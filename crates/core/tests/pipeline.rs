@@ -150,7 +150,7 @@ fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
 
 #[test]
 fn a_feed_without_a_connector_is_read_only() {
-    let s = setup();
+    let mut s = setup();
     let read_only = s
         .collection
         .add_feed(Some("https://elsewhere.example/feed.xml"), None)

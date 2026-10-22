@@ -14,7 +14,8 @@ pub type Route = (&'static str, u16, Vec<u8>);
 type Routes = Arc<Mutex<HashMap<String, (u16, Vec<u8>)>>>;
 
 /// An HTTP server on a loopback port. It answers each `GET` with the route
-/// for the path, without the query, or with status 404.
+/// for the path, without the query, or with status 404. A route with a 3xx
+/// status is a redirect, and its body is the `Location` address.
 #[derive(Debug)]
 pub struct TestServer {
     port: u16,
@@ -57,8 +58,14 @@ impl TestServer {
                     .ok()
                     .and_then(|r| r.get(&path).cloned())
                     .unwrap_or((404, b"not found".to_vec()));
+                let (location, body) = if (300..400).contains(&status) {
+                    let target = String::from_utf8_lossy(&body);
+                    (format!("Location: {target}\r\n"), Vec::new())
+                } else {
+                    (String::new(), body)
+                };
                 let head = format!(
-                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 {status} X\r\n{location}Content-Length: {}\r\nConnection: close\r\n\r\n",
                     body.len()
                 );
                 let _ = stream.write_all(head.as_bytes());

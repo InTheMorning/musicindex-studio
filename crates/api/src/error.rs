@@ -4,6 +4,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
+use studio_core::address::AddressError;
 use studio_core::collection::{CollectionError, CollectionErrorKind};
 use studio_core::connector::{ConnectorError, ConnectorErrorKind};
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
@@ -106,6 +107,16 @@ impl From<PipelineError> for ApiError {
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())
+    }
+}
+
+impl From<AddressError> for ApiError {
+    fn from(error: AddressError) -> Self {
+        match error {
+            AddressError::Collection(e) => e.into(),
+            AddressError::Connector(e) => e.into(),
+            _ => Self::internal(error.to_string()),
+        }
     }
 }
 

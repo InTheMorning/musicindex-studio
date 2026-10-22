@@ -7,8 +7,10 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use studio_core::address::AddressSource;
 use studio_core::collection::{ConnectorId, FeedId};
 use studio_core::connector::{self, LocalFolder};
+use studio_core::discover::PublicFeed;
 use studio_core::pipeline;
 use studio_core::vault::OpenVault;
 
@@ -131,8 +133,29 @@ pub(crate) async fn lock_vault(State(shared): State<Shared>) -> ApiResult {
     .await
 }
 
+/// The connectors. Each connector lists the linked feeds with an address
+/// that does not agree with the folder (ADR 0021 item 8).
 pub(crate) async fn list_connectors(State(shared): State<Shared>) -> ApiResult {
-    blocking(shared, |w| to_json(w.collection.connectors()?)).await
+    blocking(shared, |w| {
+        let feeds = w.collection.feeds()?;
+        let mut list = Vec::new();
+        for row in w.collection.connectors()? {
+            let linked: Vec<_> = feeds
+                .iter()
+                .filter(|f| f.connector_id == Some(row.id))
+                .cloned()
+                .collect();
+            let has_address = studio_core::address::folder_url(&row).is_some();
+            let mut value = serde_json::to_value(&row).unwrap_or(Value::Null);
+            value["disagreeing_feeds"] = json!(studio_core::address::folder_disagreements(
+                has_address,
+                &linked
+            ));
+            list.push(value);
+        }
+        Ok(Json(Value::Array(list)))
+    })
+    .await
 }
 
 #[derive(Deserialize)]
@@ -198,7 +221,6 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
 
 #[derive(Deserialize)]
 pub(crate) struct NewFeed {
-    public_url: Option<String>,
     connector_id: Option<i64>,
     path: Option<String>,
 }
@@ -223,14 +245,13 @@ pub(crate) async fn add_feed(
                 ));
             }
         };
-        let public_url = body
-            .public_url
-            .filter(|u| !u.trim().is_empty())
-            .or_else(|| connector.as_ref().and_then(|(_, _, url)| url.clone()));
-        let id = w.collection.add_feed(
-            public_url.as_deref(),
-            connector.as_ref().map(|(c, p, _)| (*c, p.as_str())),
-        )?;
+        let id = w
+            .collection
+            .add_feed(None, connector.as_ref().map(|(c, p, _)| (*c, p.as_str())))?;
+        if let Some((_, _, url)) = &connector {
+            w.collection
+                .set_address(id, AddressSource::Folder, url.as_deref())?;
+        }
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
     })
     .await
@@ -397,6 +418,26 @@ pub(crate) struct Import {
     urls: Vec<String>,
 }
 
+/// True when the collection has the feed, by its read address or its GUID.
+fn is_known(read: &PublicFeed, keys: &(Vec<String>, Vec<String>)) -> bool {
+    let guid = read
+        .feed
+        .podcast_guid
+        .as_deref()
+        .map(str::to_ascii_lowercase);
+    keys.0.contains(&read.url) || guid.is_some_and(|g| keys.1.contains(&g))
+}
+
+/// Add a read-only feed with the address where Studio read it (ADR 0021).
+fn add_read_feed(
+    w: &mut Workspace,
+    read: &PublicFeed,
+) -> Result<studio_core::collection::FeedRow, ApiError> {
+    let id = w.collection.add_feed(Some(&read.url), None)?;
+    w.collection.record_state(id, &read.feed, &read.version)?;
+    Ok(w.collection.feed(id)?)
+}
+
 /// Add read-only feeds by address (ADR 0020). A feed that the collection
 /// has is not added again.
 pub(crate) async fn import_feeds(
@@ -409,7 +450,11 @@ pub(crate) async fn import_feeds(
         for url in body.urls {
             let keys = collection_keys(w)?;
             let found = match w.discovered.get(&url) {
-                Some(found) => (found.feed.clone(), found.version.clone()),
+                Some(found) => PublicFeed {
+                    feed: found.feed.clone(),
+                    version: found.version.clone(),
+                    url: found.url.clone(),
+                },
                 None => match studio_core::discover::read_public(&w.web, &url) {
                     Ok(read) => read,
                     Err(message) => {
@@ -418,13 +463,10 @@ pub(crate) async fn import_feeds(
                     }
                 },
             };
-            let guid = found.0.podcast_guid.as_deref().map(str::to_ascii_lowercase);
-            if keys.0.contains(&url) || guid.is_some_and(|g| keys.1.contains(&g)) {
+            if is_known(&found, &keys) {
                 continue;
             }
-            let id = w.collection.add_feed(Some(&url), None)?;
-            w.collection.record_state(id, &found.0, &found.1)?;
-            added.push(w.collection.feed(id)?);
+            added.push(add_read_feed(w, &found)?);
         }
         Ok((
             StatusCode::CREATED,
@@ -435,7 +477,8 @@ pub(crate) async fn import_feeds(
 }
 
 /// Link each read-only feed to its file in the folder of a connector, by
-/// `podcast:guid` (ADR 0019, ADR 0020).
+/// `podcast:guid` (ADR 0019, ADR 0020). Then find the folder address from
+/// the linked feeds (ADR 0021).
 pub(crate) async fn match_connector(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -463,10 +506,17 @@ pub(crate) async fn match_connector(
             if let Some(file) = file {
                 w.collection
                     .set_feed_connector(feed.id, row.id, &file.path)?;
-                linked.push(w.collection.feed(feed.id)?);
+                linked.push(feed.id);
             }
         }
-        Ok(Json(json!({ "linked": linked })))
+        let folder_address = studio_core::address::apply_folder_address(&mut w.collection, row.id)?;
+        let linked = linked
+            .into_iter()
+            .map(|id| w.collection.feed(id))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Json(
+            json!({ "linked": linked, "folder_address": folder_address }),
+        ))
     })
     .await
 }
@@ -507,14 +557,10 @@ pub(crate) async fn import_msp(
                 continue;
             }
             match studio_core::discover::read_public(&w.web, &backup.feed_url) {
-                Ok((feed, version)) => {
-                    let guid = feed.podcast_guid.as_deref().map(str::to_ascii_lowercase);
-                    if guid.is_some_and(|g| keys.1.contains(&g)) {
-                        continue;
+                Ok(read) => {
+                    if !is_known(&read, &keys) {
+                        added.push(add_read_feed(w, &read)?);
                     }
-                    let id = w.collection.add_feed(Some(&backup.feed_url), None)?;
-                    w.collection.record_state(id, &feed, &version)?;
-                    added.push(w.collection.feed(id)?);
                 }
                 Err(message) => {
                     failed.push(json!({ "source": backup.feed_url, "message": message }));

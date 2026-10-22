@@ -153,6 +153,31 @@ function mediumKind(medium) {
   }
 }
 
+// The source of a feed address (ADR 0021).
+function addressSource(source) {
+  switch (source) {
+    case 'read': return 'Studio read the feed at this address';
+    case 'self_link': return 'The self link in the feed';
+    case 'folder': return 'The public address of the folder';
+    case 'new_feed_url': return 'The new feed address in the feed';
+    default: return 'Not known';
+  }
+}
+
+// Each address that is different from the public address. Studio shows
+// them and does not select silently (ADR 0021).
+function AddressDifferences({ feed }) {
+  const differences = feed.address_differences || [];
+  if (differences.length === 0) return null;
+  return html`<div class="notice" role="status">
+    <strong>Other sources give a different address.</strong>
+    <ul class="address-list">
+      ${differences.map((d) => html`<li>${addressSource(d.source)}: <span class="mono">${d.url}</span></li>`)}
+    </ul>
+    Studio uses the public address above. Studio does not change the feed file.
+  </div>`;
+}
+
 // ---- Navigation with the browser history ----
 // Each screen keeps its view in history.state under its own scope, so that
 // the browser Back button goes to the previous step or view.
@@ -657,8 +682,10 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
     </section>
     <section class="section">
       <${ErrorNotice} error=${error} />
+      <${AddressDifferences} feed=${feed} />
       <h2>Facts</h2>
       <dl class="facts">
+        <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
@@ -727,7 +754,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
   // A new folder takes each read-only feed whose file it holds (ADR 0020).
   const added = (connector) => run(async () => {
     const result = await api(`/connectors/${connector.id}/match`, { method: 'POST' });
-    setLinked({ connector, feeds: result.linked });
+    setLinked({ connector, feeds: result.linked, folder: result.folder_address });
     setAdding(false);
     onChanged();
   });
@@ -741,10 +768,19 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
       ${linked && linked.feeds.length > 0 && html`<div class="notice" role="status">
         Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.connector.name}”.
       </div>`}
+      ${linked && linked.folder && linked.folder.state === 'inferred' && linked.folder.new && html`<div class="notice" role="status">
+        <strong>Studio found the public address of “${linked.connector.name}” from its feeds.</strong>
+        <span class="mono">${linked.folder.url}</span>
+      </div>`}
+      ${linked && linked.folder && linked.folder.state === 'different' && html`<div class="notice" role="status">
+        <strong>The feeds in “${linked.connector.name}” give different public addresses.</strong>
+        Studio did not set a public address for the folder. The host card lists the feeds.
+      </div>`}
       ${linked && html`<${FolderFeeds} key=${linked.connector.id} connector=${linked.connector} onAdded=${onChanged} />`}
       ${connectors.map((c) => {
         const config = JSON.parse(c.config);
         const written = feeds.filter((f) => f.connector_id === c.id);
+        const disagreeing = feeds.filter((f) => (c.disagreeing_feeds || []).includes(f.id));
         return html`<article class="panel host">
           <header class="host-head">
             <span class="eyebrow"><span class="dot hosting"></span>Folder on this computer</span>
@@ -754,10 +790,17 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
           <h2>${c.name}</h2>
           <dl class="facts">
             <dt>Folder</dt><dd class="mono">${config.root}</dd>
-            <dt>Public address</dt><dd class="mono">${config.base_url || '—'}</dd>
+            <dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
+              ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
               ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
                 <span class=${`dot ${mediumKind(f.medium).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
+            ${disagreeing.length > 0 && html`<dt>Different addresses</dt><dd>
+              These feeds have an address that does not agree with the folder.
+              <ul class="address-list">
+                ${disagreeing.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>${f.title || f.path}</button>
+                  <span class="mono">${f.public_url}</span></li>`)}
+              </ul></dd>`}
           </dl>
         </article>`;
       })}

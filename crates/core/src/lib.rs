@@ -5,6 +5,7 @@
 //! HTTP server code and no UI code, and it depends on no other workspace
 //! member. It makes HTTP requests to read remote files.
 
+pub mod address;
 pub mod collection;
 pub mod connector;
 mod digest;

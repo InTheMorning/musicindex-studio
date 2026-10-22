@@ -541,3 +541,9 @@ textarea {
   text-align: left;
 }
 .feed-list .button.link:hover { text-decoration: underline; }
+
+/* The addresses of a feed or a folder. A long address breaks on any character. */
+.address-list { list-style: none; display: grid; gap: 4px; margin: 6px 0; }
+.address-list .mono { overflow-wrap: anywhere; }
+.address-list .button.link { padding: 0 8px 0 0; }
+.host .sub { color: var(--muted); }

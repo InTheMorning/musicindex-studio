@@ -22,12 +22,15 @@ use super::{
 pub struct LocalFolder {
     root: PathBuf,
     base_url: Option<String>,
+    base_url_inferred: bool,
 }
 
 #[derive(Deserialize)]
 struct Config {
     root: PathBuf,
     base_url: Option<String>,
+    #[serde(default)]
+    base_url_inferred: bool,
 }
 
 impl LocalFolder {
@@ -42,7 +45,32 @@ impl LocalFolder {
         Self {
             root: root.into(),
             base_url,
+            base_url_inferred: false,
         }
+    }
+
+    /// The same folder with a public URL that Studio found from the feeds
+    /// in it (ADR 0021 item 7).
+    #[must_use]
+    pub fn with_inferred_base_url(self, base_url: String) -> Self {
+        Self {
+            base_url: Some(base_url),
+            base_url_inferred: true,
+            ..self
+        }
+    }
+
+    /// The public URL of the folder.
+    #[must_use]
+    pub fn base_url(&self) -> Option<&str> {
+        self.base_url.as_deref()
+    }
+
+    /// True when Studio found the public URL from the feeds, and the user
+    /// did not type it.
+    #[must_use]
+    pub fn base_url_inferred(&self) -> bool {
+        self.base_url_inferred
     }
 
     /// The configuration text for the collection.
@@ -55,6 +83,7 @@ impl LocalFolder {
         serde_json::json!({
             "root": self.root.to_str().expect("the folder path is UTF-8"),
             "base_url": self.base_url,
+            "base_url_inferred": self.base_url_inferred,
         })
         .to_string()
     }
@@ -62,7 +91,11 @@ impl LocalFolder {
     pub(crate) fn from_config(config: &str) -> Result<Self, ConnectorError> {
         let config: Config = serde_json::from_str(config)
             .map_err(|e| ConnectorError::new(ConnectorErrorKind::InvalidConfig, e.to_string()))?;
-        Ok(Self::new(config.root, config.base_url))
+        Ok(Self {
+            root: config.root,
+            base_url: config.base_url,
+            base_url_inferred: config.base_url_inferred,
+        })
     }
 
     fn full_path(&self, path: &str) -> Result<PathBuf, ConnectorError> {
@@ -242,5 +275,13 @@ mod tests {
     fn the_config_text_makes_the_same_connector() {
         let folder = LocalFolder::new("/srv/feeds", Some("https://example.com".into()));
         assert_eq!(LocalFolder::from_config(&folder.config()).unwrap(), folder);
+        let inferred = LocalFolder::new("/srv/feeds", None)
+            .with_inferred_base_url("https://example.com".into());
+        assert_eq!(
+            LocalFolder::from_config(&inferred.config()).unwrap(),
+            inferred
+        );
+        let old = r#"{"root":"/srv/feeds","base_url":"https://example.com"}"#;
+        assert_eq!(LocalFolder::from_config(old).unwrap(), folder);
     }
 }

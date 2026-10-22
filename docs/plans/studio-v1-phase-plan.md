@@ -34,9 +34,10 @@ Phase 0 to Phase 4 are complete. Phase 1 has one open item.
 - The local JSON API, the UI shell, the settings screen and the first-run wizard exist ([ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0017](../adr/0017-local-api-access.md)). A test finds no secret in API responses.
 - The visual checks of task 008 pass. The [review](../reviews/2026-10-22-phase-4-visual-check.md) records the results.
 - The one-question wizard of [ADR 0020](../adr/0020-first-run-asks-one-question.md) exists: discovery from addresses and musicindex, read-only feeds, a folder match, and the MSP 2.0 import with the vault on demand. Its [visual check](../reviews/2026-10-22-task-009-visual-check.md) passes.
+- The public address of a feed follows [ADR 0021](../adr/0021-public-address-of-a-feed.md). The collection keeps the address of each source and shows each difference. A folder match can find the folder address from the linked feeds.
 - Risk for Phase 9: discovery reads each address that a user gives. The server shell must refuse addresses in private networks.
 
-Next: implement [ADR 0021](../adr/0021-public-address-of-a-feed.md) (the public address of a feed). Then Phase 5 (album editor).
+Next: Phase 5 (album editor).
 
 ## Target State
 

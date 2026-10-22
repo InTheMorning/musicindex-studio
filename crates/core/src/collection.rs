@@ -11,12 +11,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
+use crate::address::{self, Address, AddressSource};
 use crate::connector::Version;
 use crate::feed::Feed;
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
 /// to version `n + 1` (ADR 0014).
-const MIGRATIONS: &[&str] = &[r"
+const MIGRATIONS: &[&str] = &[
+    r"
 CREATE TABLE connectors (
     id INTEGER PRIMARY KEY,
     kind TEXT NOT NULL,
@@ -62,7 +64,26 @@ CREATE TRIGGER snapshots_do_not_change BEFORE UPDATE ON snapshots
 BEGIN
     SELECT RAISE(ABORT, 'ADR 0014: a snapshot row does not change after it is made');
 END;
-"];
+",
+    r"
+CREATE TABLE feed_addresses (
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    url TEXT NOT NULL,
+    PRIMARY KEY (feed_id, source)
+);
+ALTER TABLE feeds ADD COLUMN address_source TEXT;
+INSERT INTO feed_addresses (feed_id, source, url)
+SELECT f.id,
+    CASE WHEN c.kind = 'local'
+        AND f.public_url = rtrim(json_extract(c.config, '$.base_url'), '/') || '/' || f.path
+    THEN 'folder' ELSE 'read' END,
+    f.public_url
+FROM feeds f LEFT JOIN connectors c ON c.id = f.connector_id
+WHERE f.public_url IS NOT NULL;
+UPDATE feeds SET address_source = (SELECT source FROM feed_addresses WHERE feed_id = feeds.id);
+",
+];
 
 /// The schema version that this code writes.
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
@@ -154,8 +175,13 @@ pub struct ConnectorRow {
 pub struct FeedRow {
     /// The ID.
     pub id: FeedId,
-    /// The public URL of the feed.
+    /// The public address of the feed (ADR 0021).
     pub public_url: Option<String>,
+    /// The source of the public address.
+    pub address_source: Option<AddressSource>,
+    /// Each address of a different source that is different from the public
+    /// address (ADR 0021 items 3 and 4).
+    pub address_differences: Vec<Address>,
     /// The connector that writes the feed. `None` means read-only.
     pub connector_id: Option<ConnectorId>,
     /// The path of the feed file in the connector.
@@ -322,24 +348,48 @@ impl Collection {
 
     /// Add a feed. A feed with no connector is read-only.
     ///
+    /// `read_url` is the address where Studio read the feed, after each
+    /// redirect (ADR 0021 source 1).
+    ///
     /// # Errors
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn add_feed(
-        &self,
-        public_url: Option<&str>,
+        &mut self,
+        read_url: Option<&str>,
         connector: Option<(ConnectorId, &str)>,
     ) -> Result<FeedId, CollectionError> {
         self.db.execute(
-            "INSERT INTO feeds (public_url, connector_id, path, created_at) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO feeds (connector_id, path, created_at) VALUES (?1, ?2, ?3)",
             params![
-                public_url,
                 connector.map(|(c, _)| c.0),
                 connector.map(|(_, p)| p),
                 now()
             ],
         )?;
-        Ok(FeedId(self.db.last_insert_rowid()))
+        let id = FeedId(self.db.last_insert_rowid());
+        self.set_address(id, AddressSource::Read, read_url)?;
+        Ok(id)
+    }
+
+    /// Keep the address that one source gives for a feed, or remove it with
+    /// `None`. The public address then comes from the first source that
+    /// gives one (ADR 0021).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_address(
+        &mut self,
+        id: FeedId,
+        source: AddressSource,
+        url: Option<&str>,
+    ) -> Result<(), CollectionError> {
+        let tx = self.db.transaction()?;
+        put_address(&tx, id, source, url)?;
+        choose_address(&tx, id)?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// One feed.
@@ -348,7 +398,8 @@ impl Collection {
     ///
     /// Gives a [`CollectionError`] when the feed does not exist.
     pub fn feed(&self, id: FeedId) -> Result<FeedRow, CollectionError> {
-        self.db
+        let mut row = self
+            .db
             .query_row(&format!("{FEED_SELECT} WHERE id = ?1"), [id.0], feed_row)
             .optional()?
             .ok_or_else(|| {
@@ -356,7 +407,9 @@ impl Collection {
                     CollectionErrorKind::NotFound,
                     format!("feed {} does not exist", id.0),
                 )
-            })
+            })?;
+        row.address_differences = address::differences(&addresses(&self.db, id)?);
+        Ok(row)
     }
 
     /// All feeds.
@@ -366,12 +419,18 @@ impl Collection {
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn feeds(&self) -> Result<Vec<FeedRow>, CollectionError> {
         let mut statement = self.db.prepare(&format!("{FEED_SELECT} ORDER BY id"))?;
-        let rows = statement.query_map([], feed_row)?;
-        Ok(rows.collect::<Result<_, _>>()?)
+        let mut rows: Vec<FeedRow> = statement
+            .query_map([], feed_row)?
+            .collect::<Result<_, _>>()?;
+        for row in &mut rows {
+            row.address_differences = address::differences(&addresses(&self.db, row.id)?);
+        }
+        Ok(rows)
     }
 
     /// Keep the facts of a feed after a read or a write: its identity, its
-    /// title, its version and the GUID of each item (ADR 0008).
+    /// title, its version, the GUID of each item (ADR 0008), and the
+    /// addresses that the feed gives for itself (ADR 0021).
     ///
     /// # Errors
     ///
@@ -402,6 +461,14 @@ impl Collection {
                 params![id.0, position, guid, item.title],
             )?;
         }
+        put_address(&tx, id, AddressSource::SelfLink, feed.self_url())?;
+        put_address(
+            &tx,
+            id,
+            AddressSource::NewFeedUrl,
+            feed.new_feed_url.as_deref(),
+        )?;
+        choose_address(&tx, id)?;
         tx.commit()?;
         Ok(())
     }
@@ -478,6 +545,26 @@ impl Collection {
         self.db.execute(
             "UPDATE feeds SET connector_id = ?2, path = ?3 WHERE id = ?1",
             params![id.0, connector.0, path],
+        )?;
+        Ok(())
+    }
+
+    /// Replace the configuration of a connector. The configuration must
+    /// contain no secret.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the connector does not
+    /// exist.
+    pub fn set_connector_config(
+        &self,
+        id: ConnectorId,
+        config: &str,
+    ) -> Result<(), CollectionError> {
+        self.connector(id)?;
+        self.db.execute(
+            "UPDATE connectors SET config = ?2 WHERE id = ?1",
+            params![id.0, config],
         )?;
         Ok(())
     }
@@ -599,7 +686,57 @@ impl Collection {
     }
 }
 
-const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version FROM feeds";
+const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source FROM feeds";
+
+/// Keep or remove the address of one source. An empty address is no address.
+fn put_address(
+    db: &Connection,
+    id: FeedId,
+    source: AddressSource,
+    url: Option<&str>,
+) -> Result<(), CollectionError> {
+    match url.map(str::trim).filter(|u| !u.is_empty()) {
+        Some(url) => db.execute(
+            "INSERT INTO feed_addresses (feed_id, source, url) VALUES (?1, ?2, ?3)
+             ON CONFLICT (feed_id, source) DO UPDATE SET url = ?3",
+            params![id.0, source.as_str(), url],
+        )?,
+        None => db.execute(
+            "DELETE FROM feed_addresses WHERE feed_id = ?1 AND source = ?2",
+            params![id.0, source.as_str()],
+        )?,
+    };
+    Ok(())
+}
+
+/// The address of each source of a feed.
+fn addresses(db: &Connection, id: FeedId) -> Result<Vec<Address>, CollectionError> {
+    let mut statement = db.prepare("SELECT source, url FROM feed_addresses WHERE feed_id = ?1")?;
+    let rows = statement.query_map([id.0], |r| Ok((r.get::<_, String>(0)?, r.get(1)?)))?;
+    let mut found = Vec::new();
+    for row in rows {
+        let (source, url) = row?;
+        if let Some(source) = AddressSource::parse(&source) {
+            found.push(Address { source, url });
+        }
+    }
+    Ok(found)
+}
+
+/// Set the public address of a feed from its sources (ADR 0021 item 1).
+fn choose_address(db: &Connection, id: FeedId) -> Result<(), CollectionError> {
+    let all = addresses(db, id)?;
+    let chosen = address::choose(&all);
+    db.execute(
+        "UPDATE feeds SET public_url = ?2, address_source = ?3 WHERE id = ?1",
+        params![
+            id.0,
+            chosen.map(|a| a.url.as_str()),
+            chosen.map(|a| a.source.as_str())
+        ],
+    )?;
+    Ok(())
+}
 
 fn connector_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ConnectorRow> {
     Ok(ConnectorRow {
@@ -621,6 +758,11 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
         title: r.get(5)?,
         medium: r.get(6)?,
         last_version: r.get::<_, Option<String>>(7)?.map(Version::new),
+        address_source: r
+            .get::<_, Option<String>>(8)?
+            .as_deref()
+            .and_then(AddressSource::parse),
+        address_differences: Vec::new(),
     })
 }
 
@@ -643,6 +785,85 @@ mod tests {
         let collection = Collection::open(&path).unwrap();
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(collection.connectors().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_address_migration_gives_each_old_address_its_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(MIGRATIONS[0]).unwrap();
+        db.pragma_update(None, "user_version", 1).unwrap();
+        db.execute_batch(
+            r#"INSERT INTO connectors VALUES (1, 'local', 'Home', '{"root":"/srv","base_url":"https://m.example/"}', NULL, 0);
+               INSERT INTO feeds (id, public_url, connector_id, path, created_at) VALUES
+                 (1, 'https://m.example/a.xml', 1, 'a.xml', 0),
+                 (2, 'https://other.example/b.xml', 1, 'b.xml', 0),
+                 (3, 'https://other.example/c.xml', NULL, NULL, 0),
+                 (4, NULL, 1, 'd.xml', 0);"#,
+        )
+        .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        let sources: Vec<_> = collection
+            .feeds()
+            .unwrap()
+            .iter()
+            .map(|f| (f.public_url.clone(), f.address_source))
+            .collect();
+        assert_eq!(
+            sources,
+            [
+                (
+                    Some("https://m.example/a.xml".to_owned()),
+                    Some(AddressSource::Folder)
+                ),
+                (
+                    Some("https://other.example/b.xml".to_owned()),
+                    Some(AddressSource::Read)
+                ),
+                (
+                    Some("https://other.example/c.xml".to_owned()),
+                    Some(AddressSource::Read)
+                ),
+                (None, None),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_read_address_stays_and_each_other_address_is_a_difference() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let id = collection
+            .add_feed(Some("https://new.example/a.xml"), None)
+            .unwrap();
+        let doc = Document::parse(
+            "<rss xmlns:atom=\"http://www.w3.org/2005/Atom\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">\
+             <channel><title>A</title><itunes:new-feed-url>https://next.example/a.xml</itunes:new-feed-url>\
+             <atom:link rel=\"self\" href=\"https://old.example/a.xml\"/></channel></rss>",
+        )
+        .unwrap();
+        collection
+            .record_state(id, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        let row = collection.feed(id).unwrap();
+        assert_eq!(row.public_url.as_deref(), Some("https://new.example/a.xml"));
+        assert_eq!(row.address_source, Some(AddressSource::Read));
+        let differences: Vec<_> = row
+            .address_differences
+            .iter()
+            .map(|d| (d.source, d.url.as_str()))
+            .collect();
+        assert!(differences.contains(&(AddressSource::SelfLink, "https://old.example/a.xml")));
+        assert!(differences.contains(&(AddressSource::NewFeedUrl, "https://next.example/a.xml")));
+        assert_eq!(differences.len(), 2);
+
+        collection
+            .set_address(id, AddressSource::Read, None)
+            .unwrap();
+        let row = collection.feed(id).unwrap();
+        assert_eq!(row.public_url.as_deref(), Some("https://old.example/a.xml"));
+        assert_eq!(row.address_source, Some(AddressSource::SelfLink));
     }
 
     #[test]
@@ -718,7 +939,7 @@ mod tests {
 
     #[test]
     fn an_update_of_a_snapshot_gives_an_error() {
-        let collection = Collection::open_in_memory().unwrap();
+        let mut collection = Collection::open_in_memory().unwrap();
         let feed = collection.add_feed(None, None).unwrap();
         let snapshot = collection
             .add_snapshot(feed, &Version::new("v1"), b"<rss/>")

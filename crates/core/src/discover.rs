@@ -128,7 +128,7 @@ pub enum Via {
 /// A feed that discovery found and read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Found {
-    /// The address that Studio read.
+    /// The address where Studio read the feed, after each redirect.
     pub url: String,
     /// The channel title.
     pub title: Option<String>,
@@ -194,17 +194,33 @@ impl Source {
     }
 }
 
+/// A public feed that Studio read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicFeed {
+    /// The typed model of the feed.
+    pub feed: Feed,
+    /// The version marker of the content.
+    pub version: Version,
+    /// The address where Studio read the feed, after each redirect
+    /// (ADR 0021 source 1).
+    pub url: String,
+}
+
 /// Read one public feed by its address.
 ///
 /// # Errors
 ///
 /// Gives a message when the read fails or the file is not an RSS feed.
-pub fn read_public(web: &Web, url: &str) -> Result<(Feed, Version), String> {
+pub fn read_public(web: &Web, url: &str) -> Result<PublicFeed, String> {
     let limit = u64::try_from(MAX_FEED_BYTES).unwrap_or(u64::MAX);
     let file = web.get(url, limit).map_err(|e| e.to_string())?;
     let doc = Document::parse_bytes(&file.bytes).map_err(|e| e.to_string())?;
     let feed = Feed::read(&doc).map_err(|e| e.to_string())?;
-    Ok((feed, content_version(&file.bytes)))
+    Ok(PublicFeed {
+        feed,
+        version: content_version(&file.bytes),
+        url: file.final_url,
+    })
 }
 
 /// The address of a source. A GUID gets its address from musicindex.
@@ -305,7 +321,11 @@ pub fn from_sources(
             result.truncated = true;
             break;
         }
-        let (feed, version) = match read_public(web, &url) {
+        let PublicFeed {
+            feed,
+            version,
+            url: read_url,
+        } = match read_public(web, &url) {
             Ok(read) => read,
             Err(message) => {
                 result.failed.push(Failed {
@@ -315,6 +335,11 @@ pub fn from_sources(
                 continue;
             }
         };
+        // After a redirect, discovery can have the feed from an earlier address.
+        if read_url != url && !seen_urls.insert(read_url.clone()) {
+            continue;
+        }
+        let url = read_url;
         if let Some(guid) = &feed.podcast_guid {
             let new = seen_guids.insert(guid.to_ascii_lowercase());
             if !new && via != Via::Given {
@@ -466,6 +491,21 @@ mod tests {
         assert_eq!(found.feeds.len(), 1);
         assert_eq!(found.feeds[0].title.as_deref(), Some("Album B"));
         assert_eq!(found.failed.len(), 3);
+    }
+
+    #[test]
+    fn a_found_feed_has_the_address_after_the_redirect() {
+        let server = server();
+        server.set("/old.xml", 301, server.url("/b.xml").into_bytes());
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let found = from_sources(
+            &Web::new(),
+            &index,
+            &[server.url("/old.xml"), server.url("/b.xml")],
+            &[],
+        );
+        assert_eq!(found.feeds.len(), 1);
+        assert_eq!(found.feeds[0].url, server.url("/b.xml"));
     }
 
     #[test]

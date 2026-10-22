@@ -7,6 +7,7 @@ use std::fmt;
 
 use similar::TextDiff;
 
+use crate::address::AddressSource;
 use crate::collection::{Collection, CollectionError, DraftRow, FeedId, FeedRow, SnapshotId};
 use crate::connector::{Connector, ConnectorError, ConnectorErrorKind, Expected, Version};
 use crate::digest::sha256_hex;
@@ -159,6 +160,11 @@ pub fn refresh(
     })?;
     let feed = Feed::read(&Document::parse_bytes(&file.bytes)?)?;
     collection.record_state(id, &feed, &file.version)?;
+    collection.set_address(
+        id,
+        AddressSource::Folder,
+        connector.public_url(path).as_deref(),
+    )?;
     Ok(feed)
 }
 
@@ -181,10 +187,11 @@ pub fn refresh_public(
             format!("feed {} has no connector and no public address", id.0),
         )
     })?;
-    let (feed, version) = crate::discover::read_public(web, url)
+    let read = crate::discover::read_public(web, url)
         .map_err(|message| PipelineError::new(PipelineErrorKind::Network, message))?;
-    collection.record_state(id, &feed, &version)?;
-    Ok(feed)
+    collection.record_state(id, &read.feed, &read.version)?;
+    collection.set_address(id, AddressSource::Read, Some(&read.url))?;
+    Ok(read.feed)
 }
 
 /// Start a draft from the live file. It replaces an older draft.

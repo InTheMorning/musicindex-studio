@@ -732,6 +732,66 @@ async fn a_connected_folder_takes_the_read_only_feeds_that_it_holds() {
     assert_eq!(linked[0]["connector_id"], connector["id"]);
 }
 
+/// The example of ADR 0021: a folder with no public address holds a feed that
+/// discovery found and a feed that only the folder has.
+#[tokio::test]
+async fn a_folder_match_finds_the_folder_address_from_the_feeds() {
+    let server = web_feeds();
+    server.set("/album.xml", 200, FEED.as_bytes().to_vec());
+    let app = app_with_index(&server.url(""));
+    std::fs::write(
+        app.feeds.path().join("other.xml"),
+        FEED.replace("g-1", "g-2"),
+    )
+    .unwrap();
+    call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/album.xml")] })),
+    )
+    .await;
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{}/match", connector["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["folder_address"],
+        json!({ "state": "inferred", "url": server.url(""), "new": true })
+    );
+    assert_eq!(body["linked"][0]["address_source"], "read");
+
+    let (_, other) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "other.xml" })),
+    )
+    .await;
+    assert_eq!(other["public_url"], server.url("/other.xml"));
+    assert_eq!(other["address_source"], "folder");
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors[0]["disagreeing_feeds"], json!([]));
+    assert!(
+        connectors[0]["config"]
+            .as_str()
+            .unwrap()
+            .contains("\"base_url_inferred\":true")
+    );
+}
+
 #[tokio::test]
 async fn search_gives_feed_hits_from_musicindex() {
     let server = web_feeds();

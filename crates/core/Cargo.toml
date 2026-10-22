@@ -14,9 +14,15 @@ chacha20poly1305 = "0.11"
 getrandom = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11"
+similar = "3"
 quick-xml = "0.42"
+rusqlite = { version = "0.40", features = ["bundled"] }
 uuid = { version = "1.28", features = ["v4", "v5"] }
 zeroize = "1.9"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

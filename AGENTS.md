@@ -15,10 +15,10 @@ The license is AGPL-3.0 ([ADR 0011](docs/adr/0011-agpl-license.md)).
 
 ## Where The Work Stands
 
-On 2026-10-22, Phase 0, Phase 1 and Phase 2 are complete. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It also has the encrypted secret vault. The other crates contain no function yet.
+On 2026-10-22, Phase 0 to Phase 3 are complete. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It has the encrypted secret vault, the SQLite collection, the local folder connector and the write pipeline. The other crates contain no function yet.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0013`.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 3 (collection and local connector) is next. The current state of the plan lists the open items.
+- Decisions: `docs/adr/0001` to `docs/adr/0015`. ADR 0015 is proposed.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 4 (API and UI shell) is next. The current state of the plan lists the open items.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
@@ -26,7 +26,7 @@ On 2026-10-22, Phase 0, Phase 1 and Phase 2 are complete. `studio-core` reads a 
 
 | Path | Contents |
 | --- | --- |
-| `crates/core` | `studio-core`: feed model (`feed`, `xml`, `guid`) and vault (`vault`). The connectors and the write pipeline come in Phase 3. No HTTP and no UI code. |
+| `crates/core` | `studio-core`: feed model (`feed`, `xml`, `guid`), vault (`vault`), collection (`collection`), connectors (`connector`) and write pipeline (`pipeline`). No HTTP and no UI code. |
 | `crates/core/tests/corpus` | Published feeds for the round-trip tests. `manifest.json` gives the source URL, the fetch time and the SHA-256 of each file. |
 | `crates/api` | `studio-api`: the JSON API over the core |
 | `crates/server` | `studio-server`: the server shell |
@@ -59,6 +59,7 @@ Durable rules:
 
 - The core crate has no HTTP code and no UI code. Each feed rule is in the core ([ADR 0002](docs/adr/0002-rust-core-json-api-browser-ui.md)).
 - A connector gets its secrets from the vault only. No secret is in a log, an API response or the collection database ([ADR 0003](docs/adr/0003-user-unlocked-secret-vault.md), [ADR 0006](docs/adr/0006-connectors-and-the-v1-set.md)).
+- A write to a host occurs only through `pipeline::write_draft`, with the ID of the diff that the user approved ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md), [ADR 0015](docs/adr/0015-connector-interface-and-write-pipeline.md)).
 - A read and a write with no edit give the same bytes. The writer changes only the elements that the user changed. The corpus tests enforce this ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md), [ADR 0012](docs/adr/0012-lossless-tree-with-a-typed-model.md)).
 - An entity color is not a general accent. Each control is a minimum of 44 px high, and all functions work from the keyboard ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
 

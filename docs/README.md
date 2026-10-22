@@ -15,6 +15,8 @@
 - [ADR 0011: AGPL-3.0 license](adr/0011-agpl-license.md)
 - [ADR 0012: A lossless XML tree with a typed model](adr/0012-lossless-tree-with-a-typed-model.md)
 - [ADR 0013: Vault format and cryptography](adr/0013-vault-format-and-cryptography.md)
+- [ADR 0014: The collection is in SQLite](adr/0014-collection-in-sqlite.md)
+- [ADR 0015: The connector interface and the write pipeline](adr/0015-connector-interface-and-write-pipeline.md) (proposed)
 
 ## Plans
 
@@ -27,6 +29,7 @@
 - [Studio v1 task 003: Feed model and writer](tasks/studio-v1-task-003-feed-model.md)
 - [Studio v1 task 004: Remaining feed elements](tasks/studio-v1-task-004-remaining-feed-elements.md)
 - [Studio v1 task 005: Vault](tasks/studio-v1-task-005-vault.md)
+- [Studio v1 task 006: Collection, local connector and write pipeline](tasks/studio-v1-task-006-collection-connector-pipeline.md)
 
 ## Research
 

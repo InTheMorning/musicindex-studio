@@ -22,16 +22,18 @@ An artist can do these steps on the desktop or on a public Studio server:
 
 ## Current State
 
-Phase 0, Phase 1 and Phase 2 are complete. Phase 1 has one open item.
+Phase 0 to Phase 3 are complete. Phase 1 has one open item.
 
 - The lossless XML tree and the typed model exist ([ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md)).
 - The corpus has 23 published feeds and 2 fixtures. Each feed gives the same bytes after a read and a write.
 - Open item: the corpus has no Podtunes feed. The research gives no Podtunes feed URL. The operator can supply one.
 
 - The vault exists in `studio-core` ([ADR 0013](../adr/0013-vault-format-and-cryptography.md)). A passphrase, a recovery key or a vault key from a Nostr signer opens it.
-- Phase 3 and Phase 4 must add the tests that find no secret in the collection database and in API responses.
+- The collection is in SQLite ([ADR 0014](../adr/0014-collection-in-sqlite.md)). A test finds no connector secret in the database file.
+- The local folder connector and the write pipeline exist ([ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md), proposed).
+- Phase 4 must add the test that finds no secret in API responses.
 
-Phase 3 (collection and local connector) is next.
+Phase 4 (API and UI shell) is next.
 
 ## Target State
 
@@ -70,6 +72,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Make the local folder connector first, because it needs no network.
 - Make the write pipeline: draft, diff, version check and snapshot ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md)).
 - Mechanical check: a write stops with a conflict when the file changed after the read.
+- Task: [006](../tasks/studio-v1-task-006-collection-connector-pipeline.md) is complete.
 
 ### Phase 4: API And UI Shell
 

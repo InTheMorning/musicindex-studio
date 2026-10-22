@@ -7,5 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[dependencies]
+studio-api.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+
 [lints]
 workspace = true

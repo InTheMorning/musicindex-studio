@@ -22,7 +22,7 @@ An artist can do these steps on the desktop or on a public Studio server:
 
 ## Current State
 
-Phase 0 to Phase 3 are complete. Phase 1 has one open item.
+Phase 0 to Phase 3 are complete. Phase 1 has one open item. Phase 4 is in progress.
 
 - The lossless XML tree and the typed model exist ([ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md)).
 - The corpus has 23 published feeds and 2 fixtures. Each feed gives the same bytes after a read and a write.
@@ -31,9 +31,9 @@ Phase 0 to Phase 3 are complete. Phase 1 has one open item.
 - The vault exists in `studio-core` ([ADR 0013](../adr/0013-vault-format-and-cryptography.md)). A passphrase, a recovery key or a vault key from a Nostr signer opens it.
 - The collection is in SQLite ([ADR 0014](../adr/0014-collection-in-sqlite.md)). A test finds no connector secret in the database file.
 - The local folder connector and the write pipeline exist ([ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md)).
-- Phase 4 must add the test that finds no secret in API responses.
-
-Phase 4 (API and UI shell) is next.
+- The local JSON API, the UI shell, the settings screen and the first-run wizard exist ([ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0017](../adr/0017-local-api-access.md)). A test finds no secret in API responses.
+- The visual checks of task 008 are open. The operator has not done them.
+- Task 009 (more discovery methods) is next. Then Phase 5.
 
 ## Target State
 
@@ -77,7 +77,8 @@ A phase gets task files in `docs/tasks/` before work starts.
 ### Phase 4: API And UI Shell
 
 - Give the core functions as a JSON API ([ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md)).
-- Select the UI build method in a new ADR.
+- Select the UI build method in a new ADR. [ADR 0016](../adr/0016-ui-without-a-build-step.md) selects it.
+- Tasks: [007](../tasks/studio-v1-task-007-local-api.md) and [008](../tasks/studio-v1-task-008-ui-shell-and-wizard.md) are complete, except the visual checks. [009](../tasks/studio-v1-task-009-more-discovery-methods.md) is next.
 - Make the UI shell, the configuration screen and the first-run wizard.
 - Mechanical check: API contract tests for each route.
 - Visual check: the operator compares the shell with the musicindex.org baseline.

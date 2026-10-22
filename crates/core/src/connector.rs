@@ -12,7 +12,8 @@ use crate::vault::OpenVault;
 
 /// A version marker of a file on a host. Each connector selects its form:
 /// a content hash, an ETag or a commit ID.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(transparent)]
 pub struct Version(String);
 
 impl Version {

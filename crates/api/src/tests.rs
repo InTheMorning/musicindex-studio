@@ -1,0 +1,417 @@
+//! Contract tests of the local API (task 007).
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
+use http_body_util::BodyExt;
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+use crate::{Access, Workspace, local_router};
+
+const TOKEN: &str = "test-token";
+const HOST: &str = "127.0.0.1:4100";
+const PASSPHRASE: &str = "correct horse battery";
+const FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+    <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+    <item><guid>t-1</guid></item></channel></rss>";
+
+struct App {
+    router: Router,
+    data: tempfile::TempDir,
+    feeds: tempfile::TempDir,
+}
+
+fn app() -> App {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
+    let workspace = Workspace::open(data.path()).unwrap();
+    App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    }
+}
+
+async fn send(app: &App, request: Request<Body>) -> (StatusCode, Value, String) {
+    let response = app.router.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    let value = serde_json::from_str(&text).unwrap_or(Value::Null);
+    (status, value, text)
+}
+
+fn request(method: &str, path: &str, body: Option<Value>) -> Request<Body> {
+    let builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::HOST, HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+    match body {
+        Some(body) => builder
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap(),
+        None => builder.body(Body::empty()).unwrap(),
+    }
+}
+
+async fn call(app: &App, method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
+    let (status, value, _) = send(app, request(method, path, body)).await;
+    (status, value)
+}
+
+/// Make the vault, a local connector and a feed. Gives the feed ID.
+async fn set_up(app: &App) -> i64 {
+    let (status, _) = call(
+        app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let root = app.feeds.path().to_str().unwrap();
+    let (status, connector) = call(
+        app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, feed) = call(
+        app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    feed["id"].as_i64().unwrap()
+}
+
+#[tokio::test]
+async fn status_gives_the_vault_state_and_the_counts() {
+    let app = app();
+    let (status, body) = call(&app, "GET", "/api/v1/status", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["vault"], "absent");
+    assert_eq!(body["connectors"], 0);
+    assert_eq!(body["feeds"], 0);
+    assert!(body["version"].is_string());
+}
+
+#[tokio::test]
+async fn the_vault_is_made_locked_and_unlocked() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE, "recovery_key": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["recovery_key"].as_str().unwrap().len(), 39);
+    assert!(app.data.path().join("vault.json").exists());
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "vault_exists");
+
+    let (_, body) = call(&app, "POST", "/api/v1/vault/lock", None).await;
+    assert_eq!(body["vault"], "locked");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": "not the passphrase" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "wrong_key");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["vault"], "open");
+}
+
+#[tokio::test]
+async fn a_short_passphrase_gives_422() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": "short" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "passphrase_too_short");
+}
+
+#[tokio::test]
+async fn connectors_and_feeds_are_added_listed_and_read() {
+    let app = app();
+    let id = set_up(&app).await;
+
+    let (status, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(connectors[0]["kind"], "local");
+    assert_eq!(connectors[0]["name"], "Home");
+
+    let (status, feeds) = call(&app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(feeds[0]["path"], "album.xml");
+    assert_eq!(feeds[0]["public_url"], "https://music.example/album.xml");
+    assert_eq!(feeds[0]["title"], Value::Null);
+
+    let (status, feed) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(feed["title"], "Album");
+    assert_eq!(feed["podcast_guid"], "g-1");
+    assert_eq!(feed["medium"], "music");
+    assert!(
+        feed["last_version"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
+}
+
+#[tokio::test]
+async fn a_relative_folder_and_a_half_feed_give_422() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "x", "root": "relative/dir" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_config");
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "path": "a.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn a_read_only_feed_cannot_refresh_and_a_missing_file_gives_404() {
+    let app = app();
+    set_up(&app).await;
+    let (_, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "public_url": "https://elsewhere.example/feed.xml" })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{}/refresh", feed["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "read_only");
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let (_, missing) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connectors[0]["id"], "path": "missing.xml" })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{}/refresh", missing["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
+}
+
+#[tokio::test]
+async fn an_api_request_without_the_token_gives_401() {
+    let app = app();
+    for auth in [None, Some("Bearer wrong-token"), Some("test-token")] {
+        let mut builder = Request::builder()
+            .uri("/api/v1/status")
+            .header(header::HOST, HOST);
+        if let Some(auth) = auth {
+            builder = builder.header(header::AUTHORIZATION, auth);
+        }
+        let (status, body, _) = send(&app, builder.body(Body::empty()).unwrap()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{auth:?}");
+        assert_eq!(body["error"]["code"], "token_required");
+    }
+}
+
+#[tokio::test]
+async fn a_host_that_is_not_loopback_gives_403() {
+    let app = app();
+    for host in ["evil.example:4100", "127.0.0.1:9999", "127.0.0.1", ""] {
+        let request = Request::builder()
+            .uri("/api/v1/status")
+            .header(header::HOST, host)
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let (status, body, _) = send(&app, request).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{host}");
+        assert_eq!(body["error"]["code"], "host_not_allowed");
+    }
+    for host in ["localhost:4100", "[::1]:4100"] {
+        let request = request("GET", "/api/v1/status", None);
+        let (mut parts, body) = request.into_parts();
+        parts.headers.insert(header::HOST, host.parse().unwrap());
+        let (status, _, _) = send(&app, Request::from_parts(parts, body)).await;
+        assert_eq!(status, StatusCode::OK, "{host}");
+    }
+}
+
+#[tokio::test]
+async fn a_body_that_is_not_json_gives_415() {
+    let app = app();
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/vault")
+        .header(header::HOST, HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from("passphrase=correct+horse+battery"))
+        .unwrap();
+    let (status, _, _) = send(&app, request).await;
+    assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert!(!app.data.path().join("vault.json").exists());
+}
+
+#[tokio::test]
+async fn no_get_response_contains_a_secret() {
+    let app = app();
+    let id = set_up(&app).await;
+    call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    // Put a connector secret in the vault, and a connector that refers to it.
+    let secret = "sftp-password-1f9e2c";
+    let vault_key = {
+        let file =
+            studio_core::vault::VaultFile::load(&app.data.path().join("vault.json")).unwrap();
+        let mut vault = file.open_with_passphrase(PASSPHRASE).unwrap();
+        vault.put("connector:secret", secret.as_bytes()).unwrap();
+        vault
+            .file()
+            .save(&app.data.path().join("vault.json"))
+            .unwrap();
+        vault.key_for_signer().to_string()
+    };
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .add_connector(
+            "sftp",
+            "Server",
+            r#"{"host":"example.com"}"#,
+            Some("connector:secret"),
+        )
+        .unwrap();
+    drop(collection);
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+
+    for path in ["/api/v1/status", "/api/v1/connectors", "/api/v1/feeds"] {
+        let (status, _, text) = send(&app, request("GET", path, None)).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        for forbidden in [secret, PASSPHRASE, vault_key.as_str()] {
+            assert!(!text.contains(forbidden), "{path} contains a secret");
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_ui_files_load_without_the_token_and_with_a_strict_policy() {
+    let app = app();
+    let paths =
+        std::iter::once("/".to_owned()).chain(crate::ui::paths().map(|p| format!("/ui/{p}")));
+    for path in paths {
+        let request = Request::builder()
+            .uri(&path)
+            .header(header::HOST, HOST)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        let policy = response.headers()[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap();
+        assert!(policy.starts_with("default-src 'self'"));
+        assert!(!policy.contains("unsafe"));
+    }
+    let request = Request::builder()
+        .uri("/ui/../Cargo.toml")
+        .header(header::HOST, HOST)
+        .body(Body::empty())
+        .unwrap();
+    let (status, _, _) = send(&app, request).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn the_ui_names_no_other_server_and_sends_the_token() {
+    for (name, text) in crate::ui::text_files() {
+        if name.starts_with("vendor/") {
+            continue;
+        }
+        for scheme in ["http://", "https://"] {
+            let found: Vec<&str> = text
+                .match_indices(scheme)
+                .map(|(i, _)| &text[i..(i + 40).min(text.len())])
+                .filter(|s| !s.contains("www.w3.org/2000/svg") && !s.contains("music.example"))
+                .collect();
+            assert!(
+                found.is_empty(),
+                "ADR 0016: {name} names another server: {found:?}"
+            );
+        }
+    }
+    let app_js = crate::ui::text_files()
+        .find(|(name, _)| *name == "app.js")
+        .unwrap()
+        .1;
+    assert_eq!(
+        app_js.matches("fetch(").count(),
+        1,
+        "app.js must call the API through api()"
+    );
+    assert!(app_js.contains("Authorization: `Bearer ${token}`"));
+}

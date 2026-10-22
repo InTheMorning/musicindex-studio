@@ -9,6 +9,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::Serialize;
 
 use crate::connector::Version;
 use crate::feed::Feed;
@@ -95,19 +96,22 @@ impl From<rusqlite::Error> for CollectionError {
 }
 
 /// The ID of a connector in the collection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct ConnectorId(pub i64);
 
 /// The ID of a feed in the collection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct FeedId(pub i64);
 
 /// The ID of a snapshot.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct SnapshotId(pub i64);
 
 /// A connector as the collection keeps it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ConnectorRow {
     /// The ID.
     pub id: ConnectorId,
@@ -122,7 +126,7 @@ pub struct ConnectorRow {
 }
 
 /// A feed as the collection keeps it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FeedRow {
     /// The ID.
     pub id: FeedId,
@@ -155,7 +159,7 @@ pub struct DraftRow {
 }
 
 /// The facts of a snapshot, without its bytes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SnapshotInfo {
     /// The ID.
     pub id: SnapshotId,

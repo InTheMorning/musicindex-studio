@@ -17,6 +17,8 @@
 - [ADR 0013: Vault format and cryptography](adr/0013-vault-format-and-cryptography.md)
 - [ADR 0014: The collection is in SQLite](adr/0014-collection-in-sqlite.md)
 - [ADR 0015: The connector interface and the write pipeline](adr/0015-connector-interface-and-write-pipeline.md)
+- [ADR 0016: The UI has no build step](adr/0016-ui-without-a-build-step.md)
+- [ADR 0017: Access to the local API](adr/0017-local-api-access.md) (proposed)
 
 ## Plans
 
@@ -30,6 +32,9 @@
 - [Studio v1 task 004: Remaining feed elements](tasks/studio-v1-task-004-remaining-feed-elements.md)
 - [Studio v1 task 005: Vault](tasks/studio-v1-task-005-vault.md)
 - [Studio v1 task 006: Collection, local connector and write pipeline](tasks/studio-v1-task-006-collection-connector-pipeline.md)
+- [Studio v1 task 007: Local JSON API](tasks/studio-v1-task-007-local-api.md)
+- [Studio v1 task 008: UI shell, settings and first-run wizard](tasks/studio-v1-task-008-ui-shell-and-wizard.md)
+- [Studio v1 task 009: More discovery methods](tasks/studio-v1-task-009-more-discovery-methods.md)
 
 ## Research
 

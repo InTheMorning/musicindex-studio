@@ -91,6 +91,7 @@ const FIELD_MESSAGES = {
   invalid_path: 'This path is not in the folder.',
   invalid_feed: 'This file is not a feed that Studio can read.',
   invalid_config: 'Give the full path of the folder, for example /home/me/feeds.',
+  folder_not_found: 'Studio did not find this folder on this computer.',
 };
 
 // Split an API error into a field message and an error for a notice.
@@ -292,7 +293,7 @@ function AddHostForm({ onAdded }) {
       onAdded(connector);
     });
   };
-  const hostError = splitError(error, ['invalid_config']);
+  const hostError = splitError(error, ['invalid_config', 'folder_not_found']);
   return html`<form class="form" onSubmit=${submit}>
     <${Field} id="host-name" label="Name" required value=${name} onInput=${(e) => setName(e.target.value)} />
     <${Field} id="host-root" label="Folder" required placeholder="/home/me/feeds"

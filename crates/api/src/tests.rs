@@ -267,6 +267,37 @@ async fn the_host_lists_its_feed_files_and_marks_the_ones_in_the_collection() {
 }
 
 #[tokio::test]
+async fn a_folder_that_starts_with_a_tilde_is_in_the_home_folder() {
+    let app = app();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": "~" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let config: Value = serde_json::from_str(connector["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["root"], std::env::var("HOME").unwrap());
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "x", "root": "~/no-such-folder-for-studio-tests" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "folder_not_found");
+    let home = std::env::var("HOME").unwrap();
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with(home.trim_end_matches('/'))
+    );
+}
+
+#[tokio::test]
 async fn a_relative_folder_and_a_half_feed_give_422() {
     let app = app();
     let (status, body) = call(

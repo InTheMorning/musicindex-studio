@@ -155,11 +155,19 @@ pub(crate) async fn add_connector(
             root,
             base_url,
         } = body;
+        let root = expand_home(root.trim());
         if !std::path::Path::new(&root).is_absolute() {
             return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "invalid_config",
                 "the folder must be an absolute path",
+            ));
+        }
+        if !std::path::Path::new(&root).is_dir() {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "folder_not_found",
+                format!("{root} is not a folder on this computer"),
             ));
         }
         let base_url = base_url.filter(|u| !u.trim().is_empty());
@@ -170,6 +178,18 @@ pub(crate) async fn add_connector(
         Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
     })
     .await
+}
+
+/// Replace a leading `~` with the home folder of the user that runs Studio.
+fn expand_home(path: &str) -> String {
+    let home = std::env::var("HOME").ok().filter(|h| !h.is_empty());
+    match (path, home) {
+        ("~", Some(home)) => home,
+        (p, Some(home)) if p.starts_with("~/") => {
+            format!("{}/{}", home.trim_end_matches('/'), &p[2..])
+        }
+        (p, _) => p.to_owned(),
+    }
 }
 
 pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {

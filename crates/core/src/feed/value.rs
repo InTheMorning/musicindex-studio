@@ -1,11 +1,11 @@
 //! Payment blocks: `podcast:value` and `podcast:valueTimeSplit`.
 
 use super::elements::{Recipient, RemoteItem};
-use super::sync::{Children, Entry, Modeled, Names, read_list};
+use super::sync::{Children, Entry, KeyError, Modeled, Names, adopt_list, read_list};
 use crate::xml::{Element, Ns};
 
 /// `podcast:value`: a payment block for a channel or an item.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ValueBlock {
     /// `type`, such as `lightning`.
     pub value_type: Option<String>,
@@ -41,6 +41,14 @@ impl Modeled for ValueBlock {
         children.list(&self.recipients);
         children.list_before(&self.time_splits, &[]);
     }
+
+    fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
+        adopt_list(&mut self.recipients, draft.map(|d| d.recipients.as_slice()))?;
+        adopt_list(
+            &mut self.time_splits,
+            draft.map(|d| d.time_splits.as_slice()),
+        )
+    }
 }
 
 /// `podcast:valueTimeSplit`: different recipients for a period of playback.
@@ -48,7 +56,7 @@ impl Modeled for ValueBlock {
 /// The specification permits one `podcast:remoteItem` or one or more
 /// `podcast:valueRecipient` elements. The model keeps lists of both, so that
 /// it also keeps a feed that does not obey this rule.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ValueTimeSplit {
     /// `startTime`, in seconds.
     pub start_time: Option<String>,
@@ -87,5 +95,13 @@ impl Modeled for ValueTimeSplit {
         let mut children = Children::new(element, &[], names);
         children.list(&self.remote_items);
         children.list(&self.recipients);
+    }
+
+    fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
+        adopt_list(
+            &mut self.remote_items,
+            draft.map(|d| d.remote_items.as_slice()),
+        )?;
+        adopt_list(&mut self.recipients, draft.map(|d| d.recipients.as_slice()))
     }
 }

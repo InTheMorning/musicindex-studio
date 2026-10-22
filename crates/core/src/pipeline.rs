@@ -28,6 +28,12 @@ pub enum PipelineErrorKind {
     NoDraft,
     /// The approved diff is not the current diff of the draft.
     DiffNotApproved,
+    /// The sent model is from a revision of the draft that is not current
+    /// (ADR 0022).
+    StaleRevision,
+    /// The sent model does not agree with the draft: a key that is not in
+    /// the draft, or a changed GUID (ADR 0022).
+    InvalidModel,
     /// The live file changed after the draft started.
     Conflict,
     /// The feed file is not a feed that Studio can read.
@@ -241,6 +247,99 @@ pub fn edit_draft(
     draft.draft_xml = doc.write().into_bytes();
     collection.save_draft(id, &draft)?;
     Ok(draft)
+}
+
+/// The revision of a draft: a hash of its bytes (ADR 0022 item 5).
+#[must_use]
+pub fn revision(draft: &DraftRow) -> String {
+    sha256_hex(&[&draft.draft_xml])
+}
+
+/// The typed model of a draft, and its revision.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft or the draft is not
+/// a feed.
+pub fn draft_model(collection: &Collection, id: FeedId) -> Result<(Feed, String), PipelineError> {
+    let draft = current_draft(collection, id)?;
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    Ok((feed, revision(&draft)))
+}
+
+/// Replace the model of a draft with a model that the UI sent (ADR 0022).
+///
+/// The function finds the source element of each sent entry by its key. It
+/// gives a new item a random UUID as its GUID. Gives the new model and its
+/// revision.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::StaleRevision`] when `revision` is not the
+/// current revision, and [`PipelineErrorKind::InvalidModel`] for a key that
+/// is not in the draft or a changed GUID. The draft then does not change.
+pub fn replace_model(
+    collection: &Collection,
+    id: FeedId,
+    sent_revision: &str,
+    mut sent: Feed,
+) -> Result<(Feed, String), PipelineError> {
+    let mut draft = current_draft(collection, id)?;
+    if revision(&draft) != sent_revision {
+        return Err(PipelineError::new(
+            PipelineErrorKind::StaleRevision,
+            "the draft changed after this model was read; read the draft again",
+        ));
+    }
+    let mut doc = Document::parse_bytes(&draft.draft_xml)?;
+    let current = Feed::read(&doc)?;
+    let invalid = |message: String| PipelineError::new(PipelineErrorKind::InvalidModel, message);
+    sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
+    keep_identity(&current, &mut sent).map_err(invalid)?;
+    sent.write(&mut doc)?;
+    draft.draft_xml = doc.write().into_bytes();
+    collection.save_draft(id, &draft)?;
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    Ok((feed, revision(&draft)))
+}
+
+/// Refuse a change of an existing GUID, and give each new item a GUID
+/// (ADR 0008, ADR 0022 items 7 and 8).
+fn keep_identity(current: &Feed, sent: &mut Feed) -> Result<(), String> {
+    if current.podcast_guid.is_some() && sent.podcast_guid != current.podcast_guid {
+        return Err("the feed GUID does not change through the editor".to_owned());
+    }
+    let items = sent
+        .items
+        .iter_mut()
+        .map(|e| {
+            (
+                e.key().and_then(|k| current.items.get(k)).map(|c| &c.guid),
+                &mut e.value,
+            )
+        })
+        .chain(sent.live_items.iter_mut().map(|e| {
+            (
+                e.key()
+                    .and_then(|k| current.live_items.get(k))
+                    .map(|c| &c.item.guid),
+                &mut e.value.item,
+            )
+        }));
+    for (before, item) in items {
+        match before {
+            Some(Some(guid)) if item.guid.as_ref() != Some(guid) => {
+                return Err(format!(
+                    "the item GUID {guid} does not change through the editor"
+                ));
+            }
+            None if item.guid.as_deref().is_none_or(|g| g.trim().is_empty()) => {
+                item.guid = Some(uuid::Uuid::new_v4().to_string());
+            }
+            Some(_) | None => {}
+        }
+    }
+    Ok(())
 }
 
 /// The diff between the live file at the start of the draft and the draft.

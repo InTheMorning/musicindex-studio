@@ -10,10 +10,17 @@ use crate::xml::{self, Element, Node, Ns};
 ///
 /// The origin lets the writer keep the source bytes of an entry that did not
 /// change, and keep the elements in it that the core does not model.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// In JSON, the entry is its value with a `key`: its position in its list
+/// when the core read it. A new entry has no key (ADR 0022).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Entry<T> {
     /// The typed value.
+    #[serde(flatten)]
     pub value: T,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    key: Option<usize>,
+    #[serde(skip)]
     origin: Option<Element>,
 }
 
@@ -22,18 +29,92 @@ impl<T> Entry<T> {
     pub fn new(value: T) -> Self {
         Self {
             value,
+            key: None,
             origin: None,
         }
     }
 
-    pub(crate) fn read(element: &Element) -> Self
+    /// The position of the entry in its list when the core read it. A new
+    /// entry has no key.
+    #[must_use]
+    pub fn key(&self) -> Option<usize> {
+        self.key
+    }
+
+    pub(crate) fn read(element: &Element, key: usize) -> Self
     where
         T: Modeled,
     {
         Self {
             value: T::read(element),
+            key: Some(key),
             origin: Some(element.clone()),
         }
+    }
+}
+
+/// A sent model that does not agree with the draft (ADR 0022).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyError {
+    message: String,
+}
+
+impl KeyError {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for KeyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for KeyError {}
+
+/// Give each sent entry with a key the source element of the draft entry
+/// with the same key (ADR 0022 items 2 to 4).
+///
+/// `draft` is `None` when the parent of the list is new. A key in such a
+/// list is an error.
+pub(crate) fn adopt_list<T: Modeled>(
+    sent: &mut [Entry<T>],
+    draft: Option<&[Entry<T>]>,
+) -> Result<(), KeyError> {
+    let mut used = std::collections::HashSet::new();
+    for entry in sent {
+        let Some(key) = entry.key else {
+            entry.origin = None;
+            entry.value.adopt(None)?;
+            continue;
+        };
+        let source = draft
+            .and_then(|d| d.get(key))
+            .ok_or_else(|| KeyError::new(format!("the draft has no {} with key {key}", T::NAME)))?;
+        if !used.insert(key) {
+            return Err(KeyError::new(format!(
+                "the key {key} occurs two times in the {} list",
+                T::NAME
+            )));
+        }
+        entry.origin.clone_from(&source.origin);
+        entry.value.adopt(Some(&source.value))?;
+    }
+    Ok(())
+}
+
+/// Give an optional child with nested lists the source elements of the
+/// draft child.
+pub(crate) fn adopt_one<T: Modeled>(
+    sent: Option<&mut T>,
+    draft: Option<&T>,
+) -> Result<(), KeyError> {
+    match sent {
+        Some(value) => value.adopt(draft),
+        None => Ok(()),
     }
 }
 
@@ -66,6 +147,12 @@ pub(crate) trait Modeled: Sized {
     /// The function must not change a part of the element that already holds
     /// the value.
     fn apply(&self, element: &mut Element, names: &mut Names);
+
+    /// Give the entries of each nested list the source elements of the draft
+    /// value (ADR 0022). A value with no nested list has nothing to do.
+    fn adopt(&mut self, _draft: Option<&Self>) -> Result<(), KeyError> {
+        Ok(())
+    }
 }
 
 /// Read the entries of one kind from the children of `parent`.
@@ -73,7 +160,8 @@ pub(crate) fn read_list<T: Modeled>(parent: &Element) -> Vec<Entry<T>> {
     parent
         .elements()
         .filter(|e| e.is(T::NS, T::NAME))
-        .map(Entry::read)
+        .enumerate()
+        .map(|(key, e)| Entry::read(e, key))
         .collect()
 }
 

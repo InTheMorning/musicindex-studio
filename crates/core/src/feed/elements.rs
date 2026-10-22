@@ -17,7 +17,7 @@ macro_rules! element_type {
         }
     ) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, PartialEq, Eq, Default)]
+        #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
         pub struct $ty {
             $($(#[$tmeta])* pub $text: String,)?
             $($(#[$fmeta])* pub $field: Option<String>,)*

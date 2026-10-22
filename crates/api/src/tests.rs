@@ -864,3 +864,180 @@ async fn an_msp_backup_needs_the_vault_and_keeps_its_token_there() {
         assert!(!text.contains(token), "{path}");
     }
 }
+
+/// The live file of the feed that `set_up` adds.
+fn live(app: &App) -> String {
+    std::fs::read_to_string(app.feeds.path().join("album.xml")).unwrap()
+}
+
+#[tokio::test]
+async fn a_draft_is_edited_examined_written_and_rolled_back() {
+    let app = app();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (status, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(draft["changed"], false);
+    assert_eq!(draft["model"]["items"][0]["key"], 0);
+
+    let mut model = draft["model"].clone();
+    model["title"] = json!("Album (remaster)");
+    let (status, draft) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(draft["changed"], true);
+    assert_eq!(live(&app), FEED);
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert!(
+        diff["unified"]
+            .as_str()
+            .unwrap()
+            .contains("+<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>Album (remaster)</title>")
+    );
+    let write_path = format!("/api/v1/feeds/{id}/write");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &write_path,
+        Some(json!({ "diff_id": "other" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "diff_not_approved");
+    let (status, feed) = call(
+        &app,
+        "POST",
+        &write_path,
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(feed["title"], "Album (remaster)");
+    assert!(live(&app).contains("Album (remaster)"));
+
+    let (_, snapshots) = call(&app, "GET", &format!("/api/v1/feeds/{id}/snapshots"), None).await;
+    let snapshot = snapshots[0]["id"].as_i64().unwrap();
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/snapshots/{snapshot}/draft"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(draft["model"]["title"], "Album");
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    call(
+        &app,
+        "POST",
+        &write_path,
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(live(&app), FEED);
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/snapshots/999/draft"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_stale_or_invalid_model_and_a_changed_file_give_errors() {
+    let app = app();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["key"] = json!(5);
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_model");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": "old", "model": draft["model"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "stale_revision");
+
+    let mut model = draft["model"].clone();
+    model["title"] = json!("Changed");
+    call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        FEED.replace("t-1", "t-9"),
+    )
+    .unwrap();
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "conflict");
+    assert!(live(&app).contains("t-9"));
+
+    let (status, _) = call(&app, "DELETE", &draft_path, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(draft["changed"], false);
+    assert_eq!(draft["model"]["items"][0]["guid"], "t-9");
+}
+
+#[tokio::test]
+async fn each_draft_route_of_a_read_only_feed_gives_read_only() {
+    let app = app();
+    set_up(&app).await;
+    let (_, feed) = call(&app, "POST", "/api/v1/feeds", Some(json!({}))).await;
+    let id = feed["id"].as_i64().unwrap();
+    let model = serde_json::to_value(studio_core::feed::Feed::default()).unwrap();
+    let body = json!({ "revision": "r", "model": model });
+    for (method, path, body) in [
+        ("GET", format!("/api/v1/feeds/{id}/draft"), None),
+        ("PUT", format!("/api/v1/feeds/{id}/draft"), Some(body)),
+        ("DELETE", format!("/api/v1/feeds/{id}/draft"), None),
+        ("GET", format!("/api/v1/feeds/{id}/diff"), None),
+        (
+            "POST",
+            format!("/api/v1/feeds/{id}/write"),
+            Some(json!({ "diff_id": "d" })),
+        ),
+        ("GET", format!("/api/v1/feeds/{id}/snapshots"), None),
+        (
+            "POST",
+            format!("/api/v1/feeds/{id}/snapshots/1/draft"),
+            None,
+        ),
+    ] {
+        let (status, response) = call(&app, method, &path, body).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{method} {path}");
+        assert_eq!(response["error"]["code"], "read_only", "{method} {path}");
+    }
+}

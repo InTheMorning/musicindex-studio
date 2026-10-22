@@ -662,7 +662,8 @@ impl Collection {
     ///
     /// # Errors
     ///
-    /// Gives a [`CollectionError`] when the feed has no such snapshot.
+    /// Gives [`CollectionErrorKind::NotFound`] when the feed has no such
+    /// snapshot.
     pub fn snapshot_xml(
         &self,
         id: FeedId,
@@ -676,7 +677,10 @@ impl Collection {
             )
             .optional()?
             .ok_or_else(|| {
-                CollectionError::new(format!("feed {} has no snapshot {}", id.0, snapshot.0))
+                CollectionError::with_kind(
+                    CollectionErrorKind::NotFound,
+                    format!("feed {} has no snapshot {}", id.0, snapshot.0),
+                )
             })
     }
 

@@ -23,6 +23,7 @@
 - [ADR 0019: Select a feed from the files of a host](adr/0019-select-a-feed-from-the-host.md)
 - [ADR 0020: The first run asks one question](adr/0020-first-run-asks-one-question.md)
 - [ADR 0021: The public address of a feed](adr/0021-public-address-of-a-feed.md)
+- [ADR 0022: The editor sends the model with entry keys](adr/0022-the-editor-sends-the-model-with-entry-keys.md)
 
 ## Plans
 
@@ -39,6 +40,9 @@
 - [Studio v1 task 007: Local JSON API](tasks/studio-v1-task-007-local-api.md)
 - [Studio v1 task 008: UI shell, settings and first-run wizard](tasks/studio-v1-task-008-ui-shell-and-wizard.md)
 - [Studio v1 task 009: The one-question wizard](tasks/studio-v1-task-009-more-discovery-methods.md)
+- [Studio v1 task 010: The draft API](tasks/studio-v1-task-010-draft-api.md)
+- [Studio v1 task 011: The album editor](tasks/studio-v1-task-011-album-editor.md)
+- [Studio v1 task 012: The value editor](tasks/studio-v1-task-012-value-editor.md)
 
 ## Reviews
 

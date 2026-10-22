@@ -102,6 +102,8 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::Network => (StatusCode::BAD_GATEWAY, "network"),
             PipelineErrorKind::NoDraft => (StatusCode::CONFLICT, "no_draft"),
             PipelineErrorKind::DiffNotApproved => (StatusCode::CONFLICT, "diff_not_approved"),
+            PipelineErrorKind::StaleRevision => (StatusCode::CONFLICT, "stale_revision"),
+            PipelineErrorKind::InvalidModel => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_model"),
             PipelineErrorKind::Conflict => (StatusCode::CONFLICT, "conflict"),
             PipelineErrorKind::InvalidFeed => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_feed"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),

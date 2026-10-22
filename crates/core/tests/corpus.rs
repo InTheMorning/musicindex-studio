@@ -52,6 +52,23 @@ fn each_corpus_feed_writes_the_same_bytes_after_a_projection() {
 }
 
 #[test]
+fn each_corpus_feed_writes_the_same_bytes_after_a_json_round_trip() {
+    for (name, bytes) in corpus() {
+        let mut doc = Document::parse_bytes(&bytes).unwrap();
+        let draft = Feed::read(&doc).unwrap();
+        let json = serde_json::to_string(&draft).unwrap();
+        let mut sent: Feed = serde_json::from_str(&json).unwrap_or_else(|e| panic!("{name}: {e}"));
+        sent.adopt(&draft).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(sent, draft, "{name}: the JSON model is different");
+        sent.write(&mut doc).unwrap();
+        assert!(
+            doc.write().as_bytes() == bytes,
+            "{name}: JSON round trip changed bytes"
+        );
+    }
+}
+
+#[test]
 fn the_corpus_has_value_time_splits_live_items_and_publishers() {
     let feeds: Vec<Feed> = corpus()
         .iter()

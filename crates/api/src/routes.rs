@@ -8,9 +8,10 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
-use studio_core::collection::{ConnectorId, FeedId};
+use studio_core::collection::{ConnectorId, FeedId, SnapshotId};
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
+use studio_core::feed::Feed;
 use studio_core::pipeline;
 use studio_core::vault::OpenVault;
 
@@ -572,6 +573,153 @@ pub(crate) async fn import_msp(
             StatusCode::CREATED,
             Json(json!({ "added": added, "failed": failed })),
         ))
+    })
+    .await
+}
+
+// ---- Drafts (ADR 0007, ADR 0022) ----
+
+/// The connector of a feed that Studio can write. A feed with no connector
+/// gives the `read_only` error.
+fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, ApiError> {
+    let row = w.collection.feed(id)?;
+    let Some(connector_id) = row.connector_id else {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "read_only",
+            format!("feed {} has no connector, so Studio cannot write it", id.0),
+        ));
+    };
+    let connector_row = w.collection.connector(connector_id)?;
+    if connector_row.secret_ref.is_some() && w.vault.is_none() {
+        return Err(ApiError::vault_locked());
+    }
+    Ok(connector::from_row(&connector_row, w.vault.as_ref())?)
+}
+
+/// The draft as the UI edits it: the model, its revision, and `changed`. The
+/// value of `changed` is true when the draft is different from the live file.
+fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
+    let (model, revision) = pipeline::draft_model(&w.collection, id)?;
+    let changed = pipeline::diff(&w.collection, id)?.changed;
+    Ok(Json(
+        json!({ "revision": revision, "model": model, "changed": changed }),
+    ))
+}
+
+/// The draft of a feed. Studio starts one from the live file when the feed
+/// has none.
+pub(crate) async fn get_draft(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let made = writer(w, id)?;
+        if w.collection.draft(id)?.is_none() {
+            pipeline::start_draft(&w.collection, made.as_ref(), id)?;
+        }
+        draft_json(w, id)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SentDraft {
+    revision: String,
+    model: Feed,
+}
+
+/// Replace the model of the draft (ADR 0022). The hosted file does not
+/// change.
+pub(crate) async fn put_draft(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SentDraft>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        pipeline::replace_model(&w.collection, id, &body.revision, body.model)?;
+        draft_json(w, id)
+    })
+    .await
+}
+
+/// Remove the draft. The hosted file does not change.
+pub(crate) async fn delete_draft(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        w.collection.delete_draft(id)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+/// The diff between the live file and the draft, with the ID that the user
+/// approves.
+pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        let diff = pipeline::diff(&w.collection, id)?;
+        Ok(Json(json!({
+            "id": diff.id.as_str(),
+            "unified": diff.unified,
+            "changed": diff.changed,
+        })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Write {
+    diff_id: String,
+}
+
+/// Write the draft with the ID of the diff that the user approved (ADR 0007).
+pub(crate) async fn write_feed(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<Write>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let made = writer(w, id)?;
+        pipeline::write_draft(
+            &mut w.collection,
+            made.as_ref(),
+            id,
+            &pipeline::DiffId::new(body.diff_id),
+        )?;
+        to_json(w.collection.feed(id)?)
+    })
+    .await
+}
+
+/// The snapshots of a feed, the newest first.
+pub(crate) async fn list_snapshots(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        to_json(w.collection.snapshots(id)?)
+    })
+    .await
+}
+
+/// Make a draft from a snapshot, to roll the feed back. The user then
+/// approves its diff.
+pub(crate) async fn draft_from_snapshot(
+    State(shared): State<Shared>,
+    Path((id, snapshot)): Path<(i64, i64)>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let made = writer(w, id)?;
+        w.collection.snapshot_xml(id, SnapshotId(snapshot))?;
+        pipeline::draft_from_snapshot(&w.collection, made.as_ref(), id, SnapshotId(snapshot))?;
+        draft_json(w, id)
     })
     .await
 }

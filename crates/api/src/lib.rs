@@ -52,6 +52,19 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
         .route("/feeds/{id}", delete(routes::delete_feed))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
+        .route(
+            "/feeds/{id}/draft",
+            get(routes::get_draft)
+                .put(routes::put_draft)
+                .delete(routes::delete_draft),
+        )
+        .route("/feeds/{id}/diff", get(routes::get_diff))
+        .route("/feeds/{id}/write", post(routes::write_feed))
+        .route("/feeds/{id}/snapshots", get(routes::list_snapshots))
+        .route(
+            "/feeds/{id}/snapshots/{snapshot}/draft",
+            post(routes::draft_from_snapshot),
+        )
         .with_state(shared);
     Router::new()
         .route("/", get(ui::index))

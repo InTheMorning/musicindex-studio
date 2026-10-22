@@ -19,8 +19,8 @@ pub use elements::{
     AtomLink, Enclosure, Funding, Image, License, Locked, Person, Recipient, RemoteItem,
     Transcript, Txt,
 };
-pub use sync::Entry;
-use sync::{Children, Modeled, Names, read_list, read_one, read_text};
+use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
+pub use sync::{Entry, KeyError};
 pub use value::{ValueBlock, ValueTimeSplit};
 
 use crate::xml::{Document, Element, Node, Ns};
@@ -47,7 +47,7 @@ const NO_CHANNEL: FeedError = FeedError {
 };
 
 /// A feed: the modeled content of its `channel`.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Feed {
     /// `title`.
     pub title: Option<String>,
@@ -165,6 +165,28 @@ impl Feed {
         Ok(())
     }
 
+    /// Give each entry of the sent model the source element of the draft
+    /// entry with the same key, so that the writer keeps its source bytes
+    /// (ADR 0022 items 2 to 4).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`KeyError`] when a key is not in the draft, or when a key
+    /// occurs two times in one list.
+    pub fn adopt(&mut self, draft: &Feed) -> Result<(), KeyError> {
+        adopt_list(&mut self.atom_links, Some(&draft.atom_links))?;
+        adopt_list(&mut self.images, Some(&draft.images))?;
+        adopt_list(&mut self.persons, Some(&draft.persons))?;
+        adopt_list(&mut self.fundings, Some(&draft.fundings))?;
+        adopt_list(&mut self.txts, Some(&draft.txts))?;
+        adopt_one(self.publisher.as_mut(), draft.publisher.as_ref())?;
+        adopt_one(self.podroll.as_mut(), draft.podroll.as_ref())?;
+        adopt_list(&mut self.remote_items, Some(&draft.remote_items))?;
+        adopt_list(&mut self.values, Some(&draft.values))?;
+        adopt_list(&mut self.items, Some(&draft.items))?;
+        adopt_list(&mut self.live_items, Some(&draft.live_items))
+    }
+
     /// The feed URL that the feed gives for itself: the `href` of the first
     /// `atom:link` with `rel="self"`.
     #[must_use]
@@ -203,7 +225,7 @@ fn read_href(parent: &Element, ns: Ns, local: &str) -> Option<String> {
 ///
 /// Podcast Namespace PR #793 lets a feed have more than one publisher, each
 /// a `podcast:remoteItem` with `medium="publisher"` and a `rel` role set.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Publisher {
     /// The `podcast:remoteItem` elements.
     pub remote_items: Vec<Entry<RemoteItem>>,
@@ -222,10 +244,17 @@ impl Modeled for Publisher {
     fn apply(&self, element: &mut Element, names: &mut Names) {
         Children::new(element, &[], names).list(&self.remote_items);
     }
+
+    fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
+        adopt_list(
+            &mut self.remote_items,
+            draft.map(|d| d.remote_items.as_slice()),
+        )
+    }
 }
 
 /// `podcast:podroll`: feeds that the creator recommends.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Podroll {
     /// The `podcast:remoteItem` elements.
     pub remote_items: Vec<Entry<RemoteItem>>,
@@ -244,10 +273,17 @@ impl Modeled for Podroll {
     fn apply(&self, element: &mut Element, names: &mut Names) {
         Children::new(element, &[], names).list(&self.remote_items);
     }
+
+    fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
+        adopt_list(
+            &mut self.remote_items,
+            draft.map(|d| d.remote_items.as_slice()),
+        )
+    }
 }
 
 /// An `item`: a track or an episode.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Item {
     /// `title`.
     pub title: Option<String>,
@@ -318,6 +354,18 @@ impl Item {
         c.one(self.license.as_ref());
         c.list(&self.values);
     }
+
+    fn adopt_fields(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
+        adopt_list(&mut self.images, draft.map(|d| d.images.as_slice()))?;
+        adopt_list(&mut self.persons, draft.map(|d| d.persons.as_slice()))?;
+        adopt_list(&mut self.fundings, draft.map(|d| d.fundings.as_slice()))?;
+        adopt_list(
+            &mut self.transcripts,
+            draft.map(|d| d.transcripts.as_slice()),
+        )?;
+        adopt_list(&mut self.txts, draft.map(|d| d.txts.as_slice()))?;
+        adopt_list(&mut self.values, draft.map(|d| d.values.as_slice()))
+    }
 }
 
 impl Modeled for Item {
@@ -331,10 +379,14 @@ impl Modeled for Item {
     fn apply(&self, element: &mut Element, names: &mut Names) {
         self.apply_fields(element, names);
     }
+
+    fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
+        self.adopt_fields(draft)
+    }
 }
 
 /// `podcast:liveItem`: a live or scheduled show.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct LiveItem {
     /// `status`: `pending`, `live` or `ended`.
     pub status: Option<String>,
@@ -364,5 +416,9 @@ impl Modeled for LiveItem {
         element.set_attribute("start", self.start.as_deref());
         element.set_attribute("end", self.end.as_deref());
         self.item.apply_fields(element, names);
+    }
+
+    fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
+        self.item.adopt_fields(draft.map(|d| &d.item))
     }
 }

@@ -378,8 +378,8 @@ function AddFeedForm({ connectors, onAdded }) {
       ? html`<${Field} id="feed-path" label="Feed file" required placeholder="album/feed.xml"
           hint="The path of the feed file in the folder of the host."
           error=${feedError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />`
-      : html`<button class="button quiet" type="button" onClick=${() => setTyping(true)}>The feed is not in the list</button>`}
-    ${typing && available.length > 0 && html`<button class="button quiet" type="button" onClick=${() => setTyping(false)}>Select from the list</button>`}
+      : html`<button class="button link" type="button" onClick=${() => setTyping(true)}>The feed is not in the list</button>`}
+    ${typing && available.length > 0 && html`<button class="button link" type="button" onClick=${() => setTyping(false)}>Select from the list</button>`}
     <${ErrorNotice} error=${feedError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !target}>${busy ? 'Reading the feed…' : 'Add the feed'}</button></div>
   </form>`;
@@ -557,7 +557,7 @@ function Wizard({ onFinish }) {
         <button class="button primary" type="button" onClick=${() => go('find')}>Yes, I have feeds</button>
         <button class="button" type="button" onClick=${() => go('new')}>No, I am new</button>
       </div>
-      <button class="button quiet" type="button" onClick=${() => go('msp')}>Import from MSP 2.0</button>
+      <button class="button link" type="button" onClick=${() => go('msp')}>Import from MSP 2.0</button>
     </div>`;
   } else if (step === 'msp') {
     body = html`<div class="form"><div><h1>Import from MSP 2.0</h1></div>
@@ -714,7 +714,7 @@ function AddFeeds({ connectors, onAdded }) {
     <div class="panel"><h2>Find feeds by address or name</h2>
       ${found
         ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
-          <div class="actions"><button class="button quiet" type="button" onClick=${() => setFound(null)}>Search again</button></div>`
+          <div class="actions"><button class="button link" type="button" onClick=${() => setFound(null)}>Search again</button></div>`
         : html`<${FindFeeds} onFound=${setFound} />`}
     </div>
     ${connectors.length > 0 && html`<div class="panel"><h2>From a connected folder</h2>

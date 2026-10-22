@@ -713,7 +713,7 @@ function FolderFeeds({ connector, onAdded }) {
   </div>`;
 }
 
-function Hosts({ connectors, feeds, onChanged }) {
+function Hosts({ connectors, feeds, onChanged, onOpen }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -755,7 +755,9 @@ function Hosts({ connectors, feeds, onChanged }) {
           <dl class="facts">
             <dt>Folder</dt><dd class="mono">${config.root}</dd>
             <dt>Public address</dt><dd class="mono">${config.base_url || '—'}</dd>
-            <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : written.map((f) => f.title || f.path).join(', ')}</dd>
+            <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
+              ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
+                <span class=${`dot ${mediumKind(f.medium).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
           </dl>
         </article>`;
       })}
@@ -811,7 +813,8 @@ function Shell({ vault, onLock }) {
   } else if (feeds === null) {
     main = html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`;
   } else if (view.name === 'hosts') {
-    main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()} />`;
+    main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
+      onOpen=${(id) => setView({ name: 'feed', id })} />`;
   } else if (view.name === 'add-feed') {
     main = html`<${AddFeeds} connectors=${connectors}
       onAdded=${async (f) => { await load(); setView(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;

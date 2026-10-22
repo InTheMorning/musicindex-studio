@@ -528,3 +528,16 @@ textarea {
 .host { gap: 10px; }
 .host-head { display: flex; align-items: center; justify-content: space-between; }
 .host h2 { font-size: 1.4rem; font-weight: 700; letter-spacing: -.02em; }
+
+/* One feed on each line, with its type dot. */
+.feed-list { list-style: none; display: grid; }
+.feed-list .button.link {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 400;
+  text-align: left;
+}
+.feed-list .button.link:hover { text-decoration: underline; }

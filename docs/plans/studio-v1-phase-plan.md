@@ -38,7 +38,7 @@ Phase 0 to Phase 4 are complete. Phase 1 has one open item.
 - The public address of a feed follows [ADR 0021](../adr/0021-public-address-of-a-feed.md). The collection keeps the address of each source and shows each difference. A folder match can find the folder address from the linked feeds.
 - Risk for the Server Shell phase: discovery reads each address that a user gives. The server shell must refuse addresses in private networks.
 
-Phase 5 is in progress. [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) gives the method of an edit. [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) gives the address rule and the facts of a new audio file. [ADR 0024](../adr/0024-track-numbers-follow-the-track-sequence.md) sets the track numbers from the track sequence. [Task 010](../tasks/studio-v1-task-010-draft-api.md) (the draft API) and [task 011](../tasks/studio-v1-task-011-album-editor.md) (the album editor UI) are complete. The [visual check of task 011](../reviews/2026-10-22-task-011-visual-check.md) passes. Next: [task 012](../tasks/studio-v1-task-012-value-editor.md) (the value editor).
+Phase 5 is in progress. [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) gives the method of an edit. [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) gives the address rule and the facts of a new audio file. [ADR 0024](../adr/0024-track-numbers-follow-the-track-sequence.md) sets the track numbers from the track sequence. [Task 010](../tasks/studio-v1-task-010-draft-api.md) (the draft API) and [task 011](../tasks/studio-v1-task-011-album-editor.md) (the album editor UI) are complete. [Task 012](../tasks/studio-v1-task-012-value-editor.md) (the value editor) is complete. The visual checks of [task 011](../reviews/2026-10-22-task-011-visual-check.md) and [task 012](../reviews/2026-10-22-task-012-visual-check.md) pass. Next: [task 013](../tasks/studio-v1-task-013-recipient-picker.md) (the recipient picker).
 
 ## Target State
 
@@ -91,7 +91,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 ### Phase 5: Album Editor
 
 - Make the album editor: channel, tracks, value recipients and value time splits.
-- Tasks: [010](../tasks/studio-v1-task-010-draft-api.md) and [011](../tasks/studio-v1-task-011-album-editor.md) are complete. [012](../tasks/studio-v1-task-012-value-editor.md) is open.
+- Tasks: [010](../tasks/studio-v1-task-010-draft-api.md), [011](../tasks/studio-v1-task-011-album-editor.md) and [012](../tasks/studio-v1-task-012-value-editor.md) are complete. [013](../tasks/studio-v1-task-013-recipient-picker.md) (the recipient picker, [ADR 0027](../adr/0027-the-recipient-picker.md)) is open.
 - Make the diff view and the snapshot list with rollback.
 - Visual check: the operator edits a published album feed completely.
 
@@ -172,3 +172,6 @@ A phase gets task files in `docs/tasks/` before work starts.
 - The vault key derivation function, the encryption algorithm and a recovery method (ADR 0003).
 - The questions in ADR 0009.
 - The sequence of the musicL and live item editors (Phase 10).
+- Later work that the operator noted on 2026-10-22, with no phase yet:
+  - v4vmm sends value time splits to Studio. The album editor does not edit them (task 012).
+  - A check that a payment route works. It probably needs a connected Lightning node. Podcast Index marks some routes with a warning, and its method is not known.

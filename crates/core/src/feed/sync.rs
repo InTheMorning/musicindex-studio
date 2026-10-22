@@ -173,6 +173,9 @@ pub(crate) fn read_list<T: Modeled>(parent: &Element) -> Vec<Entry<T>> {
 pub(crate) struct Names {
     declared: Vec<(String, String)>,
     added: Vec<(&'static str, &'static str)>,
+    /// The attribute sequence of each element name in the source, for new
+    /// elements.
+    orders: std::collections::HashMap<String, Vec<String>>,
 }
 
 impl Names {
@@ -188,6 +191,7 @@ impl Names {
         Self {
             declared,
             added: Vec::new(),
+            orders: xml::attribute_orders(root),
         }
     }
 
@@ -209,8 +213,10 @@ impl Names {
         Element::new(format!("{prefix}:{local}"), Some(uri))
     }
 
-    /// Put each added declaration on the root element.
+    /// Give each new element the attribute sequence of the source, and put
+    /// each added declaration on the root element.
     pub(crate) fn finish(self, root: &mut Element) {
+        xml::order_new_attributes(root, &self.orders);
         for (prefix, uri) in self.added {
             root.set_attribute(&format!("xmlns:{prefix}"), Some(uri));
         }

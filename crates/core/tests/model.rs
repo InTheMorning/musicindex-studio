@@ -241,3 +241,97 @@ fn a_change_of_sequence_numbers_the_tracks_and_keeps_the_dates() {
         Some("Thu, 01 Oct 2026 00:00:00 GMT")
     );
 }
+
+const VALUE_FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">
+  <channel>
+    <title>Album</title>
+    <podcast:value type=\"lightning\" method=\"keysend\">
+      <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"02aa\" split=\"90\" />
+      <podcast:valueRecipient name=\"Bob\" type=\"node\" address=\"02bb\" split=\"10\" customKey=\"7629169\" customValue=\"x\" />
+    </podcast:value>
+    <item>
+      <title>One</title>
+      <guid>track-1</guid>
+      <podcast:value type=\"lightning\" method=\"keysend\">
+        <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"02aa\" split=\"100\" />
+        <podcast:valueTimeSplit startTime=\"60\" duration=\"30\" remotePercentage=\"95\">
+          <podcast:remoteItem feedGuid=\"f-1\" itemGuid=\"i-1\" />
+        </podcast:valueTimeSplit>
+      </podcast:value>
+    </item>
+  </channel>
+</rss>";
+
+fn value_draft() -> (Collection, FeedId) {
+    let (collection, id) = draft();
+    let row = DraftRow {
+        base_version: None,
+        base_xml: VALUE_FEED.as_bytes().to_vec(),
+        draft_xml: VALUE_FEED.as_bytes().to_vec(),
+    };
+    collection.save_draft(id, &row).unwrap();
+    (collection, id)
+}
+
+#[test]
+fn one_changed_recipient_changes_only_its_element() {
+    let (collection, id) = value_draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.values[0].recipients[1].split = Some("20".to_owned());
+    pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    assert_eq!(
+        draft_text(&collection, id),
+        VALUE_FEED.replace(
+            "address=\"02bb\" split=\"10\"",
+            "address=\"02bb\" split=\"20\""
+        )
+    );
+}
+
+#[test]
+fn a_value_time_split_goes_to_json_and_back_with_no_change() {
+    let (collection, id) = value_draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let json = serde_json::to_value(&feed).unwrap();
+    let split = &json["items"][0]["values"][0]["time_splits"][0];
+    assert_eq!(split["key"], 0);
+    assert_eq!(split["start_time"], "60");
+    assert_eq!(split["remote_items"][0]["feed_guid"], "f-1");
+    let (back, _) = pipeline::replace_model(&collection, id, &revision, sent(&feed)).unwrap();
+    assert_eq!(back, feed);
+    assert_eq!(draft_text(&collection, id), VALUE_FEED);
+}
+
+#[test]
+fn a_new_recipient_gets_the_attribute_sequence_of_the_source() {
+    let (collection, id) = draft();
+    let source = VALUE_FEED.replace(
+        "name=\"Ann\" type=\"node\" address=\"02aa\" split=\"90\"",
+        "address=\"02aa\" split=\"90\" name=\"Ann\" type=\"node\"",
+    );
+    let row = DraftRow {
+        base_version: None,
+        base_xml: source.as_bytes().to_vec(),
+        draft_xml: source.as_bytes().to_vec(),
+    };
+    collection.save_draft(id, &row).unwrap();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.values[0]
+        .recipients
+        .push(Entry::new(studio_core::feed::Recipient {
+            name: Some("Cy".to_owned()),
+            recipient_type: Some("node".to_owned()),
+            address: Some("02cc".to_owned()),
+            split: Some("5".to_owned()),
+            fee: Some("true".to_owned()),
+            ..Default::default()
+        }));
+    pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let text = draft_text(&collection, id);
+    assert!(
+        text.contains("<podcast:valueRecipient address=\"02cc\" split=\"5\" name=\"Cy\" type=\"node\" fee=\"true\" />"),
+        "{text}"
+    );
+}

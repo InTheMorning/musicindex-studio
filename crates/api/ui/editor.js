@@ -2,6 +2,7 @@
 // draft. Each list entry carries its key, and the draft saves automatically.
 import { html, useState, useEffect, useRef, useCallback } from './vendor/htm-preact-standalone.module.js';
 import { api, Field, ErrorNotice, useAction } from './app.js';
+import { AlbumPayments, TrackPayments } from './values.js';
 
 // ---- Client IDs and keys ----
 // Each list entry gets a client ID (`_cid`) for the life of the page. After a
@@ -11,7 +12,7 @@ import { api, Field, ErrorNotice, useAction } from './app.js';
 
 let nextCid = 1;
 
-function withCids(value) {
+export function withCids(value) {
   if (Array.isArray(value)) {
     return value.map((entry) => (entry && typeof entry === 'object' ? { ...withCids(entry), _cid: nextCid++ } : entry));
   }
@@ -183,7 +184,7 @@ const BAD_ADDRESS = 'This is not a full web address. Start it with https://.';
 // A text field. An address field gives its model path in `address`. The
 // field then shows red text when the core finds the address not correct
 // (ADR 0023 item 4).
-function TextField({ id, label, value, onChange, required = false, address, bad = [], ...rest }) {
+export function TextField({ id, label, value, onChange, required = false, address, bad = [], ...rest }) {
   const error = address && bad.some((b) => b.field === address) ? BAD_ADDRESS : null;
   return html`<${Field} id=${id} label=${label} value=${value ?? ''} error=${error} ...${rest}
     onInput=${(e) => onChange(required ? e.target.value : optional(e.target.value))} />`;
@@ -197,10 +198,10 @@ function TextArea({ id, label, value, onChange }) {
 }
 
 // Change one field of an object.
-const set = (object, name, value) => ({ ...object, [name]: value });
+export const set = (object, name, value) => ({ ...object, [name]: value });
 
 // Change one entry of a list.
-const setAt = (list, index, entry) => list.map((e, i) => (i === index ? entry : e));
+export const setAt = (list, index, entry) => list.map((e, i) => (i === index ? entry : e));
 
 function move(list, index, by) {
   const target = index + by;
@@ -211,7 +212,7 @@ function move(list, index, by) {
 }
 
 // The buttons that move or remove one entry of a list.
-function EntryActions({ list, index, name, onChange }) {
+export function EntryActions({ list, index, name, onChange }) {
   return html`<div class="actions">
     <button class="button quiet" type="button" disabled=${index === 0}
       aria-label=${`Move ${name} up`} onClick=${() => onChange(move(list, index, -1))}>Move up</button>
@@ -237,6 +238,37 @@ function ChannelFields({ model, update, bad }) {
   </div>`;
 }
 
+// ---- Summary lines (ADR 0028) ----
+// Each entry of a list is one summary line that opens. Entries with the same
+// group name open one at a time. An entry that the user added starts open.
+
+export const startOpen = new Set();
+
+// A ref that opens a new entry one time, after the browser inserted it. An
+// entry that is open at insertion closes when its group has an open entry,
+// so the open must come after the insertion. The browser then closes the
+// other entry of the group.
+export const openOnce = (cid) => (element) => {
+  if (element && startOpen.has(cid)) {
+    startOpen.delete(cid);
+    element.open = true;
+  }
+};
+
+export function EntryRow({ group, cid, summary, children }) {
+  return html`<details class="entry-row" name=${group} key=${cid} ref=${openOnce(cid)}>
+    <summary>${summary}</summary>
+    <div class="form">${children}</div>
+  </details>`;
+}
+
+// Add an entry that starts open.
+export function addOpen(list, blank) {
+  const added = withCids([blank])[0];
+  startOpen.add(added._cid);
+  return [...list, added];
+}
+
 function Persons({ prefix, persons, onChange, bad }) {
   const blank = { name: '', role: null, group: null, img: null, href: null };
   return html`<div class="form">
@@ -245,17 +277,20 @@ function Persons({ prefix, persons, onChange, bad }) {
     ${persons.map((p, i) => {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
       const id = `${prefix}-person-${p._cid}`;
-      return html`<fieldset class="entry" key=${p._cid}>
-        <legend>${p.name || 'New person'}</legend>
+      const summary = html`<span class="title">${p.name || 'New person'}</span>
+        <span class="sub">${p.role || 'host'} · ${p.group || 'cast'}</span>`;
+      return html`<${EntryRow} key=${p._cid} group=${`${prefix}-persons`} cid=${p._cid} summary=${summary}>
         <${TextField} id=${`${id}-name`} label="Name" required value=${p.name} onChange=${change('name')} />
-        <${TextField} id=${`${id}-role`} label="Role" hint="For example vocalist or guitarist. Empty means host." value=${p.role} onChange=${change('role')} />
-        <${TextField} id=${`${id}-group`} label="Group" hint="For example music. Empty means cast." value=${p.group} onChange=${change('group')} />
+        <div class="grid2">
+          <${TextField} id=${`${id}-role`} label="Role" hint="For example vocalist. Empty means host." value=${p.role} onChange=${change('role')} />
+          <${TextField} id=${`${id}-group`} label="Group" hint="For example music. Empty means cast." value=${p.group} onChange=${change('group')} />
+        </div>
         <${TextField} id=${`${id}-img`} label="Picture address" type="url" address=${`persons/${i}/img`} bad=${bad} value=${p.img} onChange=${change('img')} />
         <${TextField} id=${`${id}-href`} label="Information address" type="url" address=${`persons/${i}/href`} bad=${bad} value=${p.href} onChange=${change('href')} />
         <${EntryActions} list=${persons} index=${i} name=${p.name || 'this person'} onChange=${onChange} />
-      </fieldset>`;
+      <//>`;
     })}
-    <div class="actions"><button class="button" type="button" onClick=${() => onChange([...persons, withCids([blank])[0]])}>＋ Add a person</button></div>
+    <div class="actions"><button class="button" type="button" onClick=${() => onChange(addOpen(persons, blank))}>＋ Add a person</button></div>
   </div>`;
 }
 
@@ -267,14 +302,15 @@ function Fundings({ fundings, onChange, bad }) {
     ${fundings.map((f, i) => {
       const change = (name) => (value) => onChange(setAt(fundings, i, set(f, name, value)));
       const id = `funding-${f._cid}`;
-      return html`<fieldset class="entry" key=${f._cid}>
-        <legend>${f.label || 'New support link'}</legend>
+      const summary = html`<span class="title">${f.label || 'New support link'}</span>
+        <span class="sub mono">${f.url || 'No address'}</span>`;
+      return html`<${EntryRow} key=${f._cid} group="fundings" cid=${f._cid} summary=${summary}>
         <${TextField} id=${`${id}-label`} label="Text" required value=${f.label} onChange=${change('label')} />
         <${TextField} id=${`${id}-url`} label="Address" type="url" address=${`fundings/${i}/url`} bad=${bad} value=${f.url} onChange=${change('url')} />
         <${EntryActions} list=${fundings} index=${i} name=${f.label || 'this support link'} onChange=${onChange} />
-      </fieldset>`;
+      <//>`;
     })}
-    <div class="actions"><button class="button" type="button" onClick=${() => onChange([...fundings, withCids([blank])[0]])}>＋ Add a support link</button></div>
+    <div class="actions"><button class="button" type="button" onClick=${() => onChange(addOpen(fundings, blank))}>＋ Add a support link</button></div>
   </div>`;
 }
 
@@ -306,7 +342,7 @@ function Enclosure({ id, path, enclosure, onChange, bad }) {
     <${TextField} id=${`${id}-type`} label="Audio file type" hint="For example audio/mpeg." value=${value.media_type} onChange=${change('media_type')} />`;
 }
 
-function Track({ items, index, onChange, bad }) {
+function Track({ items, index, onChange, bad, albumBlocks }) {
   const item = items[index];
   const id = `track-${item._cid}`;
   const path = `items/${index}/`;
@@ -330,6 +366,7 @@ function Track({ items, index, onChange, bad }) {
         <dt>Track number</dt><dd>${item.episode || '—'}</dd>
         <dt>Track GUID</dt><dd class="mono">${item.guid || 'Studio gives one when it saves'}</dd>
       </dl>
+      <${TrackPayments} id=${id} item=${item} albumBlocks=${albumBlocks} onChange=${change('values')} />
       <${EntryActions} list=${items} index=${index} name=${name} onChange=${onChange} />
     </div>
   </details>`;
@@ -412,7 +449,7 @@ function Tracks({ model, update, bad }) {
     <h2>Tracks</h2>
     <p class="hint">When you move, add or remove a track, Studio sets the track number (podcast:episode) of each track from this sequence. Studio does not change the publication dates.</p>
     ${model.items.length === 0 && html`<p class="hint">This album has no tracks yet.</p>`}
-    <div class="tracks">${model.items.map((_, i) => html`<${Track} key=${model.items[i]._cid} items=${model.items} index=${i} onChange=${onChange} bad=${bad} />`)}</div>
+    <div class="tracks">${model.items.map((_, i) => html`<${Track} key=${model.items[i]._cid} items=${model.items} index=${i} onChange=${onChange} bad=${bad} albumBlocks=${model.values} />`)}</div>
     <${AddTrack} onAdd=${(item) => onChange([...model.items, withCids([item])[0]])} />
   </div>`;
 }
@@ -523,8 +560,10 @@ function Snapshots({ feedId, draft, version }) {
       draft.show(await api(`/feeds/${feedId}/snapshots/${snapshot.id}/draft`, { method: 'POST' }));
     });
   };
-  return html`<div class="panel form">
-    <h2>Earlier versions</h2>
+  const count = list ? list.length : 0;
+  return html`<details class="panel disclosure">
+    <summary><h2>Earlier versions</h2><span class="sub">${count === 0 ? 'None yet' : `${count} version${count === 1 ? '' : 's'}`}</span></summary>
+    <div class="form">
     <p class="hint">Before each write, Studio keeps the file that the write replaces. To go back, put an earlier version in the draft, examine the changes and write them.</p>
     <${ErrorNotice} error=${error} />
     ${list && list.length === 0 && html`<p class="hint">No earlier versions yet.</p>`}
@@ -533,10 +572,24 @@ function Snapshots({ feedId, draft, version }) {
         <span class="mono sub">${s.version.slice(0, 19)}</span></span>
       <button class="button" type="button" disabled=${busy} onClick=${() => restore(s)}>Put in the draft</button>
     </li>`)}</ul>`}
-  </div>`;
+    </div>
+  </details>`;
 }
 
 // ---- The editor ----
+
+// The summary line of the credits: the people, the support links and the
+// license.
+function creditSummary(model) {
+  const people = model.persons.length;
+  const names = model.persons.slice(0, 3).map((p) => p.name).filter(Boolean).join(', ');
+  const links = model.fundings.length;
+  return [
+    people === 0 ? 'No people' : `${people} ${people === 1 ? 'person' : 'people'}: ${names}${people > 3 ? ', …' : ''}`,
+    `${links} support link${links === 1 ? '' : 's'}`,
+    model.license ? model.license.identifier || 'license' : 'No license',
+  ].join(' · ');
+}
 
 export function AlbumEditor({ feed, onWritten }) {
   const draft = useDraft(feed.id);
@@ -547,12 +600,15 @@ export function AlbumEditor({ feed, onWritten }) {
   }
   return html`<section class="section editor">
     <${ChannelFields} model=${model} update=${update} bad=${draft.bad} />
-    <div class="panel form">
-      <h2>Credits and links</h2>
+    <details class="panel disclosure">
+      <summary><h2>Credits and links</h2><span class="sub">${creditSummary(model)}</span></summary>
+      <div class="form">
       <${Persons} prefix="ch" persons=${model.persons} bad=${draft.bad} onChange=${(persons) => update((m) => set(m, 'persons', persons))} />
       <${Fundings} fundings=${model.fundings} bad=${draft.bad} onChange=${(fundings) => update((m) => set(m, 'fundings', fundings))} />
       <${LicenseFields} license=${model.license} bad=${draft.bad} onChange=${(license) => update((m) => set(m, 'license', license))} />
-    </div>
+      </div>
+    </details>
+    <${AlbumPayments} model=${model} update=${update} />
     <${Tracks} model=${model} update=${update} bad=${draft.bad} />
     <${Changes} feedId=${feed.id} draft=${draft} onWritten=${onWritten} />
     <${Snapshots} feedId=${feed.id} draft=${draft} version=${feed.last_version} />

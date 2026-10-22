@@ -1125,3 +1125,28 @@ async fn the_media_route_gives_the_size_and_the_type_of_a_file() {
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_eq!(body["error"]["code"], "network");
 }
+
+/// ADR 0028: on 2026-10-22 the recipients and the people of the editor were
+/// lists of open entries, and the operator scrolled far and closed them by
+/// hand.
+#[test]
+fn each_details_element_is_a_named_entry_or_a_section() {
+    for (name, text) in crate::ui::text_files() {
+        let is_script = std::path::Path::new(name)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("js"));
+        if name.starts_with("vendor/") || !is_script {
+            continue;
+        }
+        for (index, _) in text.match_indices("<details") {
+            let end = text[index..].find('>').map_or(text.len(), |e| index + e);
+            let tag = &text[index..end];
+            assert!(
+                tag.contains("name=") || tag.contains("disclosure"),
+                "ADR 0028: {name} has a details element that is not a list entry with a name, \
+                 and not a section with the class disclosure: {tag}. Give the entries of a list \
+                 one name, so that one entry is open at a time."
+            );
+        }
+    }
+}

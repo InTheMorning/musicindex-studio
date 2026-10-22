@@ -17,6 +17,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/editor.js"),
     ),
     (
+        "values.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/values.js"),
+    ),
+    (
         "theme.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/theme.js"),

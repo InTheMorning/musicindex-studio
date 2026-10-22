@@ -28,6 +28,8 @@
 - [ADR 0024: Track numbers follow the track sequence](adr/0024-track-numbers-follow-the-track-sequence.md)
 - [ADR 0025: Studio serves cover art to the UI](adr/0025-studio-serves-cover-art.md)
 - [ADR 0026: Import music files through the draft](adr/0026-import-music-files-through-the-draft.md)
+- [ADR 0027: The recipient picker](adr/0027-the-recipient-picker.md)
+- [ADR 0028: Summary lines and one open entry](adr/0028-summary-lines-and-one-open-entry.md)
 
 ## Plans
 
@@ -47,12 +49,14 @@
 - [Studio v1 task 010: The draft API](tasks/studio-v1-task-010-draft-api.md)
 - [Studio v1 task 011: The album editor](tasks/studio-v1-task-011-album-editor.md)
 - [Studio v1 task 012: The value editor](tasks/studio-v1-task-012-value-editor.md)
+- [Studio v1 task 013: The recipient picker](tasks/studio-v1-task-013-recipient-picker.md)
 
 ## Reviews
 
 - [Phase 4 visual check, 2026-10-22](reviews/2026-10-22-phase-4-visual-check.md)
 - [Task 009 visual check, 2026-10-22](reviews/2026-10-22-task-009-visual-check.md)
 - [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
+- [Task 012 visual check, 2026-10-22](reviews/2026-10-22-task-012-visual-check.md)
 
 ## Research
 

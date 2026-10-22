@@ -122,6 +122,19 @@
 :root { --error: #ff6961; }
 :root[data-theme="light"] { --error: #c41e3a; }
 
+/* Share tokens: one hue and a pale track of the same hue. They are not
+   entity colors. The palette validator of the dataviz guidance passes each
+   value: 3:1 or more against each surface. A fee part has stripes, not a
+   second color. */
+:root {
+  --share: #2d7bff;
+  --share-track: rgba(45, 123, 255, .2);
+}
+:root[data-theme="light"] {
+  --share: #1a56c0;
+  --share-track: rgba(26, 86, 192, .16);
+}
+
 /* Diff tokens: an added line is green and a removed line is red. They are not
    entity colors and not --error. The sign of each line also shows its kind,
    so color is not the only sign. */
@@ -611,3 +624,138 @@ textarea {
 .snapshots li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .snapshots li > span { display: grid; }
 .snapshots .sub { color: var(--muted); font-size: .85rem; }
+
+/* The value editor (task 012). */
+.editor h4 { font-size: .95rem; font-weight: 700; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: end; }
+.grid2 > .field { align-content: end; }
+.field select {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--sep);
+  border-radius: 10px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font: inherit;
+}
+/* Disclosure groups. The summary line stays visible, and the details open
+   below it (Apple HIG, disclosure controls). */
+.disclosure > summary {
+  display: flex;
+  gap: 12px;
+  min-height: 44px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.disclosure > summary::-webkit-details-marker, .recipient > summary::-webkit-details-marker,
+.entry-row > summary::-webkit-details-marker { display: none; }
+.disclosure > summary::before, .recipient > summary::before, .entry-row > summary::before {
+  content: "▸";
+  color: var(--muted);
+  transition: transform .15s;
+}
+.disclosure[open] > summary::before, .recipient[open] > summary::before,
+.entry-row[open] > summary::before { transform: rotate(90deg); }
+.disclosure > summary .sub { color: var(--muted); }
+.disclosure > summary > h2, .disclosure > summary > h3, .disclosure > summary > .sub { flex: none; white-space: nowrap; }
+.disclosure > summary { flex-wrap: wrap; }
+.disclosure[open] > .form { margin-top: 14px; }
+.panel.disclosure { display: block; padding-block: 12px; }
+.panel.disclosure[open] { padding-bottom: 24px; }
+.track-payments { border-top: 1px solid var(--sep); padding-top: 6px; }
+
+/* A recipient is the third level: it has the tertiary background, with no
+   border (Apple HIG, color: primary, secondary and tertiary backgrounds). */
+.recipient { border-radius: 12px; background: var(--surface2); }
+.recipient > summary {
+  display: grid;
+  /* The marker, the name, the meter, the percentage and the address. Fixed
+     columns let the meters line up from row to row. */
+  grid-template-columns: auto minmax(0, 13rem) 64px 6.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.recipient > summary .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipient > summary .share { color: var(--muted); font-variant-numeric: tabular-nums; }
+.recipient > summary .address { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipient > .form { padding: 4px 14px 14px; }
+
+/* Share bars (task 012). A meter for one recipient, and a stack of all
+   recipients with a 2 px gap between the parts. */
+.share-meter {
+  display: block;
+  width: 64px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--share-track);
+  overflow: hidden;
+}
+.share-meter > span { display: block; height: 100%; border-radius: 3px; background: var(--share); }
+/* The bar on the summary line, and the legend on a new line under it. The
+   bar is centered over the legend. */
+.share-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  min-width: 0;
+  padding: 6px 0;
+}
+.share-legend { text-align: center; }
+.share-stack {
+  display: flex;
+  gap: 2px;
+  width: 160px;
+  height: 8px;
+}
+.share-legend { color: var(--muted); font-size: .85rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+.share-legend .part { white-space: nowrap; }
+.share-stack > span { position: relative; }
+.share-stack > span.other { background: var(--muted); }
+/* A styled label on hover, at once (the browser title waits about 1 s). */
+.share-stack > span:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--sep);
+  color: var(--text);
+  font-size: .8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 2;
+  pointer-events: none;
+}
+.share-stack > span { flex-basis: 0; min-width: 3px; background: var(--share); }
+.share-stack > span.fee {
+  background: repeating-linear-gradient(45deg, var(--share) 0 2px, var(--share-track) 2px 4px);
+}
+.share-stack > span:first-child { border-radius: 4px 0 0 4px; }
+.share-stack > span:last-child { border-radius: 0 4px 4px 0; }
+.share-stack > span:only-child { border-radius: 4px; }
+
+/* A list entry as one summary line (ADR 0028), on the tertiary background. */
+.entry-row { border-radius: 12px; background: var(--surface2); }
+.entry-row > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.entry-row > summary .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry-row > summary .sub { color: var(--muted); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry-row > .form { padding: 4px 14px 14px; }

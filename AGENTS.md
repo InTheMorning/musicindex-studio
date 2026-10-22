@@ -17,8 +17,8 @@ The license is AGPL-3.0 ([ADR 0011](docs/adr/0011-agpl-license.md)).
 
 On 2026-10-22, Phase 0 to Phase 4 and ADR 0021 are complete. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It has the encrypted secret vault, the SQLite collection, the local folder connector and the write pipeline. `studio-api` serves the local JSON API and the UI. `studio-desktop` runs them on a loopback address. `studio-server` has no function yet.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0026`. ADR 0017 is proposed.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor) is in progress. Tasks 010 (the draft API) and 011 (the album editor UI) are complete. Next: task 012 (the value editor). The current state of the plan lists the open items.
+- Decisions: `docs/adr/0001` to `docs/adr/0028`. ADR 0017 is proposed.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor) is in progress. Tasks 010 to 012 (the draft API, the album editor and the value editor) are complete. Next: task 013 (the recipient picker). The current state of the plan lists the open items.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
@@ -76,6 +76,7 @@ Durable rules:
 - In local mode, each `/api/` request needs the access token, and each request needs a loopback `Host` ([ADR 0017](docs/adr/0017-local-api-access.md)). Tests enforce this.
 - The vault refuses a passphrase with fewer than 12 characters or a zxcvbn score below 3. The UI gives no advice on how to make a passphrase ([ADR 0018](docs/adr/0018-passphrase-strength-and-error-color.md)).
 - An entity color is not a general accent. An error uses the `--error` token, not an entity color ([ADR 0018](docs/adr/0018-passphrase-strength-and-error-color.md)). Each control is a minimum of 44 px high, and all functions work from the keyboard ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
+- Each entry of a list shows as one summary line, and one entry of a list is open at a time. A section that the user does not change in each visit starts collapsed, with a summary line ([ADR 0028](docs/adr/0028-summary-lines-and-one-open-entry.md)). A test enforces the `details` elements.
 
 Situational rules:
 

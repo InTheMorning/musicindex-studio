@@ -6,6 +6,7 @@
 //! bytes of its start tag, and the writer then makes a new start tag.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt;
 
 use quick_xml::escape::{escape, resolve_predefined_entity};
@@ -230,6 +231,8 @@ pub struct Element {
     /// The space before `/>` in the source, such as `" "`. A changed start
     /// tag keeps it, so that a change of an attribute does not change it.
     close_gap: String,
+    /// True for an element that the writer made, not the parser.
+    created: bool,
 }
 
 impl Element {
@@ -247,6 +250,7 @@ impl Element {
             source_start: None,
             source_end: SourceEnd::None,
             close_gap: String::new(),
+            created: true,
         }
     }
 
@@ -658,6 +662,7 @@ impl<'s> Parser<'s> {
             source_start: Some(raw.to_owned()),
             source_end: SourceEnd::None,
             close_gap: close_gap(raw),
+            created: false,
         };
         Ok((element, scope))
     }
@@ -719,6 +724,47 @@ pub(crate) fn remove_child(children: &mut Vec<Node>, index: usize) {
 ///
 /// The writer copies it before a new element, so that the new element has
 /// the indentation of its neighbors.
+/// The attribute names of the first source element of each qualified name,
+/// in their source sequence.
+pub(crate) fn attribute_orders(root: &Element) -> HashMap<String, Vec<String>> {
+    fn walk(element: &Element, orders: &mut HashMap<String, Vec<String>>) {
+        if !element.created && !element.attributes.is_empty() {
+            orders
+                .entry(element.name.clone())
+                .or_insert_with(|| element.attributes.iter().map(|a| a.name.clone()).collect());
+        }
+        for node in &element.children {
+            if let Node::Element(child) = node {
+                walk(child, orders);
+            }
+        }
+    }
+    let mut orders = HashMap::new();
+    walk(root, &mut orders);
+    orders
+}
+
+/// Give each element that the writer made the attribute sequence of the
+/// first source element with the same name. An attribute that the source
+/// element does not have goes after the others, in its own sequence.
+pub(crate) fn order_new_attributes(element: &mut Element, orders: &HashMap<String, Vec<String>>) {
+    if element.created
+        && let Some(order) = orders.get(&element.name)
+    {
+        element.attributes.sort_by_key(|a| {
+            order
+                .iter()
+                .position(|name| *name == a.name)
+                .unwrap_or(usize::MAX)
+        });
+    }
+    for node in &mut element.children {
+        if let Node::Element(child) = node {
+            order_new_attributes(child, orders);
+        }
+    }
+}
+
 /// Give a new child element, and each new element in it, the indentation
 /// and the close style of the document.
 ///

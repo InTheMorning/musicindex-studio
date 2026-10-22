@@ -369,7 +369,7 @@ function AddFeedForm({ connectors, onAdded }) {
             checked=${selected === f.path} onChange=${() => setSelected(f.path)} />
           <span class=${`dot ${kind.dot}`}></span>
           <span class="text"><span class="title">${f.title || f.path}</span>
-            <span class="sub">${kind.label} · <span class="mono">${f.path}</span>${f.in_collection ? ' · in your collection' : ''}</span></span>
+            <span class="sub">${kind.label}${f.blocked ? ' · blocked' : ''} · <span class="mono">${f.path}</span>${f.in_collection ? ' · in your collection' : ''}</span></span>
         </label>`;
       })}
       ${found && found.truncated && html`<p class="hint">The folder has more files than Studio lists. Type the path of a feed that is not in the list.</p>`}
@@ -666,6 +666,51 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
   </div>`;
 }
 
+// The feed files in a folder that are not in the collection. Studio shows
+// them after a folder match, so that a feed that no index lists, such as a
+// blocked test feed, is not missed (ADR 0019).
+function FolderFeeds({ connector, onAdded }) {
+  const [found, setFound] = useState(null);
+  const [chosen, setChosen] = useState([]);
+  const [result, setResult] = useState(null);
+  const { busy, error, run } = useAction();
+  useEffect(() => {
+    api(`/connectors/${connector.id}/feeds`).then((list) => {
+      const others = list.feeds.filter((f) => !f.in_collection);
+      setFound(others);
+      setChosen(others.map((f) => f.path));
+    }, () => setFound([]));
+  }, [connector.id]);
+  if (!found || found.length === 0) return null;
+  if (result) return html`<div class="notice" role="status">Studio added ${result} feed${result === 1 ? '' : 's'} from “${connector.name}”.</div>`;
+  const toggle = (path) => setChosen(chosen.includes(path) ? chosen.filter((p) => p !== path) : [...chosen, path]);
+  const add = () => run(async () => {
+    for (const path of chosen) {
+      const feed = await api('/feeds', { method: 'POST', body: { connector_id: connector.id, path } });
+      await api(`/feeds/${feed.id}/refresh`, { method: 'POST' });
+    }
+    setResult(chosen.length);
+    onAdded();
+  });
+  return html`<div class="panel form">
+    <h2>Studio also found these feeds in this folder</h2>
+    <fieldset class="choices"><legend class="visually-hidden">Feeds to add</legend>
+      ${found.map((f) => {
+        const kind = mediumKind(f.medium);
+        return html`<label class="choice">
+          <input type="checkbox" checked=${chosen.includes(f.path)} onChange=${() => toggle(f.path)} />
+          <span class=${`dot ${kind.dot}`}></span>
+          <span class="text"><span class="title">${f.title || f.path}</span>
+            <span class="sub">${kind.label}${f.blocked ? ' · blocked: directories do not show it' : ''} · <span class="mono">${f.path}</span></span></span>
+        </label>`;
+      })}
+    </fieldset>
+    <${ErrorNotice} error=${error} />
+    <div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
+      ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>
+  </div>`;
+}
+
 function Hosts({ connectors, onChanged }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
@@ -674,7 +719,7 @@ function Hosts({ connectors, onChanged }) {
   // A new folder takes each read-only feed whose file it holds (ADR 0020).
   const added = (connector) => run(async () => {
     const result = await api(`/connectors/${connector.id}/match`, { method: 'POST' });
-    setLinked({ name: connector.name, feeds: result.linked });
+    setLinked({ connector, name: connector.name, feeds: result.linked });
     setFormKey(formKey + 1);
     onChanged();
   });
@@ -705,6 +750,7 @@ function Hosts({ connectors, onChanged }) {
           ? `“${linked.name}” holds none of your read-only feeds.`
           : `Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.name}”: ${linked.feeds.map((f) => f.title || f.path).join(', ')}.`}
       </div>`}
+      ${linked && html`<${FolderFeeds} key=${linked.connector.id} connector=${linked.connector} onAdded=${onChanged} />`}
       <div class="panel"><h2>Add a folder</h2><${AddHostForm} key=${formKey} onAdded=${added} /></div>
     </section>
   </div>`;

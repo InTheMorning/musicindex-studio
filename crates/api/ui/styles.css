@@ -514,3 +514,12 @@ textarea {
 .inline input { flex: 1; }
 .failed { padding-left: 18px; color: var(--muted); font-size: .9rem; }
 .choices .hint { margin-bottom: 4px; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

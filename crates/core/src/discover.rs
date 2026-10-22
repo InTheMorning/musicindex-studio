@@ -9,7 +9,7 @@ use crate::digest::content_version;
 use crate::feed::{Feed, RemoteItem};
 use crate::musicindex::MusicIndex;
 use crate::web::{Web, host_of};
-use crate::xml::Document;
+use crate::xml::{Document, Ns};
 
 /// The largest file that discovery reads, in bytes (ADR 0019).
 pub const MAX_FEED_BYTES: usize = 5 * 1024 * 1024;
@@ -25,6 +25,25 @@ pub struct Candidate {
     pub medium: Option<String>,
     /// `podcast:guid`.
     pub podcast_guid: Option<String>,
+    /// True when the feed asks each platform not to show it: an
+    /// `itunes:block` of `yes`, or a `podcast:block` of `yes` without `id`.
+    pub blocked: bool,
+}
+
+/// True when a feed asks each platform not to show it publicly.
+///
+/// A `podcast:block` with an `id` blocks only one platform, so it does not
+/// count (podcast namespace `block` tag).
+#[must_use]
+pub fn is_blocked(doc: &Document) -> bool {
+    let Some(channel) = doc.root().child(Ns::None, "channel") else {
+        return false;
+    };
+    channel.elements().any(|e| {
+        let yes = e.text().trim().eq_ignore_ascii_case("yes");
+        (e.is(Ns::Itunes, "block") && yes)
+            || (e.is(Ns::Podcast, "block") && yes && e.attribute("id").is_none())
+    })
 }
 
 /// The feed files on a host.
@@ -54,12 +73,14 @@ pub fn feed_candidates(connector: &dyn Connector) -> Result<Candidates, Connecto
             if file.bytes.len() > MAX_FEED_BYTES {
                 return None;
             }
-            let feed = Feed::read(&Document::parse_bytes(&file.bytes).ok()?).ok()?;
+            let doc = Document::parse_bytes(&file.bytes).ok()?;
+            let feed = Feed::read(&doc).ok()?;
             Some(Candidate {
                 path: path.clone(),
                 title: feed.title,
                 medium: feed.medium,
                 podcast_guid: feed.podcast_guid,
+                blocked: is_blocked(&doc),
             })
         })
         .collect();
@@ -468,6 +489,26 @@ mod tests {
         let found = from_sources(&Web::new(), &index, &[server.url("/p.xml")], &[]);
         assert_eq!(found.feeds.len(), MAX_DISCOVERED_FEEDS);
         assert!(found.truncated);
+    }
+
+    #[test]
+    fn a_feed_with_a_full_block_is_blocked_and_a_platform_block_is_not() {
+        let doc = |extra: &str| {
+            Document::parse(&format!(
+                "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" \
+                 xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>{extra}</channel></rss>"
+            ))
+            .unwrap()
+        };
+        assert!(is_blocked(&doc("<itunes:block>Yes</itunes:block>")));
+        assert!(is_blocked(&doc("<podcast:block>yes</podcast:block>")));
+        assert!(!is_blocked(&doc(
+            "<podcast:block id=\"google\">yes</podcast:block>"
+        )));
+        assert!(!is_blocked(&doc(
+            "<podcast:block>no</podcast:block><itunes:block>No</itunes:block>"
+        )));
+        assert!(!is_blocked(&doc("")));
     }
 
     #[test]

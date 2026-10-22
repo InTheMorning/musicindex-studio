@@ -36,7 +36,7 @@ Phase 0 to Phase 4 are complete. Phase 1 has one open item.
 - The one-question wizard of [ADR 0020](../adr/0020-first-run-asks-one-question.md) exists: discovery from addresses and musicindex, read-only feeds, a folder match, and the MSP 2.0 import with the vault on demand. Its [visual check](../reviews/2026-10-22-task-009-visual-check.md) passes.
 - Risk for Phase 9: discovery reads each address that a user gives. The server shell must refuse addresses in private networks.
 
-Phase 5 (album editor) is next.
+Next: implement [ADR 0021](../adr/0021-public-address-of-a-feed.md) (the public address of a feed). Then Phase 5 (album editor).
 
 ## Target State
 

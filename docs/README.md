@@ -22,6 +22,7 @@
 - [ADR 0018: Passphrase strength and the error color](adr/0018-passphrase-strength-and-error-color.md)
 - [ADR 0019: Select a feed from the files of a host](adr/0019-select-a-feed-from-the-host.md)
 - [ADR 0020: The first run asks one question](adr/0020-first-run-asks-one-question.md)
+- [ADR 0021: The public address of a feed](adr/0021-public-address-of-a-feed.md)
 
 ## Plans
 

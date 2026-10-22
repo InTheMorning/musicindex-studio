@@ -78,6 +78,8 @@ const KNOWN_SERVICES: &[(&str, &str)] = &[
     ("wavlake.com", "Wavlake"),
     ("feeds.fountain.fm", "Fountain"),
     ("serve.podhome.fm", "Podhome"),
+    ("musicsideproject.com", "MSP 2.0"),
+    ("msp.podtards.com", "MSP 2.0"),
 ];
 
 /// The name of a known hosting service for a host name.

@@ -11,6 +11,7 @@ mod digest;
 pub mod discover;
 pub mod feed;
 pub mod guid;
+pub mod msp;
 pub mod musicindex;
 pub mod pipeline;
 #[cfg(any(test, feature = "testing"))]

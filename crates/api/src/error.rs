@@ -32,6 +32,14 @@ impl ApiError {
         Self::new(StatusCode::LOCKED, "vault_locked", "unlock the vault first")
     }
 
+    pub(crate) fn vault_required() -> Self {
+        Self::new(
+            StatusCode::CONFLICT,
+            "vault_required",
+            "make the vault first: this step keeps a secret",
+        )
+    }
+
     pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal", message)
     }

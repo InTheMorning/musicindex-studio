@@ -10,6 +10,8 @@
 //!   default is `$XDG_DATA_HOME/musicindex-studio`, or
 //!   `~/.local/share/musicindex-studio`.
 //! - `--port N`: the port. The default 0 lets the system select a free port.
+//! - `--musicindex URL`: the musicindex API. The default is
+//!   `https://api.musicindex.org`.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -20,6 +22,7 @@ use studio_api::{Access, Workspace, local_router};
 struct Options {
     data_dir: PathBuf,
     port: u16,
+    musicindex: Option<String>,
 }
 
 fn default_data_dir() -> Option<PathBuf> {
@@ -33,6 +36,7 @@ fn default_data_dir() -> Option<PathBuf> {
 fn options() -> Result<Options, String> {
     let mut data_dir = None;
     let mut port = 0;
+    let mut musicindex = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -45,13 +49,20 @@ fn options() -> Result<Options, String> {
                     .and_then(|p| p.parse().ok())
                     .ok_or("--port needs a number from 0 to 65535")?;
             }
+            "--musicindex" => {
+                musicindex = Some(args.next().ok_or("--musicindex needs an address")?);
+            }
             other => return Err(format!("unknown option {other}")),
         }
     }
     let data_dir = data_dir
         .or_else(default_data_dir)
         .ok_or("give --data-dir, because HOME is not set")?;
-    Ok(Options { data_dir, port })
+    Ok(Options {
+        data_dir,
+        port,
+        musicindex,
+    })
 }
 
 #[tokio::main]
@@ -67,7 +78,10 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<(), String> {
     let options = options()?;
-    let workspace = Workspace::open(&options.data_dir).map_err(|e| format!("{e:?}"))?;
+    let mut workspace = Workspace::open(&options.data_dir).map_err(|e| format!("{e:?}"))?;
+    if let Some(base) = &options.musicindex {
+        workspace = workspace.with_musicindex(base);
+    }
     // ADR 0017: listen on a loopback address only.
     let listener =
         tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, options.port)))

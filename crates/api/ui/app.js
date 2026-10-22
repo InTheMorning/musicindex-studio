@@ -186,12 +186,6 @@ function BackButton() {
 
 // ---- First-run wizard (ADR 0005) ----
 
-function Steps({ current }) {
-  return html`<ol class="steps" aria-label=${`Step ${current} of 3`}>
-    ${[1, 2, 3].map((n) => html`<li class=${n < current ? 'done' : n === current ? 'current' : ''}></li>`)}
-  </ol>`;
-}
-
 const MIN_CHARS = 12;
 const STRENGTH_WORDS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'];
 
@@ -254,9 +248,8 @@ function CreateVault({ onDone }) {
     });
   };
   return html`<form class="form" onSubmit=${submit} noValidate>
-    <${Steps} current=${1} />
     <div><h1>Protect your keys</h1>
-      <p>Studio keeps the passwords and keys of your hosts in a vault. Only your passphrase opens it.</p></div>
+      <p>This step keeps a secret, so Studio makes a vault for it first. Only your passphrase opens the vault.</p></div>
     <${Field} id="passphrase" label="Passphrase" type="password" autocomplete="new-password" required
       value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} error=${passError}>
       <${Meter} strength=${strength} />
@@ -275,7 +268,6 @@ function CreateVault({ onDone }) {
 function ShowRecoveryKey({ recoveryKey, onDone }) {
   const [kept, setKept] = useState(false);
   return html`<div class="form">
-    <${Steps} current=${1} />
     <div><h1>Write down your recovery key</h1>
       <p>Studio shows this key one time only. With it, you can open the vault if you forget your passphrase.</p></div>
     <div class="recovery" aria-label="Recovery key">${recoveryKey}</div>
@@ -285,21 +277,14 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
   </div>`;
 }
 
-function AddHostForm({ onAdded, replaces = null, submitLabel = 'Add the folder' }) {
-  const config = replaces ? JSON.parse(replaces.config) : {};
-  const [name, setName] = useState(replaces ? replaces.name : 'My feeds');
-  const [root, setRoot] = useState(config.root || '');
-  const [baseUrl, setBaseUrl] = useState(config.base_url || '');
+function AddHostForm({ onAdded }) {
+  const [name, setName] = useState('My feeds');
+  const [root, setRoot] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const { busy, error, run } = useAction();
   const submit = (event) => {
     event.preventDefault();
     run(async () => {
-      if (replaces) {
-        // A connector that a feed uses stays. The new one is added beside it.
-        await api(`/connectors/${replaces.id}`, { method: 'DELETE' }).catch((e) => {
-          if (e.code !== 'in_use') throw e;
-        });
-      }
       const connector = await api('/connectors', {
         method: 'POST',
         body: { kind: 'local', name, root, base_url: baseUrl || null },
@@ -318,7 +303,7 @@ function AddHostForm({ onAdded, replaces = null, submitLabel = 'Add the folder' 
       hint="When a web server publishes this folder, Studio uses this address for each feed."
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
     <${ErrorNotice} error=${hostError.other} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : submitLabel}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : 'Add the folder'}</button></div>
   </form>`;
 }
 
@@ -400,42 +385,207 @@ function AddFeedForm({ connectors, onAdded }) {
   </form>`;
 }
 
-function Wizard({ onFinish }) {
-  // The vault step and the recovery key step have no way back: the vault
-  // exists after the first, and Studio shows the key one time only.
-  const [step, go] = useNav('wizard', 'vault');
+// ---- Find feeds by address or name (ADR 0020) ----
+
+function FindFeeds({ onFound }) {
+  const [addresses, setAddresses] = useState('');
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState(null);
+  const [guids, setGuids] = useState([]);
+  const search = useAction();
+  const find = useAction();
+  const lines = addresses.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  const runSearch = (event) => {
+    event.preventDefault();
+    if (!query.trim()) return;
+    search.run(async () => setHits(await api(`/search?q=${encodeURIComponent(query.trim())}`)));
+  };
+  const toggle = (guid) => setGuids(guids.includes(guid) ? guids.filter((g) => g !== guid) : [...guids, guid]);
+  const runFind = (event) => {
+    event.preventDefault();
+    find.run(async () => onFound(await api('/discover', { method: 'POST', body: { addresses: lines, guids } })));
+  };
+  return html`<div class="form">
+    <form class="form" onSubmit=${runFind}>
+      <div class="field">
+        <label for="addresses">Feed addresses</label>
+        <span class="hint" id="addresses-hint">One on each line. A publisher feed brings all of its releases.</span>
+        <textarea id="addresses" rows="3" aria-describedby="addresses-hint" placeholder="https://music.example/feed.xml"
+          value=${addresses} onInput=${(e) => setAddresses(e.target.value)}></textarea>
+      </div>
+      ${guids.length > 0 && html`<p class="hint">${guids.length} feed${guids.length > 1 ? 's' : ''} from the search.</p>`}
+      <${ErrorNotice} error=${find.error} />
+      <div class="actions"><button class="button primary" type="submit"
+        disabled=${find.busy || (lines.length === 0 && guids.length === 0)}>${find.busy ? 'Reading the feeds…' : 'Find my feeds'}</button></div>
+    </form>
+    <form class="form" onSubmit=${runSearch} role="search">
+      <div class="field">
+        <label for="search">Or search musicindex by name</label>
+        <div class="inline"><input id="search" type="search" value=${query} onInput=${(e) => setQuery(e.target.value)}
+          placeholder="Artist or feed name" />
+          <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
+      </div>
+      <${ErrorNotice} error=${search.error} />
+      ${hits && hits.length === 0 && html`<p class="empty">musicindex found no feed with that name.</p>`}
+      ${hits && hits.length > 0 && html`<fieldset class="choices"><legend>Select your feeds</legend>
+        ${hits.map((h) => html`<label class="choice">
+          <input type="checkbox" checked=${guids.includes(h.feed_guid)} onChange=${() => toggle(h.feed_guid)} />
+          <span class="dot feed"></span>
+          <span class="text"><span class="title">${h.title || h.feed_guid}</span>
+            <span class="sub">${h.artist || 'Unknown artist'}</span></span></label>`)}
+      </fieldset>`}
+    </form>
+  </div>`;
+}
+
+function hostLabel(group) {
+  if (group.service) return `${group.service}: Studio can read these feeds only.`;
+  return 'Studio can write these feeds when you connect the folder that holds them.';
+}
+
+// The feeds that discovery found, grouped by host (ADR 0020 items 7 to 12).
+function FoundFeeds({ found, onAdded }) {
+  const addable = found.feeds.filter((f) => !f.in_collection);
+  const [chosen, setChosen] = useState(addable.map((f) => f.url));
+  const { busy, error, run } = useAction();
+  const groups = [];
+  for (const feed of found.feeds) {
+    const host = feed.host || 'Unknown host';
+    let group = groups.find((g) => g.host === host);
+    if (!group) groups.push(group = { host, service: feed.service, feeds: [] });
+    group.feeds.push(feed);
+  }
+  const toggle = (url) => setChosen(chosen.includes(url) ? chosen.filter((u) => u !== url) : [...chosen, url]);
+  const add = () => run(async () => onAdded(await api('/feeds/import', { method: 'POST', body: { urls: chosen } }), groups));
+  return html`<div class="form">
+    <p>${found.feeds.length === 0 ? 'Studio found no feeds.' : `Studio found ${found.feeds.length} feed${found.feeds.length > 1 ? 's' : ''}.`}</p>
+    ${groups.map((g) => html`<fieldset class="choices">
+      <legend>${g.host}</legend>
+      <p class="hint">${hostLabel(g)}</p>
+      ${g.feeds.map((f) => {
+        const kind = mediumKind(f.medium);
+        return html`<label class=${`choice${f.in_collection ? ' taken' : ''}`}>
+          <input type="checkbox" disabled=${f.in_collection} checked=${f.in_collection || chosen.includes(f.url)}
+            onChange=${() => toggle(f.url)} />
+          <span class=${`dot ${kind.dot}`}></span>
+          <span class="text"><span class="title">${f.title || f.url}</span>
+            <span class="sub">${kind.label}${f.in_collection ? ' · in your collection' : ''}</span></span></label>`;
+      })}
+    </fieldset>`)}
+    ${found.truncated && html`<p class="hint">Studio stopped at 100 feeds. Add the others in a second search.</p>`}
+    ${found.failed.length > 0 && html`<div class="field"><span class="field-error">Studio could not read:</span>
+      <ul class="failed">${found.failed.map((f) => html`<li><span class="mono">${f.source}</span>: ${f.message}</li>`)}</ul></div>`}
+    <${ErrorNotice} error=${error} />
+    <div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
+      ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>
+  </div>`;
+}
+
+// Import MSP 2.0 backup files (ADR 0020). The edit tokens are secrets, so
+// Studio makes the vault first when it does not exist.
+function MspImport({ onAdded }) {
+  const [backups, setBackups] = useState([]);
+  const [fileError, setFileError] = useState(null);
+  const [needVault, setNeedVault] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState(null);
-  const [connector, setConnector] = useState(null);
-  const [feed, setFeed] = useState(null);
+  const [result, setResult] = useState(null);
+  const { busy, error, run } = useAction();
+
+  const read = async (event) => {
+    setFileError(null);
+    const parsed = [];
+    for (const file of event.target.files) {
+      try {
+        parsed.push(JSON.parse(await file.text()));
+      } catch (_) {
+        setFileError(`${file.name} is not a JSON backup file.`);
+      }
+    }
+    setBackups(parsed);
+  };
+  const send = () => run(async () => {
+    try {
+      const done = await api('/import/msp', { method: 'POST', body: { backups } });
+      setResult(done);
+    } catch (e) {
+      if (e.code === 'vault_required') { setNeedVault(true); return; }
+      throw e;
+    }
+  });
+
+  if (recoveryKey) {
+    return html`<${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${() => { setRecoveryKey(null); send(); }} />`;
+  }
+  if (needVault) {
+    return html`<${CreateVault} onDone=${(key) => { setNeedVault(false); if (key) setRecoveryKey(key); else send(); }} />`;
+  }
+  if (result) {
+    return html`<div class="form">
+      <p>Studio added ${result.added.length} feed${result.added.length === 1 ? '' : 's'} and keeps the edit tokens in your vault.</p>
+      ${result.failed.length > 0 && html`<div class="field"><span class="field-error">Studio could not import:</span>
+        <ul class="failed">${result.failed.map((f) => html`<li><span class="mono">${f.source}</span>: ${f.message}</li>`)}</ul></div>`}
+      <div class="actions"><button class="button primary" type="button" onClick=${() => onAdded(result)}>Continue</button></div>
+    </div>`;
+  }
+  return html`<div class="form">
+    <div class="field">
+      <label for="msp-files">MSP 2.0 backup files</label>
+      <span class="hint" id="msp-files-hint">The .json files that MSP 2.0 saved for your hosted feeds. You can select more than one.</span>
+      <input id="msp-files" type="file" accept=".json,application/json" multiple aria-describedby="msp-files-hint"
+        aria-invalid=${fileError ? 'true' : undefined} onChange=${read} />
+      ${fileError && html`<span class="field-error">${fileError}</span>`}
+    </div>
+    <${ErrorNotice} error=${error} />
+    <div class="actions"><button class="button primary" type="button" disabled=${busy || backups.length === 0} onClick=${send}>
+      ${busy ? 'Importing…' : `Import ${backups.length || ''} backup${backups.length === 1 ? '' : 's'}`}</button></div>
+  </div>`;
+}
+
+// ---- First-run wizard: one question (ADR 0020) ----
+
+function Wizard({ onFinish }) {
+  const [step, go] = useNav('wizard', 'question');
+  const [found, setFound] = useState(null);
+  const [added, setAdded] = useState(null);
   let body;
-  if (step === 'vault') {
-    body = html`<${CreateVault} onDone=${(key) => { setRecoveryKey(key); go(key ? 'recovery' : 'host', { replace: true }); }} />`;
-  } else if (step === 'recovery' && recoveryKey) {
-    body = html`<${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${() => { setRecoveryKey(null); go('host', { replace: true }); }} />`;
-  } else if (step === 'host' || step === 'recovery') {
-    body = html`<div class="form"><${Steps} current=${2} />
-      <div><h1>Connect a host</h1><p>A host keeps your feed files. Start with a folder on this computer. Studio can connect other hosts later.</p></div>
-      ${connector && html`<div class="notice" role="status">You added the folder <code>${JSON.parse(connector.config).root}</code>.
-        Change it below, or continue with it.</div>
-        <div class="actions"><button class="button" type="button" onClick=${() => go('feed')}>Continue with this folder</button></div>`}
-      <${AddHostForm} key=${connector ? connector.id : 'new'} replaces=${connector}
-        submitLabel=${connector ? 'Use the changed folder' : 'Add the folder'}
-        onAdded=${(c) => { setConnector(c); go('feed'); }} /></div>`;
-  } else if (step === 'feed' && connector) {
-    body = html`<div class="form"><${Steps} current=${3} />
-      <div><h1>Add your first feed</h1><p>Select a feed in the folder that you connected. Studio reads it and remembers it in your collection.</p></div>
-      <${AddFeedForm} connectors=${[connector]} onAdded=${(f) => { setFeed(f); go('done'); }} />
-      <div class="actions"><${BackButton} /><button class="button quiet" type="button" onClick=${onFinish}>Skip for now</button></div></div>`;
-  } else if (step === 'done') {
-    body = html`<div class="form"><${Steps} current=${4} />
-      <div><h1>Studio is ready</h1>
-        <p>${feed && feed.title ? `“${feed.title}” is in your collection.` : 'Your collection is ready.'}</p></div>
+  if (step === 'question') {
+    body = html`<div class="form">
+      <div><h1>Do you already have a feed?</h1>
+        <p>Studio keeps your feeds in one collection, and edits them where you host them.</p></div>
+      <div class="actions">
+        <button class="button primary" type="button" onClick=${() => go('find')}>Yes, I have feeds</button>
+        <button class="button" type="button" onClick=${() => go('new')}>No, I am new</button>
+      </div>
+      <button class="button quiet" type="button" onClick=${() => go('msp')}>Import from MSP 2.0</button>
+    </div>`;
+  } else if (step === 'msp') {
+    body = html`<div class="form"><div><h1>Import from MSP 2.0</h1></div>
+      <${MspImport} onAdded=${onFinish} />
+      <div class="actions"><${BackButton} /></div></div>`;
+  } else if (step === 'find') {
+    body = html`<div class="form"><div><h1>Find your feeds</h1></div>
+      <${FindFeeds} onFound=${(result) => { setFound(result); go('results'); }} />
+      <div class="actions"><${BackButton} /></div></div>`;
+  } else if (step === 'results' && found) {
+    body = html`<div class="form"><div><h1>Your feeds</h1></div>
+      <${FoundFeeds} found=${found} onAdded=${(result, groups) => { setAdded({ result, groups }); go('done', { replace: true }); }} />
+      <div class="actions"><${BackButton} /></div></div>`;
+  } else if (step === 'done' && added) {
+    const own = added.groups.filter((g) => !g.service).map((g) => g.host);
+    body = html`<div class="form"><div><h1>Studio is ready</h1>
+      <p>Studio added ${added.result.added.length} feed${added.result.added.length === 1 ? '' : 's'} to your collection.</p></div>
+      ${own.length > 0 && html`<p>To edit the feeds on ${own.join(', ')}, connect the folder that holds them in Hosts.</p>`}
+      <div class="actions"><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
+  } else if (step === 'new') {
+    body = html`<div class="form"><div><h1>Welcome</h1>
+      <p>A coming version of Studio makes new feeds. Today, Studio reads and keeps feeds that exist.</p></div>
       <div class="actions"><${BackButton} /><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
   } else {
-    // A reload lost the wizard memory. The vault exists, so start at the host step.
-    body = html`<div class="form"><${Steps} current=${2} />
-      <div><h1>Connect a host</h1><p>A host keeps your feed files.</p></div>
-      <${AddHostForm} onAdded=${(c) => { setConnector(c); go('feed'); }} /></div>`;
+    // A reload lost the wizard memory. Start again at the question.
+    body = html`<div class="form"><div><h1>Do you already have a feed?</h1></div>
+      <div class="actions"><button class="button primary" type="button" onClick=${() => go('find')}>Yes, I have feeds</button>
+        <button class="button" type="button" onClick=${() => go('new')}>No, I am new</button></div></div>`;
   }
   return html`<main class="center"><div class="card"><${Brand} />${body}</div></main>`;
 }
@@ -491,11 +641,11 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
     <section class="hero" style=${{ '--glow': glow }}>
       <div class="art" aria-hidden="true"></div>
       <div>
-        <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}</span>
+        <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}${feed.connector_id ? '' : ' · read-only'}</span>
         <h1>${feed.title || 'Untitled feed'}</h1>
         <p class="summary">${feed.public_url || 'This feed has no public address yet.'}</p>
         <div class="actions">
-          <button class="button primary" type="button" disabled=${busy || !feed.connector_id} onClick=${refresh}>
+          <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read again'}</button>
           <button class="button" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button>
         </div>
@@ -506,7 +656,7 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
       <h2>Facts</h2>
       <dl class="facts">
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
-        <dt>File</dt><dd class="mono">${feed.path || 'Read-only: no host'}</dd>
+        <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
       </dl>
       <p class="hint">The editor for albums comes next. Today Studio reads and remembers your feeds.</p>
@@ -516,6 +666,16 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
 
 function Hosts({ connectors, onChanged }) {
   const { busy, error, run } = useAction();
+  const [linked, setLinked] = useState(null);
+  // A new key after each add makes an empty form.
+  const [formKey, setFormKey] = useState(0);
+  // A new folder takes each read-only feed whose file it holds (ADR 0020).
+  const added = (connector) => run(async () => {
+    const result = await api(`/connectors/${connector.id}/match`, { method: 'POST' });
+    setLinked({ name: connector.name, feeds: result.linked });
+    setFormKey(formKey + 1);
+    onChanged();
+  });
   const remove = (connector) => {
     if (!confirm(`Remove the host “${connector.name}”? The files in it do not change.`)) return;
     run(async () => {
@@ -538,12 +698,33 @@ function Hosts({ connectors, onChanged }) {
               <span class="sub mono">${JSON.parse(c.config).root}</span></span>
             <button class="button quiet" type="button" disabled=${busy} style=${{ marginLeft: 'auto' }}
               aria-label=${`Remove the host ${c.name}`} onClick=${() => remove(c)}>Remove</button></li>`)}</ul>`}
-      <div class="panel"><h2>Add a folder</h2><${AddHostForm} onAdded=${onChanged} /></div>
+      ${linked && html`<div class="notice" role="status">
+        ${linked.feeds.length === 0
+          ? `“${linked.name}” holds none of your read-only feeds.`
+          : `Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.name}”: ${linked.feeds.map((f) => f.title || f.path).join(', ')}.`}
+      </div>`}
+      <div class="panel"><h2>Add a folder</h2><${AddHostForm} key=${formKey} onAdded=${added} /></div>
     </section>
   </div>`;
 }
 
-function Shell({ onLock }) {
+function AddFeeds({ connectors, onAdded }) {
+  const [found, setFound] = useState(null);
+  return html`<div><div class="bar">Add feeds</div><section class="section">
+    <div class="panel"><h2>Find feeds by address or name</h2>
+      ${found
+        ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
+          <div class="actions"><button class="button quiet" type="button" onClick=${() => setFound(null)}>Search again</button></div>`
+        : html`<${FindFeeds} onFound=${setFound} />`}
+    </div>
+    ${connectors.length > 0 && html`<div class="panel"><h2>From a connected folder</h2>
+      <${AddFeedForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
+    <div class="panel"><h2>From MSP 2.0 backup files</h2>
+      <${MspImport} onAdded=${(result) => onAdded(result.added[0])} /></div>
+  </section></div>`;
+}
+
+function Shell({ vault, onLock }) {
   const [feeds, setFeeds] = useState(null);
   const [connectors, setConnectors] = useState([]);
   const [view, setView] = useNav('shell', { name: 'feeds' });
@@ -572,9 +753,8 @@ function Shell({ onLock }) {
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} onChanged=${() => load()} />`;
   } else if (view.name === 'add-feed') {
-    main = html`<div><div class="bar">Add a feed</div><section class="section"><div class="panel">
-      <${AddFeedForm} connectors=${connectors} onAdded=${async (f) => { await load(); setView({ name: 'feed', id: f.id }); }} />
-    </div></section></div>`;
+    main = html`<${AddFeeds} connectors=${connectors}
+      onAdded=${async (f) => { await load(); setView(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} onChanged=${() => load()}
       onRemoved=${async () => { await load(); setView({ name: 'feeds' }, { replace: true }); }} />`;
@@ -606,7 +786,7 @@ function Shell({ onLock }) {
       <footer>
         <button class="row" type="button" aria-current=${view.name === 'hosts' ? 'true' : 'false'}
           onClick=${() => setView({ name: 'hosts' })}><span class="dot hosting"></span>Hosts</button>
-        <button class="row" type="button" onClick=${lock}>Lock Studio</button>
+        ${vault === 'open' && html`<button class="row" type="button" onClick=${lock}>Lock Studio</button>`}
       </footer>
     </nav>
     <main class="main">${main}</main>
@@ -617,6 +797,7 @@ function Shell({ onLock }) {
 
 function App() {
   const [status, setStatus] = useState(null);
+  const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState(null);
   const load = useCallback(async () => {
     try {
@@ -633,9 +814,13 @@ function App() {
   if (error) return html`<main class="center"><div class="card"><${Brand} /><${ErrorNotice} error=${error} />
     <div class="actions"><button class="button" type="button" onClick=${load}>Try again</button></div></div></main>`;
   if (!status) return html`<p class="boot" role="status">Loading Studio…</p>`;
-  if (status.vault === 'absent') return html`<${Wizard} onFinish=${load} />`;
   if (status.vault === 'locked') return html`<${Unlock} onUnlocked=${load} />`;
-  return html`<${Shell} onLock=${load} />`;
+  // The first run: an empty collection (ADR 0020). The vault comes when the
+  // user first adds a secret.
+  if (status.feeds === 0 && status.connectors === 0 && !skipped) {
+    return html`<${Wizard} onFinish=${() => { setSkipped(true); load(); }} />`;
+  }
+  return html`<${Shell} vault=${status.vault} onLock=${load} />`;
 }
 
 render(html`<${App} />`, document.getElementById('app'));

@@ -48,6 +48,7 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/discover", post(routes::discover))
         .route("/search", get(routes::search))
         .route("/feeds/import", post(routes::import_feeds))
+        .route("/import/msp", post(routes::import_msp))
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
         .route("/feeds/{id}", delete(routes::delete_feed))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))

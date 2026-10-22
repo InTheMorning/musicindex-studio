@@ -179,7 +179,7 @@ code, .mono {
 .field { display: grid; gap: 6px; }
 .field label { font-weight: 600; }
 .field .hint { color: var(--muted); font-size: .9rem; }
-.field input {
+.field input, .field textarea {
   min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--sep);
@@ -486,3 +486,18 @@ code, .mono {
 .choice .text { display: grid; min-width: 0; }
 .choice .title { font-weight: 600; }
 .choice .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+
+textarea {
+  min-height: 88px;
+  padding: 10px 14px;
+  border: 1px solid var(--sep);
+  border-radius: 10px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+.inline { display: flex; gap: 8px; }
+.inline input { flex: 1; }
+.failed { padding-left: 18px; color: var(--muted); font-size: .9rem; }
+.choices .hint { margin-bottom: 4px; }

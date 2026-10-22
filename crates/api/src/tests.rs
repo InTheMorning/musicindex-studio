@@ -718,3 +718,58 @@ async fn search_gives_feed_hits_from_musicindex() {
     .await;
     assert_eq!(body["feeds"][0]["title"], "Album B");
 }
+
+#[tokio::test]
+async fn an_msp_backup_needs_the_vault_and_keeps_its_token_there() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    let token = "msp-edit-token-5e8c1a";
+    let backup = json!({ "feedId": "abc", "editToken": token, "feedUrl": server.url("/b.xml") });
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/import/msp",
+        Some(json!({ "backups": [backup] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "vault_required");
+
+    call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    let (status, _, text) = send(
+        &app,
+        request(
+            "POST",
+            "/api/v1/import/msp",
+            Some(json!({ "backups": [backup, { "feedId": "x" }] })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(!text.contains(token));
+    let body: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(body["added"][0]["title"], "Album B");
+    assert_eq!(body["failed"].as_array().unwrap().len(), 1);
+
+    let vault_file = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    assert!(!vault_file.contains(token));
+    let vault = studio_core::vault::VaultFile::from_json(&vault_file)
+        .unwrap()
+        .open_with_passphrase(PASSPHRASE)
+        .unwrap();
+    assert_eq!(
+        vault.get("msp:abc").unwrap().unwrap().as_slice(),
+        token.as_bytes()
+    );
+    for path in ["/api/v1/feeds", "/api/v1/connectors", "/api/v1/status"] {
+        let (_, _, text) = send(&app, request("GET", path, None)).await;
+        assert!(!text.contains(token), "{path}");
+    }
+}

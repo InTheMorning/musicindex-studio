@@ -450,3 +450,62 @@ pub(crate) async fn match_connector(
     })
     .await
 }
+
+#[derive(Deserialize)]
+pub(crate) struct MspImport {
+    backups: Vec<Value>,
+}
+
+/// Import MSP 2.0 backups (ADR 0020). Each feed is read-only, and each edit
+/// token goes into the vault. The response contains no edit token.
+pub(crate) async fn import_msp(
+    State(shared): State<Shared>,
+    Json(body): Json<MspImport>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        if w.vault.is_none() {
+            return Err(match w.vault_state() {
+                crate::workspace::VaultState::Absent => ApiError::vault_required(),
+                _ => ApiError::vault_locked(),
+            });
+        }
+        let mut added = Vec::new();
+        let mut failed = Vec::new();
+        for value in &body.backups {
+            let backup = match studio_core::msp::MspBackup::from_json(value) {
+                Ok(backup) => backup,
+                Err(message) => {
+                    failed.push(json!({ "source": "backup file", "message": message }));
+                    continue;
+                }
+            };
+            if let Some(vault) = w.vault.as_mut() {
+                vault.put(&backup.secret_ref(), backup.edit_token.as_bytes())?;
+            }
+            let keys = collection_keys(w)?;
+            if keys.0.contains(&backup.feed_url) {
+                continue;
+            }
+            match studio_core::discover::read_public(&w.web, &backup.feed_url) {
+                Ok((feed, version)) => {
+                    let guid = feed.podcast_guid.as_deref().map(str::to_ascii_lowercase);
+                    if guid.is_some_and(|g| keys.1.contains(&g)) {
+                        continue;
+                    }
+                    let id = w.collection.add_feed(Some(&backup.feed_url), None)?;
+                    w.collection.record_state(id, &feed, &version)?;
+                    added.push(w.collection.feed(id)?);
+                }
+                Err(message) => {
+                    failed.push(json!({ "source": backup.feed_url, "message": message }));
+                }
+            }
+        }
+        w.save_vault()?;
+        Ok((
+            StatusCode::CREATED,
+            Json(json!({ "added": added, "failed": failed })),
+        ))
+    })
+    .await
+}

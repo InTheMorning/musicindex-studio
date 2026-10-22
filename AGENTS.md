@@ -15,10 +15,10 @@ The license is AGPL-3.0 ([ADR 0011](docs/adr/0011-agpl-license.md)).
 
 ## Where The Work Stands
 
-On 2026-10-22, Phase 0 to Phase 3 are complete and Phase 4 is in progress. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It has the encrypted secret vault, the SQLite collection, the local folder connector and the write pipeline. `studio-api` serves the local JSON API and the UI. `studio-desktop` runs them on a loopback address. `studio-server` has no function yet.
+On 2026-10-22, Phase 0 to Phase 4 are complete. The visual check of task 009 is open. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It has the encrypted secret vault, the SQLite collection, the local folder connector and the write pipeline. `studio-api` serves the local JSON API and the UI. `studio-desktop` runs them on a loopback address. `studio-server` has no function yet.
 
 - Decisions: `docs/adr/0001` to `docs/adr/0020`. ADR 0017 is proposed.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Task 009 of Phase 4 is next. The current state of the plan lists the open items.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor) is next. The current state of the plan lists the open items.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
@@ -48,6 +48,8 @@ Run Studio locally. The command prints the UI address with its access token:
 ```sh
 cargo run -p studio-desktop -- --data-dir .studio-dev/data
 ```
+
+`--musicindex URL` selects a different musicindex API, such as a local test server.
 
 Keep development and check data in `.studio-dev/` at the repository root. Git ignores this folder. Do not use `/tmp` for it.
 

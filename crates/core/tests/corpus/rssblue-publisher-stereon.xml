@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0">
+  <channel>
+    <generator>RSS Blue v1.20.108</generator>
+    <lastBuildDate>Fri, 03 May 2024 11:13:29 GMT</lastBuildDate>
+    <title>Stereon</title>
+    <podcast:guid>f00a0915-caee-5fea-87bf-c04a0d88d7dd</podcast:guid>
+    <podcast:medium>publisher</podcast:medium>
+    <podcast:remoteItem feedGuid="145287d8-9a96-5a03-a7e6-22b1aa5a75a0" feedUrl="https://feeds.rssblue.com/stereon-music" medium="music"></podcast:remoteItem>
+    <podcast:remoteItem feedGuid="6ead6c12-d12c-51e4-aa5a-6cb61e46e9a9" feedUrl="https://www.wavlake.com/feed/8e61c9d6-92e2-4547-bb72-cc2d267feab4" medium="music"></podcast:remoteItem>
+    <podcast:remoteItem feedGuid="fd5201c0-c2e4-5a63-b6a6-b32b47ef2077" feedUrl="https://wavlake.com/feed/ffe400b0-0d92-45b3-9a87-3b1a7671e533" medium="music"></podcast:remoteItem>
+    <podcast:remoteItem feedGuid="e5f51a69-4a3c-518b-82ad-7062628299cb" feedUrl="https://www.wavlake.com/feed/c5217ce5-e0be-40ef-aa6a-c438ce8d1b20" medium="music"></podcast:remoteItem>
+    <podcast:remoteItem feedGuid="49db2c6a-3020-5a43-b148-c53457675696" feedUrl="https://wavlake.com/feed/bac423dd-0ba5-4ac4-b6c4-600f6529bbf4" medium="music"></podcast:remoteItem>
+    <podcast:remoteItem feedGuid="ab074ce1-90dc-5b5e-bfc1-782b1beeabb0" feedUrl="https://wavlake.com/feed/b92f06b8-9a58-4145-98d6-6461a93c606c" medium="music"></podcast:remoteItem>
+    <podcast:remoteItem feedGuid="6c162890-ad0b-584d-b6e1-8ce20c08994a" feedUrl="https://wavlake.com/feed/2d12f112-a82b-4fa7-9ddb-1b8d64d8a843" medium="music"></podcast:remoteItem>
+    <podcast:remoteItem feedGuid="e80f6329-3831-5650-ba78-6bc92d3fbed4" feedUrl="https://feeds.rssblue.com/radio-stereon" medium="podcast"></podcast:remoteItem>
+  </channel>
+</rss>

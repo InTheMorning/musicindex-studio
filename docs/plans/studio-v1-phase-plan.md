@@ -22,7 +22,12 @@ An artist can do these steps on the desktop or on a public Studio server:
 
 ## Current State
 
-Phase 0 is complete. The Cargo workspace exists, with four crates that contain no function yet.
+Phase 0 is complete. Phase 1 is partly complete:
+
+- The lossless XML tree and the typed model exist ([ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md)).
+- The corpus has 23 published feeds and 2 fixtures. Each feed gives the same bytes after a read and a write.
+- The corpus has no Podtunes feed.
+- These elements have no model yet: `podcast:person`, `podcast:funding`, `podcast:transcript`, `podcast:txt`, `podcast:license`, `podcast:podroll`, `atom:link`, `itunes:new-feed-url` and the item images.
 
 ## Target State
 
@@ -43,6 +48,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 ### Phase 1: Feed Model, Reader And Writer
 
 - Model the four feed types, value blocks and value time splits ([ADR 0008](../adr/0008-feed-types-and-feed-identity.md)).
+- Tasks: [002](../tasks/studio-v1-task-002-lossless-xml-tree.md) and [003](../tasks/studio-v1-task-003-feed-model.md) are complete. A subsequent task models the other elements in the current state above.
 - Keep each element that the core does not model.
 - Mechanical check: a corpus of published feeds gives the same meaning after a read and a write with no edit. The corpus includes MSP 2.0, Podtunes, Wavlake and Sovereign Feeds output.
 - Mechanical check: a read and write keeps the feed GUID and each item GUID.

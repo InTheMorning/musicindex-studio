@@ -15,10 +15,10 @@ The license is AGPL-3.0 ([ADR 0011](docs/adr/0011-agpl-license.md)).
 
 ## Where The Work Stands
 
-On 2026-10-22, Phase 0 is complete. The Cargo workspace exists. The four crates contain no function yet.
+On 2026-10-22, Phase 0 is complete and Phase 1 is partly complete. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. The other crates contain no function yet.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0011`.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 1 (feed model, reader and writer) is next.
+- Decisions: `docs/adr/0001` to `docs/adr/0012`.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Its current state lists the Phase 1 work that remains.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
@@ -27,6 +27,7 @@ On 2026-10-22, Phase 0 is complete. The Cargo workspace exists. The four crates 
 | Path | Contents |
 | --- | --- |
 | `crates/core` | `studio-core`: feed model, connectors, vault and write pipeline. No HTTP and no UI code. |
+| `crates/core/tests/corpus` | Published feeds for the round-trip tests. `manifest.json` gives the source URL, the fetch time and the SHA-256 of each file. |
 | `crates/api` | `studio-api`: the JSON API over the core |
 | `crates/server` | `studio-server`: the server shell |
 | `crates/desktop` | `studio-desktop`: the desktop shell. Tauri comes in Phase 10. |
@@ -58,7 +59,7 @@ Durable rules:
 
 - The core crate has no HTTP code and no UI code. Each feed rule is in the core ([ADR 0002](docs/adr/0002-rust-core-json-api-browser-ui.md)).
 - A connector gets its secrets from the vault only. No secret is in a log, an API response or the collection database ([ADR 0003](docs/adr/0003-user-unlocked-secret-vault.md), [ADR 0006](docs/adr/0006-connectors-and-the-v1-set.md)).
-- A read and a write with no edit keep the meaning of the feed ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md)).
+- A read and a write with no edit give the same bytes. The writer changes only the elements that the user changed. The corpus tests enforce this ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md), [ADR 0012](docs/adr/0012-lossless-tree-with-a-typed-model.md)).
 - An entity color is not a general accent. Each control is a minimum of 44 px high, and all functions work from the keyboard ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
 
 Situational rules:

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0" version="2.0">
+  <channel>
+    <description>With wallet switching technology, podcasters can share listener payments with the artists whose music they feature! This is a ranking of tracks that have been the most widely played by these value-for-value DJs in the last 60 days.</description>
+    <generator>RSS Blue</generator>
+    <language>en-us</language>
+    <lastBuildDate>Thu, 22 Oct 2026 14:33:41 GMT</lastBuildDate>
+    <title>Deck Darlings</title>
+    <itunes:image href="https://rssblue.com/static/dist/img/og.1x1.png" />
+    <podcast:guid>fd8afd2e-16e3-5509-b867-b94dcc65baa3</podcast:guid>
+    <podcast:medium>musicL</podcast:medium>
+    <podcast:remoteItem feedGuid="c690112f-e347-463b-a9a8-9d61b3a5ddc7" itemGuid="02d7867a-7420-40bc-814c-eeb90c6b899d" feedUrl="https://www.doerfelverse.com/artists/middleseason/no-longer-afraid.xml" medium="music" />
+    <podcast:remoteItem feedGuid="dbad52b9-6253-4a9b-bfab-246b9e839815" itemGuid="bc80fa46-9563-48f0-b6df-5f9c847c7642" feedUrl="https://music.jimmyv4v.com/bands/jimmy-v/jimmy-v-collection/jimmy_v-jimmy_v_collection-rss.xml" medium="music" />
+  </channel>
+</rss>

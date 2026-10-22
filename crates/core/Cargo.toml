@@ -7,5 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[dependencies]
+quick-xml = "0.42"
+uuid = { version = "1.28", features = ["v5"] }
+
 [lints]
 workspace = true

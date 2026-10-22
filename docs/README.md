@@ -13,6 +13,7 @@
 - [ADR 0009: Studio connects to hosts and moves files between them](adr/0009-studio-connects-to-hosts-and-moves-files.md)
 - [ADR 0010: Studio uses the Afterglow visual direction](adr/0010-studio-uses-the-afterglow-direction.md)
 - [ADR 0011: AGPL-3.0 license](adr/0011-agpl-license.md)
+- [ADR 0012: A lossless XML tree with a typed model](adr/0012-lossless-tree-with-a-typed-model.md)
 
 ## Plans
 
@@ -21,6 +22,8 @@
 ## Tasks
 
 - [Studio v1 task 001: Workspace](tasks/studio-v1-task-001-workspace.md)
+- [Studio v1 task 002: Lossless XML tree](tasks/studio-v1-task-002-lossless-xml-tree.md)
+- [Studio v1 task 003: Feed model and writer](tasks/studio-v1-task-003-feed-model.md)
 
 ## Research
 

@@ -1,0 +1,103 @@
+<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:podcast="https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md" version="2.0">
+  <channel>
+    <title>Pixel Palace</title>
+    <description>A interactive backyard campfire party! Live from Pixel Palace October 17th!!</description>
+    <language>en</language>
+    <itunes:image href="https://music.behindthesch3m3s.com/wp-content/uploads/pixel_palace/pixel%20palace%20show%20art.gif"/>
+    <link>https://www.pixelpalace.party</link>
+    <generator>Sovereign Feeds</generator>
+    <image>
+      <url>https://music.behindthesch3m3s.com/wp-content/uploads/pixel_palace/pixel%20palace%20show%20art.gif</url>
+      <link>https://www.pixelpalace.party</link>
+      <title>Pixel Palace</title>
+      <description>A interactive backyard campfire party! Live from Pixel Palace October 17th!!</description>
+      <width>144</width>
+      <height>144</height>
+    </image>
+    <itunes:category text="Music"/>
+    <itunes:category text=""/>
+    <podcast:medium>music</podcast:medium>
+    <podcast:value type="lightning" method="keysend" suggested="0.00000005000">
+      <podcast:valueRecipient name="werehere@fountain.fm" type="lnaddress" address="werehere@fountain.fm" split="11"/>
+      <podcast:valueRecipient name="unknwnmusi@fountain.fm" type="lnaddress" address="unknwnmusi@fountain.fm" split="11"/>
+      <podcast:valueRecipient name="samlofthus@fountain.fm" type="lnaddress" address="samlofthus@fountain.fm" split="11"/>
+      <podcast:valueRecipient name="frankiepaint@fountain.fm" type="lnaddress" address="frankiepaint@fountain.fm" split="12"/>
+      <podcast:valueRecipient name="missionmommy@fountain.fm" type="lnaddress" address="missionmommy@fountain.fm" split="11"/>
+      <podcast:valueRecipient name="boobury@fountain.fm" type="lnaddress" address="boobury@fountain.fm" split="11"/>
+      <podcast:valueRecipient name="ericpp@getalby.com" type="lnaddress" address="ericpp@getalby.com" split="11"/>
+      <podcast:valueRecipient name="jorbear@fountain.fm" type="lnaddress" address="jorbear@fountain.fm" split="11"/>
+      <podcast:valueRecipient name="chadf@getalby.com" type="lnaddress" address="chadf@getalby.com" split="11"/>
+    </podcast:value>
+    <podcast:complete>no</podcast:complete>
+    <podcast:block>no</podcast:block>
+    <itunes:owner>
+      <itunes:email/>
+      <itunes:name/>
+    </itunes:owner>
+    <podcast:funding url="https://www.paypal.com/donate/?cmd=_donations&amp;business=behindthesch3m3s%40protonmail.com&amp;item_name=Jorfest+2026&amp;currency_code=USD">Support the Show</podcast:funding>
+    <itunes:author>Thunder Road Media</itunes:author>
+    <pubDate>Sat, 17 Oct 2026 23:02:55 +0000</pubDate>
+    <lastBuildDate>Sat, 17 Oct 2026 23:02:55 +0000</lastBuildDate>
+    <category>Music</category>
+    <category/>
+    <podcast:guid>d1dca4bb-1966-59d7-9aff-c1eda9f31fb7</podcast:guid>
+    <podcast:liveItem status="live" start="2026-10-18T00:00:00.000Z" end="2026-10-18T01:30:00.000Z">
+      <title>Jorfest 2026</title>
+      <podcast:liveValue uri="https://curiohoster.com/event?event_id=c530c8eb-5e42-4daa-b00a-e31169935537" protocol="socket.io"/>
+      <description><![CDATA[<p>Somewhere around 7 PM Central on Saturday, the lights along Jorbear&rsquo;s roofline are going to change color, and if you watch closely you&rsquo;ll notice they&rsquo;re not lights at all. They&rsquo;re pixels. They always were. The house is a sprite. The yard is a level. We&rsquo;re Here, Sam Lofthus and NoName are about to take the decks, and you are invited to watch in the glow and admit, finally, that this is new.</p>
+<p>The value lies within splits. Every sat you send gets divided eight ways, evenly, among the people building the world in front of you. No landlord. No platform skimming off the top. Just a bunch of humans passing energy around a circle. That&rsquo;s not a business model, that&rsquo;s a campfire.</p>
+<p>Pixel Palace: Jorfest 2026<br />Saturday, October 17 &middot; 7&ndash;10 PM CT &middot; 00:00&ndash;03:00 UTC (Oct 18)<br />DJs: We&rsquo;re Here, Sam Lofthus, NoName<br />Reporter on the ground: Frankiepaint</p>
+<p>Boost, and the last digit summons one of ten stuffed animals. Milestone art appears as the sat count crosses 25k, 50k and 100k.</p>
+<p>ericpp&rsquo;s scripts turn the producer&rsquo;s split kit input into OSC commands for Jorbear&rsquo;s grandMA3 and Onyx consoles and boo-bury&rsquo;s video switcher. When the split changes, the camera cuts and that zone&rsquo;s lighting comes up with it. No boost required.</p>
+<p>Watch: <a href="https://www.pixelpalace.party/">https://www.pixelpalace.party/</a><br />Also live on Nostr: https://primal.net/p/nprofile1qqsr5qnsn6medetj3vexljqqvy99gfdrgsp7hs9f52kdvrryz6gwkrsxg6l7w</p>]]></description>
+      <enclosure length="33" type="application/x-mpegURL" url="https://customer-dlnbepb8zpz7h846.cloudflarestream.com/2808e81961ee6303b543bf3f74dccc34/manifest/video.m3u8?protocol=llhlsbeta"/>
+      <guid isPermaLink="false">e39fdf0f-4c69-4cbd-aa98-25481fc1edca</guid>
+      <itunes:image href="https://music.behindthesch3m3s.com/wp-content/uploads/pixel_palace/pixel%20palace%20show%20art.gif"/>
+      <itunes:subtitle>Jorfest 2026</itunes:subtitle>
+      <itunes:summary><![CDATA[<p>Somewhere around 7 PM Central on Saturday, the lights along Jorbear&rsquo;s roofline are going to change color, and if you watch closely you&rsquo;ll notice they&rsquo;re not lights at all. They&rsquo;re pixels. They always were. The house is a sprite. The yard is a level. We&rsquo;re Here, Sam Lofthus and NoName are about to take the decks, and you are invited to watch in the glow and admit, finally, that this is new.</p>
+<p>The value lies within splits. Every sat you send gets divided eight ways, evenly, among the people building the world in front of you. No landlord. No platform skimming off the top. Just a bunch of humans passing energy around a circle. That&rsquo;s not a business model, that&rsquo;s a campfire.</p>
+<p>Pixel Palace: Jorfest 2026<br />Saturday, October 17 &middot; 7&ndash;10 PM CT &middot; 00:00&ndash;03:00 UTC (Oct 18)<br />DJs: We&rsquo;re Here, Sam Lofthus, NoName<br />Reporter on the ground: Frankiepaint</p>
+<p>Boost, and the last digit summons one of ten stuffed animals. Milestone art appears as the sat count crosses 25k, 50k and 100k.</p>
+<p>ericpp&rsquo;s scripts turn the producer&rsquo;s split kit input into OSC commands for Jorbear&rsquo;s grandMA3 and Onyx consoles and boo-bury&rsquo;s video switcher. When the split changes, the camera cuts and that zone&rsquo;s lighting comes up with it. No boost required.</p>
+<p>Watch: <a href="https://www.pixelpalace.party/">https://www.pixelpalace.party/</a><br />Also live on Nostr: https://primal.net/p/nprofile1qqsr5qnsn6medetj3vexljqqvy99gfdrgsp7hs9f52kdvrryz6gwkrsxg6l7w</p>]]></itunes:summary>
+      <link>https://www.pixelpalace.party/</link>
+      <podcast:value type="lightning" method="keysend" suggested="0.00000005000">
+        <podcast:valueRecipient name="werehere@fountain.fm" type="lnaddress" address="werehere@fountain.fm" split="11"/>
+        <podcast:valueRecipient name="unknwnmusi@fountain.fm" type="lnaddress" address="unknwnmusi@fountain.fm" split="11"/>
+        <podcast:valueRecipient name="samlofthus@fountain.fm" type="lnaddress" address="samlofthus@fountain.fm" split="11"/>
+        <podcast:valueRecipient name="frankiepaint@fountain.fm" type="lnaddress" address="frankiepaint@fountain.fm" split="12"/>
+        <podcast:valueRecipient name="missionmommy@fountain.fm" type="lnaddress" address="missionmommy@fountain.fm" split="11"/>
+        <podcast:valueRecipient name="boobury@fountain.fm" type="lnaddress" address="boobury@fountain.fm" split="11"/>
+        <podcast:valueRecipient name="ericpp@getalby.com" type="lnaddress" address="ericpp@getalby.com" split="11"/>
+        <podcast:valueRecipient name="jorbear@fountain.fm" type="lnaddress" address="jorbear@fountain.fm" split="11"/>
+        <podcast:valueRecipient name="chadf@getalby.com" type="lnaddress" address="chadf@getalby.com" split="11"/>
+      </podcast:value>
+      <podcast:chat server="https://chat.behindthesch3m3s.com/#/connect" protocol="irc" space="#greenroom" embedUrl="https://chat.behindthesch3m3s.com/#/connect"/>
+      <itunes:explicit>Yes</itunes:explicit>
+    </podcast:liveItem>
+    <item>
+      <title>Pixel Palace: Jorfest 2026 Trailer</title>
+      <description><![CDATA[<p>Tune in October 17th starting 7:00pm cst for some fun, Pixelpalace.party is the place to be!!</p>
+<p>&nbsp;</p>
+<p>Song:</p>
+<p>"Disco Lasers" by The Synthesatsers</p>]]></description>
+      <itunes:image href="https://music.behindthesch3m3s.com/wp-content/uploads/pixel_palace/pp%20tech%20map.png"/>
+      <enclosure url="https://music.behindthesch3m3s.com/wp-content/uploads/pixel_palace/Pixel%20Palace%20trailer.mp3" length="33" type="audio/mpeg"/>
+      <podcast:value type="lightning" method="keysend" suggested="0.00000005000">
+        <podcast:valueRecipient name="unknwnmusi@fountain.fm" type="lnaddress" address="unknwnmusi@fountain.fm" split="25"/>
+        <podcast:valueRecipient name="Zephyr Knight" type="node" address="0219665f869cf7d915aff3293dcc9a99d7ab86ccd9ebb1cebd028fc67040a5ef73" split="25"/>
+        <podcast:valueRecipient name="Frankiepaint" type="node" address="038464f83bb693f4f3d0fd37e928ffab1899d0dbb6d8b34a0a09fc9883002f636f" split="25"/>
+        <podcast:valueRecipient name="ThunderRoad" type="lnaddress" address="03589f3ddb81f3802f3fc9aaa359b684ed19840b55db88f7c9c2cc671e74ac93e2" split="25"/>
+      </podcast:value>
+      <guid isPermaLink="false">47eff238-cf87-473a-86d9-749a45787a4d</guid>
+      <itunes:subtitle>Pixel Palace: Jorfest 2026 Trailer</itunes:subtitle>
+      <pubDate>Thu, 08 Oct 2026 23:45:58 +0000</pubDate>
+      <itunes:explicit>No</itunes:explicit>
+      <itunes:summary><![CDATA[<p>Tune in October 17th starting 7:00pm cst for some fun, Pixelpalace.party is the place to be!!</p>
+<p>&nbsp;</p>
+<p>Song:</p>
+<p>"Disco Lasers" by The Synthesatsers</p>]]></itunes:summary>
+      <itunes:duration>87</itunes:duration>
+    </item>
+  </channel>
+</rss>

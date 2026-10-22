@@ -18,6 +18,10 @@
 
 - [Studio v1 phase plan](plans/studio-v1-phase-plan.md)
 
+## Tasks
+
+- [Studio v1 task 001: Workspace](tasks/studio-v1-task-001-workspace.md)
+
 ## Research
 
 - [Studio baseline research, 2026-10-22](research/2026-10-22-studio-baseline-research.md)

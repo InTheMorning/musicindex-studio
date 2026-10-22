@@ -15,12 +15,32 @@ The license is AGPL-3.0 ([ADR 0011](docs/adr/0011-agpl-license.md)).
 
 ## Where The Work Stands
 
-On 2026-10-22, the repository contains decisions and a plan. It contains no code.
+On 2026-10-22, Phase 0 is complete. The Cargo workspace exists. The four crates contain no function yet.
 
 - Decisions: `docs/adr/0001` to `docs/adr/0011`.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 0 is next.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 1 (feed model, reader and writer) is next.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
+
+## Layout
+
+| Path | Contents |
+| --- | --- |
+| `crates/core` | `studio-core`: feed model, connectors, vault and write pipeline. No HTTP and no UI code. |
+| `crates/api` | `studio-api`: the JSON API over the core |
+| `crates/server` | `studio-server`: the server shell |
+| `crates/desktop` | `studio-desktop`: the desktop shell. Tauri comes in Phase 10. |
+| `docs/` | ADRs, plans, tasks and research. The index is `docs/README.md`. |
+
+## Commands
+
+These three checks must pass before each commit. CI runs the same checks.
+
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
 
 ## Design Philosophy
 

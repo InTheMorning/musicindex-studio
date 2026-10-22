@@ -22,7 +22,7 @@ An artist can do these steps on the desktop or on a public Studio server:
 
 ## Current State
 
-The repository contains the ADRs, the baseline research note, this plan and the license. It contains no code.
+Phase 0 is complete. The Cargo workspace exists, with four crates that contain no function yet.
 
 ## Target State
 

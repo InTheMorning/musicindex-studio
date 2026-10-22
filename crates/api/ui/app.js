@@ -581,7 +581,7 @@ function Shell({ onLock }) {
   } else {
     main = html`<section class="center" style=${{ minHeight: '100%' }}><div class="card">
       <h1>${feeds.length ? 'Select a feed' : 'Your collection is empty'}</h1>
-      <p>${feeds.length ? 'Your feeds are in the list at the side.' : 'Add a feed to start.'}</p>
+      <p>${feeds.length ? 'Select one in the Feeds list.' : 'Add a feed to start.'}</p>
       <div class="actions"><button class="button primary" type="button" onClick=${() => setView({ name: 'add-feed' })}>Add a feed</button></div>
     </div></section>`;
   }

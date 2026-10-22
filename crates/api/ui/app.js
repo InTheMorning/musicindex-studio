@@ -442,7 +442,7 @@ function hostLabel(group) {
 }
 
 // The feeds that discovery found, grouped by host (ADR 0020 items 7 to 12).
-function FoundFeeds({ found, onAdded }) {
+function FoundFeeds({ found, onAdded, onNothingToAdd }) {
   const addable = found.feeds.filter((f) => !f.in_collection);
   const [chosen, setChosen] = useState(addable.map((f) => f.url));
   const { busy, error, run } = useAction();
@@ -475,7 +475,8 @@ function FoundFeeds({ found, onAdded }) {
       <ul class="failed">${found.failed.map((f) => html`<li><span class="mono">${f.source}</span>: ${f.message}</li>`)}</ul></div>`}
     <${ErrorNotice} error=${error} />
     ${addable.length === 0 && found.feeds.length > 0
-      ? html`<p role="status">Each of these feeds is in your collection.</p>`
+      ? html`<p role="status">Each of these feeds is in your collection.</p>
+        ${onNothingToAdd && html`<div class="actions"><button class="button primary" type="button" onClick=${onNothingToAdd}>Open Studio</button></div>`}`
       : html`<div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
           ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>`}
   </div>`;
@@ -568,7 +569,8 @@ function Wizard({ onFinish }) {
       <div class="actions"><${BackButton} /></div></div>`;
   } else if (step === 'results' && found) {
     body = html`<div class="form"><div><h1>Your feeds</h1></div>
-      <${FoundFeeds} found=${found} onAdded=${(result, groups) => { setAdded({ result, groups }); go('done', { replace: true }); }} />
+      <${FoundFeeds} found=${found} onNothingToAdd=${onFinish}
+        onAdded=${(result, groups) => { setAdded({ result, groups }); go('done', { replace: true }); }} />
       <div class="actions"><${BackButton} /></div></div>`;
   } else if (step === 'done' && added) {
     const own = added.groups.filter((g) => !g.service).map((g) => g.host);

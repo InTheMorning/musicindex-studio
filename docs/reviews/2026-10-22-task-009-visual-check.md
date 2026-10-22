@@ -18,4 +18,4 @@ These defects were corrected:
 
 - "Import from MSP 2.0" and three other secondary actions looked like captions. They are now links at the left of the form. Commit `a6d37e6`.
 - The "Find my feeds" button was above the search results. It is now below them and shows the number of selected sources. Commit `cebb64c`.
-- When each found feed was in the collection, the result screen showed a disabled "Add 0 feeds" button. It now shows a sentence.
+- When each found feed was in the collection, the result screen showed a disabled "Add 0 feeds" button. After a browser Back from "Studio is ready", the operator could not leave the wizard. The screen now says that each feed is in the collection and gives "Open Studio".

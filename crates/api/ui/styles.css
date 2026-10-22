@@ -455,3 +455,27 @@ code, .mono {
 }
 
 .card h1 + p, .form h1 + p { margin-top: 8px; }
+
+/* A list of choices, such as the feed files of a host (ADR 0019). */
+.choices { border: 0; display: grid; gap: 4px; }
+.choices legend { font-weight: 600; margin-bottom: 6px; }
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--sep);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.choice:hover { background: var(--fill-soft); }
+.choice:has(input:checked) {
+  background: linear-gradient(var(--gloss-top), var(--gloss-bottom));
+  border-color: var(--gloss-edge);
+}
+.choice.taken { cursor: default; opacity: .6; }
+.choice input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.choice .text { display: grid; min-width: 0; }
+.choice .title { font-weight: 600; }
+.choice .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }

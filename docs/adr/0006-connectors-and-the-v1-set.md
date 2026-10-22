@@ -19,6 +19,7 @@ The research is in [the baseline research note](../research/2026-10-22-studio-ba
    - read a file and give a version marker, such as an ETag, a hash or a commit.
    - write a file only if the version marker has not changed.
    - give the public URL of a file.
+   - list the files of the host ([ADR 0019](0019-select-a-feed-from-the-host.md)).
 3. The v1 connectors are:
    - a local folder, and a remote folder through SFTP.
    - object storage through the S3 API, which includes Cloudflare R2.

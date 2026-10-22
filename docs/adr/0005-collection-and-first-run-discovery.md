@@ -22,7 +22,7 @@ Stophammer has no route that finds feeds by owner, npub or feed URL.
 
 ## Alternatives Considered
 
-- Scan a connected host for feed files. Not selected for v1.
+- Scan a connected host for feed files. Not selected for v1. [ADR 0019](0019-select-a-feed-from-the-host.md) replaces this: the wizard lists the feed files of a host.
 - Require a `podcast:txt` proof token. Rejected: write access gives the same proof with no change to the feed.
 
 ## Consequences

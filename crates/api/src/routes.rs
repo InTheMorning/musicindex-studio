@@ -267,3 +267,39 @@ pub(crate) async fn delete_connector(
     })
     .await
 }
+
+/// The feed files on the host of a connector (ADR 0019). Each candidate
+/// tells if the collection already has it.
+pub(crate) async fn connector_feeds(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let row = w.collection.connector(ConnectorId(id))?;
+        if row.secret_ref.is_some() && w.vault.is_none() {
+            return Err(ApiError::vault_locked());
+        }
+        let made = connector::from_row(&row, w.vault.as_ref())?;
+        let candidates = studio_core::discover::feed_candidates(made.as_ref())?;
+        let known: Vec<String> = w
+            .collection
+            .feeds()?
+            .into_iter()
+            .filter(|f| f.connector_id == Some(row.id))
+            .filter_map(|f| f.path)
+            .collect();
+        let feeds: Vec<Value> = candidates
+            .feeds
+            .iter()
+            .map(|c| {
+                let mut value = serde_json::to_value(c).unwrap_or(Value::Null);
+                value["in_collection"] = Value::Bool(known.contains(&c.path));
+                value
+            })
+            .collect();
+        Ok(Json(
+            json!({ "feeds": feeds, "truncated": candidates.truncated }),
+        ))
+    })
+    .await
+}

@@ -237,6 +237,31 @@ async fn connectors_and_feeds_are_added_listed_and_read() {
 }
 
 #[tokio::test]
+async fn the_host_lists_its_feed_files_and_marks_the_ones_in_the_collection() {
+    let app = app();
+    std::fs::write(
+        app.feeds.path().join("single.xml"),
+        FEED.replace("Album", "Single"),
+    )
+    .unwrap();
+    std::fs::write(app.feeds.path().join("notes.txt"), "not a feed").unwrap();
+    set_up(&app).await;
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let path = format!("/api/v1/connectors/{}/feeds", connectors[0]["id"]);
+    let (status, body) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["truncated"], false);
+    let feeds = body["feeds"].as_array().unwrap();
+    assert_eq!(feeds.len(), 2);
+    assert_eq!(feeds[0]["path"], "album.xml");
+    assert_eq!(feeds[0]["in_collection"], true);
+    assert_eq!(feeds[1]["path"], "single.xml");
+    assert_eq!(feeds[1]["title"], "Single");
+    assert_eq!(feeds[1]["medium"], "music");
+    assert_eq!(feeds[1]["in_collection"], false);
+}
+
+#[tokio::test]
 async fn a_relative_folder_and_a_half_feed_give_422() {
     let app = app();
     let (status, body) = call(

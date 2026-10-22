@@ -142,6 +142,8 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ## Open Questions
 
+- The first-run wizard does not know the situation of the user. On 2026-10-22 the operator named four situations: a user who hosts feeds already (for example on an own server), a user of a hosting service such as Podhome, a user of Wavlake or Fountain only, and a user who is new to V4V. The wizard must ask this first and give a different path for each. The design needs the operator.
+
 - The UI build method (Phase 4).
 - The podping send method: a Hive account of Studio, or a hivepinger service (ADR 0007).
 - The snapshot retention limit (ADR 0007).

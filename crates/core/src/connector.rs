@@ -54,6 +54,20 @@ pub struct FileRead {
     pub version: Version,
 }
 
+/// The limits of a file list (ADR 0019).
+pub const LIST_MAX_DEPTH: usize = 4;
+/// The maximum number of files in a list (ADR 0019).
+pub const LIST_MAX_FILES: usize = 1000;
+
+/// The files of a host, relative to the connector root.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FileList {
+    /// The relative paths, with `/` between segments, in sorted sequence.
+    pub paths: Vec<String>,
+    /// True when a limit stopped the list before the end.
+    pub truncated: bool,
+}
+
 /// The kind of a [`ConnectorError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -126,6 +140,14 @@ pub trait Connector {
 
     /// The public URL of a file, when the connector knows it.
     fn public_url(&self, path: &str) -> Option<String>;
+
+    /// List the files of the host, with the limits [`LIST_MAX_DEPTH`] and
+    /// [`LIST_MAX_FILES`]. Hidden folders are not in the list (ADR 0019).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`ConnectorError`] when the list fails.
+    fn list(&self) -> Result<FileList, ConnectorError>;
 }
 
 /// Make the connector of a collection row.

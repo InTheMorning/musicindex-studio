@@ -20,6 +20,7 @@
 - [ADR 0016: The UI has no build step](adr/0016-ui-without-a-build-step.md)
 - [ADR 0017: Access to the local API](adr/0017-local-api-access.md) (proposed)
 - [ADR 0018: Passphrase strength and the error color](adr/0018-passphrase-strength-and-error-color.md)
+- [ADR 0019: Select a feed from the files of a host](adr/0019-select-a-feed-from-the-host.md)
 
 ## Plans
 

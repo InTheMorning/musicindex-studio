@@ -9,7 +9,8 @@ use serde::Deserialize;
 use crate::digest::sha256_hex;
 
 use super::{
-    Connector, ConnectorError, ConnectorErrorKind, Expected, FileRead, Version, relative_path,
+    Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, LIST_MAX_DEPTH,
+    LIST_MAX_FILES, Version, relative_path,
 };
 
 /// A folder on the machine that runs Studio.
@@ -131,6 +132,41 @@ impl Connector for LocalFolder {
         let base = self.base_url.as_deref()?;
         Some(format!("{}/{}", base.trim_end_matches('/'), path))
     }
+
+    fn list(&self) -> Result<FileList, ConnectorError> {
+        let mut list = FileList::default();
+        let mut folders = vec![(self.root.clone(), String::new(), 0_usize)];
+        while let Some((folder, prefix, depth)) = folders.pop() {
+            let entries = fs::read_dir(&folder).map_err(|e| io_error(&folder, &e))?;
+            for entry in entries {
+                let entry = entry.map_err(|e| io_error(&folder, &e))?;
+                let Ok(name) = entry.file_name().into_string() else {
+                    continue;
+                };
+                if name.starts_with('.') {
+                    continue;
+                }
+                let path = format!("{prefix}{name}");
+                let kind = entry.file_type().map_err(|e| io_error(&entry.path(), &e))?;
+                if kind.is_dir() {
+                    if depth + 1 < LIST_MAX_DEPTH {
+                        folders.push((entry.path(), format!("{path}/"), depth + 1));
+                    } else {
+                        list.truncated = true;
+                    }
+                } else if kind.is_file() {
+                    if list.paths.len() == LIST_MAX_FILES {
+                        list.truncated = true;
+                        list.paths.sort();
+                        return Ok(list);
+                    }
+                    list.paths.push(path);
+                }
+            }
+        }
+        list.paths.sort();
+        Ok(list)
+    }
 }
 
 #[cfg(test)]
@@ -182,6 +218,24 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.kind(), ConnectorErrorKind::InvalidPath);
         assert!(!dir.path().join("escape.xml").exists());
+    }
+
+    #[test]
+    fn the_list_has_the_files_without_hidden_folders_and_with_a_depth_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = LocalFolder::new(dir.path(), None);
+        for path in [
+            "b.xml",
+            "album/feed.xml",
+            ".git/config",
+            "a/b/c/d/deep.xml",
+            "a/b/c/ok.xml",
+        ] {
+            folder.write(path, b"x", &Expected::Absent).unwrap();
+        }
+        let list = folder.list().unwrap();
+        assert_eq!(list.paths, ["a/b/c/ok.xml", "album/feed.xml", "b.xml"]);
+        assert!(list.truncated);
     }
 
     #[test]

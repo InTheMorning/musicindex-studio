@@ -7,6 +7,7 @@
 pub mod collection;
 pub mod connector;
 mod digest;
+pub mod discover;
 pub mod feed;
 pub mod guid;
 pub mod pipeline;

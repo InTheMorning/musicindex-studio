@@ -72,6 +72,24 @@ function ErrorNotice({ error }) {
   return html`<div class="notice error" role="alert"><strong>${title(error)}</strong>${error.message}</div>`;
 }
 
+// The message of an API error that belongs to one field (ADR 0018). The
+// form shows it as red text below that field, not as a notice.
+const FIELD_MESSAGES = {
+  wrong_key: 'The passphrase is not correct.',
+  passphrase_too_short: 'The passphrase is too short.',
+  passphrase_too_weak: 'The passphrase is too easy to guess.',
+  not_found: 'Studio did not find this file.',
+  invalid_path: 'This path is not in the folder.',
+  invalid_feed: 'This file is not a feed that Studio can read.',
+  invalid_config: 'Give the full path of the folder, for example /home/me/feeds.',
+};
+
+// Split an API error into a field message and an error for a notice.
+function splitError(error, codes) {
+  if (error && codes.includes(error.code)) return { field: FIELD_MESSAGES[error.code], other: null };
+  return { field: null, other: error };
+}
+
 function title(error) {
   switch (error.code) {
     case 'wrong_key': return 'The passphrase is not correct.';
@@ -214,7 +232,8 @@ function CreateVault({ onDone }) {
   const [recovery, setRecovery] = useState(true);
   const { busy, error, run } = useAction();
   const strength = useStrength(passphrase);
-  const passError = passphraseError(passphrase, strength);
+  const vaultError = splitError(error, ['passphrase_too_short', 'passphrase_too_weak']);
+  const passError = passphraseError(passphrase, strength) || vaultError.field;
   const confirmError = confirm && confirm !== passphrase ? 'The passphrases are not the same.' : null;
   const ready = strength && strength.acceptable && passphrase === confirm;
   const submit = (event) => {
@@ -237,7 +256,7 @@ function CreateVault({ onDone }) {
       value=${confirm} onInput=${(e) => setConfirm(e.target.value)} error=${confirmError} />
     <label class="check"><input type="checkbox" checked=${recovery} onChange=${(e) => setRecovery(e.target.checked)} />
       Make a recovery key, in case I forget the passphrase</label>
-    <${ErrorNotice} error=${error} />
+    <${ErrorNotice} error=${vaultError.other} />
     <div class="actions">
       <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the vault…' : 'Make the vault'}</button>
     </div>
@@ -279,28 +298,48 @@ function AddHostForm({ onAdded, replaces = null, submitLabel = 'Add the folder' 
       onAdded(connector);
     });
   };
+  const hostError = splitError(error, ['invalid_config']);
   return html`<form class="form" onSubmit=${submit}>
     <${Field} id="host-name" label="Name" required value=${name} onInput=${(e) => setName(e.target.value)} />
     <${Field} id="host-root" label="Folder" required placeholder="/home/me/feeds"
       hint="The full path of the folder that holds your feed files."
-      value=${root} onInput=${(e) => setRoot(e.target.value)} />
+      error=${hostError.field} value=${root} onInput=${(e) => setRoot(e.target.value)} />
     <${Field} id="host-url" label="Public address of the folder (optional)" type="url"
       placeholder="https://music.example.com/feeds"
       hint="When a web server publishes this folder, Studio uses this address for each feed."
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
-    <${ErrorNotice} error=${error} />
+    <${ErrorNotice} error=${hostError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : submitLabel}</button></div>
   </form>`;
 }
 
+// Select a feed file from the host, or type its path (ADR 0019).
 function AddFeedForm({ connectors, onAdded }) {
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
+  const [found, setFound] = useState(null);
+  const [listError, setListError] = useState(null);
+  const [selected, setSelected] = useState('');
+  const [typing, setTyping] = useState(false);
   const [path, setPath] = useState('');
   const { busy, error, run } = useAction();
+
+  useEffect(() => {
+    if (connectorId === null) return;
+    setFound(null);
+    setListError(null);
+    setSelected('');
+    api(`/connectors/${connectorId}/feeds`).then((result) => {
+      setFound(result);
+      if (result.feeds.every((f) => f.in_collection)) setTyping(true);
+    }, setListError);
+  }, [connectorId]);
+
+  const target = typing ? path : selected;
   const submit = (event) => {
     event.preventDefault();
+    if (!target) return;
     run(async () => {
-      const feed = await api('/feeds', { method: 'POST', body: { connector_id: connectorId, path } });
+      const feed = await api('/feeds', { method: 'POST', body: { connector_id: connectorId, path: target } });
       let read;
       try {
         read = await api(`/feeds/${feed.id}/refresh`, { method: 'POST' });
@@ -315,17 +354,40 @@ function AddFeedForm({ connectors, onAdded }) {
   if (connectors.length === 0) {
     return html`<div class="notice">Add a host first. Studio writes each feed through its host.</div>`;
   }
+  const feedError = splitError(error, ['not_found', 'invalid_path', 'invalid_feed']);
+  const available = found ? found.feeds.filter((f) => !f.in_collection) : [];
   return html`<form class="form" onSubmit=${submit}>
     ${connectors.length > 1 && html`<div class="field"><label for="feed-host">Host</label>
       <select id="feed-host" class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
       </select></div>`}
-    <${Field} id="feed-path" label="Feed file" required placeholder="album/feed.xml"
-      hint="The path of the feed file in the folder of the host."
-      value=${path} onInput=${(e) => setPath(e.target.value)} />
-    <${ErrorNotice} error=${error} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !path}>${busy ? 'Reading the feed…' : 'Add the feed'}</button></div>
+    ${!typing && html`<fieldset class="choices" aria-describedby=${feedError.field ? 'feed-choice-error' : undefined}>
+      <legend>Feeds in this folder</legend>
+      ${listError && html`<${ErrorNotice} error=${listError} />`}
+      ${!found && !listError && html`<p class="empty" role="status">Looking for feed files…</p>`}
+      ${found && found.feeds.length === 0 && html`<p class="empty">Studio found no feed files in this folder.</p>`}
+      ${found && found.feeds.map((f) => {
+        const kind = mediumKind(f.medium);
+        return html`<label class=${`choice${f.in_collection ? ' taken' : ''}`}>
+          <input type="radio" name="feed" value=${f.path} disabled=${f.in_collection}
+            checked=${selected === f.path} onChange=${() => setSelected(f.path)} />
+          <span class=${`dot ${kind.dot}`}></span>
+          <span class="text"><span class="title">${f.title || f.path}</span>
+            <span class="sub">${kind.label} · <span class="mono">${f.path}</span>${f.in_collection ? ' · in your collection' : ''}</span></span>
+        </label>`;
+      })}
+      ${found && found.truncated && html`<p class="hint">The folder has more files than Studio lists. Type the path of a feed that is not in the list.</p>`}
+      ${feedError.field && html`<span class="field-error" id="feed-choice-error">${feedError.field}</span>`}
+    </fieldset>`}
+    ${typing
+      ? html`<${Field} id="feed-path" label="Feed file" required placeholder="album/feed.xml"
+          hint="The path of the feed file in the folder of the host."
+          error=${feedError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />`
+      : html`<button class="button quiet" type="button" onClick=${() => setTyping(true)}>The feed is not in the list</button>`}
+    ${typing && available.length > 0 && html`<button class="button quiet" type="button" onClick=${() => setTyping(false)}>Select from the list</button>`}
+    <${ErrorNotice} error=${feedError.other} />
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !target}>${busy ? 'Reading the feed…' : 'Add the feed'}</button></div>
   </form>`;
 }
 
@@ -352,7 +414,7 @@ function Wizard({ onFinish }) {
         onAdded=${(c) => { setConnector(c); go('feed'); }} /></div>`;
   } else if (step === 'feed' && connector) {
     body = html`<div class="form"><${Steps} current=${3} />
-      <div><h1>Add your first feed</h1><p>Studio reads the feed and remembers it in your collection.</p></div>
+      <div><h1>Add your first feed</h1><p>Select a feed in the folder that you connected. Studio reads it and remembers it in your collection.</p></div>
       <${AddFeedForm} connectors=${[connector]} onAdded=${(f) => { setFeed(f); go('done'); }} />
       <div class="actions"><${BackButton} /><button class="button quiet" type="button" onClick=${onFinish}>Skip for now</button></div></div>`;
   } else if (step === 'done') {
@@ -381,12 +443,13 @@ function Unlock({ onUnlocked }) {
       onUnlocked();
     });
   };
+  const unlockError = splitError(error, ['wrong_key']);
   return html`<main class="center"><form class="card" onSubmit=${submit}>
     <${Brand} />
     <div><h1>Unlock Studio</h1><p>Your passphrase opens the vault with the keys of your hosts.</p></div>
     <${Field} id="unlock" label="Passphrase" type="password" autocomplete="current-password" required autofocus
-      value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
-    <${ErrorNotice} error=${error} />
+      error=${unlockError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
+    <${ErrorNotice} error=${unlockError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !passphrase}>${busy ? 'Unlocking…' : 'Unlock'}</button></div>
   </form></main>`;
 }

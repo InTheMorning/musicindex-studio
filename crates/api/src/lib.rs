@@ -43,6 +43,7 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             get(routes::list_connectors).post(routes::add_connector),
         )
         .route("/connectors/{id}", delete(routes::delete_connector))
+        .route("/connectors/{id}/feeds", get(routes::connector_feeds))
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
         .route("/feeds/{id}", delete(routes::delete_feed))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))

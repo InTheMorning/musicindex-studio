@@ -1,6 +1,6 @@
 # ADR 0015: The Connector Interface And The Write Pipeline
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
 

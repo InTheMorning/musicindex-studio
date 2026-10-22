@@ -30,7 +30,7 @@ Phase 0 to Phase 3 are complete. Phase 1 has one open item.
 
 - The vault exists in `studio-core` ([ADR 0013](../adr/0013-vault-format-and-cryptography.md)). A passphrase, a recovery key or a vault key from a Nostr signer opens it.
 - The collection is in SQLite ([ADR 0014](../adr/0014-collection-in-sqlite.md)). A test finds no connector secret in the database file.
-- The local folder connector and the write pipeline exist ([ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md), proposed).
+- The local folder connector and the write pipeline exist ([ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md)).
 - Phase 4 must add the test that finds no secret in API responses.
 
 Phase 4 (API and UI shell) is next.

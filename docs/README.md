@@ -16,7 +16,7 @@
 - [ADR 0012: A lossless XML tree with a typed model](adr/0012-lossless-tree-with-a-typed-model.md)
 - [ADR 0013: Vault format and cryptography](adr/0013-vault-format-and-cryptography.md)
 - [ADR 0014: The collection is in SQLite](adr/0014-collection-in-sqlite.md)
-- [ADR 0015: The connector interface and the write pipeline](adr/0015-connector-interface-and-write-pipeline.md) (proposed)
+- [ADR 0015: The connector interface and the write pipeline](adr/0015-connector-interface-and-write-pipeline.md)
 
 ## Plans
 

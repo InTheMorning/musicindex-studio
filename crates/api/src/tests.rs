@@ -256,6 +256,42 @@ async fn a_read_only_feed_cannot_refresh_and_a_missing_file_gives_404() {
 }
 
 #[tokio::test]
+async fn a_feed_and_then_its_connector_go_out_of_the_collection() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let connector = connectors[0]["id"].as_i64().unwrap();
+
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/connectors/{connector}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "in_use");
+
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/feeds/{id}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, body) = call(&app, "DELETE", &format!("/api/v1/feeds/{id}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
+    assert!(app.feeds.path().join("album.xml").exists());
+
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/connectors/{connector}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors, json!([]));
+}
+
+#[tokio::test]
 async fn an_api_request_without_the_token_gives_401() {
     let app = app();
     for auth in [None, Some("Bearer wrong-token"), Some("test-token")] {

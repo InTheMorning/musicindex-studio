@@ -226,3 +226,33 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
     })
     .await
 }
+
+pub(crate) async fn delete_feed(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        w.collection.delete_feed(FeedId(id))?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+pub(crate) async fn delete_connector(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        let row = w.collection.connector(ConnectorId(id))?;
+        if row.secret_ref.is_some() && w.vault.is_none() {
+            return Err(ApiError::vault_locked());
+        }
+        w.collection.delete_connector(row.id)?;
+        if let (Some(secret_ref), Some(vault)) = (&row.secret_ref, w.vault.as_mut()) {
+            vault.remove(secret_ref);
+            w.save_vault()?;
+        }
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}

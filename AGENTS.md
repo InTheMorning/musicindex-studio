@@ -46,8 +46,10 @@ cargo test --workspace
 Run Studio locally. The command prints the UI address with its access token:
 
 ```sh
-cargo run -p studio-desktop -- --data-dir /tmp/studio-dev
+cargo run -p studio-desktop -- --data-dir .studio-dev/data
 ```
+
+Keep development and check data in `.studio-dev/` at the repository root. Git ignores this folder. Do not use `/tmp` for it.
 
 ## Design Philosophy
 

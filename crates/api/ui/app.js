@@ -120,6 +120,38 @@ function mediumKind(medium) {
   }
 }
 
+// ---- Navigation with the browser history ----
+// Each screen keeps its view in history.state under its own scope, so that
+// the browser Back button goes to the previous step or view.
+
+function useNav(scope, initial) {
+  const [view, setView] = useState(() => {
+    const state = history.state;
+    return state && state.scope === scope ? state.view : initial;
+  });
+  useEffect(() => {
+    if (!history.state || history.state.scope !== scope) {
+      history.replaceState({ scope, view }, '');
+    }
+    const onPop = (event) => {
+      if (event.state && event.state.scope === scope) setView(event.state.view);
+    };
+    addEventListener('popstate', onPop);
+    return () => removeEventListener('popstate', onPop);
+  }, [scope]);
+  // push: a new history entry. replace: no way back to the current view.
+  const go = useCallback((next, { replace = false } = {}) => {
+    if (replace) history.replaceState({ scope, view: next }, '');
+    else history.pushState({ scope, view: next }, '');
+    setView(next);
+  }, [scope]);
+  return [view, go];
+}
+
+function BackButton() {
+  return html`<button class="button quiet" type="button" onClick=${() => history.back()}>← Back</button>`;
+}
+
 // ---- First-run wizard (ADR 0005) ----
 
 function Steps({ current }) {
@@ -174,14 +206,21 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
   </div>`;
 }
 
-function AddHostForm({ onAdded, submitLabel = 'Add the folder' }) {
-  const [name, setName] = useState('My feeds');
-  const [root, setRoot] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
+function AddHostForm({ onAdded, replaces = null, submitLabel = 'Add the folder' }) {
+  const config = replaces ? JSON.parse(replaces.config) : {};
+  const [name, setName] = useState(replaces ? replaces.name : 'My feeds');
+  const [root, setRoot] = useState(config.root || '');
+  const [baseUrl, setBaseUrl] = useState(config.base_url || '');
   const { busy, error, run } = useAction();
   const submit = (event) => {
     event.preventDefault();
     run(async () => {
+      if (replaces) {
+        // A connector that a feed uses stays. The new one is added beside it.
+        await api(`/connectors/${replaces.id}`, { method: 'DELETE' }).catch((e) => {
+          if (e.code !== 'in_use') throw e;
+        });
+      }
       const connector = await api('/connectors', {
         method: 'POST',
         body: { kind: 'local', name, root, base_url: baseUrl || null },
@@ -211,10 +250,14 @@ function AddFeedForm({ connectors, onAdded }) {
     event.preventDefault();
     run(async () => {
       const feed = await api('/feeds', { method: 'POST', body: { connector_id: connectorId, path } });
-      const read = await api(`/feeds/${feed.id}/refresh`, { method: 'POST' }).catch((e) => {
-        onAdded(feed);
+      let read;
+      try {
+        read = await api(`/feeds/${feed.id}/refresh`, { method: 'POST' });
+      } catch (e) {
+        // Keep no feed that Studio cannot read.
+        await api(`/feeds/${feed.id}`, { method: 'DELETE' }).catch(() => {});
         throw e;
-      });
+      }
       onAdded(read);
     });
   };
@@ -236,29 +279,41 @@ function AddFeedForm({ connectors, onAdded }) {
 }
 
 function Wizard({ onFinish }) {
-  const [step, setStep] = useState('vault');
+  // The vault step and the recovery key step have no way back: the vault
+  // exists after the first, and Studio shows the key one time only.
+  const [step, go] = useNav('wizard', 'vault');
   const [recoveryKey, setRecoveryKey] = useState(null);
   const [connector, setConnector] = useState(null);
   const [feed, setFeed] = useState(null);
   let body;
   if (step === 'vault') {
-    body = html`<${CreateVault} onDone=${(key) => { setRecoveryKey(key); setStep(key ? 'recovery' : 'host'); }} />`;
-  } else if (step === 'recovery') {
-    body = html`<${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${() => { setRecoveryKey(null); setStep('host'); }} />`;
-  } else if (step === 'host') {
+    body = html`<${CreateVault} onDone=${(key) => { setRecoveryKey(key); go(key ? 'recovery' : 'host', { replace: true }); }} />`;
+  } else if (step === 'recovery' && recoveryKey) {
+    body = html`<${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${() => { setRecoveryKey(null); go('host', { replace: true }); }} />`;
+  } else if (step === 'host' || step === 'recovery') {
     body = html`<div class="form"><${Steps} current=${2} />
       <div><h1>Connect a host</h1><p>A host keeps your feed files. Start with a folder on this computer. Studio can connect other hosts later.</p></div>
-      <${AddHostForm} onAdded=${(c) => { setConnector(c); setStep('feed'); }} /></div>`;
-  } else if (step === 'feed') {
+      ${connector && html`<div class="notice" role="status">You added the folder <code>${JSON.parse(connector.config).root}</code>.
+        Change it below, or continue with it.</div>
+        <div class="actions"><button class="button" type="button" onClick=${() => go('feed')}>Continue with this folder</button></div>`}
+      <${AddHostForm} key=${connector ? connector.id : 'new'} replaces=${connector}
+        submitLabel=${connector ? 'Use the changed folder' : 'Add the folder'}
+        onAdded=${(c) => { setConnector(c); go('feed'); }} /></div>`;
+  } else if (step === 'feed' && connector) {
     body = html`<div class="form"><${Steps} current=${3} />
       <div><h1>Add your first feed</h1><p>Studio reads the feed and remembers it in your collection.</p></div>
-      <${AddFeedForm} connectors=${[connector]} onAdded=${(f) => { setFeed(f); setStep('done'); }} />
-      <div class="actions"><button class="button quiet" type="button" onClick=${onFinish}>Skip for now</button></div></div>`;
-  } else {
+      <${AddFeedForm} connectors=${[connector]} onAdded=${(f) => { setFeed(f); go('done'); }} />
+      <div class="actions"><${BackButton} /><button class="button quiet" type="button" onClick=${onFinish}>Skip for now</button></div></div>`;
+  } else if (step === 'done') {
     body = html`<div class="form"><${Steps} current=${4} />
       <div><h1>Studio is ready</h1>
         <p>${feed && feed.title ? `“${feed.title}” is in your collection.` : 'Your collection is ready.'}</p></div>
-      <div class="actions"><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
+      <div class="actions"><${BackButton} /><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
+  } else {
+    // A reload lost the wizard memory. The vault exists, so start at the host step.
+    body = html`<div class="form"><${Steps} current=${2} />
+      <div><h1>Connect a host</h1><p>A host keeps your feed files.</p></div>
+      <${AddHostForm} onAdded=${(c) => { setConnector(c); go('feed'); }} /></div>`;
   }
   return html`<main class="center"><div class="card"><${Brand} />${body}</div></main>`;
 }
@@ -295,10 +350,18 @@ function NoToken() {
 
 // ---- Shell ----
 
-function FeedDetail({ feed, onChanged }) {
+function FeedDetail({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
+  const remove = () => {
+    const name = feed.title || feed.path || 'this feed';
+    if (!confirm(`Remove “${name}” from your collection? The feed file on the host does not change.`)) return;
+    run(async () => {
+      await api(`/feeds/${feed.id}`, { method: 'DELETE' });
+      onRemoved();
+    });
+  };
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
   return html`<div>
     <div class="bar">${feed.title || 'Untitled feed'}</div>
@@ -311,6 +374,7 @@ function FeedDetail({ feed, onChanged }) {
         <div class="actions">
           <button class="button primary" type="button" disabled=${busy || !feed.connector_id} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read again'}</button>
+          <button class="button" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button>
         </div>
       </div>
     </section>
@@ -327,18 +391,31 @@ function FeedDetail({ feed, onChanged }) {
   </div>`;
 }
 
-function Hosts({ connectors, onAdded }) {
+function Hosts({ connectors, onChanged }) {
+  const { busy, error, run } = useAction();
+  const remove = (connector) => {
+    if (!confirm(`Remove the host “${connector.name}”? The files in it do not change.`)) return;
+    run(async () => {
+      await api(`/connectors/${connector.id}`, { method: 'DELETE' });
+      onChanged();
+    });
+  };
   return html`<div>
     <div class="bar">Hosts</div>
     <section class="section">
       <h2>Your hosts</h2>
+      ${error && error.code === 'in_use'
+        ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
+        : html`<${ErrorNotice} error=${error} />`}
       ${connectors.length === 0
         ? html`<p class="empty">No host yet.</p>`
         : html`<ul class="rows">${connectors.map((c) => html`<li class="row">
             <span class="dot hosting"></span>
             <span class="text"><span class="title">${c.name}</span>
-              <span class="sub mono">${JSON.parse(c.config).root}</span></span></li>`)}</ul>`}
-      <div class="panel"><h2>Add a folder</h2><${AddHostForm} onAdded=${onAdded} /></div>
+              <span class="sub mono">${JSON.parse(c.config).root}</span></span>
+            <button class="button quiet" type="button" disabled=${busy} style=${{ marginLeft: 'auto' }}
+              aria-label=${`Remove the host ${c.name}`} onClick=${() => remove(c)}>Remove</button></li>`)}</ul>`}
+      <div class="panel"><h2>Add a folder</h2><${AddHostForm} onAdded=${onChanged} /></div>
     </section>
   </div>`;
 }
@@ -346,7 +423,7 @@ function Hosts({ connectors, onAdded }) {
 function Shell({ onLock }) {
   const [feeds, setFeeds] = useState(null);
   const [connectors, setConnectors] = useState([]);
-  const [view, setView] = useState({ name: 'feeds' });
+  const [view, setView] = useNav('shell', { name: 'feeds' });
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
@@ -370,13 +447,14 @@ function Shell({ onLock }) {
   } else if (feeds === null) {
     main = html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`;
   } else if (view.name === 'hosts') {
-    main = html`<${Hosts} connectors=${connectors} onAdded=${() => load()} />`;
+    main = html`<${Hosts} connectors=${connectors} onChanged=${() => load()} />`;
   } else if (view.name === 'add-feed') {
     main = html`<div><div class="bar">Add a feed</div><section class="section"><div class="panel">
       <${AddFeedForm} connectors=${connectors} onAdded=${async (f) => { await load(); setView({ name: 'feed', id: f.id }); }} />
     </div></section></div>`;
   } else if (selected) {
-    main = html`<${FeedDetail} feed=${selected} onChanged=${() => load()} />`;
+    main = html`<${FeedDetail} feed=${selected} onChanged=${() => load()}
+      onRemoved=${async () => { await load(); setView({ name: 'feeds' }, { replace: true }); }} />`;
   } else {
     main = html`<section class="center" style=${{ minHeight: '100%' }}><div class="card">
       <h1>${feeds.length ? 'Select a feed' : 'Your collection is empty'}</h1>

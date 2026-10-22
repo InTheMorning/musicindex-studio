@@ -67,17 +67,41 @@ END;
 /// The schema version that this code writes.
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
 
+/// The kind of a [`CollectionError`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CollectionErrorKind {
+    /// The row does not exist.
+    NotFound,
+    /// Other rows use the row, so it cannot go out.
+    InUse,
+    /// SQLite failed, or the schema is not known.
+    Database,
+}
+
 /// An error from the collection database.
 #[derive(Debug)]
 pub struct CollectionError {
+    kind: CollectionErrorKind,
     message: String,
 }
 
 impl CollectionError {
     fn new(message: impl Into<String>) -> Self {
+        Self::with_kind(CollectionErrorKind::Database, message)
+    }
+
+    fn with_kind(kind: CollectionErrorKind, message: impl Into<String>) -> Self {
         Self {
+            kind,
             message: message.into(),
         }
+    }
+
+    /// The kind of the error.
+    #[must_use]
+    pub fn kind(&self) -> CollectionErrorKind {
+        self.kind
     }
 }
 
@@ -275,7 +299,12 @@ impl Collection {
                 connector_row,
             )
             .optional()?
-            .ok_or_else(|| CollectionError::new(format!("connector {} does not exist", id.0)))
+            .ok_or_else(|| {
+                CollectionError::with_kind(
+                    CollectionErrorKind::NotFound,
+                    format!("connector {} does not exist", id.0),
+                )
+            })
     }
 
     /// All connectors.
@@ -322,7 +351,12 @@ impl Collection {
         self.db
             .query_row(&format!("{FEED_SELECT} WHERE id = ?1"), [id.0], feed_row)
             .optional()?
-            .ok_or_else(|| CollectionError::new(format!("feed {} does not exist", id.0)))
+            .ok_or_else(|| {
+                CollectionError::with_kind(
+                    CollectionErrorKind::NotFound,
+                    format!("feed {} does not exist", id.0),
+                )
+            })
     }
 
     /// All feeds.
@@ -424,6 +458,47 @@ impl Collection {
                 now()
             ],
         )?;
+        Ok(())
+    }
+
+    /// Remove a feed from the collection, with its item GUIDs, its draft and
+    /// its snapshots. The feed file on the host does not change.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the feed does not exist.
+    pub fn delete_feed(&mut self, id: FeedId) -> Result<(), CollectionError> {
+        self.feed(id)?;
+        let tx = self.db.transaction()?;
+        tx.execute("DELETE FROM snapshots WHERE feed_id = ?1", [id.0])?;
+        tx.execute("DELETE FROM feeds WHERE id = ?1", [id.0])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Remove a connector that no feed uses.
+    ///
+    /// The caller removes the vault record of the connector.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::InUse`] when a feed uses the connector,
+    /// and [`CollectionErrorKind::NotFound`] when it does not exist.
+    pub fn delete_connector(&self, id: ConnectorId) -> Result<(), CollectionError> {
+        self.connector(id)?;
+        let users: i64 = self.db.query_row(
+            "SELECT COUNT(*) FROM feeds WHERE connector_id = ?1",
+            [id.0],
+            |r| r.get(0),
+        )?;
+        if users > 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::InUse,
+                format!("{users} feeds use connector {}", id.0),
+            ));
+        }
+        self.db
+            .execute("DELETE FROM connectors WHERE id = ?1", [id.0])?;
         Ok(())
     }
 
@@ -594,6 +669,30 @@ mod tests {
         assert_eq!(collection.item_guids(feed_id).unwrap(), ["one", "two"]);
         assert_eq!(collection.feed(read_only).unwrap().connector_id, None);
         assert_eq!(collection.feeds().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_feed_goes_out_with_its_rows_and_a_used_connector_stays() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let connector = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        let feed = collection
+            .add_feed(None, Some((connector, "a.xml")))
+            .unwrap();
+        collection
+            .add_snapshot(feed, &Version::new("v1"), b"<rss/>")
+            .unwrap();
+        let error = collection.delete_connector(connector).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::InUse);
+        collection.delete_feed(feed).unwrap();
+        assert!(collection.feeds().unwrap().is_empty());
+        assert_eq!(
+            collection.delete_feed(feed).unwrap_err().kind(),
+            CollectionErrorKind::NotFound
+        );
+        collection.delete_connector(connector).unwrap();
+        assert!(collection.connectors().unwrap().is_empty());
     }
 
     #[test]

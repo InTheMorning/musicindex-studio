@@ -13,7 +13,7 @@ mod workspace;
 use std::sync::{Arc, Mutex};
 
 use axum::middleware;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 
 pub use access::Access;
 pub use axum::Router;
@@ -41,7 +41,9 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             "/connectors",
             get(routes::list_connectors).post(routes::add_connector),
         )
+        .route("/connectors/{id}", delete(routes::delete_connector))
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
+        .route("/feeds/{id}", delete(routes::delete_feed))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
         .with_state(shared);
     Router::new()

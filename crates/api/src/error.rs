@@ -4,7 +4,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
-use studio_core::collection::CollectionError;
+use studio_core::collection::{CollectionError, CollectionErrorKind};
 use studio_core::connector::{ConnectorError, ConnectorErrorKind};
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::vault::{VaultError, VaultErrorKind};
@@ -46,11 +46,12 @@ impl IntoResponse for ApiError {
 
 impl From<CollectionError> for ApiError {
     fn from(error: CollectionError) -> Self {
-        Self::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "collection",
-            error.to_string(),
-        )
+        let (status, code) = match error.kind() {
+            CollectionErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),
+            CollectionErrorKind::InUse => (StatusCode::CONFLICT, "in_use"),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "collection"),
+        };
+        Self::new(status, code, error.to_string())
     }
 }
 

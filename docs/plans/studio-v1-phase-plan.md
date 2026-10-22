@@ -109,7 +109,6 @@ A phase gets task files in `docs/tasks/` before work starts.
 ### Phase 9: Server Shell
 
 - Refuse discovery addresses in private networks, so that a user cannot make the server read them.
-
 - Sign-in with a Nostr signer and with email and passphrase ([ADR 0004](../adr/0004-server-sign-in-with-nostr-or-email.md)).
 - Mechanical check: a session cannot read or write the feeds of a different user.
 - Mechanical check: the server rejects a used sign-in event.

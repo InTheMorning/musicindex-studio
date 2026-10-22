@@ -12,7 +12,7 @@ Discovery gives the address where Studio read a feed ([ADR 0020](0020-first-run-
 On 2026-10-22 the operator connected a folder that holds four feeds. Three feeds had addresses from discovery. The fourth feed came from the folder, and it had no address, because the folder had no public address.
 Studio does not compare these addresses. Two sources can give different addresses for one feed, and Studio does not show this.
 
-Subsequent phases need a correct address for each feed. Phase 5 compares the local file with the live file. Phase 7 announces each write by the feed address.
+Subsequent phases need a correct address for each feed. Phase 5 compares the local file with the live file. The Announce phase announces each write by the feed address.
 
 ## Decision
 
@@ -46,7 +46,7 @@ A read address is proven by the read. A `self` link is a claim in the file, and 
 - Use only the address where Studio read the feed. Rejected: a feed that Studio found in a folder has no such address.
 - The `self` link before the read address. Rejected after the corpus comparison above: the only difference in the corpus was a stale `self` link.
 - Use only the folder address. Rejected: a folder that is not organized in the same structure as the server gives incorrect addresses.
-- Select one address silently when sources are different. Rejected: an incorrect address makes the announcements of Phase 7 fail without a sign.
+- Select one address silently when sources are different. Rejected: an incorrect address makes the announcements of the Announce phase fail without a sign.
 
 ## Consequences
 

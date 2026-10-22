@@ -5,7 +5,7 @@ Decisions: [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md), [ADR 0003](
 
 ## Goal
 
-Give the core functions of the first run as a JSON API in local mode. Serve the UI files from the same binary. The desktop binary runs this API until the Tauri window exists (Phase 10).
+Give the core functions of the first run as a JSON API in local mode. Serve the UI files from the same binary. The desktop binary runs this API until the Tauri window exists (the Desktop Shell phase).
 
 ## Routes
 

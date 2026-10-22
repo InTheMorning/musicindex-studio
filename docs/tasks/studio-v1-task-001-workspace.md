@@ -30,7 +30,7 @@ Make the Cargo workspace and the checks that each subsequent phase uses.
   - `studio-core`: a library crate. It has no dependency on the other members.
   - `studio-api`: a library crate. It can depend on `studio-core` only.
   - `studio-server`: a binary crate. It can depend on `studio-api` and `studio-core`.
-  - `studio-desktop`: a binary crate. Tauri comes in Phase 10, not in this task.
+  - `studio-desktop`: a binary crate. Tauri comes in the Desktop Shell phase, not in this task.
 - Add no external dependency in this task.
 - The license field of each crate is `AGPL-3.0-only`.
 - Workspace lints forbid `unsafe_code` and require documentation on each public item.

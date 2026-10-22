@@ -10,8 +10,9 @@ An artist can do these steps on the desktop or on a public Studio server:
 1. Add the feeds of the artist to a collection.
 2. Connect each feed to the host that keeps it.
 3. Edit a feed, examine a diff and write the change to the host.
-4. Move files from one host to a different host.
-5. Announce the change to indexes.
+4. Make a new release from music files, and publisher feeds for labels and artists.
+5. Move files from one host to a different host.
+6. Announce the change to indexes.
 
 ## Non-Goals
 
@@ -35,7 +36,7 @@ Phase 0 to Phase 4 are complete. Phase 1 has one open item.
 - The visual checks of task 008 pass. The [review](../reviews/2026-10-22-phase-4-visual-check.md) records the results.
 - The one-question wizard of [ADR 0020](../adr/0020-first-run-asks-one-question.md) exists: discovery from addresses and musicindex, read-only feeds, a folder match, and the MSP 2.0 import with the vault on demand. Its [visual check](../reviews/2026-10-22-task-009-visual-check.md) passes.
 - The public address of a feed follows [ADR 0021](../adr/0021-public-address-of-a-feed.md). The collection keeps the address of each source and shows each difference. A folder match can find the folder address from the linked feeds.
-- Risk for Phase 9: discovery reads each address that a user gives. The server shell must refuse addresses in private networks.
+- Risk for the Server Shell phase: discovery reads each address that a user gives. The server shell must refuse addresses in private networks.
 
 Phase 5 is in progress. [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) gives the method of an edit. [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) gives the address rule and the facts of a new audio file. [ADR 0024](../adr/0024-track-numbers-follow-the-track-sequence.md) sets the track numbers from the track sequence. [Task 010](../tasks/studio-v1-task-010-draft-api.md) (the draft API) and [task 011](../tasks/studio-v1-task-011-album-editor.md) (the album editor UI) are complete. The [visual check of task 011](../reviews/2026-10-22-task-011-visual-check.md) passes. Next: [task 012](../tasks/studio-v1-task-012-value-editor.md) (the value editor).
 
@@ -94,33 +95,49 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Make the diff view and the snapshot list with rollback.
 - Visual check: the operator edits a published album feed completely.
 
-### Phase 6: Remaining Connectors
+### Phase 6: New Releases
+
+- Show the art of the album and of each track in the editor ([ADR 0025](../adr/0025-studio-serves-cover-art.md)).
+- Make a new album feed in a connected folder. Its feed GUID comes from its address ([ADR 0008](../adr/0008-feed-types-and-feed-identity.md)).
+- Import audio files and art into the draft. The approved write puts them on the host ([ADR 0026](../adr/0026-import-music-files-through-the-draft.md)).
+- Mechanical check: an import of tagged test files gives one track for each file, with its title, track number, duration, size and type.
+- Mechanical check: an approved write puts each file on the host before the feed file, and does not replace a file that exists.
+- Mechanical check: the UI loads no image from a server other than Studio.
+- Visual check: the operator makes a new release from a folder of music files and writes it.
+
+### Phase 7: Publisher Feeds
+
+- Make and edit publisher feeds for labels and artists, with a `podcast:remoteItem` for each release ([ADR 0008](../adr/0008-feed-types-and-feed-identity.md)).
+- Decide in an ADR how a release refers to its publisher feed, and what Studio changes in the release feeds.
+- Visual check: the operator makes a label feed and an artist feed for the releases in the collection.
+
+### Phase 8: Remaining Connectors
 
 - SFTP, S3 and R2, Git pages, Blossom and nsite.
 - Mechanical check: each connector passes the shared connector test set against a local test server.
 
-### Phase 7: Announce
+### Phase 9: Announce
 
 - Send a podping and a Podcast Index pubnotify after each write, with a setting for each.
 - Mechanical check: a test confirms the announcement after a write and no announcement when the setting is off.
 
-### Phase 8: Other Feed Types
+### Phase 10: Other Feed Types
 
-- Publisher, musicL and live item editors.
+- MusicL and live item editors.
 
-### Phase 9: Server Shell
+### Phase 11: Server Shell
 
-- Refuse discovery addresses in private networks, so that a user cannot make the server read them.
+- Refuse discovery addresses, audio addresses and image addresses in private networks, so that a user cannot make the server read them.
 - Sign-in with a Nostr signer and with email and passphrase ([ADR 0004](../adr/0004-server-sign-in-with-nostr-or-email.md)).
 - Mechanical check: a session cannot read or write the feeds of a different user.
 - Mechanical check: the server rejects a used sign-in event.
 
-### Phase 10: Desktop Shell
+### Phase 12: Desktop Shell
 
 - Package the Tauri app for Linux, macOS and Windows.
 - Visual check: the operator installs and uses the app on each platform.
 
-### Phase 11: File Moves And The Self-Hosted File Host
+### Phase 13: File Moves And The Self-Hosted File Host
 
 - Move some or all files of a user from one host to a different host ([ADR 0009](../adr/0009-studio-connects-to-hosts-and-moves-files.md)).
 - Update each feed that refers to a moved file, through the write pipeline.
@@ -154,4 +171,4 @@ A phase gets task files in `docs/tasks/` before work starts.
 - The snapshot retention limit (ADR 0007). ADR 0022 keeps each snapshot until a subsequent ADR sets a limit.
 - The vault key derivation function, the encryption algorithm and a recovery method (ADR 0003).
 - The questions in ADR 0009.
-- The order of the four feed types after the album editor.
+- The sequence of the musicL and live item editors (Phase 10).

@@ -2,7 +2,8 @@
 //!
 //! The desktop shell reads the addresses that its own user gives. The
 //! server shell must also refuse addresses in private networks before it
-//! uses this module, or a user can make the server read them (Phase 9).
+//! uses this module, or a user can make the server read them (the
+//! Server Shell phase).
 
 use std::fmt;
 use std::time::Duration;

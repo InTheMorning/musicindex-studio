@@ -44,7 +44,7 @@ On 2026-10-22 the agent examined the address fields of the 25 feeds in the test 
 ## Consequences
 
 - A feed with an incorrect address in the live file needs a correction before its first write through Studio.
-- The server shell must refuse audio addresses in private networks, as it must for discovery (Phase 9).
+- The server shell must refuse audio addresses in private networks, as it must for discovery (the Server Shell phase).
 - Some hosts do not answer a `HEAD` request or a range request. The user then types the size and the type.
 
 ## Invariants

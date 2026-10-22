@@ -2,7 +2,8 @@
 //!
 //! The artist runs this binary on their own machine (ADR 0001). It runs the
 //! local API on a loopback address and prints the UI address with the access
-//! token (ADR 0017). The Tauri window comes in Phase 10.
+//! token (ADR 0017). The Tauri window comes in the Desktop Shell
+//! phase.
 //!
 //! Options:
 //!

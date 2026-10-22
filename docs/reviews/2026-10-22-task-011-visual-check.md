@@ -18,6 +18,7 @@
 | A rollback to a snapshot gives the original file | Pass | The agent compared the bytes after the write. The file was the same as the original. |
 | Each control is 44 px or more, and each step works from the keyboard | Pass | The operator did the rollback with the keyboard only. A headless check found no control lower than 44 px. |
 | The diff colors are clear in the dark and the light theme | Pass | |
+| Each editor screen is clear in the light theme | Pass | The operator checked it after the commit of the task. |
 
 ## Defects Found During The Check
 

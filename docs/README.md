@@ -26,6 +26,8 @@
 - [ADR 0022: The editor sends the model with entry keys](adr/0022-the-editor-sends-the-model-with-entry-keys.md)
 - [ADR 0023: Web addresses and the facts of an audio file](adr/0023-web-addresses-and-audio-file-facts.md)
 - [ADR 0024: Track numbers follow the track sequence](adr/0024-track-numbers-follow-the-track-sequence.md)
+- [ADR 0025: Studio serves cover art to the UI](adr/0025-studio-serves-cover-art.md)
+- [ADR 0026: Import music files through the draft](adr/0026-import-music-files-through-the-draft.md)
 
 ## Plans
 

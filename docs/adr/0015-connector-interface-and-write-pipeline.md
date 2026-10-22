@@ -36,7 +36,7 @@ The core is a library for two shells. The server uses an async runtime. The desk
 ## Consequences
 
 - The local folder connector cannot stop a change that occurs between its version check and its rename. The window is short. A remote connector with a conditional write, such as an S3 `If-Match`, has no such window.
-- The pipeline makes no announcement yet. Phase 7 adds the podping and the Podcast Index notification after a write.
+- The pipeline makes no announcement yet. The Announce phase adds the podping and the Podcast Index notification after a write.
 
 ## Invariants
 

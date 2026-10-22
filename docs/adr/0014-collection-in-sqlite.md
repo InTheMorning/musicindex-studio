@@ -24,7 +24,7 @@ Stophammer uses SQLite.
 
 ## Consequences
 
-- The server keeps the collections of all users in one database, with a user ID on each row. Phase 9 adds the user ID.
+- The server keeps the collections of all users in one database, with a user ID on each row. The Server Shell phase adds the user ID.
 
 ## Invariants
 

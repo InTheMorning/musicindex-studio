@@ -33,7 +33,7 @@ Phase 0 to Phase 3 are complete. Phase 1 has one open item. Phase 4 is in progre
 - The local folder connector and the write pipeline exist ([ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md)).
 - The local JSON API, the UI shell, the settings screen and the first-run wizard exist ([ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0017](../adr/0017-local-api-access.md)). A test finds no secret in API responses.
 - The visual checks of task 008 pass. The [review](../reviews/2026-10-22-phase-4-visual-check.md) records the results.
-- Task 009 (more discovery methods) is next. Then Phase 5.
+- Task 009 (the one-question wizard of [ADR 0020](../adr/0020-first-run-asks-one-question.md)) is next. Then Phase 5.
 
 ## Target State
 
@@ -142,7 +142,6 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ## Open Questions
 
-- The first-run wizard does not know the situation of the user. On 2026-10-22 the operator named four situations: a user who hosts feeds already (for example on an own server), a user of a hosting service such as Podhome, a user of Wavlake or Fountain only, and a user who is new to V4V. The wizard must ask this first and give a different path for each. The design needs the operator.
 
 - The UI build method (Phase 4).
 - The podping send method: a Hive account of Studio, or a hivepinger service (ADR 0007).

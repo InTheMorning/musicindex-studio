@@ -21,6 +21,7 @@
 - [ADR 0017: Access to the local API](adr/0017-local-api-access.md) (proposed)
 - [ADR 0018: Passphrase strength and the error color](adr/0018-passphrase-strength-and-error-color.md)
 - [ADR 0019: Select a feed from the files of a host](adr/0019-select-a-feed-from-the-host.md)
+- [ADR 0020: The first run asks one question](adr/0020-first-run-asks-one-question.md)
 
 ## Plans
 
@@ -36,7 +37,7 @@
 - [Studio v1 task 006: Collection, local connector and write pipeline](tasks/studio-v1-task-006-collection-connector-pipeline.md)
 - [Studio v1 task 007: Local JSON API](tasks/studio-v1-task-007-local-api.md)
 - [Studio v1 task 008: UI shell, settings and first-run wizard](tasks/studio-v1-task-008-ui-shell-and-wizard.md)
-- [Studio v1 task 009: More discovery methods](tasks/studio-v1-task-009-more-discovery-methods.md)
+- [Studio v1 task 009: The one-question wizard](tasks/studio-v1-task-009-more-discovery-methods.md)
 
 ## Reviews
 

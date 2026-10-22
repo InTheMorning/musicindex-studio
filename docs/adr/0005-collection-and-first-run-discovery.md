@@ -13,7 +13,7 @@ Stophammer has no route that finds feeds by owner, npub or feed URL.
 ## Decision
 
 1. The collection is a list of feeds. Each entry records the feed GUID, the public URL, the connector that writes it and the last known state.
-2. A first-run wizard adds feeds to the collection. It has three methods:
+2. [ADR 0020](0020-first-run-asks-one-question.md) replaces items 2 and 3. A first-run wizard adds feeds to the collection. It has three methods:
    - The user pastes one or more feed URLs.
    - The user searches musicindex (Stophammer) by artist or feed name and selects results.
    - The user imports an MSP 2.0 backup.

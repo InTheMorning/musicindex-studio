@@ -22,13 +22,16 @@ An artist can do these steps on the desktop or on a public Studio server:
 
 ## Current State
 
-Phase 0 and Phase 1 are complete, with one open item.
+Phase 0, Phase 1 and Phase 2 are complete. Phase 1 has one open item.
 
 - The lossless XML tree and the typed model exist ([ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md)).
 - The corpus has 23 published feeds and 2 fixtures. Each feed gives the same bytes after a read and a write.
 - Open item: the corpus has no Podtunes feed. The research gives no Podtunes feed URL. The operator can supply one.
 
-Phase 2 (vault) is next.
+- The vault exists in `studio-core` ([ADR 0013](../adr/0013-vault-format-and-cryptography.md)). A passphrase, a recovery key or a vault key from a Nostr signer opens it.
+- Phase 3 and Phase 4 must add the tests that find no secret in the collection database and in API responses.
+
+Phase 3 (collection and local connector) is next.
 
 ## Target State
 
@@ -57,6 +60,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 ### Phase 2: Vault
 
 - Make the encrypted vault format, with a passphrase unlock and a NIP-44 unlock ([ADR 0003](../adr/0003-user-unlocked-secret-vault.md)).
+- Task: [005](../tasks/studio-v1-task-005-vault.md) is complete.
 - Mechanical check: a test opens a vault with each unlock method and fails with an incorrect key.
 - Mechanical check: a test finds no secret in a log, an API response or the collection database.
 

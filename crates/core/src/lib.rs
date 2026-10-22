@@ -6,4 +6,5 @@
 
 pub mod feed;
 pub mod guid;
+pub mod vault;
 pub mod xml;

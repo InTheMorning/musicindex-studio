@@ -387,6 +387,8 @@ function AddFeedForm({ connectors, onAdded }) {
 
 // ---- Find feeds by address or name (ADR 0020) ----
 
+// Pasted addresses and musicindex search results, with one action at the
+// end that uses both (ADR 0020).
 function FindFeeds({ onFound }) {
   const [addresses, setAddresses] = useState('');
   const [query, setQuery] = useState('');
@@ -395,6 +397,7 @@ function FindFeeds({ onFound }) {
   const search = useAction();
   const find = useAction();
   const lines = addresses.split('\n').map((l) => l.trim()).filter(Boolean);
+  const count = lines.length + guids.length;
 
   const runSearch = (event) => {
     event.preventDefault();
@@ -402,23 +405,14 @@ function FindFeeds({ onFound }) {
     search.run(async () => setHits(await api(`/search?q=${encodeURIComponent(query.trim())}`)));
   };
   const toggle = (guid) => setGuids(guids.includes(guid) ? guids.filter((g) => g !== guid) : [...guids, guid]);
-  const runFind = (event) => {
-    event.preventDefault();
-    find.run(async () => onFound(await api('/discover', { method: 'POST', body: { addresses: lines, guids } })));
-  };
+  const runFind = () => find.run(async () => onFound(await api('/discover', { method: 'POST', body: { addresses: lines, guids } })));
   return html`<div class="form">
-    <form class="form" onSubmit=${runFind}>
-      <div class="field">
-        <label for="addresses">Feed addresses</label>
-        <span class="hint" id="addresses-hint">One on each line. A publisher feed brings all of its releases.</span>
-        <textarea id="addresses" rows="3" aria-describedby="addresses-hint" placeholder="https://music.example/feed.xml"
-          value=${addresses} onInput=${(e) => setAddresses(e.target.value)}></textarea>
-      </div>
-      ${guids.length > 0 && html`<p class="hint">${guids.length} feed${guids.length > 1 ? 's' : ''} from the search.</p>`}
-      <${ErrorNotice} error=${find.error} />
-      <div class="actions"><button class="button primary" type="submit"
-        disabled=${find.busy || (lines.length === 0 && guids.length === 0)}>${find.busy ? 'Reading the feeds…' : 'Find my feeds'}</button></div>
-    </form>
+    <div class="field">
+      <label for="addresses">Feed addresses</label>
+      <span class="hint" id="addresses-hint">One on each line. A publisher feed brings all of its releases.</span>
+      <textarea id="addresses" rows="3" aria-describedby="addresses-hint" placeholder="https://music.example/feed.xml"
+        value=${addresses} onInput=${(e) => setAddresses(e.target.value)}></textarea>
+    </div>
     <form class="form" onSubmit=${runSearch} role="search">
       <div class="field">
         <label for="search">Or search musicindex by name</label>
@@ -436,6 +430,9 @@ function FindFeeds({ onFound }) {
             <span class="sub">${h.artist || 'Unknown artist'}</span></span></label>`)}
       </fieldset>`}
     </form>
+    <${ErrorNotice} error=${find.error} />
+    <div class="actions"><button class="button primary" type="button" disabled=${find.busy || count === 0} onClick=${runFind}>
+      ${find.busy ? 'Reading the feeds…' : count > 0 ? `Find my feeds (${count})` : 'Find my feeds'}</button></div>
   </div>`;
 }
 

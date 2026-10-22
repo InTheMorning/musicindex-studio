@@ -73,3 +73,17 @@ fn the_corpus_has_value_time_splits_live_items_and_publishers() {
     assert!(feeds.iter().any(|f| f.publisher.is_some()));
     assert!(feeds.iter().any(|f| f.medium.as_deref() == Some("musicL")));
 }
+
+#[test]
+fn the_corpus_has_persons_transcripts_fundings_and_self_links() {
+    let feeds: Vec<Feed> = corpus()
+        .iter()
+        .map(|(_, b)| Feed::read(&Document::parse_bytes(b).unwrap()).unwrap())
+        .collect();
+    let items = || feeds.iter().flat_map(|f| f.items.iter());
+    assert!(feeds.iter().any(|f| !f.persons.is_empty()));
+    assert!(feeds.iter().any(|f| !f.fundings.is_empty()));
+    assert!(feeds.iter().any(|f| f.self_url().is_some()));
+    assert!(items().any(|i| !i.transcripts.is_empty()));
+    assert!(items().any(|i| i.enclosure.is_some() && i.guid.is_some()));
+}

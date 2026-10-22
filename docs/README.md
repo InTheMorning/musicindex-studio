@@ -24,6 +24,7 @@
 - [Studio v1 task 001: Workspace](tasks/studio-v1-task-001-workspace.md)
 - [Studio v1 task 002: Lossless XML tree](tasks/studio-v1-task-002-lossless-xml-tree.md)
 - [Studio v1 task 003: Feed model and writer](tasks/studio-v1-task-003-feed-model.md)
+- [Studio v1 task 004: Remaining feed elements](tasks/studio-v1-task-004-remaining-feed-elements.md)
 
 ## Research
 

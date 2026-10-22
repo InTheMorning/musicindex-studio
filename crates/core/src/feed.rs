@@ -9,14 +9,21 @@
 //! attribute is `None`, so that a read and a write keep the difference
 //! between a missing attribute and an empty one.
 
+mod elements;
 mod sync;
+mod value;
 
 use std::fmt;
 
+pub use elements::{
+    AtomLink, Enclosure, Funding, Image, License, Locked, Person, Recipient, RemoteItem,
+    Transcript, Txt,
+};
 pub use sync::Entry;
-use sync::{Make, Modeled, Names, read_list, read_text, write_list, write_single, write_text};
+use sync::{Children, Modeled, Names, read_list, read_one, read_text};
+pub use value::{ValueBlock, ValueTimeSplit};
 
-use crate::xml::{Document, Element, Ns};
+use crate::xml::{Document, Element, Node, Ns};
 
 /// The elements of `channel` that come after its other elements.
 const CHANNEL_TAIL: &[(Ns, &str)] = &[(Ns::None, "item"), (Ns::Podcast, "liveItem")];
@@ -60,8 +67,24 @@ pub struct Feed {
     pub author: Option<String>,
     /// The `href` of `itunes:image`.
     pub image: Option<String>,
+    /// `itunes:new-feed-url`: the new URL after a host move.
+    pub new_feed_url: Option<String>,
+    /// The `atom:link` elements. See [`Feed::self_url`].
+    pub atom_links: Vec<Entry<AtomLink>>,
+    /// The `podcast:image` elements.
+    pub images: Vec<Entry<Image>>,
+    /// The `podcast:person` elements.
+    pub persons: Vec<Entry<Person>>,
+    /// The `podcast:funding` elements.
+    pub fundings: Vec<Entry<Funding>>,
+    /// The `podcast:txt` elements.
+    pub txts: Vec<Entry<Txt>>,
+    /// `podcast:license`.
+    pub license: Option<License>,
     /// `podcast:publisher`.
     pub publisher: Option<Publisher>,
+    /// `podcast:podroll`.
+    pub podroll: Option<Podroll>,
     /// The `podcast:remoteItem` elements of the channel. A publisher feed
     /// lists its albums here, and a musicL feed lists its tracks here.
     pub remote_items: Vec<Entry<RemoteItem>>,
@@ -88,13 +111,18 @@ impl Feed {
             language: read_text(channel, Ns::None, "language"),
             podcast_guid: read_text(channel, Ns::Podcast, "guid"),
             medium: read_text(channel, Ns::Podcast, "medium"),
-            locked: channel.child(Ns::Podcast, "locked").map(Locked::read),
+            locked: read_one(channel),
             author: read_text(channel, Ns::Itunes, "author"),
-            image: channel
-                .child(Ns::Itunes, "image")
-                .and_then(|e| e.attribute("href"))
-                .map(str::to_owned),
-            publisher: channel.child(Ns::Podcast, "publisher").map(Publisher::read),
+            image: read_href(channel, Ns::Itunes, "image"),
+            new_feed_url: read_text(channel, Ns::Itunes, "new-feed-url"),
+            atom_links: read_list(channel),
+            images: read_list(channel),
+            persons: read_list(channel),
+            fundings: read_list(channel),
+            txts: read_list(channel),
+            license: read_one(channel),
+            publisher: read_one(channel),
+            podroll: read_one(channel),
             remote_items: read_list(channel),
             values: read_list(channel),
             items: read_list(channel),
@@ -110,97 +138,42 @@ impl Feed {
     pub fn write(&self, doc: &mut Document) -> Result<(), FeedError> {
         let mut names = Names::new(doc.root());
         let channel = channel_mut(doc.root_mut()).ok_or(NO_CHANNEL)?;
-        let tail = CHANNEL_TAIL;
-        let n = &mut names;
-        write_text(channel, Ns::None, "title", self.title.as_deref(), tail, n);
-        write_text(
-            channel,
-            Ns::None,
-            "description",
-            self.description.as_deref(),
-            tail,
-            n,
-        );
-        write_text(channel, Ns::None, "link", self.link.as_deref(), tail, n);
-        write_text(
-            channel,
-            Ns::None,
-            "language",
-            self.language.as_deref(),
-            tail,
-            n,
-        );
-        write_text(
-            channel,
-            Ns::Podcast,
-            "guid",
-            self.podcast_guid.as_deref(),
-            tail,
-            n,
-        );
-        write_text(
-            channel,
-            Ns::Podcast,
-            "medium",
-            self.medium.as_deref(),
-            tail,
-            n,
-        );
-        let locked = self
-            .locked
-            .as_ref()
-            .map(|l| move |e: &mut Element, n: &mut Names| l.apply(e, n));
-        write_single(
-            channel,
-            Ns::Podcast,
-            "locked",
-            dyn_fn(locked.as_ref()),
-            tail,
-            n,
-        );
-        write_text(
-            channel,
-            Ns::Itunes,
-            "author",
-            self.author.as_deref(),
-            tail,
-            n,
-        );
-        let image = self
-            .image
-            .as_deref()
-            .map(|href| move |e: &mut Element, _: &mut Names| e.set_attribute("href", Some(href)));
-        write_single(
-            channel,
-            Ns::Itunes,
-            "image",
-            dyn_fn(image.as_ref()),
-            tail,
-            n,
-        );
-        let publisher = self
-            .publisher
-            .as_ref()
-            .map(|p| move |e: &mut Element, n: &mut Names| p.apply(e, n));
-        write_single(
-            channel,
-            Ns::Podcast,
-            "publisher",
-            dyn_fn(publisher.as_ref()),
-            tail,
-            n,
-        );
-        write_list(channel, &self.remote_items, tail, n);
-        write_list(channel, &self.values, tail, n);
-        write_list(channel, &self.items, &[(Ns::Podcast, "liveItem")], n);
-        write_list(channel, &self.live_items, &[], n);
+        let mut c = Children::new(channel, CHANNEL_TAIL, &mut names);
+        c.text(Ns::None, "title", self.title.as_ref());
+        c.text(Ns::None, "description", self.description.as_ref());
+        c.text(Ns::None, "link", self.link.as_ref());
+        c.text(Ns::None, "language", self.language.as_ref());
+        c.text(Ns::Podcast, "guid", self.podcast_guid.as_ref());
+        c.text(Ns::Podcast, "medium", self.medium.as_ref());
+        c.one(self.locked.as_ref());
+        c.text(Ns::Itunes, "author", self.author.as_ref());
+        c.href(Ns::Itunes, "image", self.image.as_ref());
+        c.text(Ns::Itunes, "new-feed-url", self.new_feed_url.as_ref());
+        c.list(&self.atom_links);
+        c.list(&self.images);
+        c.list(&self.persons);
+        c.list(&self.fundings);
+        c.list(&self.txts);
+        c.one(self.license.as_ref());
+        c.one(self.publisher.as_ref());
+        c.one(self.podroll.as_ref());
+        c.list(&self.remote_items);
+        c.list(&self.values);
+        c.list_before(&self.items, &[(Ns::Podcast, "liveItem")]);
+        c.list_before(&self.live_items, &[]);
         names.finish(doc.root_mut());
         Ok(())
     }
-}
 
-fn dyn_fn<F: Fn(&mut Element, &mut Names)>(f: Option<&F>) -> Option<Make<'_>> {
-    f.map(|f| f as Make<'_>)
+    /// The feed URL that the feed gives for itself: the `href` of the first
+    /// `atom:link` with `rel="self"`.
+    #[must_use]
+    pub fn self_url(&self) -> Option<&str> {
+        self.atom_links
+            .iter()
+            .find(|l| l.rel.as_deref() == Some("self"))
+            .and_then(|l| l.href.as_deref())
+    }
 }
 
 fn channel(root: &Element) -> Option<&Element> {
@@ -214,37 +187,16 @@ fn channel_mut(root: &mut Element) -> Option<&mut Element> {
         return None;
     }
     root.children_mut().iter_mut().find_map(|n| match n {
-        crate::xml::Node::Element(e) if e.is(Ns::None, "channel") => Some(e),
+        Node::Element(e) if e.is(Ns::None, "channel") => Some(e),
         _ => None,
     })
 }
 
-/// Read each named attribute into a struct field.
-fn attr(element: &Element, name: &str) -> Option<String> {
-    element.attribute(name).map(str::to_owned)
-}
-
-/// `podcast:locked`.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Locked {
-    /// The text: `yes` or `no`.
-    pub value: String,
-    /// The `owner` attribute.
-    pub owner: Option<String>,
-}
-
-impl Locked {
-    fn read(element: &Element) -> Self {
-        Self {
-            value: element.text(),
-            owner: attr(element, "owner"),
-        }
-    }
-
-    fn apply(&self, element: &mut Element, _: &mut Names) {
-        element.set_attribute("owner", self.owner.as_deref());
-        element.set_text(&self.value);
-    }
+fn read_href(parent: &Element, ns: Ns, local: &str) -> Option<String> {
+    parent
+        .child(ns, local)
+        .and_then(|e| e.attribute("href"))
+        .map(str::to_owned)
 }
 
 /// `podcast:publisher`: the link from a feed to its publisher feeds.
@@ -257,7 +209,10 @@ pub struct Publisher {
     pub remote_items: Vec<Entry<RemoteItem>>,
 }
 
-impl Publisher {
+impl Modeled for Publisher {
+    const NS: Ns = Ns::Podcast;
+    const NAME: &'static str = "publisher";
+
     fn read(element: &Element) -> Self {
         Self {
             remote_items: read_list(element),
@@ -265,211 +220,29 @@ impl Publisher {
     }
 
     fn apply(&self, element: &mut Element, names: &mut Names) {
-        write_list(element, &self.remote_items, &[], names);
+        Children::new(element, &[], names).list(&self.remote_items);
     }
 }
 
-/// `podcast:remoteItem`: a reference to a feed or to an item in a feed.
+/// `podcast:podroll`: feeds that the creator recommends.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct RemoteItem {
-    /// `feedGuid`.
-    pub feed_guid: Option<String>,
-    /// `feedUrl`.
-    pub feed_url: Option<String>,
-    /// `itemGuid`.
-    pub item_guid: Option<String>,
-    /// `medium`.
-    pub medium: Option<String>,
-    /// `title`.
-    pub title: Option<String>,
-    /// `rel`: a set of role words (Podcast Namespace PR #793).
-    pub rel: Option<String>,
-}
-
-impl Modeled for RemoteItem {
-    const NS: Ns = Ns::Podcast;
-    const NAME: &'static str = "remoteItem";
-
-    fn read(element: &Element) -> Self {
-        Self {
-            feed_guid: attr(element, "feedGuid"),
-            feed_url: attr(element, "feedUrl"),
-            item_guid: attr(element, "itemGuid"),
-            medium: attr(element, "medium"),
-            title: attr(element, "title"),
-            rel: attr(element, "rel"),
-        }
-    }
-
-    fn apply(&self, element: &mut Element, _: &mut Names) {
-        element.set_attribute("feedGuid", self.feed_guid.as_deref());
-        element.set_attribute("feedUrl", self.feed_url.as_deref());
-        element.set_attribute("itemGuid", self.item_guid.as_deref());
-        element.set_attribute("medium", self.medium.as_deref());
-        element.set_attribute("title", self.title.as_deref());
-        element.set_attribute("rel", self.rel.as_deref());
-    }
-}
-
-/// `podcast:value`: a payment block for a channel or an item.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ValueBlock {
-    /// `type`, such as `lightning`.
-    pub value_type: Option<String>,
-    /// `method`, such as `keysend` or `lnaddress`.
-    pub method: Option<String>,
-    /// `suggested`.
-    pub suggested: Option<String>,
-    /// The `podcast:valueRecipient` elements.
-    pub recipients: Vec<Entry<Recipient>>,
-    /// The `podcast:valueTimeSplit` elements.
-    pub time_splits: Vec<Entry<ValueTimeSplit>>,
-}
-
-impl Modeled for ValueBlock {
-    const NS: Ns = Ns::Podcast;
-    const NAME: &'static str = "value";
-
-    fn read(element: &Element) -> Self {
-        Self {
-            value_type: attr(element, "type"),
-            method: attr(element, "method"),
-            suggested: attr(element, "suggested"),
-            recipients: read_list(element),
-            time_splits: read_list(element),
-        }
-    }
-
-    fn apply(&self, element: &mut Element, names: &mut Names) {
-        element.set_attribute("type", self.value_type.as_deref());
-        element.set_attribute("method", self.method.as_deref());
-        element.set_attribute("suggested", self.suggested.as_deref());
-        write_list(
-            element,
-            &self.recipients,
-            &[(Ns::Podcast, "valueTimeSplit")],
-            names,
-        );
-        write_list(element, &self.time_splits, &[], names);
-    }
-}
-
-/// `podcast:valueRecipient`: one destination of a payment.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Recipient {
-    /// `name`.
-    pub name: Option<String>,
-    /// `type`, such as `node` or `lnaddress`.
-    pub recipient_type: Option<String>,
-    /// `address`.
-    pub address: Option<String>,
-    /// `split`: the number of shares.
-    pub split: Option<String>,
-    /// `customKey`.
-    pub custom_key: Option<String>,
-    /// `customValue`.
-    pub custom_value: Option<String>,
-    /// `fee`.
-    pub fee: Option<String>,
-}
-
-impl Modeled for Recipient {
-    const NS: Ns = Ns::Podcast;
-    const NAME: &'static str = "valueRecipient";
-
-    fn read(element: &Element) -> Self {
-        Self {
-            name: attr(element, "name"),
-            recipient_type: attr(element, "type"),
-            address: attr(element, "address"),
-            split: attr(element, "split"),
-            custom_key: attr(element, "customKey"),
-            custom_value: attr(element, "customValue"),
-            fee: attr(element, "fee"),
-        }
-    }
-
-    fn apply(&self, element: &mut Element, _: &mut Names) {
-        element.set_attribute("name", self.name.as_deref());
-        element.set_attribute("type", self.recipient_type.as_deref());
-        element.set_attribute("address", self.address.as_deref());
-        element.set_attribute("split", self.split.as_deref());
-        element.set_attribute("customKey", self.custom_key.as_deref());
-        element.set_attribute("customValue", self.custom_value.as_deref());
-        element.set_attribute("fee", self.fee.as_deref());
-    }
-}
-
-/// `podcast:valueTimeSplit`: different recipients for a period of playback.
-///
-/// The specification permits one `podcast:remoteItem` or one or more
-/// `podcast:valueRecipient` elements. The model keeps lists of both, so that
-/// it also keeps a feed that does not obey this rule.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ValueTimeSplit {
-    /// `startTime`, in seconds.
-    pub start_time: Option<String>,
-    /// `duration`, in seconds.
-    pub duration: Option<String>,
-    /// `remoteStartTime`, in seconds.
-    pub remote_start_time: Option<String>,
-    /// `remotePercentage`.
-    pub remote_percentage: Option<String>,
+pub struct Podroll {
     /// The `podcast:remoteItem` elements.
     pub remote_items: Vec<Entry<RemoteItem>>,
-    /// The `podcast:valueRecipient` elements.
-    pub recipients: Vec<Entry<Recipient>>,
 }
 
-impl Modeled for ValueTimeSplit {
+impl Modeled for Podroll {
     const NS: Ns = Ns::Podcast;
-    const NAME: &'static str = "valueTimeSplit";
+    const NAME: &'static str = "podroll";
 
     fn read(element: &Element) -> Self {
         Self {
-            start_time: attr(element, "startTime"),
-            duration: attr(element, "duration"),
-            remote_start_time: attr(element, "remoteStartTime"),
-            remote_percentage: attr(element, "remotePercentage"),
             remote_items: read_list(element),
-            recipients: read_list(element),
         }
     }
 
     fn apply(&self, element: &mut Element, names: &mut Names) {
-        element.set_attribute("startTime", self.start_time.as_deref());
-        element.set_attribute("duration", self.duration.as_deref());
-        element.set_attribute("remoteStartTime", self.remote_start_time.as_deref());
-        element.set_attribute("remotePercentage", self.remote_percentage.as_deref());
-        write_list(element, &self.remote_items, &[], names);
-        write_list(element, &self.recipients, &[], names);
-    }
-}
-
-/// `enclosure`: the media file of an item.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Enclosure {
-    /// `url`.
-    pub url: Option<String>,
-    /// `length`, in bytes.
-    pub length: Option<String>,
-    /// `type`: the media type.
-    pub media_type: Option<String>,
-}
-
-impl Enclosure {
-    fn read(element: &Element) -> Self {
-        Self {
-            url: attr(element, "url"),
-            length: attr(element, "length"),
-            media_type: attr(element, "type"),
-        }
-    }
-
-    fn apply(&self, element: &mut Element) {
-        element.set_attribute("url", self.url.as_deref());
-        element.set_attribute("length", self.length.as_deref());
-        element.set_attribute("type", self.media_type.as_deref());
+        Children::new(element, &[], names).list(&self.remote_items);
     }
 }
 
@@ -478,6 +251,8 @@ impl Enclosure {
 pub struct Item {
     /// `title`.
     pub title: Option<String>,
+    /// `description`.
+    pub description: Option<String>,
     /// The text of `guid`. It does not change without a user action (ADR 0008).
     pub guid: Option<String>,
     /// `enclosure`.
@@ -486,6 +261,21 @@ pub struct Item {
     pub pub_date: Option<String>,
     /// `itunes:duration`, as the source wrote it.
     pub duration: Option<String>,
+    /// The `href` of `itunes:image`.
+    pub image: Option<String>,
+    /// The `podcast:image` elements.
+    pub images: Vec<Entry<Image>>,
+    /// The `podcast:person` elements. They take the place of the channel
+    /// persons for this item.
+    pub persons: Vec<Entry<Person>>,
+    /// The `podcast:funding` elements.
+    pub fundings: Vec<Entry<Funding>>,
+    /// The `podcast:transcript` elements.
+    pub transcripts: Vec<Entry<Transcript>>,
+    /// The `podcast:txt` elements.
+    pub txts: Vec<Entry<Txt>>,
+    /// `podcast:license`.
+    pub license: Option<License>,
     /// The `podcast:value` blocks of the item. They take the place of the
     /// channel value blocks for this item.
     pub values: Vec<Entry<ValueBlock>>,
@@ -495,53 +285,38 @@ impl Item {
     fn read_fields(element: &Element) -> Self {
         Self {
             title: read_text(element, Ns::None, "title"),
+            description: read_text(element, Ns::None, "description"),
             guid: read_text(element, Ns::None, "guid"),
-            enclosure: element.child(Ns::None, "enclosure").map(Enclosure::read),
+            enclosure: read_one(element),
             pub_date: read_text(element, Ns::None, "pubDate"),
             duration: read_text(element, Ns::Itunes, "duration"),
+            image: read_href(element, Ns::Itunes, "image"),
+            images: read_list(element),
+            persons: read_list(element),
+            fundings: read_list(element),
+            transcripts: read_list(element),
+            txts: read_list(element),
+            license: read_one(element),
             values: read_list(element),
         }
     }
 
     fn apply_fields(&self, element: &mut Element, names: &mut Names) {
-        write_text(
-            element,
-            Ns::None,
-            "title",
-            self.title.as_deref(),
-            &[],
-            names,
-        );
-        write_text(element, Ns::None, "guid", self.guid.as_deref(), &[], names);
-        let enclosure = self
-            .enclosure
-            .as_ref()
-            .map(|en| move |e: &mut Element, _: &mut Names| en.apply(e));
-        write_single(
-            element,
-            Ns::None,
-            "enclosure",
-            dyn_fn(enclosure.as_ref()),
-            &[],
-            names,
-        );
-        write_text(
-            element,
-            Ns::None,
-            "pubDate",
-            self.pub_date.as_deref(),
-            &[],
-            names,
-        );
-        write_text(
-            element,
-            Ns::Itunes,
-            "duration",
-            self.duration.as_deref(),
-            &[],
-            names,
-        );
-        write_list(element, &self.values, &[], names);
+        let mut c = Children::new(element, &[], names);
+        c.text(Ns::None, "title", self.title.as_ref());
+        c.text(Ns::None, "description", self.description.as_ref());
+        c.text(Ns::None, "guid", self.guid.as_ref());
+        c.one(self.enclosure.as_ref());
+        c.text(Ns::None, "pubDate", self.pub_date.as_ref());
+        c.text(Ns::Itunes, "duration", self.duration.as_ref());
+        c.href(Ns::Itunes, "image", self.image.as_ref());
+        c.list(&self.images);
+        c.list(&self.persons);
+        c.list(&self.fundings);
+        c.list(&self.transcripts);
+        c.list(&self.txts);
+        c.one(self.license.as_ref());
+        c.list(&self.values);
     }
 }
 
@@ -577,9 +352,9 @@ impl Modeled for LiveItem {
 
     fn read(element: &Element) -> Self {
         Self {
-            status: attr(element, "status"),
-            start: attr(element, "start"),
-            end: attr(element, "end"),
+            status: element.attribute("status").map(str::to_owned),
+            start: element.attribute("start").map(str::to_owned),
+            end: element.attribute("end").map(str::to_owned),
             item: Item::read_fields(element),
         }
     }

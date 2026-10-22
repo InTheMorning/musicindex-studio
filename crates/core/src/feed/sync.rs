@@ -250,6 +250,84 @@ pub(crate) fn write_text(
     );
 }
 
+/// Read the first child of kind `T`.
+pub(crate) fn read_one<T: Modeled>(parent: &Element) -> Option<T> {
+    parent.child(T::NS, T::NAME).map(T::read)
+}
+
+/// Writes the modeled children of one parent element.
+///
+/// A new child goes before the first child of a kind in `before`, or at the
+/// end of the parent.
+pub(crate) struct Children<'p, 'n> {
+    parent: &'p mut Element,
+    before: &'static [(Ns, &'static str)],
+    names: &'n mut Names,
+}
+
+impl<'p, 'n> Children<'p, 'n> {
+    pub(crate) fn new(
+        parent: &'p mut Element,
+        before: &'static [(Ns, &'static str)],
+        names: &'n mut Names,
+    ) -> Self {
+        Self {
+            parent,
+            before,
+            names,
+        }
+    }
+
+    /// Write an optional text child, such as `title`.
+    pub(crate) fn text(&mut self, ns: Ns, local: &str, value: Option<&String>) {
+        write_text(
+            self.parent,
+            ns,
+            local,
+            value.map(String::as_str),
+            self.before,
+            self.names,
+        );
+    }
+
+    /// Write the `href` attribute of an optional child, such as `itunes:image`.
+    pub(crate) fn href(&mut self, ns: Ns, local: &str, value: Option<&String>) {
+        let make =
+            value.map(|v| move |e: &mut Element, _: &mut Names| e.set_attribute("href", Some(v)));
+        write_single(
+            self.parent,
+            ns,
+            local,
+            make.as_ref().map(|m| m as Make<'_>),
+            self.before,
+            self.names,
+        );
+    }
+
+    /// Write an optional child of kind `T`.
+    pub(crate) fn one<T: Modeled>(&mut self, value: Option<&T>) {
+        let make = value.map(|v| move |e: &mut Element, n: &mut Names| v.apply(e, n));
+        write_single(
+            self.parent,
+            T::NS,
+            T::NAME,
+            make.as_ref().map(|m| m as Make<'_>),
+            self.before,
+            self.names,
+        );
+    }
+
+    /// Write the children of kind `T`.
+    pub(crate) fn list<T: Modeled>(&mut self, entries: &[Entry<T>]) {
+        write_list(self.parent, entries, self.before, self.names);
+    }
+
+    /// Write the children of kind `T`, and put new ones before `before`.
+    pub(crate) fn list_before<T: Modeled>(&mut self, entries: &[Entry<T>], before: &[(Ns, &str)]) {
+        write_list(self.parent, entries, before, self.names);
+    }
+}
+
 /// Read the text of an optional child.
 pub(crate) fn read_text(parent: &Element, ns: Ns, local: &str) -> Option<String> {
     parent.child(ns, local).map(Element::text)

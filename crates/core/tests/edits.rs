@@ -1,6 +1,6 @@
 //! Edits through the typed model change only the edited elements (ADR 0012).
 
-use studio_core::feed::{Entry, Feed, Recipient};
+use studio_core::feed::{Entry, Feed, Person, Recipient, Transcript};
 use studio_core::xml::Document;
 
 /// The remote item example from the namespace document for
@@ -162,4 +162,67 @@ fn a_removed_channel_value_block_goes_out_with_its_line() {
         after,
         "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">\n<channel>\n  <title>T</title>\n</channel>\n</rss>"
     );
+}
+
+#[test]
+fn a_host_move_changes_only_the_self_link_and_adds_the_new_feed_url() {
+    let source = "<rss xmlns:atom=\"http://www.w3.org/2005/Atom\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">\n<channel>\n  <title>T</title>\n  <atom:link href=\"https://old.example/feed.xml\" rel=\"self\" type=\"application/rss+xml\"/>\n  <item><guid>g1</guid></item>\n</channel>\n</rss>";
+    let after = edit(source, |f| {
+        assert_eq!(f.self_url(), Some("https://old.example/feed.xml"));
+        let link = f
+            .atom_links
+            .iter_mut()
+            .find(|l| l.rel.as_deref() == Some("self"))
+            .unwrap();
+        link.href = Some("https://new.example/feed.xml".into());
+        f.new_feed_url = Some("https://new.example/feed.xml".into());
+    });
+    let feed = Feed::read(&Document::parse(&after).unwrap()).unwrap();
+    assert_eq!(feed.self_url(), Some("https://new.example/feed.xml"));
+    assert_eq!(
+        feed.new_feed_url.as_deref(),
+        Some("https://new.example/feed.xml")
+    );
+    assert_eq!(feed.items[0].guid.as_deref(), Some("g1"));
+    assert!(after.contains(
+        "<itunes:new-feed-url>https://new.example/feed.xml</itunes:new-feed-url>\n  <item>"
+    ));
+    let expected = source
+        .replace(
+            "https://old.example/feed.xml\" rel=\"self\" type=\"application/rss+xml\"/>",
+            "https://new.example/feed.xml\" rel=\"self\" type=\"application/rss+xml\"/>",
+        )
+        .replace(
+            "  <item>",
+            "  <itunes:new-feed-url>https://new.example/feed.xml</itunes:new-feed-url>\n  <item>",
+        );
+    assert_eq!(after, expected);
+}
+
+#[test]
+fn an_edit_of_one_item_keeps_the_feed_guid_and_each_item_guid() {
+    let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><podcast:guid>f</podcast:guid><item><title>A</title><guid>a</guid></item><item><title>B</title><guid>b</guid></item></channel></rss>";
+    let after = edit(source, |f| {
+        f.items[1].title = Some("B2".into());
+        f.items[0].transcripts.push(Entry::new(Transcript {
+            url: Some("https://example.com/a.vtt".into()),
+            media_type: Some("text/vtt".into()),
+            ..Transcript::default()
+        }));
+        f.persons.push(Entry::new(Person {
+            name: "Ann".into(),
+            role: Some("vocals".into()),
+            ..Person::default()
+        }));
+    });
+    let feed = Feed::read(&Document::parse(&after).unwrap()).unwrap();
+    assert_eq!(feed.podcast_guid.as_deref(), Some("f"));
+    let guids: Vec<_> = feed.items.iter().map(|i| i.guid.clone().unwrap()).collect();
+    assert_eq!(guids, ["a", "b"]);
+    assert_eq!(
+        feed.items[0].transcripts[0].media_type.as_deref(),
+        Some("text/vtt")
+    );
+    assert_eq!(feed.persons[0].name, "Ann");
+    assert!(after.contains("<podcast:person role=\"vocals\">Ann</podcast:person><item>"));
 }

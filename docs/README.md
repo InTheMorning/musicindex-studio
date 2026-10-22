@@ -14,6 +14,7 @@
 - [ADR 0010: Studio uses the Afterglow visual direction](adr/0010-studio-uses-the-afterglow-direction.md)
 - [ADR 0011: AGPL-3.0 license](adr/0011-agpl-license.md)
 - [ADR 0012: A lossless XML tree with a typed model](adr/0012-lossless-tree-with-a-typed-model.md)
+- [ADR 0013: Vault format and cryptography](adr/0013-vault-format-and-cryptography.md)
 
 ## Plans
 

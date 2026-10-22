@@ -279,7 +279,7 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
 }
 
 function AddHostForm({ onAdded }) {
-  const [name, setName] = useState('My feeds');
+  const [name, setName] = useState('');
   const [root, setRoot] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const { busy, error, run } = useAction();
@@ -288,14 +288,16 @@ function AddHostForm({ onAdded }) {
     run(async () => {
       const connector = await api('/connectors', {
         method: 'POST',
-        body: { kind: 'local', name, root, base_url: baseUrl || null },
+        // An empty name takes the last part of the folder path.
+        body: { kind: 'local', name: name.trim() || root.replace(/\/+$/, '').split('/').pop() || root, root, base_url: baseUrl || null },
       });
       onAdded(connector);
     });
   };
   const hostError = splitError(error, ['invalid_config', 'folder_not_found']);
   return html`<form class="form" onSubmit=${submit}>
-    <${Field} id="host-name" label="Name" required value=${name} onInput=${(e) => setName(e.target.value)} />
+    <${Field} id="host-name" label="Name (optional)" hint="Studio uses the folder name when you leave this empty."
+      value=${name} onInput=${(e) => setName(e.target.value)} />
     <${Field} id="host-root" label="Folder" required placeholder="/home/me/feeds"
       hint="The full path of the folder that holds your feed files."
       error=${hostError.field} value=${root} onInput=${(e) => setRoot(e.target.value)} />
@@ -711,18 +713,10 @@ function FolderFeeds({ connector, onAdded }) {
   </div>`;
 }
 
-function Hosts({ connectors, onChanged }) {
+function Hosts({ connectors, feeds, onChanged }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
-  // A new key after each add makes an empty form.
-  const [formKey, setFormKey] = useState(0);
-  // A new folder takes each read-only feed whose file it holds (ADR 0020).
-  const added = (connector) => run(async () => {
-    const result = await api(`/connectors/${connector.id}/match`, { method: 'POST' });
-    setLinked({ connector, name: connector.name, feeds: result.linked });
-    setFormKey(formKey + 1);
-    onChanged();
-  });
+  const [adding, setAdding] = useState(false);
   const remove = (connector) => {
     if (!confirm(`Remove the host “${connector.name}”? The files in it do not change.`)) return;
     run(async () => {
@@ -730,28 +724,46 @@ function Hosts({ connectors, onChanged }) {
       onChanged();
     });
   };
+  // A new folder takes each read-only feed whose file it holds (ADR 0020).
+  const added = (connector) => run(async () => {
+    const result = await api(`/connectors/${connector.id}/match`, { method: 'POST' });
+    setLinked({ connector, feeds: result.linked });
+    setAdding(false);
+    onChanged();
+  });
+  const showForm = adding || connectors.length === 0;
   return html`<div>
     <div class="bar">Hosts</div>
     <section class="section">
-      <h2>Your hosts</h2>
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
         : html`<${ErrorNotice} error=${error} />`}
-      ${connectors.length === 0
-        ? html`<p class="empty">No host yet.</p>`
-        : html`<ul class="rows">${connectors.map((c) => html`<li class="row">
-            <span class="dot hosting"></span>
-            <span class="text"><span class="title">${c.name}</span>
-              <span class="sub mono">${JSON.parse(c.config).root}</span></span>
-            <button class="button quiet" type="button" disabled=${busy} style=${{ marginLeft: 'auto' }}
-              aria-label=${`Remove the host ${c.name}`} onClick=${() => remove(c)}>Remove</button></li>`)}</ul>`}
-      ${linked && html`<div class="notice" role="status">
-        ${linked.feeds.length === 0
-          ? `“${linked.name}” holds none of your read-only feeds.`
-          : `Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.name}”: ${linked.feeds.map((f) => f.title || f.path).join(', ')}.`}
+      ${linked && linked.feeds.length > 0 && html`<div class="notice" role="status">
+        Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.connector.name}”.
       </div>`}
       ${linked && html`<${FolderFeeds} key=${linked.connector.id} connector=${linked.connector} onAdded=${onChanged} />`}
-      <div class="panel"><h2>Add a folder</h2><${AddHostForm} key=${formKey} onAdded=${added} /></div>
+      ${connectors.map((c) => {
+        const config = JSON.parse(c.config);
+        const written = feeds.filter((f) => f.connector_id === c.id);
+        return html`<article class="panel host">
+          <header class="host-head">
+            <span class="eyebrow"><span class="dot hosting"></span>Folder on this computer</span>
+            <button class="button quiet" type="button" disabled=${busy}
+              aria-label=${`Remove the host ${c.name}`} onClick=${() => remove(c)}>Remove</button>
+          </header>
+          <h2>${c.name}</h2>
+          <dl class="facts">
+            <dt>Folder</dt><dd class="mono">${config.root}</dd>
+            <dt>Public address</dt><dd class="mono">${config.base_url || '—'}</dd>
+            <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : written.map((f) => f.title || f.path).join(', ')}</dd>
+          </dl>
+        </article>`;
+      })}
+      ${showForm
+        ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first host' : 'Add a host'}</h2>
+            <${AddHostForm} onAdded=${added} />
+            ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
+        : html`<div class="actions"><button class="button" type="button" onClick=${() => setAdding(true)}>＋ Add a host</button></div>`}
     </section>
   </div>`;
 }
@@ -799,7 +811,7 @@ function Shell({ vault, onLock }) {
   } else if (feeds === null) {
     main = html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`;
   } else if (view.name === 'hosts') {
-    main = html`<${Hosts} connectors=${connectors} onChanged=${() => load()} />`;
+    main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()} />`;
   } else if (view.name === 'add-feed') {
     main = html`<${AddFeeds} connectors=${connectors}
       onAdded=${async (f) => { await load(); setView(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;

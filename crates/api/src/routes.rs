@@ -96,6 +96,17 @@ pub(crate) async fn create_vault(
 }
 
 #[derive(Deserialize)]
+pub(crate) struct Strength {
+    passphrase: String,
+}
+
+/// The strength of a passphrase (ADR 0018). The response contains no part
+/// of the passphrase.
+pub(crate) async fn passphrase_strength(Json(body): Json<Strength>) -> ApiResult {
+    to_json(studio_core::vault::passphrase_strength(&body.passphrase))
+}
+
+#[derive(Deserialize)]
 pub(crate) struct Unlock {
     passphrase: String,
 }

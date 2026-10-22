@@ -20,6 +20,7 @@ quick-xml = "0.42"
 rusqlite = { version = "0.40", features = ["bundled"] }
 uuid = { version = "1.28", features = ["v4", "v5"] }
 zeroize = "1.9"
+zxcvbn = { version = "3.1", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

@@ -151,6 +151,49 @@ async fn the_vault_is_made_locked_and_unlocked() {
 }
 
 #[tokio::test]
+async fn the_strength_route_gives_the_score_and_no_part_of_the_passphrase() {
+    let app = app();
+    let (status, body, text) = send(
+        &app,
+        request(
+            "POST",
+            "/api/v1/vault/strength",
+            Some(json!({ "passphrase": "monkeymonkey1" })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["acceptable"], false);
+    assert_eq!(body["chars"], 13);
+    assert!(body["score"].as_u64().unwrap() < 3);
+    assert!(!text.contains("monkey"));
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/strength",
+        Some(json!({ "passphrase": "Kx9#mQ2!vL7@pR4z" })),
+    )
+    .await;
+    assert_eq!(body["acceptable"], true);
+    assert_eq!(body["score"], 4);
+}
+
+#[tokio::test]
+async fn a_weak_passphrase_gives_422() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": "passwordpassword" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "passphrase_too_weak");
+    assert!(!app.data.path().join("vault.json").exists());
+}
+
+#[tokio::test]
 async fn a_short_passphrase_gives_422() {
     let app = app();
     let (status, body) = call(

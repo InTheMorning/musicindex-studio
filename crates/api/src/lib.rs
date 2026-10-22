@@ -35,6 +35,7 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
     let api = Router::new()
         .route("/status", get(routes::status))
         .route("/vault", post(routes::create_vault))
+        .route("/vault/strength", post(routes::passphrase_strength))
         .route("/vault/unlock", post(routes::unlock_vault))
         .route("/vault/lock", post(routes::lock_vault))
         .route(

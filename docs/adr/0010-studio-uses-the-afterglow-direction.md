@@ -26,6 +26,6 @@ These ADRs apply only to `search.html`. Studio can adopt them only by its own de
 ## Invariants
 
 - An entity color is not a general accent color.
-- Red means only "live now".
+- Red as an entity color means only "live now". Errors use their own token ([ADR 0018](0018-passphrase-strength-and-error-color.md)).
 - Color is not the only indication of a type.
 - Each control is a minimum of 44 px high. All functions work from the keyboard.

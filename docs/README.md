@@ -19,6 +19,7 @@
 - [ADR 0015: The connector interface and the write pipeline](adr/0015-connector-interface-and-write-pipeline.md)
 - [ADR 0016: The UI has no build step](adr/0016-ui-without-a-build-step.md)
 - [ADR 0017: Access to the local API](adr/0017-local-api-access.md) (proposed)
+- [ADR 0018: Passphrase strength and the error color](adr/0018-passphrase-strength-and-error-color.md)
 
 ## Plans
 

@@ -117,6 +117,11 @@
   --gloss-edge: rgba(10, 91, 214, .4);
 }
 
+/* Studio tokens. --error is not an entity color: entity red means only
+   "live now" (ADR 0018). Contrast is 4.5:1 or more on each surface. */
+:root { --error: #ff6961; }
+:root[data-theme="light"] { --error: #c41e3a; }
+
 html, body { height: 100%; }
 
 body {
@@ -184,6 +189,16 @@ code, .mono {
   font: inherit;
 }
 .field input:focus-visible { outline-offset: 0; }
+.field input[aria-invalid="true"] { border-color: var(--error); }
+.field-error { color: var(--error); font-size: .9rem; font-weight: 500; }
+
+/* Passphrase strength meter (ADR 0018). */
+.meter { display: grid; gap: 6px; }
+.meter .bars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.meter .bars span { height: 4px; border-radius: 2px; background: var(--fill); }
+.meter .bars span.on { background: var(--accent); }
+.meter.weak .bars span.on { background: var(--error); }
+.meter .label { color: var(--muted); font-size: .9rem; }
 .check { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 
@@ -196,7 +211,7 @@ code, .mono {
   background: var(--fill-soft);
   border: 1px solid var(--sep);
 }
-.notice.error { border-color: var(--c-live); }
+.notice.error { border-color: var(--error); }
 .notice strong { display: block; }
 
 .eyebrow {

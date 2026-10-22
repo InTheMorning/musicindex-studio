@@ -29,12 +29,52 @@ const HEX: &[u8; 16] = b"0123456789abcdef";
 /// The minimum number of characters in a passphrase (ADR 0013).
 pub const MIN_PASSPHRASE_CHARS: usize = 12;
 
+/// The minimum zxcvbn score of a passphrase, from 0 to 4 (ADR 0018).
+pub const MIN_PASSPHRASE_SCORE: u8 = 3;
+
+/// The strength of a passphrase, from zxcvbn (ADR 0018).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PassphraseStrength {
+    /// The zxcvbn score, from 0 to 4.
+    pub score: u8,
+    /// The number of characters.
+    pub chars: usize,
+    /// True when the vault accepts the passphrase.
+    pub acceptable: bool,
+    /// The zxcvbn warning, such as "This is a top-10 common password."
+    pub warning: Option<String>,
+    /// The zxcvbn suggestions.
+    pub suggestions: Vec<String>,
+}
+
+/// Measure a passphrase. The result contains no part of the passphrase.
+#[must_use]
+pub fn passphrase_strength(passphrase: &str) -> PassphraseStrength {
+    let chars = passphrase.chars().count();
+    let entropy = zxcvbn::zxcvbn(passphrase, &[]);
+    let score = u8::from(entropy.score());
+    let feedback = entropy.feedback();
+    PassphraseStrength {
+        score,
+        chars,
+        acceptable: chars >= MIN_PASSPHRASE_CHARS && score >= MIN_PASSPHRASE_SCORE,
+        warning: feedback
+            .and_then(zxcvbn::feedback::Feedback::warning)
+            .map(|w| w.to_string()),
+        suggestions: feedback
+            .map(|f| f.suggestions().iter().map(ToString::to_string).collect())
+            .unwrap_or_default(),
+    }
+}
+
 /// The kind of a [`VaultError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum VaultErrorKind {
     /// The passphrase has fewer than [`MIN_PASSPHRASE_CHARS`] characters.
     PassphraseTooShort,
+    /// The passphrase has a zxcvbn score below [`MIN_PASSPHRASE_SCORE`].
+    PassphraseTooWeak,
     /// The passphrase, the recovery key or the vault key is not correct, or
     /// the vault has no wrapper for the method.
     WrongKey,
@@ -353,11 +393,21 @@ impl VaultFile {
 }
 
 fn check_passphrase(passphrase: &str) -> Result<(), VaultError> {
-    if passphrase.chars().count() < MIN_PASSPHRASE_CHARS {
+    let strength = passphrase_strength(passphrase);
+    if strength.chars < MIN_PASSPHRASE_CHARS {
         return Err(VaultError {
             kind: VaultErrorKind::PassphraseTooShort,
             message: format!(
                 "a passphrase must have a minimum of {MIN_PASSPHRASE_CHARS} characters"
+            ),
+        });
+    }
+    if strength.score < MIN_PASSPHRASE_SCORE {
+        return Err(VaultError {
+            kind: VaultErrorKind::PassphraseTooWeak,
+            message: format!(
+                "the passphrase is too easy to guess (strength {} of 4, minimum {MIN_PASSPHRASE_SCORE})",
+                strength.score
             ),
         });
     }
@@ -444,6 +494,32 @@ mod tests {
             file.open_with_key("not base64").unwrap_err().kind(),
             VaultErrorKind::WrongKey
         );
+    }
+
+    #[test]
+    fn a_long_but_weak_passphrase_gives_an_error() {
+        for weak in [
+            "passwordpassword",
+            "aaaaaaaaaaaaaaaa",
+            "qwertyuiopasdf",
+            "123456789012",
+        ] {
+            let strength = passphrase_strength(weak);
+            assert!(strength.chars >= MIN_PASSPHRASE_CHARS, "{weak}");
+            assert!(!strength.acceptable, "{weak}");
+            let error = OpenVault::create(weak).unwrap_err();
+            assert_eq!(error.kind(), VaultErrorKind::PassphraseTooWeak, "{weak}");
+        }
+        let strong = passphrase_strength("Kx9#mQ2!vL7@pR4z");
+        assert!(strong.acceptable);
+        assert_eq!(strong.score, 4);
+    }
+
+    #[test]
+    fn the_strength_contains_no_part_of_the_passphrase() {
+        let strength = passphrase_strength("monkeymonkey1");
+        let text = format!("{strength:?}");
+        assert!(!text.contains("monkey"));
     }
 
     #[test]

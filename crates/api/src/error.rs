@@ -61,6 +61,9 @@ impl From<VaultError> for ApiError {
             VaultErrorKind::PassphraseTooShort => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "passphrase_too_short")
             }
+            VaultErrorKind::PassphraseTooWeak => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "passphrase_too_weak")
+            }
             VaultErrorKind::WrongKey => (StatusCode::UNPROCESSABLE_ENTITY, "wrong_key"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "vault"),
         };

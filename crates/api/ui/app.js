@@ -76,6 +76,7 @@ function title(error) {
   switch (error.code) {
     case 'wrong_key': return 'The passphrase is not correct.';
     case 'passphrase_too_short': return 'The passphrase is too short.';
+    case 'passphrase_too_weak': return 'The passphrase is too easy to guess.';
     case 'invalid_path': return 'That path is not in the folder.';
     case 'not_found': return 'Studio did not find the file.';
     case 'invalid_feed': return 'That file is not a feed that Studio can read.';
@@ -84,11 +85,15 @@ function title(error) {
   }
 }
 
-function Field({ id, label, hint, ...input }) {
+// A labelled input. `error` is a line of red text below the field (ADR 0018).
+function Field({ id, label, hint, error, children, ...input }) {
+  const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
   return html`<div class="field">
     <label for=${id}>${label}</label>
     ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
-    <input id=${id} aria-describedby=${hint ? `${id}-hint` : undefined} ...${input} />
+    <input id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input} />
+    ${error && html`<span class="field-error" id=${`${id}-error`}>${error}</span>`}
+    ${children}
   </div>`;
 }
 
@@ -160,35 +165,81 @@ function Steps({ current }) {
   </ol>`;
 }
 
+const MIN_CHARS = 12;
+const STRENGTH_WORDS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'];
+
+// Ask the API for the strength when the user stops typing (ADR 0018).
+function useStrength(passphrase) {
+  const [strength, setStrength] = useState(null);
+  useEffect(() => {
+    setStrength(null);
+    if (!passphrase) return undefined;
+    let current = true;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api('/vault/strength', { method: 'POST', body: { passphrase } });
+        if (current) setStrength(result);
+      } catch (_) {
+        // The vault still checks the passphrase when the user submits it.
+      }
+    }, 300);
+    return () => { current = false; clearTimeout(timer); };
+  }, [passphrase]);
+  return strength;
+}
+
+function Meter({ strength }) {
+  if (!strength) return null;
+  return html`<div class=${`meter${strength.acceptable ? '' : ' weak'}`} aria-live="polite">
+    <div class="bars" aria-hidden="true">
+      ${[1, 2, 3, 4].map((n) => html`<span class=${strength.score >= n ? 'on' : ''}></span>`)}
+    </div>
+    <span class="label">Strength: ${STRENGTH_WORDS[strength.score]} (${strength.score} of 4)</span>
+  </div>`;
+}
+
+function passphraseError(passphrase, strength) {
+  if (!passphrase) return null;
+  const chars = [...passphrase].length;
+  if (chars < MIN_CHARS) return `Too short: ${chars} of ${MIN_CHARS} characters.`;
+  if (strength && !strength.acceptable) {
+    return `Too easy to guess.${strength.warning ? ` ${strength.warning}` : ''}`;
+  }
+  return null;
+}
+
 function CreateVault({ onDone }) {
   const [passphrase, setPassphrase] = useState('');
   const [confirm, setConfirm] = useState('');
   const [recovery, setRecovery] = useState(true);
   const { busy, error, run } = useAction();
-  const mismatch = confirm.length > 0 && confirm !== passphrase;
+  const strength = useStrength(passphrase);
+  const passError = passphraseError(passphrase, strength);
+  const confirmError = confirm && confirm !== passphrase ? 'The passphrases are not the same.' : null;
+  const ready = strength && strength.acceptable && passphrase === confirm;
   const submit = (event) => {
     event.preventDefault();
+    if (!ready) return;
     run(async () => {
       const result = await api('/vault', { method: 'POST', body: { passphrase, recovery_key: recovery } });
       onDone(result.recovery_key);
     });
   };
-  return html`<form class="form" onSubmit=${submit}>
+  return html`<form class="form" onSubmit=${submit} noValidate>
     <${Steps} current=${1} />
     <div><h1>Protect your keys</h1>
       <p>Studio keeps the passwords and keys of your hosts in a vault. Only your passphrase opens it.</p></div>
     <${Field} id="passphrase" label="Passphrase" type="password" autocomplete="new-password" required
-      hint="A minimum of 12 characters. A few unrelated words are easy to remember."
-      value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
+      value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} error=${passError}>
+      <${Meter} strength=${strength} />
+    <//>
     <${Field} id="confirm" label="Type the passphrase again" type="password" autocomplete="new-password" required
-      value=${confirm} onInput=${(e) => setConfirm(e.target.value)} />
-    ${mismatch && html`<div class="notice" role="status">The two passphrases are not the same.</div>`}
+      value=${confirm} onInput=${(e) => setConfirm(e.target.value)} error=${confirmError} />
     <label class="check"><input type="checkbox" checked=${recovery} onChange=${(e) => setRecovery(e.target.checked)} />
       Make a recovery key, in case I forget the passphrase</label>
     <${ErrorNotice} error=${error} />
     <div class="actions">
-      <button class="button primary" type="submit"
-        disabled=${busy || passphrase.length < 12 || passphrase !== confirm}>${busy ? 'Making the vault…' : 'Make the vault'}</button>
+      <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the vault…' : 'Make the vault'}</button>
     </div>
   </form>`;
 }

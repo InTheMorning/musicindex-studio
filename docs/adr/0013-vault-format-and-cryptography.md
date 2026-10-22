@@ -30,7 +30,7 @@ It leaves three items open: the key derivation function, the encryption algorith
    - Argon2id makes a key from the passphrase and a random 16-byte salt.
    - The parameters are 64 MiB of memory, 3 passes and 1 lane. The wrapper records them, so that a new version can make them stronger.
    - That key encrypts the vault key with XChaCha20-Poly1305.
-   - A passphrase must have a minimum of 12 characters. Studio sets no other rule for its characters.
+   - A passphrase must have a minimum of 12 characters. [ADR 0018](0018-passphrase-strength-and-error-color.md) replaces the rest of this rule: it adds a strength check.
 8. Nostr wrapper:
    - The user's signer encrypts the vault key to the user's own public key with NIP-44 version 2.
    - The wrapper records the public key and the ciphertext.

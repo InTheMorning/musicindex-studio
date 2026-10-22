@@ -474,8 +474,10 @@ function FoundFeeds({ found, onAdded }) {
     ${found.failed.length > 0 && html`<div class="field"><span class="field-error">Studio could not read:</span>
       <ul class="failed">${found.failed.map((f) => html`<li><span class="mono">${f.source}</span>: ${f.message}</li>`)}</ul></div>`}
     <${ErrorNotice} error=${error} />
-    <div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
-      ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>
+    ${addable.length === 0 && found.feeds.length > 0
+      ? html`<p role="status">Each of these feeds is in your collection.</p>`
+      : html`<div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
+          ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>`}
   </div>`;
 }
 

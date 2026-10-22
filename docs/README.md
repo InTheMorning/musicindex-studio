@@ -42,6 +42,7 @@
 ## Reviews
 
 - [Phase 4 visual check, 2026-10-22](reviews/2026-10-22-phase-4-visual-check.md)
+- [Task 009 visual check, 2026-10-22](reviews/2026-10-22-task-009-visual-check.md)
 
 ## Research
 

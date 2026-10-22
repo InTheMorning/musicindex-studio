@@ -159,6 +159,90 @@ impl Web {
     }
 }
 
+/// The size and the media type of a file, as its host gives them
+/// (ADR 0023 item 5).
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
+pub struct MediaFacts {
+    /// The size in bytes, or `None` when the host does not give it.
+    pub length: Option<u64>,
+    /// The media type without parameters, such as `audio/mpeg`, or `None`.
+    pub media_type: Option<String>,
+}
+
+impl Web {
+    /// Ask the host of a file for its size and its media type, and do not
+    /// read the file.
+    ///
+    /// The function sends a `HEAD` request. When the response has no
+    /// length, it sends a `GET` with `Range: bytes=0-0` and reads the total
+    /// size from `Content-Range` (ADR 0023 item 5).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] for an address that is not `http` or `https`, a
+    /// status that is not a success, or a network failure.
+    pub fn media_facts(&self, url: &str) -> Result<MediaFacts, WebError> {
+        let lower = url.trim().to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(WebError::new(
+                WebErrorKind::InvalidAddress,
+                format!("{url} is not an http or https address"),
+            ));
+        }
+        let response = self
+            .agent
+            .head(url.trim())
+            .call()
+            .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+        let status = response.status().as_u16();
+        if !(200..300).contains(&status) {
+            return Err(WebError {
+                kind: WebErrorKind::Status,
+                status: Some(status),
+                message: format!("{url} answered with status {status}"),
+            });
+        }
+        let mut facts = MediaFacts {
+            length: header(&response, "content-length").and_then(|v| v.parse().ok()),
+            media_type: header(&response, "content-type")
+                .as_deref()
+                .and_then(media_type),
+        };
+        if facts.length.is_none() {
+            let ranged = self
+                .agent
+                .get(url.trim())
+                .header("Range", "bytes=0-0")
+                .call()
+                .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+            facts.length = header(&ranged, "content-range").and_then(|v| {
+                v.rsplit_once('/')
+                    .and_then(|(_, total)| total.trim().parse().ok())
+            });
+            if facts.media_type.is_none() {
+                facts.media_type = header(&ranged, "content-type")
+                    .as_deref()
+                    .and_then(media_type);
+            }
+        }
+        Ok(facts)
+    }
+}
+
+fn header<B>(response: &ureq::http::Response<B>, name: &str) -> Option<String> {
+    response
+        .headers()
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
+}
+
+/// The media type of a `Content-Type` value, without its parameters.
+fn media_type(value: &str) -> Option<String> {
+    let essence = value.split(';').next().unwrap_or_default().trim();
+    (!essence.is_empty()).then(|| essence.to_ascii_lowercase())
+}
+
 /// The host name of an address, in lowercase, without a port.
 #[must_use]
 pub fn host_of(url: &str) -> Option<String> {
@@ -195,6 +279,30 @@ mod tests {
             web.get("file:///etc/passwd", 1000).unwrap_err().kind(),
             WebErrorKind::InvalidAddress
         );
+    }
+
+    #[test]
+    fn media_facts_come_from_head_or_from_a_range_request() {
+        let server = TestServer::start(Vec::new());
+        server.set_file("/a.mp3", vec![0; 1234], "audio/mpeg; charset=binary", true);
+        server.set_file("/b.mp3", vec![0; 5678], "audio/mp4", false);
+        server.set("/old.mp3", 301, server.url("/a.mp3").into_bytes());
+        let web = Web::new();
+        let a = MediaFacts {
+            length: Some(1234),
+            media_type: Some("audio/mpeg".to_owned()),
+        };
+        assert_eq!(web.media_facts(&server.url("/a.mp3")).unwrap(), a);
+        assert_eq!(web.media_facts(&server.url("/old.mp3")).unwrap(), a);
+        assert_eq!(
+            web.media_facts(&server.url("/b.mp3")).unwrap(),
+            MediaFacts {
+                length: Some(5678),
+                media_type: Some("audio/mp4".to_owned()),
+            }
+        );
+        let error = web.media_facts(&server.url("/gone.mp3")).unwrap_err();
+        assert_eq!(error.status(), Some(404));
     }
 
     #[test]

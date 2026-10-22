@@ -10,6 +10,7 @@
 //! between a missing attribute and an empty one.
 
 mod elements;
+mod links;
 mod sync;
 mod value;
 
@@ -19,6 +20,7 @@ pub use elements::{
     AtomLink, Enclosure, Funding, Image, License, Locked, Person, Recipient, RemoteItem,
     Transcript, Txt,
 };
+pub use links::{BadAddress, is_web_address};
 use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
 pub use sync::{Entry, KeyError};
 pub use value::{ValueBlock, ValueTimeSplit};
@@ -297,6 +299,9 @@ pub struct Item {
     pub pub_date: Option<String>,
     /// `itunes:duration`, as the source wrote it.
     pub duration: Option<String>,
+    /// The text of `podcast:episode`: the track number of an album track.
+    /// The core sets it from the track sequence (ADR 0024).
+    pub episode: Option<String>,
     /// The `href` of `itunes:image`.
     pub image: Option<String>,
     /// The `podcast:image` elements.
@@ -326,6 +331,7 @@ impl Item {
             enclosure: read_one(element),
             pub_date: read_text(element, Ns::None, "pubDate"),
             duration: read_text(element, Ns::Itunes, "duration"),
+            episode: read_text(element, Ns::Podcast, "episode"),
             image: read_href(element, Ns::Itunes, "image"),
             images: read_list(element),
             persons: read_list(element),
@@ -338,6 +344,22 @@ impl Item {
     }
 
     fn apply_fields(&self, element: &mut Element, names: &mut Names) {
+        let had_guid = element.child(Ns::None, "guid").is_some();
+        self.apply_children(element, names);
+        // A new `guid` is a UUID, not a link. RSS 2.0 reads a `guid` without
+        // `isPermaLink="false"` as a link. An existing `guid` keeps its bytes.
+        if !had_guid && self.guid.is_some() {
+            let guid = element.children_mut().iter_mut().find_map(|n| match n {
+                Node::Element(e) if e.is(Ns::None, "guid") => Some(e),
+                _ => None,
+            });
+            if let Some(guid) = guid {
+                guid.set_attribute("isPermaLink", Some("false"));
+            }
+        }
+    }
+
+    fn apply_children(&self, element: &mut Element, names: &mut Names) {
         let mut c = Children::new(element, &[], names);
         c.text(Ns::None, "title", self.title.as_ref());
         c.text(Ns::None, "description", self.description.as_ref());
@@ -345,6 +367,7 @@ impl Item {
         c.one(self.enclosure.as_ref());
         c.text(Ns::None, "pubDate", self.pub_date.as_ref());
         c.text(Ns::Itunes, "duration", self.duration.as_ref());
+        c.text(Ns::Podcast, "episode", self.episode.as_ref());
         c.href(Ns::Itunes, "image", self.image.as_ref());
         c.list(&self.images);
         c.list(&self.persons);

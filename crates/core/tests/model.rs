@@ -1,7 +1,7 @@
 //! Edits of a draft through the JSON model with entry keys (ADR 0022).
 
 use studio_core::collection::{Collection, DraftRow, FeedId};
-use studio_core::feed::{Entry, Feed, Item};
+use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::pipeline::{self, PipelineErrorKind};
 
 const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -107,6 +107,9 @@ fn an_entry_that_is_not_sent_goes_out_and_a_new_entry_gets_a_guid() {
     assert_eq!(titles, [Some("Two".to_owned()), Some("Three".to_owned())]);
     let guid = changed.items[1].guid.as_deref().unwrap();
     assert_eq!(uuid::Uuid::parse_str(guid).unwrap().get_version_num(), 4);
+    assert!(
+        draft_text(&collection, id).contains(&format!("<guid isPermaLink=\"false\">{guid}</guid>"))
+    );
     assert!(!draft_text(&collection, id).contains("track-1"));
 }
 
@@ -163,4 +166,78 @@ fn a_cleared_text_field_removes_its_element() {
     let model: Feed = serde_json::from_value(json).unwrap();
     pipeline::replace_model(&collection, id, &revision, model).unwrap();
     assert!(!draft_text(&collection, id).contains("description"));
+}
+
+#[test]
+fn a_new_track_gets_the_indentation_of_the_other_tracks() {
+    let (collection, id) = draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.items.push(Entry::new(Item {
+        title: Some("Three".to_owned()),
+        enclosure: Some(Enclosure {
+            url: Some("https://music.example/3.mp3".to_owned()),
+            length: Some("10".to_owned()),
+            media_type: Some("audio/mpeg".to_owned()),
+        }),
+        ..Item::default()
+    }));
+    let (changed, _) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let guid = changed.items[2].guid.as_deref().unwrap();
+    let expected = format!(
+        "      <podcast:season>2</podcast:season>\n      <podcast:episode>2</podcast:episode>\n    </item>\n    \
+         <item>\n      <title>Three</title>\n      \
+         <guid isPermaLink=\"false\">{guid}</guid>\n      \
+         <enclosure url=\"https://music.example/3.mp3\" length=\"10\" type=\"audio/mpeg\"/>\n      \
+         <podcast:episode>3</podcast:episode>\n    </item>\n  </channel>"
+    );
+    let text = draft_text(&collection, id);
+    assert!(text.contains(&expected), "{text}");
+}
+
+#[test]
+fn a_change_of_sequence_numbers_the_tracks_and_keeps_the_dates() {
+    let (collection, id) = draft();
+    let with_numbers = FEED
+        .replace(
+            "<title>One</title>",
+            "<title>One</title>\n      <pubDate>Thu, 01 Oct 2026 00:00:00 GMT</pubDate>\n      <podcast:episode display=\"A1\">1</podcast:episode>",
+        )
+        .replace("<title>Two</title>", "<title>Two</title>\n      <podcast:episode>2</podcast:episode>");
+    let row = DraftRow {
+        base_version: None,
+        base_xml: with_numbers.as_bytes().to_vec(),
+        draft_xml: with_numbers.as_bytes().to_vec(),
+    };
+    collection.save_draft(id, &row).unwrap();
+
+    // A change of a field is not a change of sequence.
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.title = Some("Album 2".to_owned());
+    let (feed, revision) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    assert_eq!(feed.items[0].episode.as_deref(), Some("1"));
+
+    let mut model = sent(&feed);
+    model.items.swap(0, 1);
+    let (moved, _) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let numbers: Vec<_> = moved
+        .items
+        .iter()
+        .map(|i| (i.title.clone().unwrap(), i.episode.clone().unwrap()))
+        .collect();
+    assert_eq!(
+        numbers,
+        [
+            ("Two".to_owned(), "1".to_owned()),
+            ("One".to_owned(), "2".to_owned())
+        ]
+    );
+    let text = draft_text(&collection, id);
+    assert!(text.contains("<podcast:episode display=\"A1\">2</podcast:episode>"));
+    assert!(text.contains("<pubDate>Thu, 01 Oct 2026 00:00:00 GMT</pubDate>"));
+    assert_eq!(
+        moved.items[1].pub_date.as_deref(),
+        Some("Thu, 01 Oct 2026 00:00:00 GMT")
+    );
 }

@@ -597,14 +597,19 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
     Ok(connector::from_row(&connector_row, w.vault.as_ref())?)
 }
 
-/// The draft as the UI edits it: the model, its revision, and `changed`. The
-/// value of `changed` is true when the draft is different from the live file.
+/// The draft as the UI edits it: the model, its revision, `changed` and
+/// `bad_addresses`. The value of `changed` is true when the draft is
+/// different from the live file. Each bad address stops a write (ADR 0023).
 fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
     let changed = pipeline::diff(&w.collection, id)?.changed;
-    Ok(Json(
-        json!({ "revision": revision, "model": model, "changed": changed }),
-    ))
+    let bad_addresses = model.bad_addresses();
+    Ok(Json(json!({
+        "revision": revision,
+        "model": model,
+        "changed": changed,
+        "bad_addresses": bad_addresses,
+    })))
 }
 
 /// The draft of a feed. Studio starts one from the live file when the feed
@@ -722,4 +727,18 @@ pub(crate) async fn draft_from_snapshot(
         draft_json(w, id)
     })
     .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Media {
+    url: String,
+}
+
+/// The size and the media type of an audio file, from its host
+/// (ADR 0023 item 5). Studio does not read the file.
+pub(crate) async fn media_facts(
+    State(shared): State<Shared>,
+    Json(body): Json<Media>,
+) -> ApiResult {
+    blocking(shared, move |w| to_json(w.web.media_facts(&body.url)?)).await
 }

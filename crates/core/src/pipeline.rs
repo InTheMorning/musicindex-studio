@@ -34,6 +34,9 @@ pub enum PipelineErrorKind {
     /// The sent model does not agree with the draft: a key that is not in
     /// the draft, or a changed GUID (ADR 0022).
     InvalidModel,
+    /// An address field of the draft is not a correct web address
+    /// (ADR 0023).
+    BadAddress,
     /// The live file changed after the draft started.
     Conflict,
     /// The feed file is not a feed that Studio can read.
@@ -296,11 +299,30 @@ pub fn replace_model(
     let invalid = |message: String| PipelineError::new(PipelineErrorKind::InvalidModel, message);
     sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
     keep_identity(&current, &mut sent).map_err(invalid)?;
+    number_tracks(&current, &mut sent);
     sent.write(&mut doc)?;
     draft.draft_xml = doc.write().into_bytes();
     collection.save_draft(id, &draft)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     Ok((feed, revision(&draft)))
+}
+
+/// Give each track its position as its `podcast:episode` when the sent model
+/// changes the sequence of the tracks (ADR 0024). A `pubDate` does not
+/// change.
+fn number_tracks(current: &Feed, sent: &mut Feed) {
+    let same = sent.items.len() == current.items.len()
+        && sent
+            .items
+            .iter()
+            .enumerate()
+            .all(|(i, e)| e.key() == Some(i));
+    if same {
+        return;
+    }
+    for (number, item) in (1_usize..).zip(sent.items.iter_mut()) {
+        item.episode = Some(number.to_string());
+    }
 }
 
 /// Refuse a change of an existing GUID, and give each new item a GUID
@@ -372,9 +394,9 @@ pub fn diff(collection: &Collection, id: FeedId) -> Result<Diff, PipelineError> 
 ///
 /// # Errors
 ///
-/// Gives [`PipelineErrorKind::DiffNotApproved`] or
-/// [`PipelineErrorKind::Conflict`], and the file on the host then does not
-/// change.
+/// Gives [`PipelineErrorKind::DiffNotApproved`],
+/// [`PipelineErrorKind::BadAddress`] or [`PipelineErrorKind::Conflict`], and
+/// the file on the host then does not change.
 pub fn write_draft(
     collection: &mut Collection,
     connector: &dyn Connector,
@@ -391,6 +413,20 @@ pub fn write_draft(
         ));
     }
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    let bad = feed.bad_addresses();
+    if !bad.is_empty() {
+        let fields: Vec<String> = bad
+            .iter()
+            .map(|b| format!("{} ({:?})", b.field, b.value))
+            .collect();
+        return Err(PipelineError::new(
+            PipelineErrorKind::BadAddress,
+            format!(
+                "these address fields are not full http or https addresses: {}",
+                fields.join(", ")
+            ),
+        ));
+    }
     let live = connector.read(&path)?;
     let live_version = live.as_ref().map(|f| &f.version);
     if live_version != draft.base_version.as_ref() {

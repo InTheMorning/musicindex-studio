@@ -227,6 +227,9 @@ pub struct Element {
     /// The source bytes of the start tag, or `None` after a change.
     source_start: Option<String>,
     source_end: SourceEnd,
+    /// The space before `/>` in the source, such as `" "`. A changed start
+    /// tag keeps it, so that a change of an attribute does not change it.
+    close_gap: String,
 }
 
 impl Element {
@@ -243,6 +246,7 @@ impl Element {
             children: Vec::new(),
             source_start: None,
             source_end: SourceEnd::None,
+            close_gap: String::new(),
         }
     }
 
@@ -408,8 +412,20 @@ impl Element {
             out.push_str(&escape(a.value.as_str()));
             out.push('"');
         }
-        out.push_str(if empty { "/>" } else { ">" });
+        if empty {
+            out.push_str(&self.close_gap);
+            out.push_str("/>");
+        } else {
+            out.push('>');
+        }
     }
+}
+
+/// The whitespace before `/>` at the end of a start tag.
+fn close_gap(raw: &str) -> String {
+    raw.strip_suffix("/>").map_or_else(String::new, |before| {
+        before[before.trim_end().len()..].to_owned()
+    })
 }
 
 /// Resolve entity references and keep each unknown reference as written.
@@ -641,6 +657,7 @@ impl<'s> Parser<'s> {
             children: Vec::new(),
             source_start: Some(raw.to_owned()),
             source_end: SourceEnd::None,
+            close_gap: close_gap(raw),
         };
         Ok((element, scope))
     }
@@ -702,6 +719,72 @@ pub(crate) fn remove_child(children: &mut Vec<Node>, index: usize) {
 ///
 /// The writer copies it before a new element, so that the new element has
 /// the indentation of its neighbors.
+/// Give a new child element, and each new element in it, the indentation
+/// and the close style of the document.
+///
+/// The indentation step is the difference between the space before the new
+/// child and the space before the end tag of `parent`. The space before
+/// `/>` comes from the first element in `parent` that closes itself. A
+/// compact parent, with no such space, does not change.
+pub(crate) fn format_new(parent: &mut Element, index: usize) {
+    let Some(Node::Text(outer)) = indent_before(&parent.children, index) else {
+        return;
+    };
+    let closing = match parent.children.last() {
+        Some(Node::Text(t)) if t.is_whitespace() => t.raw.clone(),
+        _ => return,
+    };
+    let Some(unit) = outer.raw.strip_prefix(closing.as_str()).map(str::to_owned) else {
+        return;
+    };
+    if unit.is_empty() {
+        return;
+    }
+    let gap = find_close_gap(parent).unwrap_or_default();
+    if let Some(Node::Element(child)) = parent.children.get_mut(index) {
+        indent_tree(child, &outer.raw, &unit, &gap);
+    }
+}
+
+fn find_close_gap(element: &Element) -> Option<String> {
+    element.children.iter().find_map(|n| match n {
+        Node::Element(e) if e.source_start.as_deref().is_some_and(|s| s.ends_with("/>")) => {
+            Some(e.close_gap.clone())
+        }
+        Node::Element(e) => find_close_gap(e),
+        _ => None,
+    })
+}
+
+fn indent_tree(element: &mut Element, outer: &str, unit: &str, gap: &str) {
+    if element.source_start.is_some() {
+        return;
+    }
+    if element.children.is_empty() {
+        gap.clone_into(&mut element.close_gap);
+        return;
+    }
+    if !element
+        .children
+        .iter()
+        .all(|n| matches!(n, Node::Element(_)))
+    {
+        return;
+    }
+    let inner = format!("{outer}{unit}");
+    let mut children = Vec::with_capacity(element.children.len() * 2 + 1);
+    for node in std::mem::take(&mut element.children) {
+        children.push(Node::Text(Text::new(&inner)));
+        let mut node = node;
+        if let Node::Element(child) = &mut node {
+            indent_tree(child, &inner, unit, gap);
+        }
+        children.push(node);
+    }
+    children.push(Node::Text(Text::new(outer)));
+    element.children = children;
+}
+
 pub(crate) fn indent_before(children: &[Node], index: usize) -> Option<Node> {
     let node = children.get(index.checked_sub(1)?)?;
     match node {
@@ -713,6 +796,17 @@ pub(crate) fn indent_before(children: &[Node], index: usize) -> Option<Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_changed_attribute_keeps_the_space_before_the_close() {
+        let mut doc = Document::parse("<rss><a x=\"1\" /><b x=\"1\"/></rss>").unwrap();
+        for child in doc.root_mut().children_mut() {
+            if let Node::Element(e) = child {
+                e.set_attribute("x", Some("2"));
+            }
+        }
+        assert_eq!(doc.write(), "<rss><a x=\"2\" /><b x=\"2\"/></rss>");
+    }
 
     #[test]
     fn write_after_parse_keeps_the_source_bytes() {

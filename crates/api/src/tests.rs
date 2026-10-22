@@ -531,6 +531,14 @@ fn the_ui_names_no_other_server_and_sends_the_token() {
             let found: Vec<&str> = text
                 .match_indices(scheme)
                 .map(|(i, _)| &text[i..(i + 40).min(text.len())])
+                // A scheme with no host name after it, as in an instruction
+                // to the user, names no server.
+                .filter(|s| {
+                    s[scheme.len()..]
+                        .chars()
+                        .next()
+                        .is_some_and(char::is_alphanumeric)
+                })
                 .filter(|s| !s.contains("www.w3.org/2000/svg") && !s.contains("music.example"))
                 .collect();
             assert!(
@@ -548,6 +556,14 @@ fn the_ui_names_no_other_server_and_sends_the_token() {
         1,
         "app.js must call the API through api()"
     );
+    for (name, text) in crate::ui::text_files() {
+        if name != "app.js" && !name.starts_with("vendor/") {
+            assert!(
+                !text.contains("fetch("),
+                "ADR 0017: {name} calls fetch(). Import api() from app.js, so that each request sends the token."
+            );
+        }
+    }
     assert!(app_js.contains("Authorization: `Bearer ${token}`"));
 }
 
@@ -1040,4 +1056,72 @@ async fn each_draft_route_of_a_read_only_feed_gives_read_only() {
         assert_eq!(status, StatusCode::CONFLICT, "{method} {path}");
         assert_eq!(response["error"]["code"], "read_only", "{method} {path}");
     }
+}
+
+#[tokio::test]
+async fn a_bad_address_is_listed_with_the_draft_and_stops_the_write() {
+    let app = app();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(draft["bad_addresses"], json!([]));
+    let mut model = draft["model"].clone();
+    model["link"] = json!("www.example.com");
+    let (_, draft) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(
+        draft["bad_addresses"],
+        json!([{ "field": "link", "value": "www.example.com" }])
+    );
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "bad_address");
+    assert!(body["error"]["message"].as_str().unwrap().contains("link"));
+    assert_eq!(live(&app), FEED);
+}
+
+#[tokio::test]
+async fn the_media_route_gives_the_size_and_the_type_of_a_file() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set_file("/a.mp3", vec![0; 4321], "audio/mpeg", false);
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/media/facts",
+        Some(json!({ "url": server.url("/a.mp3") })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "length": 4321, "media_type": "audio/mpeg" }));
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/media/facts",
+        Some(json!({ "url": "none" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_address");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/media/facts",
+        Some(json!({ "url": server.url("/gone.mp3") })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(body["error"]["code"], "network");
 }

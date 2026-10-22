@@ -243,9 +243,16 @@ pub(crate) fn write_list<T: Modeled>(
     let slots: Vec<usize> = positions(parent, |e| e.is(T::NS, T::NAME));
     let children = parent.children_mut();
     let mut rendered = rendered.into_iter();
+    // The positions of the new entries. At the end, the writer gives them
+    // the format of the document.
+    let mut new = Vec::new();
+    let mut is_new = entries.iter().map(|e| e.origin.is_none());
     for &slot in &slots {
         match rendered.next() {
             Some(element) => {
+                if is_new.next() == Some(true) {
+                    new.push(slot);
+                }
                 if children[slot] != Node::Element(element.clone()) {
                     children[slot] = Node::Element(element);
                 }
@@ -259,12 +266,17 @@ pub(crate) fn write_list<T: Modeled>(
         xml::remove_child(children, slot);
     }
     let extra: Vec<Element> = rendered.collect();
-    if extra.is_empty() {
-        return;
+    if !extra.is_empty() {
+        let (mut index, indent) = insertion_point(children, &slots, entries.len(), before);
+        for element in extra {
+            index = insert(children, index, indent.as_ref(), element);
+            if is_new.next() == Some(true) {
+                new.push(index - 1);
+            }
+        }
     }
-    let (mut index, indent) = insertion_point(children, &slots, entries.len(), before);
-    for element in extra {
-        index = insert(children, index, indent.as_ref(), element);
+    for index in new {
+        xml::format_new(parent, index);
     }
 }
 
@@ -312,7 +324,8 @@ pub(crate) fn write_single(
             make(&mut element, names);
             let children = parent.children_mut();
             let (index, indent) = insertion_point(children, &[], 0, before);
-            insert(children, index, indent.as_ref(), element);
+            let after = insert(children, index, indent.as_ref(), element);
+            xml::format_new(parent, after - 1);
         }
         (None, None) => {}
     }

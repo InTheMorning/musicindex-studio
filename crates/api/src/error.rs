@@ -103,6 +103,7 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::NoDraft => (StatusCode::CONFLICT, "no_draft"),
             PipelineErrorKind::DiffNotApproved => (StatusCode::CONFLICT, "diff_not_approved"),
             PipelineErrorKind::StaleRevision => (StatusCode::CONFLICT, "stale_revision"),
+            PipelineErrorKind::BadAddress => (StatusCode::UNPROCESSABLE_ENTITY, "bad_address"),
             PipelineErrorKind::InvalidModel => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_model"),
             PipelineErrorKind::Conflict => (StatusCode::CONFLICT, "conflict"),
             PipelineErrorKind::InvalidFeed => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_feed"),
@@ -124,6 +125,13 @@ impl From<AddressError> for ApiError {
 
 impl From<studio_core::web::WebError> for ApiError {
     fn from(error: studio_core::web::WebError) -> Self {
+        if error.kind() == studio_core::web::WebErrorKind::InvalidAddress {
+            return Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_address",
+                error.to_string(),
+            );
+        }
         Self::new(StatusCode::BAD_GATEWAY, "network", error.to_string())
     }
 }

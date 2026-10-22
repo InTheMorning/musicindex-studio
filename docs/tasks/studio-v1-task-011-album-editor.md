@@ -1,7 +1,7 @@
 # Studio v1 Task 011: The Album Editor
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 5.
-Decisions: [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md), [ADR 0016](../adr/0016-ui-without-a-build-step.md) and [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md).
+Decisions: [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md), [ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md), [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) and [ADR 0024](../adr/0024-track-numbers-follow-the-track-sequence.md).
 Depends on: [task 010](studio-v1-task-010-draft-api.md).
 
 ## Goal
@@ -19,6 +19,9 @@ Let the user edit the channel and the tracks of an album feed, examine the diff,
 7. Show a conflict when the live file changed. Offer to start again from the live file.
 8. Show the snapshot list. A rollback makes a draft from a snapshot, and the user then examines its diff.
 9. Let the user remove the draft.
+10. Show red text below each address field that is not correct. Do not offer the write while an address is not correct (ADR 0023 items 1 to 4).
+11. When the user gives the audio address of a new track, read the size and the type of the file from its host (ADR 0023 items 5 to 7).
+12. Show the track number of each track, and the hints about the track number and the publication date (ADR 0024 items 4 and 5).
 
 ## Constraints
 
@@ -31,6 +34,13 @@ Let the user edit the channel and the tracks of an album feed, examine the diff,
 Mechanical:
 
 - The API contract tests of task 010 pass.
+- A write with an incorrect address in the draft gives 422 and does not change the file. The error names each incorrect field.
+- The draft response lists each incorrect address field.
+- The media route gives the size and the type of a file from a `HEAD` request. When the `HEAD` response has no length, the route uses a range request.
+- A changed element that closes itself keeps the space before `/>` that its source had.
+- A new element with child elements gets the indentation of its sibling elements.
+- After a move, an addition or a removal of a track, the `podcast:episode` of each track is its position, from 1. Its attributes stay. No `pubDate` changes.
+- A change of a field that does not change the sequence does not change a track number.
 - The UI files name no other server. The existing test enforces this.
 
 Visual:

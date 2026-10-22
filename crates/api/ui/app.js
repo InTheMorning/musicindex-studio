@@ -1,5 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback } from './vendor/htm-preact-standalone.module.js';
+import { AlbumEditor } from './editor.js';
 
 // ---- Access token (ADR 0017) ----
 // The API gives the UI address with the token in the fragment. The UI keeps
@@ -27,7 +28,7 @@ class ApiError extends Error {
   }
 }
 
-async function api(path, { method = 'GET', body } = {}) {
+export async function api(path, { method = 'GET', body } = {}) {
   const headers = { Authorization: `Bearer ${token}` };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let response;
@@ -76,7 +77,7 @@ function Brand() {
     <span class="product">Studio</span></span>`;
 }
 
-function ErrorNotice({ error }) {
+export function ErrorNotice({ error }) {
   if (!error) return null;
   return html`<div class="notice error" role="alert"><strong>${title(error)}</strong>${error.message}</div>`;
 }
@@ -114,7 +115,7 @@ function title(error) {
 }
 
 // A labelled input. `error` is a line of red text below the field (ADR 0018).
-function Field({ id, label, hint, error, children, ...input }) {
+export function Field({ id, label, hint, error, children, ...input }) {
   const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
   return html`<div class="field">
     <label for=${id}>${label}</label>
@@ -126,7 +127,7 @@ function Field({ id, label, hint, error, children, ...input }) {
 }
 
 // Run an API action with a busy state and an error state.
-function useAction() {
+export function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const run = useCallback(async (work) => {
@@ -690,8 +691,9 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
       </dl>
-      <p class="hint">The editor for albums comes next. Today Studio reads and remembers your feeds.</p>
+      ${feed.connector_id && kind.label !== 'Album' && html`<p class="hint">The editor for this feed type comes in a later phase.</p>`}
     </section>
+    ${feed.connector_id && kind.label === 'Album' && html`<${AlbumEditor} key=${feed.id} feed=${feed} onWritten=${onChanged} />`}
   </div>`;
 }
 

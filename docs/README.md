@@ -24,6 +24,8 @@
 - [ADR 0020: The first run asks one question](adr/0020-first-run-asks-one-question.md)
 - [ADR 0021: The public address of a feed](adr/0021-public-address-of-a-feed.md)
 - [ADR 0022: The editor sends the model with entry keys](adr/0022-the-editor-sends-the-model-with-entry-keys.md)
+- [ADR 0023: Web addresses and the facts of an audio file](adr/0023-web-addresses-and-audio-file-facts.md)
+- [ADR 0024: Track numbers follow the track sequence](adr/0024-track-numbers-follow-the-track-sequence.md)
 
 ## Plans
 
@@ -48,6 +50,7 @@
 
 - [Phase 4 visual check, 2026-10-22](reviews/2026-10-22-phase-4-visual-check.md)
 - [Task 009 visual check, 2026-10-22](reviews/2026-10-22-task-009-visual-check.md)
+- [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
 
 ## Research
 

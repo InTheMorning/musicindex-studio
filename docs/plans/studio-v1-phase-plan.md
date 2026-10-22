@@ -37,7 +37,7 @@ Phase 0 to Phase 4 are complete. Phase 1 has one open item.
 - The public address of a feed follows [ADR 0021](../adr/0021-public-address-of-a-feed.md). The collection keeps the address of each source and shows each difference. A folder match can find the folder address from the linked feeds.
 - Risk for Phase 9: discovery reads each address that a user gives. The server shell must refuse addresses in private networks.
 
-Phase 5 is in progress. [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) gives the method of an edit. [Task 010](../tasks/studio-v1-task-010-draft-api.md) (the draft API) is complete. Next: [task 011](../tasks/studio-v1-task-011-album-editor.md) (the album editor UI).
+Phase 5 is in progress. [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) gives the method of an edit. [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) gives the address rule and the facts of a new audio file. [ADR 0024](../adr/0024-track-numbers-follow-the-track-sequence.md) sets the track numbers from the track sequence. [Task 010](../tasks/studio-v1-task-010-draft-api.md) (the draft API) and [task 011](../tasks/studio-v1-task-011-album-editor.md) (the album editor UI) are complete. The [visual check of task 011](../reviews/2026-10-22-task-011-visual-check.md) passes. Next: [task 012](../tasks/studio-v1-task-012-value-editor.md) (the value editor).
 
 ## Target State
 
@@ -90,7 +90,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 ### Phase 5: Album Editor
 
 - Make the album editor: channel, tracks, value recipients and value time splits.
-- Tasks: [010](../tasks/studio-v1-task-010-draft-api.md) is complete. [011](../tasks/studio-v1-task-011-album-editor.md) and [012](../tasks/studio-v1-task-012-value-editor.md) are open.
+- Tasks: [010](../tasks/studio-v1-task-010-draft-api.md) and [011](../tasks/studio-v1-task-011-album-editor.md) are complete. [012](../tasks/studio-v1-task-012-value-editor.md) is open.
 - Make the diff view and the snapshot list with rollback.
 - Visual check: the operator edits a published album feed completely.
 

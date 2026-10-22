@@ -68,6 +68,27 @@ fn each_corpus_feed_writes_the_same_bytes_after_a_json_round_trip() {
     }
 }
 
+/// The evidence of ADR 0023: one corpus feed has an address with no scheme.
+#[test]
+fn one_corpus_feed_has_a_bad_address() {
+    let bad: Vec<(String, Vec<String>)> = corpus()
+        .into_iter()
+        .map(|(name, bytes)| {
+            let feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
+            let fields = feed.bad_addresses().into_iter().map(|b| b.field).collect();
+            (name, fields)
+        })
+        .filter(|(_, fields): &(String, Vec<String>)| !fields.is_empty())
+        .collect();
+    assert_eq!(
+        bad,
+        [(
+            "musicsideproject-publisher-strange-love.xml".to_owned(),
+            vec!["link".to_owned()]
+        )]
+    );
+}
+
 #[test]
 fn the_corpus_has_value_time_splits_live_items_and_publishers() {
     let feeds: Vec<Feed> = corpus()

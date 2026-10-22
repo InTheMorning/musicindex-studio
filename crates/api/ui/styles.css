@@ -122,6 +122,22 @@
 :root { --error: #ff6961; }
 :root[data-theme="light"] { --error: #c41e3a; }
 
+/* Diff tokens: an added line is green and a removed line is red. They are not
+   entity colors and not --error. The sign of each line also shows its kind,
+   so color is not the only sign. */
+:root {
+  --diff-add: #3fb950;
+  --diff-add-bg: rgba(46, 160, 67, .16);
+  --diff-remove: #f0716b;
+  --diff-remove-bg: rgba(240, 113, 107, .14);
+}
+:root[data-theme="light"] {
+  --diff-add: #1a7f37;
+  --diff-add-bg: rgba(26, 127, 55, .1);
+  --diff-remove: #b42318;
+  --diff-remove-bg: rgba(180, 35, 24, .08);
+}
+
 html, body { height: 100%; }
 
 body {
@@ -547,3 +563,51 @@ textarea {
 .address-list .mono { overflow-wrap: anywhere; }
 .address-list .button.link { padding: 0 8px 0 0; }
 .host .sub { color: var(--muted); }
+
+/* The album editor (task 011). */
+.editor h3 { font-size: 1rem; font-weight: 700; }
+.editor .hint { color: var(--muted); }
+.editor textarea { width: 100%; }
+.entry {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--sep);
+  border-radius: 12px;
+}
+.entry legend { padding: 0 6px; font-weight: 600; }
+.tracks { display: grid; gap: 8px; }
+.track { border: 1px solid var(--sep); border-radius: 12px; }
+.track[open] { background: var(--fill-soft); }
+.track > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.track > summary .number { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2ch; }
+.track > .form { padding: 4px 16px 16px; }
+.add-track { border-top: 1px solid var(--sep); padding-top: 18px; }
+
+/* A diff line has a sign and an edge. Color is not the only sign (ADR 0010). */
+.diff {
+  max-height: 60vh;
+  overflow: auto;
+  padding: 12px 0;
+  border: 1px solid var(--sep);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: .85rem;
+  line-height: 1.5;
+}
+.diff span { display: block; padding: 0 14px; border-left: 3px solid transparent; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff .add { border-left-color: var(--diff-add); background: var(--diff-add-bg); }
+.diff .remove { border-left-color: var(--diff-remove); background: var(--diff-remove-bg); }
+
+.snapshots { list-style: none; display: grid; gap: 8px; }
+.snapshots li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.snapshots li > span { display: grid; }
+.snapshots .sub { color: var(--muted); font-size: .85rem; }

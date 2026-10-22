@@ -58,13 +58,22 @@ function ThemeToggle() {
     try { localStorage.setItem('studio-theme', next); } catch (_) {}
     setTheme(next);
   };
+  // The same icons as musicindex.org search.html.
   return html`<button class="theme-toggle" type="button" onClick=${toggle}
     aria-label=${`Use the ${next} theme`} title=${`Use the ${next} theme`}>
-    ${theme === 'dark' ? '☀' : '☾'}</button>`;
+    <svg class="icon-sun" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <circle cx="12" cy="12" r="4.2"></circle>
+      <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"></path>
+    </svg>
+    <svg class="icon-moon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"></path>
+    </svg></button>`;
 }
 
+// The Music Index lockup, as on musicindex.org, with the product name.
 function Brand() {
-  return html`<span class="brand"><span class="mark" aria-hidden="true"></span>Studio</span>`;
+  return html`<span class="brand"><img src="/ui/assets/musicindex-lockup-horizontal.svg" alt="Music Index" />
+    <span class="product">Studio</span></span>`;
 }
 
 function ErrorNotice({ error }) {

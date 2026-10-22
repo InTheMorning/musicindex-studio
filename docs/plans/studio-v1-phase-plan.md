@@ -32,7 +32,7 @@ Phase 0 to Phase 3 are complete. Phase 1 has one open item. Phase 4 is in progre
 - The collection is in SQLite ([ADR 0014](../adr/0014-collection-in-sqlite.md)). A test finds no connector secret in the database file.
 - The local folder connector and the write pipeline exist ([ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md)).
 - The local JSON API, the UI shell, the settings screen and the first-run wizard exist ([ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0017](../adr/0017-local-api-access.md)). A test finds no secret in API responses.
-- The visual checks of task 008 are open. The operator has not done them.
+- The visual checks of task 008 are in progress. The [review](../reviews/2026-10-22-phase-4-visual-check.md) records the results.
 - Task 009 (more discovery methods) is next. Then Phase 5.
 
 ## Target State

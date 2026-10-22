@@ -38,6 +38,10 @@
 - [Studio v1 task 008: UI shell, settings and first-run wizard](tasks/studio-v1-task-008-ui-shell-and-wizard.md)
 - [Studio v1 task 009: More discovery methods](tasks/studio-v1-task-009-more-discovery-methods.md)
 
+## Reviews
+
+- [Phase 4 visual check, 2026-10-22](reviews/2026-10-22-phase-4-visual-check.md)
+
 ## Research
 
 - [Studio baseline research, 2026-10-22](research/2026-10-22-studio-baseline-research.md)

@@ -41,6 +41,27 @@ const FILES: &[(&str, &str, &[u8])] = &[
         "image/svg+xml",
         include_bytes!("../ui/assets/favicon.svg"),
     ),
+    (
+        "assets/musicindex-lockup-horizontal.svg",
+        "image/svg+xml",
+        include_bytes!("../ui/assets/musicindex-lockup-horizontal.svg"),
+    ),
+    // The licenses of the vendored files.
+    (
+        "assets/Figtree-OFL.txt",
+        "text/plain; charset=utf-8",
+        include_bytes!("../ui/assets/Figtree-OFL.txt"),
+    ),
+    (
+        "vendor/preact-LICENSE.txt",
+        "text/plain; charset=utf-8",
+        include_bytes!("../ui/vendor/preact-LICENSE.txt"),
+    ),
+    (
+        "vendor/htm-LICENSE.txt",
+        "text/plain; charset=utf-8",
+        include_bytes!("../ui/vendor/htm-LICENSE.txt"),
+    ),
 ];
 
 /// The UI loads nothing from other servers (ADR 0016). The policy makes the

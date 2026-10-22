@@ -493,7 +493,8 @@ async fn the_ui_files_load_without_the_token_and_with_a_strict_policy() {
 #[test]
 fn the_ui_names_no_other_server_and_sends_the_token() {
     for (name, text) in crate::ui::text_files() {
-        if name.starts_with("vendor/") {
+        // The vendored code and the license texts are not UI code.
+        if name.starts_with("vendor/") || name.to_ascii_lowercase().ends_with(".txt") {
             continue;
         }
         for scheme in ["http://", "https://"] {
@@ -518,4 +519,25 @@ fn the_ui_names_no_other_server_and_sends_the_token() {
         "app.js must call the API through api()"
     );
     assert!(app_js.contains("Authorization: `Bearer ${token}`"));
+}
+
+#[test]
+fn each_ui_address_in_the_ui_files_is_served() {
+    // On 2026-10-22 the lockup image was in app.js but not in the served
+    // files, and the page showed a broken image.
+    let served: Vec<&str> = crate::ui::paths().collect();
+    for (name, text) in crate::ui::text_files() {
+        for (index, _) in text.match_indices("/ui/") {
+            let rest = &text[index + 4..];
+            let end = rest.find(['"', '\'', ')', '`', ' ']).unwrap_or(rest.len());
+            let path = &rest[..end];
+            if path.is_empty() || path.contains("${") {
+                continue;
+            }
+            assert!(
+                served.contains(&path),
+                "ADR 0016: {name} refers to /ui/{path}, but crates/api/src/ui.rs does not serve it. Add it to FILES."
+            );
+        }
+    }
 }

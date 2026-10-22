@@ -16,11 +16,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 similar = "3"
+ureq = "3.5"
 quick-xml = "0.42"
 rusqlite = { version = "0.40", features = ["bundled"] }
 uuid = { version = "1.28", features = ["v4", "v5"] }
 zeroize = "1.9"
 zxcvbn = { version = "3.1", default-features = false }
+
+[features]
+# Test helpers for the tests of other workspace crates.
+testing = []
 
 [dev-dependencies]
 tempfile = "3"

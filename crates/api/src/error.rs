@@ -90,6 +90,7 @@ impl From<PipelineError> for ApiError {
         let (status, code) = match error.kind() {
             PipelineErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
             PipelineErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),
+            PipelineErrorKind::Network => (StatusCode::BAD_GATEWAY, "network"),
             PipelineErrorKind::NoDraft => (StatusCode::CONFLICT, "no_draft"),
             PipelineErrorKind::DiffNotApproved => (StatusCode::CONFLICT, "diff_not_approved"),
             PipelineErrorKind::Conflict => (StatusCode::CONFLICT, "conflict"),
@@ -97,5 +98,11 @@ impl From<PipelineError> for ApiError {
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())
+    }
+}
+
+impl From<studio_core::web::WebError> for ApiError {
+    fn from(error: studio_core::web::WebError) -> Self {
+        Self::new(StatusCode::BAD_GATEWAY, "network", error.to_string())
     }
 }

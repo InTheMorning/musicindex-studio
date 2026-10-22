@@ -461,6 +461,27 @@ impl Collection {
         Ok(())
     }
 
+    /// Give a feed the connector and the path that write it.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the feed or the
+    /// connector does not exist.
+    pub fn set_feed_connector(
+        &self,
+        id: FeedId,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        self.feed(id)?;
+        self.connector(connector)?;
+        self.db.execute(
+            "UPDATE feeds SET connector_id = ?2, path = ?3 WHERE id = ?1",
+            params![id.0, connector.0, path],
+        )?;
+        Ok(())
+    }
+
     /// Remove a feed from the collection, with its item GUIDs, its draft and
     /// its snapshots. The feed file on the host does not change.
     ///

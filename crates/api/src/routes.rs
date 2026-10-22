@@ -221,11 +221,9 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
         let id = FeedId(id);
         let row = w.collection.feed(id)?;
         let Some(connector_id) = row.connector_id else {
-            return Err(ApiError::new(
-                StatusCode::CONFLICT,
-                "read_only",
-                "this feed has no connector",
-            ));
+            // A read-only feed reads from its public address (ADR 0020).
+            pipeline::refresh_public(&mut w.collection, &w.web, id)?;
+            return to_json(w.collection.feed(id)?);
         };
         let connector_row = w.collection.connector(connector_id)?;
         if connector_row.secret_ref.is_some() && w.vault.is_none() {
@@ -300,6 +298,155 @@ pub(crate) async fn connector_feeds(
         Ok(Json(
             json!({ "feeds": feeds, "truncated": candidates.truncated }),
         ))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Discover {
+    #[serde(default)]
+    addresses: Vec<String>,
+    #[serde(default)]
+    guids: Vec<String>,
+}
+
+/// The URLs and the feed GUIDs that the collection has.
+fn collection_keys(w: &Workspace) -> Result<(Vec<String>, Vec<String>), ApiError> {
+    let feeds = w.collection.feeds()?;
+    let urls = feeds.iter().filter_map(|f| f.public_url.clone()).collect();
+    let guids = feeds
+        .iter()
+        .filter_map(|f| f.podcast_guid.as_deref().map(str::to_ascii_lowercase))
+        .collect();
+    Ok((urls, guids))
+}
+
+fn in_collection(found: &studio_core::discover::Found, keys: &(Vec<String>, Vec<String>)) -> bool {
+    keys.0.contains(&found.url)
+        || found
+            .podcast_guid
+            .as_deref()
+            .is_some_and(|g| keys.1.contains(&g.to_ascii_lowercase()))
+}
+
+/// Find feeds from addresses and GUIDs (ADR 0020).
+pub(crate) async fn discover(
+    State(shared): State<Shared>,
+    Json(body): Json<Discover>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let found =
+            studio_core::discover::from_sources(&w.web, &w.index, &body.addresses, &body.guids);
+        let keys = collection_keys(w)?;
+        let feeds: Vec<Value> = found
+            .feeds
+            .iter()
+            .map(|f| {
+                let mut value = serde_json::to_value(f).unwrap_or(Value::Null);
+                value["in_collection"] = Value::Bool(in_collection(f, &keys));
+                value
+            })
+            .collect();
+        w.discovered = found
+            .feeds
+            .into_iter()
+            .map(|f| (f.url.clone(), f))
+            .collect();
+        Ok(Json(
+            json!({ "feeds": feeds, "failed": found.failed, "truncated": found.truncated }),
+        ))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Search {
+    q: String,
+}
+
+/// Search musicindex for feeds by name.
+pub(crate) async fn search(
+    State(shared): State<Shared>,
+    axum::extract::Query(query): axum::extract::Query<Search>,
+) -> ApiResult {
+    blocking(shared, move |w| to_json(w.index.search(&query.q)?)).await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Import {
+    urls: Vec<String>,
+}
+
+/// Add read-only feeds by address (ADR 0020). A feed that the collection
+/// has is not added again.
+pub(crate) async fn import_feeds(
+    State(shared): State<Shared>,
+    Json(body): Json<Import>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let mut added = Vec::new();
+        let mut failed = Vec::new();
+        for url in body.urls {
+            let keys = collection_keys(w)?;
+            let found = match w.discovered.get(&url) {
+                Some(found) => (found.feed.clone(), found.version.clone()),
+                None => match studio_core::discover::read_public(&w.web, &url) {
+                    Ok(read) => read,
+                    Err(message) => {
+                        failed.push(json!({ "source": url, "message": message }));
+                        continue;
+                    }
+                },
+            };
+            let guid = found.0.podcast_guid.as_deref().map(str::to_ascii_lowercase);
+            if keys.0.contains(&url) || guid.is_some_and(|g| keys.1.contains(&g)) {
+                continue;
+            }
+            let id = w.collection.add_feed(Some(&url), None)?;
+            w.collection.record_state(id, &found.0, &found.1)?;
+            added.push(w.collection.feed(id)?);
+        }
+        Ok((
+            StatusCode::CREATED,
+            Json(json!({ "added": added, "failed": failed })),
+        ))
+    })
+    .await
+}
+
+/// Link each read-only feed to its file in the folder of a connector, by
+/// `podcast:guid` (ADR 0019, ADR 0020).
+pub(crate) async fn match_connector(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let row = w.collection.connector(ConnectorId(id))?;
+        if row.secret_ref.is_some() && w.vault.is_none() {
+            return Err(ApiError::vault_locked());
+        }
+        let made = connector::from_row(&row, w.vault.as_ref())?;
+        let candidates = studio_core::discover::feed_candidates(made.as_ref())?;
+        let mut linked = Vec::new();
+        for feed in w.collection.feeds()? {
+            if feed.connector_id.is_some() {
+                continue;
+            }
+            let Some(guid) = feed.podcast_guid.as_deref() else {
+                continue;
+            };
+            let file = candidates.feeds.iter().find(|c| {
+                c.podcast_guid
+                    .as_deref()
+                    .is_some_and(|g| g.eq_ignore_ascii_case(guid))
+            });
+            if let Some(file) = file {
+                w.collection
+                    .set_feed_connector(feed.id, row.id, &file.path)?;
+                linked.push(w.collection.feed(feed.id)?);
+            }
+        }
+        Ok(Json(json!({ "linked": linked })))
     })
     .await
 }

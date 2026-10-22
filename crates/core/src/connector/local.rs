@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::digest::sha256_hex;
+use crate::digest::content_version;
 
 use super::{
     Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, LIST_MAX_DEPTH,
@@ -78,7 +78,7 @@ fn io_error(path: &Path, error: &std::io::Error) -> ConnectorError {
 }
 
 fn version_of(bytes: &[u8]) -> Version {
-    Version::new(format!("sha256:{}", sha256_hex(&[bytes])))
+    content_version(bytes)
 }
 
 impl Connector for LocalFolder {

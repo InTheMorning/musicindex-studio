@@ -2,7 +2,8 @@
 //!
 //! This crate holds the feed model, the RSS reader and writer, the
 //! connectors, the vault and the write pipeline (ADR 0002). It contains no
-//! HTTP code and no UI code, and it depends on no other workspace member.
+//! HTTP server code and no UI code, and it depends on no other workspace
+//! member. It makes HTTP requests to read remote files.
 
 pub mod collection;
 pub mod connector;
@@ -10,6 +11,10 @@ mod digest;
 pub mod discover;
 pub mod feed;
 pub mod guid;
+pub mod musicindex;
 pub mod pipeline;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 pub mod vault;
+pub mod web;
 pub mod xml;

@@ -16,6 +16,7 @@ studio-core.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync"] }
 
 [dev-dependencies]
+studio-core = { workspace = true, features = ["testing"] }
 http-body-util = "0.1"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }

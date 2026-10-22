@@ -21,6 +21,8 @@ pub enum PipelineErrorKind {
     ReadOnly,
     /// The feed file does not exist on the host.
     NotFound,
+    /// A web read failed.
+    Network,
     /// The feed has no draft.
     NoDraft,
     /// The approved diff is not the current diff of the draft.
@@ -157,6 +159,31 @@ pub fn refresh(
     })?;
     let feed = Feed::read(&Document::parse_bytes(&file.bytes)?)?;
     collection.record_state(id, &feed, &file.version)?;
+    Ok(feed)
+}
+
+/// Read a feed that has no connector from its public address, and keep its
+/// facts in the collection (ADR 0020).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no public address, the read
+/// fails, or the file is not a feed.
+pub fn refresh_public(
+    collection: &mut Collection,
+    web: &crate::web::Web,
+    id: FeedId,
+) -> Result<Feed, PipelineError> {
+    let row = collection.feed(id)?;
+    let url = row.public_url.as_deref().ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::ReadOnly,
+            format!("feed {} has no connector and no public address", id.0),
+        )
+    })?;
+    let (feed, version) = crate::discover::read_public(web, url)
+        .map_err(|message| PipelineError::new(PipelineErrorKind::Network, message))?;
+    collection.record_state(id, &feed, &version)?;
     Ok(feed)
 }
 

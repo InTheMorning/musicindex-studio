@@ -2,8 +2,13 @@
 
 use std::path::{Path, PathBuf};
 
+use std::collections::HashMap;
+
 use studio_core::collection::Collection;
+use studio_core::discover::Found;
+use studio_core::musicindex::{DEFAULT_API, MusicIndex};
 use studio_core::vault::{OpenVault, VaultFile};
+use studio_core::web::Web;
 
 use crate::error::ApiError;
 
@@ -25,6 +30,11 @@ pub struct Workspace {
     vault_path: PathBuf,
     pub(crate) collection: Collection,
     pub(crate) vault: Option<OpenVault>,
+    pub(crate) web: Web,
+    pub(crate) index: MusicIndex,
+    /// The feeds of the last discovery, by address, so that an import does
+    /// not read them again.
+    pub(crate) discovered: HashMap<String, Found>,
 }
 
 impl Workspace {
@@ -40,7 +50,17 @@ impl Workspace {
             vault_path: data_dir.join("vault.json"),
             collection: Collection::open(&data_dir.join("collection.sqlite"))?,
             vault: None,
+            web: Web::new(),
+            index: MusicIndex::new(Web::new(), DEFAULT_API),
+            discovered: HashMap::new(),
         })
+    }
+
+    /// Use a different musicindex API, such as a test server.
+    #[must_use]
+    pub fn with_musicindex(mut self, base: &str) -> Self {
+        self.index = MusicIndex::new(self.web.clone(), base);
+        self
     }
 
     pub(crate) fn vault_state(&self) -> VaultState {

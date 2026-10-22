@@ -69,7 +69,3 @@ A feed address and the links in a feed tell most of this situation.
 
 - The wizard asks one question before the first result.
 - Studio does not follow links more than one level from an address that the user gave.
-
-## Open Questions
-
-- Should Studio also ask for the passphrase only when an action needs a secret, and not at start?

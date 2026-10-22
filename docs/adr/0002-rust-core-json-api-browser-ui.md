@@ -12,7 +12,7 @@ The other musicindex services, such as Stophammer, use Rust.
 
 ## Decision
 
-1. The core is a Rust library crate. It contains the feed model, the RSS reader and writer, the connectors, the vault and the write pipeline. It contains no HTTP code and no UI code.
+1. The core is a Rust library crate. It contains the feed model, the RSS reader and writer, the connectors, the vault and the write pipeline. It contains no HTTP server code and no UI code. It can make HTTP requests, because connectors and feed discovery read remote files. On 2026-10-22 this text replaced "It contains no HTTP code".
 2. An axum service gives the core functions as a JSON API.
 3. One browser UI uses that API.
 4. The desktop shell is a Tauri app. It shows the same UI in a native window.

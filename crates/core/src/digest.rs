@@ -17,3 +17,8 @@ pub(crate) fn sha256_hex(parts: &[&[u8]]) -> String {
             text
         })
 }
+
+/// The version marker of file content: its SHA-256 (ADR 0015).
+pub(crate) fn content_version(bytes: &[u8]) -> crate::connector::Version {
+    crate::connector::Version::new(format!("sha256:{}", sha256_hex(&[bytes])))
+}

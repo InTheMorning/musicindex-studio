@@ -23,10 +23,15 @@ struct App {
 }
 
 fn app() -> App {
+    app_with_index("http://127.0.0.1:9")
+}
+
+/// An app whose musicindex API is at `index`. Port 9 answers nothing.
+fn app_with_index(index: &str) -> App {
     let data = tempfile::tempdir().unwrap();
     let feeds = tempfile::tempdir().unwrap();
     std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
-    let workspace = Workspace::open(data.path()).unwrap();
+    let workspace = Workspace::open(data.path()).unwrap().with_musicindex(index);
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
         data,
@@ -284,16 +289,10 @@ async fn a_relative_folder_and_a_half_feed_give_422() {
 }
 
 #[tokio::test]
-async fn a_read_only_feed_cannot_refresh_and_a_missing_file_gives_404() {
+async fn a_feed_without_an_address_is_read_only_and_a_missing_file_gives_404() {
     let app = app();
     set_up(&app).await;
-    let (_, feed) = call(
-        &app,
-        "POST",
-        "/api/v1/feeds",
-        Some(json!({ "public_url": "https://elsewhere.example/feed.xml" })),
-    )
-    .await;
+    let (_, feed) = call(&app, "POST", "/api/v1/feeds", Some(json!({}))).await;
     let (status, body) = call(
         &app,
         "POST",
@@ -540,4 +539,182 @@ fn each_ui_address_in_the_ui_files_is_served() {
             );
         }
     }
+}
+
+/// A test server with a publisher feed, two releases and a musicindex API.
+fn web_feeds() -> studio_core::testing::TestServer {
+    use studio_core::testing::TestServer;
+    let server = TestServer::start(Vec::new());
+    let feed = |medium: &str, guid: &str, title: &str, extra: &str| {
+        format!(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>{title}</title>\
+             <podcast:guid>{guid}</podcast:guid><podcast:medium>{medium}</podcast:medium>{extra}</channel></rss>"
+        )
+        .into_bytes()
+    };
+    let a = server.url("/a.xml");
+    server.set(
+        "/publisher.xml",
+        200,
+        feed("publisher", "p-1", "Label", &format!(
+            "<podcast:remoteItem feedGuid=\"g-1\" feedUrl=\"{a}\"/><podcast:remoteItem feedGuid=\"b-1\"/>"
+        )),
+    );
+    // The same GUID as the local FEED, so that a folder match can find it.
+    server.set("/a.xml", 200, FEED.as_bytes().to_vec());
+    server.set("/b.xml", 200, feed("music", "b-1", "Album B", ""));
+    server.set(
+        "/v1/feeds/b-1",
+        200,
+        format!("{{\"data\":{{\"feed_url\":\"{}\"}}}}", server.url("/b.xml")).into_bytes(),
+    );
+    server.set(
+        "/v1/search",
+        200,
+        br#"{"data":[{"entity_type":"feed","entity_id":"b-1","title":"Album B","release_artist":"Ann"}]}"#.to_vec(),
+    );
+    server
+}
+
+#[tokio::test]
+async fn discovery_follows_a_publisher_and_import_adds_read_only_feeds() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/discover",
+        Some(json!({ "addresses": [server.url("/publisher.xml")] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let feeds = body["feeds"].as_array().unwrap();
+    let titles: Vec<&str> = feeds.iter().map(|f| f["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Label", "Album", "Album B"]);
+    assert_eq!(feeds[1]["via"], "release");
+    assert_eq!(feeds[0]["host"], "127.0.0.1");
+    assert_eq!(feeds[0]["service"], Value::Null);
+    assert!(feeds.iter().all(|f| f["in_collection"] == false));
+
+    let urls: Vec<&str> = feeds.iter().map(|f| f["url"].as_str().unwrap()).collect();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": urls })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["added"].as_array().unwrap().len(), 3);
+    assert!(
+        body["added"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| f["connector_id"].is_null())
+    );
+
+    // A second import adds nothing, and a second discovery marks the feeds.
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": urls })),
+    )
+    .await;
+    assert_eq!(body["added"], json!([]));
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/api/v1/discover",
+        Some(json!({ "addresses": [server.url("/publisher.xml")] })),
+    )
+    .await;
+    assert!(
+        body["feeds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| f["in_collection"] == true)
+    );
+    // The vault is not necessary for read-only feeds (ADR 0020).
+    let (_, status_body) = call(&app, "GET", "/api/v1/status", None).await;
+    assert_eq!(status_body["vault"], "absent");
+}
+
+#[tokio::test]
+async fn a_read_only_feed_refreshes_from_its_address() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/b.xml")] })),
+    )
+    .await;
+    let id = body["added"][0]["id"].as_i64().unwrap();
+    server.set(
+        "/b.xml",
+        200,
+        FEED.replace("Album", "Album B2").into_bytes(),
+    );
+    let (status, feed) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(feed["title"], "Album B2");
+    server.set("/b.xml", 500, Vec::new());
+    let (status, body) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(body["error"]["code"], "network");
+}
+
+#[tokio::test]
+async fn a_connected_folder_takes_the_read_only_feeds_that_it_holds() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/a.xml"), server.url("/b.xml")] })),
+    )
+    .await;
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{}/match", connector["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let linked = body["linked"].as_array().unwrap();
+    assert_eq!(linked.len(), 1);
+    assert_eq!(linked[0]["path"], "album.xml");
+    assert_eq!(linked[0]["connector_id"], connector["id"]);
+}
+
+#[tokio::test]
+async fn search_gives_feed_hits_from_musicindex() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    let (status, body) = call(&app, "GET", "/api/v1/search?q=album%20b", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["feed_guid"], "b-1");
+    assert_eq!(body[0]["artist"], "Ann");
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/api/v1/discover",
+        Some(json!({ "guids": ["b-1"] })),
+    )
+    .await;
+    assert_eq!(body["feeds"][0]["title"], "Album B");
 }

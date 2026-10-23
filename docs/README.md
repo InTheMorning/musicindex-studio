@@ -32,6 +32,7 @@
 - [ADR 0028: Summary lines and one open entry](adr/0028-summary-lines-and-one-open-entry.md)
 - [ADR 0029: Editor pages, the toolbar and three background levels](adr/0029-editor-pages-toolbar-and-three-levels.md)
 - [ADR 0030: An added recipient gets no split](adr/0030-an-added-recipient-gets-no-split.md)
+- [ADR 0031: A new element takes its hosted position](adr/0031-a-new-element-takes-its-hosted-position.md)
 
 ## Plans
 
@@ -60,6 +61,7 @@
 - [Studio v1 task 014b: The draft toolbar and the sheets](tasks/studio-v1-task-014b-toolbar-and-sheets.md)
 - [Studio v1 task 014c: The sidebar tree and the editor pages](tasks/studio-v1-task-014c-tree-and-pages.md)
 - [Studio v1 task 014d: The phone width](tasks/studio-v1-task-014d-phone-width.md)
+- [Studio v1 task 015: A new element takes its hosted position](tasks/studio-v1-task-015-hosted-position.md)
 
 ## Reviews
 

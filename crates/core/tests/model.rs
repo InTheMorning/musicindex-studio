@@ -2,7 +2,7 @@
 
 use studio_core::collection::{Collection, DraftRow, FeedId};
 use studio_core::connector::LocalFolder;
-use studio_core::feed::{Enclosure, Entry, Feed, Item};
+use studio_core::feed::{AlternateEnclosure, Enclosure, Entry, Feed, Item, Source};
 use studio_core::pipeline::{self, PipelineErrorKind};
 
 /// A connector for [`pipeline::diff`]. The feed of [`draft`] has no
@@ -294,6 +294,63 @@ fn a_change_of_sequence_numbers_the_tracks_and_keeps_the_dates() {
         moved.items[1].pub_date.as_deref(),
         Some("Thu, 01 Oct 2026 00:00:00 GMT")
     );
+}
+
+/// Task 019a: a new track with two alternate enclosures puts them directly
+/// after the enclosure, each on its own line and indent (ADR 0031,
+/// ADR 0033 item 6).
+#[test]
+fn a_new_track_puts_its_alternate_enclosures_after_the_enclosure() {
+    let (collection, id) = draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.items.push(Entry::new(Item {
+        title: Some("Three".to_owned()),
+        enclosure: Some(Enclosure {
+            url: Some("https://music.example/3.mp3".to_owned()),
+            length: Some("10".to_owned()),
+            media_type: Some("audio/mpeg".to_owned()),
+        }),
+        alternate_enclosures: vec![
+            Entry::new(AlternateEnclosure {
+                media_type: Some("audio/flac".to_owned()),
+                title: Some("Lossless (FLAC)".to_owned()),
+                sources: vec![Entry::new(Source {
+                    uri: Some("https://music.example/3.flac".to_owned()),
+                    ..Source::default()
+                })],
+                ..AlternateEnclosure::default()
+            }),
+            Entry::new(AlternateEnclosure {
+                media_type: Some("audio/mpeg".to_owned()),
+                title: Some("MP3".to_owned()),
+                default: Some("true".to_owned()),
+                sources: vec![Entry::new(Source {
+                    uri: Some("https://music.example/3-alt.mp3".to_owned()),
+                    ..Source::default()
+                })],
+                ..AlternateEnclosure::default()
+            }),
+        ],
+        ..Item::default()
+    }));
+    let (changed, _) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let guid = changed.items[2].guid.as_deref().unwrap();
+    let expected = format!(
+        "      <podcast:season>2</podcast:season>\n      <podcast:episode>2</podcast:episode>\n    </item>\n    \
+         <item>\n      <title>Three</title>\n      \
+         <guid isPermaLink=\"false\">{guid}</guid>\n      \
+         <enclosure url=\"https://music.example/3.mp3\" length=\"10\" type=\"audio/mpeg\"/>\n      \
+         <podcast:alternateEnclosure type=\"audio/flac\" title=\"Lossless (FLAC)\">\n        \
+         <podcast:source uri=\"https://music.example/3.flac\"/>\n      \
+         </podcast:alternateEnclosure>\n      \
+         <podcast:alternateEnclosure type=\"audio/mpeg\" title=\"MP3\" default=\"true\">\n        \
+         <podcast:source uri=\"https://music.example/3-alt.mp3\"/>\n      \
+         </podcast:alternateEnclosure>\n      \
+         <podcast:episode>3</podcast:episode>\n    </item>\n  </channel>"
+    );
+    let text = draft_text(&collection, id);
+    assert!(text.contains(&expected), "{text}");
 }
 
 const VALUE_FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">

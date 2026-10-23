@@ -299,6 +299,23 @@ fn a_new_item_takes_the_sequence_of_the_last_hosted_item() {
     assert!(title < guid, "{after}");
 }
 
+/// An item with `enclosure` and one `podcast:alternateEnclosure`, with
+/// `height` and `timeOffset`, attributes that the model does not have
+/// (ADR 0033).
+const ALTERNATE_ENCLOSURE_EXAMPLE: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">\n  <channel>\n    <item>\n      <guid>g1</guid>\n      <enclosure url=\"https://example.com/a.mp3\" type=\"audio/mpeg\"/>\n      <podcast:alternateEnclosure type=\"video/mp4\" length=\"100\" height=\"720\" timeOffset=\"1.5\">\n        <podcast:source uri=\"https://example.com/a.mp4\"/>\n      </podcast:alternateEnclosure>\n    </item>\n  </channel>\n</rss>";
+
+#[test]
+fn a_changed_alternate_enclosure_length_keeps_height_and_time_offset() {
+    let after = edit(ALTERNATE_ENCLOSURE_EXAMPLE, |f| {
+        f.items[0].alternate_enclosures[0].length = Some("200".into());
+    });
+    let changed = changed_lines(ALTERNATE_ENCLOSURE_EXAMPLE, &after);
+    assert_eq!(changed.len(), 1, "{changed:?}");
+    assert!(changed[0].contains(r#"length="200""#));
+    assert!(changed[0].contains(r#"height="720""#));
+    assert!(changed[0].contains(r#"timeOffset="1.5""#));
+}
+
 #[test]
 fn a_channel_element_absent_from_the_hosted_file_keeps_its_old_position() {
     let hosted = Document::parse(SPLIT_EXAMPLE).unwrap();

@@ -500,11 +500,12 @@ pub fn release_path(feed_path: &str, file_name: &str) -> String {
 }
 
 /// Each pending file of a draft that the draft refers to, as the address of
-/// an enclosure or of an image (ADR 0032 item 10).
+/// an enclosure, of an image, or of a `podcast:source` (ADR 0032 item 10,
+/// ADR 0033 item 7).
 ///
 /// The draft refers to a pending file when `connector.public_url` of its
-/// path is the `url` of an enclosure. It also refers to a file that is the
-/// `href` of `itunes:image` of the channel or of an item.
+/// path is the `url` of an enclosure, the `uri` of a `podcast:source`, or
+/// the `href` of `itunes:image` of the channel or of an item.
 ///
 /// # Errors
 ///
@@ -525,6 +526,11 @@ pub fn referenced_files(
                 .and_then(|enclosure| enclosure.url.as_deref()),
         );
         urls.extend(item.value.image.as_deref());
+        for enclosure in &item.value.alternate_enclosures {
+            for source in &enclosure.sources {
+                urls.extend(source.uri.as_deref());
+            }
+        }
     }
     let files = collection
         .draft_files(id)?

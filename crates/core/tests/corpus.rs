@@ -125,3 +125,43 @@ fn the_corpus_has_persons_transcripts_fundings_and_self_links() {
     assert!(items().any(|i| !i.transcripts.is_empty()));
     assert!(items().any(|i| i.enclosure.is_some() && i.guid.is_some()));
 }
+
+/// Task 019a: the core reads `podcast:alternateEnclosure` and its
+/// `podcast:source`, with the attributes that the Jimmy V feed has
+/// (ADR 0033).
+#[test]
+fn the_jimmy_v_feed_has_alternate_enclosures_with_their_type_length_bitrate_and_source() {
+    let (_, bytes) = corpus()
+        .into_iter()
+        .find(|(name, _)| name == "jimmyv4v-music-jimmy-v-music.xml")
+        .expect("the Jimmy V feed is in the corpus");
+    let feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
+    let alternates: Vec<_> = feed
+        .items
+        .iter()
+        .flat_map(|i| i.alternate_enclosures.iter())
+        .collect();
+    assert_eq!(alternates.len(), 3, "the corpus file changed");
+
+    let water_is_sound = &alternates[0];
+    assert_eq!(water_is_sound.media_type.as_deref(), Some("video/mp4"));
+    assert_eq!(water_is_sound.length.as_deref(), Some("48611412"));
+    assert_eq!(water_is_sound.bitrate.as_deref(), Some("1561599"));
+    assert_eq!(
+        water_is_sound.sources[0].uri.as_deref(),
+        Some(
+            "https://music.jimmyv4v.com/bands/jimmy-v/jimmy-v-collection/water_is_sound/Water_is_Sound-Jimmy_V.mp4"
+        )
+    );
+
+    let woman_of_the_year = &alternates[1];
+    assert_eq!(woman_of_the_year.media_type.as_deref(), Some("video/mp4"));
+    assert_eq!(woman_of_the_year.length.as_deref(), Some("75591122"));
+    assert_eq!(woman_of_the_year.bitrate.as_deref(), Some("3304174"));
+    assert_eq!(
+        woman_of_the_year.sources[0].uri.as_deref(),
+        Some(
+            "https://op3.dev/e/music.jimmyv4v.com/bands/jimmy-v/jimmy-v-collection/woman-of-the-year/jimmy-v-woman-of-the-year.mp4"
+        )
+    );
+}

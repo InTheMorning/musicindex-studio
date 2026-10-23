@@ -325,12 +325,14 @@ impl Names {
 /// sequence. An entry more than the existing elements goes after the last
 /// element of the kind, or before the first element in `before`, or at the
 /// end of the parent. When the parent has no element of that kind, a new
-/// entry can go to its position in `hosted` instead (ADR 0031). An existing
-/// element more than the entries goes out.
+/// entry can go to its position in `hosted` instead (ADR 0031), or, with no
+/// such position, after the last child of a kind in `after`
+/// (ADR 0033 item 6). An existing element more than the entries goes out.
 pub(crate) fn write_list<T: Modeled>(
     parent: &mut Element,
     entries: &[Entry<T>],
     before: &[(Ns, &str)],
+    after: &[(Ns, &str)],
     hosted: Option<&[HostedType]>,
     names: &mut Names,
 ) {
@@ -377,6 +379,7 @@ pub(crate) fn write_list<T: Modeled>(
             &slots,
             entries.len(),
             before,
+            after,
             hosted,
             (T::NS, T::NAME),
         );
@@ -438,7 +441,8 @@ pub(crate) fn write_single(
             let mut element = names.element(ns, local);
             make(&mut element, names);
             let children = parent.children_mut();
-            let (index, indent) = insertion_point(children, &[], 0, before, hosted, (ns, local));
+            let (index, indent) =
+                insertion_point(children, &[], 0, before, &[], hosted, (ns, local));
             let after = insert(children, index, indent.as_ref(), element);
             xml::format_new(parent, after - 1);
         }
@@ -554,6 +558,7 @@ impl<'p, 'n> Children<'p, 'n> {
             self.parent,
             entries,
             self.before,
+            &[],
             self.hosted.as_deref(),
             self.names,
         );
@@ -565,6 +570,20 @@ impl<'p, 'n> Children<'p, 'n> {
             self.parent,
             entries,
             before,
+            &[],
+            self.hosted.as_deref(),
+            self.names,
+        );
+    }
+
+    /// Write the children of kind `T`. A new one with no hosted position
+    /// goes after the last child of a kind in `after` (ADR 0033 item 6).
+    pub(crate) fn list_after<T: Modeled>(&mut self, entries: &[Entry<T>], after: &[(Ns, &str)]) {
+        write_list(
+            self.parent,
+            entries,
+            self.before,
+            after,
             self.hosted.as_deref(),
             self.names,
         );
@@ -591,12 +610,15 @@ fn positions(parent: &Element, mut matches: impl FnMut(&Element) -> bool) -> Vec
 /// Find where a new element goes, and the indentation to put before it.
 ///
 /// `element_type` is the namespace and the local name of the new element.
-/// `hosted` is the hosted sequence of the parent (ADR 0031).
+/// `hosted` is the hosted sequence of the parent (ADR 0031). `after` gives
+/// the kinds that a new element with no hosted position goes after, when the
+/// parent has a child of one of them (ADR 0033 item 6).
 fn insertion_point(
     children: &[Node],
     slots: &[usize],
     used: usize,
     before: &[(Ns, &str)],
+    after: &[(Ns, &str)],
     hosted: Option<&[HostedType]>,
     element_type: (Ns, &str),
 ) -> (usize, Option<Node>) {
@@ -610,6 +632,14 @@ fn insertion_point(
     // (ADR 0031).
     if slots.is_empty()
         && let Some(point) = hosted.and_then(|h| hosted_insertion_point(children, h, element_type))
+    {
+        return point;
+    }
+    // After the last child of a preferred kind, when the parent has no
+    // element of this kind and no hosted position for it
+    // (ADR 0033 item 6).
+    if slots.is_empty()
+        && let Some(point) = after_last_of(children, after)
     {
         return point;
     }
@@ -629,6 +659,16 @@ fn insertion_point(
         Some(last) => (last + 1, xml::indent_before(children, last)),
         None => (children.len(), None),
     }
+}
+
+/// The point after the last child of one of the kinds in `anchors`, or none
+/// when `children` has no such child (ADR 0033 item 6).
+fn after_last_of(children: &[Node], anchors: &[(Ns, &str)]) -> Option<(usize, Option<Node>)> {
+    let last = children.iter().rposition(|n| match n {
+        Node::Element(e) => anchors.iter().any(|&(ns, local)| e.is(ns, local)),
+        _ => false,
+    })?;
+    Some((last + 1, xml::indent_before(children, last)))
 }
 
 /// Find the hosted position of a new element of `element_type` (ADR 0031).

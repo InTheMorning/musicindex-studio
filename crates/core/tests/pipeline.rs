@@ -5,7 +5,7 @@ use std::fs;
 
 use studio_core::collection::{Collection, ConnectorId, DraftFile, FeedId};
 use studio_core::connector::{self, Connector, Expected, LocalFolder};
-use studio_core::feed::{Enclosure, Entry, Feed, Item};
+use studio_core::feed::{AlternateEnclosure, Enclosure, Entry, Feed, Item, Source};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::imports;
 use studio_core::pipeline::{self, DiffFile, DiffId, PipelineErrorKind};
@@ -494,6 +494,61 @@ fn add_referenced_file(s: &FileSetup, path: &str, bytes: &[u8]) -> DraftFile {
     })
     .unwrap();
     file
+}
+
+/// Add an item whose only address of a pending file is the `uri` of a
+/// `podcast:source` of an alternate enclosure (ADR 0033 item 7).
+fn add_referenced_source_file(s: &FileSetup, path: &str, bytes: &[u8]) -> DraftFile {
+    let file = put_pending_file(s, path, bytes);
+    let url = s.connector.public_url(path).unwrap();
+    let item = Item {
+        title: Some(path.to_owned()),
+        alternate_enclosures: vec![Entry::new(AlternateEnclosure {
+            media_type: Some(file.media_type.clone()),
+            sources: vec![Entry::new(Source {
+                uri: Some(url),
+                ..Source::default()
+            })],
+            ..AlternateEnclosure::default()
+        })],
+        ..Item::default()
+    };
+    pipeline::edit_draft(&s.collection, s.feed, move |f| {
+        f.items.push(Entry::new(item));
+    })
+    .unwrap();
+    file
+}
+
+#[test]
+fn a_pending_file_that_only_a_source_refers_to_is_in_the_diff_and_goes_to_the_host() {
+    let mut s = file_setup();
+    let file = add_referenced_source_file(&s, "album/my-album/01.flac", b"lossless");
+
+    let diff = pipeline::diff(&s.collection, &s.connector, s.feed).unwrap();
+    assert_eq!(
+        diff.files,
+        [DiffFile {
+            path: file.path.clone(),
+            size: file.size,
+            media_type: file.media_type.clone(),
+        }]
+    );
+
+    pipeline::write_draft(&mut s.collection, &s.connector, &s.store, s.feed, &diff.id).unwrap();
+
+    assert_eq!(
+        s.connector.writes(),
+        [
+            "album/my-album/01.flac".to_owned(),
+            "album/my-album.xml".to_owned(),
+        ]
+    );
+    assert!(s.collection.draft_files(s.feed).unwrap().is_empty());
+    assert_eq!(
+        fs::read(s.dir.path().join("album/my-album/01.flac")).unwrap(),
+        b"lossless"
+    );
 }
 
 #[test]

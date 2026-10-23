@@ -11,7 +11,7 @@ Read and write `podcast:alternateEnclosure` in the typed model of an item. A pen
 
 Inspect: `crates/core/src/feed.rs` (`Item`), `crates/core/src/feed/value.rs` (`ValueBlock`, a model of an element with child lists), `crates/core/src/feed/elements.rs` (`element_type!`), `crates/core/src/feed/sync.rs` (the insertion point and `hosted_insertion_point`), `crates/core/src/feed/links.rs`, `crates/core/src/pipeline.rs` (`referenced_files`), `crates/core/tests/corpus/jimmyv4v-music-jimmy-v-music.xml`, the corpus tests and the pipeline tests.
 
-Change: `feed.rs`, a new `crates/core/src/feed/enclosures.rs` or `value.rs` only if the pattern requires it, `elements.rs`, `sync.rs`, `links.rs`, `pipeline.rs`, and the tests.
+Change: `feed.rs`, a new `crates/core/src/feed/enclosures.rs` or `value.rs` only if the pattern requires it, `elements.rs`, `sync.rs`, `pipeline.rs`, and the tests.
 
 Do not change: `crates/api`, the UI, `media.rs`, `collection.rs`.
 
@@ -24,7 +24,7 @@ These choices are fixed. Do not change them.
 - `Item` gets `pub alternate_enclosures: Vec<Entry<AlternateEnclosure>>` with `#[serde(default)]`, so that a model with no such field also reads.
 - The read and the write keep each attribute and each child that the model does not have, such as `height`, `timeOffset` and `podcast:integrity`. A read and a write with no edit give the same bytes.
 - A new `podcast:alternateEnclosure` in an item with none uses the hosted position of ADR 0031. When that gives no point, it goes directly after the `enclosure` of the item. A second new one goes after the first.
-- `links.rs` checks the `uri` of each source, with the field path `items/{i}/alternate_enclosures/{j}/sources/{k}/uri`.
+- The address check of ADR 0023 does not check a source `uri`. The namespace allows other schemes there, such as `ipfs://`.
 - `referenced_files` also counts the `uri` of each `podcast:source` of each item.
 
 ## Steps
@@ -47,7 +47,7 @@ Mechanical:
 - A test adds two alternative enclosures to a new item that has `title`, `guid`, `enclosure` and `podcast:episode`. The written item has the sequence `title`, `guid`, `enclosure`, the two alternative enclosures, `podcast:episode`, each with its own line and indent.
 - A test changes the `length` of a hosted alternative enclosure. The written file keeps `height` and `timeOffset`.
 - A pipeline test: a pending file that only a `podcast:source` refers to is in the diff and goes to the host.
-- A source `uri` that is not a web address gives its field path in the address check.
+- A source `uri` with the scheme `ipfs://` does not stop a write.
 - The three commit checks pass.
 
 Visual:

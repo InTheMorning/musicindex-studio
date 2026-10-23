@@ -10,6 +10,7 @@
 //! between a missing attribute and an empty one.
 
 mod elements;
+mod enclosures;
 mod links;
 mod sync;
 mod value;
@@ -17,9 +18,10 @@ mod value;
 use std::fmt;
 
 pub use elements::{
-    AtomLink, Enclosure, Funding, Image, License, Locked, Person, Recipient, RemoteItem,
+    AtomLink, Enclosure, Funding, Image, License, Locked, Person, Recipient, RemoteItem, Source,
     Transcript, Txt,
 };
+pub use enclosures::AlternateEnclosure;
 pub use links::{BadAddress, is_web_address};
 use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
 pub use sync::{Entry, KeyError};
@@ -352,6 +354,11 @@ pub struct Item {
     pub guid: Option<String>,
     /// `enclosure`.
     pub enclosure: Option<Enclosure>,
+    /// The `podcast:alternateEnclosure` elements: other files of the media
+    /// of the item, such as a lossless file next to an MP3 file
+    /// (ADR 0033). A model with no such field also reads, as an empty list.
+    #[serde(default)]
+    pub alternate_enclosures: Vec<Entry<AlternateEnclosure>>,
     /// `pubDate`, as the source wrote it.
     pub pub_date: Option<String>,
     /// `itunes:duration`, as the source wrote it.
@@ -386,6 +393,7 @@ impl Item {
             description: read_text(element, Ns::None, "description"),
             guid: read_text(element, Ns::None, "guid"),
             enclosure: read_one(element),
+            alternate_enclosures: read_list(element),
             pub_date: read_text(element, Ns::None, "pubDate"),
             duration: read_text(element, Ns::Itunes, "duration"),
             episode: read_text(element, Ns::Podcast, "episode"),
@@ -426,6 +434,9 @@ impl Item {
         c.text(Ns::None, "description", self.description.as_ref());
         c.text(Ns::None, "guid", self.guid.as_ref());
         c.one(self.enclosure.as_ref());
+        // A new alternate enclosure with no hosted position goes directly
+        // after the enclosure (ADR 0031, ADR 0033 item 6).
+        c.list_after(&self.alternate_enclosures, &[(Ns::None, "enclosure")]);
         c.text(Ns::None, "pubDate", self.pub_date.as_ref());
         c.text(Ns::Itunes, "duration", self.duration.as_ref());
         c.text(Ns::Podcast, "episode", self.episode.as_ref());
@@ -448,6 +459,10 @@ impl Item {
             draft.map(|d| d.transcripts.as_slice()),
         )?;
         adopt_list(&mut self.txts, draft.map(|d| d.txts.as_slice()))?;
+        adopt_list(
+            &mut self.alternate_enclosures,
+            draft.map(|d| d.alternate_enclosures.as_slice()),
+        )?;
         adopt_list(&mut self.values, draft.map(|d| d.values.as_slice()))
     }
 }

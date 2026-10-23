@@ -132,6 +132,17 @@ element_type! {
 }
 
 element_type! {
+    /// `podcast:source`: one address of a `podcast:alternateEnclosure`
+    /// (ADR 0033).
+    Source = (Ns::Podcast, "source") {
+        /// `uri`.
+        uri => "uri",
+        /// `contentType`: the media type of the file at `uri`.
+        content_type => "contentType",
+    }
+}
+
+element_type! {
     /// `podcast:transcript`: a transcript or captions file of an item.
     Transcript = (Ns::Podcast, "transcript") {
         /// `url`.

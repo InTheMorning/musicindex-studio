@@ -74,6 +74,8 @@ pub struct FileList {
 pub enum ConnectorErrorKind {
     /// The file on the host does not have the expected version.
     Conflict,
+    /// The file on the host does not exist.
+    NotFound,
     /// The path is not a relative path in the connector.
     InvalidPath,
     /// The connector configuration is not valid, or the kind is not known.
@@ -148,6 +150,17 @@ pub trait Connector {
     ///
     /// Gives a [`ConnectorError`] when the list fails.
     fn list(&self) -> Result<FileList, ConnectorError>;
+
+    /// Delete a file only when the file on the host has the expected
+    /// version. Studio reads the version from its inventory, so it does
+    /// not delete a file that changed after the scan (ADR 0036 item 16).
+    ///
+    /// # Errors
+    ///
+    /// Gives [`ConnectorErrorKind::Conflict`] when the file on the host has
+    /// a different version, and [`ConnectorErrorKind::NotFound`] when the
+    /// file does not exist.
+    fn delete(&self, path: &str, expected: &Version) -> Result<(), ConnectorError>;
 }
 
 /// Make the connector of a collection row.

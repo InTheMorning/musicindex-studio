@@ -447,6 +447,14 @@ impl Connector for RecordingConnector {
     fn list(&self) -> Result<connector::FileList, connector::ConnectorError> {
         self.inner.list()
     }
+
+    fn delete(
+        &self,
+        path: &str,
+        expected: &connector::Version,
+    ) -> Result<(), connector::ConnectorError> {
+        self.inner.delete(path, expected)
+    }
 }
 
 /// A new album draft, with a connector that records each write and a store

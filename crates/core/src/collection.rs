@@ -11,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
+use serde_json::Value;
 
 use crate::address::{self, Address, AddressSource};
 use crate::connector::Version;
@@ -117,6 +118,43 @@ CREATE TABLE draft_files (
     PRIMARY KEY (feed_id, path)
 );
 ",
+    r"
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+ALTER TABLE feeds ADD COLUMN folder TEXT;
+ALTER TABLE feeds ADD COLUMN files_connector_id INTEGER REFERENCES connectors(id);
+CREATE UNIQUE INDEX feeds_folder ON feeds(folder) WHERE folder IS NOT NULL;
+CREATE TABLE library_files (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    local INTEGER NOT NULL,
+    source_url TEXT,
+    connector_id INTEGER REFERENCES connectors(id),
+    added_at INTEGER NOT NULL,
+    UNIQUE (feed_id, path)
+);
+CREATE TABLE host_files (
+    connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    version TEXT NOT NULL,
+    sha256 TEXT,
+    seen_at INTEGER NOT NULL,
+    PRIMARY KEY (connector_id, path)
+);
+CREATE TABLE draft_operations (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('copy', 'delete')),
+    library_file_id INTEGER REFERENCES library_files(id) ON DELETE CASCADE,
+    connector_id INTEGER NOT NULL REFERENCES connectors(id),
+    path TEXT NOT NULL,
+    added_at INTEGER NOT NULL
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -191,6 +229,16 @@ pub struct FeedId(pub i64);
 #[serde(transparent)]
 pub struct SnapshotId(pub i64);
 
+/// The ID of a library file in the collection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
+pub struct LibraryFileId(pub i64);
+
+/// The ID of a draft operation in the collection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
+pub struct DraftOperationId(pub i64);
+
 /// A connector as the collection keeps it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ConnectorRow {
@@ -230,6 +278,12 @@ pub struct FeedRow {
     pub medium: Option<String>,
     /// The version marker from the last read or write.
     pub last_version: Option<Version>,
+    /// The release folder of the feed in the library (ADR 0036 item 4).
+    pub folder: Option<String>,
+    /// The default host of the files of the release. `None` means that
+    /// the write pipeline still decides a default elsewhere (ADR 0036
+    /// item 4 and item 8).
+    pub files_connector_id: Option<ConnectorId>,
 }
 
 /// A draft of a feed (ADR 0007).
@@ -267,6 +321,106 @@ pub struct DraftFile {
     pub media_type: String,
     /// The SHA-256 of the file, as the name of its copy in the data folder.
     pub sha256: String,
+}
+
+/// A file of a release folder in the library (ADR 0036 item 4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LibraryFile {
+    /// The ID.
+    pub id: LibraryFileId,
+    /// The feed of the release.
+    pub feed_id: FeedId,
+    /// The path of the file in the release folder.
+    pub path: String,
+    /// The size of the file, in bytes.
+    pub size: u64,
+    /// The SHA-256 of the file.
+    pub sha256: String,
+    /// The media type, such as `audio/mpeg`.
+    pub media_type: String,
+    /// True when the bytes of the file are in the library.
+    pub local: bool,
+    /// The address that the file came from, when Studio knows one.
+    pub source_url: Option<String>,
+    /// The host that the user selected for the file. `None` means the
+    /// default host of the release (ADR 0036 item 4 and item 8).
+    pub connector_id: Option<ConnectorId>,
+    /// The time that Studio added the row, in seconds after the Unix
+    /// epoch.
+    pub added_at: i64,
+}
+
+/// A file that Studio saw on a host, kept in the inventory (ADR 0036 item
+/// 4 and item 6).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HostFile {
+    /// The host.
+    pub connector_id: ConnectorId,
+    /// The path of the file on the host.
+    pub path: String,
+    /// The size of the file, in bytes.
+    pub size: u64,
+    /// The version marker of the file.
+    pub version: Version,
+    /// The SHA-256 of the file, when Studio read it. Studio reads it only
+    /// when the size agrees with a library file (ADR 0036 item 6).
+    pub sha256: Option<String>,
+    /// The time that Studio last saw the file, in seconds after the Unix
+    /// epoch.
+    pub seen_at: i64,
+}
+
+/// The kind of a [`DraftOperation`] (ADR 0036 item 4 and item 12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DraftOperationKind {
+    /// Copy a library file to a host.
+    Copy,
+    /// Delete a file from a host.
+    Delete,
+}
+
+impl DraftOperationKind {
+    /// The text of the kind in the collection.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Copy => "copy",
+            Self::Delete => "delete",
+        }
+    }
+
+    /// The kind for its text in the collection.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "copy" => Some(Self::Copy),
+            "delete" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
+
+/// A host operation that the user started in a draft: a copy of a
+/// library file to a host, or a deletion of a host file (ADR 0036 item 4
+/// and item 12).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DraftOperation {
+    /// The ID.
+    pub id: DraftOperationId,
+    /// The feed of the draft.
+    pub feed_id: FeedId,
+    /// The kind of operation.
+    pub kind: DraftOperationKind,
+    /// The library file to copy. `None` for a deletion.
+    pub library_file_id: Option<LibraryFileId>,
+    /// The host.
+    pub connector_id: ConnectorId,
+    /// The path of the file on the host.
+    pub path: String,
+    /// The time that the user started the operation, in seconds after
+    /// the Unix epoch.
+    pub added_at: i64,
 }
 
 /// A recipient that the collection knows, from a feed that Studio read, or
@@ -360,6 +514,41 @@ impl Collection {
             tx.pragma_update(None, "user_version", version)?;
             tx.commit()?;
         }
+        Ok(())
+    }
+
+    /// A setting value, or `None` when it is not set (ADR 0036 item 1).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails, or when the stored
+    /// value is not valid JSON.
+    pub fn setting(&self, key: &str) -> Result<Option<Value>, CollectionError> {
+        let text: Option<String> = self
+            .db
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        text.map(|text| {
+            serde_json::from_str(&text)
+                .map_err(|e| CollectionError::new(format!("setting {key:?}: {e}")))
+        })
+        .transpose()
+    }
+
+    /// Keep a setting value (ADR 0036 item 1).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_setting(&self, key: &str, value: &Value) -> Result<(), CollectionError> {
+        let text = value.to_string();
+        self.db.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT (key) DO UPDATE SET value = ?2",
+            params![key, text],
+        )?;
         Ok(())
     }
 
@@ -640,6 +829,40 @@ impl Collection {
         Ok(())
     }
 
+    /// Give a feed its release folder in the library (ADR 0035 item 2,
+    /// ADR 0036 item 4).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails, or when a different
+    /// feed already has this folder.
+    pub fn set_feed_folder(&self, id: FeedId, folder: &str) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET folder = ?2 WHERE id = ?1",
+            params![id.0, folder],
+        )?;
+        Ok(())
+    }
+
+    /// Give a feed its default host for files. `None` means that the
+    /// write pipeline decides the default elsewhere (ADR 0036 item 4 and
+    /// item 8).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_files_connector(
+        &self,
+        id: FeedId,
+        connector: Option<ConnectorId>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET files_connector_id = ?2 WHERE id = ?1",
+            params![id.0, connector.map(|c| c.0)],
+        )?;
+        Ok(())
+    }
+
     /// Replace the configuration of a connector. The configuration must
     /// contain no secret.
     ///
@@ -789,6 +1012,239 @@ impl Collection {
             params![id.0, sha256],
             |r| r.get(0),
         )?)
+    }
+
+    /// Keep the row of a file of a release folder (ADR 0036 item 4).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails, or when the feed
+    /// already has a file at this path.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_library_file(
+        &self,
+        feed: FeedId,
+        path: &str,
+        size: u64,
+        sha256: &str,
+        media_type: &str,
+        local: bool,
+        source_url: Option<&str>,
+    ) -> Result<LibraryFileId, CollectionError> {
+        let size = i64::try_from(size).unwrap_or(i64::MAX);
+        self.db.execute(
+            "INSERT INTO library_files (feed_id, path, size, sha256, media_type, local, source_url, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![feed.0, path, size, sha256, media_type, local, source_url, now()],
+        )?;
+        Ok(LibraryFileId(self.db.last_insert_rowid()))
+    }
+
+    /// Each file of a release folder, by path (ADR 0036 item 4).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn library_files(&self, feed: FeedId) -> Result<Vec<LibraryFile>, CollectionError> {
+        let mut statement = self.db.prepare(&format!(
+            "{LIBRARY_FILE_SELECT} WHERE feed_id = ?1 ORDER BY path"
+        ))?;
+        let rows = statement.query_map([feed.0], library_file_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// One file of a release folder.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the file does not
+    /// exist.
+    pub fn library_file(&self, id: LibraryFileId) -> Result<LibraryFile, CollectionError> {
+        self.db
+            .query_row(
+                &format!("{LIBRARY_FILE_SELECT} WHERE id = ?1"),
+                [id.0],
+                library_file_row,
+            )
+            .optional()?
+            .ok_or_else(|| {
+                CollectionError::with_kind(
+                    CollectionErrorKind::NotFound,
+                    format!("library file {} does not exist", id.0),
+                )
+            })
+    }
+
+    /// Give a library file the host that the user selected, or `None`
+    /// for the default host of the release (ADR 0036 item 4 and item 8).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_library_file_connector(
+        &self,
+        id: LibraryFileId,
+        connector: Option<ConnectorId>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE library_files SET connector_id = ?2 WHERE id = ?1",
+            params![id.0, connector.map(|c| c.0)],
+        )?;
+        Ok(())
+    }
+
+    /// Remove the row of a file of a release folder. The file in the
+    /// folder does not change.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the file does not
+    /// exist.
+    pub fn remove_library_file(&self, id: LibraryFileId) -> Result<(), CollectionError> {
+        let changed = self
+            .db
+            .execute("DELETE FROM library_files WHERE id = ?1", [id.0])?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("library file {} does not exist", id.0),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Keep the row of a file that Studio saw on a host. A later call
+    /// with the same host and path replaces the row, and clears a
+    /// SHA-256 from an earlier call (ADR 0036 item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn put_host_file(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+        size: u64,
+        version: &Version,
+    ) -> Result<(), CollectionError> {
+        let size = i64::try_from(size).unwrap_or(i64::MAX);
+        self.db.execute(
+            "INSERT INTO host_files (connector_id, path, size, version, sha256, seen_at)
+             VALUES (?1, ?2, ?3, ?4, NULL, ?5)
+             ON CONFLICT (connector_id, path)
+             DO UPDATE SET size = ?3, version = ?4, seen_at = ?5,
+                 sha256 = CASE WHEN host_files.version = ?4 THEN host_files.sha256 ELSE NULL END",
+            params![connector.0, path, size, version.as_str(), now()],
+        )?;
+        Ok(())
+    }
+
+    /// Each file that Studio saw on a host, by path (ADR 0036 item 4 and
+    /// item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn host_files(&self, connector: ConnectorId) -> Result<Vec<HostFile>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT connector_id, path, size, version, sha256, seen_at FROM host_files
+             WHERE connector_id = ?1 ORDER BY path",
+        )?;
+        let rows = statement.query_map([connector.0], host_file_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Remove the row of a file that Studio no longer sees on a host. A
+    /// path with no row is not an error.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_host_file(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM host_files WHERE connector_id = ?1 AND path = ?2",
+            params![connector.0, path],
+        )?;
+        Ok(())
+    }
+
+    /// Keep the SHA-256 that Studio read from a host file. Studio reads
+    /// it only when the size agrees with a library file (ADR 0036 item
+    /// 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_host_file_sha(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+        sha256: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE host_files SET sha256 = ?3 WHERE connector_id = ?1 AND path = ?2",
+            params![connector.0, path, sha256],
+        )?;
+        Ok(())
+    }
+
+    /// Keep the row of a host operation that the user started in a draft
+    /// (ADR 0036 item 4 and item 12).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_draft_operation(
+        &self,
+        feed: FeedId,
+        kind: DraftOperationKind,
+        library_file: Option<LibraryFileId>,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<DraftOperationId, CollectionError> {
+        self.db.execute(
+            "INSERT INTO draft_operations (feed_id, kind, library_file_id, connector_id, path, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                feed.0,
+                kind.as_str(),
+                library_file.map(|f| f.0),
+                connector.0,
+                path,
+                now()
+            ],
+        )?;
+        Ok(DraftOperationId(self.db.last_insert_rowid()))
+    }
+
+    /// Each host operation of a draft, in the sequence that the user
+    /// started them (ADR 0036 item 4 and item 12).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn draft_operations(&self, feed: FeedId) -> Result<Vec<DraftOperation>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT id, feed_id, kind, library_file_id, connector_id, path, added_at
+             FROM draft_operations WHERE feed_id = ?1 ORDER BY id",
+        )?;
+        let rows = statement.query_map([feed.0], draft_operation_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Remove each host operation of a draft (ADR 0036 item 5).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_operations(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db
+            .execute("DELETE FROM draft_operations WHERE feed_id = ?1", [feed.0])?;
+        Ok(())
     }
 
     /// Keep a snapshot of a live file. A snapshot does not change after this.
@@ -1052,7 +1508,7 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source FROM feeds";
+const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id FROM feeds";
 
 /// Keep or remove the address of one source. An empty address is no address.
 fn put_address(
@@ -1207,6 +1663,51 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
             .as_deref()
             .and_then(AddressSource::parse),
         address_differences: Vec::new(),
+        folder: r.get(9)?,
+        files_connector_id: r.get::<_, Option<i64>>(10)?.map(ConnectorId),
+    })
+}
+
+fn library_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryFile> {
+    let size: i64 = r.get(3)?;
+    Ok(LibraryFile {
+        id: LibraryFileId(r.get(0)?),
+        feed_id: FeedId(r.get(1)?),
+        path: r.get(2)?,
+        size: u64::try_from(size).unwrap_or(0),
+        sha256: r.get(4)?,
+        media_type: r.get(5)?,
+        local: r.get(6)?,
+        source_url: r.get(7)?,
+        connector_id: r.get::<_, Option<i64>>(8)?.map(ConnectorId),
+        added_at: r.get(9)?,
+    })
+}
+
+const LIBRARY_FILE_SELECT: &str = "SELECT id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at FROM library_files";
+
+fn host_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HostFile> {
+    let size: i64 = r.get(2)?;
+    Ok(HostFile {
+        connector_id: ConnectorId(r.get(0)?),
+        path: r.get(1)?,
+        size: u64::try_from(size).unwrap_or(0),
+        version: Version::new(r.get::<_, String>(3)?),
+        sha256: r.get(4)?,
+        seen_at: r.get(5)?,
+    })
+}
+
+fn draft_operation_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<DraftOperation> {
+    let kind: String = r.get(2)?;
+    Ok(DraftOperation {
+        id: DraftOperationId(r.get(0)?),
+        feed_id: FeedId(r.get(1)?),
+        kind: DraftOperationKind::parse(&kind).expect("the kind column allows only copy or delete"),
+        library_file_id: r.get::<_, Option<i64>>(3)?.map(LibraryFileId),
+        connector_id: ConnectorId(r.get(4)?),
+        path: r.get(5)?,
+        added_at: r.get(6)?,
     })
 }
 
@@ -1632,6 +2133,122 @@ mod tests {
         };
         collection.add_draft_file(FeedId(1), &file).unwrap();
         assert_eq!(collection.draft_files(FeedId(1)).unwrap(), [file]);
+    }
+
+    #[test]
+    fn a_database_at_schema_version_4_opens_and_gets_the_library_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..4] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", 4).unwrap();
+        db.execute(
+            "INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+
+        // Settings.
+        assert!(collection.setting("library_root").unwrap().is_none());
+        collection
+            .set_setting("library_root", &serde_json::json!("/srv/library"))
+            .unwrap();
+        assert_eq!(
+            collection.setting("library_root").unwrap(),
+            Some(serde_json::json!("/srv/library"))
+        );
+
+        // The feed folder and the default host of its files.
+        let feed = FeedId(1);
+        assert_eq!(collection.feed(feed).unwrap().folder, None);
+        collection.set_feed_folder(feed, "my-album").unwrap();
+        let connector = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        collection
+            .set_files_connector(feed, Some(connector))
+            .unwrap();
+        let row = collection.feed(feed).unwrap();
+        assert_eq!(row.folder.as_deref(), Some("my-album"));
+        assert_eq!(row.files_connector_id, Some(connector));
+
+        // Library files.
+        let file = collection
+            .add_library_file(feed, "01 Song.mp3", 10, "abc", "audio/mpeg", true, None)
+            .unwrap();
+        assert_eq!(
+            collection.library_files(feed).unwrap(),
+            [collection.library_file(file).unwrap()]
+        );
+        assert_eq!(collection.library_file(file).unwrap().path, "01 Song.mp3");
+        collection
+            .set_library_file_connector(file, Some(connector))
+            .unwrap();
+        assert_eq!(
+            collection.library_file(file).unwrap().connector_id,
+            Some(connector)
+        );
+
+        // The host inventory.
+        collection
+            .put_host_file(connector, "a.mp3", 10, &Version::new("sha256:1"))
+            .unwrap();
+        assert_eq!(collection.host_files(connector).unwrap().len(), 1);
+        collection
+            .set_host_file_sha(connector, "a.mp3", "abc")
+            .unwrap();
+        assert_eq!(
+            collection.host_files(connector).unwrap()[0]
+                .sha256
+                .as_deref(),
+            Some("abc")
+        );
+        // A scan with the same version keeps the SHA-256. A new version
+        // clears it (ADR 0036 item 6).
+        collection
+            .put_host_file(connector, "a.mp3", 10, &Version::new("sha256:1"))
+            .unwrap();
+        assert_eq!(
+            collection.host_files(connector).unwrap()[0]
+                .sha256
+                .as_deref(),
+            Some("abc")
+        );
+        collection
+            .put_host_file(connector, "a.mp3", 11, &Version::new("sha256:2"))
+            .unwrap();
+        assert_eq!(collection.host_files(connector).unwrap()[0].sha256, None);
+        collection.remove_host_file(connector, "a.mp3").unwrap();
+        assert!(collection.host_files(connector).unwrap().is_empty());
+
+        // Draft operations.
+        let operation = collection
+            .add_draft_operation(
+                feed,
+                DraftOperationKind::Copy,
+                Some(file),
+                connector,
+                "a.mp3",
+            )
+            .unwrap();
+        let operations = collection.draft_operations(feed).unwrap();
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].id, operation);
+        assert_eq!(operations[0].kind, DraftOperationKind::Copy);
+        collection.remove_draft_operations(feed).unwrap();
+        assert!(collection.draft_operations(feed).unwrap().is_empty());
+
+        collection.remove_library_file(file).unwrap();
+        assert_eq!(
+            collection.remove_library_file(file).unwrap_err().kind(),
+            CollectionErrorKind::NotFound
+        );
     }
 
     #[test]

@@ -29,3 +29,4 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
+| [021a](../tasks/studio-v1-task-021a-records-and-library-folder.md) | Pass after two corrections | (1) `put_host_file` cleared the SHA-256 at each scan, also when the version did not change, so task 021b would read each file again. It now keeps the SHA-256 for the same version, and a test covers it. (2) `put_file` and `write_feed_xml` did not check the folder name, so a folder `..` went out of the library. The folder name now has the check of a file name, and a test covers it. |

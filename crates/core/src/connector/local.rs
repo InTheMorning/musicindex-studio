@@ -170,6 +170,24 @@ impl Connector for LocalFolder {
         ))
     }
 
+    fn delete(&self, path: &str, expected: &Version) -> Result<(), ConnectorError> {
+        let full = self.full_path(path)?;
+        let Some(current) = self.read(path)? else {
+            return Err(ConnectorError::new(
+                ConnectorErrorKind::NotFound,
+                format!("{} does not exist", full.display()),
+            ));
+        };
+        if &current.version != expected {
+            return Err(ConnectorError::new(
+                ConnectorErrorKind::Conflict,
+                format!("{} changed on the host", full.display()),
+            ));
+        }
+        fs::remove_file(&full).map_err(|e| io_error(&full, &e))?;
+        Ok(())
+    }
+
     fn list(&self) -> Result<FileList, ConnectorError> {
         let mut list = FileList::default();
         let mut folders = vec![(self.root.clone(), String::new(), 0_usize)];
@@ -248,6 +266,25 @@ mod tests {
             folder.public_url("a/b/01 Song (Live).mp3").as_deref(),
             Some("https://example.com/feeds/a/b/01%20Song%20%28Live%29.mp3")
         );
+    }
+
+    #[test]
+    fn delete_removes_a_file_with_the_correct_version_and_refuses_other_cases() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = LocalFolder::new(dir.path(), None);
+        let error = folder
+            .delete("a.mp3", &Version::new("sha256:0"))
+            .unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::NotFound);
+
+        let v1 = folder.write("a.mp3", b"one", &Expected::Absent).unwrap();
+        let stale = Version::new("sha256:0");
+        let error = folder.delete("a.mp3", &stale).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::Conflict);
+        assert!(dir.path().join("a.mp3").exists());
+
+        folder.delete("a.mp3", &v1).unwrap();
+        assert!(!dir.path().join("a.mp3").exists());
     }
 
     #[test]

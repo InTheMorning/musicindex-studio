@@ -57,7 +57,17 @@ Defects found during this check:
 
 The operator saw "Not saved" once. The browser tab used an address of a stopped Studio. With the current address, the removal saved.
 
+## Task 020 Check
+
+On 2026-10-23 the operator did the check of [task 020](../tasks/studio-v1-task-020-reuse-the-file-on-the-host.md) ([ADR 0034](../adr/0034-an-import-reuses-the-same-file-on-the-host.md)). Result: pass.
+
+- The operator imported a FLAC file that Studio had not written, added the track and wrote it. The operator then removed the track and imported the same file again. The two file rows showed "On the host already", and Studio added no pending file. The diff listed no file, and the write put only the feed file.
+- An import of the FLAC file of the task 019 check gave `file_exists` for its MP3 file. Its MP3 file came from the build before task 020, which wrote the ID3 frames in a random sequence. The refusal is correct (ADR 0034 item 3).
+- The badges of the file rows had different widths, so the file names were not in line. Each badge now has a width of 56 px.
+
 ## Open Items
+
+- A removed track and a new import of the same file give a new item GUID, so listener apps show a new track. A function to replace the audio of a track can keep its GUID.
 
 - The art preview of a pending file shows the placeholder, because the image is not on the host before the write. The preview can use the pending copy.
 - The row of a converted WAV file shows the name of the WAV file. It does not show the name of the FLAC file.

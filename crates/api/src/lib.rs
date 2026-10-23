@@ -12,6 +12,7 @@ mod workspace;
 
 use std::sync::{Arc, Mutex};
 
+use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::routing::{delete, get, post};
 
@@ -19,6 +20,10 @@ pub use access::Access;
 pub use axum::Router;
 pub use error::ApiError;
 pub use workspace::{VaultState, Workspace};
+
+/// The body limit of the upload route (ADR 0026, ADR 0032). The other
+/// routes keep the default limit of 2 MiB.
+const MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
 
 /// Serve a router until the process stops.
 ///
@@ -69,6 +74,12 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/feeds/new", post(routes::new_album_feed))
         .route("/feeds/{id}", delete(routes::delete_feed))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
+        .route(
+            "/feeds/{id}/files",
+            post(routes::upload_file)
+                .delete(routes::delete_pending_file)
+                .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
+        )
         .route(
             "/feeds/{id}/draft",
             get(routes::get_draft)

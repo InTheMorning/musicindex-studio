@@ -142,6 +142,37 @@ async fn set_up(app: &App) -> i64 {
     feed["id"].as_i64().unwrap()
 }
 
+/// The path of a test media file of task 018b, in `crates/core/tests/media`.
+fn media_path(file: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../core/tests/media")
+        .join(file)
+}
+
+/// Send one file to the upload route of a feed, with its name in the
+/// query (task 018c).
+async fn upload(app: &App, id: i64, name: &str, bytes: Vec<u8>) -> (StatusCode, Value) {
+    let uri = format!("/api/v1/feeds/{id}/files?name={}", url_encode(name));
+    let request = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::HOST, HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::from(bytes))
+        .unwrap();
+    let (status, body, _) = send(app, request).await;
+    (status, body)
+}
+
+/// True when the temporary upload folder has no file, or does not exist
+/// (task 018c).
+fn incoming_is_empty(app: &App) -> bool {
+    match std::fs::read_dir(app.data.path().join("imports/incoming")) {
+        Ok(mut entries) => entries.next().is_none(),
+        Err(_) => true,
+    }
+}
+
 #[tokio::test]
 async fn status_gives_the_vault_state_and_the_counts() {
     let app = app();
@@ -1525,4 +1556,142 @@ fn each_background_uses_a_token() {
             );
         }
     }
+}
+
+#[tokio::test]
+async fn an_upload_of_an_mp3_gives_its_release_address_and_facts_with_no_change_of_the_draft() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["path"], "album/tagged.mp3");
+    assert_eq!(body["url"], "https://music.example/album/tagged.mp3");
+    assert_eq!(body["media_type"], "audio/mpeg");
+    assert_eq!(body["kind"], "audio");
+    assert_eq!(body["title"], "Test Title");
+    assert_eq!(body["track_number"], 3);
+    assert_eq!(body["duration"], "00:00:01");
+    assert_eq!(body["converted_from_wav"], false);
+    assert_eq!(body["file_name"], "tagged.mp3");
+    assert!(body["size"].as_u64().unwrap() > 0);
+    assert!(incoming_is_empty(&app));
+
+    // The route does not change the model of the draft, so the diff lists
+    // no file: the draft does not refer to it yet (ADR 0032 item 10).
+    let (status, _) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(diff["files"], json!([]));
+}
+
+/// The name of an upload comes from the browser. A file goes only into
+/// the folder of its release, so the route keeps only the last part of the
+/// name, and refuses a name that is no file name.
+#[tokio::test]
+async fn an_upload_keeps_only_the_last_part_of_its_name() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+
+    let (status, body) = upload(&app, id, "../../sub/tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["path"], "album/tagged.mp3");
+
+    for name in ["..", "", "sub/"] {
+        let (status, body) = upload(&app, id, name, bytes.clone()).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{name}: {body}");
+        assert_eq!(body["error"]["code"], "invalid_name");
+    }
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn an_upload_of_a_wav_file_converts_it_to_flac() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.wav")).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.wav", bytes).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["path"], "album/tagged.flac");
+    assert_eq!(body["url"], "https://music.example/album/tagged.flac");
+    assert_eq!(body["media_type"], "audio/flac");
+    assert_eq!(body["converted_from_wav"], true);
+    assert_eq!(body["file_name"], "tagged.flac");
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn a_text_file_gives_415_and_a_repeated_name_gives_409() {
+    let app = app();
+    let id = set_up(&app).await;
+    let text = std::fs::read(media_path("not-media.txt")).unwrap();
+
+    let (status, body) = upload(&app, id, "not-media.txt", text).await;
+    assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(body["error"]["code"], "unsupported_media");
+    assert!(incoming_is_empty(&app));
+
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, _) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(incoming_is_empty(&app));
+
+    let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "file_pending");
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn an_upload_to_a_folder_with_no_public_address_gives_422() {
+    let app = app();
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "No address", "root": root })),
+    )
+    .await;
+    let (_, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "no_public_address");
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn a_pending_file_is_removed_and_a_missing_one_gives_404() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, body) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let path = body["path"].as_str().unwrap().to_owned();
+
+    let delete_path = format!("/api/v1/feeds/{id}/files?path={}", url_encode(&path));
+    let (status, _) = call(&app, "DELETE", &delete_path, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // The pending row is already gone, so a second removal gives 404.
+    let (status, body) = call(&app, "DELETE", &delete_path, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
+
+    // The copy of the pending file is also gone, so the same name uploads
+    // again without the 409 conflict of a repeated path.
+    let (status, _) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::CREATED);
 }

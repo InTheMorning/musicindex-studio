@@ -9,11 +9,12 @@ publish.workspace = true
 
 [dependencies]
 axum = "0.8"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 studio-core.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "fs", "io-util"] }
 
 [dev-dependencies]
 studio-core = { workspace = true, features = ["testing"] }

@@ -1,20 +1,25 @@
 //! The JSON routes of the local API.
 
+use std::path::{Path as FilePath, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::RequestExt;
+use axum::extract::{Path, Query, Request, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
-use studio_core::collection::{ConnectorId, FeedId, SnapshotId};
+use studio_core::collection::{ConnectorId, DraftFile, FeedId, SnapshotId};
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
 use studio_core::feed::{Feed, Recipient};
+use studio_core::media;
 use studio_core::pipeline;
 use studio_core::vault::OpenVault;
+use tokio::io::AsyncWriteExt;
 
 use crate::error::ApiError;
 use crate::workspace::Workspace;
@@ -781,6 +786,225 @@ pub(crate) async fn draft_from_snapshot(
         pipeline::discard_draft(&w.collection, &w.store, id)?;
         pipeline::draft_from_snapshot(&w.collection, made.as_ref(), id, SnapshotId(snapshot))?;
         draft_json(w, made.as_ref(), id)
+    })
+    .await
+}
+
+/// The name that the UI gives for the file in the upload route.
+#[derive(Deserialize)]
+pub(crate) struct UploadQuery {
+    name: String,
+}
+
+/// The path of a pending file, in the query of the route that removes it.
+#[derive(Deserialize)]
+pub(crate) struct PendingFileQuery {
+    path: String,
+}
+
+/// Removes its file when it goes out of scope. An upload keeps no
+/// temporary file after its result, also after an error (ADR 0026 item 5,
+/// ADR 0032 item 10).
+struct TempFile(PathBuf);
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+/// The file name of an upload: the last part of the name that the browser
+/// gives. A file goes only into the folder of its release, so a name with a
+/// folder part loses that part. An empty name, `.` and `..` give 422
+/// `invalid_name`.
+fn upload_file_name(name: &str) -> Result<String, ApiError> {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or_default().trim();
+    if last.is_empty() || last == "." || last == ".." || last.chars().any(char::is_control) {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_name",
+            "Give a file name, for example 01 Song.mp3.",
+        ));
+    }
+    Ok(last.to_owned())
+}
+
+/// A random name for a file of the temporary upload folder, with the
+/// extension of `name` when it has one. `media::import` finds the media
+/// type partly from the extension of its source file.
+fn temp_file_name(name: &str) -> Result<String, ApiError> {
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes)
+        .map_err(|_| ApiError::internal("the random source is not available"))?;
+    let random = bytes.iter().fold(String::with_capacity(32), |mut text, b| {
+        use std::fmt::Write as _;
+        let _ = write!(text, "{b:02x}");
+        text
+    });
+    match FilePath::new(name).extension().and_then(|e| e.to_str()) {
+        Some(extension) => Ok(format!("{random}.{extension}")),
+        None => Ok(random),
+    }
+}
+
+/// Send one file to the draft of a feed (ADR 0026, ADR 0032 items 1 to 5
+/// and 10). The body is the bytes of the file, and `name` in the query is
+/// the file name that the user selected.
+///
+/// The handler writes the body to a temporary file in `incoming/` of the
+/// pending files folder, chunk by chunk, with no lock of the workspace.
+/// The import, the release path and the write to the pending files then
+/// run in `blocking`.
+pub(crate) async fn upload_file(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Query(query): Query<UploadQuery>,
+    request: Request,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let file_name = upload_file_name(&query.name)?;
+    // Read the folder of the temporary files, with no lock held during the
+    // write of the body (ADR 0026 item 5, ADR 0032 item 10).
+    let store = { lock(&shared)?.store.clone() };
+    let incoming = store.root().join("incoming");
+    tokio::fs::create_dir_all(&incoming)
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    let temp_path = incoming.join(temp_file_name(&file_name)?);
+    // The guard removes the temporary file at the end of this function,
+    // also after an error of the body, the import or the collection.
+    let guard = TempFile(temp_path.clone());
+
+    let mut file = tokio::fs::File::create(&temp_path)
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    let mut body = request.into_limited_body().into_data_stream();
+    while let Some(chunk) = body.next().await {
+        let chunk = chunk
+            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, "upload_failed", e.to_string()))?;
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| ApiError::internal(e.to_string()))?;
+    }
+    file.flush()
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    drop(file);
+
+    let name = file_name;
+    blocking(shared, move |w| {
+        let _guard = guard;
+        import_upload(w, FeedId(id), &temp_path, &name)
+    })
+    .await
+}
+
+/// The blocking steps of an upload: the public address check, the media
+/// import, the release path and the write to the pending files (ADR 0026,
+/// ADR 0032 items 1 to 5 and 10).
+fn import_upload(
+    w: &mut Workspace,
+    id: FeedId,
+    temp_path: &FilePath,
+    name: &str,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let made = writer(w, id)?;
+    let row = w.collection.feed(id)?;
+    let feed_path = row
+        .path
+        .as_deref()
+        .ok_or_else(|| ApiError::internal(format!("feed {} has a connector and no path", id.0)))?;
+    if made.public_url(feed_path).is_none() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "no_public_address",
+            "the folder of this feed has no public address; give the folder one first",
+        ));
+    }
+
+    let imported = media::import(temp_path, name)?;
+    // A WAV import makes a new FLAC file next to the temporary file.
+    // Remove it at the end of this function too, also after an error
+    // (ADR 0032 item 2).
+    let _converted_guard =
+        (imported.path.as_path() != temp_path).then(|| TempFile(imported.path.clone()));
+
+    let path = pipeline::release_path(feed_path, &imported.file_name);
+    if w.collection.draft_files(id)?.iter().any(|f| f.path == path) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "file_pending",
+            format!("{path} is already a pending file of this draft"),
+        ));
+    }
+    if made.read(&path)?.is_some() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "file_exists",
+            format!("a file exists at {path} already"),
+        ));
+    }
+
+    let (sha256, size) = w
+        .store
+        .put_file(id, &imported.path)
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    w.collection.add_draft_file(
+        id,
+        &DraftFile {
+            path: path.clone(),
+            size,
+            media_type: imported.media_type.clone(),
+            sha256,
+        },
+    )?;
+
+    let url = made.public_url(&path).ok_or_else(|| {
+        ApiError::internal("the connector gave no public address for the release path")
+    })?;
+    let (kind, title, track_number, duration) = match imported.kind {
+        media::ImportedKind::Audio {
+            title,
+            track_number,
+            duration,
+        } => ("audio", title, track_number, duration),
+        media::ImportedKind::Image => ("image", None, None, None),
+    };
+    Ok((
+        StatusCode::CREATED,
+        to_json(json!({
+            "path": path,
+            "url": url,
+            "size": size,
+            "media_type": imported.media_type,
+            "kind": kind,
+            "title": title,
+            "track_number": track_number,
+            "duration": duration,
+            "converted_from_wav": imported.converted_from_wav,
+            "file_name": imported.file_name,
+        }))?,
+    ))
+}
+
+/// Remove one pending file of the draft of a feed, with its copy in the
+/// data folder (ADR 0026 item 8, ADR 0032 item 12).
+pub(crate) async fn delete_pending_file(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Query(query): Query<PendingFileQuery>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let files = w.collection.draft_files(id)?;
+        let Some(file) = files.into_iter().find(|f| f.path == query.path) else {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                format!("{} is not a pending file of this draft", query.path),
+            ));
+        };
+        w.collection.remove_draft_file(id, &file.path)?;
+        w.store.remove(id, &file.sha256);
+        Ok(StatusCode::NO_CONTENT)
     })
     .await
 }

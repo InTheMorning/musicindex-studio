@@ -7,6 +7,7 @@ use serde_json::json;
 use studio_core::address::AddressError;
 use studio_core::collection::{CollectionError, CollectionErrorKind};
 use studio_core::connector::{ConnectorError, ConnectorErrorKind};
+use studio_core::media::{MediaError, MediaErrorKind};
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::vault::{VaultError, VaultErrorKind};
 
@@ -114,6 +115,20 @@ impl From<PipelineError> for ApiError {
             }
             PipelineErrorKind::FileExists => (StatusCode::CONFLICT, "file_exists"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
+        };
+        Self::new(status, code, error.to_string())
+    }
+}
+
+impl From<MediaError> for ApiError {
+    fn from(error: MediaError) -> Self {
+        let (status, code) = match error.kind() {
+            // ADR 0026, ADR 0032 items 1 to 5: the content is not a media
+            // type that Studio accepts.
+            MediaErrorKind::Unsupported => {
+                (StatusCode::UNSUPPORTED_MEDIA_TYPE, "unsupported_media")
+            }
+            _ => (StatusCode::BAD_GATEWAY, "media"),
         };
         Self::new(status, code, error.to_string())
     }

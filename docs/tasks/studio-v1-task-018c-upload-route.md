@@ -20,6 +20,7 @@ Do not change: `crates/core`, the UI.
 These choices are fixed. Do not change them.
 
 - Route `POST /api/v1/feeds/{id}/files?name=<file name>`. The body is the bytes of the file. The route has `DefaultBodyLimit::max(2 GiB)`. The other routes keep the default limit.
+- The route keeps only the last part of `name`, after the last `/` or `\\`. An empty name, `.` and `..` give 422 `invalid_name`. A file goes only into the folder of its release.
 - The handler writes the body to a temporary file in `<store root>/incoming/`, chunk by chunk, with no lock of the workspace. It then does these steps in `blocking`:
   1. The feed must have a connector and a path. The connector must give a public address for the release path, or 422 `no_public_address`.
   2. `media::import(temp, name)`. `Unsupported` gives 415 `unsupported_media`.

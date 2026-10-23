@@ -49,14 +49,16 @@ function move(list, index, by) {
   return copy;
 }
 
-// The buttons that move or remove one entry of a list.
+// The buttons that move or remove one entry of a list (ADR 0037 item 1).
+// "Move up" and "Move down" change no value, so each is a normal button.
+// "Remove" takes an entry out of the list, so it is destructive.
 export function EntryActions({ list, index, name, onChange }) {
   return html`<div class="actions">
-    <button class="button quiet" type="button" disabled=${index === 0}
+    <button class="button" type="button" disabled=${index === 0}
       aria-label=${`Move ${name} up`} onClick=${() => onChange(move(list, index, -1))}>Move up</button>
-    <button class="button quiet" type="button" disabled=${index === list.length - 1}
+    <button class="button" type="button" disabled=${index === list.length - 1}
       aria-label=${`Move ${name} down`} onClick=${() => onChange(move(list, index, 1))}>Move down</button>
-    <button class="button quiet" type="button"
+    <button class="button destructive" type="button"
       aria-label=${`Remove ${name}`} onClick=${() => onChange(list.filter((_, i) => i !== index))}>Remove</button>
   </div>`;
 }
@@ -192,7 +194,7 @@ function AlternateEnclosures({ list, onChange }) {
     return html`<div class="alt-enclosure" key=${enc._cid}>
       <span class="title">${label}</span>
       <span class="sub">${enc.length ? fileSize(Number(enc.length)) : '—'}</span>
-      <button class="button quiet" type="button"
+      <button class="button destructive" type="button"
         aria-label=${`Remove ${label}`} onClick=${() => onChange(list.filter((_, j) => j !== i))}>Remove</button>
     </div>`;
   });
@@ -279,7 +281,7 @@ function AddTrackSheet({ open, onClose, onAdd }) {
       </div>
     </form>
     <footer>
-      <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
       <button class="button primary" type="submit" form="add-track-form" disabled=${!ready}>＋ Add the track</button>
     </footer>
   </dialog>`;
@@ -418,7 +420,7 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
       <span class=${`state${failed ? ' failed' : ''}`} role=${failed ? 'alert' : undefined}>
         ${importStateText(row, kind)}
       </span>
-      <button class="button quiet" type="button" disabled=${row.state === 'sending'}
+      <button class="button destructive" type="button" disabled=${row.state === 'sending'}
         aria-label=${`Remove ${row.file.name}`} onClick=${() => onRemove(row)}>Remove</button>
     </div>
     ${row.isWav && html`<div class="notice"><strong>${row.file.name}</strong>${WAV_NOTICE}</div>`}
@@ -633,7 +635,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
           aria-describedby="import-input-hint"
           accept="audio/*,image/*,.wav,.flac,.m4a,.ogg,.opus"
           onChange=${(e) => { addFiles(e.target.files); e.target.value = ''; }} />
-        <label for="import-input" class="button">＋ Choose music and image files</label>
+        <label for="import-input" class="button action">＋ Choose music and image files</label>
       </div>
       ${rows.length === 0 && html`<p class="hint">Select the files to import.</p>`}
       ${rows.length > 0 && html`<div class="group">
@@ -642,7 +644,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
       </div>`}
     </div>
     <footer>
-      <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
       <button class="button primary" type="button" disabled=${!canAdd} onClick=${add}>
         ${addLabel}
       </button>
@@ -681,19 +683,29 @@ function operationKindLabel(kind) {
   }
 }
 
+// The second line of an operation row: what the operation means for the
+// feed (task 022b, review of milestone 7a).
+const OPERATION_NOTE = {
+  upload: 'The feed uses this file.',
+  copy: 'A spare copy. The feed does not use it.',
+  delete: 'Studio deletes it after the feed is written.',
+};
+
 // One row of a host operation of the diff: its kind, its host, its path
 // and its size (ADR 0036 item 14). An upload has no draft operation of its
-// own, so it has no Remove button.
+// own, so it has no Remove button. "Remove" takes the operation out of the
+// draft, so it is destructive (ADR 0037 item 1).
 function HostOperationRow({ op, connectors, onRemove, busy }) {
   return html`<div class="host-op-row">
     <span class="kind">${operationKindLabel(op.kind)}</span>
     <span class="text">
       <span class="title">${connectorName(connectors, op.connector_id)}</span>
       <span class="sub mono">${op.path}</span>
+      <span class="sub">${OPERATION_NOTE[op.kind] || ''}</span>
     </span>
     <span class="size">${fileSize(op.size)}</span>
-    ${op.operation_id !== null && html`<button class="button quiet" type="button" disabled=${busy}
-      onClick=${() => onRemove(op.operation_id)}>Remove</button>`}
+    ${op.operation_id !== null && html`<button class="button" type="button" disabled=${busy}
+      onClick=${() => onRemove(op.operation_id)}>Undo</button>`}
   </div>`;
 }
 
@@ -708,8 +720,8 @@ function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
       <span class="sub mono">${blocked.path}</span>
       <span class="sub">Studio cannot delete this file. These feeds refer to it: ${blocked.feed_titles.join(', ')}</span>
     </span>
-    <button class="button quiet" type="button" disabled=${busy}
-      onClick=${() => onRemove(blocked.operation_id)}>Remove</button>
+    <button class="button" type="button" disabled=${busy}
+      onClick=${() => onRemove(blocked.operation_id)}>Undo</button>
   </div>`;
 }
 
@@ -831,7 +843,7 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, opsP
       </div>
     </div>
     <footer>
-      <button class="button quiet" type="button" disabled=${busy || !pending} onClick=${discard}>Discard the draft</button>
+      <button class="button destructive" type="button" disabled=${busy || !pending} onClick=${discard}>Discard the draft</button>
       ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy} onClick=${write}>
         ${busy ? 'Writing…' : 'Write to the host'}</button>`}
     </footer>
@@ -941,7 +953,7 @@ function FeedFacts({ feed, onRemoved }) {
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
       </dl>
       <${ErrorNotice} error=${error} />
-      <div class="actions"><button class="button quiet" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button></div>
+      <div class="actions"><button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button></div>
     </div>
   </details>`;
 }
@@ -1097,9 +1109,9 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
     </section>
 
     <div class="actions">
-      <button class="button quiet" type="button" disabled=${trackIndex === 0} onClick=${() => changeItems(move(items, trackIndex, -1))}>Move up</button>
-      <button class="button quiet" type="button" disabled=${trackIndex === items.length - 1} onClick=${() => changeItems(move(items, trackIndex, 1))}>Move down</button>
-      <button class="button quiet" type="button" onClick=${removeTrack}>Remove the track</button>
+      <button class="button" type="button" disabled=${trackIndex === 0} onClick=${() => changeItems(move(items, trackIndex, -1))}>Move up</button>
+      <button class="button" type="button" disabled=${trackIndex === items.length - 1} onClick=${() => changeItems(move(items, trackIndex, 1))}>Move down</button>
+      <button class="button destructive" type="button" onClick=${removeTrack}>Remove the track</button>
     </div>`;
 }
 
@@ -1108,93 +1120,139 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
 // deletion, and sees each host file of the release folder that is not a
 // copy of a library file.
 
-// A list of the connected hosts, for the choice of a host (task
-// architecture). The caller keeps out a host that makes no sense as a
-// target, such as the host of a copy that already exists.
-function HostPicker({ id, label, buttonLabel, connectors, exclude = [], busy, onPick }) {
-  const [target, setTarget] = useState('');
-  const options = connectors.filter((c) => !exclude.includes(c.id));
-  if (options.length === 0) return html`<p class="hint">Studio has no other connected host.</p>`;
-  const pick = () => { if (target) { onPick(Number(target)); setTarget(''); } };
-  return html`<div class="inline">
-    <label class="visually-hidden" for=${id}>${label}</label>
-    <select id=${id} class="button" value=${target} onChange=${(e) => setTarget(e.target.value)}>
-      <option value="">Select a host</option>
-      ${options.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-    </select>
-    <button class="button" type="button" disabled=${busy || !target} onClick=${pick}>${buttonLabel}</button>
-  </div>`;
-}
-
-// One copy of a library file on a host, with its own actions (ADR 0036
-// items 12 and 13).
-function CopyRow({ file, copy, connectors, busy, open, onToggleMove, onChanged }) {
-  const reference = () => onChanged({ op: 'reference', file: file.id, connector_id: copy.connector_id, from_url: file.url });
-  const del = () => onChanged({ op: 'delete', connector_id: copy.connector_id, path: copy.path });
-  const moveTo = (to) => onChanged({ op: 'move', file: file.id, from: copy.connector_id, to });
+// One copy of a library file on a host (ADR 0036 items 12 and 13, ADR
+// 0037). A pending operation takes over the row with "Undo". The copy
+// that the feed uses shows no Reference button and no Delete button: it
+// offers "Move to" each other host instead, so the user can move the use
+// of the file in one click. A copy that the feed does not use offers
+// "Reference", to put the feed on this copy, and "Delete".
+function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUndo }) {
+  const name = connectorName(connectors, copy.connector_id);
+  if (copy.pending) {
+    const text = copy.pending.kind === 'delete' ? 'Deletion pending' : 'Copy pending';
+    return html`<div class="copy-row">
+      <span class="title">${name}</span>
+      <span class="sub mono">${copy.path}</span>
+      <span class="sub">${text}</span>
+      <div class="actions">
+        <button class="button" type="button" disabled=${busy} onClick=${() => onUndo(copy.pending.operation_id)}>Undo</button>
+      </div>
+    </div>`;
+  }
+  if (copy.in_use) {
+    const targets = connectors.filter((c) => c.id !== copy.connector_id);
+    return html`<div class="copy-row">
+      <span class="title">${name}</span>
+      <span class="sub mono">${copy.path}</span>
+      ${copy.url && html`<span class="sub mono">${copy.url}</span>`}
+      <span class="sub">Used by the feed</span>
+      ${targets.length > 0 && html`<div class="actions">
+        ${targets.map((c) => html`<button key=${c.id} class="button action" type="button" disabled=${busy}
+          onClick=${() => onMoveTo(copy.connector_id, c.id)}>Move to ${c.name}</button>`)}
+      </div>`}
+    </div>`;
+  }
   return html`<div class="copy-row">
-    <span class="title">${connectorName(connectors, copy.connector_id)}</span>
+    <span class="title">${name}</span>
     <span class="sub mono">${copy.path}</span>
     ${copy.url && html`<span class="sub mono">${copy.url}</span>`}
     <div class="actions">
-      <button class="button quiet" type="button" disabled=${busy} onClick=${reference}>Reference</button>
-      <button class="button quiet" type="button" disabled=${busy} onClick=${onToggleMove}>Move to…</button>
-      <button class="button quiet" type="button" disabled=${busy} onClick=${del}>Delete</button>
+      <button class="button action" type="button" disabled=${busy} onClick=${() => onReference(copy.connector_id)}>Reference</button>
+      <button class="button destructive" type="button" disabled=${busy} onClick=${() => onDelete(copy.connector_id, copy.path)}>Delete</button>
     </div>
-    ${open && html`<${HostPicker} id=${`move-${file.id}-${copy.connector_id}`} label="Host to move this copy to"
-      buttonLabel="Move" connectors=${connectors} exclude=${[copy.connector_id]} busy=${busy} onPick=${moveTo} />`}
   </div>`;
 }
 
 // One library file, as a summary line that opens to show each of its
 // copies (ADR 0028, ADR 0036 items 11 and 12). The badge reuses the
-// format label of `FileRows` above.
-function FileEntry({ feedId, file, connectors, busy, onOperation, onChanged }) {
-  const [picking, setPicking] = useState(null); // null, 'copy', or the connector ID of a copy to move
+// format label of `FileRows` above. `.file-rows` holds the open rows with
+// no empty space between them (review of milestone 7a).
+//
+// The entry shows one "Copy to" button for each host that has no copy of
+// the file and no pending copy of it yet (ADR 0037). Each pending copy of
+// the file, from `pending_copies`, shows its own row with "Undo".
+function FileEntry({ feedId, file, defaultHost, connectors, busy, onOperation, onUndo, onChanged }) {
   const summary = html`<span class="badge">${formatLabel(file.media_type)}</span>
     <span class="title">${file.path}</span>
     <span class="sub">${file.in_use ? 'In use' : 'Not in use'} · ${file.copies.length} ${file.copies.length === 1 ? 'copy' : 'copies'}</span>`;
-  const act = (body) => onOperation(body).then(() => setPicking(null));
-  const copyTo = (connectorId) => act({ op: 'copy', file: file.id, connector_id: connectorId });
+  const reference = (connectorId) => onOperation({ op: 'reference', file: file.id, connector_id: connectorId, from_url: file.url });
+  const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
+  const copyTo = (connectorId) => onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
+  const moveTo = (from, to) => onOperation({ op: 'move', file: file.id, from, to });
   const setHost = (value) => onChanged(`/feeds/${feedId}/files/${file.id}/host`, { connector_id: value });
+  // A file with no host of its own uses the default host of the release
+  // (ADR 0036 item 8).
+  const hostValue = file.own_connector_id ?? '';
+  const takenHosts = [
+    ...file.copies.map((c) => c.connector_id),
+    ...file.pending_copies.map((p) => p.connector_id),
+  ];
+  const copyTargets = connectors.filter((c) => !takenHosts.includes(c.id));
   return html`<${EntryRow} group="library-files" cid=${file.id} summary=${summary}>
-    ${file.copies.length === 0 && html`<p class="hint">Studio sends this file to its host when you write.</p>`}
-    ${file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} file=${file}
-      copy=${copy} connectors=${connectors} busy=${busy} open=${picking === copy.connector_id}
-      onToggleMove=${() => setPicking(picking === copy.connector_id ? null : copy.connector_id)} onChanged=${act} />`)}
-    <div class="actions">
-      <button class="button quiet" type="button" disabled=${busy} onClick=${() => setPicking(picking === 'copy' ? null : 'copy')}>Copy to…</button>
-    </div>
-    ${picking === 'copy' && html`<${HostPicker} id=${`copy-${file.id}`} label="Host to copy this file to" buttonLabel="Copy"
-      connectors=${connectors} exclude=${file.copies.map((c) => c.connector_id)} busy=${busy} onPick=${copyTo} />`}
-    <div class="field">
-      <label for=${`file-host-${file.id}`}>Host of this file</label>
-      <select id=${`file-host-${file.id}`} class="button" value=${file.connector_id} disabled=${busy}
-        onChange=${(e) => setHost(e.target.value === '' ? null : Number(e.target.value))}>
-        <option value="">Use the default host of the release</option>
-        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-      </select>
+    <div class="file-rows">
+      ${file.copies.length === 0 && file.pending_copies.length === 0
+        && html`<p class="hint">Studio sends this file to its host when you write.</p>`}
+      ${file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
+        connectors=${connectors} busy=${busy} onMoveTo=${moveTo} onReference=${reference} onDelete=${del} onUndo=${onUndo} />`)}
+      ${file.pending_copies.map((pending) => html`<div class="copy-row" key=${`pending-${pending.operation_id}`}>
+        <span class="title">Copy to ${connectorName(connectors, pending.connector_id)} pending</span>
+        <span class="sub mono">${pending.path}</span>
+        <div class="actions">
+          <button class="button" type="button" disabled=${busy} onClick=${() => onUndo(pending.operation_id)}>Undo</button>
+        </div>
+      </div>`)}
+      ${copyTargets.length > 0 && html`<div class="actions">
+        ${copyTargets.map((c) => html`<button key=${c.id} class="button action" type="button" disabled=${busy}
+          onClick=${() => copyTo(c.id)}>Copy to ${c.name}</button>`)}
+      </div>`}
+      <div class="field">
+        <label for=${`file-host-${file.id}`}>Host of this file</label>
+        <select id=${`file-host-${file.id}`} class="button" value=${hostValue} disabled=${busy}
+          onChange=${(e) => setHost(e.target.value === '' ? null : Number(e.target.value))}>
+          <option value="">Use the default host of the release</option>
+          ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+        </select>
+      </div>
     </div>
   <//>`;
 }
 
 // A host file of the release folder that is not a copy of a library file
-// (ADR 0036 item 11).
-function OtherFileRow({ file, connectors, busy, onOperation }) {
-  const del = () => onOperation({ op: 'delete', connector_id: file.connector_id, path: file.path });
+// (ADR 0036 item 11, ADR 0037). A pending operation takes over the row
+// with "Undo". A file that the feed uses keeps its "Delete" button, but
+// disabled, since the user must take the file out of the feed first.
+function OtherFileRow({ file, connectors, busy, onDelete, onUndo }) {
+  const base = `${connectorName(connectors, file.connector_id)} · ${fileSize(file.size)}`;
+  if (file.pending) {
+    const text = file.pending.kind === 'delete' ? 'Deletion pending' : 'Copy pending';
+    return html`<div class="alt-enclosure">
+      <span class="title">${file.path}</span>
+      <span class="sub">${base} · ${text}</span>
+      <button class="button" type="button" disabled=${busy} onClick=${() => onUndo(file.pending.operation_id)}>Undo</button>
+    </div>`;
+  }
+  if (file.in_use) {
+    return html`<div class="alt-enclosure">
+      <span class="title">${file.path}</span>
+      <span class="sub">${base} · Used by the feed · Remove it from the feed first</span>
+      <button class="button destructive" type="button" disabled>Delete</button>
+    </div>`;
+  }
   return html`<div class="alt-enclosure">
     <span class="title">${file.path}</span>
-    <span class="sub">${connectorName(connectors, file.connector_id)} · ${fileSize(file.size)}</span>
-    <button class="button quiet" type="button" disabled=${busy} onClick=${del}>Delete</button>
+    <span class="sub">${base}</span>
+    <button class="button destructive" type="button" disabled=${busy} onClick=${() => onDelete(file.connector_id, file.path)}>Delete</button>
   </div>`;
 }
 
 // The Files page: the host of the release, each of its library files with
 // their copies, and each other host file of its release folder (ADR 0036
-// items 4, 7, 9 and 11; task 021g). `onOpsChanged` tells the toolbar that
-// a host operation is pending, even when it does not change the draft XML
-// on its own (ADR 0036 item 14).
-function FilesPage({ feed, connectors, onOpsChanged }) {
+// items 4, 7, 9 and 11; task 021g, task 022b). `onOpsChanged` tells the
+// toolbar that a host operation is pending, even when it does not change
+// the draft XML on its own (ADR 0036 item 14). `reloadKey` changes after a
+// write and after a discard of the draft, so the page loads the files
+// route again (review of milestone 7a).
+function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const { busy, error: opError, run } = useAction();
@@ -1208,7 +1266,7 @@ function FilesPage({ feed, connectors, onOpsChanged }) {
       setError(e);
     }
   };
-  useEffect(() => { setData(null); load(); }, [feed.id]);
+  useEffect(() => { setData(null); load(); }, [feed.id, reloadKey]);
 
   // Each host that holds something of this release: its own host, the
   // default host of its files, and each host of a copy or an other file.
@@ -1242,8 +1300,19 @@ function FilesPage({ feed, connectors, onOpsChanged }) {
     await load();
   });
 
+  // Each operation reloads the files route, so that the page shows the
+  // mark of each pending copy and each pending deletion at once (review
+  // of milestone 7a).
   const addOperation = (body) => run(async () => {
     await api(`/feeds/${feed.id}/operations`, { method: 'POST', body });
+    onOpsChanged();
+    await load();
+  });
+
+  // Take a pending operation out of the draft, such as a copy or a
+  // deletion that the user no longer wants (task 022b).
+  const undoOperation = (operationId) => run(async () => {
+    await api(`/feeds/${feed.id}/operations/${operationId}`, { method: 'DELETE' });
     onOpsChanged();
     await load();
   });
@@ -1255,7 +1324,7 @@ function FilesPage({ feed, connectors, onOpsChanged }) {
 
   return html`<section class="page-section"><h2>Files</h2>
       <div class="actions">
-        <button class="button" type="button" disabled=${scan.busy} onClick=${runScan}>
+        <button class="button action" type="button" disabled=${scan.busy} onClick=${runScan}>
           ${scan.busy ? 'Scanning…' : 'Scan the hosts'}</button>
       </div>
       <${ErrorNotice} error=${scan.error} />
@@ -1277,8 +1346,8 @@ function FilesPage({ feed, connectors, onOpsChanged }) {
     <section class="page-section"><h2>Library files</h2>
       ${data.files.length === 0 && html`<p class="hint">No files yet.</p>`}
       ${data.files.length > 0 && html`<div class="group">
-        ${data.files.map((file) => html`<${FileEntry} key=${file.id} feedId=${feed.id} file=${file}
-          connectors=${connectors} busy=${busy} onOperation=${addOperation}
+        ${data.files.map((file) => html`<${FileEntry} key=${file.id} feedId=${feed.id} file=${file} defaultHost=${defaultHost}
+          connectors=${connectors} busy=${busy} onOperation=${addOperation} onUndo=${undoOperation}
           onChanged=${(path, body) => setFileHost(path, body)} />`)}
       </div>`}
     </section>
@@ -1286,8 +1355,9 @@ function FilesPage({ feed, connectors, onOpsChanged }) {
     ${data.other_host_files.length > 0 && html`<section class="page-section"><h2>Other files on the hosts</h2>
       <div class="group">
         ${data.other_host_files.map((extra) => html`<${OtherFileRow}
-          key=${`${extra.connector_id}-${extra.path}`} file=${extra}
-          connectors=${connectors} busy=${busy} onOperation=${addOperation} />`)}
+          key=${`${extra.connector_id}-${extra.path}`} file=${extra} connectors=${connectors} busy=${busy}
+          onDelete=${(connectorId, path) => addOperation({ op: 'delete', connector_id: connectorId, path })}
+          onUndo=${undoOperation} />`)}
       </div>
     </section>`}`;
 }
@@ -1296,7 +1366,7 @@ function FilesPage({ feed, connectors, onOpsChanged }) {
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged }) {
+export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -1321,7 +1391,7 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing
   } else if (page === 'recipients') {
     body = html`<${RecipientsPage} model=${model} update=${update} />`;
   } else if (page === 'files') {
-    body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} />`;
+    body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} reloadKey=${filesReloadKey} />`;
   } else {
     body = html`<${AlbumPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} go=${go}
       onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} />`;

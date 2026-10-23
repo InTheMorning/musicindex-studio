@@ -122,6 +122,18 @@
 :root { --error: #ff6961; }
 :root[data-theme="light"] { --error: #c41e3a; }
 
+/* Button role tints (ADR 0037): an action button and a destructive
+   button each use a pale fill of their own color, not an entity color
+   and not a level token. */
+:root {
+  --accent-tint: rgba(45, 123, 255, .18);
+  --error-tint: rgba(255, 105, 97, .16);
+}
+:root[data-theme="light"] {
+  --accent-tint: rgba(10, 91, 214, .12);
+  --error-tint: rgba(196, 30, 58, .1);
+}
+
 /* Share tokens: one hue and a pale track of the same hue. They are not
    entity colors. The palette validator of the dataviz guidance passes each
    value: 3:1 or more against each surface. A fee part has stripes, not a
@@ -222,6 +234,17 @@ code, .mono {
 }
 .button.primary:hover { filter: brightness(1.08); }
 .button:disabled { opacity: .5; cursor: default; }
+/* An action button: an accent label on a pale accent tint. A destructive
+   button: an error label on a pale error tint. Neither is a primary
+   button (ADR 0037 items 1 to 4). */
+.button.action { background: var(--accent-tint); border-color: transparent; color: var(--accent); }
+.button.action:hover { filter: brightness(1.1); }
+.button.action:active { filter: brightness(.92); }
+.button.destructive { background: var(--error-tint); border-color: transparent; color: var(--error); }
+.button.destructive:hover { filter: brightness(1.1); }
+.button.destructive:active { filter: brightness(.92); }
+/* The class "button quiet" has no fill. It is only for an icon button
+   (ADR 0037 item 5); a test enforces this. */
 .button.quiet { background: transparent; border-color: transparent; color: var(--muted); }
 .button.quiet:hover { background: var(--fill-soft); color: var(--text); }
 /* A button in a form keeps its own width and starts at the left. */
@@ -1149,10 +1172,23 @@ textarea:focus { background: var(--fill); }
 .host-op-row.error { color: var(--error); }
 .host-op-row.error .sub { color: var(--error); }
 
-/* A copy of a library file on a host, in the open entry of the Files page
-   (task 021g, ADR 0036 items 11 and 12). Each copy is a direct row of the
-   open entry's form, with its own separator above it. */
-.copy-row { display: grid; gap: 8px; padding: 10px 0; border-top: 1px solid var(--sep); }
-.copy-row:first-child { border-top: 0; padding-top: 0; }
+/* The open rows of a library file entry of the Files page: a hint, each
+   copy, each pending copy, the "Copy to" buttons and the host field
+   (task 022b, review of milestone 7a). The rows sit with no empty space
+   between them: `.file-rows` gives each row the same thin separator as a
+   group, in place of the 18 px gap of the entry's own form. */
+.file-rows { display: grid; }
+.file-rows > * { position: relative; padding: 10px 16px; }
+.file-rows > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 0;
+  border-top: 1px solid var(--sep);
+}
+/* A copy of a library file on a host, or a pending copy of it, as one
+   row of `.file-rows` (ADR 0036 items 11 and 12). */
+.copy-row { display: grid; gap: 8px; }
 .copy-row .title { font-weight: 600; }
 .copy-row .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }

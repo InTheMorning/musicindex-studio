@@ -1584,6 +1584,33 @@ fn each_background_uses_a_token() {
     }
 }
 
+/// ADR 0037 item 5: on 2026-10-23 the operator asked for button roles that
+/// show what each button does. The class "button quiet" has no fill, so
+/// it is only for an icon button, such as the close button of a sheet.
+#[test]
+fn each_quiet_button_is_an_icon_button() {
+    for (name, text) in crate::ui::text_files() {
+        let is_script = std::path::Path::new(name)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("js"));
+        if name.starts_with("vendor/") || !is_script {
+            continue;
+        }
+        for (index, _) in text.match_indices("class=\"button quiet") {
+            let quote_start = index + "class=\"".len();
+            let rest = &text[quote_start..];
+            let end = rest.find('"').unwrap_or(rest.len());
+            let classes = &rest[..end];
+            assert!(
+                classes.contains("icon-button"),
+                "ADR 0037 §Button Roles item 5: {name} has a quiet button with no icon-button \
+                 class: \"{classes}\". Give this button a role, such as action or destructive, \
+                 or add the class icon-button when it has an icon and no text label."
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn an_upload_of_an_mp3_gives_its_release_address_and_facts_with_no_change_of_the_draft() {
     let app = app();
@@ -2520,6 +2547,9 @@ async fn a_copy_operation_gives_the_library_file_a_pending_copy() {
             "operation_id": operation_id,
         }])
     );
+    // The file has no host of its own, so it uses the default host of the
+    // release (ADR 0036 item 8).
+    assert_eq!(files["files"][0]["own_connector_id"], Value::Null);
 }
 
 /// ADR 0021 and ADR 0036 item 11: `PUT /connectors/{id}` changes the

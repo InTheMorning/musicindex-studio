@@ -1217,6 +1217,9 @@ pub(crate) async fn list_release_files(
                 "media_type": file.media_type,
                 "local": file.local,
                 "connector_id": planned.connector_id.0,
+                // The host that the user selected for this file, or `null`
+                // for the default host of the release (ADR 0036 item 8).
+                "own_connector_id": file.connector_id.map(|c| c.0),
                 "url": planned.url,
                 "in_use": in_use,
                 "copies": copies,

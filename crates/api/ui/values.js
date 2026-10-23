@@ -199,7 +199,7 @@ function SaveRecipientButton({ recipient }) {
   });
   return html`<${ErrorNotice} error=${error} />
     <div class="actions">
-      <button class="button quiet" type="button" disabled=${busy} onClick=${save}>
+      <button class="button action" type="button" disabled=${busy} onClick=${save}>
         ${saved ? 'Saved' : busy ? 'Saving…' : 'Save to your recipients'}</button>
     </div>`;
 }
@@ -422,7 +422,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
                 return html`<${PickRow} key=${key} name=${r.name || r.address || 'Recipient'} address=${r.address}
                   status=${r.saved_id !== null ? 'Saved' : `In ${r.feeds} feed${r.feeds === 1 ? '' : 's'}`}
                   checked=${yoursSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleYours(key)}
-                  remove=${r.saved_id !== null && html`<button class="button quiet" type="button" disabled=${yours.busy}
+                  remove=${r.saved_id !== null && html`<button class="button destructive" type="button" disabled=${yours.busy}
                     onClick=${() => removeSaved(r.saved_id)}>Remove</button>`} />`;
               })}
             </div>`}
@@ -435,12 +435,12 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
           status=${row.from} checked=${true} taken=${false} onToggle=${row.clear} />`)}
       </div>`}
       <div class="pick-footer-row">
-        <button class="button quiet" type="button" disabled=${total === 0}
+        <button class="button" type="button" disabled=${total === 0}
           aria-expanded=${showSelected && total > 0 ? 'true' : 'false'} aria-controls="picker-selected"
           onClick=${() => setShowSelected(!showSelected)}>
           ${total} selected <span class="pick-arrow" aria-hidden="true">${showSelected && total > 0 ? '▼' : '▲'}</span></button>
         <span class="spacer"></span>
-        <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
           Add ${total} recipient${total === 1 ? '' : 's'}</button>
       </div>

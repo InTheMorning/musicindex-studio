@@ -155,6 +155,7 @@ const FIELD_MESSAGES = {
   folder_not_found: 'Studio did not find this folder on this computer.',
   no_public_address: 'Give this host a public address first, in Hosts.',
   file_exists: 'A file exists at this path already.',
+  invalid_address: 'Give a full address. Start it with https:// or http://.',
 };
 
 // Split an API error into a field message and an error for a notice.
@@ -274,8 +275,10 @@ function useNav(scope, initial) {
   return [view, go];
 }
 
+// A back selection changes no value, so it is a normal button (ADR 0037
+// item 1).
 function BackButton() {
-  return html`<button class="button quiet" type="button" onClick=${() => history.back()}>← Back</button>`;
+  return html`<button class="button" type="button" onClick=${() => history.back()}>← Back</button>`;
 }
 
 // ---- First-run wizard (ADR 0005) ----
@@ -367,7 +370,7 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
     <div class="recovery" aria-label="Recovery key">${recoveryKey}</div>
     <label class="check"><input type="checkbox" checked=${kept} onChange=${(e) => setKept(e.target.checked)} />
       I wrote down the recovery key in a safe place</label>
-    <div class="actions"><button class="button primary" type="button" disabled=${!kept} onClick=${onDone}>Continue</button></div>
+    <div class="actions"><button class="button" type="button" disabled=${!kept} onClick=${onDone}>Continue</button></div>
   </div>`;
 }
 
@@ -660,7 +663,7 @@ function MspImport({ onAdded }) {
       <p>Studio added ${result.added.length} feed${result.added.length === 1 ? '' : 's'} and keeps the edit tokens in your vault.</p>
       ${result.failed.length > 0 && html`<div class="field"><span class="field-error">Studio could not import:</span>
         <ul class="failed">${result.failed.map((f) => html`<li><span class="mono">${f.source}</span>: ${f.message}</li>`)}</ul></div>`}
-      <div class="actions"><button class="button primary" type="button" onClick=${() => onAdded(result)}>Continue</button></div>
+      <div class="actions"><button class="button" type="button" onClick=${() => onAdded(result)}>Continue</button></div>
     </div>`;
   }
   return html`<div class="form">
@@ -754,7 +757,7 @@ function LibrarySheet({ defaultRoot, onDone }) {
         <strong>Studio could not move each file into the library.</strong>
         <ul class="failed">${report.errors.map((e) => html`<li>Feed ${e.feed_id}: ${e.message}</li>`)}</ul>
       </div>`}
-      <div class="actions"><button class="button primary" type="button" onClick=${onDone}>Continue</button></div>
+      <div class="actions"><button class="button" type="button" onClick=${onDone}>Continue</button></div>
     </div></main>`;
   }
   return html`<main class="center"><form class="card" onSubmit=${submit}>
@@ -861,7 +864,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved, onMenu }) {
         <div class="actions">
           <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read again'}</button>
-          <button class="button" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button>
+          <button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button>
         </div>
       </div>
     </section>
@@ -910,11 +913,16 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
   // of a pending change next to `draft.changed`. A new feed starts clear.
   const [opsPending, setOpsPending] = useState(false);
   useEffect(() => { setOpsPending(false); }, [feed.id]);
+  // After a write and after a discard of the draft, the Files page loads
+  // its list again (task 022b, review of milestone 7a). `onOpsCleared`
+  // already runs at each of these two points.
+  const [filesReloadKey, setFilesReloadKey] = useState(0);
   return html`<div>
     <${Bar} onMenu=${onMenu}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
-        opsPending=${opsPending} onOpsCleared=${() => setOpsPending(false)} />
+        opsPending=${opsPending}
+        onOpsCleared=${() => { setOpsPending(false); setFilesReloadKey((n) => n + 1); }} />
     <//>
     <div class="feed-head">
       <header class="head">
@@ -935,7 +943,7 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
     </div>
     <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
-      connectors=${connectors} onOpsChanged=${() => setOpsPending(true)} />
+      connectors=${connectors} onOpsChanged=${() => setOpsPending(true)} filesReloadKey=${filesReloadKey} />
   </div>`;
 }
 
@@ -1109,6 +1117,71 @@ function LibraryPanel() {
   </article>`;
 }
 
+// One local folder host. "Edit" opens the name field and the public
+// address field, with "Save" and "Cancel" (task 022b, ADR 0037). "Save"
+// calls `PUT /connectors/{id}`.
+function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged }) {
+  const config = JSON.parse(connector.config);
+  const written = feeds.filter((f) => f.connector_id === connector.id);
+  const disagreeing = feeds.filter((f) => (connector.disagreeing_feeds || []).includes(f.id));
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(connector.name);
+  const [baseUrl, setBaseUrl] = useState(config.base_url || '');
+  const { busy, error, run } = useAction();
+  const startEdit = () => {
+    setName(connector.name);
+    setBaseUrl(config.base_url || '');
+    setEditing(true);
+  };
+  const save = (event) => {
+    event.preventDefault();
+    run(async () => {
+      await api(`/connectors/${connector.id}`, { method: 'PUT', body: { name: name.trim(), base_url: baseUrl } });
+      setEditing(false);
+      onChanged();
+    });
+  };
+  const addressError = splitError(error, ['invalid_address']);
+  return html`<article class="panel host">
+    <header class="host-head">
+      <span class="eyebrow"><span class="dot hosting"></span>Folder on this computer</span>
+      ${!editing && html`<div class="actions">
+        <button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>
+        <button class="button destructive" type="button" disabled=${removeBusy}
+          aria-label=${`Remove the host ${connector.name}`} onClick=${onRemove}>Remove</button>
+      </div>`}
+    </header>
+    ${editing
+      ? html`<form class="form" onSubmit=${save}>
+          <${Field} id=${`host-${connector.id}-name`} label="Name" required
+            value=${name} onInput=${(e) => setName(e.target.value)} />
+          <${Field} id=${`host-${connector.id}-url`} label="Public address of the folder" type="url"
+            placeholder="https://music.example.com/feeds" error=${addressError.field}
+            value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
+          <${ErrorNotice} error=${addressError.other} />
+          <div class="actions">
+            <button class="button primary" type="submit" disabled=${busy}>${busy ? 'Saving…' : 'Save'}</button>
+            <button class="button" type="button" disabled=${busy} onClick=${() => setEditing(false)}>Cancel</button>
+          </div>
+        </form>`
+      : html`<h2>${connector.name}</h2>
+          <dl class="facts">
+            <dt>Folder</dt><dd class="mono">${config.root}</dd>
+            <dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
+              ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>
+            <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
+              ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
+                <span class=${`dot ${mediumKind(f.medium).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
+            ${disagreeing.length > 0 && html`<dt>Different addresses</dt><dd>
+              These feeds have an address that does not agree with the folder.
+              <ul class="address-list">
+                ${disagreeing.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>${f.title || f.path}</button>
+                  <span class="mono">${f.public_url}</span></li>`)}
+              </ul></dd>`}
+          </dl>`}
+  </article>`;
+}
+
 function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
@@ -1147,33 +1220,8 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
         Studio did not set a public address for the folder. The host card lists the feeds.
       </div>`}
       ${linked && html`<${FolderFeeds} key=${linked.connector.id} connector=${linked.connector} onAdded=${onChanged} />`}
-      ${connectors.map((c) => {
-        const config = JSON.parse(c.config);
-        const written = feeds.filter((f) => f.connector_id === c.id);
-        const disagreeing = feeds.filter((f) => (c.disagreeing_feeds || []).includes(f.id));
-        return html`<article class="panel host">
-          <header class="host-head">
-            <span class="eyebrow"><span class="dot hosting"></span>Folder on this computer</span>
-            <button class="button quiet" type="button" disabled=${busy}
-              aria-label=${`Remove the host ${c.name}`} onClick=${() => remove(c)}>Remove</button>
-          </header>
-          <h2>${c.name}</h2>
-          <dl class="facts">
-            <dt>Folder</dt><dd class="mono">${config.root}</dd>
-            <dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
-              ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>
-            <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
-              ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
-                <span class=${`dot ${mediumKind(f.medium).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
-            ${disagreeing.length > 0 && html`<dt>Different addresses</dt><dd>
-              These feeds have an address that does not agree with the folder.
-              <ul class="address-list">
-                ${disagreeing.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>${f.title || f.path}</button>
-                  <span class="mono">${f.public_url}</span></li>`)}
-              </ul></dd>`}
-          </dl>
-        </article>`;
-      })}
+      ${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} feeds=${feeds} removeBusy=${busy}
+        onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}
       ${showForm
         ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first host' : 'Add a host'}</h2>
             <${AddHostForm} onAdded=${added} />

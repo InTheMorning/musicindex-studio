@@ -33,6 +33,7 @@
 - [ADR 0029: Editor pages, the toolbar and three background levels](adr/0029-editor-pages-toolbar-and-three-levels.md)
 - [ADR 0030: An added recipient gets no split](adr/0030-an-added-recipient-gets-no-split.md)
 - [ADR 0031: A new element takes its hosted position](adr/0031-a-new-element-takes-its-hosted-position.md)
+- [ADR 0032: New releases: formats, file paths and new feeds](adr/0032-new-releases-formats-paths-and-new-feeds.md)
 
 ## Plans
 
@@ -62,6 +63,13 @@
 - [Studio v1 task 014c: The sidebar tree and the editor pages](tasks/studio-v1-task-014c-tree-and-pages.md)
 - [Studio v1 task 014d: The phone width](tasks/studio-v1-task-014d-phone-width.md)
 - [Studio v1 task 015: A new element takes its hosted position](tasks/studio-v1-task-015-hosted-position.md)
+- [Studio v1 task 016: Cover art in the editor](tasks/studio-v1-task-016-cover-art.md)
+- [Studio v1 task 017: A new album feed](tasks/studio-v1-task-017-new-album-feed.md)
+- [Studio v1 task 018: Import music files](tasks/studio-v1-task-018-import-music-files.md)
+- [Studio v1 task 018a: The pending files and the write](tasks/studio-v1-task-018a-pending-files.md)
+- [Studio v1 task 018b: The tags and the WAV conversion](tasks/studio-v1-task-018b-tags-and-conversion.md)
+- [Studio v1 task 018c: The upload route](tasks/studio-v1-task-018c-upload-route.md)
+- [Studio v1 task 018d: The import sheet](tasks/studio-v1-task-018d-import-sheet.md)
 
 ## Reviews
 
@@ -72,6 +80,7 @@
 - [Task 013 review checklist, 2026-10-22](reviews/2026-10-22-task-013-review-checklist.md)
 - [Task 013 visual check, 2026-10-23](reviews/2026-10-23-task-013-visual-check.md)
 - [Phase 5 visual check, 2026-10-23](reviews/2026-10-23-phase-5-visual-check.md)
+- [Phase 6 review checklist, 2026-10-23](reviews/2026-10-23-phase-6-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

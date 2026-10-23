@@ -51,6 +51,9 @@
 - [Studio v1 task 011: The album editor](tasks/studio-v1-task-011-album-editor.md)
 - [Studio v1 task 012: The value editor](tasks/studio-v1-task-012-value-editor.md)
 - [Studio v1 task 013: The recipient picker](tasks/studio-v1-task-013-recipient-picker.md)
+- [Studio v1 task 013a: The recipient store and the musicindex routes](tasks/studio-v1-task-013a-recipient-store.md)
+- [Studio v1 task 013b: The recipient routes](tasks/studio-v1-task-013b-recipient-routes.md)
+- [Studio v1 task 013c: The picker sheet](tasks/studio-v1-task-013c-picker-sheet.md)
 - [Studio v1 task 014: The editor layout](tasks/studio-v1-task-014-editor-layout.md)
 - [Studio v1 task 014a: The background levels](tasks/studio-v1-task-014a-background-levels.md)
 - [Studio v1 task 014b: The draft toolbar and the sheets](tasks/studio-v1-task-014b-toolbar-and-sheets.md)
@@ -63,6 +66,7 @@
 - [Task 009 visual check, 2026-10-22](reviews/2026-10-22-task-009-visual-check.md)
 - [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
 - [Task 012 visual check, 2026-10-22](reviews/2026-10-22-task-012-visual-check.md)
+- [Task 013 review checklist, 2026-10-22](reviews/2026-10-22-task-013-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

@@ -4,6 +4,16 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 5.
 Decisions: [ADR 0014](../adr/0014-collection-in-sqlite.md), [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) and [ADR 0027](../adr/0027-the-recipient-picker.md).
 Depends on: [task 012](studio-v1-task-012-value-editor.md).
 
+## Packets
+
+Three packets do this task, one after the other. Each packet has a prompt for a coding model. The planning model examines each packet with the [review checklist](../reviews/2026-10-22-task-013-review-checklist.md) before its commit.
+
+1. [013a: the recipient store and the musicindex routes](studio-v1-task-013a-recipient-store.md): steps 1, 2 and the core of step 4.
+2. [013b: the recipient routes](studio-v1-task-013b-recipient-routes.md): step 3 and the API of step 4.
+3. [013c: the picker sheet](studio-v1-task-013c-picker-sheet.md): steps 5 and 6.
+
+The picker goes into the Recipients page and the recipients section of each track page of [task 014](studio-v1-task-014-editor-layout.md).
+
 ## Goal
 
 Let the user add recipients from a list of used and saved recipients, and from the feeds and tracks in musicindex.

@@ -4,6 +4,7 @@
 //! ID of the diff that the user approved.
 
 use std::fmt;
+use std::path::Path;
 
 use similar::TextDiff;
 
@@ -496,6 +497,46 @@ pub fn release_path(feed_path: &str, file_name: &str) -> String {
         format!("{stem}/{file_name}")
     } else {
         format!("{parent}/{stem}/{file_name}")
+    }
+}
+
+/// The result of a compare of a file on the host with a local file, for an
+/// import that may reuse the file on the host (ADR 0034).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostFile {
+    /// No file is at the path on the host.
+    Absent,
+    /// The file on the host has the same SHA-256 as the local file.
+    Same,
+    /// The file on the host has a different SHA-256 than the local file.
+    Different,
+}
+
+/// Compare the file at `path` on the host with the local file at `local`, by
+/// the SHA-256 of each (ADR 0034).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the read of the host file fails, or
+/// `local` cannot be read.
+pub fn host_file_matches(
+    connector: &dyn Connector,
+    path: &str,
+    local: &Path,
+) -> Result<HostFile, PipelineError> {
+    let Some(hosted) = connector.read(path)? else {
+        return Ok(HostFile::Absent);
+    };
+    let local_bytes = std::fs::read(local).map_err(|error| {
+        PipelineError::new(
+            PipelineErrorKind::Connector,
+            format!("{}: cannot read the local file: {error}", local.display()),
+        )
+    })?;
+    if sha256_hex(&[&hosted.bytes]) == sha256_hex(&[&local_bytes]) {
+        Ok(HostFile::Same)
+    } else {
+        Ok(HostFile::Different)
     }
 }
 

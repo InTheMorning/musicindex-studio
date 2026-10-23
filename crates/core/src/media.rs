@@ -18,6 +18,7 @@ use flacenc::component::BitRepr;
 use flacenc::error::Verify;
 use lofty::config::WriteOptions;
 use lofty::file::FileType;
+use lofty::id3::v2::Id3v2Tag;
 use lofty::prelude::*;
 use lofty::probe::Probe;
 use lofty::tag::{Tag, TagType};
@@ -503,7 +504,11 @@ fn write_mp3_tag(
     track_number: Option<u32>,
     name: &str,
 ) -> Result<(), MediaError> {
-    let mut tag = Tag::new(TagType::Id3v2);
+    // An `Id3v2Tag` keeps its frames in the sequence of the calls below.
+    // A general `Tag` gives the frames in a random sequence when it
+    // converts to ID3v2, so two imports of the same file then give
+    // different bytes (ADR 0034).
+    let mut tag = Id3v2Tag::new();
     tag.set_title(title.to_owned());
     if let Some(artist) = artist {
         tag.set_artist(artist);

@@ -1706,6 +1706,132 @@ async fn when_the_flac_path_of_a_wav_upload_exists_on_the_host_no_file_is_added(
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
 }
 
+/// An MP3 upload with bytes other than the file on the host at its
+/// release path gives 409 `file_exists`. Studio does not replace a file
+/// on the host (ADR 0034).
+#[tokio::test]
+async fn an_mp3_upload_with_different_bytes_at_its_release_path_gives_file_exists() {
+    let app = app();
+    let id = set_up(&app).await;
+    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
+    std::fs::write(app.feeds.path().join("album/tagged.mp3"), b"other bytes").unwrap();
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "file_exists");
+    assert!(incoming_is_empty(&app));
+}
+
+/// After a write of a WAV track, a second upload of the same WAV file
+/// uses the MP3 file and the FLAC file on the host, and adds no pending
+/// file (ADR 0034). The MP3 encode and its tag give the same bytes each
+/// time.
+#[tokio::test]
+async fn a_second_upload_of_the_same_wav_file_uses_both_files_on_the_host() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.wav")).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.wav", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["on_host"], false);
+    assert_eq!(body["lossless"]["on_host"], false);
+
+    // Give the track the MP3 enclosure and the FLAC file as an
+    // alternative enclosure, and write the draft, so the two files go on
+    // the host.
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": body["url"],
+        "length": body["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    model["items"][0]["alternate_enclosures"] = json!([{
+        "media_type": "audio/flac",
+        "length": body["lossless"]["size"].to_string(),
+        "bitrate": null,
+        "title": "Maximum fidelity (lossless)",
+        "rel": null,
+        "default": null,
+        "sources": [{ "uri": body["lossless"]["url"], "content_type": null }],
+    }]);
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+    assert!(app.feeds.path().join("album/tagged.flac").exists());
+
+    // A second upload of the same WAV file uses the two files on the host.
+    let (status, body) = upload(&app, id, "tagged.wav", bytes).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["on_host"], true);
+    assert_eq!(body["lossless"]["on_host"], true);
+    assert!(incoming_is_empty(&app));
+
+    for path in ["album/tagged.mp3", "album/tagged.flac"] {
+        let delete = format!("/api/v1/feeds/{id}/files?path={}", url_encode(path));
+        let (status, body) = call(&app, "DELETE", &delete, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+    }
+}
+
+/// A WAV upload whose FLAC file is on the host already, with the same
+/// bytes, and whose MP3 path is free, uses the FLAC file from the host
+/// and adds only the MP3 file as a pending file (ADR 0034).
+#[tokio::test]
+async fn a_wav_upload_whose_flac_file_is_on_the_host_adds_only_the_mp3_file() {
+    let app = app();
+    let id = set_up(&app).await;
+    let wav_bytes = std::fs::read(media_path("tagged.wav")).unwrap();
+
+    // Make the FLAC file that an import of this WAV file gives, and put
+    // it on the host first, at the release path of the lossless file.
+    let source_dir = tempfile::tempdir().unwrap();
+    let source = source_dir.path().join("tagged.wav");
+    std::fs::write(&source, &wav_bytes).unwrap();
+    let imported = studio_core::media::import(&source, "tagged.wav").unwrap();
+    let flac_bytes = std::fs::read(&imported.lossless.unwrap().path).unwrap();
+    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
+    std::fs::write(app.feeds.path().join("album/tagged.flac"), &flac_bytes).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.wav", wav_bytes).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["on_host"], false);
+    assert_eq!(body["lossless"]["on_host"], true);
+    assert!(incoming_is_empty(&app));
+
+    // Only the MP3 file is a pending file.
+    let delete_mp3 = format!(
+        "/api/v1/feeds/{id}/files?path={}",
+        url_encode("album/tagged.mp3")
+    );
+    let delete_flac = format!(
+        "/api/v1/feeds/{id}/files?path={}",
+        url_encode("album/tagged.flac")
+    );
+    let (status, body) = call(&app, "DELETE", &delete_mp3, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (status, body) = call(&app, "DELETE", &delete_flac, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
 #[tokio::test]
 async fn a_text_file_gives_415_and_a_repeated_name_replaces_or_gives_409() {
     let app = app();

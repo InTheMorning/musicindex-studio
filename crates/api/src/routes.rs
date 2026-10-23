@@ -947,7 +947,7 @@ pub(crate) async fn upload_file(
 /// The blocking steps of an upload, with the workspace locked: the public
 /// address check, the release path of the MP3 file and of the FLAC file,
 /// and the write of each to the pending files (ADR 0026, ADR 0032 items 1
-/// to 5 and 10, ADR 0033 items 1 to 7).
+/// to 5 and 10, ADR 0033 items 1 to 7, ADR 0034).
 fn import_upload(
     w: &mut Workspace,
     id: FeedId,
@@ -975,33 +975,55 @@ fn import_upload(
 
     // Check the release path of the MP3 file and of the FLAC file before
     // Studio adds either one. The route adds no file when one path fails
-    // (ADR 0033 item 3).
-    check_release_path(w, made.as_ref(), id, &path)?;
-    if let Some(lossless_path) = lossless_path.as_deref() {
-        check_release_path(w, made.as_ref(), id, lossless_path)?;
-    }
-
-    let (sha256, size) = w
-        .store
-        .put_file(id, &imported.path)
-        .map_err(|e| ApiError::internal(e.to_string()))?;
-    let draft_file = DraftFile {
-        path: path.clone(),
-        size,
-        media_type: imported.media_type.clone(),
-        sha256,
+    // (ADR 0033 item 3). A path with a file on the host of the same bytes
+    // needs no pending file; the import uses the file on the host instead
+    // (ADR 0034).
+    let on_host = check_release_path(w, made.as_ref(), id, &path, &imported.path)?;
+    let lossless_on_host = match (lossless_path.as_deref(), imported.lossless.as_ref()) {
+        (Some(lossless_path), Some(file)) => Some(check_release_path(
+            w,
+            made.as_ref(),
+            id,
+            lossless_path,
+            &file.path,
+        )?),
+        _ => None,
     };
-    w.collection.add_draft_file(id, &draft_file)?;
+
+    let main_pending = if on_host {
+        None
+    } else {
+        let (sha256, size) = w
+            .store
+            .put_file(id, &imported.path)
+            .map_err(|e| ApiError::internal(e.to_string()))?;
+        let draft_file = DraftFile {
+            path: path.clone(),
+            size,
+            media_type: imported.media_type.clone(),
+            sha256,
+        };
+        w.collection.add_draft_file(id, &draft_file)?;
+        Some(draft_file)
+    };
 
     let lossless = match (imported.lossless.as_ref(), lossless_path.as_deref()) {
         (Some(file), Some(lossless_path)) => {
-            match add_lossless_file(w, id, made.as_ref(), file, lossless_path) {
+            let result = if lossless_on_host.unwrap_or(false) {
+                lossless_host_facts(made.as_ref(), file, lossless_path)
+            } else {
+                add_lossless_file(w, id, made.as_ref(), file, lossless_path)
+            };
+            match result {
                 Ok(value) => Some(value),
                 Err(error) => {
                     // The FLAC file did not go in. The route adds no
                     // file when one of the two fails, so the MP3 file
                     // goes out too (ADR 0033 item 3).
-                    let _ = pipeline::remove_pending_file(&w.collection, &w.store, id, &draft_file);
+                    if let Some(draft_file) = &main_pending {
+                        let _ =
+                            pipeline::remove_pending_file(&w.collection, &w.store, id, draft_file);
+                    }
                     return Err(error);
                 }
             }
@@ -1025,7 +1047,7 @@ fn import_upload(
         to_json(json!({
             "path": path,
             "url": url,
-            "size": size,
+            "size": imported.size,
             "media_type": imported.media_type,
             "kind": kind,
             "title": title,
@@ -1033,6 +1055,7 @@ fn import_upload(
             "duration": duration,
             "converted_from_wav": imported.converted_from_wav,
             "file_name": imported.file_name,
+            "on_host": on_host,
             "lossless": lossless,
         }))?,
     ))
@@ -1040,16 +1063,21 @@ fn import_upload(
 
 /// Refuse the release path of a new pending file: 409 `file_pending` when
 /// a track or an image of the draft uses a pending file there, and 409
-/// `file_exists` when a file exists on the host there. A pending file at
-/// the path that the draft does not use is left over, and this function
-/// removes it so the new file can take its place (ADR 0026 item 7,
-/// ADR 0032 item 10, ADR 0033 item 3).
+/// `file_exists` when a file on the host there has bytes other than
+/// `local` (ADR 0034). A pending file at the path that the draft does not
+/// use is left over, and this function removes it so the new file can
+/// take its place (ADR 0026 item 7, ADR 0032 item 10, ADR 0033 item 3).
+///
+/// Gives `true` when the file on the host at `path` has the same bytes as
+/// `local`. The route then adds no pending file for `path`, and uses the
+/// file on the host instead (ADR 0034).
 fn check_release_path(
     w: &Workspace,
     connector: &dyn connector::Connector,
     id: FeedId,
     path: &str,
-) -> Result<(), ApiError> {
+    local: &FilePath,
+) -> Result<bool, ApiError> {
     if let Some(old) = w
         .collection
         .draft_files(id)?
@@ -1075,14 +1103,15 @@ fn check_release_path(
         }
         pipeline::remove_pending_file(&w.collection, &w.store, id, &old)?;
     }
-    if connector.read(path)?.is_some() {
-        return Err(ApiError::new(
+    match pipeline::host_file_matches(connector, path, local)? {
+        pipeline::HostFile::Absent => Ok(false),
+        pipeline::HostFile::Same => Ok(true),
+        pipeline::HostFile::Different => Err(ApiError::new(
             StatusCode::CONFLICT,
             "file_exists",
             format!("a file exists at {path} already"),
-        ));
+        )),
     }
-    Ok(())
 }
 
 /// Add the FLAC file of a lossless import as a pending file, after the
@@ -1117,6 +1146,28 @@ fn add_lossless_file(
         "size": size,
         "media_type": file.media_type,
         "file_name": file.file_name,
+        "on_host": false,
+    }))
+}
+
+/// The JSON facts of the FLAC file of a lossless import that is on the
+/// host already, with the same bytes. The import adds no pending file for
+/// it (ADR 0034).
+fn lossless_host_facts(
+    connector: &dyn connector::Connector,
+    file: &media::ImportedFile,
+    path: &str,
+) -> Result<Value, ApiError> {
+    let url = connector.public_url(path).ok_or_else(|| {
+        ApiError::internal("the connector gave no public address for the release path")
+    })?;
+    Ok(json!({
+        "path": path,
+        "url": url,
+        "size": file.size,
+        "media_type": file.media_type,
+        "file_name": file.file_name,
+        "on_host": true,
     }))
 }
 

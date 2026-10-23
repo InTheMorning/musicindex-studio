@@ -385,9 +385,11 @@ function importStateText(row, kind) {
 // notice when it is a WAV file, and its facts when it is ready. An image row
 // also has the list of its use (task architecture).
 // The name, the type and the size of one file that Studio keeps. Each
-// file of a lossless import has its own line (ADR 0033 item 1).
+// file of a lossless import has its own line (ADR 0033 item 1). A file
+// that the import uses from the host already gets a note of this fact
+// (ADR 0034 item 5).
 function fileFacts(file) {
-  return html`<span class="mono">${file.file_name}</span> · <span class="mono">${file.media_type}</span> · ${fileSize(file.size)}`;
+  return html`<span class="mono">${file.file_name}</span> · <span class="mono">${file.media_type}</span> · ${fileSize(file.size)}${file.on_host ? ' · On the host already' : ''}`;
 }
 
 function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
@@ -517,10 +519,14 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
   };
 
   // Remove the MP3 file of a sent row from the host, and the FLAC file too
-  // when the row has one (ADR 0033 items 1 and 3, task architecture).
+  // when the row has one (ADR 0033 items 1 and 3, task architecture). A
+  // file that the import used from the host already is not a pending
+  // file, so this skips its removal (ADR 0034 item 5).
   const removeFiles = (facts) => {
-    api(`/feeds/${feedId}/files?path=${encodeURIComponent(facts.path)}`, { method: 'DELETE' }).catch(() => {});
-    if (facts.lossless) {
+    if (!facts.on_host) {
+      api(`/feeds/${feedId}/files?path=${encodeURIComponent(facts.path)}`, { method: 'DELETE' }).catch(() => {});
+    }
+    if (facts.lossless && !facts.lossless.on_host) {
       api(`/feeds/${feedId}/files?path=${encodeURIComponent(facts.lossless.path)}`, { method: 'DELETE' }).catch(() => {});
     }
   };

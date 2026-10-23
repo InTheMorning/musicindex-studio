@@ -202,3 +202,19 @@ fn a_long_wav_file_gives_an_mp3_file_with_the_same_duration() {
         "the MP3 file is {duration} s"
     );
 }
+
+/// Two imports of the same lossless file give MP3 files with the same
+/// bytes, so a second import can use the file on the host (ADR 0034).
+#[test]
+fn two_imports_of_the_same_wav_file_give_the_same_mp3_bytes() {
+    let mut mp3s = Vec::new();
+    for _ in 0..3 {
+        let dir = tempfile::tempdir().unwrap();
+        let wav = dir.path().join("tagged.wav");
+        std::fs::copy(media_path("tagged.wav"), &wav).unwrap();
+        let imported = import(&wav, "tagged.wav").unwrap();
+        mp3s.push(std::fs::read(&imported.path).unwrap());
+    }
+    assert_eq!(mp3s[0], mp3s[1]);
+    assert_eq!(mp3s[1], mp3s[2]);
+}

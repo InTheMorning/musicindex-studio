@@ -374,6 +374,34 @@ fn release_path_gives_the_file_next_to_the_feed_file_with_no_extension() {
     );
 }
 
+#[test]
+fn host_file_matches_gives_absent_same_and_different() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = LocalFolder::new(dir.path(), Some("https://music.example".into()));
+    let local_dir = tempfile::tempdir().unwrap();
+    let local = local_dir.path().join("a.mp3");
+    fs::write(&local, b"music").unwrap();
+
+    assert_eq!(
+        pipeline::host_file_matches(&folder, "album/a.mp3", &local).unwrap(),
+        pipeline::HostFile::Absent
+    );
+
+    folder
+        .write("album/a.mp3", b"music", &Expected::Absent)
+        .unwrap();
+    assert_eq!(
+        pipeline::host_file_matches(&folder, "album/a.mp3", &local).unwrap(),
+        pipeline::HostFile::Same
+    );
+
+    fs::write(&local, b"different").unwrap();
+    assert_eq!(
+        pipeline::host_file_matches(&folder, "album/a.mp3", &local).unwrap(),
+        pipeline::HostFile::Different
+    );
+}
+
 // ---- Pending files (ADR 0026, ADR 0032 items 10 to 12) ----
 
 /// A connector that records the path of each write, so a test can check

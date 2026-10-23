@@ -7,7 +7,9 @@ use serde_json::json;
 use studio_core::address::AddressError;
 use studio_core::collection::{CollectionError, CollectionErrorKind};
 use studio_core::connector::{ConnectorError, ConnectorErrorKind};
+use studio_core::inventory::{InventoryError, InventoryErrorKind};
 use studio_core::media::{MediaError, MediaErrorKind};
+use studio_core::migrate::MigrateError;
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::vault::{VaultError, VaultErrorKind};
 
@@ -94,6 +96,26 @@ impl From<ConnectorError> for ApiError {
             _ => (StatusCode::BAD_GATEWAY, "connector"),
         };
         Self::new(status, code, error.to_string())
+    }
+}
+
+impl From<InventoryError> for ApiError {
+    fn from(error: InventoryError) -> Self {
+        let (status, code) = match error.kind() {
+            // ADR 0017: the host needs the vault, and the vault is locked.
+            InventoryErrorKind::VaultLocked => (StatusCode::LOCKED, "vault_locked"),
+            InventoryErrorKind::UnknownHost | InventoryErrorKind::NoHost => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "unknown_host")
+            }
+            _ => (StatusCode::BAD_GATEWAY, "inventory"),
+        };
+        Self::new(status, code, error.to_string())
+    }
+}
+
+impl From<MigrateError> for ApiError {
+    fn from(error: MigrateError) -> Self {
+        Self::internal(error.to_string())
     }
 }
 

@@ -89,6 +89,12 @@ pub struct Workspace {
     /// (ADR 0026, ADR 0033 item 1). Task 021e removes the pending-file
     /// store: an import now writes directly into the release folder.
     pub(crate) incoming_dir: PathBuf,
+    /// The folder that held the pending files before the library existed
+    /// (ADR 0036 item 5). The library route passes this to
+    /// `migrate::into_library`, at the first start with a library folder.
+    /// A data folder with no such files has no such folder either, and
+    /// the move then does nothing for it.
+    pub(crate) imports_dir: PathBuf,
 }
 
 impl Workspace {
@@ -109,6 +115,7 @@ impl Workspace {
             discovered: HashMap::new(),
             images: ImageCache::default(),
             incoming_dir: data_dir.join("incoming"),
+            imports_dir: data_dir.join("imports"),
         })
     }
 

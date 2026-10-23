@@ -1955,3 +1955,352 @@ async fn a_delete_of_a_library_file_that_the_draft_refers_to_gives_file_in_use()
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "file_in_use");
 }
+
+/// Add a connector with a public address, for the host of a copy or a
+/// move (task 021f).
+async fn add_host(app: &App, name: &str, root: &std::path::Path, base_url: &str) -> i64 {
+    let (_, connector) = call(
+        app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "local",
+            "name": name,
+            "root": root.to_str().unwrap(),
+            "base_url": base_url,
+        })),
+    )
+    .await;
+    connector["id"].as_i64().unwrap()
+}
+
+#[tokio::test]
+async fn the_library_route_moves_the_collection_and_the_files_route_lists_its_files() {
+    let app = app();
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    let (_, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+
+    let (status, library) = call(&app, "GET", "/api/v1/library", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(library["root"], Value::Null);
+    assert_eq!(
+        library["download_max_file_bytes"].as_u64().unwrap(),
+        2 * 1024 * 1024 * 1024
+    );
+
+    let library_root = app.data.path().join("library");
+    let (status, report) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": library_root.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["release_folders"], 1);
+    assert_eq!(report["feed_files"], 1);
+    assert_eq!(report["errors"], json!([]));
+
+    let (_, library) = call(&app, "GET", "/api/v1/library", None).await;
+    assert_eq!(library["root"], library_root.to_str().unwrap());
+
+    let (status, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    assert_eq!(files["folder"], "album");
+    assert_eq!(files["files"], json!([]));
+    assert_eq!(files["other_host_files"], json!([]));
+
+    // A change of an existing root is not available in milestone 7a.
+    let (status, body) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": app.data.path().join("elsewhere").to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "library_set");
+}
+
+#[tokio::test]
+async fn a_library_root_that_studio_cannot_write_gives_422() {
+    use std::os::unix::fs::PermissionsExt;
+    let app = app();
+    let parent = app.data.path().join("locked");
+    std::fs::create_dir_all(&parent).unwrap();
+    std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let root = parent.join("library");
+
+    let (status, body) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": root.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "library_not_writable");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(root.to_str().unwrap())
+    );
+
+    // Restore the permission, so the test folder can be removed.
+    std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[tokio::test]
+async fn a_copy_operation_to_a_second_host_gives_a_copy_in_the_diff() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let file_id = file["library_file_id"].as_i64().unwrap();
+
+    let backup_dir = tempfile::tempdir().unwrap();
+    let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
+
+    // The draft of the feed, with no reference to the file yet.
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "copy", "file": file_id, "connector_id": backup_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let operations = diff["operations"].as_array().unwrap();
+    assert_eq!(operations.len(), 1, "{operations:?}");
+    assert_eq!(operations[0]["kind"], "copy");
+    assert_eq!(operations[0]["connector_id"], backup_id);
+    assert_eq!(operations[0]["path"], "album/tagged.mp3");
+    assert_eq!(
+        operations[0]["url"],
+        "https://backup.example/album/tagged.mp3"
+    );
+}
+
+/// ADR 0036 item 12: a move is a copy to the new host, a reference of
+/// the new copy in the draft, and a delete of the copy on the old host.
+#[tokio::test]
+async fn a_move_operation_gives_a_copy_a_reference_and_a_delete() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let file_id = file["library_file_id"].as_i64().unwrap();
+    let from_url = file["url"].as_str().unwrap().to_owned();
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let home_id = connectors[0]["id"].as_i64().unwrap();
+    let backup_dir = tempfile::tempdir().unwrap();
+    let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
+
+    // The track refers to the file on its first host.
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": from_url,
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "move", "file": file_id, "from": home_id, "to": backup_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let operations = diff["operations"].as_array().unwrap();
+    assert!(
+        operations
+            .iter()
+            .any(|op| op["kind"] == "copy" && op["connector_id"] == backup_id),
+        "{operations:?}"
+    );
+    assert!(
+        operations
+            .iter()
+            .any(|op| op["kind"] == "delete" && op["connector_id"] == home_id),
+        "{operations:?}"
+    );
+
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(
+        draft["model"]["items"][0]["enclosure"]["url"],
+        "https://backup.example/album/tagged.mp3"
+    );
+}
+
+/// ADR 0036 item 13: Studio refuses a deletion while a feed refers to
+/// the address of the file.
+#[tokio::test]
+async fn a_delete_operation_of_a_file_in_use_gives_a_blocked_entry() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let home_id = connectors[0]["id"].as_i64().unwrap();
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "delete", "connector_id": home_id, "path": "album/tagged.mp3" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    // The draft still needs the upload of the file itself. The blocked
+    // deletion of its only copy is not among the operations to do.
+    let operations = diff["operations"].as_array().unwrap();
+    assert!(
+        !operations.iter().any(|op| op["kind"] == "delete"),
+        "{operations:?}"
+    );
+    let blocked = diff["blocked"].as_array().unwrap();
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0]["connector_id"], home_id);
+    assert_eq!(blocked[0]["path"], "album/tagged.mp3");
+    assert_eq!(blocked[0]["feed_titles"], json!([format!("feed {id}")]));
+}
+
+/// ADR 0036 item 12: an enclosure with a default alternate enclosure
+/// keeps its track playable after a dereference of its own address.
+#[tokio::test]
+async fn dereference_of_an_enclosure_with_a_default_alternate_enclosure_promotes_its_address() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.wav")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.wav", bytes).await;
+
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    model["items"][0]["alternate_enclosures"] = json!([{
+        "media_type": "audio/flac",
+        "length": file["lossless"]["size"].to_string(),
+        "bitrate": null,
+        "title": "Maximum fidelity (lossless)",
+        "rel": null,
+        "default": "true",
+        "sources": [{ "uri": file["lossless"]["url"], "content_type": null }],
+    }]);
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "dereference", "url": file["url"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(
+        draft["model"]["items"][0]["enclosure"]["url"],
+        file["lossless"]["url"]
+    );
+}
+
+/// `DELETE /operations/{op}` removes one operation by its ID, so the
+/// user can take back a copy or a deletion before the write.
+#[tokio::test]
+async fn an_operation_is_removed_by_its_id() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let file_id = file["library_file_id"].as_i64().unwrap();
+
+    let backup_dir = tempfile::tempdir().unwrap();
+    let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
+
+    // The draft of the feed, with no reference to the file yet.
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "copy", "file": file_id, "connector_id": backup_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["operations"].as_array().unwrap().len(), 1);
+
+    // The diff gives the ID of each draft operation, so the UI can remove
+    // it.
+    let operation_id = diff["operations"][0]["operation_id"].as_i64().unwrap();
+
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{id}/operations/{operation_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(diff["operations"], json!([]));
+}

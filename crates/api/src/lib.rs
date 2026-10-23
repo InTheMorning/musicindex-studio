@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::extract::DefaultBodyLimit;
 use axum::middleware;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 
 pub use access::Access;
 pub use axum::Router;
@@ -76,9 +76,17 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
         .route(
             "/feeds/{id}/files",
-            post(routes::upload_file)
+            get(routes::list_release_files)
+                .post(routes::upload_file)
                 .delete(routes::delete_pending_file)
                 .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
+        )
+        .route("/feeds/{id}/hosts", put(routes::set_files_host))
+        .route("/feeds/{id}/files/{file}/host", put(routes::set_file_host))
+        .route("/feeds/{id}/operations", post(routes::add_operation))
+        .route(
+            "/feeds/{id}/operations/{op}",
+            delete(routes::remove_operation),
         )
         .route(
             "/feeds/{id}/draft",
@@ -93,6 +101,12 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             "/feeds/{id}/snapshots/{snapshot}/draft",
             post(routes::draft_from_snapshot),
         )
+        .route(
+            "/library",
+            get(routes::get_library).put(routes::put_library),
+        )
+        .route("/library/limits", put(routes::put_library_limits))
+        .route("/hosts/{id}/scan", post(routes::scan_host))
         .with_state(shared);
     Router::new()
         .route("/", get(ui::index))

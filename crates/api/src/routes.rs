@@ -12,12 +12,17 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
-use studio_core::collection::{ConnectorId, FeedId, FeedRow, LibraryFileId, SnapshotId};
+use studio_core::collection::{
+    Collection, ConnectorId, DraftOperationId, DraftOperationKind, FeedId, FeedRow, LibraryFile,
+    LibraryFileId, SnapshotId,
+};
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
 use studio_core::feed::{Feed, Recipient};
+use studio_core::inventory::{self, Hosts};
 use studio_core::library::{self, Library};
 use studio_core::media;
+use studio_core::migrate;
 use studio_core::pipeline;
 use studio_core::vault::OpenVault;
 use tokio::io::AsyncWriteExt;
@@ -749,24 +754,35 @@ pub(crate) async fn delete_draft(
 }
 
 /// The diff between the live file and the draft, with the ID that the user
-/// approves, and the pending files that the write puts on the host.
+/// approves, the pending files that the write puts on the host, and each
+/// host operation of the release (ADR 0036 item 14).
 ///
-/// This route needs the library, because the diff also gives each host
-/// operation of the release (ADR 0036 item 14). It gives 409 `no_library`
-/// when Studio has no library folder yet.
+/// This needs the library, because the diff also gives each host
+/// operation of the release. It gives 409 `no_library` when Studio has no
+/// library folder yet.
+///
+/// The route after `POST .../operations` and `DELETE .../operations/{op}`
+/// gives this too, so that the UI sees the new diff with no second
+/// request.
+fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
+    let hosts = w.hosts()?;
+    let library = w.library()?;
+    let diff = pipeline::diff(&w.collection, &hosts, &library, id)?;
+    Ok(Json(json!({
+        "id": diff.id.as_str(),
+        "unified": diff.unified,
+        "changed": diff.changed,
+        "files": diff.files,
+        "operations": diff.operations,
+        "blocked": diff.blocked,
+    })))
+}
+
 pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
         writer(w, id)?;
-        let hosts = w.hosts()?;
-        let library = w.library()?;
-        let diff = pipeline::diff(&w.collection, &hosts, &library, id)?;
-        Ok(Json(json!({
-            "id": diff.id.as_str(),
-            "unified": diff.unified,
-            "changed": diff.changed,
-            "files": diff.files,
-        })))
+        diff_json(w, id)
     })
     .await
 }
@@ -827,6 +843,561 @@ pub(crate) async fn draft_from_snapshot(
         pipeline::discard_draft(&w.collection, id)?;
         pipeline::draft_from_snapshot(&w.collection, made.as_ref(), id, SnapshotId(snapshot))?;
         draft_json(w, id)
+    })
+    .await
+}
+
+// ---- The library, the host inventory and host operations (ADR 0036) ----
+
+/// The default of each download limit setting, 2 GiB (ADR 0036 item 17).
+/// Milestone 7b uses the limits.
+const DEFAULT_DOWNLOAD_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The library setting and the download limits (ADR 0036 items 1 and 17).
+pub(crate) async fn get_library(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        let root = w.collection.setting("library_root")?.unwrap_or(Value::Null);
+        let default_root = library::default_root().and_then(|p| p.to_str().map(str::to_owned));
+        let max = download_limit(&w.collection, "download_max_file_bytes")?;
+        let min = download_limit(&w.collection, "download_min_free_bytes")?;
+        Ok(Json(json!({
+            "root": root,
+            "default_root": default_root,
+            "download_max_file_bytes": max,
+            "download_min_free_bytes": min,
+        })))
+    })
+    .await
+}
+
+/// One download limit setting, or the default when the user has not set
+/// it yet (ADR 0036 item 17).
+fn download_limit(collection: &Collection, key: &str) -> Result<u64, ApiError> {
+    match collection.setting(key)? {
+        Some(value) => value
+            .as_u64()
+            .ok_or_else(|| ApiError::internal(format!("the {key} setting is not a number"))),
+        None => Ok(DEFAULT_DOWNLOAD_LIMIT_BYTES),
+    }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetLibrary {
+    root: String,
+}
+
+/// A report of a move into the library, as JSON. [`migrate::MoveReport`]
+/// has no `Serialize`, because the core gives no JSON (ADR 0002).
+fn move_report_json(report: &migrate::MoveReport) -> Value {
+    let errors: Vec<Value> = report
+        .errors
+        .iter()
+        .map(|error| json!({ "feed_id": error.feed_id.0, "message": error.message }))
+        .collect();
+    json!({
+        "release_folders": report.release_folders,
+        "feed_files": report.feed_files,
+        "moved_files": report.moved_files,
+        "errors": errors,
+    })
+}
+
+/// Give Studio its library folder (ADR 0036 item 1). At the first call,
+/// Studio also moves the current collection into it (ADR 0035 item 22,
+/// ADR 0036 items 1 to 6).
+///
+/// A later call with a different path gives 409 `library_set`: a move of
+/// the library is not in milestone 7a. A later call with the same path
+/// repeats the setting, with no second move.
+pub(crate) async fn put_library(
+    State(shared): State<Shared>,
+    Json(body): Json<SetLibrary>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let existing = w.collection.setting("library_root")?;
+        let existing_root = existing.as_ref().and_then(Value::as_str).map(str::to_owned);
+        let root = expand_home(body.root.trim());
+        if let Some(existing_root) = &existing_root
+            && existing_root != &root
+        {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "library_set",
+                "Studio has a library folder already; a move of the library is not available in this version",
+            ));
+        }
+        let library = Library::open(&root).map_err(|error| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "library_not_writable",
+                error.to_string(),
+            )
+        })?;
+        let report = if existing_root.is_none() {
+            let hosts = w.hosts()?;
+            migrate::into_library(&w.collection, &hosts, &library, &w.imports_dir)?
+        } else {
+            migrate::MoveReport::default()
+        };
+        w.collection.set_setting("library_root", &json!(root))?;
+        Ok(Json(move_report_json(&report)))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct LibraryLimits {
+    download_max_file_bytes: u64,
+    download_min_free_bytes: u64,
+}
+
+/// Give Studio its download limits, in bytes (ADR 0036 item 17).
+pub(crate) async fn put_library_limits(
+    State(shared): State<Shared>,
+    Json(body): Json<LibraryLimits>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        if body.download_max_file_bytes == 0 || body.download_min_free_bytes == 0 {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_limit",
+                "each download limit must be a positive number of bytes",
+            ));
+        }
+        w.collection.set_setting(
+            "download_max_file_bytes",
+            &json!(body.download_max_file_bytes),
+        )?;
+        w.collection.set_setting(
+            "download_min_free_bytes",
+            &json!(body.download_min_free_bytes),
+        )?;
+        Ok(Json(json!({
+            "download_max_file_bytes": body.download_max_file_bytes,
+            "download_min_free_bytes": body.download_min_free_bytes,
+        })))
+    })
+    .await
+}
+
+/// The library file of a feed, checked to belong to it.
+fn feed_library_file(
+    collection: &Collection,
+    id: FeedId,
+    file_id: i64,
+) -> Result<LibraryFile, ApiError> {
+    let file = collection.library_file(LibraryFileId(file_id))?;
+    if file.feed_id != id {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            format!("library file {file_id} is not a file of feed {}", id.0),
+        ));
+    }
+    Ok(file)
+}
+
+/// Each host file of a release folder that is not a copy of one of its
+/// library files (ADR 0036 item 11). Studio reads the SHA-256 of a host
+/// file only when its size agrees with a library file already (ADR 0036
+/// item 6).
+fn extra_folder_files(
+    collection: &Collection,
+    hosts: &Hosts,
+    folder: &str,
+    library_files: &[LibraryFile],
+) -> Result<Vec<Value>, ApiError> {
+    let prefix = format!("{folder}/");
+    let mut extra = Vec::new();
+    for connector_id in hosts.ids() {
+        for host_file in collection.host_files(connector_id)? {
+            if !host_file.path.starts_with(&prefix) {
+                continue;
+            }
+            let candidates: Vec<&LibraryFile> = library_files
+                .iter()
+                .filter(|file| file.size == host_file.size)
+                .collect();
+            let is_copy = if candidates.is_empty() {
+                false
+            } else {
+                let sha256 = match &host_file.sha256 {
+                    Some(sha256) => Some(sha256.clone()),
+                    None => inventory::host_sha(collection, hosts, connector_id, &host_file.path)?,
+                };
+                sha256.is_some_and(|sha256| candidates.iter().any(|file| file.sha256 == sha256))
+            };
+            if !is_copy {
+                let connector = hosts.get(connector_id)?;
+                extra.push(json!({
+                    "connector_id": connector_id.0,
+                    "path": host_file.path,
+                    "size": host_file.size,
+                    "url": connector.public_url(&host_file.path),
+                }));
+            }
+        }
+    }
+    Ok(extra)
+}
+
+/// The files of a release: its folder, its default host, each library
+/// file with its planned address, its copies and whether the draft uses
+/// it, and each host file of the folder that is not a copy of a library
+/// file (ADR 0036 items 4, 7, 9 and 11).
+pub(crate) async fn list_release_files(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let feed_row = w.collection.feed(id)?;
+        let hosts = w.hosts()?;
+        let library_files = w.collection.library_files(id)?;
+
+        let mut files = Vec::new();
+        for file in &library_files {
+            let planned = inventory::planned_path(&w.collection, &hosts, &feed_row, file)?;
+            let in_use = pipeline::library_file_in_use(&w.collection, &hosts, file)?;
+            let copies: Vec<Value> = inventory::copies(&w.collection, &hosts, file)?
+                .into_iter()
+                .map(|copy| {
+                    json!({
+                        "connector_id": copy.connector_id.0,
+                        "path": copy.path,
+                        "url": copy.url,
+                    })
+                })
+                .collect();
+            files.push(json!({
+                "id": file.id.0,
+                "path": file.path,
+                "size": file.size,
+                "media_type": file.media_type,
+                "local": file.local,
+                "connector_id": planned.connector_id.0,
+                "url": planned.url,
+                "in_use": in_use,
+                "copies": copies,
+            }));
+        }
+
+        let other = match feed_row.folder.as_deref() {
+            Some(folder) => extra_folder_files(&w.collection, &hosts, folder, &library_files)?,
+            None => Vec::new(),
+        };
+
+        Ok(Json(json!({
+            "folder": feed_row.folder,
+            "files_connector_id": feed_row.files_connector_id.map(|c| c.0),
+            "files": files,
+            "other_host_files": other,
+        })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetFilesHost {
+    files_connector_id: Option<i64>,
+}
+
+/// Give a release its default host for files (ADR 0036 item 4 and item
+/// 8).
+pub(crate) async fn set_files_host(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SetFilesHost>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        let connector = body.files_connector_id.map(ConnectorId);
+        if let Some(connector) = connector {
+            w.collection.connector(connector)?;
+        }
+        w.collection.set_files_connector(id, connector)?;
+        to_json(w.collection.feed(id)?)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetFileHost {
+    connector_id: Option<i64>,
+}
+
+/// Give one library file its own host, or clear it back to the default
+/// host of the release (ADR 0036 item 4 and item 8).
+pub(crate) async fn set_file_host(
+    State(shared): State<Shared>,
+    Path((id, file)): Path<(i64, i64)>,
+    Json(body): Json<SetFileHost>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        let file_row = feed_library_file(&w.collection, id, file)?;
+        let connector = body.connector_id.map(ConnectorId);
+        if let Some(connector) = connector {
+            w.collection.connector(connector)?;
+        }
+        w.collection
+            .set_library_file_connector(file_row.id, connector)?;
+        to_json(w.collection.library_file(file_row.id)?)
+    })
+    .await
+}
+
+/// The path and the address where Studio would put `file` on
+/// `connector_id` (ADR 0036 item 9). The function forces the host for
+/// this one computation. It does not change the host of `file` in the
+/// collection.
+fn planned_path_on(
+    collection: &Collection,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    file: &LibraryFile,
+    connector_id: ConnectorId,
+) -> Result<inventory::PlannedPath, ApiError> {
+    let mut forced = file.clone();
+    forced.connector_id = Some(connector_id);
+    Ok(inventory::planned_path(
+        collection, hosts, feed_row, &forced,
+    )?)
+}
+
+/// The address for the draft, for `file` on `connector_id` (ADR 0036
+/// item 12). The function gives the address of a copy that is on the
+/// host already. It gives the planned address otherwise.
+fn reference_url(
+    collection: &Collection,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    file: &LibraryFile,
+    connector_id: ConnectorId,
+) -> Result<String, ApiError> {
+    let existing = inventory::copies(collection, hosts, file)?
+        .into_iter()
+        .find(|copy| copy.connector_id == connector_id)
+        .and_then(|copy| copy.url);
+    if let Some(url) = existing {
+        return Ok(url);
+    }
+    planned_path_on(collection, hosts, feed_row, file, connector_id)?
+        .url
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "no_public_address",
+                "the host gives no public address for this file",
+            )
+        })
+}
+
+/// Replace each address of `feed` that is `from` with `to` (ADR 0036
+/// item 12). The function checks the same addresses as the host
+/// inventory (ADR 0036 item 7): the channel image, each item's
+/// enclosure and image, and each `podcast:source` of an alternate
+/// enclosure.
+fn reference_feed(feed: &mut Feed, from: &str, to: &str) {
+    if feed.image.as_deref() == Some(from) {
+        feed.image = Some(to.to_owned());
+    }
+    for entry in &mut feed.items {
+        let item = &mut entry.value;
+        if item.image.as_deref() == Some(from) {
+            item.image = Some(to.to_owned());
+        }
+        if let Some(enclosure) = item.enclosure.as_mut()
+            && enclosure.url.as_deref() == Some(from)
+        {
+            enclosure.url = Some(to.to_owned());
+        }
+        for alternate in &mut item.alternate_enclosures {
+            for source in &mut alternate.value.sources {
+                if source.value.uri.as_deref() == Some(from) {
+                    source.value.uri = Some(to.to_owned());
+                }
+            }
+        }
+    }
+}
+
+/// Remove the address `url` from `feed` (ADR 0036 item 12). An enclosure
+/// with a `default="true"` alternate enclosure takes the address of that
+/// alternate enclosure, so that the item keeps a playable file.
+fn dereference_feed(feed: &mut Feed, url: &str) {
+    if feed.image.as_deref() == Some(url) {
+        feed.image = None;
+    }
+    for entry in &mut feed.items {
+        let item = &mut entry.value;
+        if item.image.as_deref() == Some(url) {
+            item.image = None;
+        }
+        if item.enclosure.as_ref().and_then(|e| e.url.as_deref()) == Some(url) {
+            let promoted = item
+                .alternate_enclosures
+                .iter()
+                .find(|alternate| alternate.value.default.as_deref() == Some("true"))
+                .and_then(|alternate| alternate.value.sources.first())
+                .and_then(|source| source.value.uri.clone());
+            match (promoted, item.enclosure.as_mut()) {
+                (Some(new_url), Some(enclosure)) => enclosure.url = Some(new_url),
+                _ => item.enclosure = None,
+            }
+        }
+        for alternate in &mut item.alternate_enclosures {
+            alternate
+                .value
+                .sources
+                .retain(|source| source.value.uri.as_deref() != Some(url));
+        }
+    }
+}
+
+/// The body of `POST /feeds/{id}/operations` (ADR 0036 items 10 and 12).
+#[derive(Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub(crate) enum FileOperation {
+    /// Put the address of a copy in the feed, in place of its current
+    /// address.
+    Reference {
+        file: i64,
+        connector_id: i64,
+        from_url: String,
+    },
+    /// Remove an address from the feed.
+    Dereference { url: String },
+    /// Put a library file on a different host, with no change of the
+    /// feed.
+    Copy { file: i64, connector_id: i64 },
+    /// Copy a library file to a host, reference the new copy, and delete
+    /// the copy that was on the first host.
+    Move { file: i64, from: i64, to: i64 },
+    /// Delete a file from a host.
+    Delete { connector_id: i64, path: String },
+}
+
+/// Change the draft or add a draft operation of a release, from one user
+/// operation on a file (ADR 0036 items 10 and 12). Gives the new diff
+/// summary.
+pub(crate) async fn add_operation(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<FileOperation>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        let hosts = w.hosts()?;
+        let feed_row = w.collection.feed(id)?;
+        match body {
+            FileOperation::Reference {
+                file,
+                connector_id,
+                from_url,
+            } => {
+                let file = feed_library_file(&w.collection, id, file)?;
+                let to_url = reference_url(
+                    &w.collection,
+                    &hosts,
+                    &feed_row,
+                    &file,
+                    ConnectorId(connector_id),
+                )?;
+                pipeline::edit_draft(&w.collection, id, |feed| {
+                    reference_feed(feed, &from_url, &to_url);
+                })?;
+            }
+            FileOperation::Dereference { url } => {
+                pipeline::edit_draft(&w.collection, id, |feed| {
+                    dereference_feed(feed, &url);
+                })?;
+            }
+            FileOperation::Copy { file, connector_id } => {
+                let file = feed_library_file(&w.collection, id, file)?;
+                let planned = planned_path_on(
+                    &w.collection,
+                    &hosts,
+                    &feed_row,
+                    &file,
+                    ConnectorId(connector_id),
+                )?;
+                w.collection.add_draft_operation(
+                    id,
+                    DraftOperationKind::Copy,
+                    Some(file.id),
+                    ConnectorId(connector_id),
+                    &planned.path,
+                )?;
+            }
+            FileOperation::Move { file, from, to } => {
+                let file = feed_library_file(&w.collection, id, file)?;
+                let from_connector = ConnectorId(from);
+                let to_connector = ConnectorId(to);
+                let from_planned =
+                    planned_path_on(&w.collection, &hosts, &feed_row, &file, from_connector)?;
+                let from_url =
+                    reference_url(&w.collection, &hosts, &feed_row, &file, from_connector)?;
+                let to_planned =
+                    planned_path_on(&w.collection, &hosts, &feed_row, &file, to_connector)?;
+                let to_url = reference_url(&w.collection, &hosts, &feed_row, &file, to_connector)?;
+                w.collection.add_draft_operation(
+                    id,
+                    DraftOperationKind::Copy,
+                    Some(file.id),
+                    to_connector,
+                    &to_planned.path,
+                )?;
+                pipeline::edit_draft(&w.collection, id, |feed| {
+                    reference_feed(feed, &from_url, &to_url);
+                })?;
+                w.collection.add_draft_operation(
+                    id,
+                    DraftOperationKind::Delete,
+                    None,
+                    from_connector,
+                    &from_planned.path,
+                )?;
+            }
+            FileOperation::Delete { connector_id, path } => {
+                w.collection.add_draft_operation(
+                    id,
+                    DraftOperationKind::Delete,
+                    None,
+                    ConnectorId(connector_id),
+                    &path,
+                )?;
+            }
+        }
+        diff_json(w, id)
+    })
+    .await
+}
+
+/// Remove one draft operation of a release, for example to take back a
+/// copy or a deletion before the write (ADR 0036 item 12).
+pub(crate) async fn remove_operation(
+    State(shared): State<Shared>,
+    Path((id, op)): Path<(i64, i64)>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        w.collection
+            .remove_draft_operation(id, DraftOperationId(op))?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+/// List a host, and keep the inventory in step with it (ADR 0036 item 6).
+pub(crate) async fn scan_host(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let hosts = w.hosts()?;
+        to_json(inventory::scan(&w.collection, &hosts, ConnectorId(id))?)
     })
     .await
 }

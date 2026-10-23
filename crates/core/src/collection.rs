@@ -1256,6 +1256,35 @@ impl Collection {
         Ok(())
     }
 
+    /// Remove one host operation of a draft (ADR 0036 item 12). The route
+    /// that lets the user take back a copy or a deletion before the write
+    /// uses this.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the operation does not
+    /// exist for this feed, or a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_operation(
+        &self,
+        feed: FeedId,
+        id: DraftOperationId,
+    ) -> Result<(), CollectionError> {
+        let changed = self.db.execute(
+            "DELETE FROM draft_operations WHERE id = ?1 AND feed_id = ?2",
+            params![id.0, feed.0],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!(
+                    "draft operation {} does not exist for feed {}",
+                    id.0, feed.0
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// Keep a snapshot of a live file. A snapshot does not change after this.
     ///
     /// # Errors
@@ -2256,6 +2285,39 @@ mod tests {
         collection.remove_library_file(file).unwrap();
         assert_eq!(
             collection.remove_library_file(file).unwrap_err().kind(),
+            CollectionErrorKind::NotFound
+        );
+    }
+
+    /// A removal of one operation needs its own feed (ADR 0036 item 12).
+    /// A wrong feed, or an ID that is gone already, gives `not_found`.
+    #[test]
+    fn remove_draft_operation_removes_one_operation_and_checks_its_feed() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let connector = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        let operation = collection
+            .add_draft_operation(feed, DraftOperationKind::Delete, None, connector, "a.mp3")
+            .unwrap();
+
+        assert_eq!(
+            collection
+                .remove_draft_operation(FeedId(999), operation)
+                .unwrap_err()
+                .kind(),
+            CollectionErrorKind::NotFound
+        );
+        assert_eq!(collection.draft_operations(feed).unwrap().len(), 1);
+
+        collection.remove_draft_operation(feed, operation).unwrap();
+        assert!(collection.draft_operations(feed).unwrap().is_empty());
+        assert_eq!(
+            collection
+                .remove_draft_operation(feed, operation)
+                .unwrap_err()
+                .kind(),
             CollectionErrorKind::NotFound
         );
     }

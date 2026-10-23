@@ -240,6 +240,9 @@ pub struct HostOperation {
     pub library_file_id: Option<i64>,
     /// The public address of the file, when the host gives one.
     pub url: Option<String>,
+    /// The draft operation that gives this operation, so that the user can
+    /// remove it. `None` for an upload, which comes from the draft itself.
+    pub operation_id: Option<i64>,
 }
 
 /// A deletion that Studio refuses because a feed refers to the file
@@ -253,6 +256,8 @@ pub struct BlockedDelete {
     /// The title of each feed that refers to the file. A feed with no
     /// title shows its ID instead.
     pub feed_titles: Vec<String>,
+    /// The draft operation of the deletion, so that the user can remove it.
+    pub operation_id: i64,
 }
 
 /// The result of an import of a file into the library (ADR 0036 item 5).
@@ -847,6 +852,7 @@ fn host_operations(
                 size: file.size,
                 library_file_id: Some(file.id.0),
                 url: planned.url,
+                operation_id: None,
             });
         }
     }
@@ -879,6 +885,7 @@ fn host_operations(
                         size: file.size,
                         library_file_id: Some(file.id.0),
                         url: connector.public_url(&operation.path),
+                        operation_id: Some(operation.id.0),
                     });
                 }
             }
@@ -907,12 +914,14 @@ fn host_operations(
                         size,
                         library_file_id: None,
                         url,
+                        operation_id: Some(operation.id.0),
                     });
                 } else {
                     blocked.push(BlockedDelete {
                         connector_id: operation.connector_id,
                         path: operation.path.clone(),
                         feed_titles: referring,
+                        operation_id: operation.id.0,
                     });
                 }
             }

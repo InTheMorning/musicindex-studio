@@ -481,6 +481,9 @@ code, .mono {
 .bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The feed title part of a breadcrumb title (review of task 014c, defect 5). */
 .bar-title .muted { color: var(--muted); font-weight: 400; }
+/* The menu button of a Bar. CSS shows it only at 760 px or less, where the
+   drawer holds the sidebar (task 014d, ADR 0029 item 15). */
+.bar .menu { display: none; }
 
 /* The draft toolbar: the short status, then "Versions" and "Review" (ADR
    0029 item 1). */
@@ -547,6 +550,19 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   }
 }
 
+/* The drawer that holds the sidebar at 760 px or less (task 014d, ADR 0029
+   item 15). `Shell` opens it with the menu button of a Bar, and shows no
+   nav.sidebar at this width. */
+dialog.drawer[open] {
+  margin: 0;
+  height: 100dvh;
+  width: min(320px, 86vw);
+  max-height: none;
+  background: var(--sidebar);
+  box-shadow: 0 0 60px var(--art-shadow);
+}
+dialog.drawer .sidebar { height: 100%; }
+
 .hero {
   position: relative;
   overflow: hidden;
@@ -588,8 +604,13 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
 }
 
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .sidebar { max-height: 45dvh; border-right: 0; border-bottom: 1px solid var(--sep); }
+  /* `Shell` shows no nav.sidebar at this width, so the shell needs one
+     column only (task 014d). */
+  .shell { grid-template-columns: 1fr; }
+  .bar .menu { display: inline-flex; }
+  /* The short status can hide at this width, so that the bar holds the
+     breadcrumb, "Versions" and "Review" with no overflow (task 014d). */
+  .draft-status { display: none; }
   .hero { grid-template-columns: 1fr; padding: 32px 16px 24px; }
   .section { padding: 8px 16px 24px; }
   .card { padding: 24px 18px; }

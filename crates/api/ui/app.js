@@ -1,5 +1,5 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
-import { html, render, useState, useEffect, useCallback } from './vendor/htm-preact-standalone.module.js';
+import { html, render, useState, useEffect, useCallback, useRef } from './vendor/htm-preact-standalone.module.js';
 import { AlbumEditor, DraftToolbar, trackKey } from './editor.js';
 import { useDraft } from './draft.js';
 
@@ -659,6 +659,35 @@ function NoToken() {
 
 // ---- Shell ----
 
+// A function that does nothing. Each wide-width use of SidebarContent gives
+// this as its onSelect, since a selection there needs no drawer to close
+// (task 014d).
+const NOOP = () => {};
+
+// Is the window 760 px wide or less (ADR 0029 item 15)? This follows each
+// change of the match, such as a resize or a turn of the device.
+function useNarrow() {
+  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 760px)').matches);
+  useEffect(() => {
+    const query = matchMedia('(max-width: 760px)');
+    const onChange = () => setNarrow(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
+// The toolbar of a screen. Each screen gives its own content, such as a
+// title or a breadcrumb, after the menu button. CSS shows the menu button
+// only at 760 px or less, where the drawer holds the sidebar (ADR 0029 item
+// 15). `FeedDetail`, `Hosts` and `AddFeeds` use this (task 014d).
+function Bar({ onMenu, children }) {
+  return html`<div class="bar">
+    <button class="button quiet icon-button menu" type="button" aria-label="Show the feeds" onClick=${onMenu}>☰</button>
+    ${children}
+  </div>`;
+}
+
 // Is this feed an album that the editor can open (ADR 0029 item 4)?
 function isEditable(feed) {
   return Boolean(feed.connector_id) && mediumKind(feed.medium).label === 'Album';
@@ -666,7 +695,7 @@ function isEditable(feed) {
 
 // A feed that the editor cannot open yet: the full hero and the facts, as
 // before ADR 0029.
-function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
+function ReadOnlyFeed({ feed, onChanged, onRemoved, onMenu }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -680,7 +709,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   };
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
   return html`<div>
-    <div class="bar"><span class="bar-title">${feed.title || 'Untitled feed'}</span></div>
+    <${Bar} onMenu=${onMenu}><span class="bar-title">${feed.title || 'Untitled feed'}</span><//>
     <section class="hero" style=${{ '--glow': glow }}>
       <div class="art" aria-hidden="true"></div>
       <div>
@@ -729,16 +758,16 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved }) {
+function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved, onMenu }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
   return html`<div>
-    <div class="bar">
+    <${Bar} onMenu=${onMenu}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} />
-    </div>
+    <//>
     <div class="feed-head">
       <header class="head">
         <div class="cover"><span class="mark" style=${{ '--glow': glow }}></span></div>
@@ -759,12 +788,12 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRe
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved }) {
+function FeedDetail({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved, onMenu }) {
   if (isEditable(feed)) {
     return html`<${EditableFeed} feed=${feed} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} onChanged=${onChanged} onRemoved=${onRemoved} />`;
+      adding=${adding} onAdding=${onAdding} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
   }
-  return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} />`;
+  return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
 }
 
 // The sidebar tree: each feed, and the pages of the selected feed (ADR 0029
@@ -875,7 +904,7 @@ function FolderFeeds({ connector, onAdded }) {
   </div>`;
 }
 
-function Hosts({ connectors, feeds, onChanged, onOpen }) {
+function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -895,7 +924,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
   });
   const showForm = adding || connectors.length === 0;
   return html`<div>
-    <div class="bar">Hosts</div>
+    <${Bar} onMenu=${onMenu}><span class="bar-title">Hosts</span><//>
     <section class="section">
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
@@ -948,9 +977,9 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
   </div>`;
 }
 
-function AddFeeds({ connectors, onAdded }) {
+function AddFeeds({ connectors, onAdded, onMenu }) {
   const [found, setFound] = useState(null);
-  return html`<div><div class="bar">Add feeds</div><section class="section">
+  return html`<div><${Bar} onMenu=${onMenu}><span class="bar-title">Add feeds</span><//><section class="section">
     <div class="panel"><h2>Find feeds by address or name</h2>
       ${found
         ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
@@ -964,6 +993,25 @@ function AddFeeds({ connectors, onAdded }) {
   </section></div>`;
 }
 
+// The content of the sidebar: the brand, the theme toggle, the feed tree,
+// "Add a feed", Hosts and "Lock Studio". The wide `Shell` shows it in
+// `nav.sidebar`. The narrow `Shell` shows the same content in the drawer,
+// where a selection closes the drawer (task 014d, ADR 0029 item 15).
+function SidebarContent({ feeds, view, draft, go, onAdding, vault, onLock, onSelect }) {
+  const select = (next, options) => { onSelect(); go(next, options); };
+  const addTrack = (value) => { onSelect(); onAdding(value); };
+  return html`<header><${Brand} /><${ThemeToggle} /></header>
+    <h2>Feeds</h2>
+    ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
+    <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} />
+    <button class="row" type="button" onClick=${() => select({ name: 'add-feed' })}>＋ Add a feed</button>
+    <footer>
+      <button class="row" type="button" aria-current=${view.name === 'hosts' ? 'true' : 'false'}
+        onClick=${() => select({ name: 'hosts' })}><span class="dot hosting"></span>Hosts</button>
+      ${vault === 'open' && html`<button class="row" type="button" onClick=${() => { onSelect(); onLock(); }}>Lock Studio</button>`}
+    </footer>`;
+}
+
 function Shell({ vault, onLock }) {
   const [feeds, setFeeds] = useState(null);
   const [connectors, setConnectors] = useState([]);
@@ -971,6 +1019,16 @@ function Shell({ vault, onLock }) {
   const [error, setError] = useState(null);
   // The Add a track sheet, by the tree and by the album page (ADR 0029 item 7).
   const [adding, setAdding] = useState(false);
+  // At a narrow width, the drawer holds the sidebar (task 014d).
+  const narrow = useNarrow();
+  const drawerRef = useRef(null);
+  const openDrawer = useCallback(() => { if (drawerRef.current) drawerRef.current.showModal(); }, []);
+  const closeDrawer = useCallback(() => { if (drawerRef.current && drawerRef.current.open) drawerRef.current.close(); }, []);
+  // A click that lands on the dialog itself, and not on its content, is a
+  // click on the backdrop (task 014d architecture).
+  const onBackdrop = useCallback((event) => { if (event.target === event.currentTarget) closeDrawer(); }, [closeDrawer]);
+  // A width that grows past 760 px needs no open drawer.
+  useEffect(() => { if (!narrow) closeDrawer(); }, [narrow, closeDrawer]);
 
   const load = useCallback(async () => {
     try {
@@ -994,42 +1052,43 @@ function Shell({ vault, onLock }) {
   useEffect(() => { setAdding(false); }, [draftFeedId]);
 
   let main;
+  // A screen with no bar of its own gets one, so that the menu button is
+  // always there at a narrow width (ADR 0029 item 15).
+  const withBar = (content) => html`<div><${Bar} onMenu=${openDrawer}><span class="bar-title">Studio</span><//>${content}</div>`;
   if (error) {
-    main = html`<section class="section"><${ErrorNotice} error=${error} /></section>`;
+    main = withBar(html`<section class="section"><${ErrorNotice} error=${error} /></section>`);
   } else if (feeds === null) {
-    main = html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`;
+    main = withBar(html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`);
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
-      onOpen=${(id) => go({ name: 'feed', id })} />`;
+      onOpen=${(id) => go({ name: 'feed', id })} onMenu=${openDrawer} />`;
   } else if (view.name === 'add-feed') {
-    main = html`<${AddFeeds} connectors=${connectors}
+    main = html`<${AddFeeds} connectors=${connectors} onMenu=${openDrawer}
       onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
   } else if (selected) {
-    main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go}
+    main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}
       adding=${adding} onAdding=${setAdding} onChanged=${() => load()}
       onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} />`;
   } else {
-    main = html`<section class="center" style=${{ minHeight: '100%' }}><div class="card">
+    main = withBar(html`<section class="center" style=${{ minHeight: 'calc(100% - var(--bar-h))' }}><div class="card">
       <h1>${feeds.length ? 'Select a feed' : 'Your collection is empty'}</h1>
       <p>${feeds.length ? 'Select one in the Feeds list.' : 'Add a feed to start.'}</p>
       <div class="actions"><button class="button primary" type="button" onClick=${() => go({ name: 'add-feed' })}>Add a feed</button></div>
-    </div></section>`;
+    </div></section>`);
   }
 
   return html`<div class="shell">
-    <nav class="sidebar" aria-label="Collection">
-      <header><${Brand} /><${ThemeToggle} /></header>
-      <h2>Feeds</h2>
-      ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
-      <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${go} onAdding=${setAdding} />
-      <button class="row" type="button" onClick=${() => go({ name: 'add-feed' })}>＋ Add a feed</button>
-      <footer>
-        <button class="row" type="button" aria-current=${view.name === 'hosts' ? 'true' : 'false'}
-          onClick=${() => go({ name: 'hosts' })}><span class="dot hosting"></span>Hosts</button>
-        ${vault === 'open' && html`<button class="row" type="button" onClick=${lock}>Lock Studio</button>`}
-      </footer>
-    </nav>
+    ${!narrow && html`<nav class="sidebar" aria-label="Collection">
+      <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding}
+        vault=${vault} onLock=${lock} onSelect=${NOOP} />
+    </nav>`}
     <main class="main">${main}</main>
+    <dialog class="drawer" ref=${drawerRef} aria-label="Collection" onClick=${onBackdrop}>
+      ${narrow && html`<nav class="sidebar">
+        <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding}
+          vault=${vault} onLock=${lock} onSelect=${closeDrawer} />
+      </nav>`}
+    </dialog>
   </div>`;
 }
 

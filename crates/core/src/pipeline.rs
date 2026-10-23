@@ -676,7 +676,8 @@ pub fn host_file_matches(
 /// `url` of an enclosure, the `uri` of a `podcast:source`, or the `href`
 /// of `itunes:image` of the channel or of an item (ADR 0032 item 10,
 /// ADR 0033 item 7, ADR 0036 item 7 and item 10).
-fn feed_addresses(feed: &Feed) -> Vec<&str> {
+#[must_use]
+pub fn feed_addresses(feed: &Feed) -> Vec<&str> {
     let mut urls: Vec<&str> = Vec::new();
     urls.extend(feed.image.as_deref());
     for item in &feed.items {

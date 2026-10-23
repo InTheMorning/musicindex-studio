@@ -47,7 +47,10 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             "/connectors",
             get(routes::list_connectors).post(routes::add_connector),
         )
-        .route("/connectors/{id}", delete(routes::delete_connector))
+        .route(
+            "/connectors/{id}",
+            put(routes::update_connector).delete(routes::delete_connector),
+        )
         .route("/connectors/{id}/feeds", get(routes::connector_feeds))
         .route("/connectors/{id}/match", post(routes::match_connector))
         .route("/discover", post(routes::discover))

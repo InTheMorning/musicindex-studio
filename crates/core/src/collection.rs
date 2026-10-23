@@ -892,6 +892,21 @@ impl Collection {
         Ok(())
     }
 
+    /// Give a connector a new name.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the connector does not
+    /// exist.
+    pub fn set_connector_name(&self, id: ConnectorId, name: &str) -> Result<(), CollectionError> {
+        self.connector(id)?;
+        self.db.execute(
+            "UPDATE connectors SET name = ?2 WHERE id = ?1",
+            params![id.0, name],
+        )?;
+        Ok(())
+    }
+
     /// Remove a feed from the collection, with its item GUIDs, its draft and
     /// its snapshots. The feed file on the host does not change.
     ///

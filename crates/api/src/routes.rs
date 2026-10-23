@@ -13,8 +13,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
 use studio_core::collection::{
-    Collection, ConnectorId, DraftOperationId, DraftOperationKind, FeedId, FeedRow, LibraryFile,
-    LibraryFileId, SnapshotId,
+    Collection, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId, DraftOperationKind,
+    FeedId, FeedRow, LibraryFile, LibraryFileId, SnapshotId,
 };
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
@@ -240,6 +240,81 @@ fn expand_home(path: &str) -> String {
         }
         (p, _) => p.to_owned(),
     }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct UpdateConnector {
+    name: Option<String>,
+    base_url: Option<String>,
+}
+
+/// Change the name or the public address of a connector (ADR 0021,
+/// ADR 0036 item 11). The caller can send one field or both.
+///
+/// Only a local folder host has a public address. An empty `base_url`
+/// removes the address. A `base_url` that is not an `http` or `https`
+/// address gives 422 `invalid_address`, with no change of the connector.
+pub(crate) async fn update_connector(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<UpdateConnector>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = ConnectorId(id);
+        let row = w.collection.connector(id)?;
+        if let Some(name) = &body.name {
+            w.collection.set_connector_name(id, name)?;
+        }
+        if let Some(base_url) = &body.base_url {
+            set_connector_base_url(w, &row, base_url)?;
+        }
+        to_json(w.collection.connector(id)?)
+    })
+    .await
+}
+
+/// Give a local folder host a new public address, or remove it with an
+/// empty `base_url` (ADR 0021, ADR 0036 item 11). The address is typed,
+/// not inferred, so Studio does not replace it after this. Each feed
+/// address of the folder then changes, as after a folder match.
+///
+/// A connector of a different kind has no public address, so the
+/// function does nothing for it.
+///
+/// # Errors
+///
+/// Gives 422 `invalid_address` when `base_url` is not empty and is not
+/// an `http` or `https` address.
+fn set_connector_base_url(
+    w: &mut Workspace,
+    row: &ConnectorRow,
+    base_url: &str,
+) -> Result<(), ApiError> {
+    if row.kind != LocalFolder::KIND {
+        return Ok(());
+    }
+    let trimmed = base_url.trim();
+    let new_url = if trimmed.is_empty() {
+        None
+    } else {
+        let lower = trimmed.to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_address",
+                "the public address must start with http:// or https://",
+            ));
+        }
+        Some(trimmed.to_owned())
+    };
+    let mut config: Value =
+        serde_json::from_str(&row.config).map_err(|e| ApiError::internal(e.to_string()))?;
+    config["base_url"] = new_url.map_or(Value::Null, Value::String);
+    config["base_url_inferred"] = Value::Bool(false);
+    w.collection
+        .set_connector_config(row.id, &config.to_string())?;
+    studio_core::address::apply_folder_address(&mut w.collection, row.id)?;
+    Ok(())
 }
 
 pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
@@ -997,6 +1072,42 @@ fn feed_library_file(
     Ok(file)
 }
 
+/// Each address that the draft of a feed gives, or an empty list when the
+/// feed has no draft (ADR 0036 items 7, 10 and 12).
+fn draft_addresses(collection: &Collection, id: FeedId) -> Result<Vec<String>, ApiError> {
+    match pipeline::draft_model(collection, id) {
+        Ok((feed, _)) => Ok(pipeline::feed_addresses(&feed)
+            .into_iter()
+            .map(str::to_owned)
+            .collect()),
+        Err(error) if error.kind() == pipeline::PipelineErrorKind::NoDraft => Ok(Vec::new()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// True when `url` is one of the addresses that the draft gives (ADR 0036
+/// items 10 and 12).
+fn is_in_use(url: Option<&str>, addresses: &[String]) -> bool {
+    url.is_some_and(|url| addresses.iter().any(|address| address == url))
+}
+
+/// The draft operation that waits for the write of `path` on
+/// `connector_id`, as `null` when the draft has none (ADR 0036 items 4,
+/// 12 and 14).
+fn pending_operation(
+    operations: &[DraftOperation],
+    connector_id: ConnectorId,
+    path: &str,
+) -> Value {
+    operations
+        .iter()
+        .find(|op| op.connector_id == connector_id && op.path == path)
+        .map_or(
+            Value::Null,
+            |op| json!({ "kind": op.kind.as_str(), "operation_id": op.id.0 }),
+        )
+}
+
 /// Each host file of a release folder that is not a copy of one of its
 /// library files (ADR 0036 item 11). Studio reads the SHA-256 of a host
 /// file only when its size agrees with a library file already (ADR 0036
@@ -1006,6 +1117,8 @@ fn extra_folder_files(
     hosts: &Hosts,
     folder: &str,
     library_files: &[LibraryFile],
+    operations: &[DraftOperation],
+    addresses: &[String],
 ) -> Result<Vec<Value>, ApiError> {
     let prefix = format!("{folder}/");
     let mut extra = Vec::new();
@@ -1029,11 +1142,16 @@ fn extra_folder_files(
             };
             if !is_copy {
                 let connector = hosts.get(connector_id)?;
+                let url = connector.public_url(&host_file.path);
+                let in_use = is_in_use(url.as_deref(), addresses);
+                let pending = pending_operation(operations, connector_id, &host_file.path);
                 extra.push(json!({
                     "connector_id": connector_id.0,
                     "path": host_file.path,
                     "size": host_file.size,
-                    "url": connector.public_url(&host_file.path),
+                    "url": url,
+                    "in_use": in_use,
+                    "pending": pending,
                 }));
             }
         }
@@ -1041,10 +1159,14 @@ fn extra_folder_files(
     Ok(extra)
 }
 
-/// The files of a release: its folder, its default host, each library
-/// file with its planned address, its copies and whether the draft uses
-/// it, and each host file of the folder that is not a copy of a library
-/// file (ADR 0036 items 4, 7, 9 and 11).
+/// The files of a release (ADR 0036 items 4, 7, 9, 10, 11 and 12).
+///
+/// The result gives the folder, the default host, and each library
+/// file with its planned address and its copies. Each copy marks
+/// `in_use` true when the draft uses it, and `pending` with the draft
+/// operation of its host and path. Each library file lists its pending
+/// copy operations. The result also gives each host file of the folder
+/// that is not a copy of a library file, with the same two marks.
 pub(crate) async fn list_release_files(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -1054,6 +1176,8 @@ pub(crate) async fn list_release_files(
         let feed_row = w.collection.feed(id)?;
         let hosts = w.hosts()?;
         let library_files = w.collection.library_files(id)?;
+        let operations = w.collection.draft_operations(id)?;
+        let addresses = draft_addresses(&w.collection, id)?;
 
         let mut files = Vec::new();
         for file in &library_files {
@@ -1062,10 +1186,27 @@ pub(crate) async fn list_release_files(
             let copies: Vec<Value> = inventory::copies(&w.collection, &hosts, file)?
                 .into_iter()
                 .map(|copy| {
+                    let copy_in_use = is_in_use(copy.url.as_deref(), &addresses);
+                    let pending = pending_operation(&operations, copy.connector_id, &copy.path);
                     json!({
                         "connector_id": copy.connector_id.0,
                         "path": copy.path,
                         "url": copy.url,
+                        "in_use": copy_in_use,
+                        "pending": pending,
+                    })
+                })
+                .collect();
+            let pending_copies: Vec<Value> = operations
+                .iter()
+                .filter(|op| {
+                    op.kind == DraftOperationKind::Copy && op.library_file_id == Some(file.id)
+                })
+                .map(|op| {
+                    json!({
+                        "connector_id": op.connector_id.0,
+                        "path": op.path,
+                        "operation_id": op.id.0,
                     })
                 })
                 .collect();
@@ -1079,11 +1220,19 @@ pub(crate) async fn list_release_files(
                 "url": planned.url,
                 "in_use": in_use,
                 "copies": copies,
+                "pending_copies": pending_copies,
             }));
         }
 
         let other = match feed_row.folder.as_deref() {
-            Some(folder) => extra_folder_files(&w.collection, &hosts, folder, &library_files)?,
+            Some(folder) => extra_folder_files(
+                &w.collection,
+                &hosts,
+                folder,
+                &library_files,
+                &operations,
+                &addresses,
+            )?,
             None => Vec::new(),
         };
 

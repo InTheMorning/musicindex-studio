@@ -2358,3 +2358,216 @@ async fn an_operation_is_removed_by_its_id() {
     let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
     assert_eq!(diff["operations"], json!([]));
 }
+
+/// ADR 0036 items 10 and 11: after a write, the copy that the enclosure
+/// refers to is in use, and a copy that it does not refer to is not.
+#[tokio::test]
+async fn after_a_write_the_referenced_copy_is_in_use_and_the_other_copy_is_not() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let file_id = file["library_file_id"].as_i64().unwrap();
+    let home_url = file["url"].as_str().unwrap().to_owned();
+
+    let backup_dir = tempfile::tempdir().unwrap();
+    let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
+
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": home_url,
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "copy", "file": file_id, "connector_id": backup_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, write_result) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{write_result}");
+
+    // The write removes the draft. Studio starts a fresh one from the
+    // live file, which still has the enclosure on the home address.
+    call(&app, "GET", &draft_path, None).await;
+
+    let (status, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    let copies = files["files"][0]["copies"].as_array().unwrap();
+    assert_eq!(copies.len(), 2, "{copies:?}");
+    let home_copy = copies
+        .iter()
+        .find(|c| c["url"] == home_url)
+        .expect("the home copy");
+    assert_eq!(home_copy["in_use"], true);
+    let backup_copy = copies
+        .iter()
+        .find(|c| c["connector_id"] == backup_id)
+        .expect("the backup copy");
+    assert_eq!(backup_copy["in_use"], false);
+}
+
+/// ADR 0036 items 6, 11 and 12: a delete operation on a host file that
+/// is not a copy of a library file gives that file a pending mark, with
+/// the operation ID.
+#[tokio::test]
+async fn a_delete_operation_marks_an_other_host_file_as_pending() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    upload(&app, id, "tagged.mp3", bytes).await;
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let home_id = connectors[0]["id"].as_i64().unwrap();
+
+    // A file that Studio did not put there: not a copy of the library
+    // file, so it is an "other" file of the release folder.
+    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
+    std::fs::write(app.feeds.path().join("album/notes.txt"), b"notes").unwrap();
+    let (status, _) = call(&app, "POST", &format!("/api/v1/hosts/{home_id}/scan"), None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    let other = files["other_host_files"].as_array().unwrap();
+    let notes = other
+        .iter()
+        .find(|f| f["path"] == "album/notes.txt")
+        .expect("the extra file is in the list");
+    assert_eq!(notes["in_use"], false);
+    assert_eq!(notes["pending"], Value::Null);
+
+    // The draft of the feed, with no operation yet.
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "delete", "connector_id": home_id, "path": "album/notes.txt" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let operation_id = diff["operations"][0]["operation_id"].as_i64().unwrap();
+
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    let other = files["other_host_files"].as_array().unwrap();
+    let notes = other
+        .iter()
+        .find(|f| f["path"] == "album/notes.txt")
+        .expect("the extra file is in the list");
+    assert_eq!(
+        notes["pending"],
+        json!({ "kind": "delete", "operation_id": operation_id })
+    );
+}
+
+/// ADR 0036 items 4 and 12: a copy operation gives its library file a
+/// pending copy, with the host, the path and the operation ID.
+#[tokio::test]
+async fn a_copy_operation_gives_the_library_file_a_pending_copy() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let file_id = file["library_file_id"].as_i64().unwrap();
+
+    let backup_dir = tempfile::tempdir().unwrap();
+    let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
+
+    // The draft of the feed, with no reference to the file yet.
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "copy", "file": file_id, "connector_id": backup_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let operation_id = diff["operations"][0]["operation_id"].as_i64().unwrap();
+
+    let (status, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    assert_eq!(
+        files["files"][0]["pending_copies"],
+        json!([{
+            "connector_id": backup_id,
+            "path": "album/tagged.mp3",
+            "operation_id": operation_id,
+        }])
+    );
+}
+
+/// ADR 0021 and ADR 0036 item 11: `PUT /connectors/{id}` changes the
+/// name and the public address of a local folder host, and the address
+/// of each library file changes with it, as after a folder match.
+#[tokio::test]
+async fn put_connector_changes_the_name_and_the_address_of_a_local_folder() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    upload(&app, id, "tagged.mp3", bytes).await;
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let home_id = connectors[0]["id"].as_i64().unwrap();
+
+    let (status, connector) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{home_id}"),
+        Some(json!({ "name": "Renamed", "base_url": "https://new.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{connector}");
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors[0]["name"], "Renamed");
+    let config = connectors[0]["config"].as_str().unwrap().to_owned();
+    assert!(config.contains("https://new.example"), "{config}");
+    assert!(config.contains("\"base_url_inferred\":false"), "{config}");
+
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(
+        files["files"][0]["url"],
+        "https://new.example/album/tagged.mp3"
+    );
+
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{home_id}"),
+        Some(json!({ "base_url": "ftp://x" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_address");
+
+    // The rejected update did not change the address.
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let config = connectors[0]["config"].as_str().unwrap();
+    assert!(config.contains("https://new.example"), "{config}");
+}

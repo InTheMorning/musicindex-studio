@@ -38,6 +38,7 @@
 - [ADR 0034: An import reuses the same file on the host](adr/0034-an-import-reuses-the-same-file-on-the-host.md)
 - [ADR 0035: A release library is the master of each feed](adr/0035-a-release-library-is-the-master-of-each-feed.md)
 - [ADR 0036: Library records, the host inventory and host operations](adr/0036-library-records-host-inventory-and-host-operations.md)
+- [ADR 0037: Button roles](adr/0037-button-roles.md)
 
 ## Plans
 
@@ -89,6 +90,9 @@
 - [Studio v1 task 021e: The move of the current collection into the library](tasks/studio-v1-task-021e-move-into-the-library.md)
 - [Studio v1 task 021f: The API of the library](tasks/studio-v1-task-021f-library-api.md)
 - [Studio v1 task 021g: The library UI](tasks/studio-v1-task-021g-library-ui.md)
+- [Studio v1 task 022: The UI pass after milestone 7a](tasks/studio-v1-task-022-ui-pass-after-7a.md)
+- [Studio v1 task 022a: The API marks and the host address](tasks/studio-v1-task-022a-api-marks-and-host-address.md)
+- [Studio v1 task 022b: The button roles and the Files page](tasks/studio-v1-task-022b-button-roles-and-files-page.md)
 
 ## Reviews
 

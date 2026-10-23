@@ -21,7 +21,7 @@ The Apple guidance gives these points:
 - The frequent commands and the primary action of a toolbar "remain visible at all window sizes".
 - At compact width, a split view puts the sidebar behind a control.
 
-The operator answered two rounds of questions and examined a mockup at desktop and phone width ([mockup](../notes/2026-10-22-editor-layout-mockup.html)). The operator accepted each part of the mockup.
+The operator answered two rounds of questions and examined a mockup at desktop and phone width. The operator accepted each part of the mockup. The mockup is in commit `d1e6fe2`, at `docs/notes/2026-10-22-editor-layout-mockup.html`. Task 014 removed it after its visual check.
 
 ## Decision
 

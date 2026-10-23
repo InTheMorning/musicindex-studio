@@ -64,10 +64,7 @@
 - [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
 - [Task 012 visual check, 2026-10-22](reviews/2026-10-22-task-012-visual-check.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
-
-## Notes
-
-- [Editor layout mockup, 2026-10-22](notes/2026-10-22-editor-layout-mockup.html). Task 014 removes it.
+- [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 
 ## Research
 

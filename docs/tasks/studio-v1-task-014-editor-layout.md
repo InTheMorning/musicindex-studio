@@ -4,7 +4,9 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 5.
 Decisions: [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md) and [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md).
 Depends on: [task 012](studio-v1-task-012-value-editor.md).
 
-Mockup: [the editor layout](../notes/2026-10-22-editor-layout-mockup.html). Open it in a browser. It has static data.
+Status: complete. The [visual check](../reviews/2026-10-22-task-014-visual-check.md) passed.
+
+Mockup: The mockup is in commit `d1e6fe2`, at `docs/notes/2026-10-22-editor-layout-mockup.html`. Task 014 removed it after its visual check. To open it, use `git show d1e6fe2:docs/notes/2026-10-22-editor-layout-mockup.html`.
 
 ## Packets
 

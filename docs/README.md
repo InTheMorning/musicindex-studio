@@ -37,6 +37,7 @@
 - [ADR 0033: A lossless import gives an MP3 enclosure](adr/0033-a-lossless-import-gives-an-mp3-enclosure.md)
 - [ADR 0034: An import reuses the same file on the host](adr/0034-an-import-reuses-the-same-file-on-the-host.md)
 - [ADR 0035: A release library is the master of each feed](adr/0035-a-release-library-is-the-master-of-each-feed.md)
+- [ADR 0036: Library records, the host inventory and host operations](adr/0036-library-records-host-inventory-and-host-operations.md)
 
 ## Plans
 
@@ -79,6 +80,14 @@
 - [Studio v1 task 019c: The upload route gives two files](tasks/studio-v1-task-019c-upload-two-files.md)
 - [Studio v1 task 019d: The import sheet and the track page](tasks/studio-v1-task-019d-import-sheet-and-track-page.md)
 - [Studio v1 task 020: An import reuses the same file on the host](tasks/studio-v1-task-020-reuse-the-file-on-the-host.md)
+- [Studio v1 task 021: The release library, milestone 7a](tasks/studio-v1-task-021-release-library-7a.md)
+- [Studio v1 task 021a: The records and the library folder](tasks/studio-v1-task-021a-records-and-library-folder.md)
+- [Studio v1 task 021b: The host inventory and the addresses](tasks/studio-v1-task-021b-inventory-and-addresses.md)
+- [Studio v1 task 021c: The import into the library, and the diff](tasks/studio-v1-task-021c-library-import-and-diff.md)
+- [Studio v1 task 021d: The write with host operations](tasks/studio-v1-task-021d-write-with-host-operations.md)
+- [Studio v1 task 021e: The move of the current collection into the library](tasks/studio-v1-task-021e-move-into-the-library.md)
+- [Studio v1 task 021f: The API of the library](tasks/studio-v1-task-021f-library-api.md)
+- [Studio v1 task 021g: The library UI](tasks/studio-v1-task-021g-library-ui.md)
 
 ## Reviews
 
@@ -91,6 +100,7 @@
 - [Phase 5 visual check, 2026-10-23](reviews/2026-10-23-phase-5-visual-check.md)
 - [Phase 6 review checklist, 2026-10-23](reviews/2026-10-23-phase-6-review-checklist.md)
 - [Phase 6 visual check, 2026-10-23](reviews/2026-10-23-phase-6-visual-check.md)
+- [Phase 7 review checklist, 2026-10-23](reviews/2026-10-23-phase-7-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

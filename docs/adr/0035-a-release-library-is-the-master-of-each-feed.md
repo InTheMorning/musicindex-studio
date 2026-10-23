@@ -1,6 +1,6 @@
 # ADR 0035: A Release Library Is The Master Of Each Feed
 
-- Status: Accepted. Phase 7 of the [Studio v1 phase plan](../plans/studio-v1-phase-plan.md) implements it. Until then, the rules that this ADR replaces stay in force.
+- Status: Accepted. Phase 7 of the [Studio v1 phase plan](../plans/studio-v1-phase-plan.md) implements it. Until then, the rules that this ADR replaces stay in force. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) gives the records, the host inventory and the host operations.
 - Date: 2026-10-23
 - Owner: operator
 

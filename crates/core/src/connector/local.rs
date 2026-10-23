@@ -163,7 +163,11 @@ impl Connector for LocalFolder {
 
     fn public_url(&self, path: &str) -> Option<String> {
         let base = self.base_url.as_deref()?;
-        Some(format!("{}/{}", base.trim_end_matches('/'), path))
+        Some(format!(
+            "{}/{}",
+            base.trim_end_matches('/'),
+            crate::web::url_path(path)
+        ))
     }
 
     fn list(&self) -> Result<FileList, ConnectorError> {
@@ -239,6 +243,10 @@ mod tests {
         assert_eq!(
             folder.public_url("a/feed.xml").as_deref(),
             Some("https://example.com/feeds/a/feed.xml")
+        );
+        assert_eq!(
+            folder.public_url("a/b/01 Song (Live).mp3").as_deref(),
+            Some("https://example.com/feeds/a/b/01%20Song%20%28Live%29.mp3")
         );
     }
 

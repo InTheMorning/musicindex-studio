@@ -6,6 +6,7 @@
 //! Server Shell phase).
 
 use std::fmt;
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use ureq::ResponseExt;
@@ -316,6 +317,31 @@ fn header<B>(response: &ureq::http::Response<B>, name: &str) -> Option<String> {
 fn media_type(value: &str) -> Option<String> {
     let essence = value.split(';').next().unwrap_or_default().trim();
     (!essence.is_empty()).then(|| essence.to_ascii_lowercase())
+}
+
+/// Encode a text as one segment of a URL path. The text can contain `/`,
+/// for example the GUID of an item that is an address.
+pub(crate) fn path_segment(text: &str) -> String {
+    let mut encoded = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            // Writing to a `String` cannot fail.
+            let _ = write!(encoded, "%{byte:02X}");
+        }
+    }
+    encoded
+}
+
+/// Encode a host path for a URL. Each segment is encoded, and `/` stays the
+/// separator. A file name with a space thus gives a correct address.
+#[must_use]
+pub fn url_path(path: &str) -> String {
+    path.split('/')
+        .map(path_segment)
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// The host name of an address, in lowercase, without a port.

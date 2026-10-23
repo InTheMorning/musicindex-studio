@@ -1,12 +1,10 @@
 //! The musicindex API (Stophammer): feed addresses by GUID, search, and the
 //! payment routes of a feed and of a track (ADR 0027 item 6).
 
-use std::fmt::Write as _;
-
 use serde::{Deserialize, Serialize};
 
 use crate::feed::Recipient;
-use crate::web::{Web, WebError, WebErrorKind};
+use crate::web::{Web, WebError, WebErrorKind, path_segment};
 
 /// The public musicindex API.
 pub const DEFAULT_API: &str = "https://api.musicindex.org";
@@ -160,22 +158,6 @@ fn filter_guid(guid: &str) -> String {
     guid.chars()
         .filter(|c| c.is_ascii_hexdigit() || *c == '-')
         .collect()
-}
-
-/// Encode a text as one segment of a URL path. The GUID of an item can be
-/// any text, for example an address with `/`, so the client does not filter
-/// it as it filters a feed GUID.
-fn path_segment(text: &str) -> String {
-    let mut encoded = String::with_capacity(text.len());
-    for byte in text.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
-            encoded.push(char::from(byte));
-        } else {
-            // Writing to a `String` cannot fail.
-            let _ = write!(encoded, "%{byte:02X}");
-        }
-    }
-    encoded
 }
 
 /// A client of one musicindex API.

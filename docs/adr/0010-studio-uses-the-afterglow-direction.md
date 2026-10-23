@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md). The editor page of a feed has a compact header, not the detail hero.
 
 ## Context
 

@@ -30,6 +30,7 @@
 - [ADR 0026: Import music files through the draft](adr/0026-import-music-files-through-the-draft.md)
 - [ADR 0027: The recipient picker](adr/0027-the-recipient-picker.md)
 - [ADR 0028: Summary lines and one open entry](adr/0028-summary-lines-and-one-open-entry.md)
+- [ADR 0029: Editor pages, the toolbar and three background levels](adr/0029-editor-pages-toolbar-and-three-levels.md)
 
 ## Plans
 
@@ -50,6 +51,7 @@
 - [Studio v1 task 011: The album editor](tasks/studio-v1-task-011-album-editor.md)
 - [Studio v1 task 012: The value editor](tasks/studio-v1-task-012-value-editor.md)
 - [Studio v1 task 013: The recipient picker](tasks/studio-v1-task-013-recipient-picker.md)
+- [Studio v1 task 014: The editor layout](tasks/studio-v1-task-014-editor-layout.md)
 
 ## Reviews
 
@@ -57,6 +59,10 @@
 - [Task 009 visual check, 2026-10-22](reviews/2026-10-22-task-009-visual-check.md)
 - [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
 - [Task 012 visual check, 2026-10-22](reviews/2026-10-22-task-012-visual-check.md)
+
+## Notes
+
+- [Editor layout mockup, 2026-10-22](notes/2026-10-22-editor-layout-mockup.html). Task 014 removes it.
 
 ## Research
 

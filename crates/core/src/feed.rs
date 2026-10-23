@@ -418,11 +418,9 @@ impl Item {
 
     fn apply_children(&self, element: &mut Element, names: &mut Names) {
         // The hosted parent of the item is the item of the hosted file with
-        // the same GUID. A new item has no hosted parent (ADR 0031 item 2).
-        let hosted = self
-            .guid
-            .as_deref()
-            .and_then(|guid| names.hosted_item(guid));
+        // the same GUID. A new item uses the last hosted item as its model
+        // (ADR 0031 item 2).
+        let hosted = names.hosted_item(self.guid.as_deref());
         let mut c = Children::new(element, &[], names, hosted);
         c.text(Ns::None, "title", self.title.as_ref());
         c.text(Ns::None, "description", self.description.as_ref());

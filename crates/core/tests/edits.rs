@@ -1,6 +1,6 @@
 //! Edits through the typed model change only the edited elements (ADR 0012).
 
-use studio_core::feed::{Entry, Feed, License, Person, Recipient, Transcript};
+use studio_core::feed::{Entry, Feed, Item, License, Person, Recipient, Transcript};
 use studio_core::xml::Document;
 
 /// The remote item example from the namespace document for
@@ -275,6 +275,28 @@ fn an_item_image_removed_and_added_again_goes_back_to_its_hosted_position() {
     let guid = after.find("<guid>").unwrap();
     assert!(title < image, "{after}");
     assert!(image < guid, "{after}");
+}
+
+#[test]
+fn a_new_item_takes_the_sequence_of_the_last_hosted_item() {
+    let hosted = Document::parse(ITEM_SEQUENCE_EXAMPLE).unwrap();
+    let mut doc = Document::parse(ITEM_SEQUENCE_EXAMPLE).unwrap();
+    // The first save gives the new item only its GUID, and a later save
+    // gives it a title, as the editor does.
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.items.push(Entry::new(Item {
+        guid: Some("g2".into()),
+        ..Item::default()
+    }));
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.items[1].title = Some("New".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let after = doc.write();
+    let new_item = &after[after.find("<guid>g1</guid>").unwrap()..];
+    let title = new_item.find("<title>New</title>").unwrap();
+    let guid = new_item.find(">g2</guid>").unwrap();
+    assert!(title < guid, "{after}");
 }
 
 #[test]

@@ -208,6 +208,9 @@ fn hosted_sequence(parent: &Element) -> Vec<HostedType> {
 struct Hosted {
     channel: Vec<HostedType>,
     items: std::collections::HashMap<String, Vec<HostedType>>,
+    /// The sequence of the last `item` of the hosted file. A new item uses
+    /// it as its model (ADR 0031 item 2).
+    model_item: Option<Vec<HostedType>>,
 }
 
 impl Hosted {
@@ -216,15 +219,20 @@ impl Hosted {
     fn new(doc: &Document) -> Option<Self> {
         let channel = super::channel(doc.root())?;
         let mut items = std::collections::HashMap::new();
+        let mut model_item = None;
         for child in channel.elements() {
             let is_item = child.is(Ns::None, "item") || child.is(Ns::Podcast, "liveItem");
             if is_item && let Some(guid) = read_text(child, Ns::None, "guid") {
                 items.insert(guid, hosted_sequence(child));
             }
+            if child.is(Ns::None, "item") {
+                model_item = Some(hosted_sequence(child));
+            }
         }
         Some(Self {
             channel: hosted_sequence(channel),
             items,
+            model_item,
         })
     }
 }
@@ -274,11 +282,13 @@ impl Names {
         self.hosted.as_ref().map(|h| h.channel.clone())
     }
 
-    /// The hosted sequence of the item with this GUID, or none (ADR 0031).
-    pub(crate) fn hosted_item(&self, guid: &str) -> Option<Vec<HostedType>> {
-        self.hosted
-            .as_ref()
-            .and_then(|h| h.items.get(guid).cloned())
+    /// The hosted sequence of the item with this GUID. An item that the
+    /// hosted file does not have gets the sequence of the last hosted item
+    /// as its model (ADR 0031 item 2).
+    pub(crate) fn hosted_item(&self, guid: Option<&str>) -> Option<Vec<HostedType>> {
+        let hosted = self.hosted.as_ref()?;
+        guid.and_then(|g| hosted.items.get(g).cloned())
+            .or_else(|| hosted.model_item.clone())
     }
 
     pub(crate) fn element(&mut self, ns: Ns, local: &str) -> Element {
@@ -635,10 +645,22 @@ fn hosted_insertion_point(
 ) -> Option<(usize, Option<Node>)> {
     let (ns, local) = element_type;
     let first = hosted.iter().position(|t| t.is(ns, local))?;
-    hosted[..first].iter().rev().find_map(|earlier| {
+    let after_earlier = hosted[..first].iter().rev().find_map(|earlier| {
         let last = children
             .iter()
             .rposition(|n| matches!(n, Node::Element(e) if earlier.matches(e)))?;
         Some((last + 1, xml::indent_before(children, last)))
+    });
+    // With no earlier sibling, the element goes before the nearest later
+    // sibling (ADR 0031 item 1).
+    after_earlier.or_else(|| {
+        hosted[first + 1..].iter().find_map(|later| {
+            let index = children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if later.matches(e)))?;
+            let indent = xml::indent_before(children, index);
+            let start = if indent.is_some() { index - 1 } else { index };
+            Some((start, indent))
+        })
     })
 }

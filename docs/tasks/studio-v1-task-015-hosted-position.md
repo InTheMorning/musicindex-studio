@@ -30,6 +30,7 @@ These choices are fixed. Do not change them.
   2. From the nearest of these types back to the first, find the last draft child of that type.
   3. When one is found, the new element goes after it, with the indentation of that child.
   When no child is found, the current rules apply.
+- Extension of 2026-10-23 (ADR 0031 items 1, 2 and 6): `hosted_item` gives the sequence of the last hosted `item` to an item that the hosted file does not have. When no earlier sibling is in the draft, the new element goes before the nearest later sibling. The planning model made this extension, with the test `a_new_item_takes_the_sequence_of_the_last_hosted_item`.
 - `edit_draft` and `replace_model` parse `base_xml` of the draft and call `write_hosted` with it. When `base_xml` is empty or does not parse, they call it with `None`.
 
 ## Steps

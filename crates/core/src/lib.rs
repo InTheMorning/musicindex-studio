@@ -13,6 +13,7 @@ pub mod discover;
 pub mod feed;
 pub mod guid;
 pub mod imports;
+pub mod inventory;
 pub mod library;
 pub mod media;
 pub mod msp;

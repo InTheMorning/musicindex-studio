@@ -37,7 +37,7 @@ The planning model added the technical choices below.
 
 ### The Inventory
 
-6. Studio lists each host with `Connector::list` at the start, after each write, and when the user asks. It records each file in `host_files`. It reads the SHA-256 of a host file only when the size agrees with a library file.
+6. Studio lists each host with `Connector::list` at the start, after each write, and when the user asks. The list gives the size and a stamp of each file with no read of the file. The stamp is a change marker, for example the size and the modification time, or an `ETag`. Studio records each file in `host_files`. It reads the SHA-256 of a host file only when the size agrees with a library file. A row keeps its SHA-256 while its stamp does not change.
 7. A feed refers to a host file when the public address of the host file is an address in the feed: an enclosure, a `podcast:source` or an image.
 
 ### Addresses And Placement
@@ -61,7 +61,7 @@ The planning model added the technical choices below.
 
 14. The diff lists the feed XML change, each upload and copy with its host and its size, and each deletion with its host.
 15. The write puts the uploads and the copies first, then the feed XML, then the deletions. Before the deletions, Studio reads each new address through its connector, to confirm that the file is there ([ADR 0009](0009-studio-connects-to-hosts-and-moves-files.md)).
-16. `Connector` gets `delete(path, expected)`. A deletion uses the version from the inventory, so Studio does not delete a file that changed after the scan.
+16. `Connector` gets `stat(path)`, which gives the size and the stamp of one file, and `delete(path, stamp)`. A deletion uses the stamp from the inventory, so Studio does not delete a file that changed after the scan.
 
 ### Download Limits
 
@@ -92,4 +92,5 @@ The planning model added the technical choices below.
 - The library XML has the same bytes as the hosted feed file after each write.
 - No host operation occurs without a diff that the user saw.
 - Studio does not delete a host file while a feed of the library refers to its address.
-- A deletion uses the version from the inventory.
+- A deletion uses the stamp from the inventory.
+- A scan reads no file. A test enforces it.

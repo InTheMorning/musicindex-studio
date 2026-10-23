@@ -59,11 +59,44 @@ pub const LIST_MAX_DEPTH: usize = 4;
 /// The maximum number of files in a list (ADR 0019).
 pub const LIST_MAX_FILES: usize = 1000;
 
+/// A change marker of a file that a list gives with no read of the file,
+/// for example the size and the modification time, or an `ETag`. Two
+/// different stamps of one path mean that the file changed (ADR 0036
+/// item 6).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(transparent)]
+pub struct Stamp(String);
+
+impl Stamp {
+    /// Make a stamp from its text.
+    #[must_use]
+    pub fn new(text: impl Into<String>) -> Self {
+        Self(text.into())
+    }
+
+    /// The stamp as text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// One file of a host list, with the facts that need no read of the file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListedFile {
+    /// The relative path, with `/` between segments.
+    pub path: String,
+    /// The size of the file, in bytes.
+    pub size: u64,
+    /// The change marker of the file.
+    pub stamp: Stamp,
+}
+
 /// The files of a host, relative to the connector root.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FileList {
-    /// The relative paths, with `/` between segments, in sorted sequence.
-    pub paths: Vec<String>,
+    /// The files, in the sorted sequence of their paths.
+    pub files: Vec<ListedFile>,
     /// True when a limit stopped the list before the end.
     pub truncated: bool,
 }
@@ -151,16 +184,25 @@ pub trait Connector {
     /// Gives a [`ConnectorError`] when the list fails.
     fn list(&self) -> Result<FileList, ConnectorError>;
 
+    /// The size and the stamp of one file, with no read of the file.
+    /// Gives `None` when the file does not exist (ADR 0036 item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`ConnectorError`] when the path is not valid or the host
+    /// fails.
+    fn stat(&self, path: &str) -> Result<Option<ListedFile>, ConnectorError>;
+
     /// Delete a file only when the file on the host has the expected
-    /// version. Studio reads the version from its inventory, so it does
-    /// not delete a file that changed after the scan (ADR 0036 item 16).
+    /// stamp. Studio reads the stamp from its inventory, so it does not
+    /// delete a file that changed after the scan (ADR 0036 item 16).
     ///
     /// # Errors
     ///
     /// Gives [`ConnectorErrorKind::Conflict`] when the file on the host has
-    /// a different version, and [`ConnectorErrorKind::NotFound`] when the
+    /// a different stamp, and [`ConnectorErrorKind::NotFound`] when the
     /// file does not exist.
-    fn delete(&self, path: &str, expected: &Version) -> Result<(), ConnectorError>;
+    fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError>;
 }
 
 /// Make the connector of a collection row.

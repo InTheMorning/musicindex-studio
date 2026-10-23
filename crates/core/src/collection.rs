@@ -14,7 +14,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::address::{self, Address, AddressSource};
-use crate::connector::Version;
+use crate::connector::{Stamp, Version};
 use crate::feed::{Feed, Recipient};
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
@@ -360,8 +360,9 @@ pub struct HostFile {
     pub path: String,
     /// The size of the file, in bytes.
     pub size: u64,
-    /// The version marker of the file.
-    pub version: Version,
+    /// The stamp of the file from the host list. The column has the name
+    /// `version`.
+    pub stamp: Stamp,
     /// The SHA-256 of the file, when Studio read it. Studio reads it only
     /// when the size agrees with a library file (ADR 0036 item 6).
     pub sha256: Option<String>,
@@ -1125,7 +1126,7 @@ impl Collection {
         connector: ConnectorId,
         path: &str,
         size: u64,
-        version: &Version,
+        stamp: &Stamp,
     ) -> Result<(), CollectionError> {
         let size = i64::try_from(size).unwrap_or(i64::MAX);
         self.db.execute(
@@ -1134,9 +1135,31 @@ impl Collection {
              ON CONFLICT (connector_id, path)
              DO UPDATE SET size = ?3, version = ?4, seen_at = ?5,
                  sha256 = CASE WHEN host_files.version = ?4 THEN host_files.sha256 ELSE NULL END",
-            params![connector.0, path, size, version.as_str(), now()],
+            params![connector.0, path, size, stamp.as_str(), now()],
         )?;
         Ok(())
+    }
+
+    /// One file that Studio saw on a host, or `None` when it has no row
+    /// at this path (ADR 0036 item 4 and item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn host_file(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<Option<HostFile>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT connector_id, path, size, version, sha256, seen_at FROM host_files
+                 WHERE connector_id = ?1 AND path = ?2",
+                params![connector.0, path],
+                host_file_row,
+            )
+            .optional()?)
     }
 
     /// Each file that Studio saw on a host, by path (ADR 0036 item 4 and
@@ -1692,7 +1715,7 @@ fn host_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HostFile> {
         connector_id: ConnectorId(r.get(0)?),
         path: r.get(1)?,
         size: u64::try_from(size).unwrap_or(0),
-        version: Version::new(r.get::<_, String>(3)?),
+        stamp: Stamp::new(r.get::<_, String>(3)?),
         sha256: r.get(4)?,
         seen_at: r.get(5)?,
     })
@@ -2197,7 +2220,7 @@ mod tests {
 
         // The host inventory.
         collection
-            .put_host_file(connector, "a.mp3", 10, &Version::new("sha256:1"))
+            .put_host_file(connector, "a.mp3", 10, &Stamp::new("10-1"))
             .unwrap();
         assert_eq!(collection.host_files(connector).unwrap().len(), 1);
         collection
@@ -2212,7 +2235,7 @@ mod tests {
         // A scan with the same version keeps the SHA-256. A new version
         // clears it (ADR 0036 item 6).
         collection
-            .put_host_file(connector, "a.mp3", 10, &Version::new("sha256:1"))
+            .put_host_file(connector, "a.mp3", 10, &Stamp::new("10-1"))
             .unwrap();
         assert_eq!(
             collection.host_files(connector).unwrap()[0]
@@ -2221,7 +2244,7 @@ mod tests {
             Some("abc")
         );
         collection
-            .put_host_file(connector, "a.mp3", 11, &Version::new("sha256:2"))
+            .put_host_file(connector, "a.mp3", 11, &Stamp::new("11-2"))
             .unwrap();
         assert_eq!(collection.host_files(connector).unwrap()[0].sha256, None);
         collection.remove_host_file(connector, "a.mp3").unwrap();

@@ -65,8 +65,9 @@ pub struct Candidates {
 pub fn feed_candidates(connector: &dyn Connector) -> Result<Candidates, ConnectorError> {
     let list = connector.list()?;
     let feeds = list
-        .paths
+        .files
         .iter()
+        .map(|f| &f.path)
         .filter(|p| p.to_ascii_lowercase().ends_with(".xml"))
         .filter_map(|path| {
             let file = connector.read(path).ok()??;

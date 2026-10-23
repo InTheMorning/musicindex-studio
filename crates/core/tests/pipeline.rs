@@ -448,10 +448,14 @@ impl Connector for RecordingConnector {
         self.inner.list()
     }
 
+    fn stat(&self, path: &str) -> Result<Option<connector::ListedFile>, connector::ConnectorError> {
+        self.inner.stat(path)
+    }
+
     fn delete(
         &self,
         path: &str,
-        expected: &connector::Version,
+        expected: &connector::Stamp,
     ) -> Result<(), connector::ConnectorError> {
         self.inner.delete(path, expected)
     }

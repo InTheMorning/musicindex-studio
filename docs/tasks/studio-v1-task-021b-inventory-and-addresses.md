@@ -21,9 +21,9 @@ These choices are fixed. Do not change them.
 
 - `pub struct Hosts` holds one `Box<dyn Connector>` for each `ConnectorId`. `Hosts::get(id) -> Result<&dyn Connector, InventoryError>`. The API makes it with `connector::from_row` and the vault. Tests make it from local folders.
 - `inventory::scan(collection, hosts, connector_id) -> Result<ScanResult, InventoryError>`:
-  - It calls `list` and puts each file into `host_files` with its size, its version and `seen_at`.
+  - It calls `list` and puts each file into `host_files` with its size, its stamp and `seen_at`. The list gives the size and the stamp with no read.
   - It removes each `host_files` row of that host that the list does not have.
-  - A row keeps its `sha256` when its version did not change. Otherwise the `sha256` becomes `NULL`.
+  - A row keeps its `sha256` when its stamp did not change. When the stamp changed, the `sha256` becomes `NULL`.
   - `ScanResult` gives the number of files that are new, changed and gone.
 - `inventory::host_sha(collection, hosts, connector_id, path) -> Result<Option<String>, InventoryError>` gives the recorded SHA-256, or reads the file, records its SHA-256 and gives it. It gives `None` when the file is gone.
 - `inventory::copies(collection, hosts, file: &LibraryFile) -> Result<Vec<Copy>, InventoryError>` gives each host file with the same size and the same SHA-256 as the library file, with its host, its path and its public address. It reads a SHA-256 only for a host file with the same size.

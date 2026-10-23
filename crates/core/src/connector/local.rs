@@ -10,7 +10,7 @@ use crate::digest::content_version;
 
 use super::{
     Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, LIST_MAX_DEPTH,
-    LIST_MAX_FILES, Version, relative_path,
+    LIST_MAX_FILES, ListedFile, Stamp, Version, relative_path,
 };
 
 /// A folder on the machine that runs Studio.
@@ -170,15 +170,25 @@ impl Connector for LocalFolder {
         ))
     }
 
-    fn delete(&self, path: &str, expected: &Version) -> Result<(), ConnectorError> {
+    fn stat(&self, path: &str) -> Result<Option<ListedFile>, ConnectorError> {
         let full = self.full_path(path)?;
-        let Some(current) = self.read(path)? else {
+        match fs::metadata(&full) {
+            Ok(meta) if meta.is_file() => Ok(Some(listed(path.to_owned(), &meta))),
+            Ok(_) => Ok(None),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(io_error(&full, &e)),
+        }
+    }
+
+    fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
+        let full = self.full_path(path)?;
+        let Some(current) = self.stat(path)? else {
             return Err(ConnectorError::new(
                 ConnectorErrorKind::NotFound,
                 format!("{} does not exist", full.display()),
             ));
         };
-        if &current.version != expected {
+        if &current.stamp != expected {
             return Err(ConnectorError::new(
                 ConnectorErrorKind::Conflict,
                 format!("{} changed on the host", full.display()),
@@ -210,17 +220,34 @@ impl Connector for LocalFolder {
                         list.truncated = true;
                     }
                 } else if kind.is_file() {
-                    if list.paths.len() == LIST_MAX_FILES {
+                    if list.files.len() == LIST_MAX_FILES {
                         list.truncated = true;
-                        list.paths.sort();
+                        list.files.sort_by(|a, b| a.path.cmp(&b.path));
                         return Ok(list);
                     }
-                    list.paths.push(path);
+                    let meta = entry.metadata().map_err(|e| io_error(&entry.path(), &e))?;
+                    list.files.push(listed(path, &meta));
                 }
             }
         }
-        list.paths.sort();
+        list.files.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(list)
+    }
+}
+
+/// The list facts of a local file. The stamp is the size and the
+/// modification time in nanoseconds, so a list reads no file
+/// (ADR 0036 item 6).
+fn listed(path: String, meta: &fs::Metadata) -> ListedFile {
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos());
+    ListedFile {
+        path,
+        size: meta.len(),
+        stamp: Stamp::new(format!("{}-{modified}", meta.len())),
     }
 }
 
@@ -269,21 +296,20 @@ mod tests {
     }
 
     #[test]
-    fn delete_removes_a_file_with_the_correct_version_and_refuses_other_cases() {
+    fn delete_removes_a_file_with_the_correct_stamp_and_refuses_other_cases() {
         let dir = tempfile::tempdir().unwrap();
         let folder = LocalFolder::new(dir.path(), None);
-        let error = folder
-            .delete("a.mp3", &Version::new("sha256:0"))
-            .unwrap_err();
+        let error = folder.delete("a.mp3", &Stamp::new("0-0")).unwrap_err();
         assert_eq!(error.kind(), ConnectorErrorKind::NotFound);
 
-        let v1 = folder.write("a.mp3", b"one", &Expected::Absent).unwrap();
-        let stale = Version::new("sha256:0");
-        let error = folder.delete("a.mp3", &stale).unwrap_err();
+        folder.write("a.mp3", b"one", &Expected::Absent).unwrap();
+        let stamp = folder.stat("a.mp3").unwrap().unwrap().stamp;
+        let error = folder.delete("a.mp3", &Stamp::new("0-0")).unwrap_err();
         assert_eq!(error.kind(), ConnectorErrorKind::Conflict);
         assert!(dir.path().join("a.mp3").exists());
+        assert_eq!(folder.stat("b.mp3").unwrap(), None);
 
-        folder.delete("a.mp3", &v1).unwrap();
+        folder.delete("a.mp3", &stamp).unwrap();
         assert!(!dir.path().join("a.mp3").exists());
     }
 
@@ -312,7 +338,9 @@ mod tests {
             folder.write(path, b"x", &Expected::Absent).unwrap();
         }
         let list = folder.list().unwrap();
-        assert_eq!(list.paths, ["a/b/c/ok.xml", "album/feed.xml", "b.xml"]);
+        let paths: Vec<&str> = list.files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, ["a/b/c/ok.xml", "album/feed.xml", "b.xml"]);
+        assert!(list.files.iter().all(|f| f.size == 1));
         assert!(list.truncated);
     }
 

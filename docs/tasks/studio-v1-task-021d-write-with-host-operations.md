@@ -21,10 +21,10 @@ These choices are fixed. Do not change them.
 
 - `write_draft(collection, hosts: &Hosts, library: &Library, id, approved: &DiffId) -> Result<Version, PipelineError>`. The checks of the current `write_draft` stay: the diff ID, the addresses and the version of the feed file.
 - The sequence of the write:
-  1. Each upload and copy: read the library file, and `write(path, bytes, &Expected::Absent)`. A `Conflict` gives `FileExists`, and the feed file does not change. After each file, put it into `host_files` with its version and its SHA-256.
+  1. Each upload and copy: read the library file, and `write(path, bytes, &Expected::Absent)`. A `Conflict` gives `FileExists`, and the feed file does not change. After each file, put it into `host_files` with the size and the stamp from `stat`, and its SHA-256.
   2. The feed XML, as before. Then put the hosted bytes into the release folder with `library.write_feed_xml`.
   3. Read each new address of the feed through its connector. When one is not there, stop before the deletions with `NotReachable`, and name the address.
-  4. Each deletion: check again that no feed refers to the address. Then `delete(path, version)` with the version from `host_files`, and remove the row. A `Conflict` stops the deletions and names the path. The feed XML stays written.
+  4. Each deletion: check again that no feed refers to the address. Then `delete(path, stamp)` with the stamp from `host_files`, and remove the row. A `Conflict` stops the deletions and names the path. The feed XML stays written.
   5. Remove the `draft_operations` of the feed, and the draft.
 - After the write, `inventory::scan` runs for each host that the write touched.
 - `write_draft` no longer uses `draft_files` or the store. The import route of the API calls `import_into_library`. The API keeps its result fields, with `on_host` from `PlannedPath`.
@@ -49,7 +49,7 @@ Mechanical:
 - A release with one file on host A and one file on host B writes the two files and a feed with the correct address for each. The library XML has the same bytes as the hosted feed file.
 - A changed library file gets a hash name on the host. The previous file stays until the feed is written. With a delete operation for it, the write deletes it after the feed.
 - A delete operation for an address that a different feed of the library refers to does not delete the file.
-- A host file that changed after the scan stops the deletion with `Conflict`. The feed stays written.
+- A host file that changed after the scan has a different stamp. It stops the deletion with `Conflict`, and the feed stays written.
 - An address that is not on its host after the uploads stops the write before the deletions.
 - The three commit checks pass.
 

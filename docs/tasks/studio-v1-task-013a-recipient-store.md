@@ -50,7 +50,6 @@ These choices are fixed. Do not change them.
 - New public types and methods on `Collection`:
 
   ```rust
-  pub struct RecipientIdentity { pub address: String, pub custom_key: Option<String>, pub custom_value: Option<String> }
   pub struct KnownRecipient {
       pub name: Option<String>, pub recipient_type: Option<String>,
       pub address: String, pub custom_key: Option<String>, pub custom_value: Option<String>,
@@ -62,9 +61,9 @@ These choices are fixed. Do not change them.
   pub fn remove_saved_recipient(&self, id: i64) -> Result<(), CollectionError>;
   ```
 
-  `KnownRecipient` and `RecipientIdentity` derive `Debug`, `Clone`, `PartialEq`, `Eq` and `Serialize`. In the API, `''` shows as `null`.
+  `KnownRecipient` derives `Debug`, `Clone`, `PartialEq`, `Eq` and `Serialize`. In the API, `''` shows as `null`.
 - `known_recipients` gives each identity one time, from the two tables. The name and the type come from the row with the highest `seen_at` or `saved_at`. The sequence is by name, then by address. The sequence of names ignores capital letters.
-- `save_recipient` needs an address with one or more characters. With no address, it gives a `CollectionError` of the new kind `Invalid`. When the identity is saved, it changes the name, the type and `saved_at` of that row, and gives its `id`.
+- `save_recipient` needs an address with one or more characters that are not spaces. With no address, it gives a `CollectionError` of the new kind `Invalid`. When the identity is saved, it changes the name, the type and `saved_at` of that row, and gives its `id`.
 - `remove_saved_recipient` with an unknown `id` gives `NotFound`.
 - In `musicindex.rs`, two new methods on `MusicIndex`:
 

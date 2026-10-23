@@ -24,6 +24,6 @@ The planning model uses this list after each packet, before the commit of that p
 
 | Packet | Result | Required corrections |
 | --- | --- | --- |
-| [013a](../tasks/studio-v1-task-013a-recipient-store.md) | Open | |
+| [013a](../tasks/studio-v1-task-013a-recipient-store.md) | Pass after two corrections | The packet named a type `RecipientIdentity` that no method used. The planning model removed it. `save_recipient` accepted an address of only spaces, which `Feed::recipients` ignores. It now refuses it. |
 | [013b](../tasks/studio-v1-task-013b-recipient-routes.md) | Open | |
 | [013c](../tasks/studio-v1-task-013c-picker-sheet.md) | Open | |

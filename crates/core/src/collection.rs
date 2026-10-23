@@ -4,6 +4,7 @@
 //! feed, the drafts and the snapshots. It keeps no secret: a connector row
 //! gives only the ID of its vault record.
 
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,7 +14,7 @@ use serde::Serialize;
 
 use crate::address::{self, Address, AddressSource};
 use crate::connector::Version;
-use crate::feed::Feed;
+use crate::feed::{Feed, Recipient};
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
 /// to version `n + 1` (ADR 0014).
@@ -83,6 +84,28 @@ FROM feeds f LEFT JOIN connectors c ON c.id = f.connector_id
 WHERE f.public_url IS NOT NULL;
 UPDATE feeds SET address_source = (SELECT source FROM feed_addresses WHERE feed_id = feeds.id);
 ",
+    r"
+CREATE TABLE feed_recipients (
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    address TEXT NOT NULL,
+    custom_key TEXT NOT NULL DEFAULT '',
+    custom_value TEXT NOT NULL DEFAULT '',
+    name TEXT,
+    recipient_type TEXT,
+    seen_at INTEGER NOT NULL,
+    PRIMARY KEY (feed_id, address, custom_key, custom_value)
+);
+CREATE TABLE saved_recipients (
+    id INTEGER PRIMARY KEY,
+    address TEXT NOT NULL,
+    custom_key TEXT NOT NULL DEFAULT '',
+    custom_value TEXT NOT NULL DEFAULT '',
+    name TEXT,
+    recipient_type TEXT,
+    saved_at INTEGER NOT NULL,
+    UNIQUE (address, custom_key, custom_value)
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -96,6 +119,8 @@ pub enum CollectionErrorKind {
     NotFound,
     /// Other rows use the row, so it cannot go out.
     InUse,
+    /// The collection refuses the sent value.
+    Invalid,
     /// SQLite failed, or the schema is not known.
     Database,
 }
@@ -217,6 +242,26 @@ pub struct SnapshotInfo {
     pub version: Version,
     /// The time of the snapshot, in seconds after the Unix epoch.
     pub taken_at: i64,
+}
+
+/// A recipient that the collection knows, from a feed that Studio read, or
+/// from a save by the user (ADR 0027).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct KnownRecipient {
+    /// The name, from the most recent read or save.
+    pub name: Option<String>,
+    /// The recipient type, from the most recent read or save.
+    pub recipient_type: Option<String>,
+    /// The payment address.
+    pub address: String,
+    /// `customKey`, when the recipient has one.
+    pub custom_key: Option<String>,
+    /// `customValue`, when the recipient has one.
+    pub custom_value: Option<String>,
+    /// The number of feeds of the collection that have this recipient.
+    pub feeds: usize,
+    /// The ID of the saved recipient row, when the user saved it.
+    pub saved_id: Option<i64>,
 }
 
 /// The collection database.
@@ -469,6 +514,7 @@ impl Collection {
             feed.new_feed_url.as_deref(),
         )?;
         choose_address(&tx, id)?;
+        put_recipients(&tx, id, feed.recipients())?;
         tx.commit()?;
         Ok(())
     }
@@ -684,10 +730,202 @@ impl Collection {
             })
     }
 
+    /// Each recipient that the collection knows: from a feed that Studio
+    /// read, or from a save (ADR 0027 items 2 to 5).
+    ///
+    /// The list has each identity one time. The name and the type come from
+    /// the row with the highest `seen_at` or `saved_at`. The sequence is by
+    /// name, then by address, with no regard to capital letters.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn known_recipients(&self) -> Result<Vec<KnownRecipient>, CollectionError> {
+        let mut found: HashMap<(String, String, String), RecipientAgg> = HashMap::new();
+
+        let mut statement = self.db.prepare(
+            "SELECT feed_id, address, custom_key, custom_value, name, recipient_type, seen_at
+             FROM feed_recipients",
+        )?;
+        let rows = statement.query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, Option<String>>(4)?,
+                r.get::<_, Option<String>>(5)?,
+                r.get::<_, i64>(6)?,
+            ))
+        })?;
+        for row in rows {
+            let (feed_id, address, custom_key, custom_value, name, recipient_type, seen_at) = row?;
+            let key = (address.clone(), custom_key.clone(), custom_value.clone());
+            let agg = found
+                .entry(key)
+                .or_insert_with(|| RecipientAgg::new(address, custom_key, custom_value));
+            agg.feeds.insert(feed_id);
+            agg.consider(seen_at, name, recipient_type);
+        }
+        drop(statement);
+
+        let mut statement = self.db.prepare(
+            "SELECT id, address, custom_key, custom_value, name, recipient_type, saved_at
+             FROM saved_recipients",
+        )?;
+        let rows = statement.query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, Option<String>>(4)?,
+                r.get::<_, Option<String>>(5)?,
+                r.get::<_, i64>(6)?,
+            ))
+        })?;
+        for row in rows {
+            let (saved_id, address, custom_key, custom_value, name, recipient_type, saved_at) =
+                row?;
+            let key = (address.clone(), custom_key.clone(), custom_value.clone());
+            let agg = found
+                .entry(key)
+                .or_insert_with(|| RecipientAgg::new(address, custom_key, custom_value));
+            agg.saved_id = Some(saved_id);
+            agg.consider(saved_at, name, recipient_type);
+        }
+
+        let mut list: Vec<KnownRecipient> = found.into_values().map(RecipientAgg::finish).collect();
+        list.sort_by(|a, b| {
+            let a_name = a.name.as_deref().unwrap_or_default().to_lowercase();
+            let b_name = b.name.as_deref().unwrap_or_default().to_lowercase();
+            a_name.cmp(&b_name).then_with(|| a.address.cmp(&b.address))
+        });
+        Ok(list)
+    }
+
+    /// Save a recipient. When its identity is already saved, change the
+    /// name and the type of that row (ADR 0027 item 5).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] of kind [`CollectionErrorKind::Invalid`]
+    /// when the recipient has no address.
+    pub fn save_recipient(&self, recipient: &Recipient) -> Result<i64, CollectionError> {
+        // The same rule as `Feed::recipients`: an address of only spaces is no
+        // address.
+        let Some(address) = recipient
+            .address
+            .as_deref()
+            .filter(|a| !a.trim().is_empty())
+        else {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::Invalid,
+                "a saved recipient needs an address",
+            ));
+        };
+        let custom_key = recipient.custom_key.clone().unwrap_or_default();
+        let custom_value = recipient.custom_value.clone().unwrap_or_default();
+        self.db.execute(
+            "INSERT INTO saved_recipients (address, custom_key, custom_value, name, recipient_type, saved_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT (address, custom_key, custom_value)
+             DO UPDATE SET name = ?4, recipient_type = ?5, saved_at = ?6",
+            params![
+                address,
+                custom_key,
+                custom_value,
+                recipient.name,
+                recipient.recipient_type,
+                now()
+            ],
+        )?;
+        Ok(self.db.query_row(
+            "SELECT id FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3",
+            params![address, custom_key, custom_value],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Remove a saved recipient. The `feed_recipients` rows do not
+    /// change.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the ID does not exist.
+    pub fn remove_saved_recipient(&self, id: i64) -> Result<(), CollectionError> {
+        let changed = self
+            .db
+            .execute("DELETE FROM saved_recipients WHERE id = ?1", [id])?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("saved recipient {id} does not exist"),
+            ));
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     pub(crate) fn db(&self) -> &Connection {
         &self.db
     }
+}
+
+/// One recipient identity. [`Collection::known_recipients`] uses it to
+/// combine the rows of the two recipient tables.
+struct RecipientAgg {
+    address: String,
+    custom_key: String,
+    custom_value: String,
+    feeds: HashSet<i64>,
+    saved_id: Option<i64>,
+    best_at: i64,
+    name: Option<String>,
+    recipient_type: Option<String>,
+}
+
+impl RecipientAgg {
+    fn new(address: String, custom_key: String, custom_value: String) -> Self {
+        Self {
+            address,
+            custom_key,
+            custom_value,
+            feeds: HashSet::new(),
+            saved_id: None,
+            best_at: i64::MIN,
+            name: None,
+            recipient_type: None,
+        }
+    }
+
+    /// Keep `name` and `recipient_type` from the row with the highest `at`
+    /// value.
+    fn consider(&mut self, at: i64, name: Option<String>, recipient_type: Option<String>) {
+        if at >= self.best_at {
+            self.best_at = at;
+            self.name = name;
+            self.recipient_type = recipient_type;
+        }
+    }
+
+    fn finish(self) -> KnownRecipient {
+        KnownRecipient {
+            name: self.name,
+            recipient_type: self.recipient_type,
+            address: self.address,
+            custom_key: non_empty(self.custom_key),
+            custom_value: non_empty(self.custom_value),
+            feeds: self.feeds.len(),
+            saved_id: self.saved_id,
+        }
+    }
+}
+
+/// Turn the empty text that the database uses for a missing custom key or
+/// custom value back into `None`.
+fn non_empty(value: String) -> Option<String> {
+    (!value.is_empty()).then_some(value)
 }
 
 const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source FROM feeds";
@@ -711,6 +949,74 @@ fn put_address(
         )?,
     };
     Ok(())
+}
+
+/// Replace the `feed_recipients` rows of a feed with its current
+/// recipients (ADR 0027 item 4).
+///
+/// A recipient that occurs two times in `recipients` gives one row. The
+/// last occurrence gives the name and the type.
+fn put_recipients(
+    db: &Connection,
+    id: FeedId,
+    recipients: Vec<&Recipient>,
+) -> Result<(), CollectionError> {
+    db.execute("DELETE FROM feed_recipients WHERE feed_id = ?1", [id.0])?;
+    let seen_at = now();
+    let mut rows: Vec<RecipientRow> = Vec::new();
+    for recipient in recipients {
+        // `Feed::recipients` gives only a recipient with an address.
+        let Some(address) = recipient.address.clone() else {
+            continue;
+        };
+        let custom_key = recipient.custom_key.clone().unwrap_or_default();
+        let custom_value = recipient.custom_value.clone().unwrap_or_default();
+        let same = rows.iter_mut().find(|r| {
+            r.address == address && r.custom_key == custom_key && r.custom_value == custom_value
+        });
+        match same {
+            // A recipient that occurs two times in one feed gives one row.
+            // The last occurrence gives the name and the type.
+            Some(row) => {
+                row.name.clone_from(&recipient.name);
+                row.recipient_type.clone_from(&recipient.recipient_type);
+            }
+            None => rows.push(RecipientRow {
+                address,
+                custom_key,
+                custom_value,
+                name: recipient.name.clone(),
+                recipient_type: recipient.recipient_type.clone(),
+            }),
+        }
+    }
+    for row in rows {
+        db.execute(
+            "INSERT INTO feed_recipients
+                 (feed_id, address, custom_key, custom_value, name, recipient_type, seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                id.0,
+                row.address,
+                row.custom_key,
+                row.custom_value,
+                row.name,
+                row.recipient_type,
+                seen_at
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+/// One row of `feed_recipients`. [`put_recipients`] uses it to give each
+/// identity of a feed one row.
+struct RecipientRow {
+    address: String,
+    custom_key: String,
+    custom_value: String,
+    name: Option<String>,
+    recipient_type: Option<String>,
 }
 
 /// The address of each source of a feed.
@@ -966,14 +1272,234 @@ mod tests {
         let secret = "s3-secret-key-9b1e7d";
         let mut vault = OpenVault::create("correct horse battery").unwrap();
         vault.put("connector:1", secret.as_bytes()).unwrap();
-        let collection = Collection::open(&path).unwrap();
+        let mut collection = Collection::open(&path).unwrap();
         collection
             .add_connector("s3", "Bucket", r#"{"bucket":"music"}"#, Some("connector:1"))
+            .unwrap();
+        let feed_id = collection.add_feed(None, None).unwrap();
+        let doc = Document::parse(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             <podcast:value type=\"lightning\" method=\"keysend\">\
+             <podcast:valueRecipient address=\"addr1\" type=\"node\" split=\"100\"/>\
+             </podcast:value></channel></rss>",
+        )
+        .unwrap();
+        collection
+            .record_state(feed_id, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        collection
+            .save_recipient(&Recipient {
+                address: Some("addr2".to_owned()),
+                ..Recipient::default()
+            })
             .unwrap();
         drop(collection);
         let bytes = std::fs::read(&path).unwrap();
         let text = String::from_utf8_lossy(&bytes);
         assert!(text.contains("connector:1"));
         assert!(!text.contains(secret));
+    }
+
+    #[test]
+    fn a_database_at_schema_version_2_opens_and_gets_the_recipient_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(MIGRATIONS[0]).unwrap();
+        db.execute_batch(MIGRATIONS[1]).unwrap();
+        db.pragma_update(None, "user_version", 2).unwrap();
+        db.execute(
+            "INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(collection.feeds().unwrap().len(), 1);
+        assert!(collection.known_recipients().unwrap().is_empty());
+        collection
+            .save_recipient(&Recipient {
+                address: Some("addr".to_owned()),
+                ..Recipient::default()
+            })
+            .unwrap();
+        assert_eq!(collection.known_recipients().unwrap().len(), 1);
+    }
+
+    fn value_recipient_doc(address: &str, extra: &str) -> Document {
+        Document::parse(&format!(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             <podcast:value type=\"lightning\" method=\"keysend\">\
+             <podcast:valueRecipient address=\"{address}\" type=\"node\" split=\"100\" {extra}/>\
+             </podcast:value>\
+             <item><guid>one</guid>\
+             <podcast:value type=\"lightning\" method=\"keysend\">\
+             <podcast:valueRecipient address=\"it\" name=\"Item\" type=\"node\" split=\"100\" customKey=\"7629169\" customValue=\"acct1\"/>\
+             </podcast:value>\
+             </item></channel></rss>"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn known_recipients_gives_the_channel_and_item_recipients_of_one_feed_one_time_each() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let doc = value_recipient_doc("ch", "name=\"Channel\"");
+        collection
+            .record_state(feed, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        let mut known = collection.known_recipients().unwrap();
+        known.sort_by(|a, b| a.address.cmp(&b.address));
+        assert_eq!(known.len(), 2);
+        for recipient in &known {
+            assert_eq!(recipient.feeds, 1);
+            assert_eq!(recipient.saved_id, None);
+        }
+        let channel = known.iter().find(|r| r.address == "ch").unwrap();
+        assert_eq!(channel.name.as_deref(), Some("Channel"));
+        assert_eq!(channel.custom_key, None);
+        assert_eq!(channel.custom_value, None);
+        let item = known.iter().find(|r| r.address == "it").unwrap();
+        assert_eq!(item.custom_key.as_deref(), Some("7629169"));
+        assert_eq!(item.custom_value.as_deref(), Some("acct1"));
+    }
+
+    #[test]
+    fn two_feeds_with_the_same_identity_give_one_entry_with_the_name_of_the_newest_read() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed_a = collection.add_feed(None, None).unwrap();
+        let feed_b = collection.add_feed(None, None).unwrap();
+        collection
+            .record_state(
+                feed_a,
+                &Feed::read(&value_recipient_doc("shared", "name=\"Old\"")).unwrap(),
+                &Version::new("v1"),
+            )
+            .unwrap();
+        collection
+            .db()
+            .execute(
+                "UPDATE feed_recipients SET seen_at = 1 WHERE feed_id = ?1 AND address = 'shared'",
+                [feed_a.0],
+            )
+            .unwrap();
+        collection
+            .record_state(
+                feed_b,
+                &Feed::read(&value_recipient_doc("shared", "name=\"New\"")).unwrap(),
+                &Version::new("v1"),
+            )
+            .unwrap();
+        collection
+            .db()
+            .execute(
+                "UPDATE feed_recipients SET seen_at = 2 WHERE feed_id = ?1 AND address = 'shared'",
+                [feed_b.0],
+            )
+            .unwrap();
+        let known = collection.known_recipients().unwrap();
+        let shared = known.iter().find(|r| r.address == "shared").unwrap();
+        assert_eq!(shared.feeds, 2);
+        assert_eq!(shared.name.as_deref(), Some("New"));
+    }
+
+    #[test]
+    fn a_recipient_goes_out_of_the_list_when_its_feed_loses_it_or_the_feed_is_deleted() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let with_recipient = Document::parse(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             <podcast:value type=\"lightning\" method=\"keysend\">\
+             <podcast:valueRecipient address=\"only\" type=\"node\" split=\"100\"/>\
+             </podcast:value></channel></rss>",
+        )
+        .unwrap();
+        let without_recipient = Document::parse(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title></channel></rss>",
+        )
+        .unwrap();
+
+        collection
+            .record_state(
+                feed,
+                &Feed::read(&with_recipient).unwrap(),
+                &Version::new("v1"),
+            )
+            .unwrap();
+        assert_eq!(collection.known_recipients().unwrap().len(), 1);
+
+        collection
+            .record_state(
+                feed,
+                &Feed::read(&without_recipient).unwrap(),
+                &Version::new("v2"),
+            )
+            .unwrap();
+        assert!(collection.known_recipients().unwrap().is_empty());
+
+        collection
+            .record_state(
+                feed,
+                &Feed::read(&with_recipient).unwrap(),
+                &Version::new("v3"),
+            )
+            .unwrap();
+        assert_eq!(collection.known_recipients().unwrap().len(), 1);
+        collection.delete_feed(feed).unwrap();
+        assert!(collection.known_recipients().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_saved_recipient_stays_with_no_feed_and_goes_out_when_removed() {
+        let collection = Collection::open_in_memory().unwrap();
+        let id = collection
+            .save_recipient(&Recipient {
+                address: Some("saved".to_owned()),
+                name: Some("Ann".to_owned()),
+                ..Recipient::default()
+            })
+            .unwrap();
+        let known = collection.known_recipients().unwrap();
+        assert_eq!(known.len(), 1);
+        assert_eq!(known[0].feeds, 0);
+        assert_eq!(known[0].saved_id, Some(id));
+        collection.remove_saved_recipient(id).unwrap();
+        assert!(collection.known_recipients().unwrap().is_empty());
+        assert_eq!(
+            collection.remove_saved_recipient(id).unwrap_err().kind(),
+            CollectionErrorKind::NotFound
+        );
+    }
+
+    #[test]
+    fn save_recipient_needs_an_address_and_updates_a_saved_identity() {
+        let collection = Collection::open_in_memory().unwrap();
+        let error = collection
+            .save_recipient(&Recipient::default())
+            .unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::Invalid);
+        let spaces = Recipient {
+            address: Some("   ".to_owned()),
+            ..Recipient::default()
+        };
+        let error = collection.save_recipient(&spaces).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::Invalid);
+
+        let recipient = Recipient {
+            address: Some("x".to_owned()),
+            name: Some("Old".to_owned()),
+            ..Recipient::default()
+        };
+        let id = collection.save_recipient(&recipient).unwrap();
+        let updated = Recipient {
+            name: Some("New".to_owned()),
+            ..recipient
+        };
+        assert_eq!(collection.save_recipient(&updated).unwrap(), id);
+        let known = collection.known_recipients().unwrap();
+        assert_eq!(known.len(), 1);
+        assert_eq!(known[0].name.as_deref(), Some("New"));
     }
 }

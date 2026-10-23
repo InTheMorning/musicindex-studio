@@ -198,6 +198,45 @@ impl Feed {
             .find(|l| l.rel.as_deref() == Some("self"))
             .and_then(|l| l.href.as_deref())
     }
+
+    /// Each `podcast:valueRecipient` of each value block of the channel, of
+    /// each item and of each live item (ADR 0027 item 4).
+    ///
+    /// The list does not have a recipient of a value time split. A
+    /// recipient with no address, or with an address of only spaces, is not
+    /// in the list.
+    #[must_use]
+    pub fn recipients(&self) -> Vec<&Recipient> {
+        let mut found = Vec::new();
+        for value in &self.values {
+            push_recipients(&mut found, &value.recipients);
+        }
+        for item in &self.items {
+            for value in &item.values {
+                push_recipients(&mut found, &value.recipients);
+            }
+        }
+        for live in &self.live_items {
+            for value in &live.item.values {
+                push_recipients(&mut found, &value.recipients);
+            }
+        }
+        found
+    }
+}
+
+/// Add each recipient of `entries` that has an address of one or more
+/// characters that are not spaces.
+fn push_recipients<'a>(found: &mut Vec<&'a Recipient>, entries: &'a [Entry<Recipient>]) {
+    for entry in entries {
+        let Some(address) = entry.value.address.as_deref() else {
+            continue;
+        };
+        if address.trim().is_empty() {
+            continue;
+        }
+        found.push(&entry.value);
+    }
 }
 
 fn channel(root: &Element) -> Option<&Element> {
@@ -443,5 +482,55 @@ impl Modeled for LiveItem {
 
     fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
         self.item.adopt_fields(draft.map(|d| &d.item))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn recipient(address: &str) -> Entry<Recipient> {
+        Entry::new(Recipient {
+            address: Some(address.to_owned()),
+            ..Recipient::default()
+        })
+    }
+
+    #[test]
+    fn recipients_come_from_the_channel_items_and_live_items_but_not_a_time_split() {
+        let feed = Feed {
+            values: vec![Entry::new(ValueBlock {
+                recipients: vec![recipient("channel"), recipient(""), recipient("  ")],
+                time_splits: vec![Entry::new(ValueTimeSplit {
+                    recipients: vec![recipient("split")],
+                    ..ValueTimeSplit::default()
+                })],
+                ..ValueBlock::default()
+            })],
+            items: vec![Entry::new(Item {
+                values: vec![Entry::new(ValueBlock {
+                    recipients: vec![recipient("item")],
+                    ..ValueBlock::default()
+                })],
+                ..Item::default()
+            })],
+            live_items: vec![Entry::new(LiveItem {
+                item: Item {
+                    values: vec![Entry::new(ValueBlock {
+                        recipients: vec![recipient("live")],
+                        ..ValueBlock::default()
+                    })],
+                    ..Item::default()
+                },
+                ..LiveItem::default()
+            })],
+            ..Feed::default()
+        };
+        let addresses: Vec<_> = feed
+            .recipients()
+            .into_iter()
+            .map(|r| r.address.as_deref().unwrap())
+            .collect();
+        assert_eq!(addresses, ["channel", "item", "live"]);
     }
 }

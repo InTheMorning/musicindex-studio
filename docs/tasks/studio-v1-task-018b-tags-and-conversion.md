@@ -23,7 +23,7 @@ These choices are fixed. Do not change them.
 - `media::import(source: &Path, name: &str) -> Result<Imported, MediaError>`. `name` is the file name that the user selected.
 - `pub struct Imported { pub file_name: String, pub path: PathBuf, pub media_type: String, pub size: u64, pub kind: ImportedKind, pub converted_from_wav: bool }`. `path` is the file to keep: the source, or a new FLAC file in the same folder.
 - `pub enum ImportedKind { Audio { title: Option<String>, track_number: Option<u32>, duration: Option<String> }, Image }`. `duration` is `HH:MM:SS`.
-- The type comes from the content, with `lofty` for audio. The accepted media types are `audio/mpeg`, `audio/mp4`, `audio/flac`, `audio/ogg`, `image/jpeg`, `image/png` and `image/webp`. An M4A file gives `audio/mp4`. An Ogg Opus file gives `audio/ogg`.
+- The type comes from the content, with `lofty` for audio. The accepted media types are `audio/mpeg`, `audio/mp4`, `audio/flac`, `audio/ogg`, `image/jpeg`, `image/png`, `image/webp` and `image/gif` (GIF added on 2026-10-23, ADR 0032 item 1). An M4A file gives `audio/mp4`. An Ogg Opus file gives `audio/ogg`.
 - Other content gives a `MediaError` of the type `Unsupported`, with the name of the file.
 - A WAV file (RIFF WAVE, 16-bit or 24-bit integer samples) becomes FLAC with `flacenc`. Studio reads the samples with `hound`. With `lofty`, it copies four tags of the WAV file into the Vorbis comments of the FLAC file: the title, the artist, the album and the track number. `file_name` gets the extension `.flac`. `converted_from_wav` is `true`.
 - A WAV file with float samples gives `Unsupported`, with a message that names the sample format.

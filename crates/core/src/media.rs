@@ -272,6 +272,10 @@ fn sniff_image(source: &Path, name: &str) -> Result<Option<&'static str>, MediaE
     if head.len() >= 12 && &head[0..4] == b"RIFF" && &head[8..12] == b"WEBP" {
         return Ok(Some("image/webp"));
     }
+    // Published music feeds use GIF art (ADR 0032 item 1).
+    if head.starts_with(b"GIF87a") || head.starts_with(b"GIF89a") {
+        return Ok(Some("image/gif"));
+    }
     Ok(None)
 }
 
@@ -401,6 +405,10 @@ mod tests {
         let webp = dir.path().join("a.webp");
         fs::write(&webp, b"RIFF....WEBPVP8 ").expect("write");
         assert_eq!(sniff_image(&webp, "a.webp").unwrap(), Some("image/webp"));
+
+        let gif = dir.path().join("a.gif");
+        fs::write(&gif, b"GIF89a\x01\x00\x01\x00").expect("write");
+        assert_eq!(sniff_image(&gif, "a.gif").unwrap(), Some("image/gif"));
 
         let other = dir.path().join("a.bin");
         fs::write(&other, b"not an image").expect("write");

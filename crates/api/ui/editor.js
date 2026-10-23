@@ -285,6 +285,14 @@ function isWavFile(file) {
   return /\.wav$/i.test(file.name);
 }
 
+// Is this a GIF image, by its name? Studio accepts it, and tells the user
+// that Apple Podcasts asks for JPEG or PNG art (ADR 0032 item 1).
+function isGifFile(file) {
+  return /\.gif$/i.test(file.name);
+}
+
+const GIF_NOTICE = 'Apple Podcasts asks for JPEG or PNG art. Other apps show this GIF image.';
+
 const AUDIO_EXTENSIONS = /\.(mp3|m4a|flac|ogg|opus|wav)$/i;
 
 // The kind of a file before Studio reads it: a guess from its name, for the
@@ -337,6 +345,7 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
         aria-label=${`Remove ${row.file.name}`} onClick=${() => onRemove(row)}>Remove</button>
     </div>
     ${row.isWav && html`<div class="notice"><strong>${row.file.name}</strong>${WAV_NOTICE}</div>`}
+    ${row.isGif && html`<div class="notice"><strong>${row.file.name}</strong>${GIF_NOTICE}</div>`}
     ${row.state === 'ready' && kind === 'audio' && html`<dl class="facts">
       <dt>Title</dt><dd>${row.facts.title || '—'}</dd>
       <dt>Track number</dt><dd>${row.facts.track_number ?? '—'}</dd>
@@ -437,6 +446,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
       id: nextImportId++,
       file,
       isWav: isWavFile(file),
+      isGif: isGifFile(file),
       state: 'waiting',
       error: null,
       facts: null,

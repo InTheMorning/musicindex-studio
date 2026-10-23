@@ -14,7 +14,7 @@ On 2026-10-23 the operator answered three questions about the formats, the file 
 
 ### Audio Formats
 
-1. The import accepts MP3, M4A (AAC), FLAC and Ogg (Vorbis and Opus) files.
+1. The import accepts MP3, M4A (AAC), FLAC and Ogg (Vorbis and Opus) files. For art, it accepts JPEG, PNG, WebP and GIF images. A GIF image shows a notice that Apple Podcasts asks for JPEG or PNG art. The operator added GIF on 2026-10-23, in the visual check of Phase 6, because published music feeds use GIF art.
 2. The import also accepts a WAV file. Studio converts it to FLAC before the import, and keeps its tags. The UI tells the user, in a notice that the user cannot miss, that Studio converts the file. The notice also says that some listener apps do not play FLAC.
 3. Studio reads the tags with the `lofty` library. It converts WAV to FLAC with the `hound` and `flacenc` libraries. The three libraries are pure Rust.
 

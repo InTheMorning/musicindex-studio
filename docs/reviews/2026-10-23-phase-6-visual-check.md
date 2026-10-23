@@ -35,6 +35,28 @@ After step 8, the folder had `my-album/Piano.ff.A0.flac` with the `fLaC` signatu
 - Step 4: with only an image in the sheet, the button "Add 0 tracks" was disabled. After the correction, the button says "Add the album art" and adds the art.
 - Step 4: the address of each file with a space in its name was not correct, so Studio could not write. After the correction, the local folder connector encodes each segment of the path. The agent encoded the 9 addresses of the draft in the check data.
 
+## Task 019 Check
+
+On 2026-10-23 the operator did the visual check of [task 019](../tasks/studio-v1-task-019-lossless-import.md) ([ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md)) in the same release. Result: pass.
+
+| Step | Procedure | Result |
+| --- | --- | --- |
+| 1 | Import a WAV file and a FLAC file. Examine the notices and the facts of each file. | Pass after two corrections |
+| 2 | Add the FLAC track. Examine the alternative enclosures on the track page. | Pass |
+| 3 | Examine the diff of the new item | Pass after one correction |
+| 4 | Approve and write | Pass |
+
+The agent examined the pending files after step 1. The MP3 file of the FLAC file has 245 kbit/s, which agrees with VBR V0, and the four tags of the source. After step 4, the folder had the MP3 file and the FLAC file, with the sizes of the diff. No WAV file was on the host or in the pending store.
+
+Defects found during this check:
+
+- Step 1: the Size and Type rows gave only the MP3 file. Each file line now gives its name, its type and its size.
+- Step 1: while an audio file was sending, the disabled button said "Add the album art". It now says "Add 0 tracks".
+- Step 3: the alternative enclosures went after `podcast:episode`, because a new item takes the sequence of the last hosted item. The item now writes its alternative enclosures last, and a test covers the hosted sequence.
+- Step 3: an import with the name of a file that the draft uses gave the message "The sheet sent a file with this name already". The message now tells the user to remove that track or image from the draft first.
+
+The operator saw "Not saved" once. The browser tab used an address of a stopped Studio. With the current address, the removal saved.
+
 ## Open Items
 
 - The art preview of a pending file shows the placeholder, because the image is not on the host before the write. The preview can use the pending copy.

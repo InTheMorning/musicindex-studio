@@ -489,7 +489,12 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
     (r) => r.state !== 'failed' && (r.facts ? r.facts.kind === 'audio' : guessKind(r.file) === 'audio'),
   );
   const stillGoing = rows.some((r) => r.state === 'waiting' || r.state === 'sending');
-  const canAdd = !stillGoing && readyAudio.length > 0;
+  const albumArt = rows.find((r) => r.state === 'ready' && r.facts.kind === 'image' && r.imageUse === 'album');
+  // An import of the album art alone is also an add.
+  const canAdd = !stillGoing && (readyAudio.length > 0 || Boolean(albumArt));
+  const addLabel = readyAudio.length > 0
+    ? `＋ Add ${readyAudio.length} track${readyAudio.length === 1 ? '' : 's'}`
+    : '＋ Add the album art';
 
   // The add: the audio files in the sequence of their track numbers, then
   // the files with no number in the sequence of selection (ADR 0026 item 3).
@@ -504,7 +509,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
       );
       return found ? found.facts.url : null;
     };
-    const albumImage = rows.find((r) => r.state === 'ready' && r.facts.kind === 'image' && r.imageUse === 'album');
+    const albumImage = albumArt;
     const tracks = [...numbered, ...unnumbered].map((row) => ({
       title: row.facts.title || null,
       description: null,
@@ -554,7 +559,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
     <footer>
       <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
       <button class="button primary" type="button" disabled=${!canAdd} onClick=${add}>
-        ＋ Add ${readyAudio.length} track${readyAudio.length === 1 ? '' : 's'}
+        ${addLabel}
       </button>
     </footer>
   </dialog>`;

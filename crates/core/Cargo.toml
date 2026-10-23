@@ -27,6 +27,8 @@ lofty = { version = "0.25", default-features = false, features = [
 ] }
 hound = { version = "3.5", default-features = false }
 flacenc = { version = "0.5", default-features = false }
+mp3lame-encoder = "0.2"
+claxon = "0.4"
 
 [features]
 # Test helpers for the tests of other workspace crates.

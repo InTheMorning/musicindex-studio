@@ -1,8 +1,12 @@
-//! Facts of an imported audio file or image file, and the WAV to FLAC
-//! conversion (ADR 0026 items 1 to 4, ADR 0032 items 1 to 5).
+//! Facts of an imported audio file or image file, the WAV to FLAC
+//! conversion, and the MP3 encoder (ADR 0026 items 1 to 4,
+//! ADR 0032 items 1 to 5, ADR 0033 items 1 to 4, 10 and 11).
 //!
-//! The core reads tags with `lofty`. It converts a WAV file to FLAC with
-//! `hound` and `flacenc`. The three libraries are pure Rust.
+//! The core reads tags with `lofty`. It converts a WAV file to FLAC
+//! with `hound` and `flacenc`. It encodes a WAV file or a FLAC file to
+//! MP3 with `mp3lame-encoder`, and decodes a FLAC file for the encoder
+//! with `claxon`. `mp3lame-encoder` compiles LAME from its bundled
+//! source at build time. Each other library is pure Rust.
 
 use std::fmt;
 use std::fs;
@@ -75,14 +79,15 @@ pub enum ImportedKind {
 }
 
 /// The facts of a file that the user selected for import (ADR 0026,
-/// ADR 0032).
+/// ADR 0032, ADR 0033).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Imported {
-    /// The name to keep for the file. A converted WAV file gets the
-    /// extension `.flac`.
+    /// The name to keep for the file. A WAV file or a FLAC file gets
+    /// the extension `.mp3`, because the MP3 file is the enclosure of
+    /// the track (ADR 0033 items 1 and 5).
     pub file_name: String,
-    /// The file to keep: the source file, or a new FLAC file in the same
-    /// folder.
+    /// The file to keep: the source file, or a new MP3 file in the
+    /// same folder.
     pub path: PathBuf,
     /// The media type, such as `audio/mpeg` or `image/png`.
     pub media_type: String,
@@ -92,20 +97,39 @@ pub struct Imported {
     pub kind: ImportedKind,
     /// True when Studio converted a WAV file to FLAC.
     pub converted_from_wav: bool,
+    /// The lossless file of a WAV file or a FLAC file: the converted
+    /// FLAC file, or the source FLAC file. `None` for each other file
+    /// (ADR 0033 item 1).
+    pub lossless: Option<ImportedFile>,
 }
 
-/// Read the facts of an audio file or an image file, and convert a WAV
-/// file to FLAC with its tags (ADR 0026 items 1 to 4, ADR 0032 items 1
-/// to 5).
+/// The facts of a file that goes with the main file of an [`Imported`]
+/// result (ADR 0033 item 1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedFile {
+    /// The name to keep for the file.
+    pub file_name: String,
+    /// The file to keep.
+    pub path: PathBuf,
+    /// The media type, such as `audio/flac`.
+    pub media_type: String,
+    /// The size of `path` in bytes.
+    pub size: u64,
+}
+
+/// Read the facts of an audio file or an image file. Give a WAV file or
+/// a FLAC file an MP3 enclosure, with its tags (ADR 0026 items 1 to 4,
+/// ADR 0032 items 1 to 5, ADR 0033 items 1 to 4, 10 and 11).
 ///
 /// `name` is the file name that the user selected.
 ///
 /// # Errors
 ///
 /// Gives [`MediaErrorKind::Unsupported`] when the content is not one of
-/// the accepted media types, or when a WAV file does not have 16-bit or
-/// 24-bit integer samples. Gives [`MediaErrorKind::Io`] when a file
-/// operation or a tag operation fails.
+/// the accepted media types, when a WAV file or a FLAC file does not
+/// have 16-bit or 24-bit integer samples, or when it has more than two
+/// channels. Gives [`MediaErrorKind::Io`] when a file operation or a
+/// tag operation fails.
 pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
     if let Some(media_type) = sniff_image(source, name)? {
         let size = file_size(source, name)?;
@@ -116,6 +140,7 @@ pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
             size,
             kind: ImportedKind::Image,
             converted_from_wav: false,
+            lossless: None,
         });
     }
 
@@ -129,6 +154,9 @@ pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
 
     if file_type == FileType::Wav {
         return convert_wav(source, name);
+    }
+    if file_type == FileType::Flac {
+        return convert_flac(source, name);
     }
 
     let Some(media_type) = audio_media_type(file_type) else {
@@ -153,12 +181,14 @@ pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
             duration: Some(duration),
         },
         converted_from_wav: false,
+        lossless: None,
     })
 }
 
-/// Convert a WAV file to FLAC, and copy its title, artist, album and
-/// track number tags into the Vorbis comments of the new file
-/// (ADR 0032 item 2).
+/// Convert a WAV file to FLAC and to MP3, and copy its title, artist,
+/// album and track number tags into the new files. The MP3 file is the
+/// main result. The FLAC file is `lossless` (ADR 0032 item 2,
+/// ADR 0033 items 1 to 4, 10 and 11).
 fn convert_wav(source: &Path, name: &str) -> Result<Imported, MediaError> {
     let source_tagged_file = Probe::open(source)
         .map_err(|e| io_error(name, e))?
@@ -194,40 +224,105 @@ fn convert_wav(source: &Path, name: &str) -> Result<Imported, MediaError> {
     encode_flac(&samples, &spec, &flac_path, name)?;
 
     let title = title_or_file_name(source_tag, name);
+    let artist = source_tag
+        .and_then(Tag::artist)
+        .map(std::borrow::Cow::into_owned);
+    let album = source_tag
+        .and_then(Tag::album)
+        .map(std::borrow::Cow::into_owned);
+    let track_number = source_tag.and_then(Tag::track);
+
     let mut flac_tag = Tag::new(TagType::VorbisComments);
     flac_tag.set_title(title.clone());
-    if let Some(artist) = source_tag.and_then(Tag::artist) {
-        flac_tag.set_artist(artist.into_owned());
+    if let Some(artist) = artist.clone() {
+        flac_tag.set_artist(artist);
     }
-    if let Some(album) = source_tag.and_then(Tag::album) {
-        flac_tag.set_album(album.into_owned());
+    if let Some(album) = album.clone() {
+        flac_tag.set_album(album);
     }
-    let track_number = source_tag.and_then(Tag::track);
     if let Some(track_number) = track_number {
         flac_tag.set_track(track_number);
     }
     flac_tag
         .save_to_path(&flac_path, WriteOptions::default())
         .map_err(|e| io_error(name, e))?;
+    let flac_size = file_size(&flac_path, name)?;
 
-    let size = file_size(&flac_path, name)?;
     let duration = if spec.sample_rate == 0 {
         Duration::ZERO
     } else {
         Duration::from_secs_f64(f64::from(frame_count) / f64::from(spec.sample_rate))
     };
 
+    let mp3_path = source.with_extension("mp3");
+    encode_mp3(
+        &samples,
+        u32::from(spec.channels),
+        spec.bits_per_sample,
+        spec.sample_rate,
+        &mp3_path,
+        name,
+    )?;
+    write_mp3_tag(&mp3_path, &title, artist, album, track_number, name)?;
+    let mp3_size = file_size(&mp3_path, name)?;
+
     Ok(Imported {
-        file_name: file_name_with_extension(name, "flac"),
-        path: flac_path,
-        media_type: "audio/flac".to_owned(),
-        size,
+        file_name: file_name_with_extension(name, "mp3"),
+        path: mp3_path,
+        media_type: "audio/mpeg".to_owned(),
+        size: mp3_size,
         kind: ImportedKind::Audio {
             title: Some(title),
             track_number,
             duration: Some(format_duration(duration)),
         },
         converted_from_wav: true,
+        lossless: Some(ImportedFile {
+            file_name: file_name_with_extension(name, "flac"),
+            path: flac_path,
+            media_type: "audio/flac".to_owned(),
+            size: flac_size,
+        }),
+    })
+}
+
+/// Give a FLAC file an MP3 enclosure, with its tags. The FLAC file
+/// stays as it is, as `lossless` (ADR 0033 items 1 to 4, 10 and 11).
+fn convert_flac(source: &Path, name: &str) -> Result<Imported, MediaError> {
+    let tagged_file = Probe::open(source)
+        .map_err(|e| io_error(name, e))?
+        .read()
+        .map_err(|e| io_error(name, e))?;
+    let tag = tagged_file.first_tag();
+    let title = title_or_file_name(tag, name);
+    let artist = tag.and_then(Tag::artist).map(std::borrow::Cow::into_owned);
+    let album = tag.and_then(Tag::album).map(std::borrow::Cow::into_owned);
+    let track_number = tag.and_then(Tag::track);
+    let duration = format_duration(tagged_file.properties().duration());
+
+    let mp3_path = source.with_extension("mp3");
+    encode_mp3_from_flac(source, &mp3_path, name)?;
+    write_mp3_tag(&mp3_path, &title, artist, album, track_number, name)?;
+    let mp3_size = file_size(&mp3_path, name)?;
+    let flac_size = file_size(source, name)?;
+
+    Ok(Imported {
+        file_name: file_name_with_extension(name, "mp3"),
+        path: mp3_path,
+        media_type: "audio/mpeg".to_owned(),
+        size: mp3_size,
+        kind: ImportedKind::Audio {
+            title: Some(title),
+            track_number,
+            duration: Some(duration),
+        },
+        converted_from_wav: false,
+        lossless: Some(ImportedFile {
+            file_name: name.to_owned(),
+            path: source.to_owned(),
+            media_type: "audio/flac".to_owned(),
+            size: flac_size,
+        }),
     })
 }
 
@@ -253,6 +348,174 @@ fn encode_flac(
     let mut sink = flacenc::bitsink::ByteSink::new();
     stream.write(&mut sink).map_err(|e| io_error(name, e))?;
     fs::write(path, sink.as_slice()).map_err(|e| io_error(name, e))
+}
+
+/// Decode the FLAC file at `source` with `claxon`, and encode its
+/// samples to MP3 at `mp3_path` (ADR 0033 items 10 and 11).
+fn encode_mp3_from_flac(source: &Path, mp3_path: &Path, name: &str) -> Result<(), MediaError> {
+    let mut reader = claxon::FlacReader::open(source).map_err(|e| io_error(name, e))?;
+    let info = reader.streaminfo();
+
+    let bits_per_sample = u16::try_from(info.bits_per_sample).unwrap_or(u16::MAX);
+    if bits_per_sample != 16 && bits_per_sample != 24 {
+        return Err(MediaError::new(
+            MediaErrorKind::Unsupported,
+            format!(
+                "{name} has a {bits_per_sample}-bit integer sample format, which Studio does \
+                 not encode"
+            ),
+        ));
+    }
+
+    let samples: Vec<i32> = reader
+        .samples()
+        .collect::<Result<_, claxon::Error>>()
+        .map_err(|e| io_error(name, e))?;
+
+    encode_mp3(
+        &samples,
+        info.channels,
+        bits_per_sample,
+        info.sample_rate,
+        mp3_path,
+        name,
+    )
+}
+
+/// Encode `samples` to MP3 with LAME, at VBR quality V0, and write the
+/// file to `path`. `samples` holds one integer sample of
+/// `bits_per_sample` bits per channel per frame, channel interleaved
+/// (ADR 0033 items 2 and 10).
+fn encode_mp3(
+    samples: &[i32],
+    channels: u32,
+    bits_per_sample: u16,
+    sample_rate: u32,
+    path: &Path,
+    name: &str,
+) -> Result<(), MediaError> {
+    check_channel_count(channels, name)?;
+    // `check_channel_count` already refused a channel count above 2.
+    let channel_count = u8::try_from(channels).unwrap_or(2);
+
+    let mut builder = mp3lame_encoder::Builder::new()
+        .ok_or_else(|| io_error(name, "cannot create the LAME encoder"))?;
+    builder
+        .set_num_channels(channel_count)
+        .map_err(|e| io_error(name, e))?;
+    builder
+        .set_sample_rate(sample_rate)
+        .map_err(|e| io_error(name, e))?;
+    builder
+        .set_vbr_mode(mp3lame_encoder::VbrMode::Mtrh)
+        .map_err(|e| io_error(name, e))?;
+    builder
+        .set_vbr_quality(mp3lame_encoder::Quality::Best)
+        .map_err(|e| io_error(name, e))?;
+    let mut encoder = builder.build().map_err(|e| io_error(name, e))?;
+
+    // LAME takes each integer sample at the full 32-bit range. `samples`
+    // holds each sample in its low `bits_per_sample` bits, so the loop
+    // shifts it to the top of the 32-bit range.
+    let shift = 32 - u32::from(bits_per_sample);
+    let mut mp3 = Vec::new();
+    // Encode a part of the samples at a time, so that a long file needs
+    // no second copy of all its samples in memory.
+    let mut left = Vec::with_capacity(ENCODE_FRAMES);
+    let mut right = Vec::with_capacity(ENCODE_FRAMES);
+    let chunk = ENCODE_FRAMES * usize::from(channel_count);
+    for part in samples.chunks(chunk) {
+        left.clear();
+        right.clear();
+        if channel_count == 2 {
+            for frame in part.chunks_exact(2) {
+                left.push(frame[0] << shift);
+                right.push(frame[1] << shift);
+            }
+        } else {
+            left.extend(part.iter().map(|&sample| sample << shift));
+        }
+        mp3.reserve(mp3lame_encoder::max_required_buffer_size(left.len()));
+        let written = if channel_count == 2 {
+            encoder.encode_to_vec(
+                mp3lame_encoder::DualPcm {
+                    left: &left,
+                    right: &right,
+                },
+                &mut mp3,
+            )
+        } else {
+            encoder.encode_to_vec(mp3lame_encoder::MonoPcm(&left), &mut mp3)
+        };
+        written.map_err(|e| io_error(name, e))?;
+    }
+
+    // The final flush needs its own buffer, at least 7200 bytes.
+    mp3.reserve(7200);
+    encoder
+        .flush_to_vec::<mp3lame_encoder::FlushNoGap>(&mut mp3)
+        .map_err(|e| io_error(name, e))?;
+
+    // LAME reserves the first frame of `mp3` for the VBR header, but
+    // leaves it empty until the whole file is encoded. A reader needs
+    // this header for the correct duration of a VBR file. The header
+    // goes after any ID3v2 tag that LAME wrote; `studio-core` writes no
+    // such tag, so `id3v2_tag_size` is 0, and the header is the first
+    // frame of `mp3`.
+    let id3v2_size = encoder.id3v2_tag_size();
+    let lame_tag_size = encoder.lame_tag_size();
+    if lame_tag_size > 0 {
+        // The buffer needs its full size before the encoder writes to
+        // it: an empty buffer gives no space, so the encoder would
+        // refuse it.
+        let mut vbr_header = Vec::with_capacity(lame_tag_size);
+        encoder.lame_tag_encode_to_vec(&mut vbr_header);
+        mp3[id3v2_size..id3v2_size + lame_tag_size].copy_from_slice(&vbr_header);
+    }
+
+    fs::write(path, &mp3).map_err(|e| io_error(name, e))
+}
+
+/// The number of sample frames that the MP3 encoder takes at a time.
+const ENCODE_FRAMES: usize = 1 << 16;
+
+/// Gives `Unsupported`, with `channels` in the message, when `channels`
+/// is more than two. LAME encodes mono and stereo sound only
+/// (ADR 0033 item 10).
+fn check_channel_count(channels: u32, name: &str) -> Result<(), MediaError> {
+    if channels > 2 {
+        return Err(MediaError::new(
+            MediaErrorKind::Unsupported,
+            format!("{name} has {channels} channels, which Studio does not encode to MP3"),
+        ));
+    }
+    Ok(())
+}
+
+/// Write an `ID3v2` tag to the MP3 file at `path`, with the title, the
+/// artist, the album and the track number of the source (ADR 0033
+/// item 2).
+fn write_mp3_tag(
+    path: &Path,
+    title: &str,
+    artist: Option<String>,
+    album: Option<String>,
+    track_number: Option<u32>,
+    name: &str,
+) -> Result<(), MediaError> {
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.set_title(title.to_owned());
+    if let Some(artist) = artist {
+        tag.set_artist(artist);
+    }
+    if let Some(album) = album {
+        tag.set_album(album);
+    }
+    if let Some(track_number) = track_number {
+        tag.set_track(track_number);
+    }
+    tag.save_to_path(path, WriteOptions::default())
+        .map_err(|e| io_error(name, e))
 }
 
 /// The media type of an image, from the first bytes of `source`. Gives

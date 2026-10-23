@@ -43,6 +43,20 @@ where
     .map_err(|e| ApiError::internal(e.to_string()))?
 }
 
+/// Run blocking core work on a blocking thread, with no lock of the
+/// workspace. An MP3 encode of a WAV file or a FLAC file takes some
+/// seconds, and another request must not wait for it (ADR 0015, ADR 0033
+/// item 1).
+async fn blocking_unlocked<T, F>(work: F) -> Result<T, ApiError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, ApiError> + Send + 'static,
+{
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))?
+}
+
 fn lock(shared: &Shared) -> Result<MutexGuard<'_, Workspace>, ApiError> {
     shared
         .lock()
@@ -816,7 +830,7 @@ pub(crate) struct PendingFileQuery {
 
 /// Removes its file when it goes out of scope. An upload keeps no
 /// temporary file after its result, also after an error (ADR 0026 item 5,
-/// ADR 0032 item 10).
+/// ADR 0032 item 10, ADR 0033 item 1).
 struct TempFile(PathBuf);
 
 impl Drop for TempFile {
@@ -859,13 +873,16 @@ fn temp_file_name(name: &str) -> Result<String, ApiError> {
 }
 
 /// Send one file to the draft of a feed (ADR 0026, ADR 0032 items 1 to 5
-/// and 10). The body is the bytes of the file, and `name` in the query is
-/// the file name that the user selected.
+/// and 10, ADR 0033 items 1 to 7). The body is the bytes of the file, and
+/// `name` in the query is the file name that the user selected.
 ///
 /// The handler writes the body to a temporary file in `incoming/` of the
-/// pending files folder, chunk by chunk, with no lock of the workspace.
-/// The import, the release path and the write to the pending files then
-/// run in `blocking`.
+/// pending files folder, chunk by chunk, with no lock of the workspace. It
+/// then calls `media::import` on a blocking thread, with no lock of the
+/// workspace, because an MP3 encode takes some seconds and another
+/// request must not wait for it (ADR 0033 item 1). The release path check
+/// and the write to the pending files then run in `blocking`, with the
+/// workspace locked.
 pub(crate) async fn upload_file(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -901,22 +918,40 @@ pub(crate) async fn upload_file(
         .map_err(|e| ApiError::internal(e.to_string()))?;
     drop(file);
 
-    let name = file_name;
+    // The import runs on a blocking thread, with no lock of the workspace
+    // (ADR 0033 item 1).
+    let import_path = temp_path.clone();
+    let imported =
+        blocking_unlocked(move || media::import(&import_path, &file_name).map_err(ApiError::from))
+            .await?;
+
+    // A WAV import or a FLAC import makes a new MP3 file, and a WAV
+    // import also makes a new FLAC file, next to the temporary file.
+    // Remove each new file at the end of this function too, also after an
+    // error (ADR 0032 item 2, ADR 0033 items 1 and 3).
+    let _mp3_guard =
+        (imported.path.as_path() != temp_path).then(|| TempFile(imported.path.clone()));
+    let _lossless_guard = imported
+        .lossless
+        .as_ref()
+        .filter(|file| file.path.as_path() != temp_path)
+        .map(|file| TempFile(file.path.clone()));
+
     blocking(shared, move |w| {
         let _guard = guard;
-        import_upload(w, FeedId(id), &temp_path, &name)
+        import_upload(w, FeedId(id), imported)
     })
     .await
 }
 
-/// The blocking steps of an upload: the public address check, the media
-/// import, the release path and the write to the pending files (ADR 0026,
-/// ADR 0032 items 1 to 5 and 10).
+/// The blocking steps of an upload, with the workspace locked: the public
+/// address check, the release path of the MP3 file and of the FLAC file,
+/// and the write of each to the pending files (ADR 0026, ADR 0032 items 1
+/// to 5 and 10, ADR 0033 items 1 to 7).
 fn import_upload(
     w: &mut Workspace,
     id: FeedId,
-    temp_path: &FilePath,
-    name: &str,
+    imported: media::Imported,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let made = writer(w, id)?;
     let row = w.collection.feed(id)?;
@@ -932,60 +967,47 @@ fn import_upload(
         ));
     }
 
-    let imported = media::import(temp_path, name)?;
-    // A WAV import makes a new FLAC file next to the temporary file.
-    // Remove it at the end of this function too, also after an error
-    // (ADR 0032 item 2).
-    let _converted_guard =
-        (imported.path.as_path() != temp_path).then(|| TempFile(imported.path.clone()));
-
     let path = pipeline::release_path(feed_path, &imported.file_name);
-    if let Some(old) = w
-        .collection
-        .draft_files(id)?
-        .into_iter()
-        .find(|f| f.path == path)
-    {
-        // A pending file that no track and no image of the draft uses is
-        // left over, for example from a sheet that closed when Studio
-        // stopped. The new upload replaces it. A file that the draft uses
-        // stays, and the upload gives file_pending.
-        let used = match pipeline::draft_model(&w.collection, id) {
-            Ok((feed, _)) => pipeline::referenced_files(&w.collection, made.as_ref(), id, &feed)?,
-            // With no draft, no track uses the file.
-            Err(e) if e.kind() == PipelineErrorKind::NoDraft => Vec::new(),
-            Err(e) => return Err(e.into()),
-        };
-        if used.iter().any(|f| f.path == path) {
-            return Err(ApiError::new(
-                StatusCode::CONFLICT,
-                "file_pending",
-                format!("{path} is already a pending file of this draft"),
-            ));
-        }
-        pipeline::remove_pending_file(&w.collection, &w.store, id, &old)?;
-    }
-    if made.read(&path)?.is_some() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "file_exists",
-            format!("a file exists at {path} already"),
-        ));
+    let lossless_path = imported
+        .lossless
+        .as_ref()
+        .map(|file| pipeline::release_path(feed_path, &file.file_name));
+
+    // Check the release path of the MP3 file and of the FLAC file before
+    // Studio adds either one. The route adds no file when one path fails
+    // (ADR 0033 item 3).
+    check_release_path(w, made.as_ref(), id, &path)?;
+    if let Some(lossless_path) = lossless_path.as_deref() {
+        check_release_path(w, made.as_ref(), id, lossless_path)?;
     }
 
     let (sha256, size) = w
         .store
         .put_file(id, &imported.path)
         .map_err(|e| ApiError::internal(e.to_string()))?;
-    w.collection.add_draft_file(
-        id,
-        &DraftFile {
-            path: path.clone(),
-            size,
-            media_type: imported.media_type.clone(),
-            sha256,
-        },
-    )?;
+    let draft_file = DraftFile {
+        path: path.clone(),
+        size,
+        media_type: imported.media_type.clone(),
+        sha256,
+    };
+    w.collection.add_draft_file(id, &draft_file)?;
+
+    let lossless = match (imported.lossless.as_ref(), lossless_path.as_deref()) {
+        (Some(file), Some(lossless_path)) => {
+            match add_lossless_file(w, id, made.as_ref(), file, lossless_path) {
+                Ok(value) => Some(value),
+                Err(error) => {
+                    // The FLAC file did not go in. The route adds no
+                    // file when one of the two fails, so the MP3 file
+                    // goes out too (ADR 0033 item 3).
+                    let _ = pipeline::remove_pending_file(&w.collection, &w.store, id, &draft_file);
+                    return Err(error);
+                }
+            }
+        }
+        _ => None,
+    };
 
     let url = made.public_url(&path).ok_or_else(|| {
         ApiError::internal("the connector gave no public address for the release path")
@@ -1011,8 +1033,91 @@ fn import_upload(
             "duration": duration,
             "converted_from_wav": imported.converted_from_wav,
             "file_name": imported.file_name,
+            "lossless": lossless,
         }))?,
     ))
+}
+
+/// Refuse the release path of a new pending file: 409 `file_pending` when
+/// a track or an image of the draft uses a pending file there, and 409
+/// `file_exists` when a file exists on the host there. A pending file at
+/// the path that the draft does not use is left over, and this function
+/// removes it so the new file can take its place (ADR 0026 item 7,
+/// ADR 0032 item 10, ADR 0033 item 3).
+fn check_release_path(
+    w: &Workspace,
+    connector: &dyn connector::Connector,
+    id: FeedId,
+    path: &str,
+) -> Result<(), ApiError> {
+    if let Some(old) = w
+        .collection
+        .draft_files(id)?
+        .into_iter()
+        .find(|f| f.path == path)
+    {
+        // A pending file that no track and no image of the draft uses is
+        // left over, for example from a sheet that closed when Studio
+        // stopped. The new upload replaces it. A file that the draft uses
+        // stays, and the upload gives file_pending.
+        let used = match pipeline::draft_model(&w.collection, id) {
+            Ok((feed, _)) => pipeline::referenced_files(&w.collection, connector, id, &feed)?,
+            // With no draft, no track uses the file.
+            Err(e) if e.kind() == PipelineErrorKind::NoDraft => Vec::new(),
+            Err(e) => return Err(e.into()),
+        };
+        if used.iter().any(|f| f.path == path) {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "file_pending",
+                format!("{path} is already a pending file of this draft"),
+            ));
+        }
+        pipeline::remove_pending_file(&w.collection, &w.store, id, &old)?;
+    }
+    if connector.read(path)?.is_some() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "file_exists",
+            format!("a file exists at {path} already"),
+        ));
+    }
+    Ok(())
+}
+
+/// Add the FLAC file of a lossless import as a pending file, after the
+/// MP3 file. Gives its JSON facts for the `lossless` field of the result
+/// (ADR 0033 items 1, 3, 5 and 7).
+fn add_lossless_file(
+    w: &mut Workspace,
+    id: FeedId,
+    connector: &dyn connector::Connector,
+    file: &media::ImportedFile,
+    path: &str,
+) -> Result<Value, ApiError> {
+    let (sha256, size) = w
+        .store
+        .put_file(id, &file.path)
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+    w.collection.add_draft_file(
+        id,
+        &DraftFile {
+            path: path.to_owned(),
+            size,
+            media_type: file.media_type.clone(),
+            sha256,
+        },
+    )?;
+    let url = connector.public_url(path).ok_or_else(|| {
+        ApiError::internal("the connector gave no public address for the release path")
+    })?;
+    Ok(json!({
+        "path": path,
+        "url": url,
+        "size": size,
+        "media_type": file.media_type,
+        "file_name": file.file_name,
+    }))
 }
 
 /// Remove one pending file of the draft of a feed, with its copy in the

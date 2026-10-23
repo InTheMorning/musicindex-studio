@@ -1586,6 +1586,8 @@ async fn an_upload_of_an_mp3_gives_its_release_address_and_facts_with_no_change_
     assert_eq!(body["converted_from_wav"], false);
     assert_eq!(body["file_name"], "tagged.mp3");
     assert!(body["size"].as_u64().unwrap() > 0);
+    // An MP3 import gives no lossless file (ADR 0033 item 4).
+    assert_eq!(body["lossless"], Value::Null);
     assert!(incoming_is_empty(&app));
 
     // The route does not change the model of the draft, so the diff lists
@@ -1617,20 +1619,91 @@ async fn an_upload_keeps_only_the_last_part_of_its_name() {
     assert!(incoming_is_empty(&app));
 }
 
+/// An upload of a WAV file gives an MP3 enclosure and a lossless FLAC
+/// file, as two pending files of the draft (ADR 0033 items 1, 3 and 5).
 #[tokio::test]
-async fn an_upload_of_a_wav_file_converts_it_to_flac() {
+async fn an_upload_of_a_wav_file_gives_an_mp3_file_and_a_lossless_flac_file() {
     let app = app();
     let id = set_up(&app).await;
     let bytes = std::fs::read(media_path("tagged.wav")).unwrap();
 
     let (status, body) = upload(&app, id, "tagged.wav", bytes).await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["path"], "album/tagged.flac");
-    assert_eq!(body["url"], "https://music.example/album/tagged.flac");
-    assert_eq!(body["media_type"], "audio/flac");
+    assert_eq!(body["path"], "album/tagged.mp3");
+    assert_eq!(body["url"], "https://music.example/album/tagged.mp3");
+    assert_eq!(body["media_type"], "audio/mpeg");
     assert_eq!(body["converted_from_wav"], true);
-    assert_eq!(body["file_name"], "tagged.flac");
+    assert_eq!(body["file_name"], "tagged.mp3");
+    assert!(body["size"].as_u64().unwrap() > 0);
+    assert_eq!(body["lossless"]["path"], "album/tagged.flac");
+    assert_eq!(
+        body["lossless"]["url"],
+        "https://music.example/album/tagged.flac"
+    );
+    assert_eq!(body["lossless"]["media_type"], "audio/flac");
+    assert_eq!(body["lossless"]["file_name"], "tagged.flac");
+    assert!(body["lossless"]["size"].as_u64().unwrap() > 0);
     assert!(incoming_is_empty(&app));
+
+    // Both files are pending files of the draft.
+    let delete_mp3 = format!(
+        "/api/v1/feeds/{id}/files?path={}",
+        url_encode("album/tagged.mp3")
+    );
+    let delete_flac = format!(
+        "/api/v1/feeds/{id}/files?path={}",
+        url_encode("album/tagged.flac")
+    );
+    let (status, _) = call(&app, "DELETE", &delete_mp3, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = call(&app, "DELETE", &delete_flac, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+}
+
+/// An upload of a FLAC file gives an MP3 enclosure, and keeps the FLAC
+/// file as the lossless file (ADR 0033 items 1, 3 and 5).
+#[tokio::test]
+async fn an_upload_of_a_flac_file_gives_an_mp3_file_and_keeps_the_flac_as_lossless() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.flac")).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.flac", bytes).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["path"], "album/tagged.mp3");
+    assert_eq!(body["media_type"], "audio/mpeg");
+    assert_eq!(body["converted_from_wav"], false);
+    assert_eq!(body["file_name"], "tagged.mp3");
+    assert_eq!(body["lossless"]["path"], "album/tagged.flac");
+    assert_eq!(body["lossless"]["media_type"], "audio/flac");
+    assert_eq!(body["lossless"]["file_name"], "tagged.flac");
+    assert!(body["lossless"]["size"].as_u64().unwrap() > 0);
+    assert!(incoming_is_empty(&app));
+}
+
+/// When a file already exists at the FLAC release path, the upload of a
+/// WAV file gives 409 `file_exists`, and adds no file (ADR 0033 item 3).
+#[tokio::test]
+async fn when_the_flac_path_of_a_wav_upload_exists_on_the_host_no_file_is_added() {
+    let app = app();
+    let id = set_up(&app).await;
+    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
+    std::fs::write(app.feeds.path().join("album/tagged.flac"), b"existing flac").unwrap();
+    let bytes = std::fs::read(media_path("tagged.wav")).unwrap();
+
+    let (status, body) = upload(&app, id, "tagged.wav", bytes).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "file_exists");
+    assert!(incoming_is_empty(&app));
+
+    // The MP3 file did not go in either: its path gives 404, not a
+    // pending file that this test can remove.
+    let delete_mp3 = format!(
+        "/api/v1/feeds/{id}/files?path={}",
+        url_encode("album/tagged.mp3")
+    );
+    let (status, body) = call(&app, "DELETE", &delete_mp3, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
 }
 
 #[tokio::test]

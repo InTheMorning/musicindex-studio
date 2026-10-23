@@ -37,6 +37,8 @@ The agent examined the files and the records after each write:
 - "Copy to…" and "Move to…" need a selection in a list and a second button. The selection alone does nothing.
 - The review sheet does not tell the difference between an upload and a copy. A line can say "The feed uses this file" or "A spare copy. The feed does not use it."
 - The Files page does not show which copy the feed uses, which other host files the feed uses, or which deletion is pending.
+- A click on "Delete" gives no feedback: the row does not change, and no message tells the user that the deletion waits for the write.
+- The Files page does not load its list again after a write. After step 9 it still showed the deleted file.
 - "Host of this file" shows the default host of the release, not "Use the default host of the release", for a file with no host of its own.
 - The entry of a library file has an empty space between its copy rows and "Copy to…".
 - The operator asked for button roles from the Apple HIG: an action button such as Copy or Move has the accent color, a destructive button such as Delete or Remove has red, and a button does not have the same fill as the surface below it. This needs a decision record.

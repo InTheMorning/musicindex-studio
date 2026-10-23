@@ -92,13 +92,14 @@ The research lists these defects that an editor must not have:
 | nsite (NIP-5A) | Blossom upload and a kind 35128 manifest | Nostr | Observed in `src/utils/nsite.ts` |
 | Sovereign Feeds and curiohoster | Multipart POST of `feed.xml` to `/api/sf/upload` | Session cookie from an Alby login | Observed in the Sovereign Feeds source |
 | Castopod | No raw feed upload. The database makes the feed. The REST API adds episodes but cannot update a podcast. | Optional HTTP Basic for the instance | Observed in the Castopod source |
+| PodSovereign | No raw feed upload. The database makes the feed. A JSON API with a session cookie changes the show details and the episodes. | Email and password session, with a CSRF check | Observed in the PodSovereign source, commit `acdc1a7`, 2026-10-23. `../musicindex-research/research_notes/studio/podsovereign-comparison.md` |
 | Wavlake | Not found | Unknown | Research gap. Wavlake hosts approximately 88% of the index. |
 | Fountain for Artists | Hosted service with no public source | Unknown | Research gap |
 | RSS Blue, Podhome, Buzzsprout, Transistor | Not examined | Unknown | Research gap |
 | GitHub Pages, S3, Cloudflare R2, FTP, SFTP, IPFS | Not examined | Unknown | Research gap |
 
 (inference) A connector for a platform in a gap row needs research before a design treats the platform as writable.
-(inference) A host that makes the feed from its own database, such as Castopod or Wavlake, cannot accept a full feed file. A connector for it must change records through the host API, or it must stay read-only.
+(inference) A host that makes the feed from its own database, such as Castopod, PodSovereign or Wavlake, cannot accept a full feed file. A connector for it must change records through the host API, or it must stay read-only.
 
 ## Feed Elements
 

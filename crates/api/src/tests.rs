@@ -76,6 +76,42 @@ async fn call(app: &App, method: &str, path: &str, body: Option<Value>) -> (Stat
     (status, value)
 }
 
+/// Send a request and give its raw body, for a response that is not JSON.
+async fn send_raw(
+    app: &App,
+    request: Request<Body>,
+) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let response = app.router.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let headers = response.headers().clone();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes()
+        .to_vec();
+    (status, headers, bytes)
+}
+
+/// Percent-encode a value for a query string, for a test URL that has a
+/// scheme, a host and a port.
+fn url_encode(value: &str) -> String {
+    use std::fmt::Write as _;
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char);
+            }
+            _ => {
+                let _ = write!(encoded, "%{byte:02X}");
+            }
+        }
+    }
+    encoded
+}
+
 /// Make the vault, a local connector and a feed. Gives the feed ID.
 async fn set_up(app: &App) -> i64 {
     let (status, _) = call(
@@ -1137,6 +1173,64 @@ async fn the_media_route_gives_the_size_and_the_type_of_a_file() {
     .await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_eq!(body["error"]["code"], "network");
+}
+
+#[tokio::test]
+async fn the_image_route_gives_the_bytes_and_caches_until_a_refresh() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set_file("/cover.png", vec![1, 2, 3, 4], "image/png", true);
+    let app = app();
+    let id = set_up(&app).await;
+    let image_url = server.url("/cover.png");
+    let path = format!("/api/v1/images?url={}", url_encode(&image_url));
+
+    let (status, headers, bytes) = send_raw(&app, request("GET", &path, None)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_TYPE], "image/png");
+    assert_eq!(headers[header::CACHE_CONTROL], "no-store");
+    assert_eq!(bytes, vec![1, 2, 3, 4]);
+
+    // A second request for the same address does not call the host again:
+    // the route still gives the first bytes, not these new ones.
+    server.set_file("/cover.png", vec![9, 9, 9], "image/png", true);
+    let (_, _, bytes) = send_raw(&app, request("GET", &path, None)).await;
+    assert_eq!(bytes, vec![1, 2, 3, 4]);
+
+    // After a refresh of the feed, the route calls the host again.
+    call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    let (_, _, bytes) = send_raw(&app, request("GET", &path, None)).await;
+    assert_eq!(bytes, vec![9, 9, 9]);
+
+    let (status, body) = call(&app, "GET", "/api/v1/images?url=not-an-address", None).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_address");
+
+    server.set_file("/page.html", b"<html></html>".to_vec(), "text/html", true);
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!(
+            "/api/v1/images?url={}",
+            url_encode(&server.url("/page.html"))
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "not_image");
+}
+
+#[tokio::test]
+async fn an_api_request_with_no_token_to_images_gives_401() {
+    let app = app();
+    let request = Request::builder()
+        .uri("/api/v1/images?url=https://example.com/a.png")
+        .header(header::HOST, HOST)
+        .body(Body::empty())
+        .unwrap();
+    let (status, body, _) = send(&app, request).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"]["code"], "token_required");
 }
 
 #[tokio::test]

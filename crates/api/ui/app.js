@@ -29,7 +29,9 @@ class ApiError extends Error {
   }
 }
 
-export async function api(path, { method = 'GET', body } = {}) {
+// `raw` is true for a response that is not JSON, such as an image (ADR 0025).
+// It then gives the body as a `Blob` instead of parsed JSON.
+export async function api(path, { method = 'GET', body, raw = false } = {}) {
   const headers = { Authorization: `Bearer ${token}` };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let response;
@@ -42,12 +44,65 @@ export async function api(path, { method = 'GET', body } = {}) {
   } catch (_) {
     throw new ApiError(0, 'offline', 'Studio does not answer. Make sure that it is still running.');
   }
+  if (raw && response.ok) return response.blob();
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     const error = data && data.error ? data.error : { code: 'unknown', message: response.statusText };
     throw new ApiError(response.status, error.code, error.message);
   }
   return data;
+}
+
+// ---- Images, through the local API (ADR 0025, ADR 0032 items 13 and 14) ----
+// The browser cannot put the access token on an <img src> request, so the
+// UI asks the API for each image and reads it as a data: address instead.
+// The UI loads no image from another server (ADR 0016).
+
+// Each image that the page already read, by its address, for the life of
+// the page.
+const imageResults = new Map();
+
+// The image at an address: `{ src, failed }`. `src` is a data: address, or
+// `null` while the image loads or when Studio could not read it.
+export function useImage(url) {
+  const [result, setResult] = useState(() => (url ? imageResults.get(url) || null : null));
+  useEffect(() => {
+    // A new address has no result yet, even when the old address had one.
+    // With no reset here, the box would keep the image of the old address
+    // until the new one loads or fails.
+    if (!url) { setResult(null); return undefined; }
+    const cached = imageResults.get(url);
+    setResult(cached || null);
+    if (cached) return undefined;
+    let current = true;
+    const finish = (found) => {
+      imageResults.set(url, found);
+      if (current) setResult(found);
+    };
+    api(`/images?url=${encodeURIComponent(url)}`, { raw: true }).then((blob) => {
+      const reader = new FileReader();
+      reader.onload = () => finish({ src: reader.result, failed: false });
+      reader.onerror = () => finish({ src: null, failed: true });
+      reader.readAsDataURL(blob);
+    }, () => finish({ src: null, failed: true }));
+    return () => { current = false; };
+  }, [url]);
+  return result || { src: null, failed: false };
+}
+
+// An image at an address, in a box of `className` (ADR 0025). With no
+// address, or with an image that Studio cannot read, it shows the current
+// mark, tinted with `glow`. For an image that Studio cannot read, the title
+// of the box gives its address. `always` keeps the box, with the mark, when
+// there is no address: the compact header always shows a cover, but a field
+// preview with no address shows nothing (ADR 0032 items 13 and 14).
+export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = false }) {
+  const { src, failed } = useImage(url);
+  if (!url && !always) return null;
+  if (src) return html`<div class=${className}><img src=${src} alt="" /></div>`;
+  return html`<div class=${className} title=${failed ? url : undefined}>
+    <span class="mark" style=${{ '--glow': glow }}></span>
+  </div>`;
 }
 
 // ---- Small parts ----
@@ -770,7 +825,7 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRe
     <//>
     <div class="feed-head">
       <header class="head">
-        <div class="cover"><span class="mark" style=${{ '--glow': glow }}></span></div>
+        <${ImageThumb} url=${draft.model && draft.model.image} glow=${glow} className="cover" always />
         <div class="text">
           <span class="eyebrow">${kind.label}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>

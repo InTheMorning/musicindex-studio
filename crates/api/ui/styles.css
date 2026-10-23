@@ -981,6 +981,7 @@ textarea:focus { background: var(--fill); }
   width: 56px;
   height: 56px;
   border-radius: 12px;
+  overflow: hidden;
   background: var(--level-2);
   display: grid;
   place-items: center;
@@ -989,6 +990,32 @@ textarea:focus { background: var(--fill); }
 .head .cover .mark {
   width: 32px;
   height: 28px;
+  background: var(--glow, var(--c-feed));
+  -webkit-mask: var(--mark-mask) center / contain no-repeat;
+  mask: var(--mark-mask) center / contain no-repeat;
+}
+/* The art of the album or the track, read through the local API (ADR 0025).
+   With no address, or with an image that Studio cannot read, the cover
+   keeps its mark (above). */
+.head .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* The preview next to the cover image address field and the track image
+   address field (ADR 0025, ADR 0032 items 13 and 14). It shows nothing when
+   the field has no address. */
+.field-cover {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--level-2);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.field-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.field-cover .mark {
+  width: 36px;
+  height: 31px;
   background: var(--glow, var(--c-feed));
   -webkit-mask: var(--mark-mask) center / contain no-repeat;
   mask: var(--mark-mask) center / contain no-repeat;

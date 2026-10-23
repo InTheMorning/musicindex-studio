@@ -2,15 +2,59 @@
 
 use std::path::{Path, PathBuf};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use studio_core::collection::Collection;
 use studio_core::discover::Found;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
 use studio_core::vault::{OpenVault, VaultFile};
-use studio_core::web::Web;
+use studio_core::web::{Web, WebImage};
 
 use crate::error::ApiError;
+
+/// The number of images that [`ImageCache`] keeps (ADR 0032 item 13).
+const MAX_IMAGES: usize = 64;
+
+/// The images that the core already read, by their address (ADR 0025,
+/// ADR 0032 items 13 and 14). The UI gets each image through the local API,
+/// so that it loads no image from another server (ADR 0016).
+///
+/// The cache keeps the order that each image came in, so that it can remove
+/// the oldest image when it is full.
+#[derive(Debug, Default)]
+pub(crate) struct ImageCache {
+    order: VecDeque<String>,
+    images: HashMap<String, WebImage>,
+}
+
+impl ImageCache {
+    /// The image at this address, when the cache has it.
+    pub(crate) fn get(&self, url: &str) -> Option<&WebImage> {
+        self.images.get(url)
+    }
+
+    /// Keep an image at this address. When the cache is full, it removes the
+    /// oldest image.
+    pub(crate) fn put(&mut self, url: String, image: WebImage) {
+        if !self.images.contains_key(&url) {
+            if self.order.len() >= MAX_IMAGES
+                && let Some(oldest) = self.order.pop_front()
+            {
+                self.images.remove(&oldest);
+            }
+            self.order.push_back(url.clone());
+        }
+        self.images.insert(url, image);
+    }
+
+    /// Remove each image. A refresh of a feed may read each address again,
+    /// so Studio does not keep an image that may no longer be correct
+    /// (ADR 0032 item 13).
+    pub(crate) fn clear(&mut self) {
+        self.order.clear();
+        self.images.clear();
+    }
+}
 
 /// The state of the vault.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -35,6 +79,8 @@ pub struct Workspace {
     /// The feeds of the last discovery, by address, so that an import does
     /// not read them again.
     pub(crate) discovered: HashMap<String, Found>,
+    /// The images that the core already read (ADR 0025, ADR 0032 item 13).
+    pub(crate) images: ImageCache,
 }
 
 impl Workspace {
@@ -53,6 +99,7 @@ impl Workspace {
             web: Web::new(),
             index: MusicIndex::new(Web::new(), DEFAULT_API),
             discovered: HashMap::new(),
+            images: ImageCache::default(),
         })
     }
 

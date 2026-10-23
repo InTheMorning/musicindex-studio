@@ -25,9 +25,9 @@ The planning model uses this list after each task or packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
-| [016](../tasks/studio-v1-task-016-cover-art.md) | Open | |
+| [016](../tasks/studio-v1-task-016-cover-art.md) | Pass after one correction | The image route held the workspace lock during the read from the host. A slow host of art then stopped each other request, such as a save of the draft, for up to 20 s. The planning model moved the read out of the lock. |
 | [017](../tasks/studio-v1-task-017-new-album-feed.md) | Open | |
 | [018a](../tasks/studio-v1-task-018a-pending-files.md) | Open | |
-| [018b](../tasks/studio-v1-task-018b-tags-and-conversion.md) | Open | |
+| [018b](../tasks/studio-v1-task-018b-tags-and-conversion.md) | Pass | `lofty` 0.25.4 does not build with no default features. The coding agent kept the feature `id3v2_compression_support`, which adds only `flate2` with its pure Rust back end. The planning model accepted this deviation. |
 | [018c](../tasks/studio-v1-task-018c-upload-route.md) | Open | |
 | [018d](../tasks/studio-v1-task-018d-import-sheet.md) | Open | |

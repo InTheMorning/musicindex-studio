@@ -127,13 +127,17 @@ impl From<AddressError> for ApiError {
 
 impl From<studio_core::web::WebError> for ApiError {
     fn from(error: studio_core::web::WebError) -> Self {
-        if error.kind() == studio_core::web::WebErrorKind::InvalidAddress {
-            return Self::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "invalid_address",
-                error.to_string(),
-            );
+        let code = match error.kind() {
+            studio_core::web::WebErrorKind::InvalidAddress => Some("invalid_address"),
+            // ADR 0025, ADR 0032 item 13: the core read a file that is not
+            // an image, or an image that is larger than the limit.
+            studio_core::web::WebErrorKind::NotImage => Some("not_image"),
+            studio_core::web::WebErrorKind::TooLarge => Some("too_large"),
+            _ => None,
+        };
+        match code {
+            Some(code) => Self::new(StatusCode::UNPROCESSABLE_ENTITY, code, error.to_string()),
+            None => Self::new(StatusCode::BAD_GATEWAY, "network", error.to_string()),
         }
-        Self::new(StatusCode::BAD_GATEWAY, "network", error.to_string())
     }
 }

@@ -3,8 +3,9 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use axum::Json;
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::extract::{Path, Query, State};
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
@@ -261,6 +262,9 @@ pub(crate) async fn add_feed(
 pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
+        // The feed may give a different image at the same address, or a
+        // different address, after this read (ADR 0032 item 13).
+        w.images.clear();
         let row = w.collection.feed(id)?;
         let Some(connector_id) = row.connector_id else {
             // A read-only feed reads from its public address (ADR 0020).
@@ -741,6 +745,46 @@ pub(crate) async fn media_facts(
     Json(body): Json<Media>,
 ) -> ApiResult {
     blocking(shared, move |w| to_json(w.web.media_facts(&body.url)?)).await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ImageQuery {
+    url: String,
+}
+
+/// The image at an address, from the cache or from its host (ADR 0025,
+/// ADR 0032 items 13 and 14). The UI cannot put the access token on an
+/// `<img>` request, so it gets the image through this route instead.
+pub(crate) async fn get_image(
+    State(shared): State<Shared>,
+    Query(query): Query<ImageQuery>,
+) -> Result<Response, ApiError> {
+    // The lock is held only to read and to fill the cache. The read from
+    // the host of the image occurs with no lock, so that a slow host does
+    // not stop the other requests, such as a save of the draft.
+    let url = query.url;
+    let (cached, web) = {
+        let w = lock(&shared)?;
+        (w.images.get(&url).cloned(), w.web.clone())
+    };
+    let image = if let Some(image) = cached {
+        image
+    } else {
+        let read_url = url.clone();
+        let image = tokio::task::spawn_blocking(move || web.get_image(&read_url))
+            .await
+            .map_err(|e| ApiError::internal(e.to_string()))??;
+        lock(&shared)?.images.put(url, image.clone());
+        image
+    };
+    Ok((
+        [
+            (header::CONTENT_TYPE, image.media_type),
+            (header::CACHE_CONTROL, "no-store".to_owned()),
+        ],
+        image.bytes,
+    )
+        .into_response())
 }
 
 // ---- Recipients (ADR 0027) ----

@@ -3,7 +3,7 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
-import { api, Field, ErrorNotice, useAction, addressSource } from './app.js';
+import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 
@@ -498,7 +498,9 @@ function AlbumPage({ feed, model, update, bad, go, onAdding, onRemoved }) {
         <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
         <${TextField} id="ch-author" label="Artist" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
         <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${TextField} id="ch-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')} />
+        <${TextField} id="ch-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')}>
+          <${ImageThumb} url=${model.image} className="field-cover" />
+        <//>
         <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
       </div>
@@ -578,6 +580,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
   // No wrapper: the head and each section are direct rows of .page, with
   // the gap of .page between them (review of task 014c, defect 2).
   return html`<header class="head">
+      <${ImageThumb} url=${item.image || model.image} glow="var(--c-track)" className="cover" always />
       <div class="text"><span class="eyebrow">Track ${trackIndex + 1} of ${items.length}</span>
         <h1>${item.title || 'Untitled track'}</h1></div>
       <div class="pager">
@@ -610,7 +613,9 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
         <details class="disclosure">
           <summary class="link-row"><span class="label">Track image</span>
             <span class="summary">${item.image ? 'Has an image' : 'Uses the album cover'}</span></summary>
-          <div class="form"><${TextField} id=${`${id}-image`} label="Track image address" type="url" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')} /></div>
+          <div class="form"><${TextField} id=${`${id}-image`} label="Track image address" type="url" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')}>
+            <${ImageThumb} url=${item.image} glow="var(--c-track)" className="field-cover" />
+          <//></div>
         </details>
         <details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>

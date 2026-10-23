@@ -46,6 +46,7 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/connectors/{id}/feeds", get(routes::connector_feeds))
         .route("/connectors/{id}/match", post(routes::match_connector))
         .route("/discover", post(routes::discover))
+        .route("/images", get(routes::get_image))
         .route("/media/facts", post(routes::media_facts))
         .route("/search", get(routes::search))
         .route("/recipients", get(routes::list_recipients))

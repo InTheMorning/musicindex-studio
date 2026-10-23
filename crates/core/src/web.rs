@@ -22,6 +22,9 @@ pub enum WebErrorKind {
     TooLarge,
     /// The connection or the transfer failed.
     Network,
+    /// The response has a `Content-Type` that is not an image type
+    /// (ADR 0025).
+    NotImage,
 }
 
 /// An error from [`Web`].
@@ -160,6 +163,77 @@ impl Web {
     }
 }
 
+/// The limit on the size of an image that [`Web::get_image`] reads
+/// (ADR 0025, ADR 0032 item 13).
+pub const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
+
+/// An image that [`Web::get_image`] read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebImage {
+    /// The bytes of the image.
+    pub bytes: Vec<u8>,
+    /// The media type, such as `image/png`, with no parameter.
+    pub media_type: String,
+}
+
+impl Web {
+    /// Read an image of [`MAX_IMAGE_BYTES`] or less (ADR 0025).
+    ///
+    /// The function follows each redirect of the agent, and reads the
+    /// response only when its `Content-Type` is an image type.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] for an address that is not `http` or `https`, a
+    /// status that is not 200, a response with no image media type, a file
+    /// that is too large, or a network failure.
+    pub fn get_image(&self, url: &str) -> Result<WebImage, WebError> {
+        let lower = url.trim().to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(WebError::new(
+                WebErrorKind::InvalidAddress,
+                format!("{url} is not an http or https address"),
+            ));
+        }
+        let mut response = self
+            .agent
+            .get(url.trim())
+            .call()
+            .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+        let status = response.status().as_u16();
+        if status != 200 {
+            return Err(WebError {
+                kind: WebErrorKind::Status,
+                status: Some(status),
+                message: format!("{url} answered with status {status}"),
+            });
+        }
+        let media_type = header(&response, "content-type")
+            .as_deref()
+            .and_then(media_type)
+            .filter(|m| m.starts_with("image/"))
+            .ok_or_else(|| {
+                WebError::new(
+                    WebErrorKind::NotImage,
+                    format!("{url} did not answer with an image media type"),
+                )
+            })?;
+        let bytes = response
+            .body_mut()
+            .with_config()
+            .limit(MAX_IMAGE_BYTES)
+            .read_to_vec()
+            .map_err(|e| match e {
+                ureq::Error::BodyExceedsLimit(_) => WebError::new(
+                    WebErrorKind::TooLarge,
+                    format!("{url} is larger than {MAX_IMAGE_BYTES} bytes"),
+                ),
+                other => WebError::new(WebErrorKind::Network, format!("{url}: {other}")),
+            })?;
+        Ok(WebImage { bytes, media_type })
+    }
+}
+
 /// The size and the media type of a file, as its host gives them
 /// (ADR 0023 item 5).
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
@@ -279,6 +353,38 @@ mod tests {
         assert_eq!(
             web.get("file:///etc/passwd", 1000).unwrap_err().kind(),
             WebErrorKind::InvalidAddress
+        );
+    }
+
+    #[test]
+    fn get_image_reads_the_bytes_and_the_type_or_gives_not_image_or_too_large() {
+        let server = TestServer::start(Vec::new());
+        server.set_file(
+            "/cover.png",
+            vec![1, 2, 3, 4],
+            "image/png; charset=binary",
+            true,
+        );
+        server.set_file("/page.html", b"<html></html>".to_vec(), "text/html", true);
+        server.set_file(
+            "/huge.png",
+            vec![0; usize::try_from(MAX_IMAGE_BYTES + 1).unwrap()],
+            "image/png",
+            true,
+        );
+        let web = Web::new();
+
+        let image = web.get_image(&server.url("/cover.png")).unwrap();
+        assert_eq!(image.bytes, vec![1, 2, 3, 4]);
+        assert_eq!(image.media_type, "image/png");
+
+        assert_eq!(
+            web.get_image(&server.url("/page.html")).unwrap_err().kind(),
+            WebErrorKind::NotImage
+        );
+        assert_eq!(
+            web.get_image(&server.url("/huge.png")).unwrap_err().kind(),
+            WebErrorKind::TooLarge
         );
     }
 

@@ -138,9 +138,27 @@ impl Feed {
     ///
     /// Gives a [`FeedError`] when the document has no `rss/channel` element.
     pub fn write(&self, doc: &mut Document) -> Result<(), FeedError> {
-        let mut names = Names::new(doc.root());
+        self.write_hosted(doc, None)
+    }
+
+    /// Put the values into `doc` and change only what is different.
+    ///
+    /// `hosted` is the hosted file of the draft, or none. A new direct
+    /// child of the channel or of an item can go to its hosted position.
+    /// This happens when `hosted` has an element of that type (ADR 0031).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`FeedError`] when the document has no `rss/channel` element.
+    pub fn write_hosted(
+        &self,
+        doc: &mut Document,
+        hosted: Option<&Document>,
+    ) -> Result<(), FeedError> {
+        let mut names = Names::new(doc.root(), hosted);
+        let channel_hosted = names.hosted_channel();
         let channel = channel_mut(doc.root_mut()).ok_or(NO_CHANNEL)?;
-        let mut c = Children::new(channel, CHANNEL_TAIL, &mut names);
+        let mut c = Children::new(channel, CHANNEL_TAIL, &mut names, channel_hosted);
         c.text(Ns::None, "title", self.title.as_ref());
         c.text(Ns::None, "description", self.description.as_ref());
         c.text(Ns::None, "link", self.link.as_ref());
@@ -283,7 +301,7 @@ impl Modeled for Publisher {
     }
 
     fn apply(&self, element: &mut Element, names: &mut Names) {
-        Children::new(element, &[], names).list(&self.remote_items);
+        Children::new(element, &[], names, None).list(&self.remote_items);
     }
 
     fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
@@ -312,7 +330,7 @@ impl Modeled for Podroll {
     }
 
     fn apply(&self, element: &mut Element, names: &mut Names) {
-        Children::new(element, &[], names).list(&self.remote_items);
+        Children::new(element, &[], names, None).list(&self.remote_items);
     }
 
     fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
@@ -399,7 +417,13 @@ impl Item {
     }
 
     fn apply_children(&self, element: &mut Element, names: &mut Names) {
-        let mut c = Children::new(element, &[], names);
+        // The hosted parent of the item is the item of the hosted file with
+        // the same GUID. A new item has no hosted parent (ADR 0031 item 2).
+        let hosted = self
+            .guid
+            .as_deref()
+            .and_then(|guid| names.hosted_item(guid));
+        let mut c = Children::new(element, &[], names, hosted);
         c.text(Ns::None, "title", self.title.as_ref());
         c.text(Ns::None, "description", self.description.as_ref());
         c.text(Ns::None, "guid", self.guid.as_ref());

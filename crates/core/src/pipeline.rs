@@ -231,6 +231,18 @@ pub fn start_draft(
     Ok(draft)
 }
 
+/// Parse the hosted file that the draft started from, for `write_hosted`
+/// (ADR 0031).
+///
+/// Gives none when `base_xml` is empty or is not a feed that the core can
+/// parse. The writer then uses the current rules, with no hosted position.
+fn hosted_document(draft: &DraftRow) -> Option<Document> {
+    if draft.base_xml.is_empty() {
+        return None;
+    }
+    Document::parse_bytes(&draft.base_xml).ok()
+}
+
 /// Change the draft through the typed model.
 ///
 /// # Errors
@@ -246,7 +258,8 @@ pub fn edit_draft(
     let mut doc = Document::parse_bytes(&draft.draft_xml)?;
     let mut feed = Feed::read(&doc)?;
     change(&mut feed);
-    feed.write(&mut doc)?;
+    let hosted = hosted_document(&draft);
+    feed.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
     collection.save_draft(id, &draft)?;
     Ok(draft)
@@ -300,7 +313,8 @@ pub fn replace_model(
     sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
     keep_identity(&current, &mut sent).map_err(invalid)?;
     number_tracks(&current, &mut sent);
-    sent.write(&mut doc)?;
+    let hosted = hosted_document(&draft);
+    sent.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
     collection.save_draft(id, &draft)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;

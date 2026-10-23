@@ -37,7 +37,7 @@ impl Modeled for ValueBlock {
         element.set_attribute("type", self.value_type.as_deref());
         element.set_attribute("method", self.method.as_deref());
         element.set_attribute("suggested", self.suggested.as_deref());
-        let mut children = Children::new(element, &[(Ns::Podcast, "valueTimeSplit")], names);
+        let mut children = Children::new(element, &[(Ns::Podcast, "valueTimeSplit")], names, None);
         children.list(&self.recipients);
         children.list_before(&self.time_splits, &[]);
     }
@@ -92,7 +92,7 @@ impl Modeled for ValueTimeSplit {
         element.set_attribute("duration", self.duration.as_deref());
         element.set_attribute("remoteStartTime", self.remote_start_time.as_deref());
         element.set_attribute("remotePercentage", self.remote_percentage.as_deref());
-        let mut children = Children::new(element, &[], names);
+        let mut children = Children::new(element, &[], names, None);
         children.list(&self.remote_items);
         children.list(&self.recipients);
     }

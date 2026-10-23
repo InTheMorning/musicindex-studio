@@ -1,6 +1,6 @@
 //! Edits through the typed model change only the edited elements (ADR 0012).
 
-use studio_core::feed::{Entry, Feed, Person, Recipient, Transcript};
+use studio_core::feed::{Entry, Feed, License, Person, Recipient, Transcript};
 use studio_core::xml::Document;
 
 /// The remote item example from the namespace document for
@@ -225,4 +225,68 @@ fn an_edit_of_one_item_keeps_the_feed_guid_and_each_item_guid() {
     );
     assert_eq!(feed.persons[0].name, "Ann");
     assert!(after.contains("<podcast:person role=\"vocals\">Ann</podcast:person><item>"));
+}
+
+/// A feed with `title`, `itunes:author`, `description`, `link` and
+/// `language`, then one item, in that sequence (ADR 0031).
+const CHANNEL_SEQUENCE_EXAMPLE: &str = "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">\n<channel>\n  <title>T</title>\n  <itunes:author>A</itunes:author>\n  <description>Old</description>\n  <link>https://example.com</link>\n  <language>en</language>\n  <item><guid>g1</guid></item>\n</channel>\n</rss>";
+
+#[test]
+fn a_description_removed_and_added_again_goes_back_to_its_hosted_position() {
+    let hosted = Document::parse(CHANNEL_SEQUENCE_EXAMPLE).unwrap();
+    let mut doc = Document::parse(CHANNEL_SEQUENCE_EXAMPLE).unwrap();
+    // The user clears the field. The automatic save removes the element
+    // (ADR 0022 item 6).
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.description = None;
+    feed.write(&mut doc).unwrap();
+    assert!(!doc.write().contains("<description>"));
+    // The user types a new text. The pipeline gives the hosted file to the
+    // writer at each change of the draft (ADR 0031 item 4).
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.description = Some("New".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let after = doc.write();
+    let author = after.find("<itunes:author>").unwrap();
+    let description = after.find("<description>").unwrap();
+    let link = after.find("<link>").unwrap();
+    assert!(author < description, "{after}");
+    assert!(description < link, "{after}");
+}
+
+/// A feed with one item that has `title`, `itunes:image` and `guid`, in that
+/// sequence (ADR 0031).
+const ITEM_SEQUENCE_EXAMPLE: &str = "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">\n<channel>\n  <item>\n    <title>T</title>\n    <itunes:image href=\"https://example.com/a.jpg\"/>\n    <guid>g1</guid>\n  </item>\n</channel>\n</rss>";
+
+#[test]
+fn an_item_image_removed_and_added_again_goes_back_to_its_hosted_position() {
+    let hosted = Document::parse(ITEM_SEQUENCE_EXAMPLE).unwrap();
+    let mut doc = Document::parse(ITEM_SEQUENCE_EXAMPLE).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.items[0].image = None;
+    feed.write(&mut doc).unwrap();
+    assert!(!doc.write().contains("itunes:image"));
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.items[0].image = Some("https://example.com/b.jpg".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let after = doc.write();
+    let title = after.find("<title>").unwrap();
+    let image = after.find("itunes:image").unwrap();
+    let guid = after.find("<guid>").unwrap();
+    assert!(title < image, "{after}");
+    assert!(image < guid, "{after}");
+}
+
+#[test]
+fn a_channel_element_absent_from_the_hosted_file_keeps_its_old_position() {
+    let hosted = Document::parse(SPLIT_EXAMPLE).unwrap();
+    let mut doc = Document::parse(SPLIT_EXAMPLE).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.license = Some(License {
+        identifier: "cc-by-4.0".into(),
+        url: None,
+    });
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let after = doc.write();
+    assert!(after.contains("<podcast:license>cc-by-4.0</podcast:license>\n      <item>"));
 }

@@ -168,6 +168,53 @@ fn a_cleared_text_field_removes_its_element() {
     assert!(!draft_text(&collection, id).contains("description"));
 }
 
+/// A field that the user clears and types again gives a diff of its text
+/// only (ADR 0031).
+#[test]
+fn a_cleared_description_that_is_typed_again_changes_only_its_text_in_the_diff() {
+    let (collection, id) = draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut json = serde_json::to_value(&feed).unwrap();
+    json["description"] = serde_json::Value::Null;
+    let cleared: Feed = serde_json::from_value(json).unwrap();
+    let (feed, revision) = pipeline::replace_model(&collection, id, &revision, cleared).unwrap();
+    let mut model = sent(&feed);
+    model.description = Some("New words".to_owned());
+    pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let diff = pipeline::diff(&collection, id).unwrap();
+    let added: Vec<&str> = diff
+        .unified
+        .lines()
+        .filter(|l| l.starts_with('+') && !l.starts_with("+++"))
+        .collect();
+    let removed: Vec<&str> = diff
+        .unified
+        .lines()
+        .filter(|l| l.starts_with('-') && !l.starts_with("---"))
+        .collect();
+    assert_eq!(
+        added,
+        ["+    <description>New words</description>"],
+        "{}",
+        diff.unified
+    );
+    assert_eq!(
+        removed,
+        ["-    <description>Old words</description>"],
+        "{}",
+        diff.unified
+    );
+    // The removed line and the added line are adjacent. The description
+    // does not move to a different line (ADR 0031).
+    assert!(
+        diff.unified.contains(
+            "-    <description>Old words</description>\n+    <description>New words</description>"
+        ),
+        "{}",
+        diff.unified
+    );
+}
+
 #[test]
 fn a_new_track_gets_the_indentation_of_the_other_tracks() {
     let (collection, id) = draft();

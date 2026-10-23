@@ -4,7 +4,7 @@
 //! different from the tree. An element that did not change keeps its source
 //! bytes.
 
-use crate::xml::{self, Element, Node, Ns};
+use crate::xml::{self, Document, Element, Node, Ns};
 
 /// One entry of a modeled list, with the element that it came from.
 ///
@@ -165,6 +165,70 @@ pub(crate) fn read_list<T: Modeled>(parent: &Element) -> Vec<Entry<T>> {
         .collect()
 }
 
+/// The namespace and the local name of an element: the pair that
+/// [`Element::is`] tests (ADR 0031).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HostedType {
+    namespace: Option<String>,
+    local: String,
+}
+
+impl HostedType {
+    /// The type of `element`.
+    fn of(element: &Element) -> Self {
+        Self {
+            namespace: element.namespace().map(str::to_owned),
+            local: element.local_name().to_owned(),
+        }
+    }
+
+    /// True when this type is the type `(ns, local)`.
+    fn is(&self, ns: Ns, local: &str) -> bool {
+        self.local == local && ns.matches(self.namespace.as_deref())
+    }
+
+    /// True when `element` has this type.
+    fn matches(&self, element: &Element) -> bool {
+        element.local_name() == self.local && element.namespace() == self.namespace.as_deref()
+    }
+}
+
+/// The hosted sequence of `parent`: the type of each element child, in
+/// sequence (ADR 0031).
+fn hosted_sequence(parent: &Element) -> Vec<HostedType> {
+    parent.elements().map(HostedType::of).collect()
+}
+
+/// The hosted sequence of the channel, and of each item by its GUID
+/// (ADR 0031).
+///
+/// The pipeline gives the hosted document at each change of the draft. The
+/// writer uses it to put a new direct child of the channel or of an item at
+/// its position in the hosted file.
+struct Hosted {
+    channel: Vec<HostedType>,
+    items: std::collections::HashMap<String, Vec<HostedType>>,
+}
+
+impl Hosted {
+    /// Read the hosted sequence of the channel and of each item. Gives none
+    /// when the document has no `rss/channel` element.
+    fn new(doc: &Document) -> Option<Self> {
+        let channel = super::channel(doc.root())?;
+        let mut items = std::collections::HashMap::new();
+        for child in channel.elements() {
+            let is_item = child.is(Ns::None, "item") || child.is(Ns::Podcast, "liveItem");
+            if is_item && let Some(guid) = read_text(child, Ns::None, "guid") {
+                items.insert(guid, hosted_sequence(child));
+            }
+        }
+        Some(Self {
+            channel: hosted_sequence(channel),
+            items,
+        })
+    }
+}
+
 /// The source of the qualified names for new elements.
 ///
 /// The writer uses the prefix that the root element declares for each
@@ -176,10 +240,19 @@ pub(crate) struct Names {
     /// The attribute sequence of each element name in the source, for new
     /// elements.
     orders: std::collections::HashMap<String, Vec<String>>,
+    /// The hosted sequence of the channel and of each item, or none.
+    /// `Names` goes to each writer of the tree. A writer of a direct child
+    /// of the channel or of an item gets the hosted sequence of its parent
+    /// from here. It uses [`Names::hosted_channel`] or
+    /// [`Names::hosted_item`] (ADR 0031).
+    hosted: Option<Hosted>,
 }
 
 impl Names {
-    pub(crate) fn new(root: &Element) -> Self {
+    /// Make the write context. `hosted` is the hosted document of the
+    /// draft, or none when the draft has no hosted file to compare against
+    /// (ADR 0031).
+    pub(crate) fn new(root: &Element, hosted: Option<&Document>) -> Self {
         let declared = root
             .attributes()
             .iter()
@@ -192,7 +265,20 @@ impl Names {
             declared,
             added: Vec::new(),
             orders: xml::attribute_orders(root),
+            hosted: hosted.and_then(Hosted::new),
         }
+    }
+
+    /// The hosted sequence of the channel, or none (ADR 0031).
+    pub(crate) fn hosted_channel(&self) -> Option<Vec<HostedType>> {
+        self.hosted.as_ref().map(|h| h.channel.clone())
+    }
+
+    /// The hosted sequence of the item with this GUID, or none (ADR 0031).
+    pub(crate) fn hosted_item(&self, guid: &str) -> Option<Vec<HostedType>> {
+        self.hosted
+            .as_ref()
+            .and_then(|h| h.items.get(guid).cloned())
     }
 
     pub(crate) fn element(&mut self, ns: Ns, local: &str) -> Element {
@@ -228,11 +314,14 @@ impl Names {
 /// The entries fill the positions of the existing elements of that kind, in
 /// sequence. An entry more than the existing elements goes after the last
 /// element of the kind, or before the first element in `before`, or at the
-/// end of the parent. An existing element more than the entries goes out.
+/// end of the parent. When the parent has no element of that kind, a new
+/// entry can go to its position in `hosted` instead (ADR 0031). An existing
+/// element more than the entries goes out.
 pub(crate) fn write_list<T: Modeled>(
     parent: &mut Element,
     entries: &[Entry<T>],
     before: &[(Ns, &str)],
+    hosted: Option<&[HostedType]>,
     names: &mut Names,
 ) {
     let rendered: Vec<Element> = entries
@@ -273,7 +362,14 @@ pub(crate) fn write_list<T: Modeled>(
     }
     let extra: Vec<Element> = rendered.collect();
     if !extra.is_empty() {
-        let (mut index, indent) = insertion_point(children, &slots, entries.len(), before);
+        let (mut index, indent) = insertion_point(
+            children,
+            &slots,
+            entries.len(),
+            before,
+            hosted,
+            (T::NS, T::NAME),
+        );
         for element in extra {
             index = insert(children, index, indent.as_ref(), element);
             if is_new.next() == Some(true) {
@@ -308,13 +404,16 @@ pub(crate) type Make<'a> = &'a dyn Fn(&mut Element, &mut Names);
 /// Make the first child of kind (`ns`, `local`) hold `value`, or remove it.
 ///
 /// `make` writes the value into an element. The element keeps its source
-/// bytes when it already holds the value.
+/// bytes when it already holds the value. When the parent has no element of
+/// that kind, a new element can go to its position in `hosted` instead
+/// (ADR 0031).
 pub(crate) fn write_single(
     parent: &mut Element,
     ns: Ns,
     local: &str,
     value: Option<Make<'_>>,
     before: &[(Ns, &str)],
+    hosted: Option<&[HostedType]>,
     names: &mut Names,
 ) {
     let slot = positions(parent, |e| e.is(ns, local)).first().copied();
@@ -329,7 +428,7 @@ pub(crate) fn write_single(
             let mut element = names.element(ns, local);
             make(&mut element, names);
             let children = parent.children_mut();
-            let (index, indent) = insertion_point(children, &[], 0, before);
+            let (index, indent) = insertion_point(children, &[], 0, before, hosted, (ns, local));
             let after = insert(children, index, indent.as_ref(), element);
             xml::format_new(parent, after - 1);
         }
@@ -344,6 +443,7 @@ pub(crate) fn write_text(
     local: &str,
     value: Option<&str>,
     before: &[(Ns, &str)],
+    hosted: Option<&[HostedType]>,
     names: &mut Names,
 ) {
     let make = value.map(|v| move |e: &mut Element, _: &mut Names| e.set_text(v));
@@ -353,6 +453,7 @@ pub(crate) fn write_text(
         local,
         make.as_ref().map(|m| m as Make<'_>),
         before,
+        hosted,
         names,
     );
 }
@@ -365,23 +466,33 @@ pub(crate) fn read_one<T: Modeled>(parent: &Element) -> Option<T> {
 /// Writes the modeled children of one parent element.
 ///
 /// A new child goes before the first child of a kind in `before`, or at the
-/// end of the parent.
+/// end of the parent. The hosted sequence of the parent can give the new
+/// child its hosted position. This happens when that sequence has the kind
+/// of the child, and the parent has no element of that kind (ADR 0031).
 pub(crate) struct Children<'p, 'n> {
     parent: &'p mut Element,
     before: &'static [(Ns, &'static str)],
     names: &'n mut Names,
+    hosted: Option<Vec<HostedType>>,
 }
 
 impl<'p, 'n> Children<'p, 'n> {
+    /// Make a writer for the direct children of `parent`.
+    ///
+    /// `hosted` is the hosted sequence of `parent`, or none. It is none
+    /// when `parent` is new, is not the channel or an item, or has no
+    /// hosted sequence (ADR 0031).
     pub(crate) fn new(
         parent: &'p mut Element,
         before: &'static [(Ns, &'static str)],
         names: &'n mut Names,
+        hosted: Option<Vec<HostedType>>,
     ) -> Self {
         Self {
             parent,
             before,
             names,
+            hosted,
         }
     }
 
@@ -393,6 +504,7 @@ impl<'p, 'n> Children<'p, 'n> {
             local,
             value.map(String::as_str),
             self.before,
+            self.hosted.as_deref(),
             self.names,
         );
     }
@@ -407,6 +519,7 @@ impl<'p, 'n> Children<'p, 'n> {
             local,
             make.as_ref().map(|m| m as Make<'_>),
             self.before,
+            self.hosted.as_deref(),
             self.names,
         );
     }
@@ -420,18 +533,31 @@ impl<'p, 'n> Children<'p, 'n> {
             T::NAME,
             make.as_ref().map(|m| m as Make<'_>),
             self.before,
+            self.hosted.as_deref(),
             self.names,
         );
     }
 
     /// Write the children of kind `T`.
     pub(crate) fn list<T: Modeled>(&mut self, entries: &[Entry<T>]) {
-        write_list(self.parent, entries, self.before, self.names);
+        write_list(
+            self.parent,
+            entries,
+            self.before,
+            self.hosted.as_deref(),
+            self.names,
+        );
     }
 
     /// Write the children of kind `T`, and put new ones before `before`.
     pub(crate) fn list_before<T: Modeled>(&mut self, entries: &[Entry<T>], before: &[(Ns, &str)]) {
-        write_list(self.parent, entries, before, self.names);
+        write_list(
+            self.parent,
+            entries,
+            before,
+            self.hosted.as_deref(),
+            self.names,
+        );
     }
 }
 
@@ -453,17 +579,29 @@ fn positions(parent: &Element, mut matches: impl FnMut(&Element) -> bool) -> Vec
 }
 
 /// Find where a new element goes, and the indentation to put before it.
+///
+/// `element_type` is the namespace and the local name of the new element.
+/// `hosted` is the hosted sequence of the parent (ADR 0031).
 fn insertion_point(
     children: &[Node],
     slots: &[usize],
     used: usize,
     before: &[(Ns, &str)],
+    hosted: Option<&[HostedType]>,
+    element_type: (Ns, &str),
 ) -> (usize, Option<Node>) {
     // After the last remaining element of the same kind.
     if used > 0
         && let Some(&last) = slots.get(used - 1)
     {
         return (last + 1, xml::indent_before(children, last));
+    }
+    // At the hosted position, when the parent has no element of this kind
+    // (ADR 0031).
+    if slots.is_empty()
+        && let Some(point) = hosted.and_then(|h| hosted_insertion_point(children, h, element_type))
+    {
+        return point;
     }
     // Before the first element of a kind that must come later.
     let first_later = children.iter().position(|n| match n {
@@ -481,4 +619,26 @@ fn insertion_point(
         Some(last) => (last + 1, xml::indent_before(children, last)),
         None => (children.len(), None),
     }
+}
+
+/// Find the hosted position of a new element of `element_type` (ADR 0031).
+///
+/// The function looks at the types of the hosted sequence before the first
+/// element of `element_type` there, from the nearest type back to the
+/// first. It gives the point after the last child of `children` that has
+/// one of these types. It gives none when the hosted sequence does not have
+/// `element_type`, or when `children` has no child of an earlier type.
+fn hosted_insertion_point(
+    children: &[Node],
+    hosted: &[HostedType],
+    element_type: (Ns, &str),
+) -> Option<(usize, Option<Node>)> {
+    let (ns, local) = element_type;
+    let first = hosted.iter().position(|t| t.is(ns, local))?;
+    hosted[..first].iter().rev().find_map(|earlier| {
+        let last = children
+            .iter()
+            .rposition(|n| matches!(n, Node::Element(e) if earlier.matches(e)))?;
+        Some((last + 1, xml::indent_before(children, last)))
+    })
 }

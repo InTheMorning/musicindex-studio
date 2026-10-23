@@ -1,6 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef } from './vendor/htm-preact-standalone.module.js';
-import { AlbumEditor, DraftToolbar, trackKey } from './editor.js';
+import { AlbumEditor, DraftToolbar, trackKey, isTrack } from './editor.js';
 import { useDraft } from './draft.js';
 
 // ---- Access token (ADR 0017) ----
@@ -750,7 +750,7 @@ function Crumb({ feed, view, draft }) {
   if (page === 'album') return html`<span class="bar-title">${name}</span>`;
   let label = PAGE_NAMES[page];
   if (page === 'track') {
-    const item = draft.model && draft.model.items.find((i) => trackKey(i) === view.track);
+    const item = draft.model && draft.model.items.find((i) => isTrack(i, view.track));
     label = item ? item.title || 'Untitled track' : 'Track';
   }
   return html`<span class="bar-title"><span class="muted">${name}</span> › ${label}</span>`;
@@ -1022,6 +1022,9 @@ function Shell({ vault, onLock }) {
   // At a narrow width, the drawer holds the sidebar (task 014d).
   const narrow = useNarrow();
   const drawerRef = useRef(null);
+  // Each new page starts at its top.
+  const mainRef = useRef(null);
+  useEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view]);
   const openDrawer = useCallback(() => { if (drawerRef.current) drawerRef.current.showModal(); }, []);
   const closeDrawer = useCallback(() => { if (drawerRef.current && drawerRef.current.open) drawerRef.current.close(); }, []);
   // A click that lands on the dialog itself, and not on its content, is a
@@ -1082,7 +1085,7 @@ function Shell({ vault, onLock }) {
       <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding}
         vault=${vault} onLock=${lock} onSelect=${NOOP} />
     </nav>`}
-    <main class="main">${main}</main>
+    <main class="main" ref=${mainRef}>${main}</main>
     <dialog class="drawer" ref=${drawerRef} aria-label="Collection" onClick=${onBackdrop}>
       ${narrow && html`<nav class="sidebar">
         <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding}

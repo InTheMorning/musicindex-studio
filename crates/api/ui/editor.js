@@ -68,6 +68,13 @@ export function trackKey(item) {
   return item.guid ? item.guid : `cid-${item._cid}`;
 }
 
+// Is this track the track of the key? A new track has a key from its client
+// ID. After the first save, the server gives it a GUID and its key changes.
+// The client ID stays, so the old key continues to find the track.
+export function isTrack(item, key) {
+  return trackKey(item) === key || `cid-${item._cid}` === key;
+}
+
 // ---- Summary lines (ADR 0028) ----
 // Each entry of a list is one summary line that opens. Entries with the same
 // group name open one at a time. An entry that the user added starts open.
@@ -631,12 +638,18 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
 // useDraft (ADR 0029 item 4).
 export function AlbumEditor({ feed, draft, view, go, adding, onAdding, onRemoved }) {
   const { model, update } = draft;
+  const page = view.page || 'album';
+  const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
+  // When the track got its GUID, put the new key in the view, so that the
+  // tree shows the current track.
+  const currentKey = trackIndex === -1 ? null : trackKey(model.items[trackIndex]);
+  useEffect(() => {
+    if (currentKey && currentKey !== view.track) go({ ...view, track: currentKey }, { replace: true });
+  }, [currentKey, view.track]);
   if (!model) {
     return html`<div class="page"><p class="hint" role="status">${STATUS[draft.status]}</p>
       <${ErrorNotice} error=${draft.error} /></div>`;
   }
-  const page = view.page || 'album';
-  const trackIndex = page === 'track' ? model.items.findIndex((item) => trackKey(item) === view.track) : -1;
   let body;
   // When the track key of the view is not in the model, for example after a
   // write that gave each item a new client ID, the editor shows the album

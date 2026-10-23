@@ -52,6 +52,10 @@
 - [Studio v1 task 012: The value editor](tasks/studio-v1-task-012-value-editor.md)
 - [Studio v1 task 013: The recipient picker](tasks/studio-v1-task-013-recipient-picker.md)
 - [Studio v1 task 014: The editor layout](tasks/studio-v1-task-014-editor-layout.md)
+- [Studio v1 task 014a: The background levels](tasks/studio-v1-task-014a-background-levels.md)
+- [Studio v1 task 014b: The draft toolbar and the sheets](tasks/studio-v1-task-014b-toolbar-and-sheets.md)
+- [Studio v1 task 014c: The sidebar tree and the editor pages](tasks/studio-v1-task-014c-tree-and-pages.md)
+- [Studio v1 task 014d: The phone width](tasks/studio-v1-task-014d-phone-width.md)
 
 ## Reviews
 
@@ -59,6 +63,7 @@
 - [Task 009 visual check, 2026-10-22](reviews/2026-10-22-task-009-visual-check.md)
 - [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
 - [Task 012 visual check, 2026-10-22](reviews/2026-10-22-task-012-visual-check.md)
+- [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 
 ## Notes
 

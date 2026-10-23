@@ -6,6 +6,15 @@ Depends on: [task 012](studio-v1-task-012-value-editor.md).
 
 Mockup: [the editor layout](../notes/2026-10-22-editor-layout-mockup.html). Open it in a browser. It has static data.
 
+## Packets
+
+Four packets do this task, one after the other. Each packet has a prompt for a coding model. The planning model examines each packet with the [review checklist](../reviews/2026-10-22-task-014-review-checklist.md) before its commit.
+
+1. [014a: the background levels](studio-v1-task-014a-background-levels.md): steps 1 and 12.
+2. [014b: the draft toolbar and the sheets](studio-v1-task-014b-toolbar-and-sheets.md): step 3.
+3. [014c: the sidebar tree and the editor pages](studio-v1-task-014c-tree-and-pages.md): steps 2 and 4 to 10.
+4. [014d: the phone width](studio-v1-task-014d-phone-width.md): step 11.
+
 ## Goal
 
 Put the draft controls in the toolbar, give the sidebar a tree of the editor pages, and use three background levels. Do not change the behavior of the core or of the API.
@@ -54,7 +63,7 @@ Stop and ask the operator when:
 
 Mechanical:
 
-- A test reads `styles.css`. Each `background` and `background-color` value must use an allowed token or keyword. The allowed values are the level tokens, the fill tokens, the selection tokens, the share tokens, the diff tokens, `--accent`, `--bar-bg`, `transparent` and `none`. For each other value, the test fails and its message names ADR 0029.
+- A test reads `styles.css`. A `background` or `background-color` value must contain no color literal and must not name `--bg`, `--surface` or `--surface2`. For each other value, the test fails and its message names ADR 0029.
 - The tests of ADR 0016 and ADR 0028 pass with no change.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` pass.
 - The agent runs `tools/drive-ui.mjs` at 1280 px and at 390 px wide, on the Album page, a track page and the Review sheet. `$small()` gives an empty list, the page does not scroll to the side, and the console shows no error.

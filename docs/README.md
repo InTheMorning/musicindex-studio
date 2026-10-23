@@ -68,6 +68,7 @@
 - [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
 - [Task 012 visual check, 2026-10-22](reviews/2026-10-22-task-012-visual-check.md)
 - [Task 013 review checklist, 2026-10-22](reviews/2026-10-22-task-013-review-checklist.md)
+- [Task 013 visual check, 2026-10-23](reviews/2026-10-23-task-013-visual-check.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

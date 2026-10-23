@@ -4,6 +4,8 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 5.
 Decisions: [ADR 0014](../adr/0014-collection-in-sqlite.md), [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) and [ADR 0027](../adr/0027-the-recipient-picker.md).
 Depends on: [task 012](studio-v1-task-012-value-editor.md).
 
+Status: complete. The [visual check](../reviews/2026-10-23-task-013-visual-check.md) passed.
+
 ## Packets
 
 Three packets do this task, one after the other. Each packet has a prompt for a coding model. The planning model examines each packet with the [review checklist](../reviews/2026-10-22-task-013-review-checklist.md) before its commit.

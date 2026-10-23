@@ -269,6 +269,287 @@ function AddTrackSheet({ open, onClose, onAdd }) {
   </dialog>`;
 }
 
+// ---- The import sheet (task 018d, ADR 0026, ADR 0032) ----
+// The user selects music files and image files. The sheet sends each file to
+// the draft, one file at a time, and shows its state and its facts. The add
+// puts the audio files in the album, in the sequence of their track numbers.
+
+// The text of the WAV notice (ADR 0032 item 2). The conversion is not an
+// error, so the notice does not use the --error color.
+const WAV_NOTICE = 'Studio converts this WAV file to FLAC before the import. Some listener apps do not play FLAC.';
+
+// Is this a WAV file, by its name? Studio shows the WAV notice for this file
+// until the user removes the row, also after the file sends (ADR 0032 item
+// 2, task architecture).
+function isWavFile(file) {
+  return /\.wav$/i.test(file.name);
+}
+
+const AUDIO_EXTENSIONS = /\.(mp3|m4a|flac|ogg|opus|wav)$/i;
+
+// The kind of a file before Studio reads it: a guess from its name, for the
+// list of audio files of an image row. Each row shows its real kind, from
+// the server, once it is ready.
+function guessKind(file) {
+  if (AUDIO_EXTENSIONS.test(file.name)) return 'audio';
+  return 'image';
+}
+
+// The size of a file, in a short and plain unit.
+function fileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const IMPORT_ERRORS = {
+  unsupported_media: 'Studio does not read this kind of file.',
+  file_pending: 'The sheet sent a file with this name already.',
+  file_exists: 'A file with this name exists on the host already.',
+  no_public_address: 'This host has no public address. Give it one in Hosts.',
+  invalid_name: 'This is not a file name that Studio can use.',
+};
+
+function importErrorText(error) {
+  return IMPORT_ERRORS[error.code] || error.message || 'Studio could not import this file.';
+}
+
+function importStateText(row, kind) {
+  if (row.state === 'waiting') return 'Waiting to send…';
+  if (row.state === 'sending') return 'Sending…';
+  if (row.state === 'failed') return importErrorText(row.error);
+  return kind === 'audio' ? 'Track ready' : 'Image ready';
+}
+
+// One row of the import sheet: the name of the file, its state, the WAV
+// notice when it is a WAV file, and its facts when it is ready. An image row
+// also has the list of its use (task architecture).
+function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
+  const kind = row.facts ? row.facts.kind : guessKind(row.file);
+  const failed = row.state === 'failed';
+  return html`<div class="import-row">
+    <div class="import-head">
+      <span class="title">${row.file.name}</span>
+      <span class=${`state${failed ? ' failed' : ''}`} role=${failed ? 'alert' : undefined}>
+        ${importStateText(row, kind)}
+      </span>
+      <button class="button quiet" type="button" disabled=${row.state === 'sending'}
+        aria-label=${`Remove ${row.file.name}`} onClick=${() => onRemove(row)}>Remove</button>
+    </div>
+    ${row.isWav && html`<div class="notice"><strong>${row.file.name}</strong>${WAV_NOTICE}</div>`}
+    ${row.state === 'ready' && kind === 'audio' && html`<dl class="facts">
+      <dt>Title</dt><dd>${row.facts.title || '—'}</dd>
+      <dt>Track number</dt><dd>${row.facts.track_number ?? '—'}</dd>
+      <dt>Duration</dt><dd>${row.facts.duration || '—'}</dd>
+      <dt>Size</dt><dd>${fileSize(row.facts.size)}</dd>
+      <dt>Type</dt><dd class="mono">${row.facts.media_type}</dd>
+    </dl>`}
+    ${row.state === 'ready' && kind === 'image' && html`<dl class="facts">
+      <dt>Size</dt><dd>${fileSize(row.facts.size)}</dd>
+      <dt>Type</dt><dd class="mono">${row.facts.media_type}</dd>
+    </dl>
+    <div class="import-dest">
+      <label for=${`import-dest-${row.id}`}>Use for</label>
+      <select id=${`import-dest-${row.id}`} value=${row.imageUse}
+        onChange=${(e) => onImageUseChange(row, e.target.value)}>
+        <option value="album">Album art</option>
+        ${audioOptions.map((a) => html`<option key=${a.id} value=${`audio-${a.id}`}>${a.file.name}</option>`)}
+        <option value="not-used">Not used</option>
+      </select>
+    </div>`}
+  </div>`;
+}
+
+// The next client-only ID of a row of the import sheet. It is not a client
+// ID of the draft model (ADR 0022): the sheet sends each row to the server
+// before it joins the model.
+let nextImportId = 1;
+
+// The import sheet: a file field, one row for each selected file, and the
+// add (task architecture). `feedId` sends each file to the draft of this
+// feed. `hasAlbumImage` tells the sheet whether the album has an image
+// already, for the default use of the first image. The browser file field
+// is hidden. Its label is a button of the app, and the field keeps the
+// focus, so the button works from the keyboard.
+function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
+  const ref = useSheet(open);
+  const [rows, setRows] = useState([]);
+  // A copy of `rows`, for the parts of this component that read the current
+  // rows between two turns of the event loop, where the state of a hook is
+  // not yet the state of its last `set` call.
+  const rowsRef = useRef([]);
+  const setAllRows = (updater) => {
+    const next = typeof updater === 'function' ? updater(rowsRef.current) : updater;
+    rowsRef.current = next;
+    setRows(next);
+  };
+  // The sheet keeps the files that it sent, so that it can remove them from
+  // the host when the user cancels (ADR 0026 item 8). `true` after the add,
+  // so that the close of the sheet does not remove the files that are now in
+  // the album.
+  const addedRef = useRef(false);
+  const sendingRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+    rowsRef.current = [];
+    setRows([]);
+    addedRef.current = false;
+  }, [open]);
+
+  const updateRow = (id, patch) => setAllRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
+  // Send each waiting row, one at a time, in the sequence of selection
+  // (task architecture). A file that a later call to `addFiles` adds joins
+  // the queue, because each turn of this loop reads `rowsRef` again.
+  const sendQueue = async () => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    try {
+      for (;;) {
+        const index = rowsRef.current.findIndex((r) => r.state === 'waiting');
+        if (index === -1) break;
+        const row = rowsRef.current[index];
+        updateRow(row.id, { state: 'sending' });
+        try {
+          const facts = await api(`/feeds/${feedId}/files?name=${encodeURIComponent(row.file.name)}`, {
+            method: 'POST',
+            body: row.file,
+          });
+          // The first image becomes the album art when the album has no
+          // image of its own yet (task architecture). "First" means no
+          // earlier-selected row is a ready image already.
+          const imageUse = facts.kind !== 'image' ? null
+            : !hasAlbumImage && !rowsRef.current.some((r) => r.id < row.id && r.facts && r.facts.kind === 'image')
+              ? 'album' : 'not-used';
+          updateRow(row.id, { state: 'ready', facts, imageUse, error: null });
+        } catch (e) {
+          updateRow(row.id, { state: 'failed', error: e });
+        }
+      }
+    } finally {
+      sendingRef.current = false;
+    }
+  };
+
+  const addFiles = (fileList) => {
+    const added = Array.from(fileList).map((file) => ({
+      id: nextImportId++,
+      file,
+      isWav: isWavFile(file),
+      state: 'waiting',
+      error: null,
+      facts: null,
+      imageUse: null,
+    }));
+    setAllRows((rs) => [...rs, ...added]);
+    sendQueue();
+  };
+
+  // Remove a row. When the sheet already sent the file, remove it from the
+  // host too ("Cancel", and a row that the user removes", task
+  // architecture). An image row that used this row as its track loses that
+  // use.
+  const removeRow = (row) => {
+    setAllRows((rs) => rs.filter((r) => r.id !== row.id)
+      .map((r) => (r.imageUse === `audio-${row.id}` ? { ...r, imageUse: 'not-used' } : r)));
+    if (row.state === 'ready' && row.facts) {
+      api(`/feeds/${feedId}/files?path=${encodeURIComponent(row.facts.path)}`, { method: 'DELETE' }).catch(() => {});
+    }
+  };
+
+  const changeImageUse = (row, value) => updateRow(row.id, { imageUse: value });
+
+  // The close of the sheet, from Cancel, the ✕ button or the Escape key.
+  // Remove each file that the sheet sent, unless the user added the files
+  // to the album (task architecture).
+  const close = () => {
+    if (!addedRef.current) {
+      for (const row of rows) {
+        if (row.state === 'ready' && row.facts) {
+          api(`/feeds/${feedId}/files?path=${encodeURIComponent(row.facts.path)}`, { method: 'DELETE' }).catch(() => {});
+        }
+      }
+    }
+    onClose();
+  };
+
+  const readyAudio = rows.filter((r) => r.state === 'ready' && r.facts.kind === 'audio');
+  const audioOptions = rows.filter(
+    (r) => r.state !== 'failed' && (r.facts ? r.facts.kind === 'audio' : guessKind(r.file) === 'audio'),
+  );
+  const stillGoing = rows.some((r) => r.state === 'waiting' || r.state === 'sending');
+  const canAdd = !stillGoing && readyAudio.length > 0;
+
+  // The add: the audio files in the sequence of their track numbers, then
+  // the files with no number in the sequence of selection (ADR 0026 item 3).
+  // Studio sets the final track numbers when it saves the draft (ADR 0024).
+  const add = () => {
+    const numbered = readyAudio.filter((r) => r.facts.track_number !== null)
+      .sort((a, b) => a.facts.track_number - b.facts.track_number);
+    const unnumbered = readyAudio.filter((r) => r.facts.track_number === null);
+    const imageFor = (rowId) => {
+      const found = rows.find(
+        (r) => r.state === 'ready' && r.facts.kind === 'image' && r.imageUse === `audio-${rowId}`,
+      );
+      return found ? found.facts.url : null;
+    };
+    const albumImage = rows.find((r) => r.state === 'ready' && r.facts.kind === 'image' && r.imageUse === 'album');
+    const tracks = [...numbered, ...unnumbered].map((row) => ({
+      title: row.facts.title || null,
+      description: null,
+      guid: null,
+      enclosure: { url: row.facts.url, length: String(row.facts.size), media_type: row.facts.media_type },
+      pub_date: null,
+      duration: row.facts.duration || null,
+      episode: null,
+      image: imageFor(row.id),
+      images: [],
+      persons: [],
+      fundings: [],
+      transcripts: [],
+      txts: [],
+      license: null,
+      values: [],
+    }));
+    // `onAdd` sets `open` to false. That closes the dialog (`useSheet`), and
+    // its close event then runs `close` above, which does not remove these
+    // files because `addedRef` is now true.
+    addedRef.current = true;
+    onAdd(tracks, albumImage ? albumImage.facts.url : null);
+  };
+
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="import-title" onClose=${close}>
+    <header>
+      <h2 id="import-title">Import files</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <div class="import-pick">
+        <p class="hint" id="import-input-hint">
+          Studio reads the facts of each file, and makes one track for each audio file.
+        </p>
+        <input id="import-input" class="visually-hidden" type="file" multiple
+          aria-describedby="import-input-hint"
+          accept="audio/*,image/*,.wav,.flac,.m4a,.ogg,.opus"
+          onChange=${(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+        <label for="import-input" class="button">＋ Choose music and image files</label>
+      </div>
+      ${rows.length === 0 && html`<p class="hint">Select the files to import.</p>`}
+      ${rows.length > 0 && html`<div class="group">
+        ${rows.map((row) => html`<${ImportRow} key=${row.id} row=${row} audioOptions=${audioOptions}
+          onRemove=${removeRow} onImageUseChange=${changeImageUse} />`)}
+      </div>`}
+    </div>
+    <footer>
+      <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="button" disabled=${!canAdd} onClick=${add}>
+        ＋ Add ${readyAudio.length} track${readyAudio.length === 1 ? '' : 's'}
+      </button>
+    </footer>
+  </dialog>`;
+}
+
 // ---- The diff, the write and the snapshots, in sheets (ADR 0029) ----
 
 function DiffView({ unified }) {
@@ -488,7 +769,7 @@ function FeedFacts({ feed, onRemoved }) {
 
 // The album page: the album fields, the album details and the tracks
 // (task 014c step 3).
-function AlbumPage({ feed, model, update, bad, go, onAdding, onRemoved }) {
+function AlbumPage({ feed, model, update, bad, go, onAdding, onImporting, onRemoved }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   // No wrapper: each section is a direct row of .page, with the gap of
@@ -532,6 +813,9 @@ function AlbumPage({ feed, model, update, bad, go, onAdding, onRemoved }) {
         </button>`)}
         <button class="link-row add" type="button" onClick=${() => onAdding(true)}>
           <span class="num">＋</span><span class="title">Add a track</span>
+        </button>
+        <button class="link-row add" type="button" onClick=${() => onImporting(true)}>
+          <span class="num">＋</span><span class="title">Import files</span>
         </button>
       </div>
       <p class="note">Studio sets the track numbers (podcast:episode) from this sequence. It does not change the publication dates.</p>
@@ -641,7 +925,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, draft, view, go, adding, onAdding, onRemoved }) {
+export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -666,7 +950,8 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, onRemoved
   } else if (page === 'recipients') {
     body = html`<${RecipientsPage} model=${model} update=${update} />`;
   } else {
-    body = html`<${AlbumPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} go=${go} onAdding=${onAdding} onRemoved=${onRemoved} />`;
+    body = html`<${AlbumPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} go=${go}
+      onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} />`;
   }
   const onAdd = (item) => {
     const [added] = withCids([item]);
@@ -674,8 +959,22 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, onRemoved
     onAdding(false);
     go({ name: 'feed', id: feed.id, page: 'track', track: trackKey(added) });
   };
+  // The import sheet already sent each file to the draft of this feed. Add
+  // the tracks that it built, and the image that it chose for the album, to
+  // the model (task architecture).
+  const onImport = (tracks, albumImageUrl) => {
+    const added = withCids(tracks);
+    update((m) => {
+      const withImage = albumImageUrl ? set(m, 'image', albumImageUrl) : m;
+      return set(withImage, 'items', [...withImage.items, ...added]);
+    });
+    onImporting(false);
+    go({ name: 'feed', id: feed.id });
+  };
   return html`<div class="page">
     ${body}
     <${AddTrackSheet} open=${adding} onClose=${() => onAdding(false)} onAdd=${onAdd} />
+    <${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(model.image)}
+      onClose=${() => onImporting(false)} onAdd=${onImport} />
   </div>`;
 }

@@ -31,15 +31,19 @@ class ApiError extends Error {
 
 // `raw` is true for a response that is not JSON, such as an image (ADR 0025).
 // It then gives the body as a `Blob` instead of parsed JSON.
+// A `File` or `Blob` body, such as the body of an upload (task 018d), goes to
+// the route as-is, with no JSON wrapper and no Content-Type header of this
+// function. The browser sets the Content-Type header of a `Blob` body.
 export async function api(path, { method = 'GET', body, raw = false } = {}) {
   const headers = { Authorization: `Bearer ${token}` };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const isBlob = body instanceof Blob;
+  if (body !== undefined && !isBlob) headers['Content-Type'] = 'application/json';
   let response;
   try {
     response = await fetch(`/api/v1${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isBlob ? body : JSON.stringify(body),
     });
   } catch (_) {
     throw new ApiError(0, 'offline', 'Studio does not answer. Make sure that it is still running.');
@@ -854,7 +858,7 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved, onMenu }) {
+function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -882,16 +886,17 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRe
       <${AddressDifferences} feed=${feed} />
     </div>
     <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} onRemoved=${onRemoved} />
+      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved} />
   </div>`;
 }
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved, onMenu }) {
+function FeedDetail({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu }) {
   if (isEditable(feed)) {
     return html`<${EditableFeed} feed=${feed} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
+      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting}
+      onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
   }
   return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
 }
@@ -900,7 +905,7 @@ function FeedDetail({ feed, draft, view, go, adding, onAdding, onChanged, onRemo
 // items 5 and 6). A click on a different feed opens its pages. A click on
 // the open feed opens or closes its pages. Only the selected feed shows its
 // pages, and only after its draft loads.
-function FeedTree({ feeds, view, draft, go, onAdding }) {
+function FeedTree({ feeds, view, draft, go, onAdding, onImporting }) {
   const selectedId = view.name === 'feed' ? view.id : null;
   const [expanded, setExpanded] = useState(selectedId);
   useEffect(() => { setExpanded(selectedId); }, [selectedId]);
@@ -953,6 +958,8 @@ function FeedTree({ feeds, view, draft, go, onAdding }) {
           })}
           <li><button class="node add" type="button" onClick=${() => { openPage(feed, {}); onAdding(true); }}>
             <span class="num">＋</span><span class="label">Add a track</span></button></li>
+          <li><button class="node add" type="button" onClick=${() => { openPage(feed, {}); onImporting(true); }}>
+            <span class="num">＋</span><span class="label">Import files</span></button></li>
         </ul>`}
       </li>`;
     })}
@@ -1099,13 +1106,14 @@ function AddFeeds({ connectors, onAdded, onMenu }) {
 // "Add a feed", Hosts and "Lock Studio". The wide `Shell` shows it in
 // `nav.sidebar`. The narrow `Shell` shows the same content in the drawer,
 // where a selection closes the drawer (task 014d, ADR 0029 item 15).
-function SidebarContent({ feeds, view, draft, go, onAdding, vault, onLock, onSelect }) {
+function SidebarContent({ feeds, view, draft, go, onAdding, onImporting, vault, onLock, onSelect }) {
   const select = (next, options) => { onSelect(); go(next, options); };
   const addTrack = (value) => { onSelect(); onAdding(value); };
+  const importFiles = (value) => { onSelect(); onImporting(value); };
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <h2>Feeds</h2>
     ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
-    <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} />
+    <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} onImporting=${importFiles} />
     <button class="row" type="button" onClick=${() => select({ name: 'add-feed' })}>＋ Add a feed</button>
     <footer>
       <button class="row" type="button" aria-current=${view.name === 'hosts' ? 'true' : 'false'}
@@ -1121,6 +1129,8 @@ function Shell({ vault, onLock }) {
   const [error, setError] = useState(null);
   // The Add a track sheet, by the tree and by the album page (ADR 0029 item 7).
   const [adding, setAdding] = useState(false);
+  // The import sheet, by the tree and by the album page (task 018d).
+  const [importing, setImporting] = useState(false);
   // At a narrow width, the drawer holds the sidebar (task 014d).
   const narrow = useNarrow();
   const drawerRef = useRef(null);
@@ -1153,8 +1163,9 @@ function Shell({ vault, onLock }) {
   // A feed with no connector, or a feed that is not an album, needs no draft.
   const draftFeedId = selected && isEditable(selected) ? selected.id : null;
   const draft = useDraft(draftFeedId);
-  // A different feed closes the Add a track sheet of the feed before it.
-  useEffect(() => { setAdding(false); }, [draftFeedId]);
+  // A different feed closes the Add a track sheet and the import sheet of
+  // the feed before it.
+  useEffect(() => { setAdding(false); setImporting(false); }, [draftFeedId]);
 
   let main;
   // A screen with no bar of its own gets one, so that the menu button is
@@ -1172,7 +1183,7 @@ function Shell({ vault, onLock }) {
       onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}
-      adding=${adding} onAdding=${setAdding} onChanged=${() => load()}
+      adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
       onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} />`;
   } else {
     main = withBar(html`<section class="center" style=${{ minHeight: 'calc(100% - var(--bar-h))' }}><div class="card">
@@ -1184,13 +1195,13 @@ function Shell({ vault, onLock }) {
 
   return html`<div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
-      <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding}
+      <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding} onImporting=${setImporting}
         vault=${vault} onLock=${lock} onSelect=${NOOP} />
     </nav>`}
     <main class="main" ref=${mainRef}>${main}</main>
     <dialog class="drawer" ref=${drawerRef} aria-label="Collection" onClick=${onBackdrop}>
       ${narrow && html`<nav class="sidebar">
-        <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding}
+        <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding} onImporting=${setImporting}
           vault=${vault} onLock=${lock} onSelect=${closeDrawer} />
       </nav>`}
     </dialog>

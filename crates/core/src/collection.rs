@@ -777,6 +777,20 @@ impl Collection {
         Ok(())
     }
 
+    /// True when a pending file of the draft has this SHA-256. Two pending
+    /// files with the same bytes share one copy in the store.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn draft_file_sha_in_use(&self, id: FeedId, sha256: &str) -> Result<bool, CollectionError> {
+        Ok(self.db.query_row(
+            "SELECT EXISTS (SELECT 1 FROM draft_files WHERE feed_id = ?1 AND sha256 = ?2)",
+            params![id.0, sha256],
+            |r| r.get(0),
+        )?)
+    }
+
     /// Keep a snapshot of a live file. A snapshot does not change after this.
     ///
     /// # Errors

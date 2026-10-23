@@ -649,8 +649,7 @@ pub fn write_draft(
         }
         // The file is on the host now, so Studio removes its row and its
         // copy. A write that stops after this point puts the file again.
-        collection.remove_draft_file(id, &file.path)?;
-        store.remove(id, &file.sha256);
+        remove_pending_file(collection, store, id, file)?;
     }
 
     let expected = match &live {
@@ -667,6 +666,27 @@ pub fn write_draft(
     // not refer to (ADR 0032 item 11).
     discard_draft(collection, store, id)?;
     Ok(version)
+}
+
+/// Remove one pending file of a draft: its row, and its copy when no other
+/// pending file of the draft has the same bytes.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+pub fn remove_pending_file(
+    collection: &Collection,
+    store: &imports::Store,
+    id: FeedId,
+    file: &DraftFile,
+) -> Result<(), PipelineError> {
+    collection.remove_draft_file(id, &file.path)?;
+    // Two pending files with the same bytes share one copy. The copy goes
+    // only with the last file that uses it.
+    if !collection.draft_file_sha_in_use(id, &file.sha256)? {
+        store.remove(id, &file.sha256);
+    }
+    Ok(())
 }
 
 /// Remove the pending files of a feed: their rows and their copies in the

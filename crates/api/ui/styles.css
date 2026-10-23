@@ -1066,3 +1066,40 @@ textarea:focus { background: var(--fill); }
 @media (max-width: 760px) {
   .page { padding: 8px 16px 24px; }
 }
+
+/* The import sheet (task 018d, ADR 0026, ADR 0032). A row is a .link-row in
+   a .group on level 3; the sheet already puts a .group on level 3 (above).
+   Each file of the sheet is one direct row of the group, so that the thin
+   separator of the group falls between files. */
+.import-row { padding: 10px 16px; display: grid; gap: 8px; }
+.import-row .import-head { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.import-row .import-head .title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-row .import-head .state { color: var(--muted); font-size: .9rem; flex: none; }
+.import-row .import-head .state.failed { color: var(--error); }
+.import-dest { display: grid; gap: 6px; }
+.import-dest select {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font: inherit;
+}
+.import-dest select:focus { background: var(--fill); }
+
+/* The file button of the import sheet. The browser field is hidden, and its
+   focus shows on the label (ADR 0010: all functions work from the keyboard). */
+.import-pick { display: grid; gap: 10px; justify-items: start; }
+.import-pick label.button { cursor: pointer; }
+.import-pick input:focus + label {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}

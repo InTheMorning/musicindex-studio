@@ -7,7 +7,7 @@
 // Each step is an object: {"wait": ms, "js": "expression", "shot": "name"}.
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
-// a label of 44 px or more).
+// a label of 44 px or more, and a control that is hidden on purpose).
 // The script prints each result and each console error.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -52,7 +52,7 @@ const helpers = `
   window.$set = (sel, v) => { const e = document.querySelector(sel); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
   window.$click = (text) => { const e = [...document.querySelectorAll('button, label')].find((b) => b.textContent.trim().startsWith(text)); if (!e) throw new Error('no ' + text); e.click(); };
   window.$text = () => document.body.innerText;
-  window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
+  window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
 const steps = JSON.parse(process.argv[4] || '[]');
 await send('Page.navigate', { url });

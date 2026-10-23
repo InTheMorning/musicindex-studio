@@ -601,6 +601,23 @@ fn discard_draft_removes_the_pending_rows_and_their_copies() {
     assert!(s.store.open(s.feed, &file.sha256).is_err());
 }
 
+/// On 2026-10-23 the review of task 018d found pending files with no copy.
+/// Two files with the same bytes share one copy, and the removal of one
+/// file removed the copy of the other.
+#[test]
+fn the_removal_of_a_pending_file_keeps_a_copy_that_another_file_uses() {
+    let s = file_setup();
+    let first = put_pending_file(&s, "album/my-album/a.mp3", b"same");
+    let second = put_pending_file(&s, "album/my-album/b.mp3", b"same");
+    assert_eq!(first.sha256, second.sha256);
+
+    pipeline::remove_pending_file(&s.collection, &s.store, s.feed, &first).unwrap();
+    assert!(s.store.open(s.feed, &second.sha256).is_ok());
+
+    pipeline::remove_pending_file(&s.collection, &s.store, s.feed, &second).unwrap();
+    assert!(s.store.open(s.feed, &second.sha256).is_err());
+}
+
 #[test]
 fn a_pending_file_at_the_feed_image_address_is_referenced() {
     let s = file_setup();

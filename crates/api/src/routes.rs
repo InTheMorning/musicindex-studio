@@ -712,6 +712,18 @@ pub(crate) async fn delete_draft(
     blocking(shared, move |w| {
         let id = FeedId(id);
         writer(w, id)?;
+        // A new release has no file on the host until its first write. With
+        // no draft, Studio cannot start a draft again, so the release keeps
+        // its draft (ADR 0032 item 9).
+        if let Some(draft) = w.collection.draft(id)?
+            && draft.base_version.is_none()
+        {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "no_hosted_file",
+                "This release has no file on the host yet. To remove it, remove it from the collection.",
+            ));
+        }
         pipeline::discard_draft(&w.collection, &w.store, id)?;
         w.collection.delete_draft(id)?;
         Ok(StatusCode::NO_CONTENT)
@@ -1002,8 +1014,7 @@ pub(crate) async fn delete_pending_file(
                 format!("{} is not a pending file of this draft", query.path),
             ));
         };
-        w.collection.remove_draft_file(id, &file.path)?;
-        w.store.remove(id, &file.sha256);
+        pipeline::remove_pending_file(&w.collection, &w.store, id, &file)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

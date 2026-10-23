@@ -443,6 +443,16 @@ async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written()
     )
     .await;
     assert!(diff["unified"].as_str().unwrap().contains("+<rss"));
+
+    // On 2026-10-23 the review of task 018d found that a discard of this
+    // draft left a release that Studio could not edit: no draft and no
+    // hosted file. The draft of a release with no hosted file stays.
+    let (status, body) = call(&app, "DELETE", &draft_path, None).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "no_hosted_file");
+    let (status, _) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+
     let (status, written) = call(
         &app,
         "POST",

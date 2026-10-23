@@ -1,6 +1,6 @@
 # ADR 0032: New Releases: Formats, File Paths And New Feeds
 
-- Status: Accepted
+- Status: Accepted. [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md) replaces the WAV conversion of items 2 and 5 on 2026-10-23.
 - Date: 2026-10-23
 - Owner: operator
 
@@ -15,13 +15,13 @@ On 2026-10-23 the operator answered three questions about the formats, the file 
 ### Audio Formats
 
 1. The import accepts MP3, M4A (AAC), FLAC and Ogg (Vorbis and Opus) files. For art, it accepts JPEG, PNG, WebP and GIF images. A GIF image shows a notice that Apple Podcasts asks for JPEG or PNG art. The operator added GIF on 2026-10-23, in the visual check of Phase 6, because published music feeds use GIF art.
-2. The import also accepts a WAV file. Studio converts it to FLAC before the import, and keeps its tags. The UI tells the user, in a notice that the user cannot miss, that Studio converts the file. The notice also says that some listener apps do not play FLAC.
-3. Studio reads the tags with the `lofty` library. It converts WAV to FLAC with the `hound` and `flacenc` libraries. The three libraries are pure Rust.
+2. The import also accepts a WAV file. [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md) gives the files that Studio makes from a WAV file or a FLAC file, and the notice that the user sees.
+3. Studio reads the tags with the `lofty` library. It converts WAV to FLAC with the `hound` and `flacenc` libraries. The three libraries are pure Rust. ADR 0033 adds the MP3 encoder.
 
 ### File Paths
 
 4. The imported files of a release go to a folder adjacent to the feed file. The folder has the name of the feed file with no extension: `my-album.xml` gives `my-album/`.
-5. Each file keeps its name. A converted WAV file gets the extension `.flac`.
+5. Each file keeps its name. ADR 0033 gives the names of the files that Studio makes from a lossless file.
 
 ### A New Feed
 
@@ -54,9 +54,8 @@ On 2026-10-23 the operator answered three questions about the formats, the file 
 
 - The core gets three new dependencies.
 - The data folder keeps the pending files of each feed until the write or the discard of the draft.
-- A FLAC track does not play in some listener apps. The user decides.
 
 ## Invariants
 
 - No file and no feed file goes to a host without a diff that the user saw.
-- No WAV file goes to a host. Studio converts it to FLAC first.
+- No WAV file goes to a host (ADR 0033).

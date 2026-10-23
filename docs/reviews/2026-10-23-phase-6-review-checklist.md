@@ -15,7 +15,7 @@ The planning model uses this list after each task or packet, before its commit.
 
 - No file and no feed file goes to a host without a diff that the user saw ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md)).
 - An import does not replace a file on the host (ADR 0026).
-- No WAV file goes to a host (ADR 0032).
+- No WAV file goes to a host, and each track from a lossless import has an MP3 enclosure ([ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md)).
 - The UI loads nothing from other servers, and the page policy does not change ([ADR 0016](../adr/0016-ui-without-a-build-step.md)).
 - Each `/api/` route needs the access token ([ADR 0017](../adr/0017-local-api-access.md)).
 - A schema change is a new migration ([ADR 0014](../adr/0014-collection-in-sqlite.md)).

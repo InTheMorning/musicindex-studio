@@ -15,10 +15,10 @@ The license is AGPL-3.0 ([ADR 0011](docs/adr/0011-agpl-license.md)).
 
 ## Where The Work Stands
 
-On 2026-10-23, Phase 0 to Phase 5 are complete. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It has the encrypted secret vault, the SQLite collection, the local folder connector and the write pipeline. `studio-api` serves the local JSON API and the UI, with the album editor. `studio-desktop` runs them on a loopback address. `studio-server` has no function yet.
+On 2026-10-23, Phase 0 to Phase 6 are complete. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It has the encrypted secret vault, the SQLite collection, the local folder connector and the write pipeline. `studio-api` serves the local JSON API and the UI, with the album editor, a new release and the import of music files. `studio-desktop` runs them on a loopback address. `studio-server` has no function yet.
 
 - Decisions: `docs/adr/0001` to `docs/adr/0032`. ADR 0017 is proposed.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor) is complete, with tasks 010 to 015 and its visual check. Phase 6 (new releases) is in progress: tasks 016 (cover art), 017 (a new album feed) and 018 (the import of music files). The current state of the plan lists the open items.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor) and Phase 6 (new releases) are complete, with their visual checks. Next: Phase 7 (publisher feeds), which needs an ADR first. The plan and the Phase 6 visual check list the open items.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 

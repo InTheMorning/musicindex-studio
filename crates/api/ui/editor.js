@@ -384,6 +384,12 @@ function importStateText(row, kind) {
 // One row of the import sheet: the name of the file, its state, the WAV
 // notice when it is a WAV file, and its facts when it is ready. An image row
 // also has the list of its use (task architecture).
+// The name, the type and the size of one file that Studio keeps. Each
+// file of a lossless import has its own line (ADR 0033 item 1).
+function fileFacts(file) {
+  return html`<span class="mono">${file.file_name}</span> · <span class="mono">${file.media_type}</span> · ${fileSize(file.size)}`;
+}
+
 function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
   const kind = row.facts ? row.facts.kind : guessKind(row.file);
   const failed = row.state === 'failed';
@@ -403,10 +409,8 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
       <dt>Title</dt><dd>${row.facts.title || '—'}</dd>
       <dt>Track number</dt><dd>${row.facts.track_number ?? '—'}</dd>
       <dt>Duration</dt><dd>${row.facts.duration || '—'}</dd>
-      <dt>File</dt><dd class="mono">${row.facts.file_name}</dd>
-      ${row.facts.lossless && html`<dt>Lossless file</dt><dd class="mono">${row.facts.lossless.file_name}</dd>`}
-      <dt>Size</dt><dd>${fileSize(row.facts.size)}</dd>
-      <dt>Type</dt><dd class="mono">${row.facts.media_type}</dd>
+      <dt>Track file</dt><dd>${fileFacts(row.facts)}</dd>
+      ${row.facts.lossless && html`<dt>Lossless file</dt><dd>${fileFacts(row.facts.lossless)}</dd>`}
     </dl>`}
     ${row.state === 'ready' && kind === 'image' && html`<dl class="facts">
       <dt>Size</dt><dd>${fileSize(row.facts.size)}</dd>

@@ -557,7 +557,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
   const albumArt = rows.find((r) => r.state === 'ready' && r.facts.kind === 'image' && r.imageUse === 'album');
   // An import of the album art alone is also an add.
   const canAdd = !stillGoing && (readyAudio.length > 0 || Boolean(albumArt));
-  const addLabel = readyAudio.length > 0
+  const addLabel = readyAudio.length > 0 || !albumArt
     ? `＋ Add ${readyAudio.length} track${readyAudio.length === 1 ? '' : 's'}`
     : '＋ Add the album art';
 

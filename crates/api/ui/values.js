@@ -1,6 +1,6 @@
 // The value editor (task 012): the payment recipients of the album and of
 // each track. The editor does not change a value time split.
-import { html, useState, useEffect } from './vendor/htm-preact-standalone.module.js';
+import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { api, Field, ErrorNotice, useAction } from './app.js';
 
@@ -273,6 +273,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     const data = await api(`/musicindex/feeds/${encodeURIComponent(guid)}/recipients`);
     setFeedData({ guid, ...data });
     setView('feed');
+    setMoved((n) => n + 1);
   });
   const openTrack = (trackGuid) => indexLoad.run(async () => {
     const data = await api(
@@ -280,9 +281,21 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     );
     setTrackData({ trackGuid, ...data });
     setView('track');
+    setMoved((n) => n + 1);
   });
-  const backToHits = () => { setFeedData(null); setView('hits'); };
-  const backToFeed = () => { setTrackData(null); setView('feed'); };
+  const backToHits = () => { setFeedData(null); setView('hits'); setMoved((n) => n + 1); };
+  const backToFeed = () => { setTrackData(null); setView('feed'); setMoved((n) => n + 1); };
+  // After each move between the hits, a feed and a track, the sheet
+  // scrolls to the top of the musicindex results. The user then sees the
+  // recipients of the page that opened.
+  const [moved, setMoved] = useState(0);
+  const resultsRef = useRef(null);
+  useEffect(() => {
+    if (moved > 0 && resultsRef.current) resultsRef.current.scrollIntoView({ block: 'start' });
+  }, [moved]);
+  // The list of the selections opens from a handle in the footer, so that
+  // it does not move the parts of the sheet.
+  const [showSelected, setShowSelected] = useState(false);
   // Each musicindex selection keeps the name of its feed or track, so that
   // the Selected part can show it after the user goes to a different page.
   const toggleIndex = (r, from) => setIndexSelected((selected) => {
@@ -293,12 +306,16 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
   });
   const feedName = feedData ? feedData.title || 'Feed' : '';
   const trackName = trackData ? trackData.title || 'Track' : '';
+  // A single has one track with the name of its feed. Show that name one time.
+  const trackPlace = trackName === feedName ? trackName : `${trackName} · ${feedName}`;
 
   // The sheet starts fresh each time that it opens.
   useEffect(() => {
     if (!open) return;
     setFilter('');
     setYoursSelected(new Set());
+    setShowSelected(false);
+    setMoved(0);
     setQuery('');
     setHits(null);
     setView('hits');
@@ -338,14 +355,6 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      ${selectedRows.length > 0 && html`<section class="page-section">
-        <h2>Selected</h2>
-        <div class="group">
-          ${selectedRows.map((row) => html`<${PickRow} key=${`s-${row.key}`}
-            name=${row.recipient.name || row.recipient.address || 'Recipient'} address=${row.recipient.address}
-            status=${row.from} checked=${true} taken=${false} onToggle=${row.clear} />`)}
-        </div>
-      </section>`}
       <section class="page-section">
         <h2>From musicindex</h2>
         <form class="form" onSubmit=${runSearch} role="search">
@@ -359,6 +368,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
             </div>
           </div>
         </form>
+        <span class="pick-anchor" ref=${resultsRef}></span>
         <${ErrorNotice} error=${search.error} />
         <${ErrorNotice} error=${indexLoad.error} />
         ${view === 'hits' && hits && hits.length === 0 && html`<p class="hint">musicindex found no feed with that name.</p>`}
@@ -387,12 +397,12 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
         ${view === 'track' && trackData && html`<div class="group">
           <button class="link-row" type="button" onClick=${backToFeed}>
             <span class="go" aria-hidden="true">‹</span><span class="title">${feedName}</span></button>
-          <h3 class="pick-head">${trackName}<span class="muted"> · ${feedName}</span></h3>
+          <h3 class="pick-head">${trackName}${trackName !== feedName && html`<span class="muted"> · ${feedName}</span>`}</h3>
           ${trackData.recipients.length === 0 && html`<p class="hint">This track has no recipients.</p>`}
           ${trackData.recipients.map((r) => {
             const key = identityOf(r);
             return html`<${PickRow} key=${`t-${key}`} name=${r.name || r.address || 'Recipient'} address=${r.address}
-              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r, `${trackName} · ${feedName}`)} />`;
+              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r, trackPlace)} />`;
           })}
         </div>`}
       </section>
@@ -418,10 +428,22 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
             </div>`}
       </section>
     </div>
-    <footer>
-      <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-      <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
-        Add ${total} recipient${total === 1 ? '' : 's'}</button>
+    <footer class="pick-footer">
+      ${showSelected && selectedRows.length > 0 && html`<div class="group pick-selected" id="picker-selected">
+        ${selectedRows.map((row) => html`<${PickRow} key=${`s-${row.key}`}
+          name=${row.recipient.name || row.recipient.address || 'Recipient'} address=${row.recipient.address}
+          status=${row.from} checked=${true} taken=${false} onToggle=${row.clear} />`)}
+      </div>`}
+      <div class="pick-footer-row">
+        <button class="button quiet" type="button" disabled=${total === 0}
+          aria-expanded=${showSelected && total > 0 ? 'true' : 'false'} aria-controls="picker-selected"
+          onClick=${() => setShowSelected(!showSelected)}>
+          ${total} selected <span class="pick-arrow" aria-hidden="true">${showSelected && total > 0 ? '▼' : '▲'}</span></button>
+        <span class="spacer"></span>
+        <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
+          Add ${total} recipient${total === 1 ? '' : 's'}</button>
+      </div>
     </footer>
   </dialog>`;
 }

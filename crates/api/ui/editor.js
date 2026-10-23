@@ -364,7 +364,7 @@ function alternateEnclosures(facts) {
 
 const IMPORT_ERRORS = {
   unsupported_media: 'Studio does not read this kind of file.',
-  file_pending: 'The sheet sent a file with this name already.',
+  file_pending: 'A track or an image of this draft uses a file with this name. Remove it from the draft first.',
   file_exists: 'A file with this name exists on the host already.',
   no_public_address: 'This host has no public address. Give it one in Hosts.',
   invalid_name: 'This is not a file name that Studio can use.',

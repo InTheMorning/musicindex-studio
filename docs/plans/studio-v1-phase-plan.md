@@ -112,12 +112,12 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - Decision: [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md).
 - The user selects a library folder. The library has one folder for each release and each publisher feed, with its feed XML, images and audio files.
-- Add a published feed: Studio downloads its XML, images and audio files into the library.
+- Add a published feed: Studio keeps its XML in the library and offers to download its images and audio files. Each download is optional.
 - Each release has a default host for its files and a host for its XML. Each file can go to a different host.
 - The diff lists each upload, replacement and deletion on each host. The write puts the uploads, then the feed XML, then the deletions.
 - Studio compares the library folder with its records, and shows each difference.
-- Move the current collection, its connected folders and its pending files into the library.
-- First answer the open questions of ADR 0035 in an ADR.
+- Move the current collection, its connected folders and its pending files into the library at the first start.
+- A move of the feed XML sets a redirect, or leaves a feed with `itunes:new-feed-url` at the address before the move.
 - Mechanical check: a release with files on two local test hosts writes a feed with the correct address for each file.
 - Mechanical check: a changed audio file gets a new name on the host, and the write deletes the file from before only after the feed is written.
 - Mechanical check: Studio does not delete a file on a host while a feed of the library refers to its address.
@@ -157,7 +157,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ### Phase 14: File Moves And The Self-Hosted File Host
 
-- Move some or all files of a user from one host to a different host ([ADR 0009](../adr/0009-studio-connects-to-hosts-and-moves-files.md)). A move is a change of placement ([ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 8).
+- Move some or all files of a user from one host to a different host ([ADR 0009](../adr/0009-studio-connects-to-hosts-and-moves-files.md)). A move is a change of placement ([ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 10).
 - Update each feed that refers to a moved file, through the write pipeline.
 - Make the optional self-hosted file host and its connector. The form of this host waits for the answer to the open question in ADR 0009.
 - Mechanical check: a move between two local test hosts keeps the feed GUID and the item GUIDs.

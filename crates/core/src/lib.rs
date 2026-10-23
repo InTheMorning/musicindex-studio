@@ -12,6 +12,7 @@ mod digest;
 pub mod discover;
 pub mod feed;
 pub mod guid;
+pub mod media;
 pub mod msp;
 pub mod musicindex;
 pub mod pipeline;

@@ -71,6 +71,8 @@ cargo run -p studio-desktop -- --data-dir .studio-dev/task-014/data
 node tools/drive-ui.mjs "<address from the run command>" .studio-dev/task-014/shots '<steps-json>'
 ```
 
+The binary contains the UI files. After each UI change, stop Studio, build it again and start it again before a `drive-ui.mjs` check. Examine each screenshot. A test result alone does not show a visual defect.
+
 ## Escalation
 
 Stop and report when:

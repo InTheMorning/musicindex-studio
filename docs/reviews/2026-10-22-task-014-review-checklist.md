@@ -11,7 +11,7 @@ The planning model uses this list after each packet, before the commit of that p
 - The `drive-ui.mjs` check of the packet passes, and the planning model examines its screenshots.
 - `$small()` gives an empty list. The console shows no error.
 - Each new code comment is in Simplified Technical English and agrees with the code.
-- The diff has no cleanup that the packet does not ask for.
+- The diff has no cleanup that the packet does not tell the coding model to do.
 
 ## Invariants
 
@@ -26,7 +26,7 @@ The planning model uses this list after each packet, before the commit of that p
 
 | Packet | Result | Required corrections |
 | --- | --- | --- |
-| [014a](../tasks/studio-v1-task-014a-background-levels.md) | Open | |
+| [014a](../tasks/studio-v1-task-014a-background-levels.md) | Pass after one correction | The fields had no `border` rule, so the browser showed its default inset border. The planning model added `border: 0`. An incorrect field keeps its red border. |
 | [014b](../tasks/studio-v1-task-014b-toolbar-and-sheets.md) | Open | |
 | [014c](../tasks/studio-v1-task-014c-tree-and-pages.md) | Open | |
 | [014d](../tasks/studio-v1-task-014d-phone-width.md) | Open | |

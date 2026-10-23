@@ -1150,3 +1150,33 @@ fn each_details_element_is_a_named_entry_or_a_section() {
         }
     }
 }
+
+/// ADR 0029: on 2026-10-22 the operator found six shades of gray hard to
+/// read. The editor keeps three background levels, each on a named token.
+#[test]
+fn each_background_uses_a_token() {
+    let (_, css) = crate::ui::text_files()
+        .find(|(name, _)| *name == "styles.css")
+        .unwrap();
+    for keyword in ["background:", "background-color:"] {
+        for (index, _) in css.match_indices(keyword) {
+            let rest = &css[index..];
+            let end = rest.find(';').map_or(rest.len(), |e| e + 1);
+            let declaration = &rest[..end];
+            let value = &declaration[keyword.len()..];
+            let is_literal_color = value.contains('#')
+                || value.contains("rgb(")
+                || value.contains("rgba(")
+                || value.contains("hsl(");
+            let is_bare_surface = value.contains("var(--bg)")
+                || value.contains("var(--surface)")
+                || value.contains("var(--surface2)");
+            assert!(
+                !is_literal_color && !is_bare_surface,
+                "ADR 0029 §Background Levels: styles.css sets a background that is not a level, \
+                 fill or named token: {declaration}. Use --level-1, --level-2, --level-3 or a \
+                 fill token."
+            );
+        }
+    }
+}

@@ -73,6 +73,8 @@ node tools/drive-ui.mjs "<address from the run command>" .studio-dev/task-014/sh
 
 Before the first run, copy `.studio-dev/check-011/data` to `.studio-dev/task-014/data`. It has two album feeds and needs no passphrase.
 
+The binary contains the UI files. After each UI change, stop Studio, build it again and start it again before a `drive-ui.mjs` check. Examine each screenshot. A test result alone does not show a visual defect.
+
 ## Escalation
 
 Stop and report when:

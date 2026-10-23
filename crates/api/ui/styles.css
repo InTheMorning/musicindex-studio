@@ -151,10 +151,23 @@
   --diff-remove-bg: rgba(180, 35, 24, .08);
 }
 
+/* Background levels (ADR 0029): the page, a group and an open entry. Each
+   level changes the fill only. A border does not identify a level. */
+:root {
+  --level-1: var(--bg);
+  --level-2: var(--surface);
+  --level-3: var(--surface2);
+}
+:root[data-theme="light"] {
+  --level-1: #f2f2f7;
+  --level-2: #ffffff;
+  --level-3: #f2f2f7;
+}
+
 html, body { height: 100%; }
 
 body {
-  background: var(--bg);
+  background: var(--level-1);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Figtree", system-ui, sans-serif;
   font-size: 15px;
@@ -224,14 +237,17 @@ code, .mono {
 .field input, .field textarea {
   min-height: 44px;
   padding: 0 14px;
-  border: 1px solid var(--sep);
+  border: 0;
   border-radius: 10px;
   background: var(--fill-soft);
   color: var(--text);
   font: inherit;
 }
+.field input:focus, .field textarea:focus { background: var(--fill); }
 .field input:focus-visible { outline-offset: 0; }
-.field input[aria-invalid="true"] { border-color: var(--error); }
+/* A field has a fill and no border (ADR 0029). The border shows the
+   error only (ADR 0018). */
+.field input[aria-invalid="true"] { border: 1px solid var(--error); }
 .field-error { color: var(--error); font-size: .9rem; font-weight: 500; }
 
 /* Passphrase strength meter (ADR 0018). */
@@ -251,9 +267,10 @@ code, .mono {
   padding: 12px 14px;
   border-radius: 10px;
   background: var(--fill-soft);
-  border: 1px solid var(--sep);
 }
-.notice.error { border-color: var(--error); }
+/* A notice has a fill and no border (ADR 0029). The border shows the
+   error only. */
+.notice.error { border: 1px solid var(--error); }
 .notice strong { display: block; }
 
 .eyebrow {
@@ -315,7 +332,7 @@ code, .mono {
   width: min(560px, 100%);
   padding: 32px;
   border-radius: 22px;
-  background: var(--surface);
+  background: var(--level-2);
   border: 1px solid var(--sep);
   box-shadow: 0 20px 60px var(--art-shadow);
   display: grid;
@@ -433,7 +450,7 @@ code, .mono {
 :root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
 
-.main { overflow-y: auto; }
+.main { overflow-y: auto; background: var(--level-1); }
 .bar {
   position: sticky;
   top: 0;
@@ -484,8 +501,7 @@ code, .mono {
 .panel {
   padding: 24px;
   border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--sep);
+  background: var(--level-2);
   display: grid;
   gap: 18px;
 }
@@ -514,14 +530,15 @@ code, .mono {
   gap: 12px;
   min-height: 44px;
   padding: 8px 12px;
-  border: 1px solid var(--sep);
   border-radius: 10px;
   cursor: pointer;
 }
 .choice:hover { background: var(--fill-soft); }
+/* A selection has a fill and no border (ADR 0029). The border shows the
+   picked selection only. */
 .choice:has(input:checked) {
   background: linear-gradient(var(--gloss-top), var(--gloss-bottom));
-  border-color: var(--gloss-edge);
+  border: 1px solid var(--gloss-edge);
 }
 .choice.taken { cursor: default; opacity: .6; }
 .choice input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
@@ -532,13 +549,14 @@ code, .mono {
 textarea {
   min-height: 88px;
   padding: 10px 14px;
-  border: 1px solid var(--sep);
+  border: 0;
   border-radius: 10px;
   background: var(--fill-soft);
   color: var(--text);
   font: inherit;
   resize: vertical;
 }
+textarea:focus { background: var(--fill); }
 .inline { display: flex; gap: 8px; }
 .inline input { flex: 1; }
 .failed { padding-left: 18px; color: var(--muted); font-size: .9rem; }
@@ -585,13 +603,12 @@ textarea {
   display: grid;
   gap: 14px;
   padding: 16px;
-  border: 1px solid var(--sep);
   border-radius: 12px;
 }
 .entry legend { padding: 0 6px; font-weight: 600; }
 .tracks { display: grid; gap: 8px; }
-.track { border: 1px solid var(--sep); border-radius: 12px; }
-.track[open] { background: var(--fill-soft); }
+.track { border-radius: 12px; }
+.track[open] { background: var(--level-3); }
 .track > summary {
   display: flex;
   align-items: center;
@@ -612,7 +629,7 @@ textarea {
   padding: 12px 0;
   border: 1px solid var(--sep);
   border-radius: 10px;
-  background: var(--bg);
+  background: var(--level-1);
   font-size: .85rem;
   line-height: 1.5;
 }
@@ -632,12 +649,13 @@ textarea {
 .field select {
   min-height: 44px;
   padding: 0 10px;
-  border: 1px solid var(--sep);
+  border: 0;
   border-radius: 10px;
   background: var(--fill-soft);
   color: var(--text);
   font: inherit;
 }
+.field select:focus { background: var(--fill); }
 /* Disclosure groups. The summary line stays visible, and the details open
    below it (Apple HIG, disclosure controls). */
 .disclosure > summary {
@@ -667,7 +685,7 @@ textarea {
 
 /* A recipient is the third level: it has the tertiary background, with no
    border (Apple HIG, color: primary, secondary and tertiary backgrounds). */
-.recipient { border-radius: 12px; background: var(--surface2); }
+.recipient { border-radius: 12px; background: var(--level-3); }
 .recipient > summary {
   display: grid;
   /* The marker, the name, the meter, the percentage and the address. Fixed
@@ -727,7 +745,7 @@ textarea {
   transform: translateX(-50%);
   padding: 4px 8px;
   border-radius: 6px;
-  background: var(--surface2);
+  background: var(--level-3);
   border: 1px solid var(--sep);
   color: var(--text);
   font-size: .8rem;
@@ -745,7 +763,7 @@ textarea {
 .share-stack > span:only-child { border-radius: 4px; }
 
 /* A list entry as one summary line (ADR 0028), on the tertiary background. */
-.entry-row { border-radius: 12px; background: var(--surface2); }
+.entry-row { border-radius: 12px; background: var(--level-3); }
 .entry-row > summary {
   display: flex;
   align-items: center;

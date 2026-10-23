@@ -102,6 +102,7 @@
 - [Phase 6 review checklist, 2026-10-23](reviews/2026-10-23-phase-6-review-checklist.md)
 - [Phase 6 visual check, 2026-10-23](reviews/2026-10-23-phase-6-visual-check.md)
 - [Phase 7 review checklist, 2026-10-23](reviews/2026-10-23-phase-7-review-checklist.md)
+- [Phase 7 milestone 7a visual check, 2026-10-23](reviews/2026-10-23-phase-7a-visual-check.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

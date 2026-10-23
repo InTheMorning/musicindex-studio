@@ -1111,6 +1111,19 @@ textarea:focus { background: var(--fill); }
 /* An alternate enclosure of a track, as one summary line in the Audio file
    group, with a Remove button. There is no form to edit it (task 019d,
    ADR 0033 item 8). */
+.import-files { list-style: none; margin: 0; padding: 0; }
+.import-file {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 0;
+  border-top: 1px solid var(--sep);
+}
+.import-file .badge {
+  flex: none; min-width: 48px; padding: 3px 8px; border-radius: 6px; text-align: center;
+  font-size: .75rem; font-weight: 600; letter-spacing: .04em; color: var(--text); background: var(--fill);
+}
+.import-file .name { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.import-file .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.import-file .role { color: var(--muted); font-size: .85rem; }
+.import-file .size { flex: none; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
 .alt-enclosure {
   display: flex;
   align-items: center;

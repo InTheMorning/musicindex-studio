@@ -30,12 +30,14 @@ The operator decided that Studio makes an MP3 file for the enclosure, and offers
 
 5. The `enclosure` of the track is the MP3 file.
 6. The item gets two `podcast:alternateEnclosure` elements after its `enclosure`:
-   - The MP3 file, with `type="audio/mpeg"`, its `length`, `title="MP3"` and `default="true"`.
-   - The FLAC file, with `type="audio/flac"`, its `length` and `title="Lossless (FLAC)"`.
+   - The MP3 file, with `type="audio/mpeg"`, its `length`, `title="Standard (MP3)"` and `default="true"`.
+   - The FLAC file, with `type="audio/flac"`, its `length` and `title="Maximum fidelity (lossless)"`.
+
+   The operator changed the two titles on 2026-10-23, after the check of task 019. Listener apps show the title in their choice of files. A track that Studio wrote before has the titles `MP3` and `Lossless (FLAC)`.
 
    Each has one `podcast:source` with the public address of the file.
 7. The diff lists the two files. A pending file is in use when it is the address of an enclosure, of an image, or of a `podcast:source` (ADR 0032 item 10).
-8. The track page of the editor shows each alternative enclosure as one summary line ([ADR 0028](0028-summary-lines-and-one-open-entry.md)). The user can remove an alternative enclosure.
+8. The track page of the editor shows each alternative enclosure as one summary line, with its title ([ADR 0028](0028-summary-lines-and-one-open-entry.md)). The user can remove an alternative enclosure.
 
 ### The Notice
 

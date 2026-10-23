@@ -345,7 +345,7 @@ function alternateEnclosures(facts) {
       media_type: 'audio/mpeg',
       length: String(facts.size),
       bitrate: null,
-      title: 'MP3',
+      title: 'Standard (MP3)',
       rel: null,
       default: 'true',
       sources: [{ uri: facts.url, content_type: null }],
@@ -354,7 +354,7 @@ function alternateEnclosures(facts) {
       media_type: 'audio/flac',
       length: String(facts.lossless.size),
       bitrate: null,
-      title: 'Lossless (FLAC)',
+      title: 'Maximum fidelity (lossless)',
       rel: null,
       default: null,
       sources: [{ uri: facts.lossless.url, content_type: null }],
@@ -384,12 +384,29 @@ function importStateText(row, kind) {
 // One row of the import sheet: the name of the file, its state, the WAV
 // notice when it is a WAV file, and its facts when it is ready. An image row
 // also has the list of its use (task architecture).
-// The name, the type and the size of one file that Studio keeps. Each
-// file of a lossless import has its own line (ADR 0033 item 1). A file
-// that the import uses from the host already gets a note of this fact
-// (ADR 0034 item 5).
-function fileFacts(file) {
-  return html`<span class="mono">${file.file_name}</span> · <span class="mono">${file.media_type}</span> · ${fileSize(file.size)}${file.on_host ? ' · On the host already' : ''}`;
+// The short format name of a media type, for the badge of a file row.
+function formatLabel(mediaType) {
+  const known = { 'audio/mpeg': 'MP3', 'audio/flac': 'FLAC', 'audio/mp4': 'M4A', 'audio/ogg': 'OGG', 'image/jpeg': 'JPEG' };
+  return known[mediaType] || (mediaType || '').split('/').pop().toUpperCase();
+}
+
+// The files that Studio keeps for one import row. Each file is one row with
+// its format, its name, its role and its size. A lossless import has two
+// files (ADR 0033 item 1). A file that the import uses from the host gets
+// a note of this fact (ADR 0034 item 5).
+function FileRows({ facts, role }) {
+  const files = [{ file: facts, role }];
+  if (facts.lossless) files.push({ file: facts.lossless, role: 'Maximum fidelity (lossless)' });
+  return html`<ul class="import-files" aria-label="Files">
+    ${files.map(({ file, role: text }) => html`<li class="import-file">
+      <span class="badge">${formatLabel(file.media_type)}</span>
+      <span class="name">
+        <span class="file" title=${file.file_name}>${file.file_name}</span>
+        <span class="role">${text}${file.on_host ? ' · On the host already' : ''}</span>
+      </span>
+      <span class="size">${fileSize(file.size)}</span>
+    </li>`)}
+  </ul>`;
 }
 
 function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
@@ -411,13 +428,9 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
       <dt>Title</dt><dd>${row.facts.title || '—'}</dd>
       <dt>Track number</dt><dd>${row.facts.track_number ?? '—'}</dd>
       <dt>Duration</dt><dd>${row.facts.duration || '—'}</dd>
-      <dt>Track file</dt><dd>${fileFacts(row.facts)}</dd>
-      ${row.facts.lossless && html`<dt>Lossless file</dt><dd>${fileFacts(row.facts.lossless)}</dd>`}
-    </dl>`}
-    ${row.state === 'ready' && kind === 'image' && html`<dl class="facts">
-      <dt>Size</dt><dd>${fileSize(row.facts.size)}</dd>
-      <dt>Type</dt><dd class="mono">${row.facts.media_type}</dd>
     </dl>
+    <${FileRows} facts=${row.facts} role=${row.facts.lossless ? 'Standard: plays in each app' : 'Track file'} />`}
+    ${row.state === 'ready' && kind === 'image' && html`<${FileRows} facts=${row.facts} role="Image" />
     <div class="import-dest">
       <label for=${`import-dest-${row.id}`}>Use for</label>
       <select id=${`import-dest-${row.id}`} value=${row.imageUse}

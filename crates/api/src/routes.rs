@@ -1195,6 +1195,63 @@ fn reference_url(
         })
 }
 
+/// The `reference` operation: put the address of `file` on `target` in
+/// the draft, in place of each other address of the same file. A host
+/// with no copy of the file gets one with the write, so the new address
+/// has a file (ADR 0036 item 12).
+fn reference_operation(
+    w: &Workspace,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    file: i64,
+    target: ConnectorId,
+    from_url: Option<String>,
+) -> Result<(), ApiError> {
+    let id = feed_row.id;
+    let file = feed_library_file(&w.collection, id, file)?;
+    let to_url = reference_url(&w.collection, hosts, feed_row, &file, target)?;
+    // Each address of the same file goes to the new address: its planned
+    // address and the address of each copy.
+    let mut from_urls = file_addresses(&w.collection, hosts, feed_row, &file)?;
+    from_urls.extend(from_url);
+    from_urls.retain(|url| url != &to_url);
+    let on_target = inventory::copies(&w.collection, hosts, &file)?
+        .iter()
+        .any(|copy| copy.connector_id == target);
+    if !on_target {
+        let planned = planned_path_on(&w.collection, hosts, feed_row, &file, target)?;
+        w.collection.add_draft_operation(
+            id,
+            DraftOperationKind::Copy,
+            Some(file.id),
+            target,
+            &planned.path,
+        )?;
+    }
+    pipeline::edit_draft(&w.collection, id, |feed| {
+        for from in &from_urls {
+            reference_feed(feed, from, &to_url);
+        }
+    })?;
+    Ok(())
+}
+
+/// Each address of `file`: its planned address on its own host, and the
+/// address of each copy (ADR 0036 items 7 and 9).
+fn file_addresses(
+    collection: &Collection,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    file: &LibraryFile,
+) -> Result<Vec<String>, ApiError> {
+    let mut urls: Vec<String> = inventory::copies(collection, hosts, file)?
+        .into_iter()
+        .filter_map(|copy| copy.url)
+        .collect();
+    urls.extend(inventory::planned_path(collection, hosts, feed_row, file)?.url);
+    Ok(urls)
+}
+
 /// Replace each address of `feed` that is `from` with `to` (ADR 0036
 /// item 12). The function checks the same addresses as the host
 /// inventory (ADR 0036 item 7): the channel image, each item's
@@ -1261,12 +1318,14 @@ fn dereference_feed(feed: &mut Feed, url: &str) {
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub(crate) enum FileOperation {
-    /// Put the address of a copy in the feed, in place of its current
-    /// address.
+    /// Put the address of the file on a host in the feed, in place of
+    /// each other address of the same file. `from_url` is one more address
+    /// to replace, for an address that Studio does not know as a copy.
     Reference {
         file: i64,
         connector_id: i64,
-        from_url: String,
+        #[serde(default)]
+        from_url: Option<String>,
     },
     /// Remove an address from the feed.
     Dereference { url: String },
@@ -1299,17 +1358,14 @@ pub(crate) async fn add_operation(
                 connector_id,
                 from_url,
             } => {
-                let file = feed_library_file(&w.collection, id, file)?;
-                let to_url = reference_url(
-                    &w.collection,
+                reference_operation(
+                    w,
                     &hosts,
                     &feed_row,
-                    &file,
+                    file,
                     ConnectorId(connector_id),
+                    from_url,
                 )?;
-                pipeline::edit_draft(&w.collection, id, |feed| {
-                    reference_feed(feed, &from_url, &to_url);
-                })?;
             }
             FileOperation::Dereference { url } => {
                 pipeline::edit_draft(&w.collection, id, |feed| {

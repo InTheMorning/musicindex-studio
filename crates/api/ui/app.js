@@ -726,6 +726,48 @@ function Wizard({ onFinish }) {
   return html`<main class="center"><div class="card"><${Brand} />${body}</div></main>`;
 }
 
+// ---- The library folder (ADR 0036 items 1 to 6) ----
+// Studio keeps one folder for each release: its feed file, its images and
+// its audio files. The app asks for this folder once, after the vault and
+// before the editor, and runs with no Shell yet.
+
+function LibrarySheet({ defaultRoot, onDone }) {
+  const [path, setPath] = useState(defaultRoot || '');
+  const [report, setReport] = useState(null);
+  const { busy, error, run } = useAction();
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      setReport(await api('/library', { method: 'PUT', body: { root: path.trim() } }));
+    });
+  };
+  if (report) {
+    return html`<main class="center"><div class="card">
+      <${Brand} />
+      <div><h1>Studio set up your library</h1></div>
+      <dl class="facts">
+        <dt>Release folders</dt><dd>${report.release_folders}</dd>
+        <dt>Feed files</dt><dd>${report.feed_files}</dd>
+        <dt>Files moved</dt><dd>${report.moved_files}</dd>
+      </dl>
+      ${report.errors.length > 0 && html`<div class="notice error" role="alert">
+        <strong>Studio could not move each file into the library.</strong>
+        <ul class="failed">${report.errors.map((e) => html`<li>Feed ${e.feed_id}: ${e.message}</li>`)}</ul>
+      </div>`}
+      <div class="actions"><button class="button primary" type="button" onClick=${onDone}>Continue</button></div>
+    </div></main>`;
+  }
+  return html`<main class="center"><form class="card" onSubmit=${submit}>
+    <${Brand} />
+    <div><h1>Where Studio keeps your releases</h1>
+      <p>Studio keeps one folder for each release here: its feed file, its images and its audio files.</p></div>
+    <${Field} id="library-path" label="Folder" required value=${path} onInput=${(e) => setPath(e.target.value)} />
+    <${ErrorNotice} error=${error} />
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !path.trim()}>
+      ${busy ? 'Using this folder…' : 'Use this folder'}</button></div>
+  </form></main>`;
+}
+
 // ---- Unlock and no-token screens ----
 
 function Unlock({ onUnlocked }) {
@@ -839,7 +881,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved, onMenu }) {
 }
 
 // The names of the pages that are not the album page or a track.
-const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Recipients' };
+const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Recipients', files: 'Files' };
 
 // The toolbar title: the feed title on the album page, or the feed title in
 // the muted color, then the name of the open page (review of task 014c,
@@ -858,15 +900,21 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu }) {
+function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
+  // A host operation of the Files page does not always change the feed
+  // XML (task 021g, ADR 0036 item 14), so the toolbar needs its own sign
+  // of a pending change next to `draft.changed`. A new feed starts clear.
+  const [opsPending, setOpsPending] = useState(false);
+  useEffect(() => { setOpsPending(false); }, [feed.id]);
   return html`<div>
     <${Bar} onMenu=${onMenu}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
-      <${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} />
+      <${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
+        opsPending=${opsPending} onOpsCleared=${() => setOpsPending(false)} />
     <//>
     <div class="feed-head">
       <header class="head">
@@ -886,17 +934,18 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
       <${AddressDifferences} feed=${feed} />
     </div>
     <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved} />
+      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
+      connectors=${connectors} onOpsChanged=${() => setOpsPending(true)} />
   </div>`;
 }
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu }) {
+function FeedDetail({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors }) {
   if (isEditable(feed)) {
     return html`<${EditableFeed} feed=${feed} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting}
-      onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
+      onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} connectors=${connectors} />`;
   }
   return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
 }
@@ -945,6 +994,8 @@ function FeedTree({ feeds, view, draft, go, onAdding, onImporting }) {
             onClick=${() => openPage(feed, { page: 'credits' })}><span class="label">Credits and links</span></button></li>
           <li><button class="node" type="button" aria-current=${isCurrent({ page: 'recipients' }) ? 'page' : 'false'}
             onClick=${() => openPage(feed, { page: 'recipients' })}><span class="label">Recipients</span></button></li>
+          <li><button class="node" type="button" aria-current=${isCurrent({ page: 'files' }) ? 'page' : 'false'}
+            onClick=${() => openPage(feed, { page: 'files' })}><span class="label">Files</span></button></li>
           <li class="tree-sub">Tracks</li>
           ${draft.model.items.map((item, i) => {
             const key = trackKey(item);
@@ -1011,6 +1062,53 @@ function FolderFeeds({ connector, onAdded }) {
   </div>`;
 }
 
+// The library folder and the download limits (ADR 0036 items 1 and 17).
+// A move of the library to a new folder is not part of this version, so
+// this panel shows the folder as a fact and lets the user change only the
+// download limits.
+function LibraryPanel() {
+  const [library, setLibrary] = useState(null);
+  const [maxMb, setMaxMb] = useState('');
+  const [minMb, setMinMb] = useState('');
+  const { busy, error, run } = useAction();
+  const load = () => api('/library').then((result) => {
+    setLibrary(result);
+    setMaxMb(String(Math.round(result.download_max_file_bytes / (1024 * 1024))));
+    setMinMb(String(Math.round(result.download_min_free_bytes / (1024 * 1024))));
+  });
+  useEffect(() => { load(); }, []);
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      await api('/library/limits', {
+        method: 'PUT',
+        body: {
+          download_max_file_bytes: Math.round(Number(maxMb) * 1024 * 1024),
+          download_min_free_bytes: Math.round(Number(minMb) * 1024 * 1024),
+        },
+      });
+      await load();
+    });
+  };
+  if (!library) return null;
+  const ready = Number(maxMb) > 0 && Number(minMb) > 0;
+  return html`<article class="panel">
+    <h2>Library</h2>
+    <dl class="facts"><dt>Folder</dt><dd class="mono">${library.root}</dd></dl>
+    <form class="form" onSubmit=${submit}>
+      <div class="grid2">
+        <${Field} id="limit-max" label="Largest download, in MB" inputmode="numeric" required
+          value=${maxMb} onInput=${(e) => setMaxMb(e.target.value)} />
+        <${Field} id="limit-min" label="Free space to keep, in MB" inputmode="numeric" required
+          value=${minMb} onInput=${(e) => setMinMb(e.target.value)} />
+      </div>
+      <${ErrorNotice} error=${error} />
+      <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
+        ${busy ? 'Saving…' : 'Save the limits'}</button></div>
+    </form>
+  </article>`;
+}
+
 function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
@@ -1033,6 +1131,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   return html`<div>
     <${Bar} onMenu=${onMenu}><span class="bar-title">Hosts</span><//>
     <section class="section">
+      <${LibraryPanel} />
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
         : html`<${ErrorNotice} error=${error} />`}
@@ -1184,7 +1283,7 @@ function Shell({ vault, onLock }) {
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}
       adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
-      onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} />`;
+      onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} connectors=${connectors} />`;
   } else {
     main = withBar(html`<section class="center" style=${{ minHeight: 'calc(100% - var(--bar-h))' }}><div class="card">
       <h1>${feeds.length ? 'Select a feed' : 'Your collection is empty'}</h1>
@@ -1212,11 +1311,14 @@ function Shell({ vault, onLock }) {
 
 function App() {
   const [status, setStatus] = useState(null);
+  const [library, setLibrary] = useState(null);
   const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState(null);
   const load = useCallback(async () => {
     try {
-      setStatus(await api('/status'));
+      const [nextStatus, nextLibrary] = await Promise.all([api('/status'), api('/library')]);
+      setStatus(nextStatus);
+      setLibrary(nextLibrary);
       setError(null);
     } catch (e) {
       setError(e);
@@ -1228,8 +1330,13 @@ function App() {
   if (error && error.status === 401) return html`<${NoToken} />`;
   if (error) return html`<main class="center"><div class="card"><${Brand} /><${ErrorNotice} error=${error} />
     <div class="actions"><button class="button" type="button" onClick=${load}>Try again</button></div></div></main>`;
-  if (!status) return html`<p class="boot" role="status">Loading Studio…</p>`;
+  if (!status || !library) return html`<p class="boot" role="status">Loading Studio…</p>`;
   if (status.vault === 'locked') return html`<${Unlock} onUnlocked=${load} />`;
+  // Studio needs its library folder before the editor, so that a write has
+  // a release folder to keep the hosted file in (ADR 0036 items 1 and 2).
+  if (library.root === null) {
+    return html`<${LibrarySheet} defaultRoot=${library.default_root} onDone=${load} />`;
+  }
   // The first run: an empty collection (ADR 0020). The vault comes when the
   // user first adds a secret.
   if (status.feeds === 0 && status.connectors === 0 && !skipped) {

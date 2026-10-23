@@ -661,6 +661,69 @@ function DiffView({ unified }) {
   })}</pre>`;
 }
 
+// ---- Host operations, in the diff sheet and the Files page (task 021g,
+// ADR 0036 items 10 to 14) ----
+
+// The name of a connected host, by its ID. A host that the list does not
+// have yet, for example right after a page load, falls back to a plain
+// word.
+function connectorName(connectors, id) {
+  const found = connectors.find((c) => c.id === id);
+  return found ? found.name : 'Host';
+}
+
+function operationKindLabel(kind) {
+  switch (kind) {
+    case 'upload': return 'Upload';
+    case 'copy': return 'Copy';
+    case 'delete': return 'Delete';
+    default: return kind;
+  }
+}
+
+// One row of a host operation of the diff: its kind, its host, its path
+// and its size (ADR 0036 item 14). An upload has no draft operation of its
+// own, so it has no Remove button.
+function HostOperationRow({ op, connectors, onRemove, busy }) {
+  return html`<div class="host-op-row">
+    <span class="kind">${operationKindLabel(op.kind)}</span>
+    <span class="text">
+      <span class="title">${connectorName(connectors, op.connector_id)}</span>
+      <span class="sub mono">${op.path}</span>
+    </span>
+    <span class="size">${fileSize(op.size)}</span>
+    ${op.operation_id !== null && html`<button class="button quiet" type="button" disabled=${busy}
+      onClick=${() => onRemove(op.operation_id)}>Remove</button>`}
+  </div>`;
+}
+
+// A deletion that Studio refuses because a feed of the library refers to
+// the file (ADR 0036 item 13). The row uses the error color, not an
+// entity color (ADR 0018).
+function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
+  return html`<div class="host-op-row error" role="alert">
+    <span class="kind">Delete</span>
+    <span class="text">
+      <span class="title">${connectorName(connectors, blocked.connector_id)}</span>
+      <span class="sub mono">${blocked.path}</span>
+      <span class="sub">Studio cannot delete this file. These feeds refer to it: ${blocked.feed_titles.join(', ')}</span>
+    </span>
+    <button class="button quiet" type="button" disabled=${busy}
+      onClick=${() => onRemove(blocked.operation_id)}>Remove</button>
+  </div>`;
+}
+
+// Each host operation of the diff, above the XML diff (ADR 0036 item 14).
+function HostOperations({ diff, connectors, onRemove, busy }) {
+  if (diff.operations.length === 0 && diff.blocked.length === 0) return null;
+  return html`<div class="group host-ops">
+    ${diff.operations.map((op) => html`<${HostOperationRow}
+      key=${`${op.kind}-${op.connector_id}-${op.path}`} op=${op} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
+    ${diff.blocked.map((b) => html`<${BlockedDeleteRow}
+      key=${`blocked-${b.operation_id}`} blocked=${b} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
+  </div>`;
+}
+
 // A sheet opens with showModal() when `open` turns true, and closes with
 // close() when `open` turns false. The close event covers the Escape key,
 // and each caller passes its handler as `onClose` (ADR 0029 item 5 and 6).
@@ -677,7 +740,7 @@ export function useSheet(open) {
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
 // 2). It is the same content as the former Changes panel.
-function ReviewSheet({ feedId, draft, open, onWritten, onClose }) {
+function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, opsPending, onOpsCleared }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
@@ -689,6 +752,10 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose }) {
   });
   // The sheet examines the draft each time that it opens.
   useEffect(() => { if (open) examine(); }, [open]);
+  const removeOperation = (operationId) => run(async () => {
+    await api(`/feeds/${feedId}/operations/${operationId}`, { method: 'DELETE' });
+    setDiff(await api(`/feeds/${feedId}/diff`));
+  });
   const write = () => run(async () => {
     let feed;
     try {
@@ -701,6 +768,7 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose }) {
     }
     setDiff(null);
     await draft.load();
+    onOpsCleared();
     onWritten(feed);
     ref.current.close();
   });
@@ -709,6 +777,7 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose }) {
     run(async () => {
       await api(`/feeds/${feedId}/draft`, { method: 'DELETE' });
       setDiff(null);
+      onOpsCleared();
       await draft.load();
     });
   };
@@ -717,12 +786,18 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose }) {
     run(async () => {
       await api(`/feeds/${feedId}/draft`, { method: 'DELETE' });
       setDiff(null);
+      onOpsCleared();
       await draft.load();
     });
   };
   const conflict = error && error.code === 'conflict';
-  const blocked = draft.bad.length > 0;
+  // Studio cannot write while an address of the draft is not correct. A
+  // host operation of `diff` does not block the write on its own: Studio
+  // skips a deletion that `diff.blocked` names, and the user sees it here.
+  const addressesBlocked = draft.bad.length > 0;
   const stale = error && error.code === 'diff_not_approved';
+  const pending = draft.changed || opsPending;
+  const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title">Review changes</h2>
@@ -742,21 +817,22 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose }) {
         : stale
           ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
           : html`<${ErrorNotice} error=${error} />`}
-      ${blocked && html`<div class="notice error" role="alert">
+      ${addressesBlocked && html`<div class="notice error" role="alert">
         <strong>Studio cannot write while an address is not correct.</strong>
         Correct the fields with red text. Each address starts with https:// or http://.
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
+      ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} busy=${busy} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} unified=${diff.unified} />`
-        : html`<p>The draft is the same as the hosted file.</p>`)}
+        : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
       <div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the changes</button>
       </div>
     </div>
     <footer>
-      <button class="button quiet" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
-      ${diff && diff.changed && !blocked && html`<button class="button primary" type="button" disabled=${busy} onClick=${write}>
+      <button class="button quiet" type="button" disabled=${busy || !pending} onClick=${discard}>Discard the draft</button>
+      ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy} onClick=${write}>
         ${busy ? 'Writing…' : 'Write to the host'}</button>`}
     </footer>
   </dialog>`;
@@ -801,26 +877,29 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
 }
 
 // The short status of the toolbar (ADR 0029 item 1). It differs from the
-// long status of the review sheet.
-function toolbarStatus(draft) {
+// long status of the review sheet. `opsPending` is true after a host
+// operation of the Files page, which does not always change the draft XML
+// on its own (ADR 0036 item 14, task 021g).
+function toolbarStatus(draft, opsPending) {
   if (draft.status === 'idle' || draft.status === 'loading') return { text: 'Loading…' };
   if (draft.status === 'waiting' || draft.status === 'saving') return { text: 'Saving…' };
   if (draft.status === 'failed') return { text: 'Not saved', error: true };
-  return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
+  return draft.changed || opsPending ? { text: 'Saved, not written' } : { text: 'No changes' };
 }
 
 // The toolbar of the editor: the draft status, and the buttons that open
 // the review sheet and the versions sheet (ADR 0029 items 1 to 3).
-export function DraftToolbar({ feedId, draft, onWritten }) {
+export function DraftToolbar({ feedId, draft, onWritten, connectors, opsPending, onOpsCleared }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
-  const status = toolbarStatus(draft);
+  const status = toolbarStatus(draft, opsPending);
   return html`<div class="draft-toolbar">
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
     <${ReviewSheet} feedId=${feedId} draft=${draft} open=${open === 'review'}
-      onWritten=${onWritten} onClose=${() => setOpen(null)} />
+      onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors}
+      opsPending=${opsPending} onOpsCleared=${onOpsCleared} />
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
   </div>`;
 }
@@ -1024,11 +1103,200 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
     </div>`;
 }
 
+// ---- The Files page (task 021g, ADR 0036 items 4, 7 to 14) ----
+// The user sets the host of each file, starts a copy, a move or a
+// deletion, and sees each host file of the release folder that is not a
+// copy of a library file.
+
+// A list of the connected hosts, for the choice of a host (task
+// architecture). The caller keeps out a host that makes no sense as a
+// target, such as the host of a copy that already exists.
+function HostPicker({ id, label, buttonLabel, connectors, exclude = [], busy, onPick }) {
+  const [target, setTarget] = useState('');
+  const options = connectors.filter((c) => !exclude.includes(c.id));
+  if (options.length === 0) return html`<p class="hint">Studio has no other connected host.</p>`;
+  const pick = () => { if (target) { onPick(Number(target)); setTarget(''); } };
+  return html`<div class="inline">
+    <label class="visually-hidden" for=${id}>${label}</label>
+    <select id=${id} class="button" value=${target} onChange=${(e) => setTarget(e.target.value)}>
+      <option value="">Select a host</option>
+      ${options.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+    </select>
+    <button class="button" type="button" disabled=${busy || !target} onClick=${pick}>${buttonLabel}</button>
+  </div>`;
+}
+
+// One copy of a library file on a host, with its own actions (ADR 0036
+// items 12 and 13).
+function CopyRow({ file, copy, connectors, busy, open, onToggleMove, onChanged }) {
+  const reference = () => onChanged({ op: 'reference', file: file.id, connector_id: copy.connector_id, from_url: file.url });
+  const del = () => onChanged({ op: 'delete', connector_id: copy.connector_id, path: copy.path });
+  const moveTo = (to) => onChanged({ op: 'move', file: file.id, from: copy.connector_id, to });
+  return html`<div class="copy-row">
+    <span class="title">${connectorName(connectors, copy.connector_id)}</span>
+    <span class="sub mono">${copy.path}</span>
+    ${copy.url && html`<span class="sub mono">${copy.url}</span>`}
+    <div class="actions">
+      <button class="button quiet" type="button" disabled=${busy} onClick=${reference}>Reference</button>
+      <button class="button quiet" type="button" disabled=${busy} onClick=${onToggleMove}>Move to…</button>
+      <button class="button quiet" type="button" disabled=${busy} onClick=${del}>Delete</button>
+    </div>
+    ${open && html`<${HostPicker} id=${`move-${file.id}-${copy.connector_id}`} label="Host to move this copy to"
+      buttonLabel="Move" connectors=${connectors} exclude=${[copy.connector_id]} busy=${busy} onPick=${moveTo} />`}
+  </div>`;
+}
+
+// One library file, as a summary line that opens to show each of its
+// copies (ADR 0028, ADR 0036 items 11 and 12). The badge reuses the
+// format label of `FileRows` above.
+function FileEntry({ feedId, file, connectors, busy, onOperation, onChanged }) {
+  const [picking, setPicking] = useState(null); // null, 'copy', or the connector ID of a copy to move
+  const summary = html`<span class="badge">${formatLabel(file.media_type)}</span>
+    <span class="title">${file.path}</span>
+    <span class="sub">${file.in_use ? 'In use' : 'Not in use'} · ${file.copies.length} ${file.copies.length === 1 ? 'copy' : 'copies'}</span>`;
+  const act = (body) => onOperation(body).then(() => setPicking(null));
+  const copyTo = (connectorId) => act({ op: 'copy', file: file.id, connector_id: connectorId });
+  const setHost = (value) => onChanged(`/feeds/${feedId}/files/${file.id}/host`, { connector_id: value });
+  return html`<${EntryRow} group="library-files" cid=${file.id} summary=${summary}>
+    ${file.copies.length === 0 && html`<p class="hint">Studio sends this file to its host when you write.</p>`}
+    ${file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} file=${file}
+      copy=${copy} connectors=${connectors} busy=${busy} open=${picking === copy.connector_id}
+      onToggleMove=${() => setPicking(picking === copy.connector_id ? null : copy.connector_id)} onChanged=${act} />`)}
+    <div class="actions">
+      <button class="button quiet" type="button" disabled=${busy} onClick=${() => setPicking(picking === 'copy' ? null : 'copy')}>Copy to…</button>
+    </div>
+    ${picking === 'copy' && html`<${HostPicker} id=${`copy-${file.id}`} label="Host to copy this file to" buttonLabel="Copy"
+      connectors=${connectors} exclude=${file.copies.map((c) => c.connector_id)} busy=${busy} onPick=${copyTo} />`}
+    <div class="field">
+      <label for=${`file-host-${file.id}`}>Host of this file</label>
+      <select id=${`file-host-${file.id}`} class="button" value=${file.connector_id} disabled=${busy}
+        onChange=${(e) => setHost(e.target.value === '' ? null : Number(e.target.value))}>
+        <option value="">Use the default host of the release</option>
+        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+      </select>
+    </div>
+  <//>`;
+}
+
+// A host file of the release folder that is not a copy of a library file
+// (ADR 0036 item 11).
+function OtherFileRow({ file, connectors, busy, onOperation }) {
+  const del = () => onOperation({ op: 'delete', connector_id: file.connector_id, path: file.path });
+  return html`<div class="alt-enclosure">
+    <span class="title">${file.path}</span>
+    <span class="sub">${connectorName(connectors, file.connector_id)} · ${fileSize(file.size)}</span>
+    <button class="button quiet" type="button" disabled=${busy} onClick=${del}>Delete</button>
+  </div>`;
+}
+
+// The Files page: the host of the release, each of its library files with
+// their copies, and each other host file of its release folder (ADR 0036
+// items 4, 7, 9 and 11; task 021g). `onOpsChanged` tells the toolbar that
+// a host operation is pending, even when it does not change the draft XML
+// on its own (ADR 0036 item 14).
+function FilesPage({ feed, connectors, onOpsChanged }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const { busy, error: opError, run } = useAction();
+  const scan = useAction();
+
+  const load = async () => {
+    try {
+      setData(await api(`/feeds/${feed.id}/files`));
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
+  };
+  useEffect(() => { setData(null); load(); }, [feed.id]);
+
+  // Each host that holds something of this release: its own host, the
+  // default host of its files, and each host of a copy or an other file.
+  const releaseHosts = () => {
+    if (!data) return [];
+    const ids = new Set();
+    if (feed.connector_id) ids.add(feed.connector_id);
+    if (data.files_connector_id) ids.add(data.files_connector_id);
+    for (const file of data.files) {
+      ids.add(file.connector_id);
+      for (const copy of file.copies) ids.add(copy.connector_id);
+    }
+    for (const extra of data.other_host_files) ids.add(extra.connector_id);
+    return [...ids];
+  };
+
+  const runScan = () => scan.run(async () => {
+    for (const id of releaseHosts()) {
+      await api(`/hosts/${id}/scan`, { method: 'POST' });
+    }
+    await load();
+  });
+
+  const setDefaultHost = (connectorId) => run(async () => {
+    await api(`/feeds/${feed.id}/hosts`, { method: 'PUT', body: { files_connector_id: connectorId } });
+    await load();
+  });
+
+  const setFileHost = (path, body) => run(async () => {
+    await api(path, { method: 'PUT', body });
+    await load();
+  });
+
+  const addOperation = (body) => run(async () => {
+    await api(`/feeds/${feed.id}/operations`, { method: 'POST', body });
+    onOpsChanged();
+    await load();
+  });
+
+  if (error) return html`<section class="page-section"><${ErrorNotice} error=${error} /></section>`;
+  if (!data) return html`<section class="page-section"><p class="hint" role="status">Loading the files…</p></section>`;
+
+  const defaultHost = data.files_connector_id ?? feed.connector_id;
+
+  return html`<section class="page-section"><h2>Files</h2>
+      <div class="actions">
+        <button class="button" type="button" disabled=${scan.busy} onClick=${runScan}>
+          ${scan.busy ? 'Scanning…' : 'Scan the hosts'}</button>
+      </div>
+      <${ErrorNotice} error=${scan.error} />
+      <${ErrorNotice} error=${opError} />
+    </section>
+
+    <section class="page-section"><h2>Hosts</h2>
+      <div class="group">
+        <div class="field">
+          <label for="files-default-host">Default host of the release files</label>
+          <select id="files-default-host" class="button" value=${defaultHost} disabled=${busy}
+            onChange=${(e) => setDefaultHost(Number(e.target.value))}>
+            ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Library files</h2>
+      ${data.files.length === 0 && html`<p class="hint">No files yet.</p>`}
+      ${data.files.length > 0 && html`<div class="group">
+        ${data.files.map((file) => html`<${FileEntry} key=${file.id} feedId=${feed.id} file=${file}
+          connectors=${connectors} busy=${busy} onOperation=${addOperation}
+          onChanged=${(path, body) => setFileHost(path, body)} />`)}
+      </div>`}
+    </section>
+
+    ${data.other_host_files.length > 0 && html`<section class="page-section"><h2>Other files on the hosts</h2>
+      <div class="group">
+        ${data.other_host_files.map((extra) => html`<${OtherFileRow}
+          key=${`${extra.connector_id}-${extra.path}`} file=${extra}
+          connectors=${connectors} busy=${busy} onOperation=${addOperation} />`)}
+      </div>
+    </section>`}`;
+}
+
 // The album editor shows one page of the typed model of the draft: the
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved }) {
+export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -1052,6 +1320,8 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {
     body = html`<${RecipientsPage} model=${model} update=${update} />`;
+  } else if (page === 'files') {
+    body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} />`;
   } else {
     body = html`<${AlbumPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} go=${go}
       onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} />`;

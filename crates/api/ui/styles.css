@@ -664,7 +664,7 @@ textarea {
 }
 textarea:focus { background: var(--fill); }
 .inline { display: flex; gap: 8px; }
-.inline input { flex: 1; }
+.inline input, .inline select { flex: 1; }
 .failed { padding-left: 18px; color: var(--muted); font-size: .9rem; }
 .choices .hint { margin-bottom: 4px; }
 
@@ -1116,7 +1116,10 @@ textarea:focus { background: var(--fill); }
   display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 0;
   border-top: 1px solid var(--sep);
 }
-.import-file .badge {
+/* The format badge. The import sheet uses it in a file row (above), and
+   the Files page uses it in the summary line of a library file (task
+   021g, ADR 0036). */
+.badge {
   flex: none; width: 56px; box-sizing: border-box; padding: 3px 0; border-radius: 6px; text-align: center;
   font-size: .75rem; font-weight: 600; letter-spacing: .04em; color: var(--text); background: var(--fill);
 }
@@ -1133,3 +1136,23 @@ textarea:focus { background: var(--fill); }
 }
 .alt-enclosure .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .alt-enclosure .sub { color: var(--muted); font-size: .9rem; flex: none; }
+
+/* A host operation of the diff sheet: its kind, its host, its path and
+   its size (task 021g, ADR 0036 item 14). A blocked deletion uses the
+   error color on its own row only, not an entity color (ADR 0018). */
+.host-op-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 16px; flex-wrap: wrap; }
+.host-op-row .kind { flex: none; width: 4.5rem; font-weight: 600; }
+.host-op-row .text { flex: 1; min-width: 0; display: grid; }
+.host-op-row .title { font-weight: 600; }
+.host-op-row .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.host-op-row .size { flex: none; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.host-op-row.error { color: var(--error); }
+.host-op-row.error .sub { color: var(--error); }
+
+/* A copy of a library file on a host, in the open entry of the Files page
+   (task 021g, ADR 0036 items 11 and 12). Each copy is a direct row of the
+   open entry's form, with its own separator above it. */
+.copy-row { display: grid; gap: 8px; padding: 10px 0; border-top: 1px solid var(--sep); }
+.copy-row:first-child { border-top: 0; padding-top: 0; }
+.copy-row .title { font-weight: 600; }
+.copy-row .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }

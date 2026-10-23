@@ -493,7 +493,7 @@ pub fn revision(draft: &DraftRow) -> String {
 }
 
 /// True when the draft of a feed is different from the live file that it
-/// started from.
+/// started from, or when it has a copy or a deletion on a host.
 ///
 /// This check needs no host, and no library: a caller that only shows the
 /// draft, such as the editor, does not need either one.
@@ -503,7 +503,9 @@ pub fn revision(draft: &DraftRow) -> String {
 /// Gives a [`PipelineError`] when the feed has no draft.
 pub fn draft_changed(collection: &Collection, id: FeedId) -> Result<bool, PipelineError> {
     let draft = current_draft(collection, id)?;
-    Ok(draft.base_xml != draft.draft_xml)
+    // A copy or a deletion on a host is a change also when the feed XML
+    // does not change (ADR 0036 item 12).
+    Ok(draft.base_xml != draft.draft_xml || !collection.draft_operations(id)?.is_empty())
 }
 
 /// The typed model of a draft, and its revision.

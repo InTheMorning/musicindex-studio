@@ -2161,6 +2161,60 @@ async fn a_move_operation_gives_a_copy_a_reference_and_a_delete() {
     );
 }
 
+/// ADR 0036 item 12: a reference to a host with no copy of the file puts
+/// the address of that host in the draft, and adds a copy, so the new
+/// address has a file after the write. The draft then shows a change
+/// also after a reload.
+#[tokio::test]
+async fn a_reference_to_a_host_with_no_copy_adds_a_copy() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let file_id = file["library_file_id"].as_i64().unwrap();
+    let backup_dir = tempfile::tempdir().unwrap();
+    let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
+
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "reference", "file": file_id, "connector_id": backup_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let operations = diff["operations"].as_array().unwrap();
+    assert!(
+        operations
+            .iter()
+            .any(|op| op["kind"] == "copy" && op["connector_id"] == backup_id),
+        "{operations:?}"
+    );
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(
+        draft["model"]["items"][0]["enclosure"]["url"],
+        "https://backup.example/album/tagged.mp3"
+    );
+    assert_eq!(draft["changed"], true);
+}
+
 /// ADR 0036 item 13: Studio refuses a deletion while a feed refers to
 /// the address of the file.
 #[tokio::test]

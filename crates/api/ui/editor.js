@@ -1,177 +1,14 @@
-// The album editor (task 011, ADR 0022). The UI edits the typed model of the
-// draft. Each list entry carries its key, and the draft saves automatically.
-import { html, useState, useEffect, useRef, useCallback } from './vendor/htm-preact-standalone.module.js';
+// The album editor (task 011, ADR 0022) and its toolbar and sheets (task
+// 014b, ADR 0029). The UI edits the typed model of the draft. Each list
+// entry carries its key, and the draft saves automatically.
+import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { api, Field, ErrorNotice, useAction } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
+import { withCids, STATUS } from './draft.js';
 
-// ---- Client IDs and keys ----
-// Each list entry gets a client ID (`_cid`) for the life of the page. After a
-// save, the position of an entry in the sent list is its new key (ADR 0022
-// item 5). The client ID finds that position, also when the user changed the
-// model during the save.
-
-let nextCid = 1;
-
-export function withCids(value) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => (entry && typeof entry === 'object' ? { ...withCids(entry), _cid: nextCid++ } : entry));
-  }
-  if (value && typeof value === 'object') {
-    const copy = {};
-    for (const [name, field] of Object.entries(value)) copy[name] = withCids(field);
-    return copy;
-  }
-  return value;
-}
-
-// The model without client IDs, as the API gets it.
-function strip(model) {
-  return JSON.parse(JSON.stringify(model, (name, value) => (name === '_cid' ? undefined : value)));
-}
-
-// The position of each entry in its list, by client ID.
-function positions(value, found = new Map()) {
-  if (Array.isArray(value)) {
-    value.forEach((entry, index) => {
-      if (entry && entry._cid) found.set(entry._cid, index);
-      positions(entry, found);
-    });
-  } else if (value && typeof value === 'object') {
-    for (const field of Object.values(value)) positions(field, found);
-  }
-  return found;
-}
-
-// Give each entry that the server has the key of its position. An entry that
-// the user added during the save has no key yet.
-function rekey(value, found) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => {
-      if (!entry || typeof entry !== 'object' || !entry._cid) return entry;
-      const next = rekey(entry, found);
-      const key = found.get(entry._cid);
-      if (key === undefined) delete next.key; else next.key = key;
-      return next;
-    });
-  }
-  if (value && typeof value === 'object') {
-    const copy = {};
-    for (const [name, field] of Object.entries(value)) copy[name] = rekey(field, found);
-    return copy;
-  }
-  return value;
-}
-
-// The server sets two fields of a track: the GUID of a new track (ADR 0022
-// item 7) and the track number (ADR 0024). Copy them into the local model, or
-// the next save would change them back.
-function copyServerFields(local, saved, found) {
-  return {
-    ...local,
-    items: local.items.map((item) => {
-      const index = found.get(item._cid);
-      const from = index === undefined ? null : saved.items[index];
-      if (!from) return item;
-      return { ...item, guid: item.guid || from.guid, episode: from.episode };
-    }),
-  };
-}
-
-// ---- The draft and its automatic save ----
-
-const SAVE_DELAY = 700;
-
-function useDraft(feedId) {
-  const [model, setModel] = useState(null);
-  const [changed, setChanged] = useState(false);
-  // Each address field that is not correct, by its model path (ADR 0023).
-  const [bad, setBad] = useState([]);
-  const [status, setStatus] = useState('loading');
-  const [error, setError] = useState(null);
-  // The number of user edits. After an edit, a diff is not current.
-  const [edits, setEdits] = useState(0);
-  const current = useRef(null);
-  const revision = useRef(null);
-  const dirty = useRef(false);
-  const inflight = useRef(null);
-  const timer = useRef(null);
-
-  const show = (draft) => {
-    clearTimeout(timer.current);
-    current.current = withCids(draft.model);
-    revision.current = draft.revision;
-    dirty.current = false;
-    setModel(current.current);
-    setChanged(draft.changed);
-    setBad(draft.bad_addresses);
-    setStatus('saved');
-    setError(null);
-  };
-
-  const load = useCallback(async () => {
-    setStatus('loading');
-    try {
-      show(await api(`/feeds/${feedId}/draft`));
-    } catch (e) {
-      setError(e);
-      setStatus('failed');
-    }
-  }, [feedId]);
-  useEffect(() => { load(); return () => clearTimeout(timer.current); }, [load]);
-
-  const saveOnce = async () => {
-    dirty.current = false;
-    const sent = current.current;
-    setStatus('saving');
-    const saved = await api(`/feeds/${feedId}/draft`, {
-      method: 'PUT',
-      body: { revision: revision.current, model: strip(sent) },
-    });
-    const found = positions(sent);
-    revision.current = saved.revision;
-    current.current = copyServerFields(rekey(current.current, found), saved.model, found);
-    setModel(current.current);
-    setChanged(saved.changed);
-    setBad(saved.bad_addresses);
-  };
-
-  // Send each change that is not saved. Only one save runs at a time.
-  const flush = useCallback(async () => {
-    clearTimeout(timer.current);
-    while (dirty.current || inflight.current) {
-      if (inflight.current) {
-        await inflight.current.catch(() => {});
-        continue;
-      }
-      inflight.current = saveOnce();
-      try {
-        await inflight.current;
-      } catch (e) {
-        dirty.current = true;
-        setError(e);
-        setStatus('failed');
-        return false;
-      } finally {
-        inflight.current = null;
-      }
-    }
-    setError(null);
-    setStatus('saved');
-    return true;
-  }, [feedId]);
-
-  const update = useCallback((change) => {
-    current.current = change(current.current);
-    dirty.current = true;
-    setModel(current.current);
-    setEdits((n) => n + 1);
-    setStatus('waiting');
-    clearTimeout(timer.current);
-    timer.current = setTimeout(flush, SAVE_DELAY);
-  }, [flush]);
-
-  return { model, changed, bad, status, error, edits, update, flush, load, show };
-}
+// `values.js` imports `withCids` from this file, so that it does not need
+// to know that the draft moved to `draft.js`.
+export { withCids } from './draft.js';
 
 // ---- Fields ----
 
@@ -454,15 +291,7 @@ function Tracks({ model, update, bad }) {
   </div>`;
 }
 
-// ---- Changes, write and snapshots ----
-
-const STATUS = {
-  loading: 'Loading the draft…',
-  waiting: 'Changes not saved yet…',
-  saving: 'Saving the draft…',
-  saved: 'The draft is saved. The hosted file does not change until you write it.',
-  failed: 'Studio could not save the draft.',
-};
+// ---- The diff, the write and the snapshots, in sheets (ADR 0029) ----
 
 function DiffView({ unified }) {
   const lines = unified.split('\n');
@@ -473,7 +302,24 @@ function DiffView({ unified }) {
   })}</pre>`;
 }
 
-function Changes({ feedId, draft, onWritten }) {
+// A sheet opens with showModal() when `open` turns true, and closes with
+// close() when `open` turns false. The close event covers the Escape key,
+// and each caller passes its handler as `onClose` (ADR 0029 item 5 and 6).
+function useSheet(open) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (open) dialog.showModal();
+    else if (dialog.open) dialog.close();
+  }, [open]);
+  return ref;
+}
+
+// The review sheet: the draft status, the diff and the write (ADR 0029 item
+// 2). It is the same content as the former Changes panel.
+function ReviewSheet({ feedId, draft, open, onWritten, onClose }) {
+  const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
   // A diff is for one draft. After a user edit, the diff is not current.
@@ -482,6 +328,8 @@ function Changes({ feedId, draft, onWritten }) {
     if (!(await draft.flush())) return;
     setDiff(await api(`/feeds/${feedId}/diff`));
   });
+  // The sheet examines the draft each time that it opens.
+  useEffect(() => { if (open) examine(); }, [open]);
   const write = () => run(async () => {
     let feed;
     try {
@@ -495,6 +343,7 @@ function Changes({ feedId, draft, onWritten }) {
     setDiff(null);
     await draft.load();
     onWritten(feed);
+    ref.current.close();
   });
   const discard = () => {
     if (!confirm('Discard the draft? Each change that you did not write goes out. The hosted file does not change.')) return;
@@ -515,65 +364,106 @@ function Changes({ feedId, draft, onWritten }) {
   const conflict = error && error.code === 'conflict';
   const blocked = draft.bad.length > 0;
   const stale = error && error.code === 'diff_not_approved';
-  return html`<div class="panel form">
-    <h2>Changes</h2>
-    <p class="hint" role="status">${STATUS[draft.status]}</p>
-    ${draft.error && draft.error.code === 'stale_revision'
-      ? html`<div class="notice error" role="alert"><strong>The draft changed in a different window.</strong>
-          Load the draft again to continue. The changes in this window since the last save go out.
-          <div class="actions"><button class="button" type="button" onClick=${draft.load}>Load the draft again</button></div></div>`
-      : html`<${ErrorNotice} error=${draft.error} />`}
-    ${conflict
-      ? html`<div class="notice error" role="alert"><strong>The hosted file changed after the draft started.</strong>
-          Studio did not write. A different tool or a different person changed the file.
-          <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startAgain}>Start again from the hosted file</button></div></div>`
-      : stale
-        ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
-        : html`<${ErrorNotice} error=${error} />`}
-    ${blocked && html`<div class="notice error" role="alert">
-      <strong>Studio cannot write while an address is not correct.</strong>
-      Correct the fields with red text. Each address starts with https:// or http://.
-      <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
-    </div>`}
-    ${diff && (diff.changed
-      ? html`<${DiffView} unified=${diff.unified} />`
-      : html`<p>The draft is the same as the hosted file.</p>`)}
-    <div class="actions">
-      <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the changes</button>
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
+    <header>
+      <h2 id="review-title">Review changes</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <p class="hint" role="status">${STATUS[draft.status]}</p>
+      ${draft.error && draft.error.code === 'stale_revision'
+        ? html`<div class="notice error" role="alert"><strong>The draft changed in a different window.</strong>
+            Load the draft again to continue. The changes in this window since the last save go out.
+            <div class="actions"><button class="button" type="button" onClick=${draft.load}>Load the draft again</button></div></div>`
+        : html`<${ErrorNotice} error=${draft.error} />`}
+      ${conflict
+        ? html`<div class="notice error" role="alert"><strong>The hosted file changed after the draft started.</strong>
+            Studio did not write. A different tool or a different person changed the file.
+            <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startAgain}>Start again from the hosted file</button></div></div>`
+        : stale
+          ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
+          : html`<${ErrorNotice} error=${error} />`}
+      ${blocked && html`<div class="notice error" role="alert">
+        <strong>Studio cannot write while an address is not correct.</strong>
+        Correct the fields with red text. Each address starts with https:// or http://.
+        <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
+      </div>`}
+      ${diff && (diff.changed
+        ? html`<${DiffView} unified=${diff.unified} />`
+        : html`<p>The draft is the same as the hosted file.</p>`)}
+      <div class="actions">
+        <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the changes</button>
+      </div>
+    </div>
+    <footer>
+      <button class="button quiet" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
       ${diff && diff.changed && !blocked && html`<button class="button primary" type="button" disabled=${busy} onClick=${write}>
         ${busy ? 'Writing…' : 'Write to the host'}</button>`}
-      <button class="button quiet" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
-    </div>
-  </div>`;
+    </footer>
+  </dialog>`;
 }
 
-function Snapshots({ feedId, draft, version }) {
+// The versions sheet: the snapshots that each write kept (ADR 0029 item 3).
+// It is the same content as the former Snapshots panel, with no details
+// element: the sheet itself is the one open view.
+function VersionsSheet({ feedId, draft, open, onClose }) {
+  const ref = useSheet(open);
   const [list, setList] = useState(null);
   const { busy, error, run } = useAction();
   useEffect(() => {
+    if (!open) return;
+    setList(null);
     api(`/feeds/${feedId}/snapshots`).then(setList, () => setList([]));
-  }, [feedId, version]);
+  }, [feedId, open]);
   const restore = (snapshot) => {
     if (draft.changed && !confirm('Replace the draft with this earlier version? Each change in the draft goes out.')) return;
     run(async () => {
       await draft.flush();
       draft.show(await api(`/feeds/${feedId}/snapshots/${snapshot.id}/draft`, { method: 'POST' }));
+      ref.current.close();
     });
   };
-  const count = list ? list.length : 0;
-  return html`<details class="panel disclosure">
-    <summary><h2>Earlier versions</h2><span class="sub">${count === 0 ? 'None yet' : `${count} version${count === 1 ? '' : 's'}`}</span></summary>
-    <div class="form">
-    <p class="hint">Before each write, Studio keeps the file that the write replaces. To go back, put an earlier version in the draft, examine the changes and write them.</p>
-    <${ErrorNotice} error=${error} />
-    ${list && list.length === 0 && html`<p class="hint">No earlier versions yet.</p>`}
-    ${list && list.length > 0 && html`<ul class="snapshots">${list.map((s) => html`<li key=${s.id}>
-      <span><span class="when">${new Date(s.taken_at * 1000).toLocaleString()}</span>
-        <span class="mono sub">${s.version.slice(0, 19)}</span></span>
-      <button class="button" type="button" disabled=${busy} onClick=${() => restore(s)}>Put in the draft</button>
-    </li>`)}</ul>`}
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="versions-title" onClose=${onClose}>
+    <header>
+      <h2 id="versions-title">Earlier versions</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <p class="hint">Before each write, Studio keeps the file that the write replaces. To go back, put an earlier version in the draft, examine the changes and write them.</p>
+      <${ErrorNotice} error=${error} />
+      ${list && list.length === 0 && html`<p class="hint">No earlier versions yet.</p>`}
+      ${list && list.length > 0 && html`<div class="group"><ul class="snapshots">${list.map((s) => html`<li key=${s.id}>
+        <span><span class="when">${new Date(s.taken_at * 1000).toLocaleString()}</span>
+          <span class="mono sub">${s.version.slice(0, 19)}</span></span>
+        <button class="button" type="button" disabled=${busy} onClick=${() => restore(s)}>Put in the draft</button>
+      </li>`)}</ul></div>`}
     </div>
-  </details>`;
+  </dialog>`;
+}
+
+// The short status of the toolbar (ADR 0029 item 1). It differs from the
+// long status of the review sheet.
+function toolbarStatus(draft) {
+  if (draft.status === 'idle' || draft.status === 'loading') return { text: 'Loading…' };
+  if (draft.status === 'waiting' || draft.status === 'saving') return { text: 'Saving…' };
+  if (draft.status === 'failed') return { text: 'Not saved', error: true };
+  return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
+}
+
+// The toolbar of the editor: the draft status, and the buttons that open
+// the review sheet and the versions sheet (ADR 0029 items 1 to 3).
+export function DraftToolbar({ feedId, draft, onWritten }) {
+  // null, 'review' or 'versions': the sheet that is open now.
+  const [open, setOpen] = useState(null);
+  const status = toolbarStatus(draft);
+  return html`<div class="draft-toolbar">
+    <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
+    <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
+    <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
+    <${ReviewSheet} feedId=${feedId} draft=${draft} open=${open === 'review'}
+      onWritten=${onWritten} onClose=${() => setOpen(null)} />
+    <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
+  </div>`;
 }
 
 // ---- The editor ----
@@ -591,8 +481,10 @@ function creditSummary(model) {
   ].join(' · ');
 }
 
-export function AlbumEditor({ feed, onWritten }) {
-  const draft = useDraft(feed.id);
+// The album editor shows the typed model of the draft. The shell loads the
+// draft and shows its toolbar; this component does not call useDraft, and
+// has no Changes panel and no Earlier versions panel (ADR 0029 item 4).
+export function AlbumEditor({ draft }) {
   const { model, update } = draft;
   if (!model) {
     return html`<section class="section"><p class="hint" role="status">${STATUS[draft.status]}</p>
@@ -610,7 +502,5 @@ export function AlbumEditor({ feed, onWritten }) {
     </details>
     <${AlbumPayments} model=${model} update=${update} />
     <${Tracks} model=${model} update=${update} bad=${draft.bad} />
-    <${Changes} feedId=${feed.id} draft=${draft} onWritten=${onWritten} />
-    <${Snapshots} feedId=${feed.id} draft=${draft} version=${feed.last_version} />
   </section>`;
 }

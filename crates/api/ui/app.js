@@ -1,6 +1,7 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback } from './vendor/htm-preact-standalone.module.js';
-import { AlbumEditor } from './editor.js';
+import { AlbumEditor, DraftToolbar } from './editor.js';
+import { useDraft } from './draft.js';
 
 // ---- Access token (ADR 0017) ----
 // The API gives the UI address with the token in the fragment. The UI keeps
@@ -653,7 +654,7 @@ function NoToken() {
 
 // ---- Shell ----
 
-function FeedDetail({ feed, onChanged, onRemoved }) {
+function FeedDetail({ feed, draft, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -667,7 +668,10 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
   };
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
   return html`<div>
-    <div class="bar">${feed.title || 'Untitled feed'}</div>
+    <div class="bar">
+      <span class="bar-title">${feed.title || 'Untitled feed'}</span>
+      ${draft.model !== null && html`<${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} />`}
+    </div>
     <section class="hero" style=${{ '--glow': glow }}>
       <div class="art" aria-hidden="true"></div>
       <div>
@@ -693,7 +697,7 @@ function FeedDetail({ feed, onChanged, onRemoved }) {
       </dl>
       ${feed.connector_id && kind.label !== 'Album' && html`<p class="hint">The editor for this feed type comes in a later phase.</p>`}
     </section>
-    ${feed.connector_id && kind.label === 'Album' && html`<${AlbumEditor} key=${feed.id} feed=${feed} onWritten=${onChanged} />`}
+    ${feed.connector_id && kind.label === 'Album' && html`<${AlbumEditor} key=${feed.id} draft=${draft} />`}
   </div>`;
 }
 
@@ -851,6 +855,10 @@ function Shell({ vault, onLock }) {
 
   const lock = async () => { await api('/vault/lock', { method: 'POST' }).catch(() => {}); onLock(); };
   const selected = view.name === 'feed' && feeds ? feeds.find((f) => f.id === view.id) : null;
+  // The shell holds the one draft of the selected feed (ADR 0029 item 4).
+  // A feed with no connector, or a feed that is not an album, needs no draft.
+  const draftFeedId = selected && selected.connector_id && mediumKind(selected.medium).label === 'Album' ? selected.id : null;
+  const draft = useDraft(draftFeedId);
 
   let main;
   if (error) {
@@ -864,7 +872,7 @@ function Shell({ vault, onLock }) {
     main = html`<${AddFeeds} connectors=${connectors}
       onAdded=${async (f) => { await load(); setView(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
   } else if (selected) {
-    main = html`<${FeedDetail} feed=${selected} onChanged=${() => load()}
+    main = html`<${FeedDetail} feed=${selected} draft=${draft} onChanged=${() => load()}
       onRemoved=${async () => { await load(); setView({ name: 'feeds' }, { replace: true }); }} />`;
   } else {
     main = html`<section class="center" style=${{ minHeight: '100%' }}><div class="card">

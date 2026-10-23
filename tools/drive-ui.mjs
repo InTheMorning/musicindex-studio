@@ -51,7 +51,7 @@ const helpers = `
   window.$set = (sel, v) => { const e = document.querySelector(sel); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
   window.$click = (text) => { const e = [...document.querySelectorAll('button, label')].find((b) => b.textContent.trim().startsWith(text)); if (!e) throw new Error('no ' + text); e.click(); };
   window.$text = () => document.body.innerText;
-  window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => e.offsetParent && e.getBoundingClientRect().height < 44).map((e) => e.outerHTML.slice(0, 70));
+  window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44).map((e) => e.outerHTML.slice(0, 70));
 `;
 const steps = JSON.parse(process.argv[4] || '[]');
 await send('Page.navigate', { url });

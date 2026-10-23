@@ -46,7 +46,7 @@
   --pill-edge: transparent;
   --grain-opacity: .22;
   --brand-filter: none;
-  --bar-h: 52px;
+  --bar-h: 56px;
   /* Entity colors (ADR 0012). Feed, track, playlist and artist each have a
      hue of their own. Host and author are shades of artist. The business
      roles are shades of one violet. Red is only for live now. */
@@ -163,6 +163,10 @@
   --level-2: #ffffff;
   --level-3: #f2f2f7;
 }
+
+/* The backdrop of a sheet (ADR 0029 items 2 and 3). */
+:root { --scrim: rgba(0, 0, 0, .55); }
+:root[data-theme="light"] { --scrim: rgba(0, 0, 0, .3); }
 
 html, body { height: 100%; }
 
@@ -451,19 +455,88 @@ code, .mono {
 :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
 
 .main { overflow-y: auto; background: var(--level-1); }
+/* The toolbar: a row with the feed title, then the draft toolbar. It stays
+   visible at all scroll positions (ADR 0029 item 1). */
 .bar {
   position: sticky;
   top: 0;
   z-index: 2;
-  height: var(--bar-h);
+  min-height: var(--bar-h);
   display: flex;
   align-items: center;
-  padding: 0 20px;
+  gap: 12px;
+  padding: 6px 20px;
   background: var(--bar-bg);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border-bottom: 1px solid var(--sep);
   font-weight: 600;
+}
+.bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The draft toolbar: the short status, then "Versions" and "Review" (ADR
+   0029 item 1). */
+.draft-toolbar { display: flex; align-items: center; flex: none; gap: 10px; }
+.draft-status { color: var(--muted); font-size: .9rem; font-weight: 500; white-space: nowrap; }
+.draft-status.error { color: var(--error); }
+
+/* The review sheet and the versions sheet (ADR 0029 items 2 and 3). A sheet
+   sits on the second background level, and a group inside it sits on the
+   third (ADR 0029 item 11). */
+dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  max-width: none;
+  max-height: none;
+}
+dialog::backdrop { background: var(--scrim); }
+dialog.sheet[open] {
+  margin: auto;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100dvh - 64px);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--level-2);
+  border-radius: 18px;
+  box-shadow: 0 30px 80px var(--art-shadow);
+  overflow: hidden;
+}
+dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
+.sheet header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 20px;
+  border-bottom: 1px solid var(--sep);
+}
+.sheet header h2 { flex: 1; font-size: 1.05rem; }
+.sheet .body {
+  overflow: auto;
+  padding: 16px 20px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+.sheet footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--sep);
+}
+.sheet .group { background: var(--level-3); border-radius: 12px; padding: 4px 16px; }
+.icon-button { width: 44px; padding: 0; }
+
+@media (max-width: 760px) {
+  dialog.sheet[open] {
+    margin: auto 0 0;
+    width: 100vw;
+    max-height: 92dvh;
+    border-radius: 18px 18px 0 0;
+  }
 }
 
 .hero {

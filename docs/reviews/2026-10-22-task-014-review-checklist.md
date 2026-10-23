@@ -27,6 +27,6 @@ The planning model uses this list after each packet, before the commit of that p
 | Packet | Result | Required corrections |
 | --- | --- | --- |
 | [014a](../tasks/studio-v1-task-014a-background-levels.md) | Pass after one correction | The fields had no `border` rule, so the browser showed its default inset border. The planning model added `border: 0`. An incorrect field keeps its red border. |
-| [014b](../tasks/studio-v1-task-014b-toolbar-and-sheets.md) | Open | |
+| [014b](../tasks/studio-v1-task-014b-toolbar-and-sheets.md) | Pass after two corrections | A load or a save for a feed could end after the user selected a different feed, and show its result under that feed. The planning model added a guard for the current feed to `useDraft`. `$small()` of `tools/drive-ui.mjs` counted the controls in a closed `details` element. The planning model changed it to use `checkVisibility()`. |
 | [014c](../tasks/studio-v1-task-014c-tree-and-pages.md) | Open | |
 | [014d](../tasks/studio-v1-task-014d-phone-width.md) | Open | |

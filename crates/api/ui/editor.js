@@ -283,7 +283,7 @@ function DiffView({ unified }) {
 // A sheet opens with showModal() when `open` turns true, and closes with
 // close() when `open` turns false. The close event covers the Escape key,
 // and each caller passes its handler as `onClose` (ADR 0029 item 5 and 6).
-function useSheet(open) {
+export function useSheet(open) {
   const ref = useRef(null);
   useEffect(() => {
     const dialog = ref.current;

@@ -1,7 +1,8 @@
 // The value editor (task 012): the payment recipients of the album and of
 // each track. The editor does not change a value time split.
-import { html } from './vendor/htm-preact-standalone.module.js';
-import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce } from './editor.js';
+import { html, useState, useEffect } from './vendor/htm-preact-standalone.module.js';
+import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
+import { api, Field, ErrorNotice, useAction } from './app.js';
 
 // ---- Shares and percentages ----
 // A split is a number of shares, not a percentage. A fee recipient
@@ -122,6 +123,13 @@ function Choice({ id, label, value, options, onChange }) {
 function Recipients({ id, recipients, defaultType, onChange }) {
   const percent = percentages(recipients);
   const blank = { name: null, recipient_type: defaultType, address: null, split: '', custom_key: null, custom_value: null, fee: null };
+  // The picker sheet (task 013c, ADR 0027). It only adds a recipient. It
+  // does not replace or remove a recipient of this list.
+  const [picking, setPicking] = useState(false);
+  const addPicked = (added) => {
+    onChange([...recipients, ...added]);
+    setPicking(false);
+  };
   return html`${recipients.length === 0 && html`<p class="hint">No recipients yet.</p>`}
     ${recipients.map((r, i) => {
       const change = (name) => (value) => onChange(setAt(recipients, i, set(r, name, value)));
@@ -152,6 +160,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
           Fee: this recipient gets its split as a percentage before the others share the rest</label>
+        <${SaveRecipientButton} recipient=${r} />
         <${EntryActions} list=${recipients} index=${i} name=${name} onChange=${onChange} />
         </div>
       </details>`;
@@ -161,7 +170,237 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         const added = withCids([blank])[0];
         startOpen.add(added._cid);
         onChange([...recipients, added]);
-      }}><span class="num">＋</span><span class="title">Add a recipient</span></button>`;
+      }}><span class="num">＋</span><span class="title">Add a recipient</span></button>
+    <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
+      <span class="num">＋</span><span class="title">Pick from your recipients</span></button>
+    <${PickerSheet} open=${picking} recipients=${recipients} onAdd=${addPicked} onClose=${() => setPicking(false)} />`;
+}
+
+// ---- Save a recipient (task 013c, ADR 0027 item 5) ----
+
+// The button of an open recipient that saves it to the user's list. It
+// shows "Saved" for 2 seconds after the save.
+function SaveRecipientButton({ recipient }) {
+  const { busy, error, run } = useAction();
+  const [saved, setSaved] = useState(false);
+  const save = () => run(async () => {
+    await api('/recipients/saved', {
+      method: 'POST',
+      body: {
+        name: recipient.name,
+        recipient_type: recipient.recipient_type,
+        address: recipient.address,
+        custom_key: recipient.custom_key,
+        custom_value: recipient.custom_value,
+      },
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  });
+  return html`<${ErrorNotice} error=${error} />
+    <div class="actions">
+      <button class="button quiet" type="button" disabled=${busy} onClick=${save}>
+        ${saved ? 'Saved' : busy ? 'Saving…' : 'Save to your recipients'}</button>
+    </div>`;
+}
+
+// ---- The recipient picker (task 013c, ADR 0027) ----
+// The picker adds recipients from the user's list and from musicindex. It
+// only adds a recipient. It does not remove or replace a recipient of the
+// editor (ADR 0027 invariant).
+
+// The identity of a recipient: its address, its custom key and its custom
+// value (ADR 0027 item 3). Two rows with the same identity are the same
+// recipient, even with a different name.
+function identityOf(r) {
+  return `${r.address || ''}\u0000${r.custom_key || ''}\u0000${r.custom_value || ''}`;
+}
+
+// One row of a part of the picker: a checkbox, the name, the address and a
+// status word. The checkbox sits in its own label of 44 px, so that a
+// Remove button can share the row (ADR 0010).
+function PickRow({ name, address, status, checked, taken, onToggle, remove }) {
+  const label = taken ? 'Already in this list' : status;
+  return html`<div class="link-row pick-row">
+    <label class="pick-box"><input type="checkbox" checked=${checked || taken} disabled=${taken}
+      aria-label=${name} onChange=${onToggle} /></label>
+    <span class="text"><span class="title">${name}</span><span class="sub mono">${address}</span></span>
+    ${label && html`<span class="summary">${label}</span>`}
+    ${remove}
+  </div>`;
+}
+
+// The picker sheet: the user's recipients, then musicindex (ADR 0027 items
+// 1, 5 to 7). `Recipients` opens it from the album and from each track.
+function PickerSheet({ open, recipients, onAdd, onClose }) {
+  const ref = useSheet(open);
+  const taken = new Set(recipients.map(identityOf));
+
+  // ---- Your recipients ----
+  const [list, setList] = useState(null);
+  const [filter, setFilter] = useState('');
+  const [yoursSelected, setYoursSelected] = useState(new Set());
+  const yours = useAction();
+  const toggleYours = (key) => setYoursSelected((selected) => {
+    const next = new Set(selected);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const removeSaved = (savedId) => yours.run(async () => {
+    await api(`/recipients/saved/${savedId}`, { method: 'DELETE' });
+    setList(await api('/recipients'));
+  });
+  const q = filter.trim().toLowerCase();
+  const shownYours = (list || []).filter(
+    (r) => !q || `${r.name || ''} ${r.address || ''}`.toLowerCase().includes(q),
+  );
+
+  // ---- From musicindex ----
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState(null);
+  const [view, setView] = useState('hits'); // 'hits', 'feed' or 'track'
+  const [feedData, setFeedData] = useState(null);
+  const [trackData, setTrackData] = useState(null);
+  const [indexSelected, setIndexSelected] = useState(new Map());
+  const search = useAction();
+  const indexLoad = useAction();
+  const runSearch = (event) => {
+    event.preventDefault();
+    if (!query.trim()) return;
+    search.run(async () => setHits(await api(`/search?q=${encodeURIComponent(query.trim())}`)));
+  };
+  const openFeed = (guid) => indexLoad.run(async () => {
+    const data = await api(`/musicindex/feeds/${encodeURIComponent(guid)}/recipients`);
+    setFeedData({ guid, ...data });
+    setView('feed');
+  });
+  const openTrack = (trackGuid) => indexLoad.run(async () => {
+    const data = await api(
+      `/musicindex/feeds/${encodeURIComponent(feedData.guid)}/tracks/${encodeURIComponent(trackGuid)}/recipients`,
+    );
+    setTrackData({ trackGuid, ...data });
+    setView('track');
+  });
+  const backToHits = () => { setFeedData(null); setView('hits'); };
+  const backToFeed = () => { setTrackData(null); setView('feed'); };
+  const toggleIndex = (r) => setIndexSelected((selected) => {
+    const key = identityOf(r);
+    const next = new Map(selected);
+    if (next.has(key)) next.delete(key); else next.set(key, r);
+    return next;
+  });
+
+  // The sheet starts fresh each time that it opens.
+  useEffect(() => {
+    if (!open) return;
+    setFilter('');
+    setYoursSelected(new Set());
+    setQuery('');
+    setHits(null);
+    setView('hits');
+    setFeedData(null);
+    setTrackData(null);
+    setIndexSelected(new Map());
+    setList(null);
+    yours.run(async () => setList(await api('/recipients')));
+  }, [open]);
+
+  const total = yoursSelected.size + indexSelected.size;
+  const add = () => {
+    const combined = new Map();
+    for (const r of list || []) {
+      if (yoursSelected.has(identityOf(r))) {
+        combined.set(identityOf(r), {
+          name: r.name, recipient_type: r.recipient_type, address: r.address, split: '',
+          custom_key: r.custom_key, custom_value: r.custom_value, fee: null,
+        });
+      }
+    }
+    for (const [key, r] of indexSelected) combined.set(key, r);
+    onAdd(withCids(fresh([...combined.values()])));
+  };
+
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="picker-title" onClose=${onClose}>
+    <header>
+      <h2 id="picker-title">Pick recipients</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <section class="page-section">
+        <h2>Your recipients</h2>
+        <${Field} id="picker-filter" label="Filter" value=${filter} placeholder="Name or address"
+          onInput=${(e) => setFilter(e.target.value)} />
+        <${ErrorNotice} error=${yours.error} />
+        ${list === null
+          ? html`<p class="hint" role="status">Loading your recipients…</p>`
+          : html`<div class="group">
+              ${shownYours.length === 0 && html`<p class="hint">${list.length === 0
+                ? 'You have no recipients yet.' : 'No recipient matches this filter.'}</p>`}
+              ${shownYours.map((r) => {
+                const key = identityOf(r);
+                return html`<${PickRow} key=${key} name=${r.name || r.address || 'Recipient'} address=${r.address}
+                  status=${r.saved_id !== null ? 'Saved' : `In ${r.feeds} feed${r.feeds === 1 ? '' : 's'}`}
+                  checked=${yoursSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleYours(key)}
+                  remove=${r.saved_id !== null && html`<button class="button quiet" type="button" disabled=${yours.busy}
+                    onClick=${() => removeSaved(r.saved_id)}>Remove</button>`} />`;
+              })}
+            </div>`}
+      </section>
+
+      <section class="page-section">
+        <h2>From musicindex</h2>
+        <form class="form" onSubmit=${runSearch} role="search">
+          <div class="field">
+            <label for="picker-search">Search musicindex</label>
+            <div class="inline">
+              <input id="picker-search" type="search" value=${query} placeholder="Artist or feed name"
+                onInput=${(e) => setQuery(e.target.value)} />
+              <button class="button" type="submit" disabled=${search.busy || !query.trim()}>
+                ${search.busy ? 'Searching…' : 'Search'}</button>
+            </div>
+          </div>
+        </form>
+        <${ErrorNotice} error=${search.error} />
+        <${ErrorNotice} error=${indexLoad.error} />
+        ${view === 'hits' && hits && hits.length === 0 && html`<p class="hint">musicindex found no feed with that name.</p>`}
+        ${view === 'hits' && hits && hits.length > 0 && html`<div class="group">
+          ${hits.map((h) => html`<button class="link-row" type="button" key=${h.feed_guid} disabled=${indexLoad.busy}
+            onClick=${() => openFeed(h.feed_guid)}>
+            <span class="dot feed"></span><span class="title">${h.title || h.feed_guid}</span>
+            <span class="go" aria-hidden="true">›</span>
+          </button>`)}
+        </div>`}
+        ${view === 'feed' && feedData && html`<div class="group">
+          <button class="link-row" type="button" onClick=${backToHits}>
+            <span class="go" aria-hidden="true">‹</span><span class="title">Back</span></button>
+          ${feedData.recipients.map((r) => {
+            const key = identityOf(r);
+            return html`<${PickRow} key=${`f-${key}`} name=${r.name || r.address || 'Recipient'} address=${r.address}
+              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r)} />`;
+          })}
+          ${feedData.tracks.map((t) => html`<button class="link-row" type="button" key=${t.track_guid} disabled=${indexLoad.busy}
+            onClick=${() => openTrack(t.track_guid)}>
+            <span class="title">${t.title}</span><span class="go" aria-hidden="true">›</span>
+          </button>`)}
+        </div>`}
+        ${view === 'track' && trackData && html`<div class="group">
+          <button class="link-row" type="button" onClick=${backToFeed}>
+            <span class="go" aria-hidden="true">‹</span><span class="title">Back</span></button>
+          ${trackData.recipients.length === 0 && html`<p class="hint">This track has no recipients.</p>`}
+          ${trackData.recipients.map((r) => {
+            const key = identityOf(r);
+            return html`<${PickRow} key=${`t-${key}`} name=${r.name || r.address || 'Recipient'} address=${r.address}
+              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r)} />`;
+          })}
+        </div>`}
+      </section>
+    </div>
+    <footer>
+      <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
+        Add ${total} recipient${total === 1 ? '' : 's'}</button>
+    </footer>
+  </dialog>`;
 }
 
 // ---- Payment blocks ----

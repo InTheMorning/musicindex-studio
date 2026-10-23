@@ -918,6 +918,25 @@ textarea:focus { background: var(--fill); }
 .link-row.add { color: var(--accent); font-weight: 600; }
 .disclosure > summary.link-row { min-height: 52px; }
 
+/* The recipient picker (task 013c, ADR 0027). A row is a .link-row in a
+   .group; the sheet already puts a .group on level 3 (below). The checkbox
+   sits in its own 44 px label, so that a Remove button can share the row. */
+.pick-row { cursor: default; }
+.pick-row .pick-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  cursor: pointer;
+}
+.pick-row .pick-box input { width: 20px; height: 20px; accent-color: var(--accent); }
+.pick-row .text { flex: 1; min-width: 0; display: grid; }
+.pick-row .text .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.pick-row.taken { opacity: .6; }
+.pick-row.taken .pick-box { cursor: default; }
+
 /* The compact header sits above .page, outside it, so it needs the same
    column and left padding as a page section, or its cover and its "Read
    again" button do not line up with the groups below (review of task 014c,

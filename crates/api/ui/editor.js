@@ -183,6 +183,21 @@ function Enclosure({ id, path, enclosure, onChange, bad }) {
     <${TextField} id=${`${id}-type`} label="Audio file type" hint="For example audio/mpeg." value=${value.media_type} onChange=${change('media_type')} />`;
 }
 
+// The alternate enclosures of a track, each as one summary line with a
+// Remove button: its title or its type, and its size. There is no form to
+// edit an alternate enclosure (ADR 0033 item 8).
+function AlternateEnclosures({ list, onChange }) {
+  return list.map((enc, i) => {
+    const label = enc.title || enc.media_type || 'Alternate file';
+    return html`<div class="alt-enclosure" key=${enc._cid}>
+      <span class="title">${label}</span>
+      <span class="sub">${enc.length ? fileSize(Number(enc.length)) : '—'}</span>
+      <button class="button quiet" type="button"
+        aria-label=${`Remove ${label}`} onClick=${() => onChange(list.filter((_, j) => j !== i))}>Remove</button>
+    </div>`;
+  });
+}
+
 // A new track needs the address, the size and the type of its audio file
 // (ADR 0023 items 6 and 7). Studio asks the host of the file for the size
 // and the type. Studio does not host files (ADR 0009).
@@ -224,6 +239,7 @@ function AddTrackSheet({ open, onClose, onAdd }) {
       description: null,
       guid: null,
       enclosure: { url: url.trim(), length: length.trim(), media_type: type.trim() },
+      alternate_enclosures: [],
       pub_date: null,
       duration: null,
       episode: null,
@@ -274,15 +290,23 @@ function AddTrackSheet({ open, onClose, onAdd }) {
 // the draft, one file at a time, and shows its state and its facts. The add
 // puts the audio files in the album, in the sequence of their track numbers.
 
-// The text of the WAV notice (ADR 0032 item 2). The conversion is not an
-// error, so the notice does not use the --error color.
-const WAV_NOTICE = 'Studio converts this WAV file to FLAC before the import. Some listener apps do not play FLAC.';
+// The text of the WAV notice and the FLAC notice (ADR 0033 item 9). The
+// conversion is not an error, so each notice does not use the --error color.
+const WAV_NOTICE = 'Studio converts this WAV file to MP3 and FLAC. Each app plays the MP3 file. An app that offers a choice can also play the lossless FLAC file.';
+const FLAC_NOTICE = 'Studio makes an MP3 file from this FLAC file. Each app plays the MP3 file. An app that offers a choice can also play the lossless FLAC file.';
 
 // Is this a WAV file, by its name? Studio shows the WAV notice for this file
-// until the user removes the row, also after the file sends (ADR 0032 item
-// 2, task architecture).
+// until the user removes the row, also after the file sends (ADR 0033 item
+// 9, task architecture).
 function isWavFile(file) {
   return /\.wav$/i.test(file.name);
+}
+
+// Is this a FLAC file, by its name? Studio shows the FLAC notice for this
+// file until the user removes the row, also after the file sends (ADR 0033
+// item 9, task architecture).
+function isFlacFile(file) {
+  return /\.flac$/i.test(file.name);
 }
 
 // Is this a GIF image, by its name? Studio accepts it, and tells the user
@@ -308,6 +332,34 @@ function fileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// The `alternate_enclosures` of a new track, from the facts of its sent
+// file. A track with no lossless file gets an empty list. A lossless track
+// gets the MP3 file and the FLAC file, in that sequence, with each other
+// attribute null (ADR 0033 items 5 and 6).
+function alternateEnclosures(facts) {
+  if (!facts.lossless) return [];
+  return [
+    {
+      media_type: 'audio/mpeg',
+      length: String(facts.size),
+      bitrate: null,
+      title: 'MP3',
+      rel: null,
+      default: 'true',
+      sources: [{ uri: facts.url, content_type: null }],
+    },
+    {
+      media_type: 'audio/flac',
+      length: String(facts.lossless.size),
+      bitrate: null,
+      title: 'Lossless (FLAC)',
+      rel: null,
+      default: null,
+      sources: [{ uri: facts.lossless.url, content_type: null }],
+    },
+  ];
 }
 
 const IMPORT_ERRORS = {
@@ -345,11 +397,14 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
         aria-label=${`Remove ${row.file.name}`} onClick=${() => onRemove(row)}>Remove</button>
     </div>
     ${row.isWav && html`<div class="notice"><strong>${row.file.name}</strong>${WAV_NOTICE}</div>`}
+    ${row.isFlac && html`<div class="notice"><strong>${row.file.name}</strong>${FLAC_NOTICE}</div>`}
     ${row.isGif && html`<div class="notice"><strong>${row.file.name}</strong>${GIF_NOTICE}</div>`}
     ${row.state === 'ready' && kind === 'audio' && html`<dl class="facts">
       <dt>Title</dt><dd>${row.facts.title || '—'}</dd>
       <dt>Track number</dt><dd>${row.facts.track_number ?? '—'}</dd>
       <dt>Duration</dt><dd>${row.facts.duration || '—'}</dd>
+      <dt>File</dt><dd class="mono">${row.facts.file_name}</dd>
+      ${row.facts.lossless && html`<dt>Lossless file</dt><dd class="mono">${row.facts.lossless.file_name}</dd>`}
       <dt>Size</dt><dd>${fileSize(row.facts.size)}</dd>
       <dt>Type</dt><dd class="mono">${row.facts.media_type}</dd>
     </dl>`}
@@ -446,6 +501,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
       id: nextImportId++,
       file,
       isWav: isWavFile(file),
+      isFlac: isFlacFile(file),
       isGif: isGifFile(file),
       state: 'waiting',
       error: null,
@@ -456,6 +512,15 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
     sendQueue();
   };
 
+  // Remove the MP3 file of a sent row from the host, and the FLAC file too
+  // when the row has one (ADR 0033 items 1 and 3, task architecture).
+  const removeFiles = (facts) => {
+    api(`/feeds/${feedId}/files?path=${encodeURIComponent(facts.path)}`, { method: 'DELETE' }).catch(() => {});
+    if (facts.lossless) {
+      api(`/feeds/${feedId}/files?path=${encodeURIComponent(facts.lossless.path)}`, { method: 'DELETE' }).catch(() => {});
+    }
+  };
+
   // Remove a row. When the sheet already sent the file, remove it from the
   // host too ("Cancel", and a row that the user removes", task
   // architecture). An image row that used this row as its track loses that
@@ -463,9 +528,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
   const removeRow = (row) => {
     setAllRows((rs) => rs.filter((r) => r.id !== row.id)
       .map((r) => (r.imageUse === `audio-${row.id}` ? { ...r, imageUse: 'not-used' } : r)));
-    if (row.state === 'ready' && row.facts) {
-      api(`/feeds/${feedId}/files?path=${encodeURIComponent(row.facts.path)}`, { method: 'DELETE' }).catch(() => {});
-    }
+    if (row.state === 'ready' && row.facts) removeFiles(row.facts);
   };
 
   const changeImageUse = (row, value) => updateRow(row.id, { imageUse: value });
@@ -476,9 +539,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
   const close = () => {
     if (!addedRef.current) {
       for (const row of rows) {
-        if (row.state === 'ready' && row.facts) {
-          api(`/feeds/${feedId}/files?path=${encodeURIComponent(row.facts.path)}`, { method: 'DELETE' }).catch(() => {});
-        }
+        if (row.state === 'ready' && row.facts) removeFiles(row.facts);
       }
     }
     onClose();
@@ -515,6 +576,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
       description: null,
       guid: null,
       enclosure: { url: row.facts.url, length: String(row.facts.size), media_type: row.facts.media_type },
+      alternate_enclosures: alternateEnclosures(row.facts),
       pub_date: null,
       duration: row.facts.duration || null,
       episode: null,
@@ -902,7 +964,10 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
     </section>
 
     <section class="page-section"><h2>Audio file</h2>
-      <div class="group"><${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} /></div>
+      <div class="group">
+        <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} />
+        <${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />
+      </div>
     </section>
 
     <${TrackPayments} id=${id} item=${item} albumBlocks=${model.values} onChange=${change('values')} />

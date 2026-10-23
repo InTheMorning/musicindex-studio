@@ -1107,3 +1107,16 @@ textarea:focus { background: var(--fill); }
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
+
+/* An alternate enclosure of a track, as one summary line in the Audio file
+   group, with a Remove button. There is no form to edit it (task 019d,
+   ADR 0033 item 8). */
+.alt-enclosure {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 16px;
+}
+.alt-enclosure .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alt-enclosure .sub { color: var(--muted); font-size: .9rem; flex: none; }

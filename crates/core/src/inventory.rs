@@ -20,6 +20,9 @@ use crate::pipeline::release_path;
 pub enum InventoryErrorKind {
     /// The set of hosts has no connector for this host.
     UnknownHost,
+    /// The host needs a secret from the vault, and the vault is locked
+    /// (ADR 0017).
+    VaultLocked,
     /// The file and the feed give no host at all.
     NoHost,
     /// The connector failed.
@@ -74,10 +77,14 @@ impl From<ConnectorError> for InventoryError {
 /// by its ID in the collection (ADR 0036 item 6).
 ///
 /// The API makes this set with [`crate::connector::from_row`] and the
-/// vault. Tests make it from local folders.
+/// vault. It leaves out a host that needs a secret while the vault is
+/// locked, and marks it instead, so that [`Hosts::get`] of that host
+/// gives [`InventoryErrorKind::VaultLocked`] (ADR 0017). Tests make the
+/// set from local folders.
 #[derive(Default)]
 pub struct Hosts {
     by_id: HashMap<ConnectorId, Box<dyn Connector>>,
+    locked: HashSet<ConnectorId>,
 }
 
 impl fmt::Debug for Hosts {
@@ -92,6 +99,7 @@ impl Hosts {
     pub fn new() -> Self {
         Self {
             by_id: HashMap::new(),
+            locked: HashSet::new(),
         }
     }
 
@@ -100,22 +108,39 @@ impl Hosts {
         self.by_id.insert(id, connector);
     }
 
+    /// Mark a host as needing the vault, while the vault is locked. A
+    /// later [`Hosts::get`] of this host gives
+    /// [`InventoryErrorKind::VaultLocked`] instead of
+    /// [`InventoryErrorKind::UnknownHost`] (ADR 0017).
+    pub fn insert_locked(&mut self, id: ConnectorId) {
+        self.locked.insert(id);
+    }
+
     /// The connector of a host.
     ///
     /// # Errors
     ///
-    /// Gives [`InventoryErrorKind::UnknownHost`] when the set has no
-    /// connector for this host.
+    /// Gives [`InventoryErrorKind::VaultLocked`] when the host needs the
+    /// vault and the vault is locked, and
+    /// [`InventoryErrorKind::UnknownHost`] when the set has no connector
+    /// for this host at all.
     pub fn get(&self, id: ConnectorId) -> Result<&dyn Connector, InventoryError> {
-        self.by_id.get(&id).map(Box::as_ref).ok_or_else(|| {
-            InventoryError::new(
-                InventoryErrorKind::UnknownHost,
-                format!("the set of hosts has no connector for host {}", id.0),
-            )
-        })
+        if let Some(connector) = self.by_id.get(&id) {
+            return Ok(connector.as_ref());
+        }
+        if self.locked.contains(&id) {
+            return Err(InventoryError::new(
+                InventoryErrorKind::VaultLocked,
+                format!("host {} needs the vault, and the vault is locked", id.0),
+            ));
+        }
+        Err(InventoryError::new(
+            InventoryErrorKind::UnknownHost,
+            format!("the set of hosts has no connector for host {}", id.0),
+        ))
     }
 
-    /// The ID of each host of the set.
+    /// The ID of each host of the set that the vault did not lock out.
     pub fn ids(&self) -> impl Iterator<Item = ConnectorId> + '_ {
         self.by_id.keys().copied()
     }
@@ -437,6 +462,29 @@ mod tests {
         fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
             self.0.delete(path, expected)
         }
+    }
+
+    #[test]
+    fn hosts_get_gives_vault_locked_for_a_locked_host_and_unknown_host_for_the_rest() {
+        let mut hosts = Hosts::new();
+        let locked = ConnectorId(1);
+        let unknown = ConnectorId(2);
+        hosts.insert_locked(locked);
+
+        let error = hosts.get(locked).err().unwrap();
+        assert_eq!(error.kind(), InventoryErrorKind::VaultLocked);
+
+        let error = hosts.get(unknown).err().unwrap();
+        assert_eq!(error.kind(), InventoryErrorKind::UnknownHost);
+
+        // A locked host that the caller inserts later is reachable, like
+        // an ordinary host.
+        let dir = tempfile::tempdir().unwrap();
+        hosts.insert(
+            locked,
+            Box::new(open_connector(dir.path(), "https://example.com")),
+        );
+        assert!(hosts.get(locked).is_ok());
     }
 
     #[test]

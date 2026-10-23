@@ -3,6 +3,8 @@
 use studio_core::collection::{Collection, DraftRow, FeedId};
 use studio_core::connector::LocalFolder;
 use studio_core::feed::{AlternateEnclosure, Enclosure, Entry, Feed, Item, Source};
+use studio_core::inventory::Hosts;
+use studio_core::library::Library;
 use studio_core::pipeline::{self, PipelineErrorKind};
 
 /// A connector for [`pipeline::diff`]. The feed of [`draft`] has no
@@ -188,7 +190,13 @@ fn a_cleared_description_that_is_typed_again_changes_only_its_text_in_the_diff()
     let mut model = sent(&feed);
     model.description = Some("New words".to_owned());
     pipeline::replace_model(&collection, id, &revision, model).unwrap();
-    let diff = pipeline::diff(&collection, &no_connector(), id).unwrap();
+    // The feed of this test has no library file and no draft operation, so
+    // an empty set of hosts and a library with no release folder give the
+    // same diff as before (ADR 0036 item 14).
+    let hosts = Hosts::new();
+    let library_dir = tempfile::tempdir().unwrap();
+    let library = Library::open(library_dir.path()).unwrap();
+    let diff = pipeline::diff(&collection, &no_connector(), &hosts, &library, id).unwrap();
     let added: Vec<&str> = diff
         .unified
         .lines()

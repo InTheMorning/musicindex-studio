@@ -26,7 +26,7 @@ These choices are fixed. Do not change them.
   - It gives the `PlannedPath` of task 021b with the library file ID.
 - A library file is in use by a draft when its planned URL, or the URL of one of its copies, is an address of the draft: an enclosure, a `podcast:source`, or an `itunes:image` of the channel or of an item.
 - `pub struct HostOperation { kind: OperationKind, connector_id, path, size, library_file_id: Option<i64>, url: Option<String> }` with `OperationKind::{Upload, Copy, Delete}`.
-  - Upload: each library file in use whose planned path has no copy with the same SHA-256 on its host.
+  - Upload: each library file whose planned URL is in the draft, when its planned path has no file with the same SHA-256. A draft that refers only to a copy on a different host uses that copy, and gives no upload.
   - Copy: each `draft_operations` row of the kind `copy`, when the host does not have the file.
   - Delete: each `draft_operations` row of the kind `delete`.
 - `Diff` gets `operations: Vec<HostOperation>` and `blocked: Vec<BlockedDelete>`. A deletion of a host file whose public address is in the draft of this feed, or in the hosted XML of a different feed of the library, is not an operation. It goes into `blocked`, with the titles of the feeds that refer to it.

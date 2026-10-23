@@ -537,10 +537,10 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
   // file, so this skips its removal (ADR 0034 item 5).
   const removeFiles = (facts) => {
     if (!facts.on_host) {
-      api(`/feeds/${feedId}/files?path=${encodeURIComponent(facts.path)}`, { method: 'DELETE' }).catch(() => {});
+      api(`/feeds/${feedId}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});
     }
     if (facts.lossless && !facts.lossless.on_host) {
-      api(`/feeds/${feedId}/files?path=${encodeURIComponent(facts.lossless.path)}`, { method: 'DELETE' }).catch(() => {});
+      api(`/feeds/${feedId}/files?file=${facts.lossless.library_file_id}`, { method: 'DELETE' }).catch(() => {});
     }
   };
 

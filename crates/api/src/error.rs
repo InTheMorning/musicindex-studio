@@ -114,6 +114,12 @@ impl From<PipelineError> for ApiError {
                 (StatusCode::UNPROCESSABLE_ENTITY, "no_public_address")
             }
             PipelineErrorKind::FileExists => (StatusCode::CONFLICT, "file_exists"),
+            // A feed with no release folder cannot take an import, the
+            // same as a workspace with no library folder (ADR 0036
+            // item 1 and item 5).
+            PipelineErrorKind::NoFolder => (StatusCode::CONFLICT, "no_library"),
+            PipelineErrorKind::NotReachable => (StatusCode::BAD_GATEWAY, "not_reachable"),
+            PipelineErrorKind::VaultLocked => (StatusCode::LOCKED, "vault_locked"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())

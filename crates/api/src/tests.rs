@@ -112,7 +112,21 @@ fn url_encode(value: &str) -> String {
     encoded
 }
 
-/// Make the vault, a local connector and a feed. Gives the feed ID.
+/// Give the workspace a library folder, through a second connection to
+/// the collection file (ADR 0036 item 1). Task 021f adds the route that
+/// sets this folder through the API.
+fn set_library_root(app: &App) {
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let root = app.data.path().join("library");
+    collection
+        .set_setting("library_root", &json!(root.to_str().unwrap()))
+        .unwrap();
+}
+
+/// Make the vault, a local connector, a feed and a library folder. Gives
+/// the feed ID.
 async fn set_up(app: &App) -> i64 {
     let (status, _) = call(
         app,
@@ -139,6 +153,7 @@ async fn set_up(app: &App) -> i64 {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+    set_library_root(app);
     feed["id"].as_i64().unwrap()
 }
 
@@ -405,6 +420,7 @@ async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written()
         Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
     )
     .await;
+    set_library_root(&app);
     let (status, feed) = call(
         &app,
         "POST",
@@ -1643,21 +1659,22 @@ async fn an_upload_of_a_wav_file_gives_an_mp3_file_and_a_lossless_flac_file() {
     assert_eq!(body["lossless"]["media_type"], "audio/flac");
     assert_eq!(body["lossless"]["file_name"], "tagged.flac");
     assert!(body["lossless"]["size"].as_u64().unwrap() > 0);
+    assert_eq!(body["on_host"], false);
+    assert_eq!(body["lossless"]["on_host"], false);
+    assert!(body["library_file_id"].is_i64());
+    assert!(body["lossless"]["library_file_id"].is_i64());
     assert!(incoming_is_empty(&app));
 
-    // Both files are pending files of the draft.
-    let delete_mp3 = format!(
-        "/api/v1/feeds/{id}/files?path={}",
-        url_encode("album/tagged.mp3")
-    );
+    // Both files are library files, and no draft refers to either yet.
+    let delete_mp3 = format!("/api/v1/feeds/{id}/files?file={}", body["library_file_id"]);
     let delete_flac = format!(
-        "/api/v1/feeds/{id}/files?path={}",
-        url_encode("album/tagged.flac")
+        "/api/v1/feeds/{id}/files?file={}",
+        body["lossless"]["library_file_id"]
     );
-    let (status, _) = call(&app, "DELETE", &delete_mp3, None).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let (status, _) = call(&app, "DELETE", &delete_flac, None).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, body) = call(&app, "DELETE", &delete_mp3, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (status, body) = call(&app, "DELETE", &delete_flac, None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
 }
 
 /// An upload of a FLAC file gives an MP3 enclosure, and keeps the FLAC
@@ -1681,54 +1698,71 @@ async fn an_upload_of_a_flac_file_gives_an_mp3_file_and_keeps_the_flac_as_lossle
     assert!(incoming_is_empty(&app));
 }
 
-/// When a file already exists at the FLAC release path, the upload of a
-/// WAV file gives 409 `file_exists`, and adds no file (ADR 0033 item 3).
+/// Give a feed a release folder, and plant a library file row with
+/// `bytes` at `name` in it, through a second connection to the
+/// collection file (ADR 0036 items 1, 4 and 5). This simulates a file
+/// that an earlier import put there, with no call to the upload route.
+fn plant_library_file(app: &App, id: i64, folder: &str, name: &str, bytes: &[u8]) {
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let id = studio_core::collection::FeedId(id);
+    collection.set_feed_folder(id, folder).unwrap();
+    let library = studio_core::library::Library::open(app.data.path().join("library")).unwrap();
+    let source_dir = tempfile::tempdir().unwrap();
+    let source = source_dir.path().join(name);
+    std::fs::write(&source, bytes).unwrap();
+    let (size, sha256) = library.put_file(folder, name, &source).unwrap();
+    collection
+        .add_library_file(id, name, size, &sha256, "audio/flac", true, None)
+        .unwrap();
+}
+
+/// When a different file is already in the library at the release name
+/// of the FLAC file, the upload of a WAV file gives 409 `file_exists`,
+/// and the route adds no library file for the MP3 file either
+/// (ADR 0033 item 3, ADR 0036 item 5).
 #[tokio::test]
-async fn when_the_flac_path_of_a_wav_upload_exists_on_the_host_no_file_is_added() {
+async fn when_the_flac_name_of_a_wav_upload_is_in_the_library_no_file_is_added() {
     let app = app();
     let id = set_up(&app).await;
-    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
-    std::fs::write(app.feeds.path().join("album/tagged.flac"), b"existing flac").unwrap();
+    plant_library_file(&app, id, "album", "tagged.flac", b"a different flac file");
+
     let bytes = std::fs::read(media_path("tagged.wav")).unwrap();
-
     let (status, body) = upload(&app, id, "tagged.wav", bytes).await;
-    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "file_exists");
     assert!(incoming_is_empty(&app));
 
-    // The MP3 file did not go in either: its path gives 404, not a
-    // pending file that this test can remove.
-    let delete_mp3 = format!(
-        "/api/v1/feeds/{id}/files?path={}",
-        url_encode("album/tagged.mp3")
-    );
-    let (status, body) = call(&app, "DELETE", &delete_mp3, None).await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    // The MP3 file did not stay in the library either.
+    assert!(!app.data.path().join("library/album/tagged.mp3").exists());
 }
 
-/// An MP3 upload with bytes other than the file on the host at its
-/// release path gives 409 `file_exists`. Studio does not replace a file
-/// on the host (ADR 0034).
+/// A second import at a release name that the library has already, with
+/// different bytes, gives 409 `file_exists`. Studio does not replace a
+/// library file (ADR 0034, ADR 0036 item 5).
 #[tokio::test]
-async fn an_mp3_upload_with_different_bytes_at_its_release_path_gives_file_exists() {
+async fn a_second_import_with_different_bytes_at_the_release_name_gives_file_exists() {
     let app = app();
     let id = set_up(&app).await;
-    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
-    std::fs::write(app.feeds.path().join("album/tagged.mp3"), b"other bytes").unwrap();
-    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let mp3_bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, _) = upload(&app, id, "tagged.mp3", mp3_bytes).await;
+    assert_eq!(status, StatusCode::CREATED);
 
-    let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
-    assert_eq!(status, StatusCode::CONFLICT);
+    let wav_bytes = std::fs::read(media_path("tagged.wav")).unwrap();
+    let (status, body) = upload(&app, id, "tagged.wav", wav_bytes).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "file_exists");
     assert!(incoming_is_empty(&app));
 }
 
-/// After a write of a WAV track, a second upload of the same WAV file
-/// uses the MP3 file and the FLAC file on the host, and adds no pending
-/// file (ADR 0034). The MP3 encode and its tag give the same bytes each
-/// time.
+/// After a write of a WAV track, with its MP3 enclosure and its FLAC
+/// alternative enclosure in the draft, a second upload of the same WAV
+/// file finds both files on the host already, through the host
+/// inventory, and adds no new library file row (ADR 0034, ADR 0036
+/// items 6 and 9).
 #[tokio::test]
-async fn a_second_upload_of_the_same_wav_file_uses_both_files_on_the_host() {
+async fn a_second_upload_of_the_same_wav_file_after_a_write_gives_on_host_true() {
     let app = app();
     let id = set_up(&app).await;
     let bytes = std::fs::read(media_path("tagged.wav")).unwrap();
@@ -1737,6 +1771,8 @@ async fn a_second_upload_of_the_same_wav_file_uses_both_files_on_the_host() {
     assert_eq!(status, StatusCode::CREATED, "{body}");
     assert_eq!(body["on_host"], false);
     assert_eq!(body["lossless"]["on_host"], false);
+    let main_id = body["library_file_id"].as_i64().unwrap();
+    let lossless_id = body["lossless"]["library_file_id"].as_i64().unwrap();
 
     // Give the track the MP3 enclosure and the FLAC file as an
     // alternative enclosure, and write the draft, so the two files go on
@@ -1778,62 +1814,22 @@ async fn a_second_upload_of_the_same_wav_file_uses_both_files_on_the_host() {
     assert!(app.feeds.path().join("album/tagged.mp3").exists());
     assert!(app.feeds.path().join("album/tagged.flac").exists());
 
-    // A second upload of the same WAV file uses the two files on the host.
+    // A second upload of the same WAV file finds both files on the host
+    // already, and adds no new library file row.
     let (status, body) = upload(&app, id, "tagged.wav", bytes).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
     assert_eq!(body["on_host"], true);
     assert_eq!(body["lossless"]["on_host"], true);
-    assert!(incoming_is_empty(&app));
-
-    for path in ["album/tagged.mp3", "album/tagged.flac"] {
-        let delete = format!("/api/v1/feeds/{id}/files?path={}", url_encode(path));
-        let (status, body) = call(&app, "DELETE", &delete, None).await;
-        assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
-    }
-}
-
-/// A WAV upload whose FLAC file is on the host already, with the same
-/// bytes, and whose MP3 path is free, uses the FLAC file from the host
-/// and adds only the MP3 file as a pending file (ADR 0034).
-#[tokio::test]
-async fn a_wav_upload_whose_flac_file_is_on_the_host_adds_only_the_mp3_file() {
-    let app = app();
-    let id = set_up(&app).await;
-    let wav_bytes = std::fs::read(media_path("tagged.wav")).unwrap();
-
-    // Make the FLAC file that an import of this WAV file gives, and put
-    // it on the host first, at the release path of the lossless file.
-    let source_dir = tempfile::tempdir().unwrap();
-    let source = source_dir.path().join("tagged.wav");
-    std::fs::write(&source, &wav_bytes).unwrap();
-    let imported = studio_core::media::import(&source, "tagged.wav").unwrap();
-    let flac_bytes = std::fs::read(&imported.lossless.unwrap().path).unwrap();
-    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
-    std::fs::write(app.feeds.path().join("album/tagged.flac"), &flac_bytes).unwrap();
-
-    let (status, body) = upload(&app, id, "tagged.wav", wav_bytes).await;
-    assert_eq!(status, StatusCode::CREATED, "{body}");
-    assert_eq!(body["on_host"], false);
-    assert_eq!(body["lossless"]["on_host"], true);
-    assert!(incoming_is_empty(&app));
-
-    // Only the MP3 file is a pending file.
-    let delete_mp3 = format!(
-        "/api/v1/feeds/{id}/files?path={}",
-        url_encode("album/tagged.mp3")
+    assert_eq!(body["library_file_id"].as_i64().unwrap(), main_id);
+    assert_eq!(
+        body["lossless"]["library_file_id"].as_i64().unwrap(),
+        lossless_id
     );
-    let delete_flac = format!(
-        "/api/v1/feeds/{id}/files?path={}",
-        url_encode("album/tagged.flac")
-    );
-    let (status, body) = call(&app, "DELETE", &delete_mp3, None).await;
-    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
-    let (status, body) = call(&app, "DELETE", &delete_flac, None).await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(incoming_is_empty(&app));
 }
 
 #[tokio::test]
-async fn a_text_file_gives_415_and_a_repeated_name_replaces_or_gives_409() {
+async fn a_text_file_gives_415_and_a_repeated_name_reuses_the_same_library_file() {
     let app = app();
     let id = set_up(&app).await;
     let text = std::fs::read(media_path("not-media.txt")).unwrap();
@@ -1844,30 +1840,17 @@ async fn a_text_file_gives_415_and_a_repeated_name_replaces_or_gives_409() {
     assert!(incoming_is_empty(&app));
 
     let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
-    let (status, _) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    let (status, first) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
     assert_eq!(status, StatusCode::CREATED);
     assert!(incoming_is_empty(&app));
 
-    // On 2026-10-23, in the visual check of Phase 6, a sheet closed when
-    // Studio stopped, and its pending files stayed. No track used them, so
-    // a new upload with the same name replaces such a file.
-    let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
-    assert_eq!(status, StatusCode::CREATED);
+    // A track of the draft refers to the file.
     let draft_path = format!("/api/v1/feeds/{id}/draft");
-    call(&app, "GET", &draft_path, None).await;
-    assert_eq!(
-        call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None)
-            .await
-            .1["files"],
-        json!([])
-    );
-
-    // When a track of the draft uses the file, the upload gives 409.
     let (_, draft) = call(&app, "GET", &draft_path, None).await;
     let mut model = draft["model"].clone();
     model["items"][0]["enclosure"] = json!({
-        "url": file["url"],
-        "length": file["size"].to_string(),
+        "url": first["url"],
+        "length": first["size"].to_string(),
         "media_type": "audio/mpeg",
     });
     let (status, _) = call(
@@ -1878,9 +1861,13 @@ async fn a_text_file_gives_415_and_a_repeated_name_replaces_or_gives_409() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["error"]["code"], "file_pending");
+
+    // An import of the same bytes at the same name again reuses the same
+    // library file row, even while a track of the draft refers to it
+    // (ADR 0036 item 5).
+    let (status, second) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::CREATED, "{second}");
+    assert_eq!(second["library_file_id"], first["library_file_id"]);
     assert!(incoming_is_empty(&app));
 }
 
@@ -1912,25 +1899,59 @@ async fn an_upload_to_a_folder_with_no_public_address_gives_422() {
 }
 
 #[tokio::test]
-async fn a_pending_file_is_removed_and_a_missing_one_gives_404() {
+async fn a_library_file_is_removed_and_a_missing_one_gives_404() {
     let app = app();
     let id = set_up(&app).await;
     let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
     let (status, body) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
     assert_eq!(status, StatusCode::CREATED);
-    let path = body["path"].as_str().unwrap().to_owned();
+    let file_id = body["library_file_id"].as_i64().unwrap();
 
-    let delete_path = format!("/api/v1/feeds/{id}/files?path={}", url_encode(&path));
+    let delete_path = format!("/api/v1/feeds/{id}/files?file={file_id}");
     let (status, _) = call(&app, "DELETE", &delete_path, None).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // The pending row is already gone, so a second removal gives 404.
+    // The row is already gone, so a second removal gives 404.
     let (status, body) = call(&app, "DELETE", &delete_path, None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "not_found");
 
-    // The copy of the pending file is also gone, so the same name uploads
-    // again without the 409 conflict of a repeated path.
-    let (status, _) = upload(&app, id, "tagged.mp3", bytes).await;
+    // The file is also gone from the release folder, so the same name
+    // imports again, not the 409 conflict of a name that the library
+    // has already.
+    let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+}
+
+/// Studio refuses to remove a library file while a track or an image of
+/// the draft refers to it (ADR 0036 item 11).
+#[tokio::test]
+async fn a_delete_of_a_library_file_that_the_draft_refers_to_gives_file_in_use() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, file) = upload(&app, id, "tagged.mp3", bytes).await;
     assert_eq!(status, StatusCode::CREATED);
+
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+
+    let delete_path = format!("/api/v1/feeds/{id}/files?file={}", file["library_file_id"]);
+    let (status, body) = call(&app, "DELETE", &delete_path, None).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "file_in_use");
 }

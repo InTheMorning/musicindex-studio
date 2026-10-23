@@ -12,12 +12,13 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
-use studio_core::collection::{ConnectorId, DraftFile, FeedId, SnapshotId};
+use studio_core::collection::{ConnectorId, FeedId, FeedRow, LibraryFileId, SnapshotId};
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
 use studio_core::feed::{Feed, Recipient};
+use studio_core::library::{self, Library};
 use studio_core::media;
-use studio_core::pipeline::{self, PipelineErrorKind};
+use studio_core::pipeline;
 use studio_core::vault::OpenVault;
 use tokio::io::AsyncWriteExt;
 
@@ -669,9 +670,11 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
 /// The draft as the UI edits it: the model, its revision, `changed` and
 /// `bad_addresses`. The value of `changed` is true when the draft is
 /// different from the live file. Each bad address stops a write (ADR 0023).
-fn draft_json(w: &Workspace, connector: &dyn connector::Connector, id: FeedId) -> ApiResult {
+///
+/// This route needs no host and no library: it only shows the draft.
+fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
-    let changed = pipeline::diff(&w.collection, connector, id)?.changed;
+    let changed = pipeline::draft_changed(&w.collection, id)?;
     let bad_addresses = model.bad_addresses();
     Ok(Json(json!({
         "revision": revision,
@@ -690,7 +693,7 @@ pub(crate) async fn get_draft(State(shared): State<Shared>, Path(id): Path<i64>)
         if w.collection.draft(id)?.is_none() {
             pipeline::start_draft(&w.collection, made.as_ref(), id)?;
         }
-        draft_json(w, made.as_ref(), id)
+        draft_json(w, id)
     })
     .await
 }
@@ -710,9 +713,9 @@ pub(crate) async fn put_draft(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        let made = writer(w, id)?;
+        writer(w, id)?;
         pipeline::replace_model(&w.collection, id, &body.revision, body.model)?;
-        draft_json(w, made.as_ref(), id)
+        draft_json(w, id)
     })
     .await
 }
@@ -747,11 +750,17 @@ pub(crate) async fn delete_draft(
 
 /// The diff between the live file and the draft, with the ID that the user
 /// approves, and the pending files that the write puts on the host.
+///
+/// This route needs the library, because the diff also gives each host
+/// operation of the release (ADR 0036 item 14). It gives 409 `no_library`
+/// when Studio has no library folder yet.
 pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
         let made = writer(w, id)?;
-        let diff = pipeline::diff(&w.collection, made.as_ref(), id)?;
+        let hosts = w.hosts()?;
+        let library = w.library()?;
+        let diff = pipeline::diff(&w.collection, made.as_ref(), &hosts, &library, id)?;
         Ok(Json(json!({
             "id": diff.id.as_str(),
             "unified": diff.unified,
@@ -767,7 +776,12 @@ pub(crate) struct Write {
     diff_id: String,
 }
 
-/// Write the draft with the ID of the diff that the user approved (ADR 0007).
+/// Write the draft with the ID of the diff that the user approved. The
+/// write also does each host operation of the release (ADR 0007,
+/// ADR 0036 items 14 and 15).
+///
+/// This route needs the library. It gives 409 `no_library` when Studio has
+/// no library folder yet.
 pub(crate) async fn write_feed(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -775,11 +789,12 @@ pub(crate) async fn write_feed(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        let made = writer(w, id)?;
+        let hosts = w.hosts()?;
+        let library = w.library()?;
         pipeline::write_draft(
             &mut w.collection,
-            made.as_ref(),
-            &w.store,
+            &hosts,
+            &library,
             id,
             &pipeline::DiffId::new(body.diff_id),
         )?;
@@ -811,7 +826,7 @@ pub(crate) async fn draft_from_snapshot(
         w.collection.snapshot_xml(id, SnapshotId(snapshot))?;
         pipeline::discard_draft(&w.collection, &w.store, id)?;
         pipeline::draft_from_snapshot(&w.collection, made.as_ref(), id, SnapshotId(snapshot))?;
-        draft_json(w, made.as_ref(), id)
+        draft_json(w, id)
     })
     .await
 }
@@ -822,10 +837,10 @@ pub(crate) struct UploadQuery {
     name: String,
 }
 
-/// The path of a pending file, in the query of the route that removes it.
+/// The ID of a library file, in the query of the route that removes it.
 #[derive(Deserialize)]
-pub(crate) struct PendingFileQuery {
-    path: String,
+pub(crate) struct LibraryFileQuery {
+    file: i64,
 }
 
 /// Removes its file when it goes out of scope. An upload keeps no
@@ -872,17 +887,17 @@ fn temp_file_name(name: &str) -> Result<String, ApiError> {
     }
 }
 
-/// Send one file to the draft of a feed (ADR 0026, ADR 0032 items 1 to 5
-/// and 10, ADR 0033 items 1 to 7). The body is the bytes of the file, and
-/// `name` in the query is the file name that the user selected.
+/// Send one file into the release folder of a feed (ADR 0026, ADR 0032
+/// items 1 to 5 and 10, ADR 0033 items 1 to 7, ADR 0036 items 5 and 9).
+/// The body is the bytes of the file, and `name` in the query is the
+/// file name that the user selected.
 ///
 /// The handler writes the body to a temporary file in `incoming/` of the
-/// pending files folder, chunk by chunk, with no lock of the workspace. It
-/// then calls `media::import` on a blocking thread, with no lock of the
+/// data folder, chunk by chunk, with no lock of the workspace. It then
+/// calls `media::import` on a blocking thread, with no lock of the
 /// workspace, because an MP3 encode takes some seconds and another
-/// request must not wait for it (ADR 0033 item 1). The release path check
-/// and the write to the pending files then run in `blocking`, with the
-/// workspace locked.
+/// request must not wait for it (ADR 0033 item 1). The import into the
+/// library then runs in `blocking`, with the workspace locked.
 pub(crate) async fn upload_file(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -945,9 +960,9 @@ pub(crate) async fn upload_file(
 }
 
 /// The blocking steps of an upload, with the workspace locked: the public
-/// address check, the release path of the MP3 file and of the FLAC file,
-/// and the write of each to the pending files (ADR 0026, ADR 0032 items 1
-/// to 5 and 10, ADR 0033 items 1 to 7, ADR 0034).
+/// address check, and the import of the MP3 file and of the FLAC file
+/// into the library (ADR 0026, ADR 0032 items 1 to 5 and 10, ADR 0033
+/// items 1 to 7, ADR 0034, ADR 0036 items 5, 9 and 10).
 fn import_upload(
     w: &mut Workspace,
     id: FeedId,
@@ -967,73 +982,56 @@ fn import_upload(
         ));
     }
 
-    let path = pipeline::release_path(feed_path, &imported.file_name);
-    let lossless_path = imported
-        .lossless
-        .as_ref()
-        .map(|file| pipeline::release_path(feed_path, &file.file_name));
+    let hosts = w.hosts()?;
+    let library = w.library()?;
+    give_release_folder(w, id, &row, feed_path)?;
 
-    // Check the release path of the MP3 file and of the FLAC file before
-    // Studio adds either one. The route adds no file when one path fails
-    // (ADR 0033 item 3). A path with a file on the host of the same bytes
-    // needs no pending file; the import uses the file on the host instead
-    // (ADR 0034).
-    let on_host = check_release_path(w, made.as_ref(), id, &path, &imported.path)?;
-    let lossless_on_host = match (lossless_path.as_deref(), imported.lossless.as_ref()) {
-        (Some(lossless_path), Some(file)) => Some(check_release_path(
-            w,
-            made.as_ref(),
-            id,
-            lossless_path,
-            &file.path,
-        )?),
-        _ => None,
-    };
+    let main_before = library_file_at(w, id, &imported.file_name)?;
+    let main = pipeline::import_into_library(
+        &w.collection,
+        &library,
+        &hosts,
+        id,
+        &imported.path,
+        &imported.file_name,
+        &imported.media_type,
+    )?;
 
-    let main_pending = if on_host {
-        None
-    } else {
-        let (sha256, size) = w
-            .store
-            .put_file(id, &imported.path)
-            .map_err(|e| ApiError::internal(e.to_string()))?;
-        let draft_file = DraftFile {
-            path: path.clone(),
-            size,
-            media_type: imported.media_type.clone(),
-            sha256,
-        };
-        w.collection.add_draft_file(id, &draft_file)?;
-        Some(draft_file)
-    };
-
-    let lossless = match (imported.lossless.as_ref(), lossless_path.as_deref()) {
-        (Some(file), Some(lossless_path)) => {
-            let result = if lossless_on_host.unwrap_or(false) {
-                lossless_host_facts(made.as_ref(), file, lossless_path)
-            } else {
-                add_lossless_file(w, id, made.as_ref(), file, lossless_path)
-            };
-            match result {
-                Ok(value) => Some(value),
+    let lossless = match imported.lossless.as_ref() {
+        Some(file) => {
+            match pipeline::import_into_library(
+                &w.collection,
+                &library,
+                &hosts,
+                id,
+                &file.path,
+                &file.file_name,
+                &file.media_type,
+            ) {
+                Ok(imported_lossless) => Some(json!({
+                    "path": imported_lossless.planned.path,
+                    "url": imported_lossless.planned.url,
+                    "size": file.size,
+                    "media_type": file.media_type,
+                    "file_name": file.file_name,
+                    "on_host": imported_lossless.planned.on_host,
+                    "library_file_id": imported_lossless.library_file_id.0,
+                })),
                 Err(error) => {
-                    // The FLAC file did not go in. The route adds no
-                    // file when one of the two fails, so the MP3 file
-                    // goes out too (ADR 0033 item 3).
-                    if let Some(draft_file) = &main_pending {
-                        let _ =
-                            pipeline::remove_pending_file(&w.collection, &w.store, id, draft_file);
+                    // The FLAC file did not go in. The route adds no new
+                    // library file when one of the two fails, so a fresh
+                    // MP3 row goes out too (ADR 0033 item 3). A row that
+                    // was there already, from an earlier import, stays.
+                    if main_before.is_none() {
+                        undo_library_file(w, &library, main.library_file_id)?;
                     }
-                    return Err(error);
+                    return Err(error.into());
                 }
             }
         }
-        _ => None,
+        None => None,
     };
 
-    let url = made.public_url(&path).ok_or_else(|| {
-        ApiError::internal("the connector gave no public address for the release path")
-    })?;
     let (kind, title, track_number, duration) = match imported.kind {
         media::ImportedKind::Audio {
             title,
@@ -1045,8 +1043,8 @@ fn import_upload(
     Ok((
         StatusCode::CREATED,
         to_json(json!({
-            "path": path,
-            "url": url,
+            "path": main.planned.path,
+            "url": main.planned.url,
             "size": imported.size,
             "media_type": imported.media_type,
             "kind": kind,
@@ -1055,140 +1053,102 @@ fn import_upload(
             "duration": duration,
             "converted_from_wav": imported.converted_from_wav,
             "file_name": imported.file_name,
-            "on_host": on_host,
+            "on_host": main.planned.on_host,
+            "library_file_id": main.library_file_id.0,
             "lossless": lossless,
         }))?,
     ))
 }
 
-/// Refuse the release path of a new pending file: 409 `file_pending` when
-/// a track or an image of the draft uses a pending file there, and 409
-/// `file_exists` when a file on the host there has bytes other than
-/// `local` (ADR 0034). A pending file at the path that the draft does not
-/// use is left over, and this function removes it so the new file can
-/// take its place (ADR 0026 item 7, ADR 0032 item 10, ADR 0033 item 3).
-///
-/// Gives `true` when the file on the host at `path` has the same bytes as
-/// `local`. The route then adds no pending file for `path`, and uses the
-/// file on the host instead (ADR 0034).
-fn check_release_path(
+/// The library file of this feed at `file_name` already, before an
+/// import. [`import_upload`] uses this to know whether the import made a
+/// fresh row, or reused one that was there already (ADR 0036 item 5).
+fn library_file_at(
     w: &Workspace,
-    connector: &dyn connector::Connector,
     id: FeedId,
-    path: &str,
-    local: &FilePath,
-) -> Result<bool, ApiError> {
-    if let Some(old) = w
-        .collection
-        .draft_files(id)?
+    file_name: &str,
+) -> Result<Option<LibraryFileId>, ApiError> {
+    Ok(w.collection
+        .library_files(id)?
         .into_iter()
-        .find(|f| f.path == path)
-    {
-        // A pending file that no track and no image of the draft uses is
-        // left over, for example from a sheet that closed when Studio
-        // stopped. The new upload replaces it. A file that the draft uses
-        // stays, and the upload gives file_pending.
-        let used = match pipeline::draft_model(&w.collection, id) {
-            Ok((feed, _)) => pipeline::referenced_files(&w.collection, connector, id, &feed)?,
-            // With no draft, no track uses the file.
-            Err(e) if e.kind() == PipelineErrorKind::NoDraft => Vec::new(),
-            Err(e) => return Err(e.into()),
-        };
-        if used.iter().any(|f| f.path == path) {
-            return Err(ApiError::new(
-                StatusCode::CONFLICT,
-                "file_pending",
-                format!("{path} is already a pending file of this draft"),
-            ));
-        }
-        pipeline::remove_pending_file(&w.collection, &w.store, id, &old)?;
-    }
-    match pipeline::host_file_matches(connector, path, local)? {
-        pipeline::HostFile::Absent => Ok(false),
-        pipeline::HostFile::Same => Ok(true),
-        pipeline::HostFile::Different => Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "file_exists",
-            format!("a file exists at {path} already"),
-        )),
-    }
+        .find(|file| file.path == file_name)
+        .map(|file| file.id))
 }
 
-/// Add the FLAC file of a lossless import as a pending file, after the
-/// MP3 file. Gives its JSON facts for the `lossless` field of the result
-/// (ADR 0033 items 1, 3, 5 and 7).
-fn add_lossless_file(
+/// Give a feed its release folder in the library, when it has none yet
+/// (ADR 0036 items 1, 2 and 4). A feed with a folder already keeps it.
+fn give_release_folder(
     w: &mut Workspace,
     id: FeedId,
-    connector: &dyn connector::Connector,
-    file: &media::ImportedFile,
-    path: &str,
-) -> Result<Value, ApiError> {
-    let (sha256, size) = w
-        .store
-        .put_file(id, &file.path)
-        .map_err(|e| ApiError::internal(e.to_string()))?;
-    w.collection.add_draft_file(
-        id,
-        &DraftFile {
-            path: path.to_owned(),
-            size,
-            media_type: file.media_type.clone(),
-            sha256,
-        },
-    )?;
-    let url = connector.public_url(path).ok_or_else(|| {
-        ApiError::internal("the connector gave no public address for the release path")
-    })?;
-    Ok(json!({
-        "path": path,
-        "url": url,
-        "size": size,
-        "media_type": file.media_type,
-        "file_name": file.file_name,
-        "on_host": false,
-    }))
+    row: &FeedRow,
+    feed_path: &str,
+) -> Result<(), ApiError> {
+    if row.folder.is_some() {
+        return Ok(());
+    }
+    let taken: std::collections::HashSet<String> = w
+        .collection
+        .feeds()?
+        .into_iter()
+        .filter_map(|feed| feed.folder)
+        .collect();
+    let folder = library::release_folder_name(feed_path, &|name| taken.contains(name));
+    w.collection.set_feed_folder(id, &folder)?;
+    Ok(())
 }
 
-/// The JSON facts of the FLAC file of a lossless import that is on the
-/// host already, with the same bytes. The import adds no pending file for
-/// it (ADR 0034).
-fn lossless_host_facts(
-    connector: &dyn connector::Connector,
-    file: &media::ImportedFile,
-    path: &str,
-) -> Result<Value, ApiError> {
-    let url = connector.public_url(path).ok_or_else(|| {
-        ApiError::internal("the connector gave no public address for the release path")
-    })?;
-    Ok(json!({
-        "path": path,
-        "url": url,
-        "size": file.size,
-        "media_type": file.media_type,
-        "file_name": file.file_name,
-        "on_host": true,
-    }))
+/// Remove a library file row that an import added in this request, with
+/// its bytes in the release folder (ADR 0033 item 3).
+fn undo_library_file(
+    w: &mut Workspace,
+    library: &Library,
+    file_id: LibraryFileId,
+) -> Result<(), ApiError> {
+    let file = w.collection.library_file(file_id)?;
+    if let Some(folder) = w.collection.feed(file.feed_id)?.folder.as_deref() {
+        library
+            .remove_file(folder, &file.path)
+            .map_err(|e| ApiError::internal(e.to_string()))?;
+    }
+    w.collection.remove_library_file(file_id)?;
+    Ok(())
 }
 
-/// Remove one pending file of the draft of a feed, with its copy in the
-/// data folder (ADR 0026 item 8, ADR 0032 item 12).
+/// Remove a library file of a feed, with its bytes in the release folder
+/// (ADR 0036 items 4, 5 and 11). Gives 409 `file_in_use` when the draft
+/// refers to the file, so Studio removes no file that a track or an
+/// image still uses.
 pub(crate) async fn delete_pending_file(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
-    Query(query): Query<PendingFileQuery>,
+    Query(query): Query<LibraryFileQuery>,
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        let files = w.collection.draft_files(id)?;
-        let Some(file) = files.into_iter().find(|f| f.path == query.path) else {
+        let file_id = LibraryFileId(query.file);
+        let file = w.collection.library_file(file_id)?;
+        if file.feed_id != id {
             return Err(ApiError::new(
                 StatusCode::NOT_FOUND,
                 "not_found",
-                format!("{} is not a pending file of this draft", query.path),
+                format!("library file {} is not a file of feed {}", query.file, id.0),
             ));
-        };
-        pipeline::remove_pending_file(&w.collection, &w.store, id, &file)?;
+        }
+        let hosts = w.hosts()?;
+        if pipeline::library_file_in_use(&w.collection, &hosts, &file)? {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "file_in_use",
+                "the draft refers to this file; remove the reference first",
+            ));
+        }
+        let library = w.library()?;
+        if let Some(folder) = w.collection.feed(id)?.folder.as_deref() {
+            library
+                .remove_file(folder, &file.path)
+                .map_err(|e| ApiError::internal(e.to_string()))?;
+        }
+        w.collection.remove_library_file(file_id)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

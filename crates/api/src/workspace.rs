@@ -4,9 +4,13 @@ use std::path::{Path, PathBuf};
 
 use std::collections::{HashMap, VecDeque};
 
+use axum::http::StatusCode;
 use studio_core::collection::Collection;
+use studio_core::connector;
 use studio_core::discover::Found;
 use studio_core::imports::Store;
+use studio_core::inventory::Hosts;
+use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
 use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::{Web, WebImage};
@@ -134,5 +138,51 @@ impl Workspace {
             vault.file().save(&self.vault_path)?;
         }
         Ok(())
+    }
+
+    /// The connector of each host, for the diff and the write
+    /// (ADR 0036 item 6).
+    ///
+    /// A host that needs a secret while the vault is locked is left out
+    /// of the set, and marked instead (ADR 0017). An operation that then
+    /// needs that host gives `vault_locked`, through
+    /// [`studio_core::inventory::InventoryErrorKind::VaultLocked`].
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the collection or a connector fails.
+    pub(crate) fn hosts(&self) -> Result<Hosts, ApiError> {
+        let mut hosts = Hosts::new();
+        for row in self.collection.connectors()? {
+            if row.secret_ref.is_some() && self.vault.is_none() {
+                hosts.insert_locked(row.id);
+                continue;
+            }
+            let made = connector::from_row(&row, self.vault.as_ref())?;
+            hosts.insert(row.id, made);
+        }
+        Ok(hosts)
+    }
+
+    /// The library folder, from the `library_root` setting (ADR 0036
+    /// item 1).
+    ///
+    /// # Errors
+    ///
+    /// Gives 409 `no_library` when the setting is absent, or an
+    /// [`ApiError`] when the collection fails or Studio cannot open the
+    /// folder.
+    pub(crate) fn library(&self) -> Result<Library, ApiError> {
+        let root = self.collection.setting("library_root")?.ok_or_else(|| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                "no_library",
+                "Studio has no library folder yet. Set one first.",
+            )
+        })?;
+        let root = root
+            .as_str()
+            .ok_or_else(|| ApiError::internal("the library_root setting is not a string"))?;
+        Library::open(root).map_err(|error| ApiError::internal(error.to_string()))
     }
 }

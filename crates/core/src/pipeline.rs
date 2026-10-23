@@ -3,6 +3,7 @@
 //! A write to a host occurs only through [`write_draft`], and only with the
 //! ID of the diff that the user approved.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::path::Path;
 
@@ -10,13 +11,16 @@ use similar::TextDiff;
 
 use crate::address::AddressSource;
 use crate::collection::{
-    Collection, CollectionError, ConnectorId, DraftFile, DraftRow, FeedId, FeedRow, SnapshotId,
+    Collection, CollectionError, ConnectorId, DraftFile, DraftOperationKind, DraftRow, FeedId,
+    FeedRow, LibraryFile, LibraryFileId, SnapshotId,
 };
 use crate::connector::{Connector, ConnectorError, ConnectorErrorKind, Expected, Version};
 use crate::digest::sha256_hex;
 use crate::feed::{Feed, FeedError};
 use crate::guid::podcast_guid_for_url;
 use crate::imports;
+use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
+use crate::library::Library;
 use crate::xml::{Document, ParseError};
 
 /// The kind of a [`PipelineError`].
@@ -54,8 +58,20 @@ pub enum PipelineErrorKind {
     /// (ADR 0032 item 8).
     NoPublicAddress,
     /// A file already exists at the path of a new feed (ADR 0032 item 8),
-    /// or at the path of a pending file (ADR 0026 item 7).
+    /// at the path of a pending file (ADR 0026 item 7), or at the name of
+    /// a file of the release folder, with different bytes (ADR 0036
+    /// item 5).
     FileExists,
+    /// The feed has no release folder yet, so Studio cannot import a file
+    /// into it (ADR 0036 item 5).
+    NoFolder,
+    /// A new address of the feed is not on its host after the uploads
+    /// and the copies. The write stops before the deletions (ADR 0036
+    /// item 15).
+    NotReachable,
+    /// A host needs a secret from the vault, and the vault is locked
+    /// (ADR 0017).
+    VaultLocked,
 }
 
 /// An error from the write pipeline.
@@ -117,6 +133,19 @@ impl From<FeedError> for PipelineError {
     }
 }
 
+impl From<InventoryError> for PipelineError {
+    fn from(error: InventoryError) -> Self {
+        let kind = match error.kind() {
+            InventoryErrorKind::Collection => PipelineErrorKind::Collection,
+            InventoryErrorKind::VaultLocked => PipelineErrorKind::VaultLocked,
+            InventoryErrorKind::UnknownHost
+            | InventoryErrorKind::NoHost
+            | InventoryErrorKind::Connector => PipelineErrorKind::Connector,
+        };
+        Self::new(kind, error.to_string())
+    }
+}
+
 /// The ID of a diff: a hash of the base version and the draft bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiffId(String);
@@ -157,12 +186,91 @@ pub struct Diff {
     /// True when the draft is different from the live file.
     pub changed: bool,
     /// Each pending file that the write puts on the host (ADR 0026 item 6).
+    /// Task 021g moves this into [`Diff::operations`].
     pub files: Vec<DiffFile>,
+    /// Each upload, copy and deletion that the write does on a host
+    /// (ADR 0036 item 14).
+    pub operations: Vec<HostOperation>,
+    /// Each deletion that Studio refuses because a feed refers to the
+    /// file (ADR 0036 item 13).
+    pub blocked: Vec<BlockedDelete>,
 }
 
-fn writable(row: &FeedRow) -> Result<&str, PipelineError> {
+/// The kind of a [`HostOperation`] (ADR 0036 items 10 and 12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperationKind {
+    /// Put a library file on its host for the first time (ADR 0036
+    /// item 10).
+    Upload,
+    /// Put a library file on a different host (ADR 0036 item 12).
+    Copy,
+    /// Delete a file from a host (ADR 0036 item 12).
+    Delete,
+}
+
+impl OperationKind {
+    /// The text of the kind, for the diff ID.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Upload => "upload",
+            Self::Copy => "copy",
+            Self::Delete => "delete",
+        }
+    }
+}
+
+/// An upload, a copy or a deletion that the write does on a host
+/// (ADR 0036 item 14).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct HostOperation {
+    /// The kind of operation.
+    pub kind: OperationKind,
+    /// The host.
+    pub connector_id: ConnectorId,
+    /// The path of the file on the host.
+    pub path: String,
+    /// The size of the file, in bytes.
+    pub size: u64,
+    /// The library file of an upload or a copy. `None` for a deletion.
+    pub library_file_id: Option<i64>,
+    /// The public address of the file, when the host gives one.
+    pub url: Option<String>,
+}
+
+/// A deletion that Studio refuses because a feed refers to the file
+/// (ADR 0036 item 13).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct BlockedDelete {
+    /// The host.
+    pub connector_id: ConnectorId,
+    /// The path of the file on the host.
+    pub path: String,
+    /// The title of each feed that refers to the file. A feed with no
+    /// title shows its ID instead.
+    pub feed_titles: Vec<String>,
+}
+
+/// The result of an import of a file into the library (ADR 0036 item 5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedFile {
+    /// The ID of the row of the library file.
+    pub library_file_id: LibraryFileId,
+    /// The path, the host and the address where Studio plans to put the
+    /// file (ADR 0036 item 9).
+    pub planned: inventory::PlannedPath,
+}
+
+/// The host and the path of a feed that Studio can write.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::ReadOnly`] when the feed has no connector or
+/// no path.
+fn writable(row: &FeedRow) -> Result<(ConnectorId, &str), PipelineError> {
     match (row.connector_id, row.path.as_deref()) {
-        (Some(_), Some(path)) => Ok(path),
+        (Some(connector_id), Some(path)) => Ok((connector_id, path)),
         _ => Err(PipelineError::new(
             PipelineErrorKind::ReadOnly,
             format!(
@@ -185,7 +293,7 @@ pub fn refresh(
     id: FeedId,
 ) -> Result<Feed, PipelineError> {
     let row = collection.feed(id)?;
-    let path = writable(&row)?;
+    let (_, path) = writable(&row)?;
     let file = connector.read(path)?.ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NotFound,
@@ -240,7 +348,7 @@ pub fn start_draft(
     id: FeedId,
 ) -> Result<DraftRow, PipelineError> {
     let row = collection.feed(id)?;
-    let path = writable(&row)?;
+    let (_, path) = writable(&row)?;
     let file = connector.read(path)?.ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NotFound,
@@ -374,6 +482,20 @@ pub fn edit_draft(
 #[must_use]
 pub fn revision(draft: &DraftRow) -> String {
     sha256_hex(&[&draft.draft_xml])
+}
+
+/// True when the draft of a feed is different from the live file that it
+/// started from.
+///
+/// This check needs no host, and no library: a caller that only shows the
+/// draft, such as the editor, does not need either one.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft.
+pub fn draft_changed(collection: &Collection, id: FeedId) -> Result<bool, PipelineError> {
+    let draft = current_draft(collection, id)?;
+    Ok(draft.base_xml != draft.draft_xml)
 }
 
 /// The typed model of a draft, and its revision.
@@ -540,6 +662,30 @@ pub fn host_file_matches(
     }
 }
 
+/// Each address that the draft gives for the channel or for a track: the
+/// `url` of an enclosure, the `uri` of a `podcast:source`, or the `href`
+/// of `itunes:image` of the channel or of an item (ADR 0032 item 10,
+/// ADR 0033 item 7, ADR 0036 item 7 and item 10).
+fn feed_addresses(feed: &Feed) -> Vec<&str> {
+    let mut urls: Vec<&str> = Vec::new();
+    urls.extend(feed.image.as_deref());
+    for item in &feed.items {
+        urls.extend(
+            item.value
+                .enclosure
+                .as_ref()
+                .and_then(|enclosure| enclosure.url.as_deref()),
+        );
+        urls.extend(item.value.image.as_deref());
+        for enclosure in &item.value.alternate_enclosures {
+            for source in &enclosure.sources {
+                urls.extend(source.uri.as_deref());
+            }
+        }
+    }
+    urls
+}
+
 /// Each pending file of a draft that the draft refers to, as the address of
 /// an enclosure, of an image, or of a `podcast:source` (ADR 0032 item 10,
 /// ADR 0033 item 7).
@@ -557,22 +703,7 @@ pub fn referenced_files(
     id: FeedId,
     feed: &Feed,
 ) -> Result<Vec<DraftFile>, PipelineError> {
-    let mut urls: Vec<&str> = Vec::new();
-    urls.extend(feed.image.as_deref());
-    for item in &feed.items {
-        urls.extend(
-            item.value
-                .enclosure
-                .as_ref()
-                .and_then(|enclosure| enclosure.url.as_deref()),
-        );
-        urls.extend(item.value.image.as_deref());
-        for enclosure in &item.value.alternate_enclosures {
-            for source in &enclosure.sources {
-                urls.extend(source.uri.as_deref());
-            }
-        }
-    }
+    let urls = feed_addresses(feed);
     let files = collection
         .draft_files(id)?
         .into_iter()
@@ -585,7 +716,8 @@ pub fn referenced_files(
     Ok(files)
 }
 
-/// The diff between the live file at the start of the draft and the draft.
+/// The diff between the live file at the start of the draft and the draft,
+/// with each host operation that the write would do (ADR 0036 item 14).
 ///
 /// # Errors
 ///
@@ -593,11 +725,16 @@ pub fn referenced_files(
 pub fn diff(
     collection: &Collection,
     connector: &dyn Connector,
+    hosts: &Hosts,
+    library: &Library,
     id: FeedId,
 ) -> Result<Diff, PipelineError> {
+    let feed_row = collection.feed(id)?;
     let draft = current_draft(collection, id)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let referenced = referenced_files(collection, connector, id, &feed)?;
+    let (operations, blocked) = host_operations(collection, library, hosts, &feed_row, &feed)?;
+    let extra = operation_bytes(collection, hosts, &operations)?;
     let base = String::from_utf8_lossy(&draft.base_xml);
     let new = String::from_utf8_lossy(&draft.draft_xml);
     let unified = TextDiff::from_lines(base.as_ref(), new.as_ref())
@@ -606,7 +743,7 @@ pub fn diff(
         .header("live", "draft")
         .to_string();
     Ok(Diff {
-        id: diff_id(&draft, &referenced),
+        id: diff_id(&draft, &referenced, &extra),
         unified,
         changed: draft.base_xml != draft.draft_xml,
         files: referenced
@@ -617,34 +754,375 @@ pub fn diff(
                 media_type: file.media_type,
             })
             .collect(),
+        operations,
+        blocked,
     })
 }
 
-/// Write the draft to the host (ADR 0007).
+/// The title of a feed, for a message that names it. A feed with no title
+/// yet shows its ID instead.
+fn feed_title(row: &FeedRow) -> String {
+    row.title
+        .clone()
+        .unwrap_or_else(|| format!("feed {}", row.id.0))
+}
+
+/// True when the hosted XML that Studio last put into the release folder
+/// of `row` gives `url` as an address (ADR 0036 item 3 and item 13).
 ///
-/// The function writes only when `approved` is the ID of the current diff,
-/// and when the live file has the version that the draft started from. It
-/// keeps a snapshot of the live file first. After the write, the draft goes
-/// out and the collection keeps the new state.
+/// The function gives `false` when `row` has no release folder yet, or
+/// Studio has not yet put a hosted file there: it is not a feed that this
+/// Studio has confirmed, so it does not block a deletion.
+fn feed_refers_in_library(library: &Library, row: &FeedRow, url: &str) -> bool {
+    let (Some(folder), Some(path)) = (row.folder.as_deref(), row.path.as_deref()) else {
+        return false;
+    };
+    let file_name = path.rsplit_once('/').map_or(path, |(_, file)| file);
+    let Ok(bytes) = std::fs::read(library.path(folder, file_name)) else {
+        return false;
+    };
+    let Ok(doc) = Document::parse_bytes(&bytes) else {
+        return false;
+    };
+    let Ok(feed) = Feed::read(&doc) else {
+        return false;
+    };
+    feed_addresses(&feed).contains(&url)
+}
+
+/// True when a host already has a file at `path` with this size and this
+/// SHA-256 (ADR 0036 item 9). The function reads the SHA-256 of the host
+/// file only when the size agrees, through [`inventory::host_sha`]
+/// (ADR 0036 item 6).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or the host fails.
+fn host_has_file(
+    collection: &Collection,
+    hosts: &Hosts,
+    connector_id: ConnectorId,
+    path: &str,
+    size: u64,
+    sha256: &str,
+) -> Result<bool, PipelineError> {
+    let Some(existing) = collection.host_file(connector_id, path)? else {
+        return Ok(false);
+    };
+    if existing.size != size {
+        return Ok(false);
+    }
+    let found = match existing.sha256 {
+        Some(found) => Some(found),
+        None => inventory::host_sha(collection, hosts, connector_id, path)?,
+    };
+    Ok(found.as_deref() == Some(sha256))
+}
+
+/// Each host operation of the draft of a feed, and each deletion that
+/// Studio refuses because a feed refers to the file (ADR 0036 items 10,
+/// 12, 13 and 14).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or a host fails.
+fn host_operations(
+    collection: &Collection,
+    library: &Library,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    feed: &Feed,
+) -> Result<(Vec<HostOperation>, Vec<BlockedDelete>), PipelineError> {
+    let urls = feed_addresses(feed);
+    let mut operations = Vec::new();
+
+    // Each library file whose planned address is in the draft, with no
+    // copy of the same bytes at its planned path yet, is an upload
+    // (ADR 0036 item 10). A draft that refers to a copy on a different
+    // host uses that copy, so it needs no upload.
+    for file in collection.library_files(feed_row.id)? {
+        let planned = inventory::planned_path(collection, hosts, feed_row, &file)?;
+        let planned_in_use = planned
+            .url
+            .as_deref()
+            .is_some_and(|url| urls.contains(&url));
+        if planned_in_use && !planned.on_host {
+            operations.push(HostOperation {
+                kind: OperationKind::Upload,
+                connector_id: planned.connector_id,
+                path: planned.path,
+                size: file.size,
+                library_file_id: Some(file.id.0),
+                url: planned.url,
+            });
+        }
+    }
+
+    // Each draft operation gives a copy, or a deletion, or a blocked
+    // deletion (ADR 0036 items 12 and 13).
+    let all_feeds = collection.feeds()?;
+    let mut blocked = Vec::new();
+    for operation in collection.draft_operations(feed_row.id)? {
+        match operation.kind {
+            DraftOperationKind::Copy => {
+                let Some(library_file_id) = operation.library_file_id else {
+                    continue;
+                };
+                let file = collection.library_file(library_file_id)?;
+                let on_host = host_has_file(
+                    collection,
+                    hosts,
+                    operation.connector_id,
+                    &operation.path,
+                    file.size,
+                    &file.sha256,
+                )?;
+                if !on_host {
+                    let connector = hosts.get(operation.connector_id)?;
+                    operations.push(HostOperation {
+                        kind: OperationKind::Copy,
+                        connector_id: operation.connector_id,
+                        path: operation.path.clone(),
+                        size: file.size,
+                        library_file_id: Some(file.id.0),
+                        url: connector.public_url(&operation.path),
+                    });
+                }
+            }
+            DraftOperationKind::Delete => {
+                let connector = hosts.get(operation.connector_id)?;
+                let url = connector.public_url(&operation.path);
+                let mut referring: Vec<String> = Vec::new();
+                if let Some(url) = url.as_deref() {
+                    if urls.contains(&url) {
+                        referring.push(feed_title(feed_row));
+                    }
+                    for other in &all_feeds {
+                        if other.id != feed_row.id && feed_refers_in_library(library, other, url) {
+                            referring.push(feed_title(other));
+                        }
+                    }
+                }
+                if referring.is_empty() {
+                    let size = collection
+                        .host_file(operation.connector_id, &operation.path)?
+                        .map_or(0, |file| file.size);
+                    operations.push(HostOperation {
+                        kind: OperationKind::Delete,
+                        connector_id: operation.connector_id,
+                        path: operation.path.clone(),
+                        size,
+                        library_file_id: None,
+                        url,
+                    });
+                } else {
+                    blocked.push(BlockedDelete {
+                        connector_id: operation.connector_id,
+                        path: operation.path.clone(),
+                        feed_titles: referring,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok((operations, blocked))
+}
+
+/// The bytes that [`diff_id`] adds for each host operation: its kind, its
+/// host, its path and its SHA-256, in sequence (ADR 0036 item 14). The
+/// bytes change when an operation changes.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or a host fails.
+fn operation_bytes(
+    collection: &Collection,
+    hosts: &Hosts,
+    operations: &[HostOperation],
+) -> Result<Vec<u8>, PipelineError> {
+    let mut bytes = Vec::new();
+    for operation in operations {
+        bytes.push(0);
+        bytes.extend_from_slice(operation.kind.as_str().as_bytes());
+        bytes.push(0);
+        bytes.extend_from_slice(operation.connector_id.0.to_string().as_bytes());
+        bytes.push(0);
+        bytes.extend_from_slice(operation.path.as_bytes());
+        bytes.push(0);
+        let sha256 = match operation.library_file_id {
+            Some(id) => collection.library_file(LibraryFileId(id))?.sha256,
+            None => {
+                inventory::host_sha(collection, hosts, operation.connector_id, &operation.path)?
+                    .unwrap_or_default()
+            }
+        };
+        bytes.extend_from_slice(sha256.as_bytes());
+    }
+    Ok(bytes)
+}
+
+/// Put a file into the release folder of a feed, and keep its row in the
+/// library (ADR 0036 item 5).
+///
+/// A file with the same name as a file that Studio put there already,
+/// and with the same SHA-256, is the same file: the function gives its
+/// row again, and does not move `source`. A file with the same name and
+/// different bytes gives [`PipelineErrorKind::FileExists`], and `source`
+/// stays where it was.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NoFolder`] when the feed has no release
+/// folder yet. Gives [`PipelineErrorKind::FileExists`] when a different
+/// file is at `file_name` already. Gives a [`PipelineError`] when Studio
+/// cannot read `source`, or cannot write the release folder, or the
+/// collection fails.
+pub fn import_into_library(
+    collection: &Collection,
+    library: &Library,
+    hosts: &Hosts,
+    id: FeedId,
+    source: &Path,
+    file_name: &str,
+    media_type: &str,
+) -> Result<ImportedFile, PipelineError> {
+    let feed_row = collection.feed(id)?;
+    let folder = feed_row.folder.clone().ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NoFolder,
+            format!("feed {} has no release folder yet", id.0),
+        )
+    })?;
+
+    // Read the SHA-256 of the source file first, to compare it with a
+    // file that is already at this name, before Studio moves it into the
+    // library (ADR 0036 item 5).
+    let bytes = std::fs::read(source).map_err(|error| {
+        PipelineError::new(
+            PipelineErrorKind::Connector,
+            format!(
+                "{}: cannot read the file to import: {error}",
+                source.display()
+            ),
+        )
+    })?;
+    let sha256 = sha256_hex(&[&bytes]);
+    let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+
+    let existing = collection
+        .library_files(id)?
+        .into_iter()
+        .find(|file| file.path == file_name);
+    let library_file_id = match existing {
+        Some(file) if file.sha256 == sha256 => {
+            // The same file, imported again. Studio keeps the one copy,
+            // and removes the file that the caller sent (ADR 0036 item 5).
+            let _ = std::fs::remove_file(source);
+            file.id
+        }
+        Some(_) => {
+            return Err(PipelineError::new(
+                PipelineErrorKind::FileExists,
+                format!("{file_name} is in the release folder already, with different bytes"),
+            ));
+        }
+        None => {
+            library
+                .put_file(&folder, file_name, source)
+                .map_err(|error| {
+                    PipelineError::new(PipelineErrorKind::Connector, error.to_string())
+                })?;
+            collection.add_library_file(id, file_name, size, &sha256, media_type, true, None)?
+        }
+    };
+
+    let file = collection.library_file(library_file_id)?;
+    let planned = inventory::planned_path(collection, hosts, &feed_row, &file)?;
+    Ok(ImportedFile {
+        library_file_id,
+        planned,
+    })
+}
+
+/// True when a library file is in use by the draft of its feed: its
+/// planned URL, or the URL of one of its copies, is an address of the
+/// draft (ADR 0036 item 11).
+///
+/// A feed with no draft refers to no address, so the function gives
+/// `false`.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or a host fails.
+pub fn library_file_in_use(
+    collection: &Collection,
+    hosts: &Hosts,
+    file: &LibraryFile,
+) -> Result<bool, PipelineError> {
+    let feed_row = collection.feed(file.feed_id)?;
+    let urls: Vec<String> = match draft_model(collection, file.feed_id) {
+        Ok((feed, _)) => feed_addresses(&feed)
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        Err(error) if error.kind() == PipelineErrorKind::NoDraft => Vec::new(),
+        Err(error) => return Err(error),
+    };
+    let planned = inventory::planned_path(collection, hosts, &feed_row, file)?;
+    if planned.url.is_some_and(|url| urls.contains(&url)) {
+        return Ok(true);
+    }
+    for copy in inventory::copies(collection, hosts, file)? {
+        if copy.url.is_some_and(|url| urls.contains(&url)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Write the draft to the host. The write also does each host operation of
+/// the draft (ADR 0007, ADR 0036 items 14 and 15).
+///
+/// The function writes only when `approved` is the ID of the current diff.
+/// It also checks that the live file still has the version that the draft
+/// started from. The function keeps a snapshot of the live file first.
+///
+/// The sequence of the write is: each upload and copy, the feed file, a
+/// check of each new address, then each deletion. After the write, the
+/// draft and its host operations go out. Studio then scans each host that
+/// the write touched.
 ///
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::DiffNotApproved`],
-/// [`PipelineErrorKind::BadAddress`] or [`PipelineErrorKind::Conflict`], and
-/// the file on the host then does not change.
+/// [`PipelineErrorKind::BadAddress`] or [`PipelineErrorKind::Conflict`]
+/// before any file changes on a host.
+///
+/// Gives [`PipelineErrorKind::FileExists`] when a file exists already at
+/// the planned path of an upload or a copy. Gives
+/// [`PipelineErrorKind::NotReachable`] when a new address is not on its
+/// host after the uploads. The feed file is already written in both cases.
+///
+/// Gives [`PipelineErrorKind::Conflict`] when a host file changed after
+/// the scan, before its deletion. The feed file stays written.
 pub fn write_draft(
     collection: &mut Collection,
-    connector: &dyn Connector,
-    store: &imports::Store,
+    hosts: &Hosts,
+    library: &Library,
     id: FeedId,
     approved: &DiffId,
 ) -> Result<Version, PipelineError> {
     let row = collection.feed(id)?;
-    let path = writable(&row)?.to_owned();
+    let (connector_id, path) = writable(&row)?;
+    let path = path.to_owned();
+    let connector = hosts.get(connector_id)?;
     let draft = current_draft(collection, id)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let referenced = referenced_files(collection, connector, id, &feed)?;
-    if &diff_id(&draft, &referenced) != approved {
+    let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
+    let extra = operation_bytes(collection, hosts, &operations)?;
+    if &diff_id(&draft, &referenced, &extra) != approved {
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
             "the draft changed after the diff was approved; approve the new diff",
@@ -673,32 +1151,17 @@ pub fn write_draft(
         ));
     }
 
-    // Put each file that the draft refers to on the host first. The write
-    // does not replace a file that exists there already (ADR 0026 items 5
-    // to 7, ADR 0032 items 10 and 11). When a file exists, the write stops
-    // here, and the feed file does not change.
-    for file in &referenced {
-        let bytes = store.open(id, &file.sha256).map_err(|error| {
-            PipelineError::new(
-                PipelineErrorKind::Connector,
-                format!("{}: cannot read the pending file: {error}", file.path),
-            )
-        })?;
-        match connector.write(&file.path, &bytes, &Expected::Absent) {
-            Ok(_) => {}
-            Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
-                return Err(PipelineError::new(
-                    PipelineErrorKind::FileExists,
-                    format!("a file exists at {} already", file.path),
-                ));
-            }
-            Err(error) => return Err(error.into()),
-        }
-        // The file is on the host now, so Studio removes its row and its
-        // copy. A write that stops after this point puts the file again.
-        remove_pending_file(collection, store, id, file)?;
-    }
+    // Each host that the write puts a file on, deletes a file from, or
+    // writes the feed file to. Studio scans each one after the write
+    // (ADR 0036 item 6).
+    let mut touched: HashSet<ConnectorId> = HashSet::new();
+    touched.insert(connector_id);
 
+    // Step 1: each upload and copy puts a library file on its host.
+    put_uploads_and_copies(collection, hosts, library, &row, &operations, &mut touched)?;
+
+    // Step 2: the feed file, as before. The release folder then keeps the
+    // same bytes as the hosted file (ADR 0036 item 3).
     let expected = match &live {
         Some(file) => {
             collection.add_snapshot(id, &file.version, &file.bytes)?;
@@ -708,11 +1171,170 @@ pub fn write_draft(
     };
     let version = connector.write(&path, &draft.draft_xml, &expected)?;
     collection.record_state(id, &feed, &version)?;
+    if let Some(folder) = row.folder.as_deref() {
+        let file_name = path
+            .rsplit_once('/')
+            .map_or(path.as_str(), |(_, name)| name);
+        library
+            .write_feed_xml(folder, file_name, &draft.draft_xml)
+            .map_err(|error| PipelineError::new(PipelineErrorKind::Connector, error.to_string()))?;
+    }
+
+    // Step 3: confirm that each upload and each copy is on its host,
+    // before Studio deletes any file (ADR 0036 item 15).
+    confirm_new_addresses(hosts, &operations)?;
+
+    // Step 4: each deletion, with the stamp from the inventory
+    // (ADR 0036 item 16). `host_operations` ran again above, with the
+    // current state of each feed. A blocked deletion is already out of
+    // `operations` (ADR 0036 item 13).
+    delete_each_operation(collection, hosts, &operations, &mut touched)?;
+
+    // Step 5: the draft and its host operations go out.
+    collection.remove_draft_operations(id)?;
     collection.delete_draft(id)?;
-    // Remove the row and the copy of each pending file that the draft did
-    // not refer to (ADR 0032 item 11).
-    discard_draft(collection, store, id)?;
+
+    for connector_id in touched {
+        inventory::scan(collection, hosts, connector_id)?;
+    }
+
     Ok(version)
+}
+
+/// Put each upload and each copy of `operations` on its host: the first
+/// step of [`write_draft`] (ADR 0036 item 15).
+///
+/// The write does not replace a file that is on the host already. After
+/// each file, the function records it in the inventory, with the
+/// SHA-256 of the library file (ADR 0036 item 6).
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NoFolder`] when the feed has no release
+/// folder, and [`PipelineErrorKind::FileExists`] when a file is on the
+/// host at the planned path already.
+fn put_uploads_and_copies(
+    collection: &Collection,
+    hosts: &Hosts,
+    library: &Library,
+    row: &FeedRow,
+    operations: &[HostOperation],
+    touched: &mut HashSet<ConnectorId>,
+) -> Result<(), PipelineError> {
+    for operation in operations {
+        if !matches!(operation.kind, OperationKind::Upload | OperationKind::Copy) {
+            continue;
+        }
+        let library_file_id = operation
+            .library_file_id
+            .expect("an upload or a copy names its library file");
+        let file = collection.library_file(LibraryFileId(library_file_id))?;
+        let folder = row.folder.as_deref().ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::NoFolder,
+                format!("feed {} has no release folder yet", row.id.0),
+            )
+        })?;
+        let bytes = std::fs::read(library.path(folder, &file.path)).map_err(|error| {
+            PipelineError::new(
+                PipelineErrorKind::Connector,
+                format!("{}: cannot read the library file: {error}", file.path),
+            )
+        })?;
+        let target = hosts.get(operation.connector_id)?;
+        match target.write(&operation.path, &bytes, &Expected::Absent) {
+            Ok(_) => {}
+            Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
+                return Err(PipelineError::new(
+                    PipelineErrorKind::FileExists,
+                    format!("a file exists at {} already", operation.path),
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+        let listed = target.stat(&operation.path)?.ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::Connector,
+                format!("{} is not on the host after the write", operation.path),
+            )
+        })?;
+        collection.put_host_file(
+            operation.connector_id,
+            &operation.path,
+            listed.size,
+            &listed.stamp,
+        )?;
+        collection.set_host_file_sha(operation.connector_id, &operation.path, &file.sha256)?;
+        touched.insert(operation.connector_id);
+    }
+    Ok(())
+}
+
+/// Confirm that each upload and each copy of `operations` is on its
+/// host: the third step of [`write_draft`], before any deletion
+/// (ADR 0036 item 15).
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NotReachable`] when a file is not on its
+/// host.
+fn confirm_new_addresses(hosts: &Hosts, operations: &[HostOperation]) -> Result<(), PipelineError> {
+    for operation in operations {
+        if !matches!(operation.kind, OperationKind::Upload | OperationKind::Copy) {
+            continue;
+        }
+        let target = hosts.get(operation.connector_id)?;
+        if target.read(&operation.path)?.is_none() {
+            let name = operation.url.as_deref().unwrap_or(&operation.path);
+            return Err(PipelineError::new(
+                PipelineErrorKind::NotReachable,
+                format!("{name} is not on its host after the uploads"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Delete each deletion of `operations`, with the stamp from the
+/// inventory: the fourth step of [`write_draft`] (ADR 0036 items 13 and
+/// 16).
+///
+/// A deletion with no row in the inventory is already gone, and the
+/// function does nothing for it.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::Conflict`] when a host file has a
+/// different stamp than the inventory.
+fn delete_each_operation(
+    collection: &Collection,
+    hosts: &Hosts,
+    operations: &[HostOperation],
+    touched: &mut HashSet<ConnectorId>,
+) -> Result<(), PipelineError> {
+    for operation in operations {
+        if operation.kind != OperationKind::Delete {
+            continue;
+        }
+        let target = hosts.get(operation.connector_id)?;
+        let Some(host_file) = collection.host_file(operation.connector_id, &operation.path)? else {
+            continue;
+        };
+        match target.delete(&operation.path, &host_file.stamp) {
+            Ok(()) => {
+                collection.remove_host_file(operation.connector_id, &operation.path)?;
+                touched.insert(operation.connector_id);
+            }
+            Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
+                return Err(PipelineError::new(
+                    PipelineErrorKind::Conflict,
+                    format!("{} changed on the host after the scan", operation.path),
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }
 
 /// Remove one pending file of a draft: its row, and its copy when no other
@@ -786,10 +1408,15 @@ fn current_draft(collection: &Collection, id: FeedId) -> Result<DraftRow, Pipeli
     })
 }
 
-/// The ID of the diff of a draft, from its bytes and the path, the size and
+/// The ID of the diff of a draft, from its bytes, the path, the size and
 /// the SHA-256 of each file that it refers to, in sequence (ADR 0032
-/// item 10). The ID changes when a referenced file changes.
-fn diff_id(draft: &DraftRow, referenced: &[DraftFile]) -> DiffId {
+/// item 10), and `extra`. The ID changes when a referenced file changes,
+/// or when `extra` changes.
+///
+/// `extra` is the bytes of [`operation_bytes`], or an empty slice for a
+/// caller that does not yet know the host operations of the draft
+/// (ADR 0036 item 14).
+fn diff_id(draft: &DraftRow, referenced: &[DraftFile], extra: &[u8]) -> DiffId {
     let base = draft
         .base_version
         .as_ref()
@@ -806,5 +1433,6 @@ fn diff_id(draft: &DraftRow, referenced: &[DraftFile]) -> DiffId {
         bytes.push(0);
         bytes.extend_from_slice(file.sha256.as_bytes());
     }
+    bytes.extend_from_slice(extra);
     DiffId(sha256_hex(&[&bytes]))
 }

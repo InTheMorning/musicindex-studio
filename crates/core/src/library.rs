@@ -100,6 +100,24 @@ impl Library {
         fs::rename(&temporary, &full).map_err(|e| named(&full, &e))?;
         Ok(())
     }
+
+    /// Remove a file of a release folder. A file that does not exist is
+    /// not an error.
+    ///
+    /// # Errors
+    ///
+    /// Gives an `io::Error` when `name` is not a plain file name, or
+    /// Studio cannot remove the file for another reason.
+    pub fn remove_file(&self, folder: &str, name: &str) -> io::Result<()> {
+        check_plain(folder)?;
+        check_plain(name)?;
+        let full = self.root.join(folder).join(name);
+        match fs::remove_file(&full) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(named(&full, &e)),
+        }
+    }
 }
 
 /// Gives an error when `name` is not a plain file name or folder name, so
@@ -244,6 +262,21 @@ mod tests {
             b"<rss/>"
         );
         assert!(!library.path("my-album", "my-album.xml.studio-tmp").exists());
+    }
+
+    #[test]
+    fn remove_file_removes_the_file_and_a_missing_file_is_not_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let library = Library::open(dir.path().join("library")).unwrap();
+        let source_dir = tempfile::tempdir().unwrap();
+        let source = source_dir.path().join("a.mp3");
+        fs::write(&source, b"music").unwrap();
+        library.put_file("my-album", "a.mp3", &source).unwrap();
+        assert!(library.path("my-album", "a.mp3").exists());
+
+        library.remove_file("my-album", "a.mp3").unwrap();
+        assert!(!library.path("my-album", "a.mp3").exists());
+        library.remove_file("my-album", "a.mp3").unwrap();
     }
 
     #[test]

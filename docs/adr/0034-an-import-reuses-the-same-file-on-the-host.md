@@ -1,6 +1,6 @@
 # ADR 0034: An Import Reuses The Same File On The Host
 
-- Status: Accepted
+- Status: Accepted. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) replaces item 3 when Phase 7 implements it.
 - Date: 2026-10-23
 - Owner: operator
 

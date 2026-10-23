@@ -1,6 +1,6 @@
 # ADR 0009: Studio Connects To Hosts And Moves Files Between Them
 
-- Status: Accepted
+- Status: Accepted. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) replaces item 1 when Phase 7 implements it.
 - Date: 2026-10-22
 - Owner: operator
 

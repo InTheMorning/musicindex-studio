@@ -1,6 +1,6 @@
 # ADR 0032: New Releases: Formats, File Paths And New Feeds
 
-- Status: Accepted. [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md) replaces the WAV conversion of items 2 and 5 on 2026-10-23.
+- Status: Accepted. [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md) replaces the WAV conversion of items 2 and 5 on 2026-10-23. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) replaces items 4 and 10 to 12 when Phase 7 implements it.
 - Date: 2026-10-23
 - Owner: operator
 

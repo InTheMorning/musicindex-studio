@@ -36,6 +36,7 @@
 - [ADR 0032: New releases: formats, file paths and new feeds](adr/0032-new-releases-formats-paths-and-new-feeds.md)
 - [ADR 0033: A lossless import gives an MP3 enclosure](adr/0033-a-lossless-import-gives-an-mp3-enclosure.md)
 - [ADR 0034: An import reuses the same file on the host](adr/0034-an-import-reuses-the-same-file-on-the-host.md)
+- [ADR 0035: A release library is the master of each feed](adr/0035-a-release-library-is-the-master-of-each-feed.md)
 
 ## Plans
 

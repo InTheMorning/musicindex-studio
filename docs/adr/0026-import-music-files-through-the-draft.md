@@ -1,6 +1,6 @@
 # ADR 0026: Import Music Files Through The Draft
 
-- Status: Accepted
+- Status: Accepted. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) replaces items 5, 8 and 9 when Phase 7 implements it.
 - Date: 2026-10-22
 - Owner: operator
 

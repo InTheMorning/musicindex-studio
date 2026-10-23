@@ -35,6 +35,7 @@
 - [ADR 0031: A new element takes its hosted position](adr/0031-a-new-element-takes-its-hosted-position.md)
 - [ADR 0032: New releases: formats, file paths and new feeds](adr/0032-new-releases-formats-paths-and-new-feeds.md)
 - [ADR 0033: A lossless import gives an MP3 enclosure](adr/0033-a-lossless-import-gives-an-mp3-enclosure.md)
+- [ADR 0034: An import reuses the same file on the host](adr/0034-an-import-reuses-the-same-file-on-the-host.md)
 
 ## Plans
 
@@ -76,6 +77,7 @@
 - [Studio v1 task 019b: The MP3 encoder](tasks/studio-v1-task-019b-mp3-encoder.md)
 - [Studio v1 task 019c: The upload route gives two files](tasks/studio-v1-task-019c-upload-two-files.md)
 - [Studio v1 task 019d: The import sheet and the track page](tasks/studio-v1-task-019d-import-sheet-and-track-page.md)
+- [Studio v1 task 020: An import reuses the same file on the host](tasks/studio-v1-task-020-reuse-the-file-on-the-host.md)
 
 ## Reviews
 

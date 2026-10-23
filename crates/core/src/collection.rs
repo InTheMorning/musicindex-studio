@@ -845,6 +845,14 @@ impl Collection {
         Ok(())
     }
 
+    /// Remove the release folder of a feed, so a test can move it again.
+    #[cfg(test)]
+    pub(crate) fn set_feed_folder_none_for_test(&self, id: FeedId) {
+        self.db
+            .execute("UPDATE feeds SET folder = NULL WHERE id = ?1", [id.0])
+            .unwrap();
+    }
+
     /// Give a feed its default host for files. `None` means that the
     /// write pipeline decides the default elsewhere (ADR 0036 item 4 and
     /// item 8).
@@ -961,12 +969,17 @@ impl Collection {
         Ok(())
     }
 
-    /// The pending files of a draft, by path (ADR 0026 item 6).
+    /// The pending files of a draft, by path (ADR 0026 item 6). After the
+    /// move into the library drops the table, a draft has no pending file
+    /// (ADR 0036 item 5).
     ///
     /// # Errors
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn draft_files(&self, id: FeedId) -> Result<Vec<DraftFile>, CollectionError> {
+        if !self.has_draft_files_table()? {
+            return Ok(Vec::new());
+        }
         let mut statement = self.db.prepare(
             "SELECT path, size, media_type, sha256 FROM draft_files
              WHERE feed_id = ?1 ORDER BY path",
@@ -987,6 +1000,19 @@ impl Collection {
             params![id.0, path],
         )?;
         Ok(())
+    }
+
+    /// True while the table of the pending files is in the database.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub(crate) fn has_draft_files_table(&self) -> Result<bool, CollectionError> {
+        Ok(self.db.query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'draft_files')",
+            [],
+            |r| r.get(0),
+        )?)
     }
 
     /// Remove the table of the pending files, once `migrate::into_library`
@@ -2363,7 +2389,8 @@ mod tests {
     fn drop_draft_files_table_removes_the_table_and_a_second_call_does_nothing() {
         let collection = Collection::open_in_memory().unwrap();
         collection.drop_draft_files_table().unwrap();
-        assert!(collection.draft_files(FeedId(1)).is_err());
+        assert!(!collection.has_draft_files_table().unwrap());
+        assert!(collection.draft_files(FeedId(1)).unwrap().is_empty());
         // A second call does nothing: it does not give an error.
         collection.drop_draft_files_table().unwrap();
     }

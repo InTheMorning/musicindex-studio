@@ -482,7 +482,7 @@ mod tests {
 
         // The table of the pending files is gone, now that the library
         // replaces it (ADR 0036 item 5).
-        assert!(s.collection.draft_files(feed_one).is_err());
+        assert!(!s.collection.has_draft_files_table().unwrap());
 
         // The move did not change a hosted file.
         assert_eq!(snapshot_dir(s.host_dir.path()), host_before);
@@ -492,6 +492,13 @@ mod tests {
         assert_eq!(second, MoveReport::default());
         let row_one_again = s.collection.feed(feed_one).unwrap();
         assert_eq!(row_one_again.folder.as_deref(), Some("album-one"));
+
+        // A feed with no folder after the table is gone moves with no
+        // pending file, for example after the user sets the library again.
+        s.collection.set_feed_folder_none_for_test(feed_one);
+        let third = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
+        assert!(third.errors.is_empty(), "{:?}", third.errors);
+        assert_eq!(third.feed_files, 1);
     }
 
     #[test]

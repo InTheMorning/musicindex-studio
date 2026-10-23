@@ -434,9 +434,6 @@ impl Item {
         c.text(Ns::None, "description", self.description.as_ref());
         c.text(Ns::None, "guid", self.guid.as_ref());
         c.one(self.enclosure.as_ref());
-        // A new alternate enclosure with no hosted position goes directly
-        // after the enclosure (ADR 0031, ADR 0033 item 6).
-        c.list_after(&self.alternate_enclosures, &[(Ns::None, "enclosure")]);
         c.text(Ns::None, "pubDate", self.pub_date.as_ref());
         c.text(Ns::Itunes, "duration", self.duration.as_ref());
         c.text(Ns::Podcast, "episode", self.episode.as_ref());
@@ -448,6 +445,12 @@ impl Item {
         c.list(&self.txts);
         c.one(self.license.as_ref());
         c.list(&self.values);
+        // A new alternate enclosure with no hosted position goes directly
+        // after the enclosure (ADR 0031, ADR 0033 item 6). It is the last
+        // write, because a new item takes the sequence of the last hosted
+        // item: an element of that sequence, such as `itunes:duration`,
+        // goes directly after the enclosure too.
+        c.list_after(&self.alternate_enclosures, &[(Ns::None, "enclosure")]);
     }
 
     fn adopt_fields(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {

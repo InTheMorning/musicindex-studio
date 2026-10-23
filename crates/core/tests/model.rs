@@ -446,3 +446,68 @@ fn a_new_recipient_gets_the_attribute_sequence_of_the_source() {
         "{text}"
     );
 }
+
+/// Task 019 visual check: the hosted items have `itunes:duration` and
+/// `podcast:episode` after the enclosure. A new lossless track takes that
+/// sequence, and its alternate enclosures still go directly after the
+/// enclosure (ADR 0031 item 2, ADR 0033 item 6).
+#[test]
+fn a_new_track_puts_its_alternate_enclosures_before_its_duration() {
+    const HOSTED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">
+  <channel>
+    <title>Album</title>
+    <item>
+      <title>One</title>
+      <guid isPermaLink=\"false\">track-1</guid>
+      <enclosure url=\"https://music.example/1.mp3\" length=\"10\" type=\"audio/mpeg\"/>
+      <itunes:duration>00:01:00</itunes:duration>
+      <podcast:episode>1</podcast:episode>
+    </item>
+  </channel>
+</rss>
+";
+    let mut collection = Collection::open_in_memory().unwrap();
+    let id = collection.add_feed(None, None).unwrap();
+    let row = DraftRow {
+        base_version: None,
+        base_xml: HOSTED.as_bytes().to_vec(),
+        draft_xml: HOSTED.as_bytes().to_vec(),
+    };
+    collection.save_draft(id, &row).unwrap();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.items.push(Entry::new(Item {
+        title: Some("Two".to_owned()),
+        enclosure: Some(Enclosure {
+            url: Some("https://music.example/2.mp3".to_owned()),
+            length: Some("20".to_owned()),
+            media_type: Some("audio/mpeg".to_owned()),
+        }),
+        duration: Some("00:02:00".to_owned()),
+        alternate_enclosures: vec![Entry::new(AlternateEnclosure {
+            media_type: Some("audio/flac".to_owned()),
+            title: Some("Lossless (FLAC)".to_owned()),
+            sources: vec![Entry::new(Source {
+                uri: Some("https://music.example/2.flac".to_owned()),
+                ..Source::default()
+            })],
+            ..AlternateEnclosure::default()
+        })],
+        ..Item::default()
+    }));
+    let (changed, _) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let guid = changed.items[1].guid.as_deref().unwrap();
+    let expected = format!(
+        "    <item>\n      <title>Two</title>\n      \
+         <guid isPermaLink=\"false\">{guid}</guid>\n      \
+         <enclosure url=\"https://music.example/2.mp3\" length=\"20\" type=\"audio/mpeg\"/>\n      \
+         <podcast:alternateEnclosure type=\"audio/flac\" title=\"Lossless (FLAC)\">\n        \
+         <podcast:source uri=\"https://music.example/2.flac\"/>\n      \
+         </podcast:alternateEnclosure>\n      \
+         <itunes:duration>00:02:00</itunes:duration>\n      \
+         <podcast:episode>2</podcast:episode>\n    </item>"
+    );
+    let text = draft_text(&collection, id);
+    assert!(text.contains(&expected), "{text}");
+}

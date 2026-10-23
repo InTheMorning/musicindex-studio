@@ -283,12 +283,16 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
   });
   const backToHits = () => { setFeedData(null); setView('hits'); };
   const backToFeed = () => { setTrackData(null); setView('feed'); };
-  const toggleIndex = (r) => setIndexSelected((selected) => {
+  // Each musicindex selection keeps the name of its feed or track, so that
+  // the Selected part can show it after the user goes to a different page.
+  const toggleIndex = (r, from) => setIndexSelected((selected) => {
     const key = identityOf(r);
     const next = new Map(selected);
-    if (next.has(key)) next.delete(key); else next.set(key, r);
+    if (next.has(key)) next.delete(key); else next.set(key, { recipient: r, from });
     return next;
   });
+  const feedName = feedData ? feedData.title || 'Feed' : '';
+  const trackName = trackData ? trackData.title || 'Track' : '';
 
   // The sheet starts fresh each time that it opens.
   useEffect(() => {
@@ -306,6 +310,12 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
   }, [open]);
 
   const total = yoursSelected.size + indexSelected.size;
+  const selectedRows = [
+    ...(list || []).filter((r) => yoursSelected.has(identityOf(r)))
+      .map((r) => ({ key: identityOf(r), recipient: r, from: 'Your recipients', clear: () => toggleYours(identityOf(r)) })),
+    ...[...indexSelected].map(([key, entry]) => ({ key, recipient: entry.recipient, from: entry.from,
+      clear: () => toggleIndex(entry.recipient) })),
+  ];
   const add = () => {
     const combined = new Map();
     for (const r of list || []) {
@@ -318,7 +328,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     }
     // An imported recipient keeps its fee mark but gets no split. The user
     // gives each new recipient its split (ADR 0030).
-    for (const [key, r] of indexSelected) combined.set(key, { ...r, split: '' });
+    for (const [key, entry] of indexSelected) combined.set(key, { ...entry.recipient, split: '' });
     onAdd(withCids(fresh([...combined.values()])));
   };
 
@@ -328,6 +338,14 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
+      ${selectedRows.length > 0 && html`<section class="page-section">
+        <h2>Selected</h2>
+        <div class="group">
+          ${selectedRows.map((row) => html`<${PickRow} key=${`s-${row.key}`}
+            name=${row.recipient.name || row.recipient.address || 'Recipient'} address=${row.recipient.address}
+            status=${row.from} checked=${true} taken=${false} onToggle=${row.clear} />`)}
+        </div>
+      </section>`}
       <section class="page-section">
         <h2>From musicindex</h2>
         <form class="form" onSubmit=${runSearch} role="search">
@@ -353,12 +371,14 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
         </div>`}
         ${view === 'feed' && feedData && html`<div class="group">
           <button class="link-row" type="button" onClick=${backToHits}>
-            <span class="go" aria-hidden="true">‹</span><span class="title">Back</span></button>
+            <span class="go" aria-hidden="true">‹</span><span class="title">Search results</span></button>
+          <h3 class="pick-head"><span class="dot feed"></span>${feedName}</h3>
           ${feedData.recipients.map((r) => {
             const key = identityOf(r);
             return html`<${PickRow} key=${`f-${key}`} name=${r.name || r.address || 'Recipient'} address=${r.address}
-              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r)} />`;
+              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r, feedName)} />`;
           })}
+          ${feedData.tracks.length > 0 && html`<h3 class="pick-head sub">Tracks</h3>`}
           ${feedData.tracks.map((t) => html`<button class="link-row" type="button" key=${t.track_guid} disabled=${indexLoad.busy}
             onClick=${() => openTrack(t.track_guid)}>
             <span class="title">${t.title}</span><span class="go" aria-hidden="true">›</span>
@@ -366,12 +386,13 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
         </div>`}
         ${view === 'track' && trackData && html`<div class="group">
           <button class="link-row" type="button" onClick=${backToFeed}>
-            <span class="go" aria-hidden="true">‹</span><span class="title">Back</span></button>
+            <span class="go" aria-hidden="true">‹</span><span class="title">${feedName}</span></button>
+          <h3 class="pick-head">${trackName}<span class="muted"> · ${feedName}</span></h3>
           ${trackData.recipients.length === 0 && html`<p class="hint">This track has no recipients.</p>`}
           ${trackData.recipients.map((r) => {
             const key = identityOf(r);
             return html`<${PickRow} key=${`t-${key}`} name=${r.name || r.address || 'Recipient'} address=${r.address}
-              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r)} />`;
+              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r, `${trackName} · ${feedName}`)} />`;
           })}
         </div>`}
       </section>

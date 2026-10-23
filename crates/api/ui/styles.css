@@ -930,6 +930,10 @@ textarea:focus { background: var(--fill); }
 }
 .pick-row .summary { white-space: normal; }
 .pick-action { display: flex; justify-content: flex-end; }
+/* The name of the feed or the track that the musicindex part shows. */
+.pick-head { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 16px 4px; font-size: 1rem; font-weight: 700; }
+.pick-head.sub { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.pick-head .muted { color: var(--muted); font-weight: 400; }
 /* At a narrow width, the status goes below the name. */
 @media (max-width: 760px) {
   .pick-row { grid-template-columns: 44px minmax(0, 1fr) auto; }

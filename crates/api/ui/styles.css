@@ -187,6 +187,9 @@ code, .mono {
 
 .boot { padding: 32px; color: var(--muted); }
 
+/* A line of muted help text, in a field or on its own. */
+.hint { color: var(--muted); font-size: .9rem; }
+
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
@@ -237,8 +240,12 @@ code, .mono {
 
 .field { display: grid; gap: 6px; }
 .field label { font-weight: 600; }
-.field .hint { color: var(--muted); font-size: .9rem; }
+/* The body of a field: the hint, the input and the error. A field in a
+   group puts its label at the left of the body at a wide width (ADR 0029,
+   task 014c step 8). */
+.field-body { display: grid; gap: 6px; min-width: 0; }
 .field input, .field textarea {
+  width: 100%;
   min-height: 44px;
   padding: 0 14px;
   border: 0;
@@ -407,7 +414,6 @@ code, .mono {
   letter-spacing: .08em;
   color: var(--muted);
 }
-.rows { list-style: none; display: grid; gap: 2px; }
 .row {
   display: flex;
   align-items: center;
@@ -473,6 +479,8 @@ code, .mono {
   font-weight: 600;
 }
 .bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The feed title part of a breadcrumb title (review of task 014c, defect 5). */
+.bar-title .muted { color: var(--muted); font-weight: 400; }
 
 /* The draft toolbar: the short status, then "Versions" and "Review" (ADR
    0029 item 1). */
@@ -669,9 +677,6 @@ textarea:focus { background: var(--fill); }
 .host .sub { color: var(--muted); }
 
 /* The album editor (task 011). */
-.editor h3 { font-size: 1rem; font-weight: 700; }
-.editor .hint { color: var(--muted); }
-.editor textarea { width: 100%; }
 .entry {
   display: grid;
   gap: 14px;
@@ -679,21 +684,6 @@ textarea:focus { background: var(--fill); }
   border-radius: 12px;
 }
 .entry legend { padding: 0 6px; font-weight: 600; }
-.tracks { display: grid; gap: 8px; }
-.track { border-radius: 12px; }
-.track[open] { background: var(--level-3); }
-.track > summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  padding: 0 14px;
-  cursor: pointer;
-  font-weight: 600;
-}
-.track > summary .number { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2ch; }
-.track > .form { padding: 4px 16px 16px; }
-.add-track { border-top: 1px solid var(--sep); padding-top: 18px; }
 
 /* A diff line has a sign and an edge. Color is not the only sign (ADR 0010). */
 .diff {
@@ -716,7 +706,6 @@ textarea:focus { background: var(--fill); }
 .snapshots .sub { color: var(--muted); font-size: .85rem; }
 
 /* The value editor (task 012). */
-.editor h4 { font-size: .95rem; font-weight: 700; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: end; }
 .grid2 > .field { align-content: end; }
 .field select {
@@ -752,13 +741,10 @@ textarea:focus { background: var(--fill); }
 .disclosure > summary > h2, .disclosure > summary > h3, .disclosure > summary > .sub { flex: none; white-space: nowrap; }
 .disclosure > summary { flex-wrap: wrap; }
 .disclosure[open] > .form { margin-top: 14px; }
-.panel.disclosure { display: block; padding-block: 12px; }
-.panel.disclosure[open] { padding-bottom: 24px; }
-.track-payments { border-top: 1px solid var(--sep); padding-top: 6px; }
 
-/* A recipient is the third level: it has the tertiary background, with no
-   border (Apple HIG, color: primary, secondary and tertiary backgrounds). */
-.recipient { border-radius: 12px; background: var(--level-3); }
+/* A recipient is a row of its group, like a link row, with no fill of its
+   own (review of task 014c, defect 3). Only its open content, the third
+   level, sits on an inset (mockup .inset). */
 .recipient > summary {
   display: grid;
   /* The marker, the name, the meter, the percentage and the address. Fixed
@@ -766,15 +752,16 @@ textarea:focus { background: var(--fill); }
   grid-template-columns: auto minmax(0, 13rem) 64px 6.5rem minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 52px;
+  padding: 10px 16px;
   cursor: pointer;
   list-style: none;
 }
+.recipient > summary:hover { background: var(--fill-soft); }
 .recipient > summary .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recipient > summary .share { color: var(--muted); font-variant-numeric: tabular-nums; }
 .recipient > summary .address { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recipient > .form { padding: 4px 14px 14px; }
+.recipient > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
 
 /* Share bars (task 012). A meter for one recipient, and a stack of all
    recipients with a 2 px gap between the parts. */
@@ -835,18 +822,152 @@ textarea:focus { background: var(--fill); }
 .share-stack > span:last-child { border-radius: 0 4px 4px 0; }
 .share-stack > span:only-child { border-radius: 4px; }
 
-/* A list entry as one summary line (ADR 0028), on the tertiary background. */
-.entry-row { border-radius: 12px; background: var(--level-3); }
+/* A list entry as one summary line (ADR 0028), a row of its group, like a
+   link row, with no fill of its own (review of task 014c, defect 3). Only
+   its open content, the third level, sits on an inset (mockup .inset). */
 .entry-row > summary {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 52px;
+  padding: 10px 16px;
   cursor: pointer;
   list-style: none;
   min-width: 0;
 }
+.entry-row > summary:hover { background: var(--fill-soft); }
 .entry-row > summary .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-row > summary .sub { color: var(--muted); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.entry-row > .form { padding: 4px 14px 14px; }
+.entry-row > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
+
+/* ---- The editor pages (task 014c, ADR 0029 items 5 to 10). ---- */
+
+/* The page of one tree item: a sequence of sections. */
+.page { padding: 8px 32px 32px; max-width: 880px; display: grid; gap: 28px; }
+.page-section { display: grid; gap: 8px; }
+.page-section > h2 { font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
+.page-section > .note { padding: 0 4px; color: var(--muted); font-size: .85rem; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 4px; }
+.section-head > h2 { font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* A section is a heading on level 1, then one group on level 2 (ADR 0029
+   item 11). A thin separator divides the rows of a group; a border does
+   not mark a level. */
+.group { background: var(--level-2); border-radius: 14px; overflow: hidden; }
+.group > * { position: relative; }
+.group > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 0;
+  border-top: 1px solid var(--sep);
+}
+.group > .field, .group > .hint, .group > .notice, .group > .actions { padding: 10px 16px; }
+.group > .field { min-height: 52px; }
+/* At more than 760 px, a field in a group puts its label at the left, in a
+   column of 170 px (task 014c step 8). */
+@media (min-width: 761px) {
+  .group > .field { display: grid; grid-template-columns: 170px 1fr; align-items: start; gap: 4px 16px; }
+  .group > .field > label { padding-top: 12px; }
+}
+
+/* A row of a group that goes to a page, or opens a disclosure. */
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.link-row:hover { background: var(--fill-soft); }
+.link-row .label { font-weight: 600; flex: none; }
+.link-row .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-row .summary { flex: 1; min-width: 0; color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-row .go { color: var(--muted); }
+.link-row .num { flex: none; width: 2ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.link-row .dur { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .9rem; }
+.link-row.add { color: var(--accent); font-weight: 600; }
+.disclosure > summary.link-row { min-height: 52px; }
+
+/* The compact header sits above .page, outside it, so it needs the same
+   column and left padding as a page section, or its cover and its "Read
+   again" button do not line up with the groups below (review of task 014c,
+   defect 1). */
+.feed-head { padding: 16px 32px 20px; max-width: 880px; display: grid; gap: 16px; }
+@media (max-width: 760px) {
+  .feed-head { padding: 16px 16px 20px; }
+}
+
+/* The compact header of an editable feed, and the header of a track page
+   (ADR 0029 item 10). */
+.head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.head .cover {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--level-2);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.head .cover .mark {
+  width: 32px;
+  height: 28px;
+  background: var(--glow, var(--c-feed));
+  -webkit-mask: var(--mark-mask) center / contain no-repeat;
+  mask: var(--mark-mask) center / contain no-repeat;
+}
+.head .text { flex: 1; min-width: 0; }
+.head h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; }
+.head .sub { color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pager { display: flex; gap: 8px; flex: none; }
+
+/* ---- The sidebar tree (ADR 0029 items 5 and 6). Two levels: the feed,
+   and its pages. ---- */
+.tree { list-style: none; display: grid; gap: 1px; }
+.tree ul { list-style: none; display: grid; gap: 1px; margin: 2px 0 6px; }
+/* A grid item does not shrink below the width of its text by default. Let
+   each row shrink, so that a long track title gets an ellipsis instead of
+   a sidebar that scrolls to the side. */
+.tree li { min-width: 0; }
+.node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.node:hover { background: var(--fill-soft); }
+.node[aria-current="true"], .node[aria-current="page"] {
+  background: linear-gradient(var(--gloss-top), var(--gloss-bottom));
+  border-color: var(--gloss-edge);
+}
+.node .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node.feed { font-weight: 600; }
+.node .chev { width: 14px; flex: none; color: var(--muted); transition: transform .15s; }
+.node[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.tree ul .node { padding-left: 36px; }
+.node .num { width: 2ch; flex: none; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.node.add { color: var(--accent); }
+.node .field-error { flex: none; font-size: .78rem; }
+.tree-sub { padding: 10px 10px 2px 36px; font-size: .75rem; color: var(--muted); font-weight: 600; }
+
+@media (max-width: 760px) {
+  .page { padding: 8px 16px 24px; }
+}

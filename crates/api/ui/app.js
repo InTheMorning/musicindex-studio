@@ -1,6 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback } from './vendor/htm-preact-standalone.module.js';
-import { AlbumEditor, DraftToolbar } from './editor.js';
+import { AlbumEditor, DraftToolbar, trackKey } from './editor.js';
 import { useDraft } from './draft.js';
 
 // ---- Access token (ADR 0017) ----
@@ -116,14 +116,18 @@ function title(error) {
 }
 
 // A labelled input. `error` is a line of red text below the field (ADR 0018).
+// The label and the input sit in one body div, so that a field in a group
+// can put the label at the left at a wide width (ADR 0029, task 014c).
 export function Field({ id, label, hint, error, children, ...input }) {
   const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
   return html`<div class="field">
     <label for=${id}>${label}</label>
-    ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
-    <input id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input} />
-    ${error && html`<span class="field-error" id=${`${id}-error`}>${error}</span>`}
-    ${children}
+    <div class="field-body">
+      ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
+      <input id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input} />
+      ${error && html`<span class="field-error" id=${`${id}-error`}>${error}</span>`}
+      ${children}
+    </div>
   </div>`;
 }
 
@@ -155,8 +159,9 @@ function mediumKind(medium) {
   }
 }
 
-// The source of a feed address (ADR 0021).
-function addressSource(source) {
+// The source of a feed address (ADR 0021). `editor.js` uses this for the
+// Feed facts row of the album page.
+export function addressSource(source) {
   switch (source) {
     case 'read': return 'Studio read the feed at this address';
     case 'self_link': return 'The self link in the feed';
@@ -654,7 +659,14 @@ function NoToken() {
 
 // ---- Shell ----
 
-function FeedDetail({ feed, draft, onChanged, onRemoved }) {
+// Is this feed an album that the editor can open (ADR 0029 item 4)?
+function isEditable(feed) {
+  return Boolean(feed.connector_id) && mediumKind(feed.medium).label === 'Album';
+}
+
+// A feed that the editor cannot open yet: the full hero and the facts, as
+// before ADR 0029.
+function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -668,10 +680,7 @@ function FeedDetail({ feed, draft, onChanged, onRemoved }) {
   };
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
   return html`<div>
-    <div class="bar">
-      <span class="bar-title">${feed.title || 'Untitled feed'}</span>
-      ${draft.model !== null && html`<${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} />`}
-    </div>
+    <div class="bar"><span class="bar-title">${feed.title || 'Untitled feed'}</span></div>
     <section class="hero" style=${{ '--glow': glow }}>
       <div class="art" aria-hidden="true"></div>
       <div>
@@ -695,10 +704,130 @@ function FeedDetail({ feed, draft, onChanged, onRemoved }) {
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
       </dl>
-      ${feed.connector_id && kind.label !== 'Album' && html`<p class="hint">The editor for this feed type comes in a later phase.</p>`}
+      ${feed.connector_id && html`<p class="hint">The editor for this feed type comes in a later phase.</p>`}
     </section>
-    ${feed.connector_id && kind.label === 'Album' && html`<${AlbumEditor} key=${feed.id} draft=${draft} />`}
   </div>`;
+}
+
+// The names of the pages that are not the album page or a track.
+const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Recipients' };
+
+// The toolbar title: the feed title on the album page, or the feed title in
+// the muted color, then the name of the open page (review of task 014c,
+// defect 5).
+function Crumb({ feed, view, draft }) {
+  const page = view.page || 'album';
+  const name = feed.title || 'Untitled feed';
+  if (page === 'album') return html`<span class="bar-title">${name}</span>`;
+  let label = PAGE_NAMES[page];
+  if (page === 'track') {
+    const item = draft.model && draft.model.items.find((i) => trackKey(i) === view.track);
+    label = item ? item.title || 'Untitled track' : 'Track';
+  }
+  return html`<span class="bar-title"><span class="muted">${name}</span> › ${label}</span>`;
+}
+
+// An editable album: the compact header, not the hero (ADR 0029 item 10).
+// The toolbar stays in view at each scroll position (ADR 0029 item 1).
+function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved }) {
+  const { busy, error, run } = useAction();
+  const kind = mediumKind(feed.medium);
+  const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
+  const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
+  return html`<div>
+    <div class="bar">
+      <${Crumb} feed=${feed} view=${view} draft=${draft} />
+      <${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} />
+    </div>
+    <div class="feed-head">
+      <header class="head">
+        <div class="cover"><span class="mark" style=${{ '--glow': glow }}></span></div>
+        <div class="text">
+          <span class="eyebrow">${kind.label}</span>
+          <h1>${feed.title || 'Untitled feed'}</h1>
+          <p class="sub mono">${feed.public_url || 'This feed has no public address yet.'}</p>
+        </div>
+        <button class="button" type="button" disabled=${busy} onClick=${refresh}>${busy ? 'Reading…' : 'Read again'}</button>
+      </header>
+      <${ErrorNotice} error=${error} />
+      <${AddressDifferences} feed=${feed} />
+    </div>
+    <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
+      adding=${adding} onAdding=${onAdding} onRemoved=${onRemoved} />
+  </div>`;
+}
+
+// The feed open in the main pane: the editor for an editable album, or the
+// read-only view for every other feed (ADR 0029 item 10).
+function FeedDetail({ feed, draft, view, go, adding, onAdding, onChanged, onRemoved }) {
+  if (isEditable(feed)) {
+    return html`<${EditableFeed} feed=${feed} draft=${draft} view=${view} go=${go}
+      adding=${adding} onAdding=${onAdding} onChanged=${onChanged} onRemoved=${onRemoved} />`;
+  }
+  return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} />`;
+}
+
+// The sidebar tree: each feed, and the pages of the selected feed (ADR 0029
+// items 5 and 6). A click on a different feed opens its pages. A click on
+// the open feed opens or closes its pages. Only the selected feed shows its
+// pages, and only after its draft loads.
+function FeedTree({ feeds, view, draft, go, onAdding }) {
+  const selectedId = view.name === 'feed' ? view.id : null;
+  const [expanded, setExpanded] = useState(selectedId);
+  useEffect(() => { setExpanded(selectedId); }, [selectedId]);
+  const toggleFeed = (feed, canEdit) => {
+    if (feed.id === selectedId) {
+      if (canEdit) setExpanded((current) => (current === feed.id ? null : feed.id));
+    } else {
+      go({ name: 'feed', id: feed.id });
+      setExpanded(feed.id);
+    }
+  };
+  const openPage = (feed, page) => go({ name: 'feed', id: feed.id, ...page });
+  // Is this tree item the page that the view shows now?
+  const isCurrent = (page) => {
+    if (selectedId === null) return false;
+    const target = page.page || 'album';
+    if ((view.page || 'album') !== target) return false;
+    return target !== 'track' || view.track === page.track;
+  };
+  return html`<ul class="tree">
+    ${feeds.map((feed) => {
+      const kind = mediumKind(feed.medium);
+      const canEdit = isEditable(feed);
+      const isOpen = canEdit && feed.id === selectedId && expanded === feed.id && draft.model !== null;
+      return html`<li key=${feed.id}>
+        <button class="node feed" type="button" aria-current=${feed.id === selectedId ? 'true' : 'false'}
+          aria-expanded=${canEdit ? (isOpen ? 'true' : 'false') : undefined}
+          onClick=${() => toggleFeed(feed, canEdit)}>
+          ${canEdit && html`<span class="chev" aria-hidden="true">▸</span>`}
+          <span class=${`dot ${kind.dot}`}></span>
+          <span class="label">${feed.title || feed.path || 'Untitled feed'}</span>
+        </button>
+        ${isOpen && html`<ul>
+          <li><button class="node" type="button" aria-current=${isCurrent({}) ? 'page' : 'false'}
+            onClick=${() => openPage(feed, {})}><span class="label">Album</span></button></li>
+          <li><button class="node" type="button" aria-current=${isCurrent({ page: 'credits' }) ? 'page' : 'false'}
+            onClick=${() => openPage(feed, { page: 'credits' })}><span class="label">Credits and links</span></button></li>
+          <li><button class="node" type="button" aria-current=${isCurrent({ page: 'recipients' }) ? 'page' : 'false'}
+            onClick=${() => openPage(feed, { page: 'recipients' })}><span class="label">Recipients</span></button></li>
+          <li class="tree-sub">Tracks</li>
+          ${draft.model.items.map((item, i) => {
+            const key = trackKey(item);
+            const bad = draft.bad.some((b) => b.field.startsWith(`items/${i}/`));
+            return html`<li key=${key}><button class="node" type="button"
+              aria-current=${isCurrent({ page: 'track', track: key }) ? 'page' : 'false'}
+              onClick=${() => openPage(feed, { page: 'track', track: key })}>
+              <span class="num">${i + 1}</span><span class="label">${item.title || 'Untitled track'}</span>
+              ${bad && html`<span class="field-error">Address not correct</span>`}
+            </button></li>`;
+          })}
+          <li><button class="node add" type="button" onClick=${() => { openPage(feed, {}); onAdding(true); }}>
+            <span class="num">＋</span><span class="label">Add a track</span></button></li>
+        </ul>`}
+      </li>`;
+    })}
+  </ul>`;
 }
 
 // The feed files in a folder that are not in the collection. Studio shows
@@ -838,8 +967,10 @@ function AddFeeds({ connectors, onAdded }) {
 function Shell({ vault, onLock }) {
   const [feeds, setFeeds] = useState(null);
   const [connectors, setConnectors] = useState([]);
-  const [view, setView] = useNav('shell', { name: 'feeds' });
+  const [view, go] = useNav('shell', { name: 'feeds' });
   const [error, setError] = useState(null);
+  // The Add a track sheet, by the tree and by the album page (ADR 0029 item 7).
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -857,8 +988,10 @@ function Shell({ vault, onLock }) {
   const selected = view.name === 'feed' && feeds ? feeds.find((f) => f.id === view.id) : null;
   // The shell holds the one draft of the selected feed (ADR 0029 item 4).
   // A feed with no connector, or a feed that is not an album, needs no draft.
-  const draftFeedId = selected && selected.connector_id && mediumKind(selected.medium).label === 'Album' ? selected.id : null;
+  const draftFeedId = selected && isEditable(selected) ? selected.id : null;
   const draft = useDraft(draftFeedId);
+  // A different feed closes the Add a track sheet of the feed before it.
+  useEffect(() => { setAdding(false); }, [draftFeedId]);
 
   let main;
   if (error) {
@@ -867,18 +1000,19 @@ function Shell({ vault, onLock }) {
     main = html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`;
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
-      onOpen=${(id) => setView({ name: 'feed', id })} />`;
+      onOpen=${(id) => go({ name: 'feed', id })} />`;
   } else if (view.name === 'add-feed') {
     main = html`<${AddFeeds} connectors=${connectors}
-      onAdded=${async (f) => { await load(); setView(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
+      onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
   } else if (selected) {
-    main = html`<${FeedDetail} feed=${selected} draft=${draft} onChanged=${() => load()}
-      onRemoved=${async () => { await load(); setView({ name: 'feeds' }, { replace: true }); }} />`;
+    main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go}
+      adding=${adding} onAdding=${setAdding} onChanged=${() => load()}
+      onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} />`;
   } else {
     main = html`<section class="center" style=${{ minHeight: '100%' }}><div class="card">
       <h1>${feeds.length ? 'Select a feed' : 'Your collection is empty'}</h1>
       <p>${feeds.length ? 'Select one in the Feeds list.' : 'Add a feed to start.'}</p>
-      <div class="actions"><button class="button primary" type="button" onClick=${() => setView({ name: 'add-feed' })}>Add a feed</button></div>
+      <div class="actions"><button class="button primary" type="button" onClick=${() => go({ name: 'add-feed' })}>Add a feed</button></div>
     </div></section>`;
   }
 
@@ -887,21 +1021,11 @@ function Shell({ vault, onLock }) {
       <header><${Brand} /><${ThemeToggle} /></header>
       <h2>Feeds</h2>
       ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
-      <ul class="rows">
-        ${(feeds || []).map((f) => {
-          const kind = mediumKind(f.medium);
-          return html`<li><button class="row" type="button" aria-current=${view.name === 'feed' && view.id === f.id ? 'true' : 'false'}
-            onClick=${() => setView({ name: 'feed', id: f.id })}>
-            <span class=${`dot ${kind.dot}`}></span>
-            <span class="text"><span class="title">${f.title || f.path || 'Untitled feed'}</span>
-              <span class="sub">${kind.label}${f.connector_id ? '' : ' · read-only'}</span></span>
-          </button></li>`;
-        })}
-      </ul>
-      <button class="row" type="button" onClick=${() => setView({ name: 'add-feed' })}>＋ Add a feed</button>
+      <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${go} onAdding=${setAdding} />
+      <button class="row" type="button" onClick=${() => go({ name: 'add-feed' })}>＋ Add a feed</button>
       <footer>
         <button class="row" type="button" aria-current=${view.name === 'hosts' ? 'true' : 'false'}
-          onClick=${() => setView({ name: 'hosts' })}><span class="dot hosting"></span>Hosts</button>
+          onClick=${() => go({ name: 'hosts' })}><span class="dot hosting"></span>Hosts</button>
         ${vault === 'open' && html`<button class="row" type="button" onClick=${lock}>Lock Studio</button>`}
       </footer>
     </nav>

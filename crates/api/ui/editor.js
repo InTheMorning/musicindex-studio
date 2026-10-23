@@ -1,9 +1,10 @@
-// The album editor (task 011, ADR 0022) and its toolbar and sheets (task
-// 014b, ADR 0029). The UI edits the typed model of the draft. Each list
-// entry carries its key, and the draft saves automatically.
+// The album editor (task 011, ADR 0022), its pages (task 014c, ADR 0029
+// items 5 to 10) and its toolbar and sheets (task 014b, ADR 0029). The UI
+// edits the typed model of the draft. Each list entry carries its key, and
+// the draft saves automatically.
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
-import { api, Field, ErrorNotice, useAction } from './app.js';
-import { AlbumPayments, TrackPayments } from './values.js';
+import { api, Field, ErrorNotice, useAction, addressSource } from './app.js';
+import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
@@ -30,7 +31,7 @@ export function TextField({ id, label, value, onChange, required = false, addres
 function TextArea({ id, label, value, onChange }) {
   return html`<div class="field">
     <label for=${id}>${label}</label>
-    <textarea id=${id} value=${value ?? ''} onInput=${(e) => onChange(optional(e.target.value))}></textarea>
+    <div class="field-body"><textarea id=${id} value=${value ?? ''} onInput=${(e) => onChange(optional(e.target.value))}></textarea></div>
   </div>`;
 }
 
@@ -60,19 +61,11 @@ export function EntryActions({ list, index, name, onChange }) {
   </div>`;
 }
 
-// ---- The channel ----
-
-function ChannelFields({ model, update, bad }) {
-  const field = (name) => (value) => update((m) => set(m, name, value));
-  return html`<div class="panel form">
-    <h2>Album</h2>
-    <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
-    <${TextField} id="ch-author" label="Artist" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
-    <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
-    <${TextField} id="ch-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')} />
-    <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
-    <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
-  </div>`;
+// The key of a track: its GUID, or its client ID when it has no GUID yet
+// (task 014c). The sidebar tree and the album page use this key to open the
+// track page of one track.
+export function trackKey(item) {
+  return item.guid ? item.guid : `cid-${item._cid}`;
 }
 
 // ---- Summary lines (ADR 0028) ----
@@ -106,11 +99,16 @@ export function addOpen(list, blank) {
   return [...list, added];
 }
 
+// People, support links and the license are each a section of the credits
+// page (ADR 0029 item 5). The page gives the heading, so each function here
+// returns its group content only, with no heading of its own.
+
+// Persons and Fundings return their rows with no wrapper div, so that each
+// entry and the add row sit as direct rows of the group, each with the
+// group's own inset separator (review of task 014c, defect 3).
 function Persons({ prefix, persons, onChange, bad }) {
   const blank = { name: '', role: null, group: null, img: null, href: null };
-  return html`<div class="form">
-    <h3>People</h3>
-    ${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
+  return html`${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
     ${persons.map((p, i) => {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
       const id = `${prefix}-person-${p._cid}`;
@@ -127,15 +125,14 @@ function Persons({ prefix, persons, onChange, bad }) {
         <${EntryActions} list=${persons} index=${i} name=${p.name || 'this person'} onChange=${onChange} />
       <//>`;
     })}
-    <div class="actions"><button class="button" type="button" onClick=${() => onChange(addOpen(persons, blank))}>＋ Add a person</button></div>
-  </div>`;
+    <button class="link-row add" type="button" onClick=${() => onChange(addOpen(persons, blank))}>
+      <span class="num">＋</span><span class="title">Add a person</span>
+    </button>`;
 }
 
 function Fundings({ fundings, onChange, bad }) {
   const blank = { label: '', url: null };
-  return html`<div class="form">
-    <h3>Support links</h3>
-    ${fundings.length === 0 && html`<p class="hint">No support links yet.</p>`}
+  return html`${fundings.length === 0 && html`<p class="hint">No support links yet.</p>`}
     ${fundings.map((f, i) => {
       const change = (name) => (value) => onChange(setAt(fundings, i, set(f, name, value)));
       const id = `funding-${f._cid}`;
@@ -147,10 +144,13 @@ function Fundings({ fundings, onChange, bad }) {
         <${EntryActions} list=${fundings} index=${i} name=${f.label || 'this support link'} onChange=${onChange} />
       <//>`;
     })}
-    <div class="actions"><button class="button" type="button" onClick=${() => onChange(addOpen(fundings, blank))}>＋ Add a support link</button></div>
-  </div>`;
+    <button class="link-row add" type="button" onClick=${() => onChange(addOpen(fundings, blank))}>
+      <span class="num">＋</span><span class="title">Add a support link</span>
+    </button>`;
 }
 
+// The license fields, returned with no wrapper, so that they sit as two
+// rows of the License group directly (task 014c step 8).
 function LicenseFields({ license, onChange, bad }) {
   const value = license || { identifier: '', url: null };
   // A license with no identifier and no address is no license.
@@ -158,14 +158,11 @@ function LicenseFields({ license, onChange, bad }) {
     const next = set(value, name, text);
     onChange(next.identifier === '' && next.url === null ? null : next);
   };
-  return html`<div class="form">
-    <h3>License</h3>
-    <${TextField} id="license-id" label="License" hint="For example cc-by-4.0." required value=${value.identifier} onChange=${change('identifier')} />
-    <${TextField} id="license-url" label="License text address" type="url" address="license/url" bad=${bad} value=${value.url} onChange=${change('url')} />
-  </div>`;
+  return html`<${TextField} id="license-id" label="License" hint="For example cc-by-4.0." required value=${value.identifier} onChange=${change('identifier')} />
+    <${TextField} id="license-url" label="License text address" type="url" address="license/url" bad=${bad} value=${value.url} onChange=${change('url')} />`;
 }
 
-// ---- The tracks ----
+// ---- The audio file ----
 
 function Enclosure({ id, path, enclosure, onChange, bad }) {
   const value = enclosure || { url: null, length: null, media_type: null };
@@ -179,45 +176,25 @@ function Enclosure({ id, path, enclosure, onChange, bad }) {
     <${TextField} id=${`${id}-type`} label="Audio file type" hint="For example audio/mpeg." value=${value.media_type} onChange=${change('media_type')} />`;
 }
 
-function Track({ items, index, onChange, bad, albumBlocks }) {
-  const item = items[index];
-  const id = `track-${item._cid}`;
-  const path = `items/${index}/`;
-  const hasBad = bad.some((b) => b.field.startsWith(path));
-  const change = (name) => (value) => onChange(setAt(items, index, set(item, name, value)));
-  const name = item.title || `track ${index + 1}`;
-  // One name for each track, so that the browser keeps only one track open.
-  return html`<details class="track" name="tracks" key=${item._cid} open=${hasBad || undefined}>
-    <summary><span class="number">${index + 1}</span><span class="title">${item.title || 'Untitled track'}</span>
-      ${hasBad && html`<span class="field-error">An address is not correct</span>`}</summary>
-    <div class="form">
-      <${TextField} id=${`${id}-title`} label="Title" value=${item.title} onChange=${change('title')} />
-      <${TextArea} id=${`${id}-description`} label="Description" value=${item.description} onChange=${change('description')} />
-      <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} />
-      <${TextField} id=${`${id}-duration`} label="Duration" hint="Seconds, or HH:MM:SS." value=${item.duration} onChange=${change('duration')} />
-      <${TextField} id=${`${id}-date`} label="Publication date"
-        hint="The release date of this track, for example Thu, 22 Oct 2026 12:00:00 GMT. Some apps sort the tracks by this date."
-        value=${item.pub_date} onChange=${change('pub_date')} />
-      <${TextField} id=${`${id}-image`} label="Track image address" type="url" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')} />
-      <dl class="facts">
-        <dt>Track number</dt><dd>${item.episode || '—'}</dd>
-        <dt>Track GUID</dt><dd class="mono">${item.guid || 'Studio gives one when it saves'}</dd>
-      </dl>
-      <${TrackPayments} id=${id} item=${item} albumBlocks=${albumBlocks} onChange=${change('values')} />
-      <${EntryActions} list=${items} index=${index} name=${name} onChange=${onChange} />
-    </div>
-  </details>`;
-}
-
 // A new track needs the address, the size and the type of its audio file
-// (ADR 0023 items 5 to 7). Studio asks the host of the file for the size and
-// the type. Studio does not host files (ADR 0009).
-function AddTrack({ onAdd }) {
+// (ADR 0023 items 6 and 7). Studio asks the host of the file for the size
+// and the type. Studio does not host files (ADR 0009).
+function AddTrackSheet({ open, onClose, onAdd }) {
+  const ref = useSheet(open);
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [length, setLength] = useState('');
   const [type, setType] = useState('');
   const [facts, setFacts] = useState({ state: 'none', for: '' });
+  // Clear the sheet each time that it opens.
+  useEffect(() => {
+    if (!open) return;
+    setTitle('');
+    setUrl('');
+    setLength('');
+    setType('');
+    setFacts({ state: 'none', for: '' });
+  }, [open]);
   const readFacts = async () => {
     const address = url.trim();
     if (!address || facts.for === address) return;
@@ -252,11 +229,6 @@ function AddTrack({ onAdd }) {
       license: null,
       values: [],
     });
-    setTitle('');
-    setUrl('');
-    setLength('');
-    setType('');
-    setFacts({ state: 'none', for: '' });
   };
   const FACTS = {
     reading: 'Studio asks the host for the size and the type of the file…',
@@ -264,31 +236,30 @@ function AddTrack({ onAdd }) {
     partial: 'The host did not give all the facts. Type the missing ones.',
     failed: 'Studio could not read the facts from the host. Type the size and the type.',
   };
-  return html`<form class="form add-track" onSubmit=${submit}>
-    <h3>Add a track</h3>
-    <${Field} id="new-track-title" label="Title" value=${title} onInput=${(e) => setTitle(e.target.value)} />
-    <${Field} id="new-track-url" label="Audio file address" type="url" required
-      hint="Studio does not keep audio files. Give the address where your host keeps the file."
-      error=${facts.state === 'invalid' && facts.for === url.trim() ? BAD_ADDRESS : null}
-      value=${url} onInput=${(e) => setUrl(e.target.value)} onBlur=${readFacts} />
-    ${FACTS[facts.state] && html`<p class="hint" role="status">${FACTS[facts.state]}</p>`}
-    <${Field} id="new-track-length" label="Audio file size in bytes" inputmode="numeric" required
-      value=${length} onInput=${(e) => setLength(e.target.value)} />
-    <${Field} id="new-track-type" label="Audio file type" hint="For example audio/mpeg." required
-      value=${type} onInput=${(e) => setType(e.target.value)} />
-    <div class="actions"><button class="button" type="submit" disabled=${!ready}>＋ Add the track</button></div>
-  </form>`;
-}
-
-function Tracks({ model, update, bad }) {
-  const onChange = (items) => update((m) => set(m, 'items', items));
-  return html`<div class="panel form">
-    <h2>Tracks</h2>
-    <p class="hint">When you move, add or remove a track, Studio sets the track number (podcast:episode) of each track from this sequence. Studio does not change the publication dates.</p>
-    ${model.items.length === 0 && html`<p class="hint">This album has no tracks yet.</p>`}
-    <div class="tracks">${model.items.map((_, i) => html`<${Track} key=${model.items[i]._cid} items=${model.items} index=${i} onChange=${onChange} bad=${bad} albumBlocks=${model.values} />`)}</div>
-    <${AddTrack} onAdd=${(item) => onChange([...model.items, withCids([item])[0]])} />
-  </div>`;
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-track-title" onClose=${onClose}>
+    <header>
+      <h2 id="add-track-title">Add a track</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <form class="body" id="add-track-form" onSubmit=${submit}>
+      <div class="group">
+        <${Field} id="new-track-title" label="Title" value=${title} onInput=${(e) => setTitle(e.target.value)} />
+        <${Field} id="new-track-url" label="Audio file address" type="url" required
+          hint="Studio does not keep audio files. Give the address where your host keeps the file."
+          error=${facts.state === 'invalid' && facts.for === url.trim() ? BAD_ADDRESS : null}
+          value=${url} onInput=${(e) => setUrl(e.target.value)} onBlur=${readFacts} />
+        ${FACTS[facts.state] && html`<p class="hint" role="status">${FACTS[facts.state]}</p>`}
+        <${Field} id="new-track-length" label="Audio file size in bytes" inputmode="numeric" required
+          value=${length} onInput=${(e) => setLength(e.target.value)} />
+        <${Field} id="new-track-type" label="Audio file type" hint="For example audio/mpeg." required
+          value=${type} onInput=${(e) => setType(e.target.value)} />
+      </div>
+    </form>
+    <footer>
+      <button class="button quiet" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="submit" form="add-track-form" disabled=${!ready}>＋ Add the track</button>
+    </footer>
+  </dialog>`;
 }
 
 // ---- The diff, the write and the snapshots, in sheets (ADR 0029) ----
@@ -466,7 +437,7 @@ export function DraftToolbar({ feedId, draft, onWritten }) {
   </div>`;
 }
 
-// ---- The editor ----
+// ---- The editor pages (ADR 0029 items 5 to 10) ----
 
 // The summary line of the credits: the people, the support links and the
 // license.
@@ -481,26 +452,212 @@ function creditSummary(model) {
   ].join(' · ');
 }
 
-// The album editor shows the typed model of the draft. The shell loads the
-// draft and shows its toolbar; this component does not call useDraft, and
-// has no Changes panel and no Earlier versions panel (ADR 0029 item 4).
-export function AlbumEditor({ draft }) {
+// The Feed facts row of the album page (task 014c step 5): the facts that
+// the former Facts section showed, and the Remove from collection button.
+function FeedFacts({ feed, onRemoved }) {
+  const { busy, error, run } = useAction();
+  const remove = () => {
+    const name = feed.title || feed.path || 'this feed';
+    if (!confirm(`Remove “${name}” from your collection? The feed file on the host does not change.`)) return;
+    run(async () => {
+      await api(`/feeds/${feed.id}`, { method: 'DELETE' });
+      onRemoved();
+    });
+  };
+  return html`<details class="disclosure">
+    <summary class="link-row"><span class="label">Feed facts</span><span class="summary">GUID, file and version</span></summary>
+    <div class="form">
+      <dl class="facts">
+        <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
+        <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
+        <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
+        <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
+      </dl>
+      <${ErrorNotice} error=${error} />
+      <div class="actions"><button class="button quiet" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button></div>
+    </div>
+  </details>`;
+}
+
+// The album page: the album fields, the album details and the tracks
+// (task 014c step 3).
+function AlbumPage({ feed, model, update, bad, go, onAdding, onRemoved }) {
+  const field = (name) => (value) => update((m) => set(m, name, value));
+  const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
+  // No wrapper: each section is a direct row of .page, with the gap of
+  // .page between sections (review of task 014c, defect 2).
+  return html`<section class="page-section"><h2>Album</h2>
+      <div class="group">
+        <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
+        <${TextField} id="ch-author" label="Artist" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
+        <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
+        <${TextField} id="ch-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')} />
+        <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
+        <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Album details</h2>
+      <div class="group">
+        <button class="link-row" type="button" onClick=${() => openPage({ page: 'credits' })}>
+          <span class="label">Credits and links</span><span class="summary">${creditSummary(model)}</span>
+          <span class="go" aria-hidden="true">›</span>
+        </button>
+        <button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
+          <span class="label">Recipients</span><span class="summary">${recipientSummary(model.values)}</span>
+          ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} />`}
+          <span class="go" aria-hidden="true">›</span>
+        </button>
+        <${FeedFacts} feed=${feed} onRemoved=${onRemoved} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Tracks</h2>
+      <div class="group">
+        ${model.items.map((item, i) => html`<button key=${trackKey(item)} class="link-row" type="button"
+          onClick=${() => openPage({ page: 'track', track: trackKey(item) })}>
+          <span class="num">${i + 1}</span>
+          <span class="title">${item.title || 'Untitled track'}</span>
+          ${item.duration && html`<span class="dur">${item.duration}</span>`}
+          <span class="go" aria-hidden="true">›</span>
+        </button>`)}
+        <button class="link-row add" type="button" onClick=${() => onAdding(true)}>
+          <span class="num">＋</span><span class="title">Add a track</span>
+        </button>
+      </div>
+      <p class="note">Studio sets the track numbers (podcast:episode) from this sequence. It does not change the publication dates.</p>
+    </section>`;
+}
+
+// The credits and links page: people, support links and the license, each
+// as a section (task 014c step 3). No wrapper: each section is a direct row
+// of .page (review of task 014c, defect 2).
+function CreditsPage({ model, update, bad }) {
+  return html`<section class="page-section"><h2>People</h2>
+      <div class="group"><${Persons} prefix="ch" persons=${model.persons} bad=${bad}
+        onChange=${(persons) => update((m) => set(m, 'persons', persons))} /></div>
+    </section>
+    <section class="page-section"><h2>Support links</h2>
+      <div class="group"><${Fundings} fundings=${model.fundings} bad=${bad}
+        onChange=${(fundings) => update((m) => set(m, 'fundings', fundings))} /></div>
+    </section>
+    <section class="page-section"><h2>License</h2>
+      <div class="group"><${LicenseFields} license=${model.license} bad=${bad}
+        onChange=${(license) => update((m) => set(m, 'license', license))} /></div>
+    </section>`;
+}
+
+// The recipients page: the album recipients, with no details around them
+// (task 014c step 3, ADR 0029 item 9).
+function RecipientsPage({ model, update }) {
+  return html`<${AlbumPayments} model=${model} update=${update} />`;
+}
+
+// The track page: the track before it and the track after it, then its
+// fields, its audio file, its recipients and its other facts (task 014c
+// step 3). The current editor has no credits for a track.
+function TrackPage({ feed, model, update, bad, trackIndex, go }) {
+  const items = model.items;
+  const item = items[trackIndex];
+  const id = `track-${item._cid}`;
+  const path = `items/${trackIndex}/`;
+  const change = (name) => (value) => update((m) => set(m, 'items', setAt(m.items, trackIndex, set(item, name, value))));
+  const changeItems = (nextItems) => update((m) => set(m, 'items', nextItems));
+  const openTrack = (i) => go({ name: 'feed', id: feed.id, page: 'track', track: trackKey(items[i]) });
+  const removeTrack = () => {
+    changeItems(items.filter((_, i) => i !== trackIndex));
+    go({ name: 'feed', id: feed.id });
+  };
+  // No wrapper: the head and each section are direct rows of .page, with
+  // the gap of .page between them (review of task 014c, defect 2).
+  return html`<header class="head">
+      <div class="text"><span class="eyebrow">Track ${trackIndex + 1} of ${items.length}</span>
+        <h1>${item.title || 'Untitled track'}</h1></div>
+      <div class="pager">
+        <button class="button icon-button" type="button" aria-label="The track before this one"
+          disabled=${trackIndex === 0} onClick=${() => openTrack(trackIndex - 1)}>‹</button>
+        <button class="button icon-button" type="button" aria-label="The track after this one"
+          disabled=${trackIndex === items.length - 1} onClick=${() => openTrack(trackIndex + 1)}>›</button>
+      </div>
+    </header>
+
+    <section class="page-section"><h2>Track</h2>
+      <div class="group">
+        <${TextField} id=${`${id}-title`} label="Title" value=${item.title} onChange=${change('title')} />
+        <${TextArea} id=${`${id}-description`} label="Description" value=${item.description} onChange=${change('description')} />
+        <${TextField} id=${`${id}-date`} label="Publication date"
+          hint="For example Thu, 22 Oct 2026 12:00:00 GMT. Some apps sort the tracks by this date."
+          value=${item.pub_date} onChange=${change('pub_date')} />
+        <${TextField} id=${`${id}-duration`} label="Duration" hint="Seconds, or HH:MM:SS." value=${item.duration} onChange=${change('duration')} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Audio file</h2>
+      <div class="group"><${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} /></div>
+    </section>
+
+    <${TrackPayments} id=${id} item=${item} albumBlocks=${model.values} onChange=${change('values')} />
+
+    <section class="page-section"><h2>More</h2>
+      <div class="group">
+        <details class="disclosure">
+          <summary class="link-row"><span class="label">Track image</span>
+            <span class="summary">${item.image ? 'Has an image' : 'Uses the album cover'}</span></summary>
+          <div class="form"><${TextField} id=${`${id}-image`} label="Track image address" type="url" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')} /></div>
+        </details>
+        <details class="disclosure">
+          <summary class="link-row"><span class="label">Identity</span>
+            <span class="summary">Number ${item.episode || '—'}</span></summary>
+          <div class="form">
+            <dl class="facts">
+              <dt>Track number</dt><dd>${item.episode || '—'}</dd>
+              <dt>Track GUID</dt><dd class="mono">${item.guid || 'Studio gives one when it saves'}</dd>
+            </dl>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button class="button quiet" type="button" disabled=${trackIndex === 0} onClick=${() => changeItems(move(items, trackIndex, -1))}>Move up</button>
+      <button class="button quiet" type="button" disabled=${trackIndex === items.length - 1} onClick=${() => changeItems(move(items, trackIndex, 1))}>Move down</button>
+      <button class="button quiet" type="button" onClick=${removeTrack}>Remove the track</button>
+    </div>`;
+}
+
+// The album editor shows one page of the typed model of the draft: the
+// album, the credits, the recipients or one track (task 014c step 3). The
+// shell loads the draft and shows its toolbar. This component does not call
+// useDraft (ADR 0029 item 4).
+export function AlbumEditor({ feed, draft, view, go, adding, onAdding, onRemoved }) {
   const { model, update } = draft;
   if (!model) {
-    return html`<section class="section"><p class="hint" role="status">${STATUS[draft.status]}</p>
-      <${ErrorNotice} error=${draft.error} /></section>`;
+    return html`<div class="page"><p class="hint" role="status">${STATUS[draft.status]}</p>
+      <${ErrorNotice} error=${draft.error} /></div>`;
   }
-  return html`<section class="section editor">
-    <${ChannelFields} model=${model} update=${update} bad=${draft.bad} />
-    <details class="panel disclosure">
-      <summary><h2>Credits and links</h2><span class="sub">${creditSummary(model)}</span></summary>
-      <div class="form">
-      <${Persons} prefix="ch" persons=${model.persons} bad=${draft.bad} onChange=${(persons) => update((m) => set(m, 'persons', persons))} />
-      <${Fundings} fundings=${model.fundings} bad=${draft.bad} onChange=${(fundings) => update((m) => set(m, 'fundings', fundings))} />
-      <${LicenseFields} license=${model.license} bad=${draft.bad} onChange=${(license) => update((m) => set(m, 'license', license))} />
-      </div>
-    </details>
-    <${AlbumPayments} model=${model} update=${update} />
-    <${Tracks} model=${model} update=${update} bad=${draft.bad} />
-  </section>`;
+  const page = view.page || 'album';
+  const trackIndex = page === 'track' ? model.items.findIndex((item) => trackKey(item) === view.track) : -1;
+  let body;
+  // When the track key of the view is not in the model, for example after a
+  // write that gave each item a new client ID, the editor shows the album
+  // page (task 014c, Architecture).
+  if (page === 'track' && trackIndex !== -1) {
+    body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} />`;
+  } else if (page === 'credits') {
+    body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
+  } else if (page === 'recipients') {
+    body = html`<${RecipientsPage} model=${model} update=${update} />`;
+  } else {
+    body = html`<${AlbumPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} go=${go} onAdding=${onAdding} onRemoved=${onRemoved} />`;
+  }
+  const onAdd = (item) => {
+    const [added] = withCids([item]);
+    update((m) => set(m, 'items', [...m.items, added]));
+    onAdding(false);
+    go({ name: 'feed', id: feed.id, page: 'track', track: trackKey(added) });
+  };
+  return html`<div class="page">
+    ${body}
+    <${AddTrackSheet} open=${adding} onClose=${() => onAdding(false)} onAdd=${onAdd} />
+  </div>`;
 }

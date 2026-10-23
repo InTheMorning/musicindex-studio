@@ -1,6 +1,8 @@
 //! The musicindex API (Stophammer): feed addresses by GUID, search, and the
 //! payment routes of a feed and of a track (ADR 0027 item 6).
 
+use std::fmt::Write as _;
+
 use serde::{Deserialize, Serialize};
 
 use crate::feed::Recipient;
@@ -160,6 +162,22 @@ fn filter_guid(guid: &str) -> String {
         .collect()
 }
 
+/// Encode a text as one segment of a URL path. The GUID of an item can be
+/// any text, for example an address with `/`, so the client does not filter
+/// it as it filters a feed GUID.
+fn path_segment(text: &str) -> String {
+    let mut encoded = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            // Writing to a `String` cannot fail.
+            let _ = write!(encoded, "%{byte:02X}");
+        }
+    }
+    encoded
+}
+
 /// A client of one musicindex API.
 #[derive(Debug, Clone)]
 pub struct MusicIndex {
@@ -235,7 +253,7 @@ impl MusicIndex {
             "{}/v1/feeds/{}/tracks/{}",
             self.base,
             filter_guid(feed_guid),
-            filter_guid(track_guid)
+            path_segment(track_guid)
         );
         match self
             .web
@@ -331,7 +349,7 @@ mod tests {
                     .to_vec(),
             ),
             (
-                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810/tracks/aa11",
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810/tracks/Track%201%2FA",
                 200,
                 br#"{"data":{"title":"Track One","payment_routes":[
                     {"recipient_name":"Ann","route_type":"node","address":"02aa","split":95,"fee":false,"custom_key":null,"custom_value":null}
@@ -357,7 +375,7 @@ mod tests {
         assert_eq!(feed.tracks[0].title, "Track One");
 
         let track = index
-            .track_routes("917393e3-1b1e-5cef-ace4-edaa54e1f810", "aa11")
+            .track_routes("917393e3-1b1e-5cef-ace4-edaa54e1f810", "Track 1/A")
             .unwrap()
             .unwrap();
         assert_eq!(track.title, "Track One");

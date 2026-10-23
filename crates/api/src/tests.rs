@@ -15,6 +15,14 @@ const PASSPHRASE: &str = "correct horse battery";
 const FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
     <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
     <item><guid>t-1</guid></item></channel></rss>";
+/// A feed with a channel `podcast:value` block, for the recipient list test.
+const FEED_WITH_RECIPIENTS: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+    <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+    <podcast:value type=\"lightning\" method=\"keysend\">\
+    <podcast:valueRecipient name=\"Ann\" address=\"ann@example.com\" split=\"90\" type=\"lnaddress\"/>\
+    <podcast:valueRecipient name=\"Bob\" address=\"bob@example.com\" split=\"10\" type=\"lnaddress\"/>\
+    </podcast:value>\
+    <item><guid>t-1</guid></item></channel></rss>";
 
 struct App {
     router: Router,
@@ -483,7 +491,12 @@ async fn no_get_response_contains_a_secret() {
     )
     .await;
 
-    for path in ["/api/v1/status", "/api/v1/connectors", "/api/v1/feeds"] {
+    for path in [
+        "/api/v1/status",
+        "/api/v1/connectors",
+        "/api/v1/feeds",
+        "/api/v1/recipients",
+    ] {
         let (status, _, text) = send(&app, request("GET", path, None)).await;
         assert_eq!(status, StatusCode::OK, "{path}");
         for forbidden in [secret, PASSPHRASE, vault_key.as_str()] {
@@ -1124,6 +1137,134 @@ async fn the_media_route_gives_the_size_and_the_type_of_a_file() {
     .await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_eq!(body["error"]["code"], "network");
+}
+
+#[tokio::test]
+async fn recipients_are_listed_saved_and_removed() {
+    let app = app();
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        FEED_WITH_RECIPIENTS.as_bytes(),
+    )
+    .unwrap();
+    let id = set_up(&app).await;
+    call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+
+    let (status, body) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let recipients = body.as_array().unwrap();
+    assert_eq!(recipients.len(), 2);
+    assert_eq!(recipients[0]["name"], "Ann");
+    assert_eq!(recipients[0]["address"], "ann@example.com");
+    assert_eq!(recipients[0]["feeds"], 1);
+    assert_eq!(recipients[0]["saved_id"], Value::Null);
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/recipients/saved",
+        Some(json!({ "name": "Cara", "recipient_type": "node", "address": "cara@example.com" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let saved_id = body["id"].as_i64().unwrap();
+
+    let (_, body) = call(&app, "GET", "/api/v1/recipients", None).await;
+    let recipients = body.as_array().unwrap();
+    assert_eq!(recipients.len(), 3);
+    let cara = recipients
+        .iter()
+        .find(|r| r["name"] == "Cara")
+        .expect("Cara is in the list");
+    assert_eq!(cara["saved_id"], saved_id);
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/recipients/saved",
+        Some(json!({ "name": "No Address" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_recipient");
+
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/recipients/saved/{saved_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/recipients/saved/{saved_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
+}
+
+#[tokio::test]
+async fn an_api_request_with_no_token_to_recipients_gives_401() {
+    let app = app();
+    let request = Request::builder()
+        .uri("/api/v1/recipients")
+        .header(header::HOST, HOST)
+        .body(Body::empty())
+        .unwrap();
+    let (status, body, _) = send(&app, request).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"]["code"], "token_required");
+}
+
+/// The payment routes of musicindex, for the recipient picker (ADR 0027
+/// item 6). The track GUID has hex digits only. `MusicIndex` keeps only the
+/// hex digits and the hyphens of a GUID in its request path.
+#[tokio::test]
+async fn the_musicindex_routes_give_the_payment_routes_of_a_feed_and_a_track() {
+    let server = web_feeds();
+    server.set(
+        "/v1/feeds/b-1",
+        200,
+        br#"{"data":{"title":"Album B","payment_routes":[{"recipient_name":"Ann","route_type":"lnaddress","address":"ann@example.com","split":90,"fee":false}],"tracks":[{"track_guid":"aa11","title":"Track One"}]}}"#.to_vec(),
+    );
+    server.set(
+        "/v1/feeds/b-1/tracks/track%20one",
+        200,
+        br#"{"data":{"title":"Track One","payment_routes":[{"recipient_name":"Bob","route_type":"lnaddress","address":"bob@example.com","split":10,"fee":false}]}}"#.to_vec(),
+    );
+    let app = app_with_index(&server.url(""));
+
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/feeds/b-1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["title"], "Album B");
+    assert_eq!(body["recipients"][0]["address"], "ann@example.com");
+    assert_eq!(body["tracks"][0]["track_guid"], "aa11");
+
+    let (status, body) = call(
+        &app,
+        "GET",
+        "/api/v1/musicindex/feeds/b-1/tracks/track%20one/recipients",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["title"], "Track One");
+    assert_eq!(body["recipients"][0]["address"], "bob@example.com");
+    assert_eq!(body["tracks"], json!([]));
+
+    let (status, body) = call(
+        &app,
+        "GET",
+        "/api/v1/musicindex/feeds/00000000-0000-0000-0000-000000000000/recipients",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
 }
 
 /// ADR 0028: on 2026-10-22 the recipients and the people of the editor were

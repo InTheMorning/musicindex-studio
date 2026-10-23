@@ -11,7 +11,7 @@ use studio_core::address::AddressSource;
 use studio_core::collection::{ConnectorId, FeedId, SnapshotId};
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
-use studio_core::feed::Feed;
+use studio_core::feed::{Feed, Recipient};
 use studio_core::pipeline;
 use studio_core::vault::OpenVault;
 
@@ -741,4 +741,73 @@ pub(crate) async fn media_facts(
     Json(body): Json<Media>,
 ) -> ApiResult {
     blocking(shared, move |w| to_json(w.web.media_facts(&body.url)?)).await
+}
+
+// ---- Recipients (ADR 0027) ----
+
+/// Each recipient that Studio knows: from a feed of the collection, or
+/// from a save by the user. The list has each recipient one time.
+pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| to_json(w.collection.known_recipients()?)).await
+}
+
+/// Save a recipient, in the field names of the UI model (ADR 0027 item 5).
+/// Studio does not keep the split and the fee of a saved recipient.
+pub(crate) async fn save_recipient(
+    State(shared): State<Shared>,
+    Json(body): Json<Recipient>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let id = w.collection.save_recipient(&body)?;
+        Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
+    })
+    .await
+}
+
+/// Remove a saved recipient. A recipient that a feed of the collection has
+/// stays in the list.
+pub(crate) async fn remove_saved_recipient(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        w.collection.remove_saved_recipient(id)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+/// The error for a GUID that musicindex does not know.
+fn index_not_found(entity: &str, guid: &str) -> ApiError {
+    ApiError::new(
+        StatusCode::NOT_FOUND,
+        "not_found",
+        format!("musicindex has no {entity} {guid}"),
+    )
+}
+
+/// The title, the payment routes and the tracks of a feed in musicindex
+/// (ADR 0027 item 6).
+pub(crate) async fn index_feed_recipients(
+    State(shared): State<Shared>,
+    Path(guid): Path<String>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let routes = w.index.feed_routes(&guid)?;
+        to_json(routes.ok_or_else(|| index_not_found("feed", &guid))?)
+    })
+    .await
+}
+
+/// The title and the payment routes of one track in musicindex (ADR 0027
+/// item 6). The result has no tracks.
+pub(crate) async fn index_track_recipients(
+    State(shared): State<Shared>,
+    Path((guid, track)): Path<(String, String)>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let routes = w.index.track_routes(&guid, &track)?;
+        to_json(routes.ok_or_else(|| index_not_found("track", &track))?)
+    })
+    .await
 }

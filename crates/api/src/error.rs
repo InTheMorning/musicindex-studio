@@ -58,6 +58,8 @@ impl From<CollectionError> for ApiError {
         let (status, code) = match error.kind() {
             CollectionErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             CollectionErrorKind::InUse => (StatusCode::CONFLICT, "in_use"),
+            // ADR 0027: a saved recipient needs an address.
+            CollectionErrorKind::Invalid => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_recipient"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "collection"),
         };
         Self::new(status, code, error.to_string())

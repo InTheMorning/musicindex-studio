@@ -48,6 +48,20 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/discover", post(routes::discover))
         .route("/media/facts", post(routes::media_facts))
         .route("/search", get(routes::search))
+        .route("/recipients", get(routes::list_recipients))
+        .route("/recipients/saved", post(routes::save_recipient))
+        .route(
+            "/recipients/saved/{id}",
+            delete(routes::remove_saved_recipient),
+        )
+        .route(
+            "/musicindex/feeds/{guid}/recipients",
+            get(routes::index_feed_recipients),
+        )
+        .route(
+            "/musicindex/feeds/{guid}/tracks/{track}/recipients",
+            get(routes::index_track_recipients),
+        )
         .route("/feeds/import", post(routes::import_feeds))
         .route("/import/msp", post(routes::import_msp))
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))

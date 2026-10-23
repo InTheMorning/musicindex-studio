@@ -74,7 +74,7 @@ These choices are fixed. Do not change them.
   pub fn track_routes(&self, feed_guid: &str, track_guid: &str) -> Result<Option<IndexRoutes>, WebError>;
   ```
 
-  `feed_routes` calls `GET {base}/v1/feeds/{guid}` with `include=payment_routes,tracks` and `limit=200`. `track_routes` calls `GET {base}/v1/feeds/{guid}/tracks/{track_guid}` with `include=payment_routes`, and gives no tracks. Filter each GUID as `feed_url` does. A 404 gives `None`.
+  `feed_routes` calls `GET {base}/v1/feeds/{guid}` with `include=payment_routes,tracks` and `limit=200`. `track_routes` calls `GET {base}/v1/feeds/{guid}/tracks/{track_guid}` with `include=payment_routes`, and gives no tracks. Filter the feed GUID as `feed_url` does. Encode the track GUID as one path segment, because an item GUID can be any text. A 404 gives `None`.
 - One route becomes one `Recipient`: `recipient_name` to `name`, `route_type` to `recipient_type`, `address`, `split` as decimal text, `custom_key`, `custom_value`, and `fee` as `Some("true")` only when it is `true`.
 
 ## Steps

@@ -417,6 +417,26 @@ impl Collection {
         Ok(id)
     }
 
+    /// Put the title and the medium of a new feed into its row, before
+    /// Studio ever reads or writes its file. The tree and the editor can
+    /// then show the feed before its first write (ADR 0032 item 7).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_new_feed(
+        &self,
+        id: FeedId,
+        title: &str,
+        medium: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET title = ?2, medium = ?3 WHERE id = ?1",
+            params![id.0, title, medium],
+        )?;
+        Ok(())
+    }
+
     /// Keep the address that one source gives for a feed, or remove it with
     /// `None`. The public address then comes from the first source that
     /// gives one (ADR 0021).

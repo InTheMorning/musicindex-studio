@@ -149,6 +149,8 @@ const FIELD_MESSAGES = {
   invalid_feed: 'This file is not a feed that Studio can read.',
   invalid_config: 'Give the full path of the folder, for example /home/me/feeds.',
   folder_not_found: 'Studio did not find this folder on this computer.',
+  no_public_address: 'Give this host a public address first, in Hosts.',
+  file_exists: 'A file exists at this path already.',
 };
 
 // Split an API error into a field message and an error for a notice.
@@ -394,6 +396,45 @@ function AddHostForm({ onAdded }) {
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
     <${ErrorNotice} error=${hostError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : 'Add the folder'}</button></div>
+  </form>`;
+}
+
+// Make a new album feed in a connected folder, as a draft with no file on
+// the host yet (ADR 0032 items 6 to 9).
+function NewReleaseForm({ connectors, onAdded }) {
+  const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
+  const [path, setPath] = useState('');
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const { busy, error, run } = useAction();
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const feed = await api('/feeds/new', {
+        method: 'POST',
+        body: { connector_id: connectorId, path, title, author },
+      });
+      onAdded(feed);
+    });
+  };
+  const releaseError = splitError(error, ['no_public_address', 'file_exists']);
+  const ready = connectorId !== null && path.trim() && title.trim() && author.trim();
+  return html`<form class="form" onSubmit=${submit}>
+    ${connectors.length > 1 && html`<div class="field"><label for="release-host">Host</label>
+      <select id="release-host" class="button" value=${connectorId}
+        onChange=${(e) => setConnectorId(Number(e.target.value))}>
+        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+      </select></div>`}
+    <${Field} id="release-path" label="Feed file" required placeholder="my-album.xml"
+      hint="The path of the new feed file in the folder of the host."
+      error=${releaseError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
+    <${Field} id="release-title" label="Album title" required
+      value=${title} onInput=${(e) => setTitle(e.target.value)} />
+    <${Field} id="release-author" label="Artist" required
+      value=${author} onInput=${(e) => setAuthor(e.target.value)} />
+    <${ErrorNotice} error=${releaseError.other} />
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
+      ${busy ? 'Making the release…' : 'Make the release'}</button></div>
   </form>`;
 }
 
@@ -670,7 +711,7 @@ function Wizard({ onFinish }) {
       <div class="actions"><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
   } else if (step === 'new') {
     body = html`<div class="form"><div><h1>Welcome</h1>
-      <p>A coming version of Studio makes new feeds. Today, Studio reads and keeps feeds that exist.</p></div>
+      <p>To make a new release, connect the folder that your web server publishes in Hosts. Then use “Make a new release” in Add a feed.</p></div>
       <div class="actions"><${BackButton} /><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
   } else {
     // A reload lost the wizard memory. Start again at the question.
@@ -834,6 +875,10 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, onChanged, onRe
         <button class="button" type="button" disabled=${busy} onClick=${refresh}>${busy ? 'Reading…' : 'Read again'}</button>
       </header>
       <${ErrorNotice} error=${error} />
+      ${feed.last_version === null && html`<div class="notice" role="status">
+        <strong>The host has no file for this release yet.</strong>
+        Open Review and write the draft to make the file.
+      </div>`}
       <${AddressDifferences} feed=${feed} />
     </div>
     <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
@@ -1035,6 +1080,8 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
 function AddFeeds({ connectors, onAdded, onMenu }) {
   const [found, setFound] = useState(null);
   return html`<div><${Bar} onMenu=${onMenu}><span class="bar-title">Add feeds</span><//><section class="section">
+    ${connectors.length > 0 && html`<div class="panel"><h2>Make a new release</h2>
+      <${NewReleaseForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
     <div class="panel"><h2>Find feeds by address or name</h2>
       ${found
         ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />

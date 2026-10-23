@@ -259,6 +259,48 @@ pub(crate) async fn add_feed(
     .await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct NewAlbumFeed {
+    connector_id: i64,
+    path: String,
+    title: String,
+    author: String,
+}
+
+/// Make a new album feed in a connected folder, as a draft with no hosted
+/// file (ADR 0032 items 6 to 9).
+pub(crate) async fn new_album_feed(
+    State(shared): State<Shared>,
+    Json(body): Json<NewAlbumFeed>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let title = body.title.trim();
+        let author = body.author.trim();
+        if title.is_empty() || author.is_empty() {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_feed",
+                "give the album title and the artist",
+            ));
+        }
+        let row = w.collection.connector(ConnectorId(body.connector_id))?;
+        if row.secret_ref.is_some() && w.vault.is_none() {
+            return Err(ApiError::vault_locked());
+        }
+        let made = connector::from_row(&row, w.vault.as_ref())?;
+        let id = pipeline::new_feed(
+            &mut w.collection,
+            made.as_ref(),
+            row.id,
+            &body.path,
+            title,
+            author,
+        )?;
+        Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
+    })
+    .await
+}
+
 pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);

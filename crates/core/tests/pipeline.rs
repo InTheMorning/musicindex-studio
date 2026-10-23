@@ -2,9 +2,12 @@
 
 use std::fs;
 
-use studio_core::collection::{Collection, FeedId};
+use studio_core::collection::{Collection, ConnectorId, FeedId};
 use studio_core::connector::{self, Connector, Expected, LocalFolder};
+use studio_core::feed::Feed;
+use studio_core::guid::podcast_guid_for_url;
 use studio_core::pipeline::{self, DiffId, PipelineErrorKind};
+use studio_core::xml::Document;
 
 const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">
@@ -157,4 +160,161 @@ fn a_feed_without_a_connector_is_read_only() {
         .unwrap();
     let error = pipeline::start_draft(&s.collection, s.connector.as_ref(), read_only).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
+}
+
+/// A connector and a collection with no feed yet, for the new-feed tests
+/// (ADR 0032 items 6 to 9).
+fn new_setup() -> (
+    tempfile::TempDir,
+    Collection,
+    Box<dyn Connector>,
+    ConnectorId,
+) {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = LocalFolder::new(dir.path(), Some("https://music.example".into()));
+    let collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let connector_id = collection
+        .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
+        .unwrap();
+    let connector =
+        connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
+    (dir, collection, connector, connector_id)
+}
+
+#[test]
+fn a_new_feed_makes_a_draft_with_no_hosted_file() {
+    let (dir, mut collection, connector, connector_id) = new_setup();
+    let id = pipeline::new_feed(
+        &mut collection,
+        connector.as_ref(),
+        connector_id,
+        "my-album.xml",
+        "New Album",
+        "New Artist",
+    )
+    .unwrap();
+    // The folder has no file before the write.
+    assert!(!dir.path().join("my-album.xml").exists());
+
+    let (model, _revision) = pipeline::draft_model(&collection, id).unwrap();
+    assert_eq!(model.title.as_deref(), Some("New Album"));
+    assert_eq!(model.author.as_deref(), Some("New Artist"));
+    assert_eq!(
+        model.podcast_guid.as_deref(),
+        Some(podcast_guid_for_url("https://music.example/my-album.xml").as_str())
+    );
+    assert_eq!(model.medium.as_deref(), Some("music"));
+    assert_eq!(model.language.as_deref(), Some("en"));
+
+    let row = collection.feed(id).unwrap();
+    assert_eq!(
+        row.public_url.as_deref(),
+        Some("https://music.example/my-album.xml")
+    );
+    assert_eq!(row.connector_id, Some(connector_id));
+    assert_eq!(row.path.as_deref(), Some("my-album.xml"));
+
+    // On 2026-10-23 the review of task 017 found a new file on one line.
+    // A later diff then showed the full file for each edit. The file has
+    // the XML declaration, and each channel element is on its own line.
+    let draft = collection.draft(id).unwrap().unwrap();
+    let xml = String::from_utf8(draft.draft_xml).unwrap();
+    assert!(
+        xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains("\n    <channel>\n        <title>New Album</title>\n"),
+        "{xml}"
+    );
+}
+
+#[test]
+fn a_new_feed_in_a_folder_with_no_public_address_gives_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = LocalFolder::new(dir.path(), None);
+    let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let connector_id = collection
+        .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
+        .unwrap();
+    let error = pipeline::new_feed(
+        &mut collection,
+        &folder,
+        connector_id,
+        "my-album.xml",
+        "New Album",
+        "New Artist",
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::NoPublicAddress);
+}
+
+#[test]
+fn a_new_feed_at_a_path_with_a_file_gives_an_error() {
+    let (dir, mut collection, connector, connector_id) = new_setup();
+    fs::write(dir.path().join("taken.xml"), b"<rss/>").unwrap();
+    let error = pipeline::new_feed(
+        &mut collection,
+        connector.as_ref(),
+        connector_id,
+        "taken.xml",
+        "New Album",
+        "New Artist",
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+}
+
+#[test]
+fn the_diff_of_a_new_feed_adds_the_full_file_and_the_write_puts_it() {
+    let (dir, mut collection, connector, connector_id) = new_setup();
+    let id = pipeline::new_feed(
+        &mut collection,
+        connector.as_ref(),
+        connector_id,
+        "my-album.xml",
+        "New Album",
+        "New Artist",
+    )
+    .unwrap();
+    let diff = pipeline::diff(&collection, id).unwrap();
+    assert!(diff.changed);
+    // The live file is absent, so the diff adds the full file and removes
+    // nothing.
+    assert!(diff.unified.contains("+<rss"));
+    assert!(!diff.unified.contains("\n-<"));
+
+    let version = pipeline::write_draft(&mut collection, connector.as_ref(), id, &diff.id).unwrap();
+    let bytes = fs::read(dir.path().join("my-album.xml")).unwrap();
+    let read_feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
+    assert_eq!(read_feed.title.as_deref(), Some("New Album"));
+    assert_eq!(read_feed.author.as_deref(), Some("New Artist"));
+    let row = collection.feed(id).unwrap();
+    assert_eq!(row.last_version, Some(version));
+    assert!(collection.draft(id).unwrap().is_none());
+}
+
+#[test]
+fn a_file_put_by_another_tool_before_the_write_of_a_new_feed_gives_a_conflict() {
+    let (dir, mut collection, connector, connector_id) = new_setup();
+    let id = pipeline::new_feed(
+        &mut collection,
+        connector.as_ref(),
+        connector_id,
+        "my-album.xml",
+        "New Album",
+        "New Artist",
+    )
+    .unwrap();
+    let diff = pipeline::diff(&collection, id).unwrap();
+    // A different tool puts a file at the path before Studio writes it.
+    fs::write(
+        dir.path().join("my-album.xml"),
+        b"<rss><channel><title>Other</title></channel></rss>",
+    )
+    .unwrap();
+    let error =
+        pipeline::write_draft(&mut collection, connector.as_ref(), id, &diff.id).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::Conflict);
+    assert!(collection.draft(id).unwrap().is_some());
 }

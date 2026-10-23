@@ -109,6 +109,10 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::InvalidModel => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_model"),
             PipelineErrorKind::Conflict => (StatusCode::CONFLICT, "conflict"),
             PipelineErrorKind::InvalidFeed => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_feed"),
+            PipelineErrorKind::NoPublicAddress => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "no_public_address")
+            }
+            PipelineErrorKind::FileExists => (StatusCode::CONFLICT, "file_exists"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())

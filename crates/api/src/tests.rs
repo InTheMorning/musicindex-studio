@@ -364,6 +364,117 @@ async fn a_relative_folder_and_a_half_feed_give_422() {
 }
 
 #[tokio::test]
+async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written() {
+    let app = app();
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    let (status, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(json!({
+            "connector_id": connector["id"],
+            "path": "my-album.xml",
+            "title": "New Album",
+            "author": "New Artist",
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(feed["title"], "New Album");
+    assert_eq!(feed["medium"], "music");
+    assert_eq!(feed["public_url"], "https://music.example/my-album.xml");
+    assert!(!app.feeds.path().join("my-album.xml").exists());
+
+    let draft_path = format!("/api/v1/feeds/{}/draft", feed["id"]);
+    let (status, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(draft["model"]["title"], "New Album");
+    assert_eq!(draft["model"]["author"], "New Artist");
+    assert_eq!(draft["model"]["medium"], "music");
+    assert_eq!(draft["model"]["language"], "en");
+    assert_eq!(
+        draft["model"]["podcast_guid"],
+        studio_core::guid::podcast_guid_for_url("https://music.example/my-album.xml")
+    );
+
+    let (_, diff) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{}/diff", feed["id"]),
+        None,
+    )
+    .await;
+    assert!(diff["unified"].as_str().unwrap().contains("+<rss"));
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{}/write", feed["id"]),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(written["title"], "New Album");
+    assert!(app.feeds.path().join("my-album.xml").exists());
+}
+
+#[tokio::test]
+async fn a_new_release_gives_422_for_no_public_address_409_for_a_file_and_422_for_an_empty_field() {
+    let app = app();
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, no_address) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "No address", "root": root })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(json!({ "connector_id": no_address["id"], "path": "a.xml", "title": "A", "author": "B" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "no_public_address");
+
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    std::fs::write(app.feeds.path().join("taken.xml"), "<rss/>").unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(json!({ "connector_id": connector["id"], "path": "taken.xml", "title": "A", "author": "B" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "file_exists");
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(json!({ "connector_id": connector["id"], "path": "empty.xml", "title": "  ", "author": "B" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_feed");
+}
+
+#[tokio::test]
 async fn a_feed_without_an_address_is_read_only_and_a_missing_file_gives_404() {
     let app = app();
     set_up(&app).await;

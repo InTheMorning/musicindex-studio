@@ -8,10 +8,13 @@ use std::fmt;
 use similar::TextDiff;
 
 use crate::address::AddressSource;
-use crate::collection::{Collection, CollectionError, DraftRow, FeedId, FeedRow, SnapshotId};
+use crate::collection::{
+    Collection, CollectionError, ConnectorId, DraftRow, FeedId, FeedRow, SnapshotId,
+};
 use crate::connector::{Connector, ConnectorError, ConnectorErrorKind, Expected, Version};
 use crate::digest::sha256_hex;
 use crate::feed::{Feed, FeedError};
+use crate::guid::podcast_guid_for_url;
 use crate::xml::{Document, ParseError};
 
 /// The kind of a [`PipelineError`].
@@ -45,6 +48,11 @@ pub enum PipelineErrorKind {
     Connector,
     /// The collection database failed.
     Collection,
+    /// The connector gives no public address for the path of a new feed
+    /// (ADR 0032 item 8).
+    NoPublicAddress,
+    /// A file exists at the path of a new feed already (ADR 0032 item 8).
+    FileExists,
 }
 
 /// An error from the write pipeline.
@@ -229,6 +237,86 @@ pub fn start_draft(
     };
     collection.save_draft(id, &draft)?;
     Ok(draft)
+}
+
+/// The template of a new feed: `rss` version 2.0 with an empty `channel`
+/// (ADR 0032 item 7). [`Feed::write`] fills it, and adds the `podcast` and
+/// the `itunes` namespace when the feed needs them.
+/// The file of a new feed. It has the XML declaration, the namespaces and
+/// the channel elements that Studio sets, with the indentation of a usual
+/// feed. The writer then sets the text of each element. Each element that
+/// the user adds later copies this indentation, so that a later diff
+/// changes only its own lines.
+const NEW_FEED_TEMPLATE: &str = concat!(
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
+    "<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" ",
+    "xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">\n",
+    "    <channel>\n",
+    "        <title></title>\n",
+    "        <itunes:author></itunes:author>\n",
+    "        <language></language>\n",
+    "        <podcast:guid></podcast:guid>\n",
+    "        <podcast:medium></podcast:medium>\n",
+    "    </channel>\n",
+    "</rss>\n",
+);
+
+/// Make a new album feed in a connected folder, as a draft with no hosted
+/// file (ADR 0032 items 6 to 9).
+///
+/// The feed GUID is the `UUIDv5` of the public address of `path`
+/// ([`podcast_guid_for_url`]). The draft sets `podcast:medium` to `music`
+/// and `language` to `en`. The user sets each other field in the editor,
+/// examines the diff, and writes it. The write puts the file only when no
+/// file exists at the path (ADR 0007).
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NoPublicAddress`] when the connector gives no
+/// public address for `path`, and [`PipelineErrorKind::FileExists`] when a
+/// file exists there already.
+pub fn new_feed(
+    collection: &mut Collection,
+    connector: &dyn Connector,
+    connector_id: ConnectorId,
+    path: &str,
+    title: &str,
+    author: &str,
+) -> Result<FeedId, PipelineError> {
+    let address = connector.public_url(path).ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NoPublicAddress,
+            format!("{path} has no public address; give the host a public address first"),
+        )
+    })?;
+    if connector.read(path)?.is_some() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::FileExists,
+            format!("a file exists at {path} already"),
+        ));
+    }
+    let mut doc = Document::parse(NEW_FEED_TEMPLATE)?;
+    let feed = Feed {
+        title: Some(title.to_owned()),
+        author: Some(author.to_owned()),
+        podcast_guid: Some(podcast_guid_for_url(&address)),
+        medium: Some("music".to_owned()),
+        language: Some("en".to_owned()),
+        ..Feed::default()
+    };
+    feed.write(&mut doc)?;
+    let id = collection.add_feed(None, Some((connector_id, path)))?;
+    collection.set_address(id, AddressSource::Folder, Some(&address))?;
+    collection.set_new_feed(id, title, "music")?;
+    collection.save_draft(
+        id,
+        &DraftRow {
+            base_version: None,
+            base_xml: Vec::new(),
+            draft_xml: doc.write().into_bytes(),
+        },
+    )?;
+    Ok(id)
 }
 
 /// Parse the hosted file that the draft started from, for `write_hosted`

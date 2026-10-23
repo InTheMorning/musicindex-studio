@@ -6,6 +6,7 @@ use std::collections::{HashMap, VecDeque};
 
 use studio_core::collection::Collection;
 use studio_core::discover::Found;
+use studio_core::imports::Store;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
 use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::{Web, WebImage};
@@ -81,6 +82,9 @@ pub struct Workspace {
     pub(crate) discovered: HashMap<String, Found>,
     /// The images that the core already read (ADR 0025, ADR 0032 item 13).
     pub(crate) images: ImageCache,
+    /// The pending files of each draft, in the data folder (ADR 0026,
+    /// ADR 0032 items 10 to 12).
+    pub(crate) store: Store,
 }
 
 impl Workspace {
@@ -100,6 +104,7 @@ impl Workspace {
             index: MusicIndex::new(Web::new(), DEFAULT_API),
             discovered: HashMap::new(),
             images: ImageCache::default(),
+            store: Store::new(data_dir.join("imports")),
         })
     }
 

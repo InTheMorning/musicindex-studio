@@ -106,6 +106,17 @@ CREATE TABLE saved_recipients (
     UNIQUE (address, custom_key, custom_value)
 );
 ",
+    r"
+CREATE TABLE draft_files (
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    media_type TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (feed_id, path)
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -242,6 +253,20 @@ pub struct SnapshotInfo {
     pub version: Version,
     /// The time of the snapshot, in seconds after the Unix epoch.
     pub taken_at: i64,
+}
+
+/// A file that an import keeps in the data folder, until the write puts it
+/// on the host (ADR 0026 item 5, ADR 0032 items 10 and 11).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DraftFile {
+    /// The path of the file in the release folder.
+    pub path: String,
+    /// The size of the file, in bytes.
+    pub size: u64,
+    /// The media type, such as `audio/mpeg`.
+    pub media_type: String,
+    /// The SHA-256 of the file, as the name of its copy in the data folder.
+    pub sha256: String,
 }
 
 /// A recipient that the collection knows, from a feed that Studio read, or
@@ -687,6 +712,71 @@ impl Collection {
         Ok(())
     }
 
+    /// Keep the row of a pending file of a draft (ADR 0026 item 5).
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::InUse`] when the draft has a pending
+    /// file at this path already.
+    pub fn add_draft_file(&self, id: FeedId, file: &DraftFile) -> Result<(), CollectionError> {
+        let size = i64::try_from(file.size).unwrap_or(i64::MAX);
+        let changed = self.db.execute(
+            "INSERT OR IGNORE INTO draft_files (feed_id, path, size, media_type, sha256, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id.0, file.path, size, file.media_type, file.sha256, now()],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::InUse,
+                format!(
+                    "the draft of feed {} has a pending file at {}",
+                    id.0, file.path
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    /// The pending files of a draft, by path (ADR 0026 item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn draft_files(&self, id: FeedId) -> Result<Vec<DraftFile>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT path, size, media_type, sha256 FROM draft_files
+             WHERE feed_id = ?1 ORDER BY path",
+        )?;
+        let rows = statement.query_map([id.0], draft_file_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Remove the row of one pending file of a draft. A path with no row is
+    /// not an error (ADR 0026 item 8).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_file(&self, id: FeedId, path: &str) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM draft_files WHERE feed_id = ?1 AND path = ?2",
+            params![id.0, path],
+        )?;
+        Ok(())
+    }
+
+    /// Remove each row of the pending files of a draft (ADR 0026 item 8,
+    /// ADR 0032 item 12).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_files(&self, id: FeedId) -> Result<(), CollectionError> {
+        self.db
+            .execute("DELETE FROM draft_files WHERE feed_id = ?1", [id.0])?;
+        Ok(())
+    }
+
     /// Keep a snapshot of a live file. A snapshot does not change after this.
     ///
     /// # Errors
@@ -1075,6 +1165,16 @@ fn connector_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ConnectorRow> {
         name: r.get(2)?,
         config: r.get(3)?,
         secret_ref: r.get(4)?,
+    })
+}
+
+fn draft_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<DraftFile> {
+    let size: i64 = r.get(1)?;
+    Ok(DraftFile {
+        path: r.get(0)?,
+        size: u64::try_from(size).unwrap_or(0),
+        media_type: r.get(2)?,
+        sha256: r.get(3)?,
     })
 }
 
@@ -1491,6 +1591,87 @@ mod tests {
             collection.remove_saved_recipient(id).unwrap_err().kind(),
             CollectionErrorKind::NotFound
         );
+    }
+
+    #[test]
+    fn a_database_at_schema_version_3_opens_and_gets_the_pending_files_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(MIGRATIONS[0]).unwrap();
+        db.execute_batch(MIGRATIONS[1]).unwrap();
+        db.execute_batch(MIGRATIONS[2]).unwrap();
+        db.pragma_update(None, "user_version", 3).unwrap();
+        db.execute(
+            "INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        let file = DraftFile {
+            path: "album/track.mp3".to_owned(),
+            size: 10,
+            media_type: "audio/mpeg".to_owned(),
+            sha256: "abc".to_owned(),
+        };
+        collection.add_draft_file(FeedId(1), &file).unwrap();
+        assert_eq!(collection.draft_files(FeedId(1)).unwrap(), [file]);
+    }
+
+    #[test]
+    fn a_pending_file_at_a_path_that_the_draft_has_gives_in_use() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let file = DraftFile {
+            path: "a.mp3".to_owned(),
+            size: 1,
+            media_type: "audio/mpeg".to_owned(),
+            sha256: "x".to_owned(),
+        };
+        collection.add_draft_file(feed, &file).unwrap();
+        let error = collection.add_draft_file(feed, &file).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::InUse);
+    }
+
+    #[test]
+    fn remove_draft_file_and_remove_draft_files_clear_the_rows() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let a = DraftFile {
+            path: "a.mp3".to_owned(),
+            size: 1,
+            media_type: "audio/mpeg".to_owned(),
+            sha256: "a".to_owned(),
+        };
+        let b = DraftFile {
+            path: "b.mp3".to_owned(),
+            size: 2,
+            media_type: "audio/mpeg".to_owned(),
+            sha256: "b".to_owned(),
+        };
+        collection.add_draft_file(feed, &a).unwrap();
+        collection.add_draft_file(feed, &b).unwrap();
+        collection.remove_draft_file(feed, "a.mp3").unwrap();
+        assert_eq!(collection.draft_files(feed).unwrap(), [b]);
+        collection.remove_draft_files(feed).unwrap();
+        assert!(collection.draft_files(feed).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_deleted_feed_removes_the_rows_of_its_pending_files() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let file = DraftFile {
+            path: "a.mp3".to_owned(),
+            size: 1,
+            media_type: "audio/mpeg".to_owned(),
+            sha256: "a".to_owned(),
+        };
+        collection.add_draft_file(feed, &file).unwrap();
+        collection.delete_feed(feed).unwrap();
+        assert!(collection.draft_files(feed).unwrap().is_empty());
     }
 
     #[test]

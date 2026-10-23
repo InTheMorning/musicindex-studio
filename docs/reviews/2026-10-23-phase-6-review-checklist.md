@@ -27,7 +27,7 @@ The planning model uses this list after each task or packet, before its commit.
 | --- | --- | --- |
 | [016](../tasks/studio-v1-task-016-cover-art.md) | Pass after one correction | The image route held the workspace lock during the read from the host. A slow host of art then stopped each other request, such as a save of the draft, for up to 20 s. The planning model moved the read out of the lock. |
 | [017](../tasks/studio-v1-task-017-new-album-feed.md) | Pass after two corrections | The template gave a new feed file on one line, with no XML declaration, so each later diff showed the full file. The planning model gave the template the declaration and indented channel elements, and added a test. The first-run text for a new user said that a later version makes new feeds. The planning model changed it. |
-| [018a](../tasks/studio-v1-task-018a-pending-files.md) | Open | |
+| [018a](../tasks/studio-v1-task-018a-pending-files.md) | Pass | The planning model examined the sequence of the write: the diff ID, the addresses and the version of the feed file come before the first file goes to the host. The coding agent added `Store::root()` for task 018c. |
 | [018b](../tasks/studio-v1-task-018b-tags-and-conversion.md) | Pass | `lofty` 0.25.4 does not build with no default features. The coding agent kept the feature `id3v2_compression_support`, which adds only `flate2` with its pure Rust back end. The planning model accepted this deviation. |
 | [018c](../tasks/studio-v1-task-018c-upload-route.md) | Open | |
 | [018d](../tasks/studio-v1-task-018d-import-sheet.md) | Open | |

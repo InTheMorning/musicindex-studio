@@ -329,7 +329,11 @@ pub(crate) async fn delete_feed(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
-        w.collection.delete_feed(FeedId(id))?;
+        let id = FeedId(id);
+        // Remove the rows and the copies of the pending files of the feed
+        // before the feed goes out (ADR 0032 item 12).
+        pipeline::discard_draft(&w.collection, &w.store, id)?;
+        w.collection.delete_feed(id)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await
@@ -646,9 +650,9 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
 /// The draft as the UI edits it: the model, its revision, `changed` and
 /// `bad_addresses`. The value of `changed` is true when the draft is
 /// different from the live file. Each bad address stops a write (ADR 0023).
-fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
+fn draft_json(w: &Workspace, connector: &dyn connector::Connector, id: FeedId) -> ApiResult {
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
-    let changed = pipeline::diff(&w.collection, id)?.changed;
+    let changed = pipeline::diff(&w.collection, connector, id)?.changed;
     let bad_addresses = model.bad_addresses();
     Ok(Json(json!({
         "revision": revision,
@@ -667,7 +671,7 @@ pub(crate) async fn get_draft(State(shared): State<Shared>, Path(id): Path<i64>)
         if w.collection.draft(id)?.is_none() {
             pipeline::start_draft(&w.collection, made.as_ref(), id)?;
         }
-        draft_json(w, id)
+        draft_json(w, made.as_ref(), id)
     })
     .await
 }
@@ -687,14 +691,15 @@ pub(crate) async fn put_draft(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        writer(w, id)?;
+        let made = writer(w, id)?;
         pipeline::replace_model(&w.collection, id, &body.revision, body.model)?;
-        draft_json(w, id)
+        draft_json(w, made.as_ref(), id)
     })
     .await
 }
 
-/// Remove the draft. The hosted file does not change.
+/// Remove the draft, with the rows and the copies of its pending files. The
+/// hosted file does not change (ADR 0032 item 12).
 pub(crate) async fn delete_draft(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -702,6 +707,7 @@ pub(crate) async fn delete_draft(
     blocking(shared, move |w| {
         let id = FeedId(id);
         writer(w, id)?;
+        pipeline::discard_draft(&w.collection, &w.store, id)?;
         w.collection.delete_draft(id)?;
         Ok(StatusCode::NO_CONTENT)
     })
@@ -709,16 +715,17 @@ pub(crate) async fn delete_draft(
 }
 
 /// The diff between the live file and the draft, with the ID that the user
-/// approves.
+/// approves, and the pending files that the write puts on the host.
 pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        writer(w, id)?;
-        let diff = pipeline::diff(&w.collection, id)?;
+        let made = writer(w, id)?;
+        let diff = pipeline::diff(&w.collection, made.as_ref(), id)?;
         Ok(Json(json!({
             "id": diff.id.as_str(),
             "unified": diff.unified,
             "changed": diff.changed,
+            "files": diff.files,
         })))
     })
     .await
@@ -741,6 +748,7 @@ pub(crate) async fn write_feed(
         pipeline::write_draft(
             &mut w.collection,
             made.as_ref(),
+            &w.store,
             id,
             &pipeline::DiffId::new(body.diff_id),
         )?;
@@ -759,8 +767,9 @@ pub(crate) async fn list_snapshots(State(shared): State<Shared>, Path(id): Path<
     .await
 }
 
-/// Make a draft from a snapshot, to roll the feed back. The user then
-/// approves its diff.
+/// Make a draft from a snapshot, to roll the feed back. The rows and the
+/// copies of the pending files of the old draft go out first (ADR 0032
+/// item 12). The user then approves the diff of the new draft.
 pub(crate) async fn draft_from_snapshot(
     State(shared): State<Shared>,
     Path((id, snapshot)): Path<(i64, i64)>,
@@ -769,8 +778,9 @@ pub(crate) async fn draft_from_snapshot(
         let id = FeedId(id);
         let made = writer(w, id)?;
         w.collection.snapshot_xml(id, SnapshotId(snapshot))?;
+        pipeline::discard_draft(&w.collection, &w.store, id)?;
         pipeline::draft_from_snapshot(&w.collection, made.as_ref(), id, SnapshotId(snapshot))?;
-        draft_json(w, id)
+        draft_json(w, made.as_ref(), id)
     })
     .await
 }

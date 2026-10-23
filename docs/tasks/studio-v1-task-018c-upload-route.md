@@ -24,7 +24,7 @@ These choices are fixed. Do not change them.
 - The handler writes the body to a temporary file in `<store root>/incoming/`, chunk by chunk, with no lock of the workspace. It then does these steps in `blocking`:
   1. The feed must have a connector and a path. The connector must give a public address for the release path, or 422 `no_public_address`.
   2. `media::import(temp, name)`. `Unsupported` gives 415 `unsupported_media`.
-  3. `path = release_path(feed path, imported.file_name)`. A path that the draft has gives 409 `file_pending`. A file on the host at that path gives 409 `file_exists`.
+  3. `path = release_path(feed path, imported.file_name)`. A pending path that a track or an image of the draft uses gives 409 `file_pending`. A pending path that the draft does not use is left over, and the upload replaces it. A file on the host at that path gives 409 `file_exists`.
   4. `store.put_file`, then `add_draft_file`.
   5. Remove the temporary files.
 - The result is 201 with `{ path, url, size, media_type, kind, title, track_number, duration, converted_from_wav, file_name }`. `kind` is `"audio"` or `"image"`. `url` is the public address of the file.

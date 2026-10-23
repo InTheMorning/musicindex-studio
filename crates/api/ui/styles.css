@@ -527,6 +527,10 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   overflow: auto;
   padding: 16px 20px;
   display: grid;
+  /* Each row keeps the full height of its content, so that the body
+     scrolls. A group has hidden overflow for its corners, and the grid
+     could otherwise make it as small as the sheet and cut its rows. */
+  grid-auto-rows: max-content;
   gap: 14px;
   align-content: start;
 }

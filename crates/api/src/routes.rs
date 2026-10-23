@@ -17,7 +17,7 @@ use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
 use studio_core::feed::{Feed, Recipient};
 use studio_core::media;
-use studio_core::pipeline;
+use studio_core::pipeline::{self, PipelineErrorKind};
 use studio_core::vault::OpenVault;
 use tokio::io::AsyncWriteExt;
 
@@ -940,12 +940,30 @@ fn import_upload(
         (imported.path.as_path() != temp_path).then(|| TempFile(imported.path.clone()));
 
     let path = pipeline::release_path(feed_path, &imported.file_name);
-    if w.collection.draft_files(id)?.iter().any(|f| f.path == path) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "file_pending",
-            format!("{path} is already a pending file of this draft"),
-        ));
+    if let Some(old) = w
+        .collection
+        .draft_files(id)?
+        .into_iter()
+        .find(|f| f.path == path)
+    {
+        // A pending file that no track and no image of the draft uses is
+        // left over, for example from a sheet that closed when Studio
+        // stopped. The new upload replaces it. A file that the draft uses
+        // stays, and the upload gives file_pending.
+        let used = match pipeline::draft_model(&w.collection, id) {
+            Ok((feed, _)) => pipeline::referenced_files(&w.collection, made.as_ref(), id, &feed)?,
+            // With no draft, no track uses the file.
+            Err(e) if e.kind() == PipelineErrorKind::NoDraft => Vec::new(),
+            Err(e) => return Err(e.into()),
+        };
+        if used.iter().any(|f| f.path == path) {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "file_pending",
+                format!("{path} is already a pending file of this draft"),
+            ));
+        }
+        pipeline::remove_pending_file(&w.collection, &w.store, id, &old)?;
     }
     if made.read(&path)?.is_some() {
         return Err(ApiError::new(

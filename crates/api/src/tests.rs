@@ -1634,7 +1634,7 @@ async fn an_upload_of_a_wav_file_converts_it_to_flac() {
 }
 
 #[tokio::test]
-async fn a_text_file_gives_415_and_a_repeated_name_gives_409() {
+async fn a_text_file_gives_415_and_a_repeated_name_replaces_or_gives_409() {
     let app = app();
     let id = set_up(&app).await;
     let text = std::fs::read(media_path("not-media.txt")).unwrap();
@@ -1649,6 +1649,36 @@ async fn a_text_file_gives_415_and_a_repeated_name_gives_409() {
     assert_eq!(status, StatusCode::CREATED);
     assert!(incoming_is_empty(&app));
 
+    // On 2026-10-23, in the visual check of Phase 6, a sheet closed when
+    // Studio stopped, and its pending files stayed. No track used them, so
+    // a new upload with the same name replaces such a file.
+    let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    call(&app, "GET", &draft_path, None).await;
+    assert_eq!(
+        call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None)
+            .await
+            .1["files"],
+        json!([])
+    );
+
+    // When a track of the draft uses the file, the upload gives 409.
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
     let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["code"], "file_pending");

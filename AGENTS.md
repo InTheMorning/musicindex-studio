@@ -26,7 +26,7 @@ On 2026-10-23, Phase 0 to Phase 6 are complete. `studio-core` reads a feed into 
 
 | Path | Contents |
 | --- | --- |
-| `crates/core` | `studio-core`: feed model (`feed`, `xml`, `guid`), vault (`vault`), collection (`collection`), feed addresses (`address`), connectors (`connector`) and write pipeline (`pipeline`). No HTTP and no UI code. |
+| `crates/core` | `studio-core`: feed model (`feed`, `xml`, `guid`), vault (`vault`), collection (`collection`), feed addresses (`address`), connectors (`connector`), media files (`media`), the library folder (`library`), the host inventory (`inventory`), the move into the library (`migrate`) and write pipeline (`pipeline`). No HTTP server code and no UI code. |
 | `crates/core/tests/corpus` | Published feeds for the round-trip tests. `manifest.json` gives the source URL, the fetch time and the SHA-256 of each file. |
 | `crates/api` | `studio-api`: the JSON API over the core, and the UI files in `crates/api/ui/` |
 | `crates/server` | `studio-server`: the server shell |

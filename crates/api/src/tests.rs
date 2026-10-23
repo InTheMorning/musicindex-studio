@@ -182,7 +182,7 @@ async fn upload(app: &App, id: i64, name: &str, bytes: Vec<u8>) -> (StatusCode, 
 /// True when the temporary upload folder has no file, or does not exist
 /// (task 018c).
 fn incoming_is_empty(app: &App) -> bool {
-    match std::fs::read_dir(app.data.path().join("imports/incoming")) {
+    match std::fs::read_dir(app.data.path().join("incoming")) {
         Ok(mut entries) => entries.next().is_none(),
         Err(_) => true,
     }

@@ -352,7 +352,7 @@ pub(crate) async fn delete_feed(
         let id = FeedId(id);
         // Remove the rows and the copies of the pending files of the feed
         // before the feed goes out (ADR 0032 item 12).
-        pipeline::discard_draft(&w.collection, &w.store, id)?;
+        pipeline::discard_draft(&w.collection, id)?;
         w.collection.delete_feed(id)?;
         Ok(StatusCode::NO_CONTENT)
     })
@@ -741,7 +741,7 @@ pub(crate) async fn delete_draft(
                 "This release has no file on the host yet. To remove it, remove it from the collection.",
             ));
         }
-        pipeline::discard_draft(&w.collection, &w.store, id)?;
+        pipeline::discard_draft(&w.collection, id)?;
         w.collection.delete_draft(id)?;
         Ok(StatusCode::NO_CONTENT)
     })
@@ -757,10 +757,10 @@ pub(crate) async fn delete_draft(
 pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        let made = writer(w, id)?;
+        writer(w, id)?;
         let hosts = w.hosts()?;
         let library = w.library()?;
-        let diff = pipeline::diff(&w.collection, made.as_ref(), &hosts, &library, id)?;
+        let diff = pipeline::diff(&w.collection, &hosts, &library, id)?;
         Ok(Json(json!({
             "id": diff.id.as_str(),
             "unified": diff.unified,
@@ -824,7 +824,7 @@ pub(crate) async fn draft_from_snapshot(
         let id = FeedId(id);
         let made = writer(w, id)?;
         w.collection.snapshot_xml(id, SnapshotId(snapshot))?;
-        pipeline::discard_draft(&w.collection, &w.store, id)?;
+        pipeline::discard_draft(&w.collection, id)?;
         pipeline::draft_from_snapshot(&w.collection, made.as_ref(), id, SnapshotId(snapshot))?;
         draft_json(w, id)
     })
@@ -905,10 +905,9 @@ pub(crate) async fn upload_file(
     request: Request,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let file_name = upload_file_name(&query.name)?;
-    // Read the folder of the temporary files, with no lock held during the
-    // write of the body (ADR 0026 item 5, ADR 0032 item 10).
-    let store = { lock(&shared)?.store.clone() };
-    let incoming = store.root().join("incoming");
+    // Read the staging folder, with no lock held during the write of the
+    // body (ADR 0026 item 5, ADR 0032 item 10, ADR 0033 item 1).
+    let incoming = { lock(&shared)?.incoming_dir.clone() };
     tokio::fs::create_dir_all(&incoming)
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?;

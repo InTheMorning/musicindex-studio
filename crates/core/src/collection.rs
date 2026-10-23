@@ -989,30 +989,16 @@ impl Collection {
         Ok(())
     }
 
-    /// Remove each row of the pending files of a draft (ADR 0026 item 8,
-    /// ADR 0032 item 12).
+    /// Remove the table of the pending files, once `migrate::into_library`
+    /// has moved each row into the library (ADR 0036 item 5). A second
+    /// call does nothing.
     ///
     /// # Errors
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn remove_draft_files(&self, id: FeedId) -> Result<(), CollectionError> {
-        self.db
-            .execute("DELETE FROM draft_files WHERE feed_id = ?1", [id.0])?;
+    pub(crate) fn drop_draft_files_table(&self) -> Result<(), CollectionError> {
+        self.db.execute("DROP TABLE IF EXISTS draft_files", [])?;
         Ok(())
-    }
-
-    /// True when a pending file of the draft has this SHA-256. Two pending
-    /// files with the same bytes share one copy in the store.
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn draft_file_sha_in_use(&self, id: FeedId, sha256: &str) -> Result<bool, CollectionError> {
-        Ok(self.db.query_row(
-            "SELECT EXISTS (SELECT 1 FROM draft_files WHERE feed_id = ?1 AND sha256 = ?2)",
-            params![id.0, sha256],
-            |r| r.get(0),
-        )?)
     }
 
     /// Keep the row of a file of a release folder (ADR 0036 item 4).
@@ -2290,7 +2276,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_draft_file_and_remove_draft_files_clear_the_rows() {
+    fn remove_draft_file_clears_its_row_and_keeps_the_rest() {
         let mut collection = Collection::open_in_memory().unwrap();
         let feed = collection.add_feed(None, None).unwrap();
         let a = DraftFile {
@@ -2309,8 +2295,15 @@ mod tests {
         collection.add_draft_file(feed, &b).unwrap();
         collection.remove_draft_file(feed, "a.mp3").unwrap();
         assert_eq!(collection.draft_files(feed).unwrap(), [b]);
-        collection.remove_draft_files(feed).unwrap();
-        assert!(collection.draft_files(feed).unwrap().is_empty());
+    }
+
+    #[test]
+    fn drop_draft_files_table_removes_the_table_and_a_second_call_does_nothing() {
+        let collection = Collection::open_in_memory().unwrap();
+        collection.drop_draft_files_table().unwrap();
+        assert!(collection.draft_files(FeedId(1)).is_err());
+        // A second call does nothing: it does not give an error.
+        collection.drop_draft_files_table().unwrap();
     }
 
     #[test]

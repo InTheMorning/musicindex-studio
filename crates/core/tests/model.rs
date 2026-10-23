@@ -1,17 +1,10 @@
 //! Edits of a draft through the JSON model with entry keys (ADR 0022).
 
 use studio_core::collection::{Collection, DraftRow, FeedId};
-use studio_core::connector::LocalFolder;
 use studio_core::feed::{AlternateEnclosure, Enclosure, Entry, Feed, Item, Source};
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::pipeline::{self, PipelineErrorKind};
-
-/// A connector for [`pipeline::diff`]. The feed of [`draft`] has no
-/// connector, so no call here reads or writes a file.
-fn no_connector() -> LocalFolder {
-    LocalFolder::new("unused", None)
-}
 
 const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">
@@ -196,7 +189,7 @@ fn a_cleared_description_that_is_typed_again_changes_only_its_text_in_the_diff()
     let hosts = Hosts::new();
     let library_dir = tempfile::tempdir().unwrap();
     let library = Library::open(library_dir.path()).unwrap();
-    let diff = pipeline::diff(&collection, &no_connector(), &hosts, &library, id).unwrap();
+    let diff = pipeline::diff(&collection, &hosts, &library, id).unwrap();
     let added: Vec<&str> = diff
         .unified
         .lines()

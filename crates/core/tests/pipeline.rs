@@ -2,13 +2,10 @@
 
 use std::fs;
 
-use studio_core::collection::{
-    Collection, ConnectorId, DraftFile, DraftOperationKind, FeedId, LibraryFileId,
-};
+use studio_core::collection::{Collection, ConnectorId, DraftOperationKind, FeedId, LibraryFileId};
 use studio_core::connector::{self, Connector, Expected, LocalFolder};
-use studio_core::feed::{AlternateEnclosure, Enclosure, Entry, Feed, Item, Source};
+use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
-use studio_core::imports;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
 use studio_core::pipeline::{self, DiffFile, DiffId, OperationKind, PipelineErrorKind};
@@ -82,14 +79,7 @@ fn an_approved_draft_writes_the_file_and_keeps_a_snapshot() {
         f.title = Some("Album (Deluxe)".into());
     })
     .unwrap();
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert!(diff.changed);
     assert!(diff.unified.contains("-    <title>Album</title>"));
     assert!(diff.unified.contains("+    <title>Album (Deluxe)</title>"));
@@ -117,15 +107,9 @@ fn a_draft_that_changed_after_the_approval_does_not_write() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
     pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("One".into())).unwrap();
-    let approved = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap()
-    .id;
+    let approved = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed)
+        .unwrap()
+        .id;
     pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Two".into())).unwrap();
     let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &approved)
         .unwrap_err();
@@ -148,14 +132,7 @@ fn a_file_that_changed_on_the_host_after_the_draft_started_does_not_write() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
     pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Mine".into())).unwrap();
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let theirs = FEED.replace("Track One", "Track One (edited elsewhere)");
     fs::write(s.dir.path().join("album.xml"), &theirs).unwrap();
     let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
@@ -171,28 +148,14 @@ fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
     pipeline::edit_draft(&s.collection, s.feed, |f| f.items.clear()).unwrap();
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
     assert!(!live(&s).contains("track-1"));
     assert!(s.collection.item_guids(s.feed).unwrap().is_empty());
 
     let snapshot = s.collection.snapshots(s.feed).unwrap()[0].id;
     pipeline::draft_from_snapshot(&s.collection, s.connector.as_ref(), s.feed, snapshot).unwrap();
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert!(diff.unified.contains("+      <guid>track-1</guid>"));
     pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
     assert_eq!(live(&s), FEED);
@@ -331,7 +294,7 @@ fn the_diff_of_a_new_feed_adds_the_full_file_and_the_write_puts_it() {
         "New Artist",
     )
     .unwrap();
-    let diff = pipeline::diff(&collection, connector.as_ref(), &hosts, &library, id).unwrap();
+    let diff = pipeline::diff(&collection, &hosts, &library, id).unwrap();
     assert!(diff.changed);
     // The live file is absent, so the diff adds the full file and removes
     // nothing.
@@ -360,7 +323,7 @@ fn a_file_put_by_another_tool_before_the_write_of_a_new_feed_gives_a_conflict() 
         "New Artist",
     )
     .unwrap();
-    let diff = pipeline::diff(&collection, connector.as_ref(), &hosts, &library, id).unwrap();
+    let diff = pipeline::diff(&collection, &hosts, &library, id).unwrap();
     // A different tool puts a file at the path before Studio writes it.
     fs::write(
         dir.path().join("my-album.xml"),
@@ -412,224 +375,11 @@ fn host_file_matches_gives_absent_same_and_different() {
     );
 }
 
-// ---- Pending files (ADR 0026, ADR 0032 items 10 to 12) ----
-
-/// A new album draft, with a store for the pending files (ADR 0032 items 6
-/// to 12).
-struct FileSetup {
-    // No test reads `dir` directly, but the struct keeps it, so that the
-    // temporary folder stays on disk for the life of the test.
-    #[expect(dead_code)]
-    dir: tempfile::TempDir,
-    collection: Collection,
-    connector: LocalFolder,
-    store: imports::Store,
-    hosts: Hosts,
-    library: Library,
-    feed: FeedId,
-}
-
-fn file_setup() -> FileSetup {
-    let dir = tempfile::tempdir().unwrap();
-    let folder = LocalFolder::new(dir.path(), Some("https://music.example".into()));
-    let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
-    let connector_id = collection
-        .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
-        .unwrap();
-    // The set of hosts gets its own connector to the same folder, so a
-    // call through `hosts` is a separate connector from `connector`.
-    let mut hosts = Hosts::new();
-    hosts.insert(
-        connector_id,
-        Box::new(LocalFolder::new(
-            dir.path(),
-            Some("https://music.example".into()),
-        )),
-    );
-    let library = Library::open(dir.path().join("library")).unwrap();
-    let connector = folder;
-    let feed = pipeline::new_feed(
-        &mut collection,
-        &connector,
-        connector_id,
-        "album/my-album.xml",
-        "New Album",
-        "New Artist",
-    )
-    .unwrap();
-    let store = imports::Store::new(dir.path().join("imports"));
-    FileSetup {
-        dir,
-        collection,
-        connector,
-        store,
-        hosts,
-        library,
-        feed,
-    }
-}
-
-/// Put the bytes of a file into the store of the feed, and keep its row
-/// (ADR 0026 item 5).
-fn put_pending_file(s: &FileSetup, path: &str, bytes: &[u8]) -> DraftFile {
-    let source_dir = tempfile::tempdir().unwrap();
-    let source = source_dir.path().join("source");
-    fs::write(&source, bytes).unwrap();
-    let (sha256, size) = s.store.put_file(s.feed, &source).unwrap();
-    let file = DraftFile {
-        path: path.to_owned(),
-        size,
-        media_type: "audio/mpeg".to_owned(),
-        sha256,
-    };
-    s.collection.add_draft_file(s.feed, &file).unwrap();
-    file
-}
-
-/// Add an item with an enclosure at the address of a pending file, so that
-/// the draft refers to it (ADR 0032 item 10).
-fn add_referenced_file(s: &FileSetup, path: &str, bytes: &[u8]) -> DraftFile {
-    let file = put_pending_file(s, path, bytes);
-    let url = s.connector.public_url(path).unwrap();
-    let item = Item {
-        title: Some(path.to_owned()),
-        enclosure: Some(Enclosure {
-            url: Some(url),
-            length: Some(file.size.to_string()),
-            media_type: Some(file.media_type.clone()),
-        }),
-        ..Item::default()
-    };
-    pipeline::edit_draft(&s.collection, s.feed, move |f| {
-        f.items.push(Entry::new(item));
-    })
-    .unwrap();
-    file
-}
-
-/// Add an item whose only address of a pending file is the `uri` of a
-/// `podcast:source` of an alternate enclosure (ADR 0033 item 7).
-fn add_referenced_source_file(s: &FileSetup, path: &str, bytes: &[u8]) -> DraftFile {
-    let file = put_pending_file(s, path, bytes);
-    let url = s.connector.public_url(path).unwrap();
-    let item = Item {
-        title: Some(path.to_owned()),
-        alternate_enclosures: vec![Entry::new(AlternateEnclosure {
-            media_type: Some(file.media_type.clone()),
-            sources: vec![Entry::new(Source {
-                uri: Some(url),
-                ..Source::default()
-            })],
-            ..AlternateEnclosure::default()
-        })],
-        ..Item::default()
-    };
-    pipeline::edit_draft(&s.collection, s.feed, move |f| {
-        f.items.push(Entry::new(item));
-    })
-    .unwrap();
-    file
-}
-
-// Task 021d moves the write of a release file to the host operations of
-// the library. `write_draft` no longer puts a pending file of
-// `draft_files` on a host, so the tests of that write stay with
-// `pipeline::diff` only. `discard_draft_removes_the_pending_rows_and_their_copies`
-// and the tests after it still cover `discard_draft` and
-// `remove_pending_file`, which do not change.
-
-#[test]
-fn a_pending_file_that_only_a_source_refers_to_is_in_the_diff() {
-    let s = file_setup();
-    let file = add_referenced_source_file(&s, "album/my-album/01.flac", b"lossless");
-
-    let diff = pipeline::diff(&s.collection, &s.connector, &s.hosts, &s.library, s.feed).unwrap();
-    assert_eq!(
-        diff.files,
-        [DiffFile {
-            path: file.path.clone(),
-            size: file.size,
-            media_type: file.media_type.clone(),
-        }]
-    );
-}
-
-#[test]
-fn an_unreferenced_pending_file_is_not_in_the_diff() {
-    let s = file_setup();
-    let referenced = add_referenced_file(&s, "album/my-album/01.mp3", b"one");
-    put_pending_file(&s, "album/my-album/02.mp3", b"two");
-
-    let diff = pipeline::diff(&s.collection, &s.connector, &s.hosts, &s.library, s.feed).unwrap();
-    assert_eq!(
-        diff.files,
-        [DiffFile {
-            path: referenced.path.clone(),
-            size: referenced.size,
-            media_type: referenced.media_type.clone(),
-        }]
-    );
-}
-
-#[test]
-fn discard_draft_removes_the_pending_rows_and_their_copies() {
-    let s = file_setup();
-    let file = put_pending_file(&s, "album/my-album/01.mp3", b"one");
-    assert_eq!(s.collection.draft_files(s.feed).unwrap().len(), 1);
-
-    pipeline::discard_draft(&s.collection, &s.store, s.feed).unwrap();
-
-    assert!(s.collection.draft_files(s.feed).unwrap().is_empty());
-    assert!(s.store.open(s.feed, &file.sha256).is_err());
-}
-
-/// On 2026-10-23 the review of task 018d found pending files with no copy.
-/// Two files with the same bytes share one copy, and the removal of one
-/// file removed the copy of the other.
-#[test]
-fn the_removal_of_a_pending_file_keeps_a_copy_that_another_file_uses() {
-    let s = file_setup();
-    let first = put_pending_file(&s, "album/my-album/a.mp3", b"same");
-    let second = put_pending_file(&s, "album/my-album/b.mp3", b"same");
-    assert_eq!(first.sha256, second.sha256);
-
-    pipeline::remove_pending_file(&s.collection, &s.store, s.feed, &first).unwrap();
-    assert!(s.store.open(s.feed, &second.sha256).is_ok());
-
-    pipeline::remove_pending_file(&s.collection, &s.store, s.feed, &second).unwrap();
-    assert!(s.store.open(s.feed, &second.sha256).is_err());
-}
-
-#[test]
-fn a_pending_file_at_the_feed_image_address_is_referenced() {
-    let s = file_setup();
-    let file = put_pending_file(&s, "album/my-album/cover.jpg", b"cover");
-    let url = s.connector.public_url("album/my-album/cover.jpg").unwrap();
-    pipeline::edit_draft(&s.collection, s.feed, move |f| f.image = Some(url)).unwrap();
-
-    let diff = pipeline::diff(&s.collection, &s.connector, &s.hosts, &s.library, s.feed).unwrap();
-    assert_eq!(diff.files.len(), 1);
-    assert_eq!(diff.files[0].path, file.path);
-}
-
-#[test]
-fn the_diff_id_changes_when_a_referenced_file_changes() {
-    let s = file_setup();
-    add_referenced_file(&s, "album/my-album/01.mp3", b"one");
-    let first = pipeline::diff(&s.collection, &s.connector, &s.hosts, &s.library, s.feed)
-        .unwrap()
-        .id;
-
-    s.collection
-        .remove_draft_file(s.feed, "album/my-album/01.mp3")
-        .unwrap();
-    put_pending_file(&s, "album/my-album/01.mp3", b"one (re-recorded)");
-    let second = pipeline::diff(&s.collection, &s.connector, &s.hosts, &s.library, s.feed)
-        .unwrap()
-        .id;
-
-    assert_ne!(first, second);
-}
+// Task 021e removes the pending-file store and the `draft_files` table:
+// the import route already writes directly into the release folder
+// (task 021d), and `migrate::into_library` moves each pending file of a
+// collection from before the library. The tests of that move are in
+// `studio_core::migrate`.
 
 // ---- The import into the library, and host operations (ADR 0036) ----
 
@@ -773,14 +523,7 @@ fn a_draft_that_refers_to_an_imported_file_gives_one_upload_until_it_is_on_the_h
     let planned = reference_planned(&s, imported.library_file_id);
     assert_eq!(planned, imported.planned);
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 1);
     let upload = &diff.operations[0];
     assert_eq!(upload.kind, OperationKind::Upload);
@@ -788,6 +531,14 @@ fn a_draft_that_refers_to_an_imported_file_gives_one_upload_until_it_is_on_the_h
     assert_eq!(upload.path, planned.path);
     assert_eq!(upload.url, planned.url);
     assert_eq!(upload.size, 3);
+    assert_eq!(
+        diff.files,
+        [DiffFile {
+            path: "01.mp3".to_owned(),
+            size: 3,
+            media_type: "audio/mpeg".to_owned(),
+        }]
+    );
 
     // The file goes on the host with the same bytes, and a scan records
     // it. The diff then gives no upload (ADR 0036 item 10).
@@ -796,15 +547,9 @@ fn a_draft_that_refers_to_an_imported_file_gives_one_upload_until_it_is_on_the_h
         .unwrap();
     inventory::scan(&s.collection, &s.hosts, planned.connector_id).unwrap();
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert!(diff.operations.is_empty());
+    assert!(diff.files.is_empty());
 }
 
 #[test]
@@ -832,14 +577,7 @@ fn a_library_file_with_its_own_host_gives_an_upload_there_with_its_url() {
         Some("https://second.example/album/01.mp3")
     );
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 1);
     let upload = &diff.operations[0];
     assert_eq!(upload.kind, OperationKind::Upload);
@@ -886,14 +624,7 @@ fn a_draft_that_refers_to_a_copy_gives_no_upload() {
     })
     .unwrap();
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert!(diff.operations.is_empty(), "{:?}", diff.operations);
     assert_ne!(imported.planned.connector_id, second_id);
 }
@@ -923,14 +654,7 @@ fn a_copy_draft_operation_gives_a_copy_when_the_host_does_not_have_the_file() {
         )
         .unwrap();
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let copies: Vec<_> = diff
         .operations
         .iter()
@@ -982,14 +706,7 @@ fn a_delete_draft_operation_gives_a_delete_unless_the_draft_refers_to_the_file()
         )
         .unwrap();
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let deletes: Vec<&str> = diff
         .operations
         .iter()
@@ -1008,28 +725,16 @@ fn the_diff_id_changes_when_a_host_operation_changes() {
     s.collection.set_feed_folder(s.feed, "album").unwrap();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
 
-    let first = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap()
-    .id;
+    let first = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed)
+        .unwrap()
+        .id;
 
     let imported = import_file(&s, "01.mp3", b"one");
     reference_planned(&s, imported.library_file_id);
 
-    let second = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap()
-    .id;
+    let second = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed)
+        .unwrap()
+        .id;
     assert_ne!(first, second);
 }
 
@@ -1061,14 +766,7 @@ fn a_release_with_files_on_two_hosts_writes_both_with_the_correct_address() {
     assert_eq!(planned_b.connector_id, second_id);
     assert_eq!(planned_b.path, "album/02.mp3");
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 2);
 
     pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
@@ -1105,14 +803,7 @@ fn a_changed_library_file_gets_a_hash_name_and_the_write_deletes_the_old_file_af
     // refers to it there.
     let old = import_file(&s, "01.mp3", b"one");
     let planned_old = reference_planned(&s, old.library_file_id);
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
     assert!(s.dir.path().join(&planned_old.path).exists());
 
@@ -1171,14 +862,7 @@ fn a_changed_library_file_gets_a_hash_name_and_the_write_deletes_the_old_file_af
         )
         .unwrap();
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 2);
 
     pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
@@ -1222,14 +906,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
         f.image = Some(cover_for_second);
     })
     .unwrap();
-    let diff_second = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        second,
-    )
-    .unwrap();
+    let diff_second = pipeline::diff(&s.collection, &s.hosts, &s.library, second).unwrap();
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
@@ -1250,14 +927,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
             "shared/cover.jpg",
         )
         .unwrap();
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert!(diff.operations.is_empty());
     assert_eq!(diff.blocked.len(), 1);
     assert_eq!(diff.blocked[0].feed_titles, ["Second Album".to_owned()]);
@@ -1291,14 +961,7 @@ fn a_host_file_that_changed_after_the_scan_stops_the_deletion_with_conflict() {
         )
         .unwrap();
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 1);
 
     // The file changes on the host after the scan, so its stamp is not
@@ -1395,14 +1058,7 @@ fn an_address_not_reachable_after_the_upload_stops_the_write_before_the_deletion
         )
         .unwrap();
 
-    let diff = pipeline::diff(
-        &s.collection,
-        s.connector.as_ref(),
-        &s.hosts,
-        &s.library,
-        s.feed,
-    )
-    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 2);
 
     // Studio cannot read the uploaded file back, as if the host had not

@@ -8,7 +8,6 @@ use axum::http::StatusCode;
 use studio_core::collection::Collection;
 use studio_core::connector;
 use studio_core::discover::Found;
-use studio_core::imports::Store;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
@@ -86,9 +85,10 @@ pub struct Workspace {
     pub(crate) discovered: HashMap<String, Found>,
     /// The images that the core already read (ADR 0025, ADR 0032 item 13).
     pub(crate) images: ImageCache,
-    /// The pending files of each draft, in the data folder (ADR 0026,
-    /// ADR 0032 items 10 to 12).
-    pub(crate) store: Store,
+    /// The staging folder for the body of an upload, before its import
+    /// (ADR 0026, ADR 0033 item 1). Task 021e removes the pending-file
+    /// store: an import now writes directly into the release folder.
+    pub(crate) incoming_dir: PathBuf,
 }
 
 impl Workspace {
@@ -108,7 +108,7 @@ impl Workspace {
             index: MusicIndex::new(Web::new(), DEFAULT_API),
             discovered: HashMap::new(),
             images: ImageCache::default(),
-            store: Store::new(data_dir.join("imports")),
+            incoming_dir: data_dir.join("incoming"),
         })
     }
 

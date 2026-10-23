@@ -11,14 +11,13 @@ use similar::TextDiff;
 
 use crate::address::AddressSource;
 use crate::collection::{
-    Collection, CollectionError, ConnectorId, DraftFile, DraftOperationKind, DraftRow, FeedId,
-    FeedRow, LibraryFile, LibraryFileId, SnapshotId,
+    Collection, CollectionError, ConnectorId, DraftOperationKind, DraftRow, FeedId, FeedRow,
+    LibraryFile, LibraryFileId, SnapshotId,
 };
 use crate::connector::{Connector, ConnectorError, ConnectorErrorKind, Expected, Version};
 use crate::digest::sha256_hex;
 use crate::feed::{Feed, FeedError};
 use crate::guid::podcast_guid_for_url;
-use crate::imports;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::Library;
 use crate::xml::{Document, ParseError};
@@ -164,11 +163,14 @@ impl DiffId {
     }
 }
 
-/// A pending file that the write puts on the host before the feed file
-/// (ADR 0026 item 6, ADR 0032 item 10).
+/// A library file that an upload of the write will put on a host
+/// (ADR 0036 item 10). The UI review sheet reads [`Diff::files`].
+///
+/// Task 021c keeps this list until task 021g, which removes it in favor
+/// of [`Diff::operations`].
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct DiffFile {
-    /// The path of the file in the release folder.
+    /// The path of the file in its release folder.
     pub path: String,
     /// The size of the file, in bytes.
     pub size: u64,
@@ -185,8 +187,9 @@ pub struct Diff {
     pub unified: String,
     /// True when the draft is different from the live file.
     pub changed: bool,
-    /// Each pending file that the write puts on the host (ADR 0026 item 6).
-    /// Task 021g moves this into [`Diff::operations`].
+    /// Each library file that an upload of `operations` will put on a
+    /// host (ADR 0036 item 10). Task 021g removes this field, in favor of
+    /// `operations`.
     pub files: Vec<DiffFile>,
     /// Each upload, copy and deletion that the write does on a host
     /// (ADR 0036 item 14).
@@ -686,36 +689,6 @@ fn feed_addresses(feed: &Feed) -> Vec<&str> {
     urls
 }
 
-/// Each pending file of a draft that the draft refers to, as the address of
-/// an enclosure, of an image, or of a `podcast:source` (ADR 0032 item 10,
-/// ADR 0033 item 7).
-///
-/// The draft refers to a pending file when `connector.public_url` of its
-/// path is the `url` of an enclosure, the `uri` of a `podcast:source`, or
-/// the `href` of `itunes:image` of the channel or of an item.
-///
-/// # Errors
-///
-/// Gives a [`PipelineError`] when the collection fails.
-pub fn referenced_files(
-    collection: &Collection,
-    connector: &dyn Connector,
-    id: FeedId,
-    feed: &Feed,
-) -> Result<Vec<DraftFile>, PipelineError> {
-    let urls = feed_addresses(feed);
-    let files = collection
-        .draft_files(id)?
-        .into_iter()
-        .filter(|file| {
-            connector
-                .public_url(&file.path)
-                .is_some_and(|url| urls.contains(&url.as_str()))
-        })
-        .collect();
-    Ok(files)
-}
-
 /// The diff between the live file at the start of the draft and the draft,
 /// with each host operation that the write would do (ADR 0036 item 14).
 ///
@@ -724,7 +697,6 @@ pub fn referenced_files(
 /// Gives a [`PipelineError`] when the feed has no draft.
 pub fn diff(
     collection: &Collection,
-    connector: &dyn Connector,
     hosts: &Hosts,
     library: &Library,
     id: FeedId,
@@ -732,9 +704,9 @@ pub fn diff(
     let feed_row = collection.feed(id)?;
     let draft = current_draft(collection, id)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let referenced = referenced_files(collection, connector, id, &feed)?;
     let (operations, blocked) = host_operations(collection, library, hosts, &feed_row, &feed)?;
     let extra = operation_bytes(collection, hosts, &operations)?;
+    let files = upload_files(collection, &operations)?;
     let base = String::from_utf8_lossy(&draft.base_xml);
     let new = String::from_utf8_lossy(&draft.draft_xml);
     let unified = TextDiff::from_lines(base.as_ref(), new.as_ref())
@@ -743,20 +715,41 @@ pub fn diff(
         .header("live", "draft")
         .to_string();
     Ok(Diff {
-        id: diff_id(&draft, &referenced, &extra),
+        id: diff_id(&draft, &extra),
         unified,
         changed: draft.base_xml != draft.draft_xml,
-        files: referenced
-            .into_iter()
-            .map(|file| DiffFile {
-                path: file.path,
-                size: file.size,
-                media_type: file.media_type,
-            })
-            .collect(),
+        files,
         operations,
         blocked,
     })
+}
+
+/// Each library file that an upload of `operations` will put on a host,
+/// for [`Diff::files`] (ADR 0036 item 10).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn upload_files(
+    collection: &Collection,
+    operations: &[HostOperation],
+) -> Result<Vec<DiffFile>, PipelineError> {
+    let mut files = Vec::new();
+    for operation in operations {
+        if operation.kind != OperationKind::Upload {
+            continue;
+        }
+        let library_file_id = operation
+            .library_file_id
+            .expect("an upload names its library file");
+        let file = collection.library_file(LibraryFileId(library_file_id))?;
+        files.push(DiffFile {
+            path: file.path,
+            size: file.size,
+            media_type: file.media_type,
+        });
+    }
+    Ok(files)
 }
 
 /// The title of a feed, for a message that names it. A feed with no title
@@ -1119,10 +1112,9 @@ pub fn write_draft(
     let connector = hosts.get(connector_id)?;
     let draft = current_draft(collection, id)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let referenced = referenced_files(collection, connector, id, &feed)?;
     let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
     let extra = operation_bytes(collection, hosts, &operations)?;
-    if &diff_id(&draft, &referenced, &extra) != approved {
+    if &diff_id(&draft, &extra) != approved {
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
             "the draft changed after the diff was approved; approve the new diff",
@@ -1337,45 +1329,19 @@ fn delete_each_operation(
     Ok(())
 }
 
-/// Remove one pending file of a draft: its row, and its copy when no other
-/// pending file of the draft has the same bytes.
+/// Remove the host operations that the user started in the draft of a
+/// feed (ADR 0036 item 12).
+///
+/// A route calls this before it discards a draft, before it puts a new
+/// draft from a snapshot, and before it deletes a feed. Task 021e removes
+/// the pending-file store, so the function no longer touches a pending
+/// file.
 ///
 /// # Errors
 ///
 /// Gives a [`PipelineError`] when the collection fails.
-pub fn remove_pending_file(
-    collection: &Collection,
-    store: &imports::Store,
-    id: FeedId,
-    file: &DraftFile,
-) -> Result<(), PipelineError> {
-    collection.remove_draft_file(id, &file.path)?;
-    // Two pending files with the same bytes share one copy. The copy goes
-    // only with the last file that uses it.
-    if !collection.draft_file_sha_in_use(id, &file.sha256)? {
-        store.remove(id, &file.sha256);
-    }
-    Ok(())
-}
-
-/// Remove the pending files of a feed: their rows and their copies in the
-/// data folder (ADR 0026 item 8, ADR 0032 item 12).
-///
-/// A route calls this before it discards a draft, before it puts a version
-/// in a draft, and before it deletes a feed.
-///
-/// # Errors
-///
-/// Gives a [`PipelineError`] when the collection fails.
-pub fn discard_draft(
-    collection: &Collection,
-    store: &imports::Store,
-    id: FeedId,
-) -> Result<(), PipelineError> {
-    for file in collection.draft_files(id)? {
-        store.remove(id, &file.sha256);
-    }
-    collection.remove_draft_files(id)?;
+pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), PipelineError> {
+    collection.remove_draft_operations(id)?;
     Ok(())
 }
 
@@ -1408,15 +1374,13 @@ fn current_draft(collection: &Collection, id: FeedId) -> Result<DraftRow, Pipeli
     })
 }
 
-/// The ID of the diff of a draft, from its bytes, the path, the size and
-/// the SHA-256 of each file that it refers to, in sequence (ADR 0032
-/// item 10), and `extra`. The ID changes when a referenced file changes,
-/// or when `extra` changes.
+/// The ID of the diff of a draft, from its bytes and `extra`. The ID
+/// changes when `extra` changes.
 ///
 /// `extra` is the bytes of [`operation_bytes`], or an empty slice for a
 /// caller that does not yet know the host operations of the draft
 /// (ADR 0036 item 14).
-fn diff_id(draft: &DraftRow, referenced: &[DraftFile], extra: &[u8]) -> DiffId {
+fn diff_id(draft: &DraftRow, extra: &[u8]) -> DiffId {
     let base = draft
         .base_version
         .as_ref()
@@ -1425,14 +1389,6 @@ fn diff_id(draft: &DraftRow, referenced: &[DraftFile], extra: &[u8]) -> DiffId {
     bytes.extend_from_slice(base.as_bytes());
     bytes.push(0);
     bytes.extend_from_slice(&draft.draft_xml);
-    for file in referenced {
-        bytes.push(0);
-        bytes.extend_from_slice(file.path.as_bytes());
-        bytes.push(0);
-        bytes.extend_from_slice(file.size.to_string().as_bytes());
-        bytes.push(0);
-        bytes.extend_from_slice(file.sha256.as_bytes());
-    }
     bytes.extend_from_slice(extra);
     DiffId(sha256_hex(&[&bytes]))
 }

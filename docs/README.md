@@ -31,6 +31,7 @@
 - [ADR 0027: The recipient picker](adr/0027-the-recipient-picker.md)
 - [ADR 0028: Summary lines and one open entry](adr/0028-summary-lines-and-one-open-entry.md)
 - [ADR 0029: Editor pages, the toolbar and three background levels](adr/0029-editor-pages-toolbar-and-three-levels.md)
+- [ADR 0030: An added recipient gets no split](adr/0030-an-added-recipient-gets-no-split.md)
 
 ## Plans
 

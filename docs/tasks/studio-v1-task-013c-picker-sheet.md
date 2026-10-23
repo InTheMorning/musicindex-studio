@@ -27,7 +27,7 @@ These choices are fixed. Do not change them.
      - A "Back" row goes back from a track to its feed, and from a feed to the hits.
 - The identity of a recipient is the address, the custom key and the custom value. When the identity of a row is in the editor list, the row shows "Already in this list". Its checkbox is disabled.
 - The footer has "Cancel" and "Add N recipients". N is the number of selected rows of the two parts.
-- The add appends each selected recipient after the current recipients, through `fresh` and `withCids` (ADR 0027 item 7). A recipient from **Your recipients** gets the split `''`. A recipient from musicindex keeps its split and its fee. After the add, the sheet closes. No new entry opens.
+- The add appends each selected recipient after the current recipients, through `fresh` and `withCids` (ADR 0027 item 7). Each added recipient gets the split `''` ([ADR 0030](../adr/0030-an-added-recipient-gets-no-split.md)). A recipient from musicindex keeps its fee mark. After the add, the sheet closes. No new entry opens.
 - An open recipient of the editor gets a "Save to your recipients" button adjacent to its Move and Remove buttons. It calls `POST /recipients/saved`, then shows "Saved" for 2 seconds.
 
 ## Steps

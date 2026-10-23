@@ -921,7 +921,21 @@ textarea:focus { background: var(--fill); }
 /* The recipient picker (task 013c, ADR 0027). A row is a .link-row in a
    .group; the sheet already puts a .group on level 3 (below). The checkbox
    sits in its own 44 px label, so that a Remove button can share the row. */
-.pick-row { cursor: default; }
+/* Fixed columns, so that the status and the Remove button line up from row
+   to row: the checkbox, the name and address, the status, the action. */
+.pick-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 9.5rem 6.5rem;
+  cursor: default;
+}
+.pick-row .summary { white-space: normal; }
+.pick-action { display: flex; justify-content: flex-end; }
+/* At a narrow width, the status goes below the name. */
+@media (max-width: 760px) {
+  .pick-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .pick-row .summary { grid-column: 2; grid-row: 2; }
+  .pick-action { grid-column: 3; grid-row: 1 / span 2; }
+}
 .pick-row .pick-box {
   display: inline-flex;
   align-items: center;

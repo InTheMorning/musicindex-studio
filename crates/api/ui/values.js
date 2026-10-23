@@ -225,13 +225,13 @@ function PickRow({ name, address, status, checked, taken, onToggle, remove }) {
     <label class="pick-box"><input type="checkbox" checked=${checked || taken} disabled=${taken}
       aria-label=${name} onChange=${onToggle} /></label>
     <span class="text"><span class="title">${name}</span><span class="sub mono">${address}</span></span>
-    ${label && html`<span class="summary">${label}</span>`}
-    ${remove}
+    <span class="summary">${label || ''}</span>
+    <span class="pick-action">${remove || ''}</span>
   </div>`;
 }
 
-// The picker sheet: the user's recipients, then musicindex (ADR 0027 items
-// 1, 5 to 7). `Recipients` opens it from the album and from each track.
+// The picker sheet: musicindex, then the user's recipients (ADR 0027 items
+// 1, 5 to 7, and ADR 0030). `Recipients` opens it from the album and from each track.
 function PickerSheet({ open, recipients, onAdd, onClose }) {
   const ref = useSheet(open);
   const taken = new Set(recipients.map(identityOf));
@@ -316,7 +316,9 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
         });
       }
     }
-    for (const [key, r] of indexSelected) combined.set(key, r);
+    // An imported recipient keeps its fee mark but gets no split. The user
+    // gives each new recipient its split (ADR 0030).
+    for (const [key, r] of indexSelected) combined.set(key, { ...r, split: '' });
     onAdd(withCids(fresh([...combined.values()])));
   };
 
@@ -326,27 +328,6 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <section class="page-section">
-        <h2>Your recipients</h2>
-        <${Field} id="picker-filter" label="Filter" value=${filter} placeholder="Name or address"
-          onInput=${(e) => setFilter(e.target.value)} />
-        <${ErrorNotice} error=${yours.error} />
-        ${list === null
-          ? html`<p class="hint" role="status">Loading your recipients…</p>`
-          : html`<div class="group">
-              ${shownYours.length === 0 && html`<p class="hint">${list.length === 0
-                ? 'You have no recipients yet.' : 'No recipient matches this filter.'}</p>`}
-              ${shownYours.map((r) => {
-                const key = identityOf(r);
-                return html`<${PickRow} key=${key} name=${r.name || r.address || 'Recipient'} address=${r.address}
-                  status=${r.saved_id !== null ? 'Saved' : `In ${r.feeds} feed${r.feeds === 1 ? '' : 's'}`}
-                  checked=${yoursSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleYours(key)}
-                  remove=${r.saved_id !== null && html`<button class="button quiet" type="button" disabled=${yours.busy}
-                    onClick=${() => removeSaved(r.saved_id)}>Remove</button>`} />`;
-              })}
-            </div>`}
-      </section>
-
       <section class="page-section">
         <h2>From musicindex</h2>
         <form class="form" onSubmit=${runSearch} role="search">
@@ -393,6 +374,27 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
               status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r)} />`;
           })}
         </div>`}
+      </section>
+
+      <section class="page-section">
+        <h2>Your recipients</h2>
+        <${Field} id="picker-filter" label="Filter" value=${filter} placeholder="Name or address"
+          onInput=${(e) => setFilter(e.target.value)} />
+        <${ErrorNotice} error=${yours.error} />
+        ${list === null
+          ? html`<p class="hint" role="status">Loading your recipients…</p>`
+          : html`<div class="group">
+              ${shownYours.length === 0 && html`<p class="hint">${list.length === 0
+                ? 'You have no recipients yet.' : 'No recipient matches this filter.'}</p>`}
+              ${shownYours.map((r) => {
+                const key = identityOf(r);
+                return html`<${PickRow} key=${key} name=${r.name || r.address || 'Recipient'} address=${r.address}
+                  status=${r.saved_id !== null ? 'Saved' : `In ${r.feeds} feed${r.feeds === 1 ? '' : 's'}`}
+                  checked=${yoursSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleYours(key)}
+                  remove=${r.saved_id !== null && html`<button class="button quiet" type="button" disabled=${yours.busy}
+                    onClick=${() => removeSaved(r.saved_id)}>Remove</button>`} />`;
+              })}
+            </div>`}
       </section>
     </div>
     <footer>

@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: [ADR 0030](0030-an-added-recipient-gets-no-split.md). Item 7: an added recipient gets no split.
 
 ## Context
 

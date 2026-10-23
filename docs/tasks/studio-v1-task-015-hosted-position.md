@@ -4,6 +4,8 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 5.
 Decision: [ADR 0031](../adr/0031-a-new-element-takes-its-hosted-position.md).
 Depends on: [task 010](studio-v1-task-010-draft-api.md).
 
+Status: complete. The [visual check of Phase 5](../reviews/2026-10-23-phase-5-visual-check.md) passed.
+
 ## Goal
 
 When the writer adds a direct child of the channel or of an item, put it at its position in the hosted file.

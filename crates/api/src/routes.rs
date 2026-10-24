@@ -909,6 +909,8 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
         "files": diff.files,
         "operations": diff.operations,
         "blocked": diff.blocked,
+        "feed_move": diff.feed_move,
+        "announce": diff.announce,
     })))
 }
 
@@ -1275,6 +1277,7 @@ fn extra_folder_files(
                     "url": url,
                     "in_use": in_use,
                     "pending": pending,
+                    "pointer": collection.is_feed_pointer(connector_id, &host_file.path)?,
                 }));
             }
         }
@@ -1426,7 +1429,34 @@ pub(crate) async fn list_release_files(
             "remote_count": remote_count,
             "remote_bytes": remote_bytes,
             "other_host_files": other,
+            "feed_move": w.collection.draft_feed_move(id)?.map(|m| json!({
+                "connector_id": m.connector_id.0,
+                "path": m.path,
+            })),
         })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetFeedHost {
+    connector_id: i64,
+}
+
+/// Put the feed XML on a different host through the draft (ADR 0038
+/// item 16). The host of the feed removes the move. A host that has a file
+/// at the path gives 409 `file_exists`. Gives the new diff summary.
+pub(crate) async fn set_feed_host(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SetFeedHost>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        writer(w, id)?;
+        let hosts = w.hosts()?;
+        pipeline::set_feed_host(&w.collection, &hosts, id, ConnectorId(body.connector_id))?;
+        diff_json(w, id)
     })
     .await
 }

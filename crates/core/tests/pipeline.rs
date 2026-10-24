@@ -1202,3 +1202,278 @@ fn an_address_not_reachable_after_the_upload_stops_the_write_before_the_deletion
     assert_eq!(fs::read(s.dir.path().join(&planned.path)).unwrap(), b"one");
     assert!(s.dir.path().join("stray.jpg").exists());
 }
+
+// ---- A move of the feed XML (ADR 0038 items 16 to 20) ----
+
+const MOVE_FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:atom=\"http://www.w3.org/2005/Atom\">
+  <channel>
+    <title>Album</title>
+    <atom:link href=\"https://a.example/album.xml\" rel=\"self\" type=\"application/rss+xml\"/>
+    <podcast:guid>917393e3-1b1e-5cef-ace4-edaa54e1f810</podcast:guid>
+    <podcast:medium>music</podcast:medium>
+    <item>
+      <title>Track One</title>
+      <guid>track-1</guid>
+    </item>
+  </channel>
+</rss>
+";
+
+type Redirects = std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>;
+
+/// A local folder that can make a redirect. It records each redirect.
+struct RedirectingFolder {
+    inner: LocalFolder,
+    redirects: Redirects,
+}
+
+impl Connector for RedirectingFolder {
+    fn read(&self, path: &str) -> Result<Option<connector::FileRead>, connector::ConnectorError> {
+        self.inner.read(path)
+    }
+    fn write(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        expected: &Expected,
+    ) -> Result<connector::Version, connector::ConnectorError> {
+        self.inner.write(path, bytes, expected)
+    }
+    fn public_url(&self, path: &str) -> Option<String> {
+        self.inner.public_url(path)
+    }
+    fn list(&self) -> Result<connector::FileList, connector::ConnectorError> {
+        self.inner.list()
+    }
+    fn stat(&self, path: &str) -> Result<Option<connector::ListedFile>, connector::ConnectorError> {
+        self.inner.stat(path)
+    }
+    fn delete(
+        &self,
+        path: &str,
+        expected: &connector::Stamp,
+    ) -> Result<(), connector::ConnectorError> {
+        self.inner.delete(path, expected)
+    }
+    fn can_redirect(&self) -> bool {
+        true
+    }
+    fn set_redirect(&self, path: &str, to_url: &str) -> Result<(), connector::ConnectorError> {
+        self.redirects
+            .lock()
+            .unwrap()
+            .push((path.to_owned(), to_url.to_owned()));
+        Ok(())
+    }
+}
+
+struct MoveSetup {
+    dir_a: tempfile::TempDir,
+    dir_b: tempfile::TempDir,
+    collection: Collection,
+    hosts: Hosts,
+    library: Library,
+    feed: FeedId,
+    a: ConnectorId,
+    b: ConnectorId,
+    redirects: Redirects,
+}
+
+fn move_setup(redirecting: bool) -> MoveSetup {
+    let dir_a = tempfile::tempdir().unwrap();
+    let dir_b = tempfile::tempdir().unwrap();
+    let folder_a = LocalFolder::new(dir_a.path(), Some("https://a.example".into()));
+    let folder_b = LocalFolder::new(dir_b.path(), Some("https://b.example".into()));
+    folder_a
+        .write("album.xml", MOVE_FEED.as_bytes(), &Expected::Absent)
+        .unwrap();
+    let mut collection = Collection::open(&dir_a.path().join("collection.sqlite")).unwrap();
+    let a = collection
+        .add_connector(LocalFolder::KIND, "A", &folder_a.config(), None)
+        .unwrap();
+    let b = collection
+        .add_connector(LocalFolder::KIND, "B", &folder_b.config(), None)
+        .unwrap();
+    let redirects: Redirects = Redirects::default();
+    let reader = connector::from_row(&collection.connector(a).unwrap(), None).unwrap();
+    let mut hosts = Hosts::new();
+    if redirecting {
+        hosts.insert(
+            a,
+            Box::new(RedirectingFolder {
+                inner: folder_a,
+                redirects: redirects.clone(),
+            }),
+        );
+    } else {
+        hosts.insert(a, Box::new(folder_a));
+    }
+    hosts.insert(b, Box::new(folder_b));
+    let library = Library::open(dir_a.path().join("library")).unwrap();
+    let feed = collection
+        .add_feed(Some("https://a.example/album.xml"), Some((a, "album.xml")))
+        .unwrap();
+    pipeline::refresh(&mut collection, reader.as_ref(), feed).unwrap();
+    collection.set_feed_folder(feed, "album").unwrap();
+    library
+        .write_feed_xml("album", "album.xml", MOVE_FEED.as_bytes())
+        .unwrap();
+    pipeline::start_draft(&collection, reader.as_ref(), feed).unwrap();
+    MoveSetup {
+        dir_a,
+        dir_b,
+        collection,
+        hosts,
+        library,
+        feed,
+        a,
+        b,
+        redirects,
+    }
+}
+
+#[test]
+fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let moved = diff.feed_move.clone().unwrap();
+    assert_eq!(moved.method, pipeline::FeedMoveMethod::Pointer);
+    assert_eq!(moved.url.as_deref(), Some("https://b.example/album.xml"));
+    assert_eq!(
+        moved.from_url.as_deref(),
+        Some("https://a.example/album.xml")
+    );
+    assert!(!diff.announce);
+
+    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+
+    let on_b = fs::read_to_string(s.dir_b.path().join("album.xml")).unwrap();
+    assert!(on_b.contains("href=\"https://b.example/album.xml\""));
+    assert!(!on_b.contains("new-feed-url"));
+    let on_a = fs::read_to_string(s.dir_a.path().join("album.xml")).unwrap();
+    assert!(on_a.contains("new-feed-url>https://b.example/album.xml</"));
+    let row = s.collection.feed(s.feed).unwrap();
+    assert_eq!(row.connector_id, Some(s.b));
+    assert_eq!(row.path.as_deref(), Some("album.xml"));
+    assert_eq!(
+        row.public_url.as_deref(),
+        Some("https://b.example/album.xml")
+    );
+    assert_eq!(
+        row.podcast_guid.as_deref(),
+        Some("917393e3-1b1e-5cef-ace4-edaa54e1f810")
+    );
+    let in_library = fs::read(s.library.path("album", "album.xml")).unwrap();
+    assert_eq!(in_library, on_b.as_bytes());
+    assert!(s.collection.is_feed_pointer(s.a, "album.xml").unwrap());
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
+}
+
+#[test]
+fn a_host_that_can_redirect_gets_a_redirect_and_keeps_its_file_with_no_pointer() {
+    let mut s = move_setup(true);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(
+        diff.feed_move.as_ref().unwrap().method,
+        pipeline::FeedMoveMethod::Redirect
+    );
+    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+
+    assert_eq!(
+        *s.redirects.lock().unwrap(),
+        [(
+            "album.xml".to_owned(),
+            "https://b.example/album.xml".to_owned()
+        )]
+    );
+    let on_a = fs::read_to_string(s.dir_a.path().join("album.xml")).unwrap();
+    assert_eq!(on_a, MOVE_FEED);
+    assert!(!s.collection.is_feed_pointer(s.a, "album.xml").unwrap());
+    assert_eq!(s.collection.feed(s.feed).unwrap().connector_id, Some(s.b));
+}
+
+#[test]
+fn a_move_to_a_host_with_a_file_at_the_path_gives_file_exists() {
+    let s = move_setup(false);
+    fs::write(s.dir_b.path().join("album.xml"), b"other").unwrap();
+    inventory::scan(&s.collection, &s.hosts, s.b).unwrap();
+    let error = pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
+}
+
+#[test]
+fn a_file_put_on_the_new_host_after_the_diff_stops_the_write_with_file_exists() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    fs::write(s.dir_b.path().join("album.xml"), b"other").unwrap();
+    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
+        .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    let on_a = fs::read_to_string(s.dir_a.path().join("album.xml")).unwrap();
+    assert_eq!(on_a, MOVE_FEED);
+    assert_eq!(s.collection.feed(s.feed).unwrap().connector_id, Some(s.a));
+}
+
+#[test]
+fn a_write_that_stopped_after_the_new_host_got_the_feed_can_finish_the_move() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    // A write that stopped after its second step left the draft XML on
+    // host B, and host A has no pointer yet.
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    fs::write(s.dir_b.path().join("album.xml"), &draft.draft_xml).unwrap();
+
+    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+
+    let on_a = fs::read_to_string(s.dir_a.path().join("album.xml")).unwrap();
+    assert!(on_a.contains("new-feed-url>https://b.example/album.xml</"));
+    assert_eq!(s.collection.feed(s.feed).unwrap().connector_id, Some(s.b));
+}
+
+#[test]
+fn the_host_of_the_feed_removes_the_move_and_puts_the_self_link_back() {
+    let s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    let (feed, _) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(feed.self_url(), Some("https://b.example/album.xml"));
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.a).unwrap();
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(draft.draft_xml, draft.base_xml);
+}
+
+#[test]
+fn a_discard_of_the_draft_removes_the_feed_move() {
+    let s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    assert!(pipeline::draft_changed(&s.collection, s.feed).unwrap());
+    pipeline::discard_draft(&s.collection, s.feed).unwrap();
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
+}
+
+#[test]
+fn a_deletion_of_a_pointer_file_is_blocked() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+
+    let reader = connector::from_row(&s.collection.connector(s.b).unwrap(), None).unwrap();
+    pipeline::start_draft(&s.collection, reader.as_ref(), s.feed).unwrap();
+    s.collection
+        .add_draft_operation(s.feed, DraftOperationKind::Delete, None, s.a, "album.xml")
+        .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(diff.operations.is_empty());
+    assert_eq!(diff.blocked.len(), 1);
+    assert!(diff.blocked[0].pointer);
+    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    assert!(s.dir_a.path().join("album.xml").exists());
+}

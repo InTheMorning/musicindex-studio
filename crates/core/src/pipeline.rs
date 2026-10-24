@@ -11,8 +11,8 @@ use similar::TextDiff;
 
 use crate::address::AddressSource;
 use crate::collection::{
-    Collection, CollectionError, ConnectorId, DraftOperationKind, DraftRow, FeedId, FeedRow,
-    LibraryFile, LibraryFileId, SnapshotId,
+    Collection, CollectionError, ConnectorId, DraftFeedMove, DraftOperationKind, DraftRow, FeedId,
+    FeedRow, LibraryFile, LibraryFileId, SnapshotId,
 };
 use crate::connector::{Connector, ConnectorError, ConnectorErrorKind, Expected, Version};
 use crate::digest::sha256_hex;
@@ -200,6 +200,50 @@ pub struct Diff {
     /// Each deletion that Studio refuses because a feed refers to the
     /// file (ADR 0036 item 13).
     pub blocked: Vec<BlockedDelete>,
+    /// The move of the feed XML to a different host, when the draft has
+    /// one (ADR 0038 item 18).
+    pub feed_move: Option<FeedMove>,
+    /// Always `false`: Studio does not tell the musicindex API and
+    /// Podcast Index about a new address yet (ADR 0038 items 18 and 21).
+    pub announce: bool,
+}
+
+/// How the host from before points to the new address of the feed XML
+/// (ADR 0038 item 18).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeedMoveMethod {
+    /// The host makes an HTTP 301 redirect.
+    Redirect,
+    /// Studio writes a pointer file with `itunes:new-feed-url`.
+    Pointer,
+}
+
+impl FeedMoveMethod {
+    /// The text of the method, for the diff ID.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Redirect => "redirect",
+            Self::Pointer => "pointer",
+        }
+    }
+}
+
+/// The move of the feed XML to a different host (ADR 0038 items 16
+/// to 19).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FeedMove {
+    /// The new host.
+    pub connector_id: ConnectorId,
+    /// The path of the feed XML. It is the same on both hosts.
+    pub path: String,
+    /// The new address of the feed XML.
+    pub url: Option<String>,
+    /// The address of the feed XML before the move.
+    pub from_url: Option<String>,
+    /// How the host from before points to the new address.
+    pub method: FeedMoveMethod,
 }
 
 /// The kind of a [`HostOperation`] (ADR 0036 items 10 and 12).
@@ -265,6 +309,9 @@ pub struct BlockedDelete {
     pub feed_titles: Vec<String>,
     /// The draft operation of the deletion, so that the user can remove it.
     pub operation_id: i64,
+    /// True when the file is a pointer file of Studio. Studio keeps it:
+    /// it tells the apps the new address of the feed (ADR 0038 item 20).
+    pub pointer: bool,
 }
 
 /// The result of an import of a file into the library (ADR 0036 item 5).
@@ -512,7 +559,9 @@ pub fn draft_changed(collection: &Collection, id: FeedId) -> Result<bool, Pipeli
     let draft = current_draft(collection, id)?;
     // A copy or a deletion on a host is a change also when the feed XML
     // does not change (ADR 0036 item 12).
-    Ok(draft.base_xml != draft.draft_xml || !collection.draft_operations(id)?.is_empty())
+    Ok(draft.base_xml != draft.draft_xml
+        || !collection.draft_operations(id)?.is_empty()
+        || collection.draft_feed_move(id)?.is_some())
 }
 
 /// The typed model of a draft, and its revision.
@@ -720,7 +769,9 @@ pub fn diff(
     let draft = current_draft(collection, id)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let (operations, blocked) = host_operations(collection, library, hosts, &feed_row, &feed)?;
-    let extra = operation_bytes(collection, hosts, &operations)?;
+    let feed_move = feed_move(collection, hosts, &feed_row)?;
+    let mut extra = operation_bytes(collection, hosts, &operations)?;
+    extra.extend(feed_move_bytes(feed_move.as_ref()));
     let files = upload_files(collection, &operations)?;
     let base = String::from_utf8_lossy(&draft.base_xml);
     let new = String::from_utf8_lossy(&draft.draft_xml);
@@ -736,7 +787,125 @@ pub fn diff(
         files,
         operations,
         blocked,
+        feed_move,
+        announce: false,
     })
+}
+
+/// The move of the feed XML in the draft of a feed, with its new address
+/// and its method. Gives `None` when the draft has no move, or the move
+/// names the host of the feed (ADR 0038 items 16 and 18).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or a host fails.
+fn feed_move(
+    collection: &Collection,
+    hosts: &Hosts,
+    row: &FeedRow,
+) -> Result<Option<FeedMove>, PipelineError> {
+    let Some(DraftFeedMove { connector_id, path }) = collection.draft_feed_move(row.id)? else {
+        return Ok(None);
+    };
+    let (from_id, from_path) = writable(row)?;
+    if connector_id == from_id {
+        return Ok(None);
+    }
+    let from = hosts.get(from_id)?;
+    let method = if from.can_redirect() {
+        FeedMoveMethod::Redirect
+    } else {
+        FeedMoveMethod::Pointer
+    };
+    Ok(Some(FeedMove {
+        connector_id,
+        url: hosts.get(connector_id)?.public_url(&path),
+        path,
+        from_url: from
+            .public_url(from_path)
+            .or_else(|| row.public_url.clone()),
+        method,
+    }))
+}
+
+/// The bytes that [`diff_id`] adds for a feed move: its host, its path and
+/// its method. The bytes are empty when there is no move.
+fn feed_move_bytes(feed_move: Option<&FeedMove>) -> Vec<u8> {
+    let Some(feed_move) = feed_move else {
+        return Vec::new();
+    };
+    let mut bytes = Vec::new();
+    bytes.push(0);
+    bytes.extend_from_slice(b"feed-move");
+    bytes.push(0);
+    bytes.extend_from_slice(feed_move.connector_id.0.to_string().as_bytes());
+    bytes.push(0);
+    bytes.extend_from_slice(feed_move.path.as_bytes());
+    bytes.push(0);
+    bytes.extend_from_slice(feed_move.method.as_str().as_bytes());
+    bytes
+}
+
+/// Put the move of the feed XML to `target` into the draft, and set the
+/// `self` link of the draft to the new address, when the draft has a
+/// `self` link (ADR 0038 item 16). The path stays the path from before.
+///
+/// The host of the feed gives no move. The function then removes the move,
+/// and puts the `self` link back to the link of the live file.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::FileExists`] when the inventory of the new
+/// host has a file at the path, and [`PipelineErrorKind::NoPublicAddress`]
+/// when the new host gives no public address for the path. Gives
+/// [`PipelineErrorKind::NotFound`] when the feed has no hosted file yet.
+/// The draft then does not change.
+pub fn set_feed_host(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+    target: ConnectorId,
+) -> Result<(), PipelineError> {
+    let row = collection.feed(id)?;
+    let (from_id, path) = writable(&row)?;
+    let draft = current_draft(collection, id)?;
+    if target == from_id {
+        collection.remove_draft_feed_move(id)?;
+        let back = Feed::read(&Document::parse_bytes(&draft.base_xml)?)
+            .ok()
+            .and_then(|base| base.self_url().map(str::to_owned));
+        if let Some(back) = back {
+            edit_draft(collection, id, |feed| {
+                feed.set_self_url(&back);
+            })?;
+        }
+        return Ok(());
+    }
+    if draft.base_version.is_none() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::NotFound,
+            format!("{path} is not on its host yet, so there is no feed XML to move"),
+        ));
+    }
+    if collection.host_file(target, path)?.is_some() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::FileExists,
+            format!("a file exists at {path} on the new host already"),
+        ));
+    }
+    let url = hosts.get(target)?.public_url(path).ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NoPublicAddress,
+            format!(
+                "{path} has no public address on the new host; give the host a public address first"
+            ),
+        )
+    })?;
+    collection.set_draft_feed_move(id, target, path)?;
+    edit_draft(collection, id, |feed| {
+        feed.set_self_url(&url);
+    })?;
+    Ok(())
 }
 
 /// Each library file that an upload of `operations` will put on a host,
@@ -940,7 +1109,15 @@ fn host_operations(
                         }
                     }
                 }
-                if referring.is_empty() {
+                if collection.is_feed_pointer(operation.connector_id, &operation.path)? {
+                    blocked.push(BlockedDelete {
+                        connector_id: operation.connector_id,
+                        path: operation.path.clone(),
+                        feed_titles: Vec::new(),
+                        operation_id: operation.id.0,
+                        pointer: true,
+                    });
+                } else if referring.is_empty() {
                     let size = collection
                         .host_file(operation.connector_id, &operation.path)?
                         .map_or(0, |file| file.size);
@@ -960,6 +1137,7 @@ fn host_operations(
                         path: operation.path.clone(),
                         feed_titles: referring,
                         operation_id: operation.id.0,
+                        pointer: false,
                     });
                 }
             }
@@ -1142,7 +1320,10 @@ pub fn library_file_in_use(
 /// started from. The function keeps a snapshot of the live file first.
 ///
 /// The sequence of the write is: each upload and copy, the feed file, a
-/// check of each new address, then each deletion. After the write, the
+/// check of each new address, then each deletion. With a feed move, the
+/// feed file goes to the new host, then the redirect or the pointer file
+/// goes to the host from before, and then the feed gets its new location
+/// (ADR 0038 item 19). After the write, the
 /// draft and its host operations go out. Studio then scans each host that
 /// the write touched.
 ///
@@ -1174,7 +1355,9 @@ pub fn write_draft(
     let draft = current_draft(collection, id)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
-    let extra = operation_bytes(collection, hosts, &operations)?;
+    let feed_move = feed_move(collection, hosts, &row)?;
+    let mut extra = operation_bytes(collection, hosts, &operations)?;
+    extra.extend(feed_move_bytes(feed_move.as_ref()));
     if &diff_id(&draft, &extra) != approved {
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
@@ -1223,16 +1406,34 @@ pub fn write_draft(
     // Step 1: each upload and copy puts a library file on its host.
     put_uploads_and_copies(collection, hosts, library, &row, &operations, &mut touched)?;
 
-    // Step 2: the feed file, as before. The release folder then keeps the
-    // same bytes as the hosted file (ADR 0036 item 3).
-    let expected = match &live {
-        Some(file) => {
-            collection.add_snapshot(id, &file.version, &file.bytes)?;
-            Expected::Version(file.version.clone())
-        }
-        None => Expected::Absent,
+    // Step 2: the feed file. With a feed move, it goes to the new host,
+    // and then the host from before points to it (ADR 0038 item 19). The
+    // release folder then keeps the same bytes as the hosted file
+    // (ADR 0036 item 3).
+    let version = if let Some(moved) = &feed_move {
+        let old = FeedHost {
+            connector,
+            connector_id,
+            path: &path,
+        };
+        put_moved_feed_file(collection, hosts, id, &old, &draft, live.as_ref(), moved)?
+    } else {
+        let expected = match &live {
+            Some(file) => {
+                collection.add_snapshot(id, &file.version, &file.bytes)?;
+                Expected::Version(file.version.clone())
+            }
+            None => Expected::Absent,
+        };
+        connector.write(&path, &draft.draft_xml, &expected)?
     };
-    let version = connector.write(&path, &draft.draft_xml, &expected)?;
+    touched.insert(feed_move.as_ref().map_or(connector_id, |m| m.connector_id));
+
+    // Step 4: the feed gets its new host and address, and the library
+    // keeps the bytes of the file on the new host.
+    if let Some(moved) = &feed_move {
+        collection.set_feed_location(id, moved.connector_id, &moved.path, moved.url.as_deref())?;
+    }
     collection.record_state(id, &feed, &version)?;
     if let Some(folder) = row.folder.as_deref() {
         let file_name = path
@@ -1242,7 +1443,6 @@ pub fn write_draft(
             .write_feed_xml(folder, file_name, &draft.draft_xml)
             .map_err(|error| PipelineError::new(PipelineErrorKind::Connector, error.to_string()))?;
     }
-
     // Step 3: confirm that each upload and each copy is on its host,
     // before Studio deletes any file (ADR 0036 item 15).
     confirm_new_addresses(hosts, &operations)?;
@@ -1253,8 +1453,9 @@ pub fn write_draft(
     // `operations` (ADR 0036 item 13).
     delete_each_operation(collection, hosts, &operations, &mut touched)?;
 
-    // Step 5: the draft and its host operations go out.
+    // Step 5: the draft, its host operations and its feed move go out.
     collection.remove_draft_operations(id)?;
+    collection.remove_draft_feed_move(id)?;
     collection.delete_draft(id)?;
 
     for connector_id in touched {
@@ -1262,6 +1463,96 @@ pub fn write_draft(
     }
 
     Ok(version)
+}
+
+/// The host of a feed XML, and its path on the host.
+struct FeedHost<'a> {
+    connector: &'a dyn Connector,
+    connector_id: ConnectorId,
+    path: &'a str,
+}
+
+/// Put the feed XML on the new host of a feed move, then make the host from
+/// before point to it: the second step of [`write_draft`] with a feed move
+/// (ADR 0038 items 19 and 20). Gives the version of the file on the new
+/// host.
+///
+/// The new host gets the file only when it has no file at the path. The
+/// host from before gets a redirect, or a pointer file that Studio keeps.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::FileExists`] when a file exists on the new
+/// host at the path, before any file changes.
+fn put_moved_feed_file(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+    old: &FeedHost<'_>,
+    draft: &DraftRow,
+    live: Option<&crate::connector::FileRead>,
+    moved: &FeedMove,
+) -> Result<Version, PipelineError> {
+    let live_file = live.ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NotFound,
+            format!("{} does not exist on the host", old.path),
+        )
+    })?;
+    let new_url = moved.url.as_deref().ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NoPublicAddress,
+            format!("{} has no public address on the new host", moved.path),
+        )
+    })?;
+    let new_host = hosts.get(moved.connector_id)?;
+    let version = match new_host.write(&moved.path, &draft.draft_xml, &Expected::Absent) {
+        Ok(version) => version,
+        Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
+            // A write that stopped after this step left the draft XML on
+            // the new host. The same bytes let the write continue, so the
+            // user can finish the move. Other bytes are a different file.
+            match new_host.read(&moved.path)? {
+                Some(found) if found.bytes == draft.draft_xml => found.version,
+                _ => {
+                    return Err(PipelineError::new(
+                        PipelineErrorKind::FileExists,
+                        format!("a file exists at {} on the new host already", moved.path),
+                    ));
+                }
+            }
+        }
+        Err(error) => return Err(error.into()),
+    };
+    collection.add_snapshot(id, &live_file.version, &live_file.bytes)?;
+    match moved.method {
+        FeedMoveMethod::Redirect => old.connector.set_redirect(old.path, new_url)?,
+        FeedMoveMethod::Pointer => {
+            let pointer = pointer_bytes(draft, new_url)?;
+            old.connector.write(
+                old.path,
+                &pointer,
+                &Expected::Version(live_file.version.clone()),
+            )?;
+            collection.add_feed_pointer(old.connector_id, old.path, id)?;
+        }
+    }
+    Ok(version)
+}
+
+/// The bytes of a pointer file: the draft with `itunes:new-feed-url` set
+/// to `new_url` (ADR 0038 item 19).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the draft is not a feed.
+fn pointer_bytes(draft: &DraftRow, new_url: &str) -> Result<Vec<u8>, PipelineError> {
+    let mut doc = Document::parse_bytes(&draft.draft_xml)?;
+    let mut feed = Feed::read(&doc)?;
+    feed.new_feed_url = Some(new_url.to_owned());
+    let hosted = hosted_document(draft);
+    feed.write_hosted(&mut doc, hosted.as_ref())?;
+    Ok(doc.write().into_bytes())
 }
 
 /// Put each upload and each copy of `operations` on its host: the first
@@ -1414,6 +1705,7 @@ fn delete_each_operation(
 /// Gives a [`PipelineError`] when the collection fails.
 pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), PipelineError> {
     collection.remove_draft_operations(id)?;
+    collection.remove_draft_feed_move(id)?;
     Ok(())
 }
 

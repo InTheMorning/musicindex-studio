@@ -327,6 +327,16 @@ pub struct FeedRow {
     pub files_connector_id: Option<ConnectorId>,
 }
 
+/// The move of the feed XML to a different host, in the draft of a feed
+/// (ADR 0038 item 16).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftFeedMove {
+    /// The new host of the feed XML.
+    pub connector_id: ConnectorId,
+    /// The path of the feed XML on the new host.
+    pub path: String,
+}
+
 /// A draft of a feed (ADR 0007).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftRow {
@@ -857,6 +867,132 @@ impl Collection {
                 },
             )
             .optional()?)
+    }
+
+    /// Keep the move of the feed XML in the draft of a feed. A move that
+    /// is there already is replaced (ADR 0038 item 16).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_draft_feed_move(
+        &self,
+        feed: FeedId,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO draft_feed_moves (feed_id, connector_id, path, added_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (feed_id) DO UPDATE SET connector_id = ?2, path = ?3, added_at = ?4",
+            params![feed.0, connector.0, path, now()],
+        )?;
+        Ok(())
+    }
+
+    /// The move of the feed XML in the draft of a feed, if there is one.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn draft_feed_move(&self, feed: FeedId) -> Result<Option<DraftFeedMove>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT connector_id, path FROM draft_feed_moves WHERE feed_id = ?1",
+                [feed.0],
+                |r| {
+                    Ok(DraftFeedMove {
+                        connector_id: ConnectorId(r.get(0)?),
+                        path: r.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Remove the move of the feed XML from the draft of a feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_feed_move(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db
+            .execute("DELETE FROM draft_feed_moves WHERE feed_id = ?1", [feed.0])?;
+        Ok(())
+    }
+
+    /// Record a pointer file: the old feed XML that tells the apps the new
+    /// address of `feed`. Studio keeps each pointer file (ADR 0038
+    /// item 20).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_feed_pointer(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+        feed: FeedId,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO feed_pointers (connector_id, path, feed_id, added_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (connector_id, path) DO UPDATE SET feed_id = ?3",
+            params![connector.0, path, feed.0, now()],
+        )?;
+        Ok(())
+    }
+
+    /// True when the file at `path` on a host is a pointer file of Studio.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn is_feed_pointer(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<bool, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT 1 FROM feed_pointers WHERE connector_id = ?1 AND path = ?2",
+                params![connector.0, path],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Change the host, the path and the public address of a feed in one
+    /// transaction (ADR 0038 item 19).
+    ///
+    /// The addresses of the sources "read" and "folder" are from the old
+    /// location, so the function replaces them. The "folder" address
+    /// becomes `public_url`.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the feed or the
+    /// connector does not exist.
+    pub fn set_feed_location(
+        &mut self,
+        feed: FeedId,
+        connector: ConnectorId,
+        path: &str,
+        public_url: Option<&str>,
+    ) -> Result<(), CollectionError> {
+        self.feed(feed)?;
+        self.connector(connector)?;
+        let tx = self.db.transaction()?;
+        tx.execute(
+            "UPDATE feeds SET connector_id = ?2, path = ?3 WHERE id = ?1",
+            params![feed.0, connector.0, path],
+        )?;
+        put_address(&tx, feed, AddressSource::Read, None)?;
+        put_address(&tx, feed, AddressSource::Folder, public_url)?;
+        choose_address(&tx, feed)?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Add or replace the draft of a feed.

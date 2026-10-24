@@ -3396,3 +3396,51 @@ async fn use_new_changes_the_draft_to_the_hash_name_and_the_write_leaves_only_th
         new_bytes
     );
 }
+
+#[tokio::test]
+async fn the_feed_host_route_puts_a_feed_move_into_the_diff() {
+    let app = app();
+    let id = set_up(&app).await;
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        "<rss version=\"2.0\"><channel><title>Album</title></channel></rss>\n",
+    )
+    .unwrap();
+    let new_dir = tempfile::tempdir().unwrap();
+    let new_id = add_host(&app, "New", new_dir.path(), "https://new.example").await;
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+
+    let (status, diff) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": new_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["feed_move"]["connector_id"], new_id);
+    assert_eq!(diff["feed_move"]["path"], "album.xml");
+    assert_eq!(diff["feed_move"]["url"], "https://new.example/album.xml");
+    assert_eq!(
+        diff["feed_move"]["from_url"],
+        "https://music.example/album.xml"
+    );
+    assert_eq!(diff["feed_move"]["method"], "pointer");
+    assert_eq!(diff["announce"], false);
+
+    // A host that has a file at the path gives 409.
+    let busy_dir = tempfile::tempdir().unwrap();
+    std::fs::write(busy_dir.path().join("album.xml"), "other").unwrap();
+    let busy_id = add_host(&app, "Busy", busy_dir.path(), "https://busy.example").await;
+    let (status, _) = call(&app, "POST", &format!("/api/v1/hosts/{busy_id}/scan"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": busy_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "file_exists");
+}

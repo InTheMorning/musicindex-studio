@@ -219,6 +219,21 @@ impl Feed {
             .and_then(|l| l.href.as_deref())
     }
 
+    /// Set the `href` of the first `atom:link` with `rel="self"`. Gives
+    /// `false`, and changes nothing, when the feed has no such link
+    /// (ADR 0038 item 16).
+    pub fn set_self_url(&mut self, url: &str) -> bool {
+        let Some(link) = self
+            .atom_links
+            .iter_mut()
+            .find(|l| l.value.rel.as_deref() == Some("self"))
+        else {
+            return false;
+        };
+        link.value.href = Some(url.to_owned());
+        true
+    }
+
     /// Each `podcast:valueRecipient` of each value block of the channel, of
     /// each item and of each live item (ADR 0027 item 4).
     ///

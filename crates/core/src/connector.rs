@@ -115,6 +115,8 @@ pub enum ConnectorErrorKind {
     InvalidConfig,
     /// A file or network operation failed.
     Io,
+    /// The connector cannot do this operation.
+    Unsupported,
 }
 
 /// An error from a connector.
@@ -203,6 +205,26 @@ pub trait Connector {
     /// a different stamp, and [`ConnectorErrorKind::NotFound`] when the
     /// file does not exist.
     fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError>;
+
+    /// True when the connector can make an HTTP 301 redirect from a path
+    /// to a URL (ADR 0038 item 17).
+    fn can_redirect(&self) -> bool {
+        false
+    }
+
+    /// Make an HTTP 301 redirect from `path` to `to_url`.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`ConnectorErrorKind::Unsupported`] when the connector cannot
+    /// make a redirect.
+    fn set_redirect(&self, path: &str, to_url: &str) -> Result<(), ConnectorError> {
+        let _ = (path, to_url);
+        Err(ConnectorError::new(
+            ConnectorErrorKind::Unsupported,
+            "the connector cannot make a redirect",
+        ))
+    }
 }
 
 /// Make the connector of a collection row.

@@ -39,6 +39,7 @@
 - [ADR 0035: A release library is the master of each feed](adr/0035-a-release-library-is-the-master-of-each-feed.md)
 - [ADR 0036: Library records, the host inventory and host operations](adr/0036-library-records-host-inventory-and-host-operations.md)
 - [ADR 0037: Button roles](adr/0037-button-roles.md)
+- [ADR 0038: Published feeds, downloads, the folder scan and feed moves](adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
 
 ## Plans
 
@@ -93,6 +94,15 @@
 - [Studio v1 task 022: The UI pass after milestone 7a](tasks/studio-v1-task-022-ui-pass-after-7a.md)
 - [Studio v1 task 022a: The API marks and the host address](tasks/studio-v1-task-022a-api-marks-and-host-address.md)
 - [Studio v1 task 022b: The button roles and the Files page](tasks/studio-v1-task-022b-button-roles-and-files-page.md)
+- [Studio v1 task 023: The release library, milestone 7b](tasks/studio-v1-task-023-release-library-7b.md)
+- [Studio v1 task 023a: The records of remote files](tasks/studio-v1-task-023a-remote-file-records.md)
+- [Studio v1 task 023b: Published feeds in the library](tasks/studio-v1-task-023b-published-feeds-in-the-library.md)
+- [Studio v1 task 023c: The download queue](tasks/studio-v1-task-023c-download-queue.md)
+- [Studio v1 task 023d: The download UI](tasks/studio-v1-task-023d-download-ui.md)
+- [Studio v1 task 023e: The folder scan](tasks/studio-v1-task-023e-folder-scan.md)
+- [Studio v1 task 023f: The folder scan UI](tasks/studio-v1-task-023f-folder-scan-ui.md)
+- [Studio v1 task 023g: The move of the feed XML](tasks/studio-v1-task-023g-feed-xml-move.md)
+- [Studio v1 task 023h: The feed XML move UI](tasks/studio-v1-task-023h-feed-xml-move-ui.md)
 
 ## Reviews
 

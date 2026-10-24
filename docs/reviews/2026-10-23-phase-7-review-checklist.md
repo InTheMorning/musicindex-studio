@@ -1,8 +1,8 @@
 # Phase 7 Review Checklist
 
 - Date: 2026-10-23
-- Reviewed: each packet of [task 021](../tasks/studio-v1-task-021-release-library-7a.md) and of milestone 7b
-- Decisions: [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) and [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md)
+- Reviewed: each packet of [task 021](../tasks/studio-v1-task-021-release-library-7a.md) and of [task 023](../tasks/studio-v1-task-023-release-library-7b.md)
+- Decisions: [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
 
 The planning model uses this list after each packet, before its commit.
 
@@ -24,6 +24,10 @@ The planning model uses this list after each packet, before its commit.
 - A read and a write with no edit give the same bytes ([ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md)).
 - Each `/api/` route needs the access token ([ADR 0017](../adr/0017-local-api-access.md)).
 - A schema change is a new migration ([ADR 0014](../adr/0014-collection-in-sqlite.md)).
+- No download starts without a selection of the user (ADR 0038 item 6).
+- The write refuses a draft with an operation that waits for a download (ADR 0038 item 12).
+- Studio does not delete a pointer file (ADR 0038 item 20).
+- The folder scan reads only a file whose stamp changed (ADR 0038 item 13).
 
 ## Results
 

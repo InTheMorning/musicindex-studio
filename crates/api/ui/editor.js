@@ -726,7 +726,8 @@ function FeedMoveRow({ move, connectors, onUndo, busy }) {
     <span class="kind">Move</span>
     <span class="text">
       <span class="title">Move the feed</span>
-      <span class="sub mono">${move.url}</span>
+      ${move.from_url && html`<span class="sub">From <span class="mono">${move.from_url}</span></span>`}
+      <span class="sub">To <span class="mono">${move.url}</span></span>
       <span class="sub">${moveNote(move.method)}</span>
       <span class="sub">${connectorName(connectors, move.connector_id)}</span>
     </span>
@@ -1519,22 +1520,24 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     await load();
   });
 
-  // The method of the pending move, from the last route answer. The files
-  // route gives no method, so a page load asks the diff route.
-  const [moveMethod, setMoveMethod] = useState('pointer');
+  // The pending move with its method and its two addresses, from the last
+  // route answer. The files route gives only the host and the path, so a
+  // page load asks the diff route.
+  const [moveInfo, setMoveInfo] = useState(null);
+  const moveMethod = moveInfo ? moveInfo.method : 'pointer';
   const pendingMove = data && data.feed_move;
   useEffect(() => {
     if (!pendingMove) return;
     api(`/feeds/${feed.id}/diff`).then(
-      (d) => { if (d.feed_move) setMoveMethod(d.feed_move.method); },
-      () => { /* The hint keeps the pointer text. */ });
+      (d) => { if (d.feed_move) setMoveInfo(d.feed_move); },
+      () => { /* The hint keeps the pointer text with no addresses. */ });
   }, [feed.id, pendingMove && pendingMove.connector_id, reloadKey]);
 
   // The route changes the self link of the draft, so the shell loads the
   // draft again, as after a host operation.
   const setFeedHost = (connectorId) => run(async () => {
     const diff = await api(`/feeds/${feed.id}/feed-host`, { method: 'PUT', body: { connector_id: connectorId } });
-    if (diff.feed_move) setMoveMethod(diff.feed_move.method);
+    setMoveInfo(diff.feed_move || null);
     onOpsChanged();
     await load();
   });
@@ -1603,8 +1606,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
             onChange=${(e) => setFeedHost(Number(e.target.value))}>
             ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
           </select>
-          ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write.
-            The address from before gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}
+          ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write${moveInfo && moveInfo.url ? html`, at <span class="mono">${moveInfo.url}</span>` : ''}.
+            The address from before${moveInfo && moveInfo.from_url ? html`, <span class="mono">${moveInfo.from_url}</span>,` : ''} gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}
         </div>
       </div>
     </section>

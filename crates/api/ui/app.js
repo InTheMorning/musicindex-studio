@@ -1038,6 +1038,10 @@ function FolderFeeds({ connector, onAdded }) {
   const [chosen, setChosen] = useState([]);
   const [result, setResult] = useState(null);
   const { busy, error, run } = useAction();
+  const panelRef = useRef(null);
+  useEffect(() => {
+    if (found && found.length > 0 && panelRef.current) panelRef.current.scrollIntoView({ block: 'nearest' });
+  }, [found]);
   useEffect(() => {
     api(`/connectors/${connector.id}/feeds`).then((list) => {
       const others = list.feeds.filter((f) => !f.in_collection);
@@ -1056,7 +1060,7 @@ function FolderFeeds({ connector, onAdded }) {
     setResult(chosen.length);
     onAdded();
   });
-  return html`<div class="panel form">
+  return html`<div class="panel form" ref=${panelRef}>
     <h2>Studio also found these feeds in this folder</h2>
     <fieldset class="choices"><legend class="visually-hidden">Feeds to add</legend>
       ${found.map((f) => {
@@ -1191,6 +1195,12 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
   const [adding, setAdding] = useState(false);
+  // The result of a new host shows above the host cards, and the form is
+  // below them, so the page brings the result into view.
+  const resultRef = useRef(null);
+  useEffect(() => {
+    if (linked && resultRef.current) resultRef.current.scrollIntoView({ block: 'start' });
+  }, [linked]);
   const remove = (connector) => {
     if (!confirm(`Remove the host “${connector.name}”? The files in it do not change.`)) return;
     run(async () => {
@@ -1213,6 +1223,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
         : html`<${ErrorNotice} error=${error} />`}
+      <div ref=${resultRef}></div>
       ${linked && linked.feeds.length > 0 && html`<div class="notice" role="status">
         Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.connector.name}”.
       </div>`}

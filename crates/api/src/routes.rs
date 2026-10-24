@@ -691,12 +691,16 @@ pub(crate) async fn match_connector(
             }
         }
         let folder_address = studio_core::address::apply_folder_address(&mut w.collection, row.id)?;
+        // A new host gets its inventory immediately, so that the Files
+        // page shows its copies (ADR 0036 item 6).
+        let hosts = w.hosts()?;
+        let inventory = inventory::scan(&w.collection, &hosts, row.id)?;
         let linked = linked
             .into_iter()
             .map(|id| w.collection.feed(id))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Json(
-            json!({ "linked": linked, "folder_address": folder_address }),
+            json!({ "linked": linked, "folder_address": folder_address, "inventory": inventory }),
         ))
     })
     .await

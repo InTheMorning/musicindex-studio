@@ -963,6 +963,10 @@ async fn a_connected_folder_takes_the_read_only_feeds_that_it_holds() {
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0]["path"], "album.xml");
     assert_eq!(linked[0]["connector_id"], connector["id"]);
+    assert!(
+        body["inventory"]["new"].as_u64().unwrap() >= 1,
+        "ADR 0036 item 6: Studio lists a host when the user adds it"
+    );
 }
 
 /// The example of ADR 0021: a folder with no public address holds a feed that

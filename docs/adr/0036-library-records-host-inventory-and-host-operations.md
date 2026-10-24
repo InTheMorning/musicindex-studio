@@ -37,7 +37,7 @@ The planning model added the technical choices below.
 
 ### The Inventory
 
-6. Studio lists each host with `Connector::list` at the start, after each write, and when the user asks. The list gives the size and a stamp of each file with no read of the file. The stamp is a change marker, for example the size and the modification time, or an `ETag`. Studio records each file in `host_files`. It reads the SHA-256 of a host file only when the size agrees with a library file. A row keeps its SHA-256 while its stamp does not change.
+6. Studio lists each host with `Connector::list` at the start, when the user adds the host, after each write, and when the user asks. The list gives the size and a stamp of each file with no read of the file. The stamp is a change marker, for example the size and the modification time, or an `ETag`. Studio records each file in `host_files`. It reads the SHA-256 of a host file only when the size agrees with a library file. A row keeps its SHA-256 while its stamp does not change.
 7. A feed refers to a host file when the public address of the host file is an address in the feed: an enclosure, a `podcast:source` or an image.
 
 ### Addresses And Placement

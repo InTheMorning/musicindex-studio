@@ -702,6 +702,7 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
       <span class="title">${connectorName(connectors, op.connector_id)}</span>
       <span class="sub mono">${op.path}</span>
       <span class="sub">${OPERATION_NOTE[op.kind] || ''}</span>
+      ${op.waiting && html`<span class="sub waiting">Waiting for the download. Studio writes it after the download.</span>`}
     </span>
     <span class="size">${fileSize(op.size)}</span>
     ${op.operation_id !== null && html`<button class="button" type="button" disabled=${busy}
@@ -803,6 +804,18 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, onOp
       await draft.load();
     });
   };
+  // An operation waits for a download of its file (ADR 0038 item 12). The
+  // write refuses the draft until each download is complete.
+  const waiting = !!diff && diff.operations.some((op) => op.waiting);
+  // While an operation waits, the sheet examines the draft again each
+  // 1.5 seconds, so that the mark goes out when the download is complete.
+  useEffect(() => {
+    if (!open || !waiting) return undefined;
+    const timer = setInterval(async () => {
+      try { setDiff(await api(`/feeds/${feedId}/diff`)); } catch (_) { /* The next pass tries again. */ }
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [open, waiting, feedId]);
   const conflict = error && error.code === 'conflict';
   // Studio cannot write while an address of the draft is not correct. A
   // host operation of `diff` does not block the write on its own: Studio
@@ -838,13 +851,14 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, onOp
       ${diff && (diff.changed
         ? html`<${DiffView} unified=${diff.unified} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
+      ${waiting && html`<p class="hint" role="status">Wait for each download, then write.</p>`}
       <div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the changes</button>
       </div>
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
-      ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy} onClick=${write}>
+      ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy || waiting} onClick=${write}>
         ${busy ? 'Writing…' : 'Write to the host'}</button>`}
     </footer>
   </dialog>`;
@@ -1119,6 +1133,47 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
 // deletion, and sees each host file of the release folder that is not a
 // copy of a library file.
 
+// The summary text of a file that is not in the library (ADR 0038 items
+// 6 and 7). `download` is the row of the downloads route, or undefined.
+function downloadSummary(download) {
+  if (!download) return 'Not in the library';
+  if (download.state === 'queued') return 'Queued';
+  if (download.state === 'failed') return 'Download failed';
+  return `Downloading ${downloadPercent(download)}%`;
+}
+
+function downloadPercent(download) {
+  if (!download.total) return 0;
+  return Math.min(100, Math.floor((download.bytes / download.total) * 100));
+}
+
+// The download controls of an open remote entry (ADR 0038 items 6 and 7,
+// ADR 0037): "Download" and "Try again" are actions. "Stop" is normal.
+function DownloadControls({ download, busy, onDownload, onStop }) {
+  if (!download) {
+    return html`<div class="actions">
+      <button class="button action" type="button" disabled=${busy} onClick=${onDownload}>Download</button>
+    </div>`;
+  }
+  if (download.state === 'failed') {
+    return html`<div class="download-state">
+      <p class="hint error-text" role="alert">${download.message || 'The download failed.'}</p>
+      <div class="actions">
+        <button class="button action" type="button" disabled=${busy} onClick=${onDownload}>Try again</button>
+      </div>
+    </div>`;
+  }
+  const percent = downloadPercent(download);
+  return html`<div class="download-state">
+    <div class="download-bar" role="progressbar" aria-label="Download" aria-valuemin="0" aria-valuemax="100"
+      aria-valuenow=${percent}><span style=${`width: ${percent}%`}></span></div>
+    <p class="hint">${download.state === 'queued' ? 'Queued' : `${fileSize(download.bytes)}${download.total ? ` of ${fileSize(download.total)}` : ''}`}</p>
+    <div class="actions">
+      <button class="button" type="button" disabled=${busy} onClick=${onStop}>Stop</button>
+    </div>
+  </div>`;
+}
+
 // One copy of a library file on a host (ADR 0036 items 12 and 13, ADR
 // 0037). A pending operation takes over the row with "Undo". The copy
 // that the feed uses shows no Reference button and no Delete button: it
@@ -1170,16 +1225,27 @@ function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUn
 // The entry shows one "Copy to" button for each host that has no copy of
 // the file and no pending copy of it yet (ADR 0037). Each pending copy of
 // the file, from `pending_copies`, shows its own row with "Undo".
-function FileEntry({ feedId, file, defaultHost, connectors, busy, onOperation, onUndo, onChanged }) {
+function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDownload, onStop, onOperation, onUndo, onChanged }) {
   const summary = html`<span class="badge">${formatLabel(file.media_type)}</span>
     <span class="title">${file.path}</span>
     <span class="sub">${file.in_use ? 'In use' : 'Not in use'} · ${file.local
       ? `${file.copies.length} ${file.copies.length === 1 ? 'copy' : 'copies'}`
-      : 'Not in the library'}</span>`;
+      : downloadSummary(download)}</span>`;
   const reference = (connectorId) => onOperation({ op: 'reference', file: file.id, connector_id: connectorId, from_url: file.url });
   const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
-  const copyTo = (connectorId) => onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
-  const moveTo = (from, to) => onOperation({ op: 'move', file: file.id, from, to });
+  // A copy or a move of a remote file asks first (ADR 0038 item 12). The
+  // size comes from the row.
+  const askFirst = () => file.local || confirm(
+    `Studio downloads this file first${file.size > 0 ? ` (${fileSize(file.size)})` : ''}. `
+    + 'The copy goes into the draft now, and the write waits for the download.');
+  const copyTo = (connectorId) => {
+    if (askFirst()) onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
+  };
+  const moveTo = (from, to) => {
+    if (askFirst()) onOperation({ op: 'move', file: file.id, from, to });
+  };
+  const sizeDiffers = file.local && file.length_in_feed != null && file.length_in_feed > 0
+    && file.length_in_feed !== file.size;
   const setHost = (value) => onChanged(`/feeds/${feedId}/files/${file.id}/host`, { connector_id: value });
   // A file with no host of its own uses the default host of the release
   // (ADR 0036 item 8).
@@ -1192,6 +1258,9 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, onOperation, o
   return html`<${EntryRow} group="library-files" cid=${file.id} summary=${summary}>
     <div class="file-rows">
       ${!file.local && html`<p class="hint">Not in the library. Studio uses the file on its host.</p>`}
+      ${!file.local && html`<${DownloadControls} download=${download} busy=${busy}
+        onDownload=${() => onDownload(file.id)} onStop=${() => onStop(file.id)} />`}
+      ${sizeDiffers && html`<p class="hint">The feed gives ${fileSize(file.length_in_feed)}. The file is ${fileSize(file.size)}.</p>`}
       ${file.local && file.copies.length === 0 && file.pending_copies.length === 0
         && html`<p class="hint">Studio sends this file to its host when you write.</p>`}
       ${file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
@@ -1203,7 +1272,7 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, onOperation, o
           <button class="button" type="button" disabled=${busy} onClick=${() => onUndo(pending.operation_id)}>Undo</button>
         </div>
       </div>`)}
-      ${file.local && copyTargets.length > 0 && html`<div class="actions">
+      ${copyTargets.length > 0 && html`<div class="actions">
         ${copyTargets.map((c) => html`<button key=${c.id} class="button action" type="button" disabled=${busy}
           onClick=${() => copyTo(c.id)}>Copy to ${c.name}</button>`)}
       </div>`}
@@ -1260,6 +1329,9 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
   const [error, setError] = useState(null);
   const { busy, error: opError, run } = useAction();
   const scan = useAction();
+  // The downloads of this feed, from the downloads route.
+  const [downloads, setDownloads] = useState([]);
+  const lastActive = useRef(new Set());
 
   const load = async () => {
     try {
@@ -1277,6 +1349,49 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
     shownFeed.current = feed.id;
     load();
   }, [feed.id, reloadKey]);
+
+  // Read the downloads. A file that was queued or running before, and is
+  // not in the list now, is complete or stopped. The page then loads the
+  // files route again. A failed download stays in the list.
+  const loadDownloads = async () => {
+    try {
+      const list = (await api(`/feeds/${feed.id}/downloads`)).downloads;
+      const active = new Set(list.filter((d) => d.state !== 'failed').map((d) => d.file_id));
+      const finished = [...lastActive.current].some((id) => !list.some((d) => d.file_id === id));
+      lastActive.current = active;
+      setDownloads(list);
+      if (finished) await load();
+    } catch (_) { /* The next pass tries again. */ }
+  };
+  useEffect(() => {
+    lastActive.current = new Set();
+    setDownloads([]);
+    loadDownloads();
+  }, [feed.id]);
+  const activeCount = downloads.filter((d) => d.state !== 'failed').length;
+  // While a download is queued or running, read the list each second.
+  useEffect(() => {
+    if (activeCount === 0) return undefined;
+    const timer = setInterval(loadDownloads, 1000);
+    return () => clearInterval(timer);
+  }, [feed.id, activeCount]);
+
+  const startDownloads = (body) => run(async () => {
+    await api(`/feeds/${feed.id}/downloads`, { method: 'POST', body });
+    await loadDownloads();
+  });
+  const stopDownload = (fileId) => run(async () => {
+    await api(`/feeds/${feed.id}/downloads/${fileId}`, { method: 'DELETE' });
+    await loadDownloads();
+    await load();
+  });
+  const stopAll = () => run(async () => {
+    for (const d of downloads.filter((x) => x.state !== 'failed')) {
+      await api(`/feeds/${feed.id}/downloads/${d.file_id}`, { method: 'DELETE' });
+    }
+    await loadDownloads();
+    await load();
+  });
 
   // Each host that holds something of this release: its own host, the
   // default host of its files, and each host of a copy or an other file.
@@ -1317,6 +1432,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
     await api(`/feeds/${feed.id}/operations`, { method: 'POST', body });
     onOpsChanged();
     await load();
+    // The route of a remote file queued its download.
+    await loadDownloads();
   });
 
   // Take a pending operation out of the draft, such as a copy or a
@@ -1354,10 +1471,22 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
     </section>
 
     <section class="page-section"><h2>Library files</h2>
+      ${data.remote_count > 0 && html`<div class="notice download-notice">
+        <span>${activeCount > 0
+          ? `Downloading ${activeCount} ${activeCount === 1 ? 'file' : 'files'}…`
+          : `${data.remote_count} ${data.remote_count === 1 ? 'file is' : 'files are'} not in the library (${fileSize(data.remote_bytes)}).`}</span>
+        <div class="actions">
+          ${activeCount > 0
+            ? html`<button class="button" type="button" disabled=${busy} onClick=${stopAll}>Stop all</button>`
+            : html`<button class="button action" type="button" disabled=${busy} onClick=${() => startDownloads({ all: true })}>Download all</button>`}
+        </div>
+      </div>`}
       ${data.files.length === 0 && html`<p class="hint">No files yet.</p>`}
       ${data.files.length > 0 && html`<div class="group">
         ${data.files.map((file) => html`<${FileEntry} key=${file.id} feedId=${feed.id} file=${file} defaultHost=${defaultHost}
           connectors=${connectors} busy=${busy} onOperation=${addOperation} onUndo=${undoOperation}
+          download=${downloads.find((d) => d.file_id === file.id)}
+          onDownload=${(fileId) => startDownloads({ files: [fileId] })} onStop=${stopDownload}
           onChanged=${(path, body) => setFileHost(path, body)} />`)}
       </div>`}
     </section>

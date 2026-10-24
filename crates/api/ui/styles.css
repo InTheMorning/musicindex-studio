@@ -1206,3 +1206,11 @@ textarea:focus { background: var(--fill); }
 .copy-row { display: grid; gap: 8px; }
 .copy-row .title { font-weight: 600; }
 .copy-row .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+
+/* The downloads of the Files page (task 023d, ADR 0038 items 6 and 7). */
+.download-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.download-state { display: grid; gap: 8px; }
+.download-bar { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
+.download-bar span { display: block; height: 100%; background: var(--accent); }
+.hint.error-text { color: var(--error); }
+.host-op-row .sub.waiting { color: var(--text); font-weight: 600; }

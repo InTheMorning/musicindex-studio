@@ -710,6 +710,30 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
   </div>`;
 }
 
+// The second line of the feed move row: what the address from before gets
+// (ADR 0038 items 16 to 18).
+function moveNote(method) {
+  return method === 'redirect'
+    ? 'The address from before gets a redirect to the new address.'
+    : 'The address from before gets a pointer file with the new address.';
+}
+
+// The move of the feed XML to a different host (ADR 0038 item 16). It
+// is the first row of the operations. "Undo" puts the feed XML back on the
+// host of the feed.
+function FeedMoveRow({ move, connectors, onUndo, busy }) {
+  return html`<div class="host-op-row">
+    <span class="kind">Move</span>
+    <span class="text">
+      <span class="title">Move the feed</span>
+      <span class="sub mono">${move.url}</span>
+      <span class="sub">${moveNote(move.method)}</span>
+      <span class="sub">${connectorName(connectors, move.connector_id)}</span>
+    </span>
+    <button class="button" type="button" disabled=${busy} onClick=${onUndo}>Undo</button>
+  </div>`;
+}
+
 // A deletion that Studio refuses because a feed of the library refers to
 // the file (ADR 0036 item 13). The row uses the error color, not an
 // entity color (ADR 0018).
@@ -719,7 +743,9 @@ function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
     <span class="text">
       <span class="title">${connectorName(connectors, blocked.connector_id)}</span>
       <span class="sub mono">${blocked.path}</span>
-      <span class="sub">Studio cannot delete this file. These feeds refer to it: ${blocked.feed_titles.join(', ')}</span>
+      <span class="sub">${blocked.pointer
+        ? 'Studio keeps this file. It tells the apps the new address of the feed.'
+        : `Studio cannot delete this file. These feeds refer to it: ${blocked.feed_titles.join(', ')}`}</span>
     </span>
     <button class="button" type="button" disabled=${busy}
       onClick=${() => onRemove(blocked.operation_id)}>Undo</button>
@@ -727,9 +753,11 @@ function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
 }
 
 // Each host operation of the diff, above the XML diff (ADR 0036 item 14).
-function HostOperations({ diff, connectors, onRemove, busy }) {
-  if (diff.operations.length === 0 && diff.blocked.length === 0) return null;
+function HostOperations({ diff, connectors, onRemove, onUndoMove, busy }) {
+  if (diff.operations.length === 0 && diff.blocked.length === 0 && !diff.feed_move) return null;
   return html`<div class="group host-ops">
+    ${diff.feed_move && html`<${FeedMoveRow} move=${diff.feed_move} connectors=${connectors} onUndo=${onUndoMove} busy=${busy} />
+      <p class="hint move-hint">Studio does not tell the musicindex API and Podcast Index the new address yet.</p>`}
     ${diff.operations.map((op) => html`<${HostOperationRow}
       key=${`${op.kind}-${op.connector_id}-${op.path}`} op=${op} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
     ${diff.blocked.map((b) => html`<${BlockedDeleteRow}
@@ -753,7 +781,7 @@ export function useSheet(open) {
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
 // 2). It is the same content as the former Changes panel.
-function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, onOpsChanged, onOpsCleared }) {
+function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose, connectors, onOpsChanged, onOpsCleared }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
@@ -769,6 +797,12 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, onOp
     await api(`/feeds/${feedId}/operations/${operationId}`, { method: 'DELETE' });
     onOpsChanged();
     setDiff(await api(`/feeds/${feedId}/diff`));
+  });
+  // "Undo" of a feed move sets the host of the feed again. The route
+  // changes the self link in the draft, so the shell loads the draft again.
+  const undoMove = () => run(async () => {
+    setDiff(await api(`/feeds/${feedId}/feed-host`, { method: 'PUT', body: { connector_id: feedConnectorId } }));
+    onOpsChanged();
   });
   const write = () => run(async () => {
     let feed;
@@ -822,7 +856,7 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, onOp
   // skips a deletion that `diff.blocked` names, and the user sees it here.
   const addressesBlocked = draft.bad.length > 0;
   const stale = error && error.code === 'diff_not_approved';
-  const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0);
+  const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title">Review changes</h2>
@@ -847,7 +881,7 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, onOp
         Correct the fields with red text. Each address starts with https:// or http://.
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
-      ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} busy=${busy} />`}
+      ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} unified=${diff.unified} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
@@ -914,7 +948,7 @@ function toolbarStatus(draft) {
 
 // The toolbar of the editor: the draft status, and the buttons that open
 // the review sheet and the versions sheet (ADR 0029 items 1 to 3).
-export function DraftToolbar({ feedId, draft, onWritten, connectors, onOpsChanged, onOpsCleared }) {
+export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpsChanged, onOpsCleared }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
   const status = toolbarStatus(draft);
@@ -922,7 +956,7 @@ export function DraftToolbar({ feedId, draft, onWritten, connectors, onOpsChange
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
-    <${ReviewSheet} feedId=${feedId} draft=${draft} open=${open === 'review'}
+    <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'}
       onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors}
       onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} />
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
@@ -1302,6 +1336,20 @@ function OtherFileRow({ file, connectors, busy, onDelete, onUndo }) {
       <button class="button" type="button" disabled=${busy} onClick=${() => onUndo(file.pending.operation_id)}>Undo</button>
     </div>`;
   }
+  if (file.pointer) {
+    return html`<div class="alt-enclosure">
+      <span class="title">${file.path}</span>
+      <span class="sub">${base} · Pointer to the new address</span>
+    </div>`;
+  }
+  // The feed XML of a feed of the library is the feed itself. The page
+  // does not offer to delete it (ADR 0035 item 17).
+  if (file.feed_xml) {
+    return html`<div class="alt-enclosure">
+      <span class="title">${file.path}</span>
+      <span class="sub">${base} · The feed file</span>
+    </div>`;
+  }
   if (file.in_use) {
     return html`<div class="alt-enclosure">
       <span class="title">${file.path}</span>
@@ -1471,6 +1519,26 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     await load();
   });
 
+  // The method of the pending move, from the last route answer. The files
+  // route gives no method, so a page load asks the diff route.
+  const [moveMethod, setMoveMethod] = useState('pointer');
+  const pendingMove = data && data.feed_move;
+  useEffect(() => {
+    if (!pendingMove) return;
+    api(`/feeds/${feed.id}/diff`).then(
+      (d) => { if (d.feed_move) setMoveMethod(d.feed_move.method); },
+      () => { /* The hint keeps the pointer text. */ });
+  }, [feed.id, pendingMove && pendingMove.connector_id, reloadKey]);
+
+  // The route changes the self link of the draft, so the shell loads the
+  // draft again, as after a host operation.
+  const setFeedHost = (connectorId) => run(async () => {
+    const diff = await api(`/feeds/${feed.id}/feed-host`, { method: 'PUT', body: { connector_id: connectorId } });
+    if (diff.feed_move) setMoveMethod(diff.feed_move.method);
+    onOpsChanged();
+    await load();
+  });
+
   const setFileHost = (path, body) => run(async () => {
     await api(path, { method: 'PUT', body });
     await load();
@@ -1499,6 +1567,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   if (!data) return html`<section class="page-section"><p class="hint" role="status">Loading the files…</p></section>`;
 
   const defaultHost = data.files_connector_id ?? feed.connector_id;
+  const feedHost = data.feed_move ? data.feed_move.connector_id : feed.connector_id;
 
   return html`${differences.length > 0 && html`<section class="page-section"><h2>Changes in the library folder</h2>
       <div class="group">
@@ -1527,6 +1596,15 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
             onChange=${(e) => setDefaultHost(Number(e.target.value))}>
             ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
           </select>
+        </div>
+        <div class="field">
+          <label for="files-feed-host">Host of the feed XML</label>
+          <select id="files-feed-host" class="button" value=${feedHost} disabled=${busy}
+            onChange=${(e) => setFeedHost(Number(e.target.value))}>
+            ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+          </select>
+          ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write.
+            The address from before gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}
         </div>
       </div>
     </section>

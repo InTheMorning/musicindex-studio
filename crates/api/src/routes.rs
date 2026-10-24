@@ -1242,6 +1242,13 @@ fn extra_folder_files(
     addresses: &[String],
 ) -> Result<Vec<Value>, ApiError> {
     let prefix = format!("{folder}/");
+    // The feed XML of each feed of the library. Studio does not offer to
+    // delete it (ADR 0035 item 17).
+    let feed_files: Vec<(ConnectorId, String)> = collection
+        .feeds()?
+        .into_iter()
+        .filter_map(|feed| Some((feed.connector_id?, feed.path?)))
+        .collect();
     let mut extra = Vec::new();
     for connector_id in hosts.ids() {
         for host_file in collection.host_files(connector_id)? {
@@ -1278,6 +1285,9 @@ fn extra_folder_files(
                     "in_use": in_use,
                     "pending": pending,
                     "pointer": collection.is_feed_pointer(connector_id, &host_file.path)?,
+                    "feed_xml": feed_files
+                        .iter()
+                        .any(|(id, path)| *id == connector_id && *path == host_file.path),
                 }));
             }
         }

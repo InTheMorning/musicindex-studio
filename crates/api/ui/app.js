@@ -923,7 +923,7 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
   return html`<div>
     <${Bar} onMenu=${onMenu}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
-      <${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
+      <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
         onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} />
     <//>
     <div class="feed-head">

@@ -1438,6 +1438,24 @@ fn a_write_that_stopped_after_the_new_host_got_the_feed_can_finish_the_move() {
 }
 
 #[test]
+fn a_deletion_of_the_feed_xml_of_a_feed_is_blocked() {
+    let s = move_setup(false);
+    s.collection
+        .add_draft_operation(s.feed, DraftOperationKind::Delete, None, s.a, "album.xml")
+        .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(
+        diff.operations
+            .iter()
+            .all(|op| op.kind != pipeline::OperationKind::Delete)
+    );
+    assert_eq!(diff.blocked.len(), 1);
+    assert_eq!(diff.blocked[0].path, "album.xml");
+    assert_eq!(diff.blocked[0].feed_titles.len(), 1);
+    assert!(!diff.blocked[0].pointer);
+}
+
+#[test]
 fn the_host_of_the_feed_removes_the_move_and_puts_the_self_link_back() {
     let s = move_setup(false);
     pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();

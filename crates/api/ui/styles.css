@@ -1222,3 +1222,7 @@ textarea:focus { background: var(--fill); }
 .change-row .title { font-weight: 500; overflow-wrap: anywhere; }
 .change-row .sub { color: var(--muted); font-size: .9rem; }
 .group > .change-row + .change-row { border-top: 1px solid var(--sep); }
+
+/* The feed move (task 023h, ADR 0038 items 16 to 21). */
+.host-ops .move-hint { margin: 0; padding: 10px 16px; border-top: 1px solid var(--sep); }
+.group > .field > .hint { grid-column: 1 / -1; margin: 0; }

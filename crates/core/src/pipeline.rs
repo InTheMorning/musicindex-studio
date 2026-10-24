@@ -1099,6 +1099,16 @@ fn host_operations(
                 let connector = hosts.get(operation.connector_id)?;
                 let url = connector.public_url(&operation.path);
                 let mut referring: Vec<String> = Vec::new();
+                // The feed XML of a feed of the library is the feed itself.
+                // A feed does not give its own address in `urls`, so this
+                // check is necessary (ADR 0035 item 17).
+                for other in &all_feeds {
+                    if other.connector_id == Some(operation.connector_id)
+                        && other.path.as_deref() == Some(operation.path.as_str())
+                    {
+                        referring.push(feed_title(other));
+                    }
+                }
                 if let Some(url) = url.as_deref() {
                     if urls.contains(&url) {
                         referring.push(feed_title(feed_row));

@@ -12,6 +12,7 @@ mod digest;
 pub mod discover;
 pub mod download;
 pub mod feed;
+pub mod folder_scan;
 pub mod guid;
 pub mod inventory;
 pub mod library;

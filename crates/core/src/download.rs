@@ -15,8 +15,7 @@ use std::sync::atomic::AtomicBool;
 use crate::collection::{Collection, CollectionError, LibraryFile};
 use crate::digest::sha256_file;
 use crate::inventory::{self, Hosts, InventoryError};
-use crate::library::Library;
-use crate::pipeline::file_stamp;
+use crate::library::{Library, file_stamp};
 use crate::web::{Web, WebError, WebErrorKind};
 
 /// The default of each download limit setting, 2 GiB (ADR 0036 item 17).

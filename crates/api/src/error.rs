@@ -8,6 +8,7 @@ use studio_core::address::AddressError;
 use studio_core::collection::{CollectionError, CollectionErrorKind};
 use studio_core::connector::{ConnectorError, ConnectorErrorKind};
 use studio_core::download::{DownloadError, DownloadErrorKind};
+use studio_core::folder_scan::ScanError;
 use studio_core::inventory::{InventoryError, InventoryErrorKind};
 use studio_core::media::{MediaError, MediaErrorKind};
 use studio_core::migrate::MigrateError;
@@ -204,5 +205,18 @@ impl From<DownloadError> for ApiError {
             _ => (StatusCode::BAD_GATEWAY, "download"),
         };
         Self::new(status, code, error.to_string())
+    }
+}
+
+impl From<ScanError> for ApiError {
+    fn from(error: ScanError) -> Self {
+        match error {
+            ScanError::Collection(error) => error.into(),
+            ScanError::Io(error) => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "library_io",
+                error.to_string(),
+            ),
+        }
     }
 }

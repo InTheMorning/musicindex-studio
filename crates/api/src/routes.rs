@@ -20,6 +20,7 @@ use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
 use studio_core::download;
 use studio_core::feed::{Feed, Recipient};
+use studio_core::folder_scan;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::{self, Library};
 use studio_core::media;
@@ -1947,6 +1948,281 @@ pub(crate) async fn stop_download(
     .await?;
     queue.0.stop(queue.1);
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ---- The folder scan (ADR 0038 items 13 to 15) ----
+
+/// A difference of the folder scan as JSON: the fields of the
+/// difference, the title of the feed, and the path of the file.
+fn difference_json(w: &Workspace, difference: &folder_scan::Difference) -> Result<Value, ApiError> {
+    let mut value =
+        serde_json::to_value(difference).map_err(|e| ApiError::internal(e.to_string()))?;
+    let feed = w.collection.feed(difference.feed_id)?;
+    let title = feed
+        .title
+        .unwrap_or_else(|| format!("feed {}", difference.feed_id.0));
+    if let Some(object) = value.as_object_mut() {
+        object.insert("feed_title".to_owned(), json!(title));
+        let file = match &difference.kind {
+            folder_scan::DifferenceKind::New { .. } => None,
+            folder_scan::DifferenceKind::Missing { file }
+            | folder_scan::DifferenceKind::Changed { file, .. } => Some(*file),
+        };
+        if let Some(file) = file {
+            let path = w.collection.library_file(file)?.path;
+            object.insert("path".to_owned(), json!(path));
+        }
+    }
+    Ok(value)
+}
+
+/// Compare each release folder with its records, and give each
+/// difference. The scan changes only the stamp of a file whose bytes did
+/// not change (ADR 0038 items 13 to 15).
+pub(crate) async fn scan_library(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        let library = w.library()?;
+        let found = folder_scan::scan(&w.collection, &library)?;
+        let differences = found
+            .iter()
+            .map(|difference| difference_json(w, difference))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Json(json!({ "differences": differences })))
+    })
+    .await
+}
+
+/// The body of `POST /feeds/{id}/library-changes`: the decision of the
+/// user for one difference (ADR 0038 item 15).
+#[derive(Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub(crate) enum LibraryChange {
+    /// Add a new file to the library, as a file that the feed does not
+    /// use.
+    Add { path: String },
+    /// Forget a missing file.
+    Forget { file: i64 },
+    /// Download a missing file again.
+    Download { file: i64 },
+    /// Use the new bytes of a changed file.
+    UseNew { file: i64 },
+    /// Put the recorded bytes of a changed file back.
+    Restore { file: i64 },
+}
+
+/// The error for a difference that the scan does not find any more.
+fn no_change() -> ApiError {
+    ApiError::new(
+        StatusCode::CONFLICT,
+        "no_change",
+        "The release folder has no such difference now. Scan the library again.",
+    )
+}
+
+/// True when the scan of a feed gives a missing file with this ID.
+fn is_missing(found: &[folder_scan::Difference], id: LibraryFileId) -> bool {
+    found
+        .iter()
+        .any(|d| matches!(&d.kind, folder_scan::DifferenceKind::Missing { file } if *file == id))
+}
+
+/// Set the length of each enclosure and of each alternate enclosure that
+/// gives `url` as its address (ADR 0035 item 16).
+fn set_length_at(feed: &mut Feed, url: &str, length: u64) {
+    for entry in &mut feed.items {
+        let item = &mut entry.value;
+        if let Some(enclosure) = item.enclosure.as_mut()
+            && enclosure.url.as_deref() == Some(url)
+        {
+            enclosure.length = Some(length.to_string());
+        }
+        for alternate in &mut item.alternate_enclosures {
+            if alternate
+                .value
+                .sources
+                .iter()
+                .any(|source| source.value.uri.as_deref() == Some(url))
+            {
+                alternate.value.length = Some(length.to_string());
+            }
+        }
+    }
+}
+
+/// Decide a difference of the folder scan for one feed. Each action scans
+/// the feed again first, and gives 409 `no_change` when the difference is
+/// not there any more. No action writes to a host. The write of the draft
+/// does the uploads and the deletions (ADR 0038 item 15, ADR 0035 item
+/// 16).
+pub(crate) async fn library_changes(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<LibraryChange>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        w.collection.feed(id)?;
+        let library = w.library()?;
+        let found = folder_scan::scan_feed(&w.collection, &library, id)?;
+        match body {
+            LibraryChange::Add { path } => {
+                let exists = found.iter().any(|d| {
+                    matches!(&d.kind, folder_scan::DifferenceKind::New { path: p, .. } if p == &path)
+                });
+                if !exists {
+                    return Err(no_change());
+                }
+                folder_scan::add_new(&w.collection, &library, id, &path)?;
+            }
+            LibraryChange::Forget { file } => {
+                let file = feed_library_file(&w.collection, id, file)?;
+                if !is_missing(&found, file.id) {
+                    return Err(no_change());
+                }
+                let hosts = w.hosts()?;
+                let known = file.source_url.is_some()
+                    || !inventory::copies(&w.collection, &hosts, &file)?.is_empty();
+                if known {
+                    w.collection.set_library_file_remote(file.id)?;
+                } else {
+                    w.collection.remove_library_file(file.id)?;
+                }
+            }
+            LibraryChange::Download { file } => {
+                let file = feed_library_file(&w.collection, id, file)?;
+                if !is_missing(&found, file.id) {
+                    return Err(no_change());
+                }
+                download_again(w, &file)?;
+            }
+            LibraryChange::Restore { file } => {
+                let file = feed_library_file(&w.collection, id, file)?;
+                let changed = found.iter().any(|d| {
+                    matches!(&d.kind, folder_scan::DifferenceKind::Changed { file: f, .. } if *f == file.id)
+                });
+                if !changed {
+                    return Err(no_change());
+                }
+                let hosts = w.hosts()?;
+                if inventory::copies(&w.collection, &hosts, &file)?.is_empty() {
+                    return Err(ApiError::new(
+                        StatusCode::CONFLICT,
+                        "no_copy",
+                        format!(
+                            "No connected host has a copy of the recorded bytes of {}.",
+                            file.path
+                        ),
+                    ));
+                }
+                download_again(w, &file)?;
+            }
+            LibraryChange::UseNew { file } => {
+                let file = feed_library_file(&w.collection, id, file)?;
+                let changed = found.iter().find_map(|d| match &d.kind {
+                    folder_scan::DifferenceKind::Changed { file: f, size, sha256 }
+                        if *f == file.id =>
+                    {
+                        Some((*size, sha256.clone()))
+                    }
+                    _ => None,
+                });
+                let Some((size, sha256)) = changed else {
+                    return Err(no_change());
+                };
+                use_new_file(w, &library, &file, size, &sha256)?;
+            }
+        }
+        let remaining = folder_scan::scan_feed(&w.collection, &library, id)?;
+        let differences = remaining
+            .iter()
+            .map(|difference| difference_json(w, difference))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Json(json!({ "differences": differences })))
+    })
+    .await
+}
+
+/// Set `local` false for a file and queue its download (ADR 0038 item
+/// 15). The checks come first, so a refusal changes nothing.
+fn download_again(w: &Workspace, file: &LibraryFile) -> Result<(), ApiError> {
+    let hosts = w.hosts()?;
+    let mut remote = file.clone();
+    remote.local = false;
+    check_download(w, &hosts, &remote)?;
+    w.collection.set_library_file_remote(file.id)?;
+    start_download(w, &remote, true)
+}
+
+/// Record the new bytes of a changed file. Each address of a copy of the
+/// bytes from before that the draft uses changes to the new planned
+/// address, with the new length. Each such copy gets a deletion in the
+/// draft (ADR 0038 item 15, ADR 0035 item 16).
+fn use_new_file(
+    w: &Workspace,
+    library: &Library,
+    file: &LibraryFile,
+    size: u64,
+    sha256: &str,
+) -> Result<(), ApiError> {
+    let id = file.feed_id;
+    let hosts = w.hosts()?;
+    let feed_row = w.collection.feed(id)?;
+    let addresses = feed_address_list(files_feed(w, id)?.as_ref());
+    let referred: Vec<inventory::Copy> = inventory::copies(&w.collection, &hosts, file)?
+        .into_iter()
+        .filter(|copy| is_in_use(copy.url.as_deref(), &addresses))
+        .collect();
+
+    // Find the new planned address before any change, so a refusal
+    // changes nothing.
+    let mut updated = file.clone();
+    updated.size = size;
+    updated.sha256 = Some(sha256.to_owned());
+    let planned = inventory::planned_path(&w.collection, &hosts, &feed_row, &updated)?;
+    let to_url = if referred.is_empty() {
+        None
+    } else {
+        writer(w, id)?;
+        Some(planned.url.clone().ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "no_public_address",
+                "the host gives no public address for this file",
+            )
+        })?)
+    };
+
+    let folder = feed_row.folder.as_deref().unwrap_or_default();
+    let stamp = library::file_stamp(&library.path(folder, &file.path));
+    if let Some(to_url) = to_url {
+        if w.collection.draft(id)?.is_none() {
+            let made = writer(w, id)?;
+            pipeline::start_draft(&w.collection, made.as_ref(), id)?;
+        }
+        pipeline::edit_draft(&w.collection, id, |feed| {
+            for copy in &referred {
+                if let Some(from) = copy.url.as_deref() {
+                    reference_feed(feed, from, &to_url);
+                }
+            }
+            set_length_at(feed, &to_url, size);
+        })?;
+        for copy in &referred {
+            let same = copy.connector_id == planned.connector_id && copy.path == planned.path;
+            if !same {
+                w.collection.add_draft_operation(
+                    id,
+                    DraftOperationKind::Delete,
+                    None,
+                    copy.connector_id,
+                    &copy.path,
+                )?;
+            }
+        }
+    }
+    w.collection
+        .set_library_file_local(file.id, size, sha256, stamp.as_deref())?;
+    Ok(())
 }
 
 /// Remove one draft operation of a release, for example to take back a

@@ -19,7 +19,7 @@ use crate::digest::sha256_hex;
 use crate::feed::{Feed, FeedError};
 use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
-use crate::library::Library;
+use crate::library::{Library, file_stamp};
 use crate::xml::{Document, ParseError};
 
 /// The kind of a [`PipelineError`].
@@ -1096,20 +1096,6 @@ pub fn import_into_library(
         library_file_id,
         planned,
     })
-}
-
-/// The stamp of a file in the library: its size and its modification time
-/// in nanoseconds, as `{size}-{mtime_ns}`. This is the stamp of the local
-/// folder connector (ADR 0038 item 13). Gives `None` when the file has no
-/// metadata.
-pub(crate) fn file_stamp(path: &Path) -> Option<String> {
-    let meta = std::fs::metadata(path).ok()?;
-    let modified = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_nanos());
-    Some(format!("{}-{modified}", meta.len()))
 }
 
 /// True when a library file is in use by the draft of its feed: its

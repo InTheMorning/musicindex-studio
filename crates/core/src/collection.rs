@@ -1221,6 +1221,48 @@ impl Collection {
         Ok(())
     }
 
+    /// Record the stamp of a library file again, with no other change.
+    /// The folder scan uses this when the modification time of a file
+    /// changed and its bytes did not (ADR 0038 item 13).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_library_file_stamp(
+        &self,
+        id: LibraryFileId,
+        stamp: Option<&str>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE library_files SET stamp = ?2 WHERE id = ?1",
+            params![id.0, stamp],
+        )?;
+        Ok(())
+    }
+
+    /// Record that the bytes of a library file are not in the library
+    /// now: `local` becomes false and the stamp goes. The size and the
+    /// SHA-256 stay, so that Studio can find a copy of the bytes
+    /// (ADR 0038 item 15).
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the file does not
+    /// exist.
+    pub fn set_library_file_remote(&self, id: LibraryFileId) -> Result<(), CollectionError> {
+        let changed = self.db.execute(
+            "UPDATE library_files SET local = 0, stamp = NULL WHERE id = ?1",
+            [id.0],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("library file {} does not exist", id.0),
+            ));
+        }
+        Ok(())
+    }
+
     /// Record a download as queued. A download that failed before is
     /// queued again, and loses its message (ADR 0038 item 9).
     ///

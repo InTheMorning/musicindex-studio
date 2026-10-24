@@ -121,6 +121,8 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             get(routes::get_library).put(routes::put_library),
         )
         .route("/library/limits", put(routes::put_library_limits))
+        .route("/library/scan", post(routes::scan_library))
+        .route("/feeds/{id}/library-changes", post(routes::library_changes))
         .route("/hosts/{id}/scan", post(routes::scan_host))
         .with_state(shared);
     Router::new()

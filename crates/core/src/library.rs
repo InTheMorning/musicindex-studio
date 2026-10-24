@@ -121,6 +121,27 @@ impl Library {
     }
 }
 
+/// The stamp of a file: its size and its modification time in
+/// nanoseconds, as `{size}-{mtime_ns}`. The local folder connector, the
+/// import, the download and the folder scan all use this one function, so
+/// that a stamp from one equals a stamp from another (ADR 0038 item 13).
+#[must_use]
+pub fn stamp_of(meta: &fs::Metadata) -> String {
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos());
+    format!("{}-{modified}", meta.len())
+}
+
+/// The stamp of the file at `path`. Gives `None` when the file has no
+/// metadata.
+#[must_use]
+pub fn file_stamp(path: &Path) -> Option<String> {
+    fs::metadata(path).ok().map(|meta| stamp_of(&meta))
+}
+
 /// Gives an error when `name` is not a plain file name or folder name, so
 /// that no path goes out of the library.
 fn check_plain(name: &str) -> io::Result<()> {

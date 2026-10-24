@@ -3106,3 +3106,293 @@ async fn a_download_row_from_before_a_restart_is_in_the_queue_again() {
         vec![9; 2000]
     );
 }
+
+// ---- The folder scan (task 023e) ----
+
+/// A feed with one library file, `tagged.mp3`, and the home host. Gives
+/// the feed ID, the library file ID, the home host ID and the file bytes.
+async fn app_with_library_file() -> (App, i64, i64, i64, Vec<u8>) {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let home = connectors[0]["id"].as_i64().unwrap();
+    (
+        app,
+        id,
+        file["library_file_id"].as_i64().unwrap(),
+        home,
+        bytes,
+    )
+}
+
+/// Put `bytes` on the home host, at the path of the release, and let
+/// Studio list the host.
+async fn put_on_home(app: &App, home: i64, name: &str, bytes: &[u8]) {
+    std::fs::create_dir_all(app.feeds.path().join("album")).unwrap();
+    std::fs::write(app.feeds.path().join("album").join(name), bytes).unwrap();
+    let (status, _) = call(app, "POST", &format!("/api/v1/hosts/{home}/scan"), None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+fn library_path(app: &App, name: &str) -> std::path::PathBuf {
+    app.data.path().join("library/album").join(name)
+}
+
+async fn change(app: &App, id: i64, body: Value) -> (StatusCode, Value) {
+    call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/library-changes"),
+        Some(body),
+    )
+    .await
+}
+
+fn collection_of(app: &App) -> studio_core::collection::Collection {
+    studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite")).unwrap()
+}
+
+#[tokio::test]
+async fn the_scan_route_gives_a_new_a_missing_and_a_changed_file_with_the_feed_title() {
+    let (app, id, file, _home, mut bytes) = app_with_library_file().await;
+    call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    let (status, body) = call(&app, "POST", "/api/v1/library/scan", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["differences"], json!([]));
+
+    std::fs::write(library_path(&app, "new.mp3"), b"new").unwrap();
+    bytes.push(0);
+    std::fs::write(library_path(&app, "tagged.mp3"), &bytes).unwrap();
+    let (_, body) = call(&app, "POST", "/api/v1/library/scan", None).await;
+    let list = body["differences"].as_array().unwrap();
+    assert_eq!(list.len(), 2, "{body}");
+    let new = list.iter().find(|d| d["kind"] == "new").unwrap();
+    assert_eq!(new["path"], "new.mp3");
+    assert_eq!(new["feed_id"], id);
+    assert_eq!(new["feed_title"], "Album");
+    let changed = list.iter().find(|d| d["kind"] == "changed").unwrap();
+    assert_eq!(changed["file"], file);
+    assert_eq!(changed["path"], "tagged.mp3");
+
+    std::fs::remove_file(library_path(&app, "tagged.mp3")).unwrap();
+    let (_, body) = call(&app, "POST", "/api/v1/library/scan", None).await;
+    let missing = body["differences"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["kind"] == "missing")
+        .cloned()
+        .unwrap();
+    assert_eq!(missing["file"], file);
+}
+
+#[tokio::test]
+async fn add_gives_a_library_file_that_the_feed_does_not_use_and_a_repeat_gives_409() {
+    let (app, id, _file, _home, _bytes) = app_with_library_file().await;
+    std::fs::write(library_path(&app, "extra.mp3"), b"extra").unwrap();
+
+    let (status, body) = change(&app, id, json!({ "action": "add", "path": "extra.mp3" })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["differences"], json!([]));
+    let files = collection_of(&app)
+        .library_files(studio_core::collection::FeedId(id))
+        .unwrap();
+    let extra = files.iter().find(|f| f.path == "extra.mp3").unwrap();
+    assert!(extra.local);
+    assert_eq!(extra.size, 5);
+    assert_eq!(extra.media_type, "audio/mpeg");
+    let (_, listed) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    let entry = listed["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "extra.mp3")
+        .unwrap();
+    assert_eq!(entry["in_use"], false);
+
+    let (status, body) = change(&app, id, json!({ "action": "add", "path": "extra.mp3" })).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "no_change");
+}
+
+#[tokio::test]
+async fn forget_keeps_the_row_of_a_file_with_a_copy_and_removes_the_row_of_a_file_with_none() {
+    let (app, id, file, home, bytes) = app_with_library_file().await;
+    std::fs::write(library_path(&app, "lone.mp3"), b"lone").unwrap();
+    change(&app, id, json!({ "action": "add", "path": "lone.mp3" })).await;
+    put_on_home(&app, home, "tagged.mp3", &bytes).await;
+    std::fs::remove_file(library_path(&app, "tagged.mp3")).unwrap();
+    std::fs::remove_file(library_path(&app, "lone.mp3")).unwrap();
+
+    let (status, body) = change(&app, id, json!({ "action": "forget", "file": file })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let files = collection_of(&app)
+        .library_files(studio_core::collection::FeedId(id))
+        .unwrap();
+    let kept = files.iter().find(|f| f.path == "tagged.mp3").unwrap();
+    assert!(!kept.local);
+    assert!(files.iter().any(|f| f.path == "lone.mp3"));
+
+    let lone = files.iter().find(|f| f.path == "lone.mp3").unwrap().id.0;
+    let (status, body) = change(&app, id, json!({ "action": "forget", "file": lone })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let files = collection_of(&app)
+        .library_files(studio_core::collection::FeedId(id))
+        .unwrap();
+    assert!(files.iter().all(|f| f.path != "lone.mp3"));
+}
+
+#[tokio::test]
+async fn download_and_restore_put_the_recorded_bytes_back_from_a_copy_on_a_host() {
+    let (app, id, file, home, bytes) = app_with_library_file().await;
+    put_on_home(&app, home, "tagged.mp3", &bytes).await;
+
+    // A missing file comes back.
+    std::fs::remove_file(library_path(&app, "tagged.mp3")).unwrap();
+    let (status, body) = change(&app, id, json!({ "action": "download", "file": file })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    wait_for_downloads(&app, id).await;
+    assert_eq!(
+        std::fs::read(library_path(&app, "tagged.mp3")).unwrap(),
+        bytes
+    );
+    assert!(
+        collection_of(&app)
+            .library_file(studio_core::collection::LibraryFileId(file))
+            .unwrap()
+            .local
+    );
+
+    // A changed file goes back to the recorded bytes.
+    std::fs::write(library_path(&app, "tagged.mp3"), b"other bytes").unwrap();
+    let (_, scan) = call(&app, "POST", "/api/v1/library/scan", None).await;
+    assert_eq!(scan["differences"][0]["kind"], "changed");
+    let (status, body) = change(&app, id, json!({ "action": "restore", "file": file })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    wait_for_downloads(&app, id).await;
+    assert_eq!(
+        std::fs::read(library_path(&app, "tagged.mp3")).unwrap(),
+        bytes
+    );
+    let (_, scan) = call(&app, "POST", "/api/v1/library/scan", None).await;
+    assert_eq!(scan["differences"], json!([]));
+}
+
+#[tokio::test]
+async fn restore_with_no_copy_gives_409_and_changes_nothing() {
+    let (app, id, file, _home, _bytes) = app_with_library_file().await;
+    std::fs::write(library_path(&app, "tagged.mp3"), b"other bytes").unwrap();
+
+    let (status, body) = change(&app, id, json!({ "action": "restore", "file": file })).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "no_copy");
+    assert_eq!(
+        std::fs::read(library_path(&app, "tagged.mp3")).unwrap(),
+        b"other bytes"
+    );
+    assert!(
+        collection_of(&app)
+            .library_file(studio_core::collection::LibraryFileId(file))
+            .unwrap()
+            .local
+    );
+
+    // A decision for a difference that is not there gives 409 too.
+    let (status, body) = change(&app, id, json!({ "action": "forget", "file": file })).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "no_change");
+}
+
+#[tokio::test]
+async fn use_new_changes_the_draft_to_the_hash_name_and_the_write_leaves_only_the_new_file() {
+    let (app, id, file, home, bytes) = app_with_library_file().await;
+    let old_url = "https://music.example/album/tagged.mp3";
+
+    // The draft uses the file, and the write puts it on the host.
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": old_url,
+        "length": bytes.len().to_string(),
+        "media_type": "audio/mpeg",
+    });
+    call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+    assert_eq!(
+        std::fs::read(app.feeds.path().join("album/tagged.mp3")).unwrap(),
+        bytes
+    );
+    let (status, _) = call(&app, "POST", &format!("/api/v1/hosts/{home}/scan"), None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // The user replaces the file in the library folder.
+    let mut new_bytes = bytes.clone();
+    new_bytes.extend_from_slice(b"more");
+    std::fs::write(library_path(&app, "tagged.mp3"), &new_bytes).unwrap();
+
+    let (status, body) = change(&app, id, json!({ "action": "use_new", "file": file })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["differences"], json!([]));
+
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let enclosure = &draft["model"]["items"][0]["enclosure"];
+    let new_url = enclosure["url"].as_str().unwrap();
+    assert!(
+        new_url.starts_with("https://music.example/album/tagged.") && new_url != old_url,
+        "{new_url}"
+    );
+    assert_eq!(enclosure["length"], new_bytes.len().to_string());
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let operations = diff["operations"].as_array().unwrap();
+    assert!(
+        operations.iter().any(|op| op["kind"] == "upload"
+            && op["path"].as_str().unwrap().starts_with("album/tagged.")
+            && op["path"] != "album/tagged.mp3"),
+        "{operations:?}"
+    );
+    assert!(
+        operations
+            .iter()
+            .any(|op| op["kind"] == "delete" && op["path"] == "album/tagged.mp3"),
+        "{operations:?}"
+    );
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+
+    // The host has only the new file.
+    let on_host: Vec<_> = std::fs::read_dir(app.feeds.path().join("album"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    assert_eq!(on_host.len(), 1, "{on_host:?}");
+    assert_ne!(on_host[0], "tagged.mp3");
+    assert_eq!(
+        std::fs::read(app.feeds.path().join("album").join(&on_host[0])).unwrap(),
+        new_bytes
+    );
+}

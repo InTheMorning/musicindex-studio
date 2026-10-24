@@ -239,15 +239,10 @@ impl Connector for LocalFolder {
 /// modification time in nanoseconds, so a list reads no file
 /// (ADR 0036 item 6).
 fn listed(path: String, meta: &fs::Metadata) -> ListedFile {
-    let modified = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_nanos());
     ListedFile {
         path,
         size: meta.len(),
-        stamp: Stamp::new(format!("{}-{modified}", meta.len())),
+        stamp: Stamp::new(crate::library::stamp_of(meta)),
     }
 }
 

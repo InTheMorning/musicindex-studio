@@ -5,14 +5,17 @@ use std::path::{Path, PathBuf};
 use std::collections::{HashMap, VecDeque};
 
 use axum::http::StatusCode;
-use studio_core::collection::Collection;
+use studio_core::collection::{Collection, FeedId};
 use studio_core::connector;
 use studio_core::discover::Found;
+use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
+use studio_core::remote;
 use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::{Web, WebImage};
+use studio_core::xml::Document;
 
 use crate::error::ApiError;
 
@@ -191,5 +194,82 @@ impl Workspace {
             .as_str()
             .ok_or_else(|| ApiError::internal("the library_root setting is not a string"))?;
         Library::open(root).map_err(|error| ApiError::internal(error.to_string()))
+    }
+
+    /// Keep the remote file records of one feed current, with `feed` as
+    /// the hosted feed (ADR 0038 item 3). A feed with no release folder
+    /// has no records.
+    ///
+    /// An error goes into the log and does not stop the caller. The
+    /// function never writes to a host.
+    pub(crate) fn record_remote_files(&self, id: FeedId, feed: &Feed) {
+        let result = (|| -> Result<(), String> {
+            let row = self.collection.feed(id).map_err(|e| e.to_string())?;
+            if row.folder.is_none() {
+                return Ok(());
+            }
+            let hosts = self.hosts().map_err(|e| format!("{e:?}"))?;
+            remote::record_remote_files(&self.collection, &hosts, id, feed)
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        })();
+        if let Err(message) = result {
+            eprintln!(
+                "studio: the remote file records of feed {} failed: {message}",
+                id.0
+            );
+        }
+    }
+
+    /// Keep the remote file records of each feed with a release folder
+    /// current. Each feed gives its hosted feed from the feed XML in its
+    /// release folder (ADR 0038 item 3). The function does nothing when
+    /// Studio has no library folder yet.
+    ///
+    /// An error for one feed goes into the log, and the other feeds still
+    /// run.
+    pub fn record_all_remote_files(&self) {
+        let Ok(library) = self.library() else {
+            return;
+        };
+        let feeds = match self.collection.feeds() {
+            Ok(feeds) => feeds,
+            Err(error) => {
+                eprintln!("studio: the list of feeds failed: {error}");
+                return;
+            }
+        };
+        for row in feeds {
+            let Some(folder) = row.folder.as_deref() else {
+                continue;
+            };
+            // The feed XML has the name of the last part of the feed path
+            // or of the feed address.
+            let names = [row.path.as_deref(), row.public_url.as_deref()];
+            let bytes = names
+                .into_iter()
+                .flatten()
+                .map(|name| name.rsplit_once('/').map_or(name, |(_, last)| last))
+                .find_map(|name| std::fs::read(library.path(folder, name)).ok());
+            let Some(bytes) = bytes else {
+                eprintln!(
+                    "studio: feed {} has no feed XML in its release folder",
+                    row.id.0
+                );
+                continue;
+            };
+            let feed = Document::parse_bytes(&bytes)
+                .map_err(|e| e.to_string())
+                .and_then(|doc| Feed::read(&doc).map_err(|e| e.to_string()));
+            match feed {
+                Ok(feed) => self.record_remote_files(row.id, &feed),
+                Err(message) => {
+                    eprintln!(
+                        "studio: the feed XML of feed {} is not a feed: {message}",
+                        row.id.0
+                    );
+                }
+            }
+        }
     }
 }

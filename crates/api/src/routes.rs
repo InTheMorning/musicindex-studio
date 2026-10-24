@@ -410,7 +410,8 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
         let row = w.collection.feed(id)?;
         let Some(connector_id) = row.connector_id else {
             // A read-only feed reads from its public address (ADR 0020).
-            pipeline::refresh_public(&mut w.collection, &w.web, id)?;
+            let hosted = pipeline::refresh_public(&mut w.collection, &w.web, id)?;
+            w.record_remote_files(id, &hosted);
             return to_json(w.collection.feed(id)?);
         };
         let connector_row = w.collection.connector(connector_id)?;
@@ -418,7 +419,8 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
             return Err(ApiError::vault_locked());
         }
         let made = connector::from_row(&connector_row, w.vault.as_ref())?;
-        pipeline::refresh(&mut w.collection, made.as_ref(), id)?;
+        let hosted = pipeline::refresh(&mut w.collection, made.as_ref(), id)?;
+        w.record_remote_files(id, &hosted);
         to_json(w.collection.feed(id)?)
     })
     .await
@@ -586,6 +588,23 @@ fn add_read_feed(
 ) -> Result<studio_core::collection::FeedRow, ApiError> {
     let id = w.collection.add_feed(Some(&read.url), None)?;
     w.collection.record_state(id, &read.feed, &read.version)?;
+    // A published feed gets its release folder and its feed XML at once
+    // (ADR 0038 item 4). Without a library folder, the move into the
+    // library gives the folder later. A failure here does not stop the
+    // add: the feed stays in the collection with no folder.
+    if w.collection.setting("library_root")?.is_some() {
+        match w.library() {
+            Ok(library) => {
+                match library::give_published_folder(&w.collection, &library, id, &read.bytes) {
+                    Ok(_) => w.record_remote_files(id, &read.feed),
+                    Err(error) => {
+                        eprintln!("studio: feed {} has no release folder yet: {error}", id.0);
+                    }
+                }
+            }
+            Err(error) => eprintln!("studio: feed {} has no release folder yet: {error:?}", id.0),
+        }
+    }
     Ok(w.collection.feed(id)?)
 }
 
@@ -605,6 +624,7 @@ pub(crate) async fn import_feeds(
                     feed: found.feed.clone(),
                     version: found.version.clone(),
                     url: found.url.clone(),
+                    bytes: found.bytes.clone(),
                 },
                 None => match studio_core::discover::read_public(&w.web, &url) {
                     Ok(read) => read,
@@ -657,6 +677,7 @@ pub(crate) async fn match_connector(
             if let Some(file) = file {
                 w.collection
                     .set_feed_connector(feed.id, row.id, &file.path)?;
+                give_linked_feed_folder(w, made.as_ref(), feed.id, &file.path);
                 linked.push(feed.id);
             }
         }
@@ -670,6 +691,42 @@ pub(crate) async fn match_connector(
         ))
     })
     .await
+}
+
+/// Give a feed that a folder match linked its release folder and its feed
+/// XML, from the file on the host (ADR 0038 item 4). A feed that has a
+/// folder keeps it. A feed with no library folder yet gets its folder at
+/// the move into the library. An error goes into the log.
+fn give_linked_feed_folder(w: &Workspace, made: &dyn connector::Connector, id: FeedId, path: &str) {
+    let result = (|| -> Result<(), String> {
+        if w.collection
+            .feed(id)
+            .map_err(|e| e.to_string())?
+            .folder
+            .is_some()
+            || w.collection
+                .setting("library_root")
+                .map_err(|e| e.to_string())?
+                .is_none()
+        {
+            return Ok(());
+        }
+        let library = w.library().map_err(|e| format!("{e:?}"))?;
+        let read = made
+            .read(path)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("{path} does not exist on the host"))?;
+        library::give_published_folder(&w.collection, &library, id, &read.bytes)
+            .map_err(|e| e.to_string())?;
+        let doc =
+            studio_core::xml::Document::parse_bytes(&read.bytes).map_err(|e| e.to_string())?;
+        let hosted = Feed::read(&doc).map_err(|e| e.to_string())?;
+        w.record_remote_files(id, &hosted);
+        Ok(())
+    })();
+    if let Err(message) = result {
+        eprintln!("studio: feed {} has no release folder yet: {message}", id.0);
+    }
 }
 
 #[derive(Deserialize)]
@@ -882,6 +939,9 @@ pub(crate) async fn write_feed(
         let id = FeedId(id);
         let hosts = w.hosts()?;
         let library = w.library()?;
+        // The write deletes the draft. Keep the feed that the write puts
+        // on the host, for the remote file records.
+        let written = pipeline::draft_model(&w.collection, id).ok();
         pipeline::write_draft(
             &mut w.collection,
             &hosts,
@@ -889,6 +949,9 @@ pub(crate) async fn write_feed(
             id,
             &pipeline::DiffId::new(body.diff_id),
         )?;
+        if let Some((feed, _)) = written {
+            w.record_remote_files(id, &feed);
+        }
         to_json(w.collection.feed(id)?)
     })
     .await
@@ -1015,6 +1078,9 @@ pub(crate) async fn put_library(
             migrate::MoveReport::default()
         };
         w.collection.set_setting("library_root", &json!(root))?;
+        // Each feed with a release folder now gets its remote file records
+        // (ADR 0038 item 3).
+        w.record_all_remote_files();
         Ok(Json(move_report_json(&report)))
     })
     .await
@@ -1083,6 +1149,49 @@ fn draft_addresses(collection: &Collection, id: FeedId) -> Result<Vec<String>, A
         Err(error) if error.kind() == pipeline::PipelineErrorKind::NoDraft => Ok(Vec::new()),
         Err(error) => Err(error.into()),
     }
+}
+
+/// The length that the draft gives for each address of an enclosure or
+/// of an alternative source, or an empty map when the feed has no draft
+/// (ADR 0038 item 11).
+fn draft_lengths(
+    collection: &Collection,
+    id: FeedId,
+) -> Result<std::collections::HashMap<String, u64>, ApiError> {
+    let feed = match pipeline::draft_model(collection, id) {
+        Ok((feed, _)) => feed,
+        Err(error) if error.kind() == pipeline::PipelineErrorKind::NoDraft => {
+            return Ok(std::collections::HashMap::new());
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let mut lengths = std::collections::HashMap::new();
+    for item in &feed.items {
+        if let Some(enclosure) = &item.value.enclosure
+            && let (Some(url), Some(length)) = (&enclosure.url, &enclosure.length)
+            && let Ok(length) = length.trim().parse::<u64>()
+        {
+            lengths.entry(url.clone()).or_insert(length);
+        }
+        // An alternative source has the length of its alternative
+        // enclosure, as the remote records do (ADR 0038 item 2).
+        for alternate in &item.value.alternate_enclosures {
+            let Some(length) = alternate
+                .value
+                .length
+                .as_deref()
+                .and_then(|length| length.trim().parse::<u64>().ok())
+            else {
+                continue;
+            };
+            for source in &alternate.value.sources {
+                if let Some(uri) = &source.value.uri {
+                    lengths.entry(uri.clone()).or_insert(length);
+                }
+            }
+        }
+    }
+    Ok(lengths)
 }
 
 /// True when `url` is one of the addresses that the draft gives (ADR 0036
@@ -1163,6 +1272,20 @@ fn extra_folder_files(
     Ok(extra)
 }
 
+/// True when the draft uses the address of a remote file, or the address
+/// of a copy of it (ADR 0038 item 5).
+fn remote_file_in_use(
+    collection: &Collection,
+    hosts: &Hosts,
+    file: &LibraryFile,
+    addresses: &[String],
+) -> Result<bool, ApiError> {
+    let by_copy = inventory::copies(collection, hosts, file)?
+        .iter()
+        .any(|copy| is_in_use(copy.url.as_deref(), addresses));
+    Ok(is_in_use(file.source_url.as_deref(), addresses) || by_copy)
+}
+
 /// The files of a release (ADR 0036 items 4, 7, 9, 10, 11 and 12).
 ///
 /// The result gives the folder, the default host, and each library
@@ -1182,11 +1305,33 @@ pub(crate) async fn list_release_files(
         let library_files = w.collection.library_files(id)?;
         let operations = w.collection.draft_operations(id)?;
         let addresses = draft_addresses(&w.collection, id)?;
+        let lengths = draft_lengths(&w.collection, id)?;
 
         let mut files = Vec::new();
+        let mut remote_count = 0_u64;
+        let mut remote_bytes = 0_u64;
         for file in &library_files {
-            let planned = inventory::planned_path(&w.collection, &hosts, &feed_row, file)?;
-            let in_use = pipeline::library_file_in_use(&w.collection, &hosts, file)?;
+            // A remote file of a read-only feed has no host, so it has no
+            // planned address (ADR 0038 item 1).
+            let planned = if file.local {
+                Some(inventory::planned_path(
+                    &w.collection,
+                    &hosts,
+                    &feed_row,
+                    file,
+                )?)
+            } else {
+                inventory::planned_path(&w.collection, &hosts, &feed_row, file).ok()
+            };
+            let in_use = if file.local {
+                pipeline::library_file_in_use(&w.collection, &hosts, file)?
+            } else {
+                remote_file_in_use(&w.collection, &hosts, file, &addresses)?
+            };
+            if !file.local {
+                remote_count += 1;
+                remote_bytes += file.size;
+            }
             let copies: Vec<Value> = inventory::copies(&w.collection, &hosts, file)?
                 .into_iter()
                 .map(|copy| {
@@ -1220,11 +1365,16 @@ pub(crate) async fn list_release_files(
                 "size": file.size,
                 "media_type": file.media_type,
                 "local": file.local,
-                "connector_id": planned.connector_id.0,
+                "connector_id": planned.as_ref().map(|p| p.connector_id.0),
+                "source_url": file.source_url,
+                "length_in_feed": file
+                    .source_url
+                    .as_deref()
+                    .and_then(|url| lengths.get(url)),
                 // The host that the user selected for this file, or `null`
                 // for the default host of the release (ADR 0036 item 8).
                 "own_connector_id": file.connector_id.map(|c| c.0),
-                "url": planned.url,
+                "url": planned.as_ref().and_then(|p| p.url.clone()),
                 "in_use": in_use,
                 "copies": copies,
                 "pending_copies": pending_copies,
@@ -1247,6 +1397,8 @@ pub(crate) async fn list_release_files(
             "folder": feed_row.folder,
             "files_connector_id": feed_row.files_connector_id.map(|c| c.0),
             "files": files,
+            "remote_count": remote_count,
+            "remote_bytes": remote_bytes,
             "other_host_files": other,
         })))
     })

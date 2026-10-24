@@ -83,6 +83,9 @@ async fn run() -> Result<(), String> {
     if let Some(base) = &options.musicindex {
         workspace = workspace.with_musicindex(base);
     }
+    // Keep the remote file records of each feed current (ADR 0038 item 3).
+    // The function does nothing when Studio has no library folder yet.
+    workspace.record_all_remote_files();
     // ADR 0017: listen on a loopback address only.
     let listener =
         tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, options.port)))

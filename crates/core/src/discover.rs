@@ -149,6 +149,10 @@ pub struct Found {
     /// The version marker of the content that Studio read.
     #[serde(skip)]
     pub version: Version,
+    /// The bytes of the feed file that Studio read. The library keeps them
+    /// as the feed XML when the user adds the feed (ADR 0038 item 4).
+    #[serde(skip)]
+    pub bytes: Vec<u8>,
 }
 
 /// A source that discovery could not read.
@@ -205,6 +209,8 @@ pub struct PublicFeed {
     /// The address where Studio read the feed, after each redirect
     /// (ADR 0021 source 1).
     pub url: String,
+    /// The bytes of the feed file that Studio read (ADR 0038 item 4).
+    pub bytes: Vec<u8>,
 }
 
 /// Read one public feed by its address.
@@ -221,6 +227,7 @@ pub fn read_public(web: &Web, url: &str) -> Result<PublicFeed, String> {
         feed,
         version: content_version(&file.bytes),
         url: file.final_url,
+        bytes: file.bytes,
     })
 }
 
@@ -326,6 +333,7 @@ pub fn from_sources(
             feed,
             version,
             url: read_url,
+            bytes,
         } = match read_public(web, &url) {
             Ok(read) => read,
             Err(message) => {
@@ -359,6 +367,7 @@ pub fn from_sources(
             via,
             feed,
             version,
+            bytes,
         });
     }
     result

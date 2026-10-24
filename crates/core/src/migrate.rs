@@ -306,17 +306,18 @@ fn move_read_only_feed(
     let Some(url) = feed.public_url.as_deref() else {
         return Ok(());
     };
-    let folder = reserve_folder(library, url, taken)?;
-
     let web = Web::new();
     let limit = u64::try_from(MAX_FEED_BYTES).unwrap_or(u64::MAX);
     let file = web.get(url, limit).map_err(|e| e.to_string())?;
-    library
-        .write_feed_xml(&folder, file_name(url), &file.bytes)
+    // The function names the folder, writes the feed XML and records the
+    // folder. The `taken` set of this call already holds each folder that
+    // the collection records.
+    let folder = library::give_published_folder(collection, library, feed.id, &file.bytes)
         .map_err(|e| e.to_string())?;
+    taken.insert(folder);
     report.feed_files += 1;
-
-    give_folder(collection, feed.id, &folder, report)
+    report.release_folders += 1;
+    Ok(())
 }
 
 /// The last path segment of a feed path or a feed address, with its

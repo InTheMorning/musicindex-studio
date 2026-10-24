@@ -8,6 +8,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use crate::collection::{Collection, CollectionError, FeedId};
 use crate::digest::sha256_hex;
 
 /// The name of the file that [`Library::open`] writes and removes, to
@@ -162,6 +163,77 @@ pub fn release_folder_name(feed_path: &str, taken: &dyn Fn(&str) -> bool) -> Str
         }
         n += 1;
     }
+}
+
+/// The error of [`give_published_folder`].
+#[derive(Debug)]
+pub enum FolderError {
+    /// The collection database failed.
+    Collection(CollectionError),
+    /// Studio could not make the release folder or write the feed XML.
+    Io(io::Error),
+    /// The feed has no address and no path to name its folder from.
+    NoAddress,
+}
+
+impl std::fmt::Display for FolderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Collection(error) => error.fmt(f),
+            Self::Io(error) => error.fmt(f),
+            Self::NoAddress => f.write_str("the feed has no address to name its folder from"),
+        }
+    }
+}
+
+impl std::error::Error for FolderError {}
+
+impl From<CollectionError> for FolderError {
+    fn from(error: CollectionError) -> Self {
+        Self::Collection(error)
+    }
+}
+
+impl From<io::Error> for FolderError {
+    fn from(error: io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+/// Give a published feed its release folder, with its feed XML
+/// (ADR 0038 item 4, ADR 0035 item 5).
+///
+/// The function names the folder from the feed address, or from the feed
+/// path when the feed has no address, with [`release_folder_name`]. It
+/// writes `bytes` as the feed XML, then records the folder in the
+/// collection. A failure before the record leaves the feed with no folder.
+///
+/// # Errors
+///
+/// Gives a [`FolderError`] when the feed has no address and no path, when
+/// Studio cannot write the folder, or when SQLite fails.
+pub fn give_published_folder(
+    collection: &Collection,
+    library: &Library,
+    feed_id: FeedId,
+    bytes: &[u8],
+) -> Result<String, FolderError> {
+    let row = collection.feed(feed_id)?;
+    let source = row
+        .public_url
+        .as_deref()
+        .or(row.path.as_deref())
+        .ok_or(FolderError::NoAddress)?;
+    let taken: std::collections::HashSet<String> = collection
+        .feeds()?
+        .into_iter()
+        .filter_map(|feed| feed.folder)
+        .collect();
+    let folder = release_folder_name(source, &|name| taken.contains(name));
+    let file_name = source.rsplit_once('/').map_or(source, |(_, name)| name);
+    library.write_feed_xml(&folder, file_name, bytes)?;
+    collection.set_feed_folder(feed_id, &folder)?;
+    Ok(folder)
 }
 
 /// The default library path, `~/musicindex/studio` (ADR 0036 item 1).

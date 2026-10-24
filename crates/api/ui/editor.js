@@ -1173,7 +1173,9 @@ function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUn
 function FileEntry({ feedId, file, defaultHost, connectors, busy, onOperation, onUndo, onChanged }) {
   const summary = html`<span class="badge">${formatLabel(file.media_type)}</span>
     <span class="title">${file.path}</span>
-    <span class="sub">${file.in_use ? 'In use' : 'Not in use'} · ${file.copies.length} ${file.copies.length === 1 ? 'copy' : 'copies'}</span>`;
+    <span class="sub">${file.in_use ? 'In use' : 'Not in use'} · ${file.local
+      ? `${file.copies.length} ${file.copies.length === 1 ? 'copy' : 'copies'}`
+      : 'Not in the library'}</span>`;
   const reference = (connectorId) => onOperation({ op: 'reference', file: file.id, connector_id: connectorId, from_url: file.url });
   const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
   const copyTo = (connectorId) => onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
@@ -1189,7 +1191,8 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, onOperation, o
   const copyTargets = connectors.filter((c) => !takenHosts.includes(c.id));
   return html`<${EntryRow} group="library-files" cid=${file.id} summary=${summary}>
     <div class="file-rows">
-      ${file.copies.length === 0 && file.pending_copies.length === 0
+      ${!file.local && html`<p class="hint">Not in the library. Studio uses the file on its host.</p>`}
+      ${file.local && file.copies.length === 0 && file.pending_copies.length === 0
         && html`<p class="hint">Studio sends this file to its host when you write.</p>`}
       ${file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
         connectors=${connectors} busy=${busy} onMoveTo=${moveTo} onReference=${reference} onDelete=${del} onUndo=${onUndo} />`)}
@@ -1200,7 +1203,7 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, onOperation, o
           <button class="button" type="button" disabled=${busy} onClick=${() => onUndo(pending.operation_id)}>Undo</button>
         </div>
       </div>`)}
-      ${copyTargets.length > 0 && html`<div class="actions">
+      ${file.local && copyTargets.length > 0 && html`<div class="actions">
         ${copyTargets.map((c) => html`<button key=${c.id} class="button action" type="button" disabled=${busy}
           onClick=${() => copyTo(c.id)}>Copy to ${c.name}</button>`)}
       </div>`}
@@ -1283,7 +1286,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
     if (feed.connector_id) ids.add(feed.connector_id);
     if (data.files_connector_id) ids.add(data.files_connector_id);
     for (const file of data.files) {
-      ids.add(file.connector_id);
+      if (file.connector_id) ids.add(file.connector_id);
       for (const copy of file.copies) ids.add(copy.connector_id);
     }
     for (const extra of data.other_host_files) ids.add(extra.connector_id);

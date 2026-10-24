@@ -2610,3 +2610,182 @@ async fn put_connector_changes_the_name_and_the_address_of_a_local_folder() {
     let config = connectors[0]["config"].as_str().unwrap();
     assert!(config.contains("https://new.example"), "{config}");
 }
+
+/// A feed with two enclosures at other servers, for the tests of the
+/// remote file records (ADR 0038).
+fn feed_with_enclosures(title: &str, second: bool) -> String {
+    let item = |guid: &str, name: &str, length: u32| {
+        format!(
+            "<item><guid>{guid}</guid><enclosure url=\"https://cdn.example/{name}.mp3\" \
+             length=\"{length}\" type=\"audio/mpeg\"/></item>"
+        )
+    };
+    let second = if second {
+        item("t-2", "b", 200)
+    } else {
+        String::new()
+    };
+    format!(
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+         <title>{title}</title><podcast:guid>g-9</podcast:guid>\
+         <podcast:medium>music</podcast:medium>{}{second}</channel></rss>",
+        item("t-1", "a", 100)
+    )
+}
+
+#[tokio::test]
+async fn a_published_feed_gets_its_folder_its_xml_and_remote_rows_and_a_refresh_keeps_them_current()
+{
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    let xml = feed_with_enclosures("Album C", true);
+    server.set("/c.xml", 200, xml.clone().into_bytes());
+    let app = app();
+    set_library_root(&app);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/c.xml")] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["added"][0]["id"].as_i64().unwrap();
+    assert_eq!(body["added"][0]["folder"], "c");
+    let stored = std::fs::read(app.data.path().join("library/c/c.xml")).unwrap();
+    assert_eq!(stored, xml.as_bytes());
+
+    let files_path = format!("/api/v1/feeds/{id}/files");
+    let (status, files) = call(&app, "GET", &files_path, None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    let rows = files["files"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|row| row["local"] == false));
+    assert_eq!(rows[0]["source_url"], "https://cdn.example/a.mp3");
+    assert_eq!(rows[0]["path"], "a.mp3");
+    assert_eq!(rows[0]["size"], 100);
+    assert_eq!(rows[0]["length_in_feed"], Value::Null);
+    assert_eq!(rows[0]["copies"], json!([]));
+    assert_eq!(files["remote_count"], 2);
+    assert_eq!(files["remote_bytes"], 300);
+
+    // A refresh that removes an enclosure removes its remote row.
+    server.set(
+        "/c.xml",
+        200,
+        feed_with_enclosures("Album C", false).into_bytes(),
+    );
+    let (status, _) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, files) = call(&app, "GET", &files_path, None).await;
+    let rows = files["files"].as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["source_url"], "https://cdn.example/a.mp3");
+    assert_eq!(files["remote_count"], 1);
+    assert_eq!(files["remote_bytes"], 100);
+}
+
+#[tokio::test]
+async fn a_published_feed_added_with_no_library_gets_no_folder_and_no_rows() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set(
+        "/c.xml",
+        200,
+        feed_with_enclosures("Album C", true).into_bytes(),
+    );
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/c.xml")] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["added"][0]["folder"], Value::Null);
+}
+
+#[tokio::test]
+async fn a_write_keeps_the_remote_rows_in_agreement_with_the_written_feed() {
+    let app = app();
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        feed_with_enclosures("Album", true),
+    )
+    .unwrap();
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    let (_, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    let library_root = app.data.path().join("library");
+    let (status, report) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": library_root.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+
+    // The start of the library gives a remote row for each address.
+    let files_path = format!("/api/v1/feeds/{id}/files");
+    let (_, files) = call(&app, "GET", &files_path, None).await;
+    assert_eq!(files["remote_count"], 2);
+
+    // The user moves the second enclosure to a new address and writes.
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][1]["enclosure"]["url"] = json!("https://cdn.example/c.mp3");
+    let (status, draft) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    // The draft reports the length of the enclosure at each address.
+    let (_, files) = call(&app, "GET", &files_path, None).await;
+    let a = files["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["source_url"] == "https://cdn.example/a.mp3")
+        .unwrap();
+    assert_eq!(a["length_in_feed"], 100);
+    assert_eq!(a["in_use"], true);
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, files) = call(&app, "GET", &files_path, None).await;
+    let mut urls: Vec<&str> = files["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["source_url"].as_str().unwrap())
+        .collect();
+    urls.sort_unstable();
+    assert_eq!(
+        urls,
+        ["https://cdn.example/a.mp3", "https://cdn.example/c.mp3"]
+    );
+}

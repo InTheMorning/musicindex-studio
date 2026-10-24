@@ -422,6 +422,13 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
         }
         let made = connector::from_row(&connector_row, w.vault.as_ref())?;
         let hosted = pipeline::refresh(&mut w.collection, made.as_ref(), id)?;
+        // A feed that the user added from a host folder gets its release
+        // folder at its first read (ADR 0038 item 4).
+        if row.folder.is_none()
+            && let Some(path) = row.path.as_deref()
+        {
+            give_linked_feed_folder(w, made.as_ref(), id, path);
+        }
         w.record_remote_files(id, &hosted);
         to_json(w.collection.feed(id)?)
     })

@@ -2793,6 +2793,23 @@ async fn a_write_keeps_the_remote_rows_in_agreement_with_the_written_feed() {
     );
 }
 
+#[tokio::test]
+async fn a_feed_added_from_a_host_folder_gets_its_release_folder_at_its_first_read() {
+    let app = app();
+    let id = set_up(&app).await;
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        feed_with_one_enclosure("https://music.example/album/a.mp3", 10),
+    )
+    .unwrap();
+    let (status, body) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["folder"], "album");
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(files["remote_count"], 1, "{files}");
+    assert!(app.data.path().join("library/album/album.xml").exists());
+}
+
 // ---- The download queue (task 023c) ----
 
 /// A feed with one enclosure at `url`, whose length is `length`.

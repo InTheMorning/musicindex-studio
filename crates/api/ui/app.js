@@ -908,21 +908,23 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
-  // A host operation of the Files page does not always change the feed
-  // XML (task 021g, ADR 0036 item 14), so the toolbar needs its own sign
-  // of a pending change next to `draft.changed`. A new feed starts clear.
-  const [opsPending, setOpsPending] = useState(false);
-  useEffect(() => { setOpsPending(false); }, [feed.id]);
-  // After a write and after a discard of the draft, the Files page loads
-  // its list again (task 022b, review of milestone 7a). `onOpsCleared`
-  // already runs at each of these two points.
+  // A host operation can change the draft XML, and `draft.changed` from
+  // the server counts each pending operation (ADR 0036 item 14). After
+  // each change of the operations, the shell saves the edits of the user
+  // and loads the draft again.
+  const opsChanged = async () => {
+    if (await draft.flush()) await draft.load();
+  };
+  // After a write, a discard of the draft and an "Undo" in the review
+  // sheet, the Files page loads its list again (task 022b, review of
+  // milestone 7a, visual check of task 022).
   const [filesReloadKey, setFilesReloadKey] = useState(0);
+  const reloadFiles = () => setFilesReloadKey((n) => n + 1);
   return html`<div>
     <${Bar} onMenu=${onMenu}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
-        opsPending=${opsPending}
-        onOpsCleared=${() => { setOpsPending(false); setFilesReloadKey((n) => n + 1); }} />
+        onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} />
     <//>
     <div class="feed-head">
       <header class="head">
@@ -943,7 +945,7 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
     </div>
     <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
-      connectors=${connectors} onOpsChanged=${() => setOpsPending(true)} filesReloadKey=${filesReloadKey} />
+      connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey} />
   </div>`;
 }
 
@@ -1226,7 +1228,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
         ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first host' : 'Add a host'}</h2>
             <${AddHostForm} onAdded=${added} />
             ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
-        : html`<div class="actions"><button class="button" type="button" onClick=${() => setAdding(true)}>＋ Add a host</button></div>`}
+        : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a host</button></div>`}
     </section>
   </div>`;
 }
@@ -1250,7 +1252,9 @@ function AddFeeds({ connectors, onAdded, onMenu }) {
 }
 
 // The content of the sidebar: the brand, the theme toggle, the feed tree,
-// "Add a feed", Hosts and "Lock Studio". The wide `Shell` shows it in
+// "Add a feed", Hosts and "Lock Studio". Only the feed tree and "Add a
+// feed" scroll, so that the brand and the footer stay in view (visual
+// check of task 022). The wide `Shell` shows it in
 // `nav.sidebar`. The narrow `Shell` shows the same content in the drawer,
 // where a selection closes the drawer (task 014d, ADR 0029 item 15).
 function SidebarContent({ feeds, view, draft, go, onAdding, onImporting, vault, onLock, onSelect }) {
@@ -1258,10 +1262,12 @@ function SidebarContent({ feeds, view, draft, go, onAdding, onImporting, vault, 
   const addTrack = (value) => { onSelect(); onAdding(value); };
   const importFiles = (value) => { onSelect(); onImporting(value); };
   return html`<header><${Brand} /><${ThemeToggle} /></header>
-    <h2>Feeds</h2>
-    ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
-    <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} onImporting=${importFiles} />
-    <button class="row" type="button" onClick=${() => select({ name: 'add-feed' })}>＋ Add a feed</button>
+    <div class="sidebar-scroll">
+      <h2>Feeds</h2>
+      ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
+      <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} onImporting=${importFiles} />
+      <button class="row" type="button" onClick=${() => select({ name: 'add-feed' })}>＋ Add a feed</button>
+    </div>
     <footer>
       <button class="row" type="button" aria-current=${view.name === 'hosts' ? 'true' : 'false'}
         onClick=${() => select({ name: 'hosts' })}><span class="dot hosting"></span>Hosts</button>

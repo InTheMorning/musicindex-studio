@@ -752,7 +752,7 @@ export function useSheet(open) {
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
 // 2). It is the same content as the former Changes panel.
-function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, opsPending, onOpsCleared }) {
+function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, onOpsChanged, onOpsCleared }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
@@ -766,6 +766,7 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, opsP
   useEffect(() => { if (open) examine(); }, [open]);
   const removeOperation = (operationId) => run(async () => {
     await api(`/feeds/${feedId}/operations/${operationId}`, { method: 'DELETE' });
+    onOpsChanged();
     setDiff(await api(`/feeds/${feedId}/diff`));
   });
   const write = () => run(async () => {
@@ -808,7 +809,6 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, opsP
   // skips a deletion that `diff.blocked` names, and the user sees it here.
   const addressesBlocked = draft.bad.length > 0;
   const stale = error && error.code === 'diff_not_approved';
-  const pending = draft.changed || opsPending;
   const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
@@ -843,7 +843,7 @@ function ReviewSheet({ feedId, draft, open, onWritten, onClose, connectors, opsP
       </div>
     </div>
     <footer>
-      <button class="button destructive" type="button" disabled=${busy || !pending} onClick=${discard}>Discard the draft</button>
+      <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
       ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy} onClick=${write}>
         ${busy ? 'Writing…' : 'Write to the host'}</button>`}
     </footer>
@@ -889,29 +889,28 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
 }
 
 // The short status of the toolbar (ADR 0029 item 1). It differs from the
-// long status of the review sheet. `opsPending` is true after a host
-// operation of the Files page, which does not always change the draft XML
-// on its own (ADR 0036 item 14, task 021g).
-function toolbarStatus(draft, opsPending) {
+// long status of the review sheet. `draft.changed` from the server also
+// counts the pending host operations (ADR 0036 item 14).
+function toolbarStatus(draft) {
   if (draft.status === 'idle' || draft.status === 'loading') return { text: 'Loading…' };
   if (draft.status === 'waiting' || draft.status === 'saving') return { text: 'Saving…' };
   if (draft.status === 'failed') return { text: 'Not saved', error: true };
-  return draft.changed || opsPending ? { text: 'Saved, not written' } : { text: 'No changes' };
+  return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
 }
 
 // The toolbar of the editor: the draft status, and the buttons that open
 // the review sheet and the versions sheet (ADR 0029 items 1 to 3).
-export function DraftToolbar({ feedId, draft, onWritten, connectors, opsPending, onOpsCleared }) {
+export function DraftToolbar({ feedId, draft, onWritten, connectors, onOpsChanged, onOpsCleared }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
-  const status = toolbarStatus(draft, opsPending);
+  const status = toolbarStatus(draft);
   return html`<div class="draft-toolbar">
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
     <${ReviewSheet} feedId=${feedId} draft=${draft} open=${open === 'review'}
       onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors}
-      opsPending=${opsPending} onOpsCleared=${onOpsCleared} />
+      onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} />
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
   </div>`;
 }
@@ -1248,10 +1247,11 @@ function OtherFileRow({ file, connectors, busy, onDelete, onUndo }) {
 // The Files page: the host of the release, each of its library files with
 // their copies, and each other host file of its release folder (ADR 0036
 // items 4, 7, 9 and 11; task 021g, task 022b). `onOpsChanged` tells the
-// toolbar that a host operation is pending, even when it does not change
-// the draft XML on its own (ADR 0036 item 14). `reloadKey` changes after a
-// write and after a discard of the draft, so the page loads the files
-// route again (review of milestone 7a).
+// shell that the host operations of the draft changed, so that it loads
+// the draft again (ADR 0036 item 14). `reloadKey` changes after a write,
+// after a discard of the draft and after an "Undo" in the review sheet, so
+// the page loads the files route again (review of milestone 7a, visual
+// check of task 022).
 function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -1266,7 +1266,14 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
       setError(e);
     }
   };
-  useEffect(() => { setData(null); load(); }, [feed.id, reloadKey]);
+  // A different feed clears the list. A reload of the same feed keeps the
+  // list, so that the open entry stays open.
+  const shownFeed = useRef(null);
+  useEffect(() => {
+    if (shownFeed.current !== feed.id) setData(null);
+    shownFeed.current = feed.id;
+    load();
+  }, [feed.id, reloadKey]);
 
   // Each host that holds something of this release: its own host, the
   // default host of its files, and each host of a copy or an other file.

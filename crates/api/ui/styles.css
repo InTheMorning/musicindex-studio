@@ -94,9 +94,11 @@
   --gloss-hi: rgba(255, 255, 255, .7);
   --veil-top: 55%;
   --veil-mid: 80%;
-  --pill-bg: rgba(255, 255, 255, .78);
-  --pill-bg-hover: #ffffff;
-  --pill-edge: rgba(60, 60, 67, .2);
+  /* A neutral button has a grey fill, as in the dark theme: a white fill
+     is the fill of a group (ADR 0037 item 4). */
+  --pill-bg: var(--fill);
+  --pill-bg-hover: var(--select);
+  --pill-edge: transparent;
   --grain-opacity: .28;
   --brand-filter: brightness(0);
   --c-feed:     #8a5e21;
@@ -426,6 +428,18 @@ code, .mono {
   padding: 14px 12px;
   background: var(--sidebar);
   border-right: 1px solid var(--sep);
+  overflow: hidden;
+}
+/* The feed tree scrolls between the brand and the footer. The padding
+   keeps the focus ring of a row in view. */
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -4px;
+  padding: 0 4px;
   overflow-y: auto;
 }
 .sidebar header { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; }

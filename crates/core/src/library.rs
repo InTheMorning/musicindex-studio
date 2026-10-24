@@ -135,7 +135,7 @@ fn check_plain(name: &str) -> io::Result<()> {
 
 /// True when `name` is a plain file name: no path separator, and not `.`
 /// or `..` (ADR 0036 item 4).
-fn is_plain_name(name: &str) -> bool {
+pub(crate) fn is_plain_name(name: &str) -> bool {
     !name.is_empty() && !name.contains(['/', '\\']) && name != "." && name != ".."
 }
 

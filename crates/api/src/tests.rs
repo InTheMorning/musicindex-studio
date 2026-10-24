@@ -1741,7 +1741,16 @@ fn plant_library_file(app: &App, id: i64, folder: &str, name: &str, bytes: &[u8]
     std::fs::write(&source, bytes).unwrap();
     let (size, sha256) = library.put_file(folder, name, &source).unwrap();
     collection
-        .add_library_file(id, name, size, &sha256, "audio/flac", true, None)
+        .add_library_file(
+            id,
+            name,
+            size,
+            Some(&sha256),
+            "audio/flac",
+            true,
+            None,
+            None,
+        )
         .unwrap();
 }
 

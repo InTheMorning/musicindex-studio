@@ -847,7 +847,9 @@ fn host_operations(
             .url
             .as_deref()
             .is_some_and(|url| urls.contains(&url));
-        if planned_in_use && !planned.on_host {
+        // A remote file has no bytes in the library, so it is never an
+        // upload (ADR 0038 item 1).
+        if planned_in_use && !planned.on_host && file.sha256.is_some() {
             operations.push(HostOperation {
                 kind: OperationKind::Upload,
                 connector_id: planned.connector_id,
@@ -871,13 +873,18 @@ fn host_operations(
                     continue;
                 };
                 let file = collection.library_file(library_file_id)?;
+                // A remote file has no bytes in the library, so it is
+                // never a copy here (ADR 0038 item 1).
+                let Some(sha256) = file.sha256.as_deref() else {
+                    continue;
+                };
                 let on_host = host_has_file(
                     collection,
                     hosts,
                     operation.connector_id,
                     &operation.path,
                     file.size,
-                    &file.sha256,
+                    sha256,
                 )?;
                 if !on_host {
                     let connector = hosts.get(operation.connector_id)?;
@@ -956,7 +963,10 @@ fn operation_bytes(
         bytes.extend_from_slice(operation.path.as_bytes());
         bytes.push(0);
         let sha256 = match operation.library_file_id {
-            Some(id) => collection.library_file(LibraryFileId(id))?.sha256,
+            Some(id) => collection
+                .library_file(LibraryFileId(id))?
+                .sha256
+                .unwrap_or_default(),
             None => {
                 inventory::host_sha(collection, hosts, operation.connector_id, &operation.path)?
                     .unwrap_or_default()
@@ -1020,7 +1030,7 @@ pub fn import_into_library(
         .into_iter()
         .find(|file| file.path == file_name);
     let library_file_id = match existing {
-        Some(file) if file.sha256 == sha256 => {
+        Some(file) if file.sha256.as_deref() == Some(sha256.as_str()) => {
             // The same file, imported again. Studio keeps the one copy,
             // and removes the file that the caller sent (ADR 0036 item 5).
             let _ = std::fs::remove_file(source);
@@ -1038,7 +1048,17 @@ pub fn import_into_library(
                 .map_err(|error| {
                     PipelineError::new(PipelineErrorKind::Connector, error.to_string())
                 })?;
-            collection.add_library_file(id, file_name, size, &sha256, media_type, true, None)?
+            let stamp = file_stamp(&library.path(&folder, file_name));
+            collection.add_library_file(
+                id,
+                file_name,
+                size,
+                Some(&sha256),
+                media_type,
+                true,
+                None,
+                stamp.as_deref(),
+            )?
         }
     };
 
@@ -1048,6 +1068,20 @@ pub fn import_into_library(
         library_file_id,
         planned,
     })
+}
+
+/// The stamp of a file in the library: its size and its modification time
+/// in nanoseconds, as `{size}-{mtime_ns}`. This is the stamp of the local
+/// folder connector (ADR 0038 item 13). Gives `None` when the file has no
+/// metadata.
+fn file_stamp(path: &Path) -> Option<String> {
+    let meta = std::fs::metadata(path).ok()?;
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos());
+    Some(format!("{}-{modified}", meta.len()))
 }
 
 /// True when a library file is in use by the draft of its feed: its
@@ -1268,7 +1302,8 @@ fn put_uploads_and_copies(
             listed.size,
             &listed.stamp,
         )?;
-        collection.set_host_file_sha(operation.connector_id, &operation.path, &file.sha256)?;
+        let sha256 = file.sha256.clone().unwrap_or_else(|| sha256_hex(&[&bytes]));
+        collection.set_host_file_sha(operation.connector_id, &operation.path, &sha256)?;
         touched.insert(operation.connector_id);
     }
     Ok(())

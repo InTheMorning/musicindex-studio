@@ -1138,7 +1138,11 @@ fn extra_folder_files(
                     Some(sha256) => Some(sha256.clone()),
                     None => inventory::host_sha(collection, hosts, connector_id, &host_file.path)?,
                 };
-                sha256.is_some_and(|sha256| candidates.iter().any(|file| file.sha256 == sha256))
+                sha256.is_some_and(|sha256| {
+                    candidates
+                        .iter()
+                        .any(|file| file.sha256.as_deref() == Some(sha256.as_str()))
+                })
             };
             if !is_copy {
                 let connector = hosts.get(connector_id)?;

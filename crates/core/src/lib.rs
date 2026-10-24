@@ -19,6 +19,7 @@ pub mod migrate;
 pub mod msp;
 pub mod musicindex;
 pub mod pipeline;
+pub mod remote;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod vault;

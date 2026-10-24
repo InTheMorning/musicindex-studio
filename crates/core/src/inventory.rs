@@ -260,7 +260,8 @@ pub struct Copy {
 /// file (ADR 0036 item 7 and item 9).
 ///
 /// The function reads a SHA-256 only for a host file with the same size
-/// as `file`.
+/// as `file`. A file with no SHA-256 is a remote file. Its copies are the
+/// host files whose public address is its `source_url` (ADR 0038 item 5).
 ///
 /// # Errors
 ///
@@ -274,20 +275,30 @@ pub fn copies(
     let mut found = Vec::new();
     for connector_id in hosts.ids() {
         for host_file in collection.host_files(connector_id)? {
-            if host_file.size != file.size {
-                continue;
-            }
-            let sha256 = match &host_file.sha256 {
-                Some(sha256) => Some(sha256.clone()),
-                None => host_sha(collection, hosts, connector_id, &host_file.path)?,
-            };
-            if sha256.as_deref() != Some(file.sha256.as_str()) {
-                continue;
-            }
             let connector = hosts.get(connector_id)?;
+            let url = connector.public_url(&host_file.path);
+            match &file.sha256 {
+                Some(wanted) => {
+                    if host_file.size != file.size {
+                        continue;
+                    }
+                    let sha256 = match &host_file.sha256 {
+                        Some(sha256) => Some(sha256.clone()),
+                        None => host_sha(collection, hosts, connector_id, &host_file.path)?,
+                    };
+                    if sha256.as_deref() != Some(wanted.as_str()) {
+                        continue;
+                    }
+                }
+                None => {
+                    if url.is_none() || url != file.source_url {
+                        continue;
+                    }
+                }
+            }
             found.push(Copy {
                 connector_id,
-                url: connector.public_url(&host_file.path),
+                url,
                 path: host_file.path,
             });
         }
@@ -388,27 +399,39 @@ pub fn planned_path(
     let feed_path = feed.path.as_deref().unwrap_or("");
     let clean_path = release_path(feed_path, &file.path);
 
+    // A remote file has no SHA-256. Studio reads no host file for it, and
+    // it plans the clean path (ADR 0038 item 1).
+    let Some(sha256) = file.sha256.as_deref() else {
+        let url = hosts.get(connector_id)?.public_url(&clean_path);
+        return Ok(PlannedPath {
+            connector_id,
+            path: clean_path,
+            url,
+            on_host: false,
+        });
+    };
+
     let clean_matches = file_matches(
         collection,
         hosts,
         connector_id,
         &clean_path,
         file.size,
-        &file.sha256,
+        sha256,
     )?;
     let (path, on_host) = if clean_matches {
         (clean_path, true)
     } else if collection.host_file(connector_id, &clean_path)?.is_some() {
         // A different file is at the clean path. Studio names this file
         // from its own hash instead (ADR 0035 item 16).
-        let hash_path = hash_name(&clean_path, &file.sha256);
+        let hash_path = hash_name(&clean_path, sha256);
         let on_host = file_matches(
             collection,
             hosts,
             connector_id,
             &hash_path,
             file.size,
-            &file.sha256,
+            sha256,
         )?;
         (hash_path, on_host)
     } else {
@@ -596,7 +619,16 @@ mod tests {
         let feed = collection.add_feed(None, None).unwrap();
         let sha256 = sha256_hex(&[b"music!!"]);
         let library_file_id = collection
-            .add_library_file(feed, "01 Song.mp3", 7, &sha256, "audio/mpeg", true, None)
+            .add_library_file(
+                feed,
+                "01 Song.mp3",
+                7,
+                Some(&sha256),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
             .unwrap();
         let library_file = collection.library_file(library_file_id).unwrap();
 
@@ -627,7 +659,16 @@ mod tests {
             .add_feed(None, Some((feed_connector, "a.xml")))
             .unwrap();
         let file_id = collection
-            .add_library_file(feed_id, "a.mp3", 1, "sha", "audio/mpeg", true, None)
+            .add_library_file(
+                feed_id,
+                "a.mp3",
+                1,
+                Some("sha"),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
             .unwrap();
 
         // No default host and no file host: Studio uses the feed's host.
@@ -666,7 +707,16 @@ mod tests {
 
         let sha256 = sha256_hex(&[b"music!!"]);
         let library_file_id = collection
-            .add_library_file(feed_id, "01 Song.mp3", 7, &sha256, "audio/mpeg", true, None)
+            .add_library_file(
+                feed_id,
+                "01 Song.mp3",
+                7,
+                Some(&sha256),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
             .unwrap();
         let file = collection.library_file(library_file_id).unwrap();
         let feed = collection.feed(feed_id).unwrap();

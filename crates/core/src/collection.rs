@@ -155,6 +155,47 @@ CREATE TABLE draft_operations (
     added_at INTEGER NOT NULL
 );
 ",
+    r"
+CREATE TABLE library_files_new (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    sha256 TEXT,
+    media_type TEXT NOT NULL,
+    local INTEGER NOT NULL,
+    source_url TEXT,
+    connector_id INTEGER REFERENCES connectors(id),
+    added_at INTEGER NOT NULL,
+    stamp TEXT,
+    UNIQUE (feed_id, path)
+);
+INSERT INTO library_files_new
+    (id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at, stamp)
+SELECT id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at, NULL
+FROM library_files;
+DROP TABLE library_files;
+ALTER TABLE library_files_new RENAME TO library_files;
+CREATE TABLE downloads (
+    library_file_id INTEGER PRIMARY KEY REFERENCES library_files(id) ON DELETE CASCADE,
+    state TEXT NOT NULL CHECK (state IN ('queued', 'failed')),
+    message TEXT,
+    added_at INTEGER NOT NULL
+);
+CREATE TABLE draft_feed_moves (
+    feed_id INTEGER PRIMARY KEY REFERENCES feeds(id) ON DELETE CASCADE,
+    connector_id INTEGER NOT NULL REFERENCES connectors(id),
+    path TEXT NOT NULL,
+    added_at INTEGER NOT NULL
+);
+CREATE TABLE feed_pointers (
+    connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (connector_id, path)
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -334,8 +375,9 @@ pub struct LibraryFile {
     pub path: String,
     /// The size of the file, in bytes.
     pub size: u64,
-    /// The SHA-256 of the file.
-    pub sha256: String,
+    /// The SHA-256 of the file. `None` for a remote file, whose bytes
+    /// are not in the library (ADR 0038 item 1).
+    pub sha256: Option<String>,
     /// The media type, such as `audio/mpeg`.
     pub media_type: String,
     /// True when the bytes of the file are in the library.
@@ -348,6 +390,10 @@ pub struct LibraryFile {
     /// The time that Studio added the row, in seconds after the Unix
     /// epoch.
     pub added_at: i64,
+    /// The size and the modification time of the file in the library,
+    /// as `{size}-{mtime_ns}`. `None` for a remote file, and for a row
+    /// from before schema version 6 (ADR 0038 item 13).
+    pub stamp: Option<String>,
 }
 
 /// A file that Studio saw on a host, kept in the inventory (ADR 0036 item
@@ -507,6 +553,16 @@ impl Collection {
                 "the collection has schema version {current}, and this Studio knows only {SCHEMA_VERSION}"
             )));
         }
+        // A migration can drop a table that other tables refer to. With
+        // foreign keys on, the drop would delete the rows that cascade.
+        // The pragma has no effect inside a transaction, so set it here.
+        self.db.pragma_update(None, "foreign_keys", false)?;
+        let result = self.run_migrations(current);
+        self.db.pragma_update(None, "foreign_keys", true)?;
+        result
+    }
+
+    fn run_migrations(&mut self, current: usize) -> Result<(), CollectionError> {
         for (index, migration) in MIGRATIONS.iter().enumerate().skip(current) {
             let tx = self.db.transaction()?;
             tx.execute_batch(migration)?;
@@ -1054,16 +1110,17 @@ impl Collection {
         feed: FeedId,
         path: &str,
         size: u64,
-        sha256: &str,
+        sha256: Option<&str>,
         media_type: &str,
         local: bool,
         source_url: Option<&str>,
+        stamp: Option<&str>,
     ) -> Result<LibraryFileId, CollectionError> {
         let size = i64::try_from(size).unwrap_or(i64::MAX);
         self.db.execute(
-            "INSERT INTO library_files (feed_id, path, size, sha256, media_type, local, source_url, added_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![feed.0, path, size, sha256, media_type, local, source_url, now()],
+            "INSERT INTO library_files (feed_id, path, size, sha256, media_type, local, source_url, added_at, stamp)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![feed.0, path, size, sha256, media_type, local, source_url, now(), stamp],
         )?;
         Ok(LibraryFileId(self.db.last_insert_rowid()))
     }
@@ -1760,10 +1817,11 @@ fn library_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryFile> {
         source_url: r.get(7)?,
         connector_id: r.get::<_, Option<i64>>(8)?.map(ConnectorId),
         added_at: r.get(9)?,
+        stamp: r.get(10)?,
     })
 }
 
-const LIBRARY_FILE_SELECT: &str = "SELECT id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at FROM library_files";
+const LIBRARY_FILE_SELECT: &str = "SELECT id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at, stamp FROM library_files";
 
 fn host_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HostFile> {
     let size: i64 = r.get(2)?;
@@ -2215,6 +2273,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn a_database_at_schema_version_4_opens_and_gets_the_library_records() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
@@ -2259,7 +2318,16 @@ mod tests {
 
         // Library files.
         let file = collection
-            .add_library_file(feed, "01 Song.mp3", 10, "abc", "audio/mpeg", true, None)
+            .add_library_file(
+                feed,
+                "01 Song.mp3",
+                10,
+                Some("abc"),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(
             collection.library_files(feed).unwrap(),
@@ -2361,6 +2429,56 @@ mod tests {
                 .kind(),
             CollectionErrorKind::NotFound
         );
+    }
+
+    #[test]
+    fn a_database_at_schema_version_5_opens_at_version_6_and_keeps_its_library_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..5] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", 5).unwrap();
+        db.execute_batch(
+            "INSERT INTO connectors VALUES (1, 'local', 'Home', '{}', NULL, 0);
+               INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0);
+               INSERT INTO library_files VALUES (1, 1, 'a.mp3', 10, 'abc', 'audio/mpeg', 1, NULL, NULL, 5);
+               INSERT INTO draft_operations VALUES (1, 1, 'copy', 1, 1, 'a.mp3', 0);",
+        )
+        .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), 6);
+        let files = collection.library_files(FeedId(1)).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].sha256.as_deref(), Some("abc"));
+        assert_eq!(files[0].stamp, None);
+        assert_eq!(files[0].added_at, 5);
+        // The drop of the old table does not remove the draft operations.
+        assert_eq!(collection.draft_operations(FeedId(1)).unwrap().len(), 1);
+        // A remote file has no SHA-256 and no stamp.
+        let remote = collection
+            .add_library_file(
+                FeedId(1),
+                "b.mp3",
+                0,
+                None,
+                "audio/mpeg",
+                false,
+                Some("https://x/b.mp3"),
+                None,
+            )
+            .unwrap();
+        assert_eq!(collection.library_file(remote).unwrap().sha256, None);
+        for table in ["downloads", "draft_feed_moves", "feed_pointers"] {
+            let count: i64 = collection
+                .db()
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(count, 0);
+        }
     }
 
     #[test]

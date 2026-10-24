@@ -276,9 +276,10 @@ fn move_pending_files(
                 feed_id,
                 &pending.path,
                 pending.size,
-                &pending.sha256,
+                Some(&pending.sha256),
                 &pending.media_type,
                 true,
+                None,
                 None,
             )
             .map_err(|e| e.to_string())?;
@@ -478,7 +479,7 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, "01 Song.mp3");
         assert!(files[0].local);
-        assert_eq!(files[0].sha256, sha256);
+        assert_eq!(files[0].sha256.as_deref(), Some(sha256.as_str()));
 
         // The table of the pending files is gone, now that the library
         // replaces it (ADR 0036 item 5).

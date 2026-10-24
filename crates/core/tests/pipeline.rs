@@ -720,6 +720,38 @@ fn a_delete_draft_operation_gives_a_delete_unless_the_draft_refers_to_the_file()
 }
 
 #[test]
+fn a_remote_file_is_not_an_upload_in_the_diff() {
+    let s = setup();
+    s.collection.set_feed_folder(s.feed, "album").unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    // The planned address of this file is in the draft, but the file has
+    // no bytes in the library.
+    s.collection
+        .add_library_file(
+            s.feed,
+            "01.mp3",
+            0,
+            None,
+            "audio/mpeg",
+            false,
+            Some("https://music.example/album/01.mp3"),
+            None,
+        )
+        .unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.items[0].value.enclosure = Some(Enclosure {
+            url: Some("https://music.example/album/01.mp3".into()),
+            length: Some("1".into()),
+            media_type: Some("audio/mpeg".into()),
+        });
+    })
+    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(diff.operations.is_empty());
+    assert!(diff.files.is_empty());
+}
+
+#[test]
 fn the_diff_id_changes_when_a_host_operation_changes() {
     let s = setup();
     s.collection.set_feed_folder(s.feed, "album").unwrap();
@@ -822,9 +854,10 @@ fn a_changed_library_file_gets_a_hash_name_and_the_write_deletes_the_old_file_af
             s.feed,
             "01.mp3",
             new_size,
-            &new_sha,
+            Some(&new_sha),
             "audio/mpeg",
             true,
+            None,
             None,
         )
         .unwrap();

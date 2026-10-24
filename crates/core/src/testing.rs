@@ -171,3 +171,111 @@ impl Response {
         bytes
     }
 }
+
+/// What [`RangeServer`] records and does.
+#[derive(Debug, Default)]
+struct RangeState {
+    /// The number of bytes after which the next answer ends, with no more
+    /// bytes. The answer still states its full length.
+    cut_after: Option<usize>,
+    /// The `Range` header of each request, in order.
+    ranges: Vec<Option<String>>,
+}
+
+/// An HTTP server on a loopback port for one file. It answers a range
+/// request with 206, and it can end an answer early, to test a download
+/// that continues.
+#[derive(Debug)]
+pub struct RangeServer {
+    port: u16,
+    state: Arc<Mutex<RangeState>>,
+}
+
+impl RangeServer {
+    /// Start a server that serves `body` at each path.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the server cannot listen on a loopback port.
+    #[must_use]
+    pub fn start(body: Vec<u8>) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+        let port = listener.local_addr().expect("a local address").port();
+        let state = Arc::new(Mutex::new(RangeState::default()));
+        let shared = Arc::clone(&state);
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut reader = BufReader::new(&mut stream);
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_err() {
+                    continue;
+                }
+                let mut range = None;
+                let mut header = String::new();
+                while reader.read_line(&mut header).is_ok() && header.trim() != "" {
+                    if header.to_ascii_lowercase().starts_with("range:") {
+                        range = header.split_once(':').map(|(_, v)| v.trim().to_owned());
+                    }
+                    header.clear();
+                }
+                let start = range
+                    .as_deref()
+                    .and_then(|r| r.strip_prefix("bytes="))
+                    .and_then(|r| r.strip_suffix('-'))
+                    .and_then(|r| r.parse::<usize>().ok());
+                let cut = {
+                    let mut state = shared.lock().expect("the state");
+                    state.ranges.push(range);
+                    state.cut_after
+                };
+                let total = body.len();
+                let first = start.unwrap_or(0).min(total);
+                let mut head = if start.is_some() {
+                    format!(
+                        "HTTP/1.1 206 X\r\nContent-Range: bytes {first}-{}/{total}\r\n",
+                        total.saturating_sub(1)
+                    )
+                } else {
+                    "HTTP/1.1 200 X\r\n".to_owned()
+                };
+                let _ = write!(
+                    head,
+                    "Content-Length: {}\r\nConnection: close\r\n\r\n",
+                    total - first
+                );
+                let mut bytes = head.into_bytes();
+                let end = cut.map_or(total, |n| (first + n).min(total));
+                bytes.extend_from_slice(&body[first..end]);
+                let _ = stream.write_all(&bytes);
+            }
+        });
+        Self { port, state }
+    }
+
+    /// The full address of a path on this server.
+    #[must_use]
+    pub fn url(&self, path: &str) -> String {
+        format!("http://127.0.0.1:{}{path}", self.port)
+    }
+
+    /// End each later answer after `bytes` bytes of the body, or serve the
+    /// whole body again with `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the state lock is poisoned.
+    pub fn cut_after(&self, bytes: Option<usize>) {
+        self.state.lock().expect("the state").cut_after = bytes;
+    }
+
+    /// The `Range` header of each request so far, in order.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the state lock is poisoned.
+    #[must_use]
+    pub fn ranges(&self) -> Vec<Option<String>> {
+        self.state.lock().expect("the state").ranges.clone()
+    }
+}

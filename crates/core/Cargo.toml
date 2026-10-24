@@ -29,6 +29,7 @@ hound = { version = "3.5", default-features = false }
 flacenc = { version = "0.5", default-features = false }
 mp3lame-encoder = "0.2"
 claxon = "0.4"
+fs4 = "1.1"
 
 [features]
 # Test helpers for the tests of other workspace crates.

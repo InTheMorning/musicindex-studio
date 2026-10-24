@@ -1,6 +1,7 @@
 //! The state of one local user: the collection and the vault.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use std::collections::{HashMap, VecDeque};
 
@@ -17,6 +18,7 @@ use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::{Web, WebImage};
 use studio_core::xml::Document;
 
+use crate::downloads::DownloadQueue;
 use crate::error::ApiError;
 
 /// The number of images that [`ImageCache`] keeps (ADR 0032 item 13).
@@ -98,6 +100,9 @@ pub struct Workspace {
     /// A data folder with no such files has no such folder either, and
     /// the move then does nothing for it.
     pub(crate) imports_dir: PathBuf,
+    /// The queue of downloads (ADR 0038 items 7 and 9). A route clones the
+    /// `Arc` and then unlocks the workspace.
+    pub(crate) downloads: Arc<DownloadQueue>,
 }
 
 impl Workspace {
@@ -119,6 +124,7 @@ impl Workspace {
             images: ImageCache::default(),
             incoming_dir: data_dir.join("incoming"),
             imports_dir: data_dir.join("imports"),
+            downloads: DownloadQueue::new(),
         })
     }
 
@@ -240,36 +246,74 @@ impl Workspace {
             }
         };
         for row in feeds {
-            let Some(folder) = row.folder.as_deref() else {
+            if row.folder.is_none() {
                 continue;
-            };
-            // The feed XML has the name of the last part of the feed path
-            // or of the feed address.
-            let names = [row.path.as_deref(), row.public_url.as_deref()];
-            let bytes = names
-                .into_iter()
-                .flatten()
-                .map(|name| name.rsplit_once('/').map_or(name, |(_, last)| last))
-                .find_map(|name| std::fs::read(library.path(folder, name)).ok());
-            let Some(bytes) = bytes else {
-                eprintln!(
-                    "studio: feed {} has no feed XML in its release folder",
-                    row.id.0
-                );
-                continue;
-            };
-            let feed = Document::parse_bytes(&bytes)
-                .map_err(|e| e.to_string())
-                .and_then(|doc| Feed::read(&doc).map_err(|e| e.to_string()));
-            match feed {
+            }
+            match library_feed(&library, &row) {
                 Ok(feed) => self.record_remote_files(row.id, &feed),
                 Err(message) => {
-                    eprintln!(
-                        "studio: the feed XML of feed {} is not a feed: {message}",
-                        row.id.0
-                    );
+                    eprintln!("studio: feed {}: {message}", row.id.0);
                 }
             }
         }
     }
+
+    /// Put each download that the collection kept as `queued` into the
+    /// queue again (ADR 0038 item 9). The workers start when the router
+    /// is ready. A download that failed stays failed, until the user
+    /// starts it again.
+    ///
+    /// An error goes into the log and does not stop the caller.
+    pub fn resume_downloads(&self) {
+        let rows = match self.collection.downloads() {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("studio: the list of downloads failed: {error}");
+                return;
+            }
+        };
+        for row in rows.into_iter().filter(|row| row.state == "queued") {
+            match self.collection.library_file(row.library_file_id) {
+                Ok(file) if !file.local => {
+                    self.downloads.add(file.id, file.feed_id, file.size);
+                }
+                Ok(_) => {
+                    let _ = self.collection.remove_download(row.library_file_id);
+                }
+                Err(error) => eprintln!(
+                    "studio: download of library file {} failed to resume: {error}",
+                    row.library_file_id.0
+                ),
+            }
+        }
+    }
+}
+
+/// The hosted feed of a feed row, from the feed XML in its release folder
+/// (ADR 0036 item 3).
+///
+/// The feed XML has the name of the last part of the feed path or of the
+/// feed address.
+///
+/// # Errors
+///
+/// Gives a message when the feed has no release folder, the folder has no
+/// feed XML, or the XML is not a feed.
+pub(crate) fn library_feed(
+    library: &Library,
+    row: &studio_core::collection::FeedRow,
+) -> Result<Feed, String> {
+    let folder = row
+        .folder
+        .as_deref()
+        .ok_or_else(|| "the feed has no release folder".to_owned())?;
+    let names = [row.path.as_deref(), row.public_url.as_deref()];
+    let bytes = names
+        .into_iter()
+        .flatten()
+        .map(|name| name.rsplit_once('/').map_or(name, |(_, last)| last))
+        .find_map(|name| std::fs::read(library.path(folder, name)).ok())
+        .ok_or_else(|| "the release folder has no feed XML".to_owned())?;
+    let doc = Document::parse_bytes(&bytes).map_err(|e| e.to_string())?;
+    Feed::read(&doc).map_err(|e| format!("the feed XML is not a feed: {e}"))
 }

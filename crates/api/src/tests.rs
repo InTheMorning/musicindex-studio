@@ -2663,7 +2663,10 @@ async fn a_published_feed_gets_its_folder_its_xml_and_remote_rows_and_a_refresh_
     assert_eq!(rows[0]["source_url"], "https://cdn.example/a.mp3");
     assert_eq!(rows[0]["path"], "a.mp3");
     assert_eq!(rows[0]["size"], 100);
-    assert_eq!(rows[0]["length_in_feed"], Value::Null);
+    // The feed has no draft, so the route compares with the hosted feed
+    // in the release folder.
+    assert_eq!(rows[0]["length_in_feed"], 100);
+    assert_eq!(rows[0]["in_use"], true);
     assert_eq!(rows[0]["copies"], json!([]));
     assert_eq!(files["remote_count"], 2);
     assert_eq!(files["remote_bytes"], 300);
@@ -2787,5 +2790,319 @@ async fn a_write_keeps_the_remote_rows_in_agreement_with_the_written_feed() {
     assert_eq!(
         urls,
         ["https://cdn.example/a.mp3", "https://cdn.example/c.mp3"]
+    );
+}
+
+// ---- The download queue (task 023c) ----
+
+/// A feed with one enclosure at `url`, whose length is `length`.
+fn feed_with_one_enclosure(url: &str, length: usize) -> String {
+    format!(
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+         <title>Album D</title><podcast:guid>g-8</podcast:guid>\
+         <podcast:medium>music</podcast:medium>\
+         <item><guid>t-1</guid><enclosure url=\"{url}\" length=\"{length}\" \
+         type=\"audio/mpeg\"/></item></channel></rss>"
+    )
+}
+
+/// Ask for the downloads of a feed until the list is empty.
+async fn wait_for_downloads(app: &App, id: i64) {
+    for _ in 0..200 {
+        let (status, body) = call(app, "GET", &format!("/api/v1/feeds/{id}/downloads"), None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let list = body["downloads"].as_array().unwrap();
+        assert!(
+            list.iter().all(|d| d["state"] != "failed"),
+            "a download failed: {body}"
+        );
+        if list.is_empty() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("the downloads did not end");
+}
+
+/// Add a published feed with one enclosure to a new app, and give the
+/// feed ID with the enclosure bytes.
+async fn app_with_remote_file(
+    length: usize,
+) -> (App, i64, studio_core::testing::TestServer, Vec<u8>) {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    let bytes: Vec<u8> = (0..5000_u32).map(|i| (i % 253) as u8).collect();
+    server.set("/a.mp3", 200, bytes.clone());
+    server.set(
+        "/d.xml",
+        200,
+        feed_with_one_enclosure(&server.url("/a.mp3"), length).into_bytes(),
+    );
+    let app = app();
+    set_library_root(&app);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/d.xml")] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["added"][0]["id"].as_i64().unwrap();
+    (app, id, server, bytes)
+}
+
+#[tokio::test]
+async fn a_download_over_http_puts_the_file_in_the_library_with_its_sha256() {
+    let (app, id, _server, bytes) = app_with_remote_file(5000).await;
+    let (status, started) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/downloads"),
+        Some(json!({ "all": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["queued"].as_array().unwrap().len(), 1);
+    wait_for_downloads(&app, id).await;
+
+    let stored = std::fs::read(app.data.path().join("library/d/a.mp3")).unwrap();
+    assert_eq!(stored, bytes);
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let file = &collection
+        .library_files(studio_core::collection::FeedId(id))
+        .unwrap()[0];
+    assert!(file.local);
+    assert_eq!(file.size, 5000);
+    let sha256 = file.sha256.as_deref().unwrap();
+    assert_eq!(sha256.len(), 64);
+    assert!(sha256.bytes().all(|b| b.is_ascii_hexdigit()));
+    assert!(file.stamp.is_some());
+    assert!(collection.downloads().unwrap().is_empty());
+
+    // The feed has no host. The files route gives the downloaded file
+    // with no planned address, and the feed still uses it at its address.
+    let (status, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    assert_eq!(files["files"][0]["local"], true);
+    assert_eq!(files["files"][0]["in_use"], true);
+    assert_eq!(files["remote_count"], 0);
+
+    // A file in the library does nothing.
+    let (status, again) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/downloads"),
+        Some(json!({ "all": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(again["queued"], json!([]));
+}
+
+#[tokio::test]
+async fn a_file_larger_than_the_limit_gives_422_download_limit_and_names_the_setting() {
+    let (app, id, _server, _) = app_with_remote_file(5000).await;
+    let (status, _) = call(
+        &app,
+        "PUT",
+        "/api/v1/library/limits",
+        Some(json!({ "download_max_file_bytes": 1000, "download_min_free_bytes": 1 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/downloads"),
+        Some(json!({ "all": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "download_limit");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("download_max_file_bytes")
+    );
+    let (_, list) = call(&app, "GET", &format!("/api/v1/feeds/{id}/downloads"), None).await;
+    assert_eq!(list["downloads"], json!([]));
+}
+
+#[tokio::test]
+async fn a_download_stops_and_its_record_goes_out() {
+    let (app, id, _server, _) = app_with_remote_file(5000).await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let file = collection
+        .library_files(studio_core::collection::FeedId(id))
+        .unwrap()[0]
+        .id
+        .0;
+    // A file of another feed gives 404.
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{}/downloads/{file}", id + 1),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{id}/downloads/{file}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(collection.downloads().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_copy_of_a_remote_file_waits_for_its_download_and_the_write_refuses_it() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    let bytes: Vec<u8> = (0..3000_u32).map(|i| (i % 199) as u8).collect();
+    // The file is not on the server yet, so the first download fails.
+    let app = app();
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        feed_with_one_enclosure(&server.url("/a.mp3"), 3000),
+    )
+    .unwrap();
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    let (_, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    let library_root = app.data.path().join("library");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": library_root.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    let file_id = files["files"][0]["id"].as_i64().unwrap();
+    assert_eq!(files["files"][0]["local"], false, "{files}");
+
+    let backup_dir = tempfile::tempdir().unwrap();
+    let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "copy", "file": file_id, "connector_id": backup_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let copy = &diff["operations"][0];
+    assert_eq!(copy["kind"], "copy");
+    // The route queued the download, and the first download fails. The
+    // write refuses the draft, and no file changes on the host.
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(diff["operations"][0]["waiting"], true, "{diff}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "waiting_for_download");
+    assert!(!backup_dir.path().join("album/a.mp3").exists());
+
+    // The file appears on the server. The user starts the download again.
+    server.set("/a.mp3", 200, bytes.clone());
+    let (status, started) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/downloads"),
+        Some(json!({ "files": [file_id] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    wait_for_downloads(&app, id).await;
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(diff["operations"][0]["waiting"], false, "{diff}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        std::fs::read(backup_dir.path().join("album/a.mp3")).unwrap(),
+        bytes
+    );
+}
+
+#[tokio::test]
+async fn a_download_row_from_before_a_restart_is_in_the_queue_again() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set("/a.mp3", 200, vec![9; 2000]);
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let file = {
+        let mut collection =
+            studio_core::collection::Collection::open(&data.path().join("collection.sqlite"))
+                .unwrap();
+        let root = data.path().join("library");
+        collection
+            .set_setting("library_root", &json!(root.to_str().unwrap()))
+            .unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        collection.set_feed_folder(feed, "d").unwrap();
+        let file = collection
+            .add_library_file(
+                feed,
+                "a.mp3",
+                2000,
+                None,
+                "audio/mpeg",
+                false,
+                Some(&server.url("/a.mp3")),
+                None,
+            )
+            .unwrap();
+        collection.queue_download(file).unwrap();
+        (feed, file)
+    };
+    let workspace = Workspace::open(data.path()).unwrap();
+    workspace.resume_downloads();
+    let app = App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    };
+    wait_for_downloads(&app, file.0.0).await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    assert!(collection.library_file(file.1).unwrap().local);
+    assert_eq!(
+        std::fs::read(app.data.path().join("library/d/a.mp3")).unwrap(),
+        vec![9; 2000]
     );
 }

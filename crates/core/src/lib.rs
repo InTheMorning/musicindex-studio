@@ -10,6 +10,7 @@ pub mod collection;
 pub mod connector;
 mod digest;
 pub mod discover;
+pub mod download;
 pub mod feed;
 pub mod guid;
 pub mod inventory;

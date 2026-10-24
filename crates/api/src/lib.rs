@@ -5,6 +5,7 @@
 //! the UI files (ADR 0016).
 
 mod access;
+mod downloads;
 mod error;
 mod routes;
 mod ui;
@@ -36,7 +37,10 @@ pub async fn serve(listener: tokio::net::TcpListener, router: Router) -> std::io
 
 /// The router of the local API and the UI.
 pub fn local_router(workspace: Workspace, access: Access) -> Router {
+    let queue = Arc::clone(&workspace.downloads);
     let shared: routes::Shared = Arc::new(Mutex::new(workspace));
+    // The workers lock the workspace for short steps (ADR 0038 item 7).
+    queue.attach(&shared);
     let api = Router::new()
         .route("/status", get(routes::status))
         .route("/vault", post(routes::create_vault))
@@ -83,6 +87,14 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
                 .post(routes::upload_file)
                 .delete(routes::delete_pending_file)
                 .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
+        )
+        .route(
+            "/feeds/{id}/downloads",
+            get(routes::list_downloads).post(routes::start_downloads),
+        )
+        .route(
+            "/feeds/{id}/downloads/{file}",
+            delete(routes::stop_download),
         )
         .route("/feeds/{id}/hosts", put(routes::set_files_host))
         .route("/feeds/{id}/files/{file}/host", put(routes::set_file_host))

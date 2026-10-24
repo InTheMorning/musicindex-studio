@@ -18,6 +18,7 @@ use studio_core::collection::{
 };
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
+use studio_core::download;
 use studio_core::feed::{Feed, Recipient};
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::{self, Library};
@@ -989,7 +990,7 @@ pub(crate) async fn draft_from_snapshot(
 
 /// The default of each download limit setting, 2 GiB (ADR 0036 item 17).
 /// Milestone 7b uses the limits.
-const DEFAULT_DOWNLOAD_LIMIT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const DEFAULT_DOWNLOAD_LIMIT_BYTES: u64 = download::DEFAULT_LIMIT_BYTES;
 
 /// The library setting and the download limits (ADR 0036 items 1 and 17).
 pub(crate) async fn get_library(State(shared): State<Shared>) -> ApiResult {
@@ -1138,34 +1139,42 @@ fn feed_library_file(
     Ok(file)
 }
 
-/// Each address that the draft of a feed gives, or an empty list when the
-/// feed has no draft (ADR 0036 items 7, 10 and 12).
-fn draft_addresses(collection: &Collection, id: FeedId) -> Result<Vec<String>, ApiError> {
-    match pipeline::draft_model(collection, id) {
-        Ok((feed, _)) => Ok(pipeline::feed_addresses(&feed)
-            .into_iter()
-            .map(str::to_owned)
-            .collect()),
-        Err(error) if error.kind() == pipeline::PipelineErrorKind::NoDraft => Ok(Vec::new()),
+/// The feed that the Files page compares with: the draft, or the hosted
+/// feed from the release folder when the feed has no draft, such as a
+/// read-only feed (ADR 0036 item 11, ADR 0038 item 5). Gives `None` when
+/// the feed has neither.
+fn files_feed(w: &Workspace, id: FeedId) -> Result<Option<Feed>, ApiError> {
+    match pipeline::draft_model(&w.collection, id) {
+        Ok((feed, _)) => Ok(Some(feed)),
+        Err(error) if error.kind() == pipeline::PipelineErrorKind::NoDraft => {
+            let Ok(library) = w.library() else {
+                return Ok(None);
+            };
+            let row = w.collection.feed(id)?;
+            Ok(crate::workspace::library_feed(&library, &row).ok())
+        }
         Err(error) => Err(error.into()),
     }
 }
 
-/// The length that the draft gives for each address of an enclosure or
-/// of an alternative source, or an empty map when the feed has no draft
-/// (ADR 0038 item 11).
-fn draft_lengths(
-    collection: &Collection,
-    id: FeedId,
-) -> Result<std::collections::HashMap<String, u64>, ApiError> {
-    let feed = match pipeline::draft_model(collection, id) {
-        Ok((feed, _)) => feed,
-        Err(error) if error.kind() == pipeline::PipelineErrorKind::NoDraft => {
-            return Ok(std::collections::HashMap::new());
-        }
-        Err(error) => return Err(error.into()),
-    };
+/// The addresses that `feed` gives (ADR 0036 items 10 and 12).
+fn feed_address_list(feed: Option<&Feed>) -> Vec<String> {
+    feed.map(|feed| {
+        pipeline::feed_addresses(feed)
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// The length that `feed` gives for each address of an enclosure or of an
+/// alternative source (ADR 0038 item 11).
+fn feed_lengths(feed: Option<&Feed>) -> std::collections::HashMap<String, u64> {
     let mut lengths = std::collections::HashMap::new();
+    let Some(feed) = feed else {
+        return lengths;
+    };
     for item in &feed.items {
         if let Some(enclosure) = &item.value.enclosure
             && let (Some(url), Some(length)) = (&enclosure.url, &enclosure.length)
@@ -1191,7 +1200,7 @@ fn draft_lengths(
             }
         }
     }
-    Ok(lengths)
+    lengths
 }
 
 /// True when `url` is one of the addresses that the draft gives (ADR 0036
@@ -1272,6 +1281,28 @@ fn extra_folder_files(
     Ok(extra)
 }
 
+/// The planned path of a library file, or `None` when its feed and the
+/// file give no connected host (ADR 0036 item 9, ADR 0038 item 1).
+fn planned_or_none(
+    collection: &Collection,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    file: &LibraryFile,
+) -> Result<Option<inventory::PlannedPath>, ApiError> {
+    match inventory::planned_path(collection, hosts, feed_row, file) {
+        Ok(planned) => Ok(Some(planned)),
+        Err(error)
+            if matches!(
+                error.kind(),
+                inventory::InventoryErrorKind::NoHost | inventory::InventoryErrorKind::UnknownHost
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 /// True when the draft uses the address of a remote file, or the address
 /// of a copy of it (ADR 0038 item 5).
 fn remote_file_in_use(
@@ -1304,30 +1335,24 @@ pub(crate) async fn list_release_files(
         let hosts = w.hosts()?;
         let library_files = w.collection.library_files(id)?;
         let operations = w.collection.draft_operations(id)?;
-        let addresses = draft_addresses(&w.collection, id)?;
-        let lengths = draft_lengths(&w.collection, id)?;
+        let compared = files_feed(w, id)?;
+        let addresses = feed_address_list(compared.as_ref());
+        let lengths = feed_lengths(compared.as_ref());
 
         let mut files = Vec::new();
         let mut remote_count = 0_u64;
         let mut remote_bytes = 0_u64;
         for file in &library_files {
-            // A remote file of a read-only feed has no host, so it has no
-            // planned address (ADR 0038 item 1).
-            let planned = if file.local {
-                Some(inventory::planned_path(
-                    &w.collection,
-                    &hosts,
-                    &feed_row,
-                    file,
-                )?)
-            } else {
-                inventory::planned_path(&w.collection, &hosts, &feed_row, file).ok()
-            };
-            let in_use = if file.local {
-                pipeline::library_file_in_use(&w.collection, &hosts, file)?
-            } else {
-                remote_file_in_use(&w.collection, &hosts, file, &addresses)?
-            };
+            // A file of a feed with no host, such as a read-only feed, has
+            // no planned address. This is also true after its download
+            // (ADR 0038 items 1 and 11).
+            let planned = planned_or_none(&w.collection, &hosts, &feed_row, file)?;
+            // The draft can use the address that the file came from, also
+            // after a download, or the address of a copy (ADR 0038 item 5).
+            let in_use = remote_file_in_use(&w.collection, &hosts, file, &addresses)?
+                || (planned.is_some()
+                    && file.local
+                    && pipeline::library_file_in_use(&w.collection, &hosts, file)?);
             if !file.local {
                 remote_count += 1;
                 remote_bytes += file.size;
@@ -1682,6 +1707,7 @@ pub(crate) async fn add_operation(
             }
             FileOperation::Copy { file, connector_id } => {
                 let file = feed_library_file(&w.collection, id, file)?;
+                let download = check_download(w, &hosts, &file)?;
                 let planned = planned_path_on(
                     &w.collection,
                     &hosts,
@@ -1696,9 +1722,11 @@ pub(crate) async fn add_operation(
                     ConnectorId(connector_id),
                     &planned.path,
                 )?;
+                start_download(w, &file, download)?;
             }
             FileOperation::Move { file, from, to } => {
                 let file = feed_library_file(&w.collection, id, file)?;
+                let download = check_download(w, &hosts, &file)?;
                 let from_connector = ConnectorId(from);
                 let to_connector = ConnectorId(to);
                 let from_planned =
@@ -1725,6 +1753,7 @@ pub(crate) async fn add_operation(
                     from_connector,
                     &from_planned.path,
                 )?;
+                start_download(w, &file, download)?;
             }
             FileOperation::Delete { connector_id, path } => {
                 w.collection.add_draft_operation(
@@ -1739,6 +1768,185 @@ pub(crate) async fn add_operation(
         diff_json(w, id)
     })
     .await
+}
+
+/// Check that a remote library file can download now: it has a source and
+/// it breaks no limit (ADR 0038 items 8 and 10). Gives `false` for a file
+/// that is in the library already, which needs no download.
+fn check_download(w: &Workspace, hosts: &Hosts, file: &LibraryFile) -> Result<bool, ApiError> {
+    if file.local {
+        return Ok(false);
+    }
+    let library = w.library()?;
+    if download::source_of(&w.collection, hosts, file)?.is_none() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "no_source",
+            format!(
+                "{} has no copy on a host and no address, so Studio cannot download it",
+                file.path
+            ),
+        ));
+    }
+    download::check_limits(&w.collection, &library, file.size)?;
+    Ok(true)
+}
+
+/// Record a download and put it in the queue. `needed` is the result of
+/// [`check_download`].
+fn start_download(w: &Workspace, file: &LibraryFile, needed: bool) -> Result<(), ApiError> {
+    if needed {
+        w.collection.queue_download(file.id)?;
+        w.downloads.add(file.id, file.feed_id, file.size);
+    }
+    Ok(())
+}
+
+// ---- The download queue (ADR 0038 items 6 to 12) ----
+
+/// The progress of one download, as JSON.
+fn download_json(
+    file: &LibraryFile,
+    state: &str,
+    bytes: u64,
+    total: Option<u64>,
+    message: Option<&str>,
+) -> Value {
+    json!({
+        "file_id": file.id,
+        "path": file.path,
+        "state": state,
+        "bytes": bytes,
+        "total": total,
+        "message": message,
+    })
+}
+
+/// Each download of a feed with its progress. Downloads that failed
+/// before a restart are in the list too.
+pub(crate) async fn list_downloads(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        w.collection.feed(id)?;
+        let queue = Arc::clone(&w.downloads);
+        let mut listed = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for (file_id, entry) in queue.entries() {
+            if entry.feed_id != id {
+                continue;
+            }
+            let Ok(file) = w.collection.library_file(LibraryFileId(file_id)) else {
+                continue;
+            };
+            seen.insert(file_id);
+            let state = serde_json::to_value(entry.state)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default();
+            listed.push(download_json(
+                &file,
+                &state,
+                entry.bytes,
+                entry.total,
+                entry.message.as_deref(),
+            ));
+        }
+        for row in w.collection.downloads()? {
+            if row.state != "failed" || seen.contains(&row.library_file_id.0) {
+                continue;
+            }
+            let Ok(file) = w.collection.library_file(row.library_file_id) else {
+                continue;
+            };
+            if file.feed_id == id {
+                listed.push(download_json(
+                    &file,
+                    "failed",
+                    0,
+                    None,
+                    row.message.as_deref(),
+                ));
+            }
+        }
+        Ok(Json(json!({ "downloads": listed })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct StartDownloads {
+    #[serde(default)]
+    files: Vec<i64>,
+    #[serde(default)]
+    all: bool,
+}
+
+/// Queue the download of some remote files of a feed, or of all of them.
+/// A file that is in the library, or in the queue already, does nothing.
+/// A file that breaks a limit gives 422 `download_limit`, and then no file
+/// goes in the queue (ADR 0038 items 6 and 10).
+pub(crate) async fn start_downloads(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<StartDownloads>,
+) -> ApiResult {
+    let (queue, queued) = blocking(shared, move |w| {
+        let id = FeedId(id);
+        w.collection.feed(id)?;
+        let hosts = w.hosts()?;
+        let queue = Arc::clone(&w.downloads);
+        let mut chosen = Vec::new();
+        if body.all {
+            chosen = w
+                .collection
+                .library_files(id)?
+                .into_iter()
+                .filter(|file| !file.local)
+                .collect();
+        }
+        for file in body.files {
+            chosen.push(feed_library_file(&w.collection, id, file)?);
+        }
+        chosen.retain(|file| {
+            !file.local
+                && queue
+                    .get(file.id)
+                    .is_none_or(|e| e.state == crate::downloads::State::Failed)
+        });
+        chosen.sort_by_key(|file| file.id.0);
+        chosen.dedup_by_key(|file| file.id);
+        for file in &chosen {
+            check_download(w, &hosts, file)?;
+        }
+        for file in &chosen {
+            w.collection.queue_download(file.id)?;
+        }
+        Ok((queue, chosen))
+    })
+    .await?;
+    let mut ids = Vec::new();
+    for file in &queued {
+        if queue.add(file.id, file.feed_id, file.size) {
+            ids.push(file.id);
+        }
+    }
+    Ok(Json(json!({ "queued": ids })))
+}
+
+/// Stop a download and take it out of the queue. The partial file stays,
+/// so a later download continues from it (ADR 0038 item 8).
+pub(crate) async fn stop_download(
+    State(shared): State<Shared>,
+    Path((id, file)): Path<(i64, i64)>,
+) -> Result<StatusCode, ApiError> {
+    let queue = blocking(shared, move |w| {
+        let file = feed_library_file(&w.collection, FeedId(id), file)?;
+        w.collection.remove_download(file.id)?;
+        Ok((Arc::clone(&w.downloads), file.id))
+    })
+    .await?;
+    queue.0.stop(queue.1);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Remove one draft operation of a release, for example to take back a

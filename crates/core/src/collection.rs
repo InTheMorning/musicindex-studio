@@ -396,6 +396,20 @@ pub struct LibraryFile {
     pub stamp: Option<String>,
 }
 
+/// A download that is not complete (ADR 0038 item 9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DownloadRow {
+    /// The library file that Studio downloads.
+    pub library_file_id: LibraryFileId,
+    /// `queued`, or `failed` with a message.
+    pub state: String,
+    /// The reason of a failure.
+    pub message: Option<String>,
+    /// The time that the download came into the queue, in seconds after
+    /// the Unix epoch.
+    pub added_at: i64,
+}
+
 /// A file that Studio saw on a host, kept in the inventory (ADR 0036 item
 /// 4 and item 6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1176,6 +1190,99 @@ impl Collection {
             params![id.0, connector.map(|c| c.0)],
         )?;
         Ok(())
+    }
+
+    /// Record that the bytes of a library file are in the library now:
+    /// `local` becomes true, with the size, the SHA-256 and the stamp of
+    /// the file (ADR 0038 item 11).
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the file does not
+    /// exist.
+    pub fn set_library_file_local(
+        &self,
+        id: LibraryFileId,
+        size: u64,
+        sha256: &str,
+        stamp: Option<&str>,
+    ) -> Result<(), CollectionError> {
+        let size = i64::try_from(size).unwrap_or(i64::MAX);
+        let changed = self.db.execute(
+            "UPDATE library_files SET local = 1, size = ?2, sha256 = ?3, stamp = ?4 WHERE id = ?1",
+            params![id.0, size, sha256, stamp],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("library file {} does not exist", id.0),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Record a download as queued. A download that failed before is
+    /// queued again, and loses its message (ADR 0038 item 9).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails, or when the library
+    /// file does not exist.
+    pub fn queue_download(&self, file: LibraryFileId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO downloads (library_file_id, state, message, added_at)
+             VALUES (?1, 'queued', NULL, ?2)
+             ON CONFLICT (library_file_id)
+             DO UPDATE SET state = 'queued', message = NULL",
+            params![file.0, now()],
+        )?;
+        Ok(())
+    }
+
+    /// Record that a download failed, with the reason.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn fail_download(&self, file: LibraryFileId, message: &str) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE downloads SET state = 'failed', message = ?2 WHERE library_file_id = ?1",
+            params![file.0, message],
+        )?;
+        Ok(())
+    }
+
+    /// Remove the record of a download. A file with no record is not an
+    /// error.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_download(&self, file: LibraryFileId) -> Result<(), CollectionError> {
+        self.db
+            .execute("DELETE FROM downloads WHERE library_file_id = ?1", [file.0])?;
+        Ok(())
+    }
+
+    /// Each download that is not complete, the oldest first.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn downloads(&self) -> Result<Vec<DownloadRow>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT library_file_id, state, message, added_at FROM downloads
+             ORDER BY added_at, library_file_id",
+        )?;
+        let rows = statement.query_map([], |r| {
+            Ok(DownloadRow {
+                library_file_id: LibraryFileId(r.get(0)?),
+                state: r.get(1)?,
+                message: r.get(2)?,
+                added_at: r.get(3)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// Remove the row of a file of a release folder. The file in the
@@ -2429,6 +2536,43 @@ mod tests {
                 .kind(),
             CollectionErrorKind::NotFound
         );
+    }
+
+    #[test]
+    fn a_download_is_queued_fails_and_goes_out_and_a_file_becomes_local() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let file = collection
+            .add_library_file(
+                feed,
+                "a.mp3",
+                5,
+                None,
+                "audio/mpeg",
+                false,
+                Some("http://x/a.mp3"),
+                None,
+            )
+            .unwrap();
+        collection.queue_download(file).unwrap();
+        collection.queue_download(file).unwrap();
+        collection.fail_download(file, "no network").unwrap();
+        let rows = collection.downloads().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].state, "failed");
+        assert_eq!(rows[0].message.as_deref(), Some("no network"));
+        collection.queue_download(file).unwrap();
+        assert_eq!(collection.downloads().unwrap()[0].state, "queued");
+        collection
+            .set_library_file_local(file, 9, "abc", Some("9-1"))
+            .unwrap();
+        let row = collection.library_file(file).unwrap();
+        assert!(row.local);
+        assert_eq!((row.size, row.sha256.as_deref()), (9, Some("abc")));
+        assert_eq!(row.stamp.as_deref(), Some("9-1"));
+        collection.remove_download(file).unwrap();
+        collection.remove_download(file).unwrap();
+        assert!(collection.downloads().unwrap().is_empty());
     }
 
     #[test]

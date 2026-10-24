@@ -7,6 +7,7 @@ use serde_json::json;
 use studio_core::address::AddressError;
 use studio_core::collection::{CollectionError, CollectionErrorKind};
 use studio_core::connector::{ConnectorError, ConnectorErrorKind};
+use studio_core::download::{DownloadError, DownloadErrorKind};
 use studio_core::inventory::{InventoryError, InventoryErrorKind};
 use studio_core::media::{MediaError, MediaErrorKind};
 use studio_core::migrate::MigrateError;
@@ -142,6 +143,8 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::NoFolder => (StatusCode::CONFLICT, "no_library"),
             PipelineErrorKind::NotReachable => (StatusCode::BAD_GATEWAY, "not_reachable"),
             PipelineErrorKind::VaultLocked => (StatusCode::LOCKED, "vault_locked"),
+            // ADR 0038 item 12: a copy waits for the download of its file.
+            PipelineErrorKind::WaitingForDownload => (StatusCode::CONFLICT, "waiting_for_download"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())
@@ -186,5 +189,20 @@ impl From<studio_core::web::WebError> for ApiError {
             Some(code) => Self::new(StatusCode::UNPROCESSABLE_ENTITY, code, error.to_string()),
             None => Self::new(StatusCode::BAD_GATEWAY, "network", error.to_string()),
         }
+    }
+}
+
+impl From<DownloadError> for ApiError {
+    fn from(error: DownloadError) -> Self {
+        let (status, code) = match error.kind() {
+            // ADR 0038 item 10: the download breaks a limit setting.
+            DownloadErrorKind::TooLarge | DownloadErrorKind::NoSpace => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "download_limit")
+            }
+            DownloadErrorKind::NoSource => (StatusCode::UNPROCESSABLE_ENTITY, "no_source"),
+            DownloadErrorKind::Collection => (StatusCode::INTERNAL_SERVER_ERROR, "collection"),
+            _ => (StatusCode::BAD_GATEWAY, "download"),
+        };
+        Self::new(status, code, error.to_string())
     }
 }

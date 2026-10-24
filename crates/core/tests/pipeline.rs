@@ -671,6 +671,93 @@ fn a_copy_draft_operation_gives_a_copy_when_the_host_does_not_have_the_file() {
 }
 
 #[test]
+fn a_copy_of_a_remote_file_waits_for_its_download_and_the_write_refuses_it() {
+    use std::sync::atomic::AtomicBool;
+    use studio_core::download;
+    use studio_core::web::Web;
+
+    let mut s = setup();
+    s.collection.set_feed_folder(s.feed, "album").unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+
+    // The bytes are on the first host. The library has only a remote row.
+    fs::create_dir_all(s.dir.path().join("album")).unwrap();
+    fs::write(s.dir.path().join("album/01.mp3"), b"one").unwrap();
+    let first = *s.hosts.ids().collect::<Vec<_>>().first().unwrap();
+    inventory::scan(&s.collection, &s.hosts, first).unwrap();
+    let id = s
+        .collection
+        .add_library_file(
+            s.feed,
+            "01.mp3",
+            3,
+            None,
+            "audio/mpeg",
+            false,
+            Some("https://music.example/album/01.mp3"),
+            None,
+        )
+        .unwrap();
+
+    let second_dir = tempfile::tempdir().unwrap();
+    let second_folder = LocalFolder::new(second_dir.path(), Some("https://second.example".into()));
+    let second_id = s
+        .collection
+        .add_connector(LocalFolder::KIND, "Second", &second_folder.config(), None)
+        .unwrap();
+    s.hosts.insert(second_id, Box::new(second_folder));
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Copy,
+            Some(id),
+            second_id,
+            "01.mp3",
+        )
+        .unwrap();
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let copies: Vec<_> = diff
+        .operations
+        .iter()
+        .filter(|op| op.kind == OperationKind::Copy)
+        .collect();
+    assert_eq!(copies.len(), 1);
+    assert!(copies[0].waiting);
+
+    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
+        .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::WaitingForDownload);
+    assert!(!second_dir.path().join("01.mp3").exists());
+    assert!(!live(&s).contains("second.example"));
+
+    // The download reads the file through the first host. The write then
+    // puts the copy.
+    let file = s.collection.library_file(id).unwrap();
+    let source = download::source_of(&s.collection, &s.hosts, &file)
+        .unwrap()
+        .unwrap();
+    let part = download::part_path(&s.library, "album", "01.mp3");
+    download::fetch(
+        &s.hosts,
+        &Web::new(),
+        &source,
+        &part,
+        u64::MAX,
+        &mut |_, _| {},
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    let facts = download::hash_part(&part).unwrap();
+    download::finish(&s.collection, &s.library, &file, &part, &facts).unwrap();
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(diff.operations.iter().all(|op| !op.waiting));
+    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    assert_eq!(fs::read(second_dir.path().join("01.mp3")).unwrap(), b"one");
+}
+
+#[test]
 fn a_delete_draft_operation_gives_a_delete_unless_the_draft_refers_to_the_file() {
     let s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();

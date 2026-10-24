@@ -7,6 +7,9 @@
 
 use std::fmt;
 use std::fmt::Write as _;
+use std::io::{Read, Write as _};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use ureq::ResponseExt;
@@ -26,6 +29,8 @@ pub enum WebErrorKind {
     /// The response has a `Content-Type` that is not an image type
     /// (ADR 0025).
     NotImage,
+    /// The caller asked to stop the transfer. The partial file stays.
+    Stopped,
 }
 
 /// An error from [`Web`].
@@ -79,6 +84,9 @@ pub struct WebFile {
 #[derive(Debug, Clone)]
 pub struct Web {
     agent: ureq::Agent,
+    /// The client for [`Web::get_to_file`]. It has no time limit for the
+    /// whole transfer, because a large file takes minutes.
+    transfer: ureq::Agent,
 }
 
 impl Default for Web {
@@ -98,8 +106,16 @@ impl Web {
             .max_redirects(5)
             .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
             .build();
+        let transfer = ureq::Agent::config_builder()
+            .timeout_connect(Some(Duration::from_secs(20)))
+            .timeout_recv_response(Some(Duration::from_secs(20)))
+            .http_status_as_error(false)
+            .max_redirects(5)
+            .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
+            .build();
         Self {
             agent: config.into(),
+            transfer: transfer.into(),
         }
     }
 
@@ -305,6 +321,143 @@ impl Web {
     }
 }
 
+/// The size of a block that [`Web::get_to_file`] reads.
+const BLOCK_BYTES: usize = 64 * 1024;
+
+impl Web {
+    /// Read a file into `part`, in blocks of 64 KiB (ADR 0038 item 8).
+    ///
+    /// When `part` has bytes, the request has `Range: bytes={len}-`. A 206
+    /// response adds to the file. A 200 response starts the file again
+    /// from 0. After each block, the function calls `progress(done, total)`
+    /// and examines `stop`. Gives the size of the complete file.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] for an address that is not `http` or `https`,
+    /// a status that is not 200 or 206, a file that is larger than
+    /// `max_bytes`, a failure of the file or the network, or a set `stop`
+    /// ([`WebErrorKind::Stopped`]). The partial file stays in each case.
+    pub fn get_to_file(
+        &self,
+        url: &str,
+        part: &Path,
+        max_bytes: u64,
+        progress: &mut dyn FnMut(u64, Option<u64>),
+        stop: &AtomicBool,
+    ) -> Result<u64, WebError> {
+        let lower = url.trim().to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(WebError::new(
+                WebErrorKind::InvalidAddress,
+                format!("{url} is not an http or https address"),
+            ));
+        }
+        let io_error = |e: std::io::Error| {
+            WebError::new(WebErrorKind::Network, format!("{}: {e}", part.display()))
+        };
+        let mut have = std::fs::metadata(part).map_or(0, |m| m.len());
+        let mut response = self.request_from(url, have)?;
+        if response.status().as_u16() == 416 && have > 0 {
+            // The partial file does not fit the file on the server. Start
+            // again from 0.
+            have = 0;
+            response = self.request_from(url, 0)?;
+        }
+        let status = response.status().as_u16();
+        let appending = match status {
+            206 => {
+                let start = header(&response, "content-range")
+                    .as_deref()
+                    .and_then(|v| v.strip_prefix("bytes "))
+                    .and_then(|v| v.split('-').next())
+                    .and_then(|v| v.trim().parse::<u64>().ok());
+                if start != Some(have) {
+                    return Err(WebError::new(
+                        WebErrorKind::Network,
+                        format!("{url} answered with a range that does not fit the partial file"),
+                    ));
+                }
+                true
+            }
+            200 => false,
+            _ => {
+                return Err(WebError {
+                    kind: WebErrorKind::Status,
+                    status: Some(status),
+                    message: format!("{url} answered with status {status}"),
+                });
+            }
+        };
+        let offset = if appending { have } else { 0 };
+        let total = header(&response, "content-length")
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(|length| length + offset);
+        let too_large = || {
+            WebError::new(
+                WebErrorKind::TooLarge,
+                format!("{url} is larger than {max_bytes} bytes"),
+            )
+        };
+        if total.is_some_and(|total| total > max_bytes) {
+            return Err(too_large());
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(appending)
+            .truncate(!appending)
+            .open(part)
+            .map_err(io_error)?;
+        let mut reader = response.body_mut().with_config().limit(u64::MAX).reader();
+        let mut done = offset;
+        let mut block = vec![0_u8; BLOCK_BYTES];
+        progress(done, total);
+        loop {
+            if stop.load(Ordering::Relaxed) {
+                return Err(WebError::new(
+                    WebErrorKind::Stopped,
+                    format!("{url}: the download stopped"),
+                ));
+            }
+            let read = reader
+                .read(&mut block)
+                .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+            if read == 0 {
+                break;
+            }
+            file.write_all(&block[..read]).map_err(io_error)?;
+            done += read as u64;
+            if done > max_bytes {
+                return Err(too_large());
+            }
+            progress(done, total);
+        }
+        file.flush().map_err(io_error)?;
+        if total.is_some_and(|total| total != done) {
+            return Err(WebError::new(
+                WebErrorKind::Network,
+                format!("{url}: the transfer ended before the end of the file"),
+            ));
+        }
+        Ok(done)
+    }
+
+    fn request_from(
+        &self,
+        url: &str,
+        have: u64,
+    ) -> Result<ureq::http::Response<ureq::Body>, WebError> {
+        let mut request = self.transfer.get(url.trim());
+        if have > 0 {
+            request = request.header("Range", format!("bytes={have}-"));
+        }
+        request
+            .call()
+            .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))
+    }
+}
+
 fn header<B>(response: &ureq::http::Response<B>, name: &str) -> Option<String> {
     response
         .headers()
@@ -436,6 +589,75 @@ mod tests {
         );
         let error = web.media_facts(&server.url("/gone.mp3")).unwrap_err();
         assert_eq!(error.status(), Some(404));
+    }
+
+    #[test]
+    fn a_download_continues_a_partial_file_with_a_range_request() {
+        use crate::digest::sha256_hex;
+        use crate::testing::RangeServer;
+        use std::sync::atomic::AtomicBool;
+
+        let body: Vec<u8> = (0..1_000_000_u32).map(|i| (i % 251) as u8).collect();
+        let server = RangeServer::start(body.clone());
+        server.cut_after(Some(300 * 1024));
+        let dir = tempfile::tempdir().unwrap();
+        let part = dir.path().join(".a.mp3.part");
+        let web = Web::new();
+        let stop = AtomicBool::new(false);
+        let url = server.url("/a.mp3");
+
+        let error = web
+            .get_to_file(&url, &part, u64::MAX, &mut |_, _| {}, &stop)
+            .unwrap_err();
+        assert_eq!(error.kind(), WebErrorKind::Network);
+        let have = std::fs::metadata(&part).unwrap().len();
+        assert!(have > 0 && have <= 300 * 1024, "{have}");
+
+        server.cut_after(None);
+        let mut last = (0, None);
+        let size = web
+            .get_to_file(&url, &part, u64::MAX, &mut |d, t| last = (d, t), &stop)
+            .unwrap();
+        assert_eq!(size, 1_000_000);
+        assert_eq!(last, (1_000_000, Some(1_000_000)));
+        let ranges = server.ranges();
+        assert_eq!(ranges[0], None);
+        assert_eq!(
+            ranges[1].as_deref(),
+            Some(format!("bytes={have}-").as_str())
+        );
+        let bytes = std::fs::read(&part).unwrap();
+        assert_eq!(sha256_hex(&[&bytes]), sha256_hex(&[&body]));
+    }
+
+    #[test]
+    fn a_download_starts_again_after_a_200_answer_and_obeys_the_limit_and_stop() {
+        use std::sync::atomic::AtomicBool;
+
+        // The plain test server ignores a range request and answers 200.
+        let server = TestServer::start(Vec::new());
+        server.set("/a.bin", 200, vec![7; 1000]);
+        let dir = tempfile::tempdir().unwrap();
+        let part = dir.path().join("a.part");
+        std::fs::write(&part, vec![1; 400]).unwrap();
+        let web = Web::new();
+        let stop = AtomicBool::new(false);
+        let size = web
+            .get_to_file(&server.url("/a.bin"), &part, 2000, &mut |_, _| {}, &stop)
+            .unwrap();
+        assert_eq!(size, 1000);
+        assert_eq!(std::fs::read(&part).unwrap(), vec![7; 1000]);
+
+        let error = web
+            .get_to_file(&server.url("/a.bin"), &part, 999, &mut |_, _| {}, &stop)
+            .unwrap_err();
+        assert_eq!(error.kind(), WebErrorKind::TooLarge);
+
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        let error = web
+            .get_to_file(&server.url("/a.bin"), &part, 2000, &mut |_, _| {}, &stop)
+            .unwrap_err();
+        assert_eq!(error.kind(), WebErrorKind::Stopped);
     }
 
     #[test]

@@ -68,6 +68,9 @@ pub enum PipelineErrorKind {
     /// and the copies. The write stops before the deletions (ADR 0036
     /// item 15).
     NotReachable,
+    /// A host operation of the draft waits for the download of a remote
+    /// library file (ADR 0038 item 12).
+    WaitingForDownload,
     /// A host needs a secret from the vault, and the vault is locked
     /// (ADR 0017).
     VaultLocked,
@@ -243,6 +246,10 @@ pub struct HostOperation {
     /// The draft operation that gives this operation, so that the user can
     /// remove it. `None` for an upload, which comes from the draft itself.
     pub operation_id: Option<i64>,
+    /// True when the library file is remote: its bytes are not in the
+    /// library yet, and the write refuses the draft until the download is
+    /// complete (ADR 0038 item 12).
+    pub waiting: bool,
 }
 
 /// A deletion that Studio refuses because a feed refers to the file
@@ -820,6 +827,51 @@ fn host_has_file(
     Ok(found.as_deref() == Some(sha256))
 }
 
+/// The host operation of a draft copy. Gives `None` when the copy has no
+/// library file, or the host has the file at the path already.
+///
+/// A copy of a remote file waits for its download (ADR 0038 item 12).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or a host fails.
+fn copy_operation(
+    collection: &Collection,
+    hosts: &Hosts,
+    operation: &crate::collection::DraftOperation,
+) -> Result<Option<HostOperation>, PipelineError> {
+    let Some(library_file_id) = operation.library_file_id else {
+        return Ok(None);
+    };
+    let file = collection.library_file(library_file_id)?;
+    let waiting = !file.local || file.sha256.is_none();
+    if !waiting {
+        let sha256 = file.sha256.as_deref().unwrap_or_default();
+        let on_host = host_has_file(
+            collection,
+            hosts,
+            operation.connector_id,
+            &operation.path,
+            file.size,
+            sha256,
+        )?;
+        if on_host {
+            return Ok(None);
+        }
+    }
+    let connector = hosts.get(operation.connector_id)?;
+    Ok(Some(HostOperation {
+        kind: OperationKind::Copy,
+        connector_id: operation.connector_id,
+        path: operation.path.clone(),
+        size: file.size,
+        library_file_id: Some(file.id.0),
+        url: connector.public_url(&operation.path),
+        operation_id: Some(operation.id.0),
+        waiting,
+    }))
+}
+
 /// Each host operation of the draft of a feed, and each deletion that
 /// Studio refuses because a feed refers to the file (ADR 0036 items 10,
 /// 12, 13 and 14).
@@ -858,6 +910,7 @@ fn host_operations(
                 library_file_id: Some(file.id.0),
                 url: planned.url,
                 operation_id: None,
+                waiting: false,
             });
         }
     }
@@ -869,34 +922,8 @@ fn host_operations(
     for operation in collection.draft_operations(feed_row.id)? {
         match operation.kind {
             DraftOperationKind::Copy => {
-                let Some(library_file_id) = operation.library_file_id else {
-                    continue;
-                };
-                let file = collection.library_file(library_file_id)?;
-                // A remote file has no bytes in the library, so it is
-                // never a copy here (ADR 0038 item 1).
-                let Some(sha256) = file.sha256.as_deref() else {
-                    continue;
-                };
-                let on_host = host_has_file(
-                    collection,
-                    hosts,
-                    operation.connector_id,
-                    &operation.path,
-                    file.size,
-                    sha256,
-                )?;
-                if !on_host {
-                    let connector = hosts.get(operation.connector_id)?;
-                    operations.push(HostOperation {
-                        kind: OperationKind::Copy,
-                        connector_id: operation.connector_id,
-                        path: operation.path.clone(),
-                        size: file.size,
-                        library_file_id: Some(file.id.0),
-                        url: connector.public_url(&operation.path),
-                        operation_id: Some(operation.id.0),
-                    });
+                if let Some(copy) = copy_operation(collection, hosts, &operation)? {
+                    operations.push(copy);
                 }
             }
             DraftOperationKind::Delete => {
@@ -925,6 +952,7 @@ fn host_operations(
                         library_file_id: None,
                         url,
                         operation_id: Some(operation.id.0),
+                        waiting: false,
                     });
                 } else {
                     blocked.push(BlockedDelete {
@@ -1074,7 +1102,7 @@ pub fn import_into_library(
 /// in nanoseconds, as `{size}-{mtime_ns}`. This is the stamp of the local
 /// folder connector (ADR 0038 item 13). Gives `None` when the file has no
 /// metadata.
-fn file_stamp(path: &Path) -> Option<String> {
+pub(crate) fn file_stamp(path: &Path) -> Option<String> {
     let meta = std::fs::metadata(path).ok()?;
     let modified = meta
         .modified()
@@ -1135,6 +1163,7 @@ pub fn library_file_in_use(
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::DiffNotApproved`],
+/// [`PipelineErrorKind::WaitingForDownload`],
 /// [`PipelineErrorKind::BadAddress`] or [`PipelineErrorKind::Conflict`]
 /// before any file changes on a host.
 ///
@@ -1164,6 +1193,16 @@ pub fn write_draft(
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
             "the draft changed after the diff was approved; approve the new diff",
+        ));
+    }
+    // ADR 0038 item 12: no file changes while a download is not complete.
+    if let Some(waiting) = operations.iter().find(|operation| operation.waiting) {
+        return Err(PipelineError::new(
+            PipelineErrorKind::WaitingForDownload,
+            format!(
+                "{} waits for the download of a file; write the draft after the download is complete",
+                waiting.path
+            ),
         ));
     }
     let bad = feed.bad_addresses();

@@ -11,6 +11,9 @@ ADR.
 
 The research examined Studio at commit `a834386`.
 
+Stophammer release 0.14.0 is deployed on 2026-10-24. Section 4 gives the
+changes for Studio.
+
 ## 1. Search Findings
 
 The report is `reports/2026-10-23-search-code-sharing-and-stophammer.md` in the
@@ -66,3 +69,39 @@ The research compared PodSovereign, a self-hosted podcast host, with Studio:
 
 The research also keeps a map of the Studio design:
 `research_notes/studio/studio-blueprint.html`.
+
+## 4. Stophammer Release 0.14.0
+
+Stophammer deployed release 0.14.0 on 2026-10-24. On that day, `GET
+/node/info` gave `git_revision` `499b301`, and `info.version` of
+`/openapi.json` gave `0.14.0`. The release delivers Stophammer ADR 0078 and
+ADR 0079.
+
+- The search index holds only the text that each entity has now (ADR 0078 §1).
+  This corrects the defect of section 1. The first
+  run and the recipient picker no longer find a feed by a title that it no
+  longer has.
+- A retire deletes each index row of the feed. A publisher hit gives the
+  quality of its feed (ADR 0078 §3 and §4).
+- The node divides `q` into words, and it puts each word in quotation marks
+  (ADR 0078 §5). Each `q` with a word gives `200`, also with an apostrophe.
+  A `q` with no word gives `400`, and a `400` message gives no SQLite text.
+- A GUID that a retire with no block frees returns only through its last
+  source URL, until an operator releases the hold (ADR 0079). The ingest gives
+  the reason `retired_source_conflict`, and the admin route
+  `DELETE /v1/retired-source-holds/{guid}` is new. Studio
+  sends no ingest request. A feed that moves to a new URL after a retire needs
+  the operator release (ADR 0079, Consequences). This concerns the feed move
+  of Studio ADR 0035.
+
+Read-only checks on the live API on 2026-10-24:
+`GET /v1/search?q=haleen'&type=track` gave `200` with 3 rows, and
+`q=title:foo` gave `200` with no rows. The OpenAPI document lists
+`/v1/retired-source-holds/{guid}`.
+
+These items stay open for Studio:
+
+- R1 to R4 need no Stophammer change. The release does not change them.
+- `../musicindex/api.json` gives the version `0.13.2` until the website
+  regenerates it.
+- The release has no prefix search, no cursor change and no query filters.

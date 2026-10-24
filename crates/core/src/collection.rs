@@ -968,7 +968,9 @@ impl Collection {
     ///
     /// The addresses of the sources "read" and "folder" are from the old
     /// location, so the function replaces them. The "folder" address
-    /// becomes `public_url`.
+    /// becomes `public_url`. A feed with no default host of its files
+    /// gets the host from before, so its files keep their host
+    /// (ADR 0038 item 16).
     ///
     /// # Errors
     ///
@@ -985,7 +987,8 @@ impl Collection {
         self.connector(connector)?;
         let tx = self.db.transaction()?;
         tx.execute(
-            "UPDATE feeds SET connector_id = ?2, path = ?3 WHERE id = ?1",
+            "UPDATE feeds SET files_connector_id = COALESCE(files_connector_id, connector_id), \
+             connector_id = ?2, path = ?3 WHERE id = ?1",
             params![feed.0, connector.0, path],
         )?;
         put_address(&tx, feed, AddressSource::Read, None)?;

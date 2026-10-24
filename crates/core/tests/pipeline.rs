@@ -1356,6 +1356,11 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
     assert!(on_a.contains("new-feed-url>https://b.example/album.xml</"));
     let row = s.collection.feed(s.feed).unwrap();
     assert_eq!(row.connector_id, Some(s.b));
+    assert_eq!(
+        row.files_connector_id,
+        Some(s.a),
+        "ADR 0038 item 16: the files of a moved feed keep their host"
+    );
     assert_eq!(row.path.as_deref(), Some("album.xml"));
     assert_eq!(
         row.public_url.as_deref(),

@@ -1316,6 +1316,43 @@ function OtherFileRow({ file, connectors, busy, onDelete, onUndo }) {
   </div>`;
 }
 
+// One difference of the library folder (ADR 0038 items 13 to 15, ADR
+// 0037). `file` is the row of the files route for a missing or a changed
+// file. `onAct` sends the decision of the user. An error shows in the row.
+function ChangeRow({ difference, file, busy, onAct }) {
+  const row = useAction();
+  const act = (body) => row.run(() => onAct(body));
+  const off = busy || row.busy;
+  const name = html`<span class="mono">${difference.path}</span>`;
+  let text;
+  let buttons;
+  if (difference.kind === 'new') {
+    text = html`New file: ${name} (${fileSize(difference.size)})`;
+    buttons = html`<button class="button action" type="button" disabled=${off}
+      onClick=${() => act({ action: 'add', path: difference.path })}>Add to the library</button>`;
+  } else if (difference.kind === 'missing') {
+    const hasSource = file && (file.copies.length > 0 || file.source_url);
+    text = html`Missing: ${name}`;
+    buttons = html`${hasSource && html`<button class="button action" type="button" disabled=${off}
+        onClick=${() => act({ action: 'download', file: difference.file })}>Download again</button>`}
+      <button class="button destructive" type="button" disabled=${off}
+        onClick=${() => act({ action: 'forget', file: difference.file })}>Forget the file</button>`;
+  } else {
+    const hasCopy = file && file.copies.length > 0;
+    text = html`Changed: ${name} (${fileSize(difference.size)}${file ? `, was ${fileSize(file.size)}` : ''})`;
+    buttons = html`<button class="button action" type="button" disabled=${off}
+        onClick=${() => act({ action: 'use_new', file: difference.file })}>Use the new file</button>
+      <button class="button" type="button" disabled=${off || !hasCopy}
+        onClick=${() => act({ action: 'restore', file: difference.file })}>Restore</button>
+      ${!hasCopy && html`<span class="sub">No copy on a host</span>`}`;
+  }
+  return html`<div class="change-row">
+    <span class="title">${text}</span>
+    <div class="actions">${buttons}</div>
+    <${ErrorNotice} error=${row.error} />
+  </div>`;
+}
+
 // The Files page: the host of the release, each of its library files with
 // their copies, and each other host file of its release folder (ADR 0036
 // items 4, 7, 9 and 11; task 021g, task 022b). `onOpsChanged` tells the
@@ -1324,7 +1361,7 @@ function OtherFileRow({ file, connectors, busy, onDelete, onUndo }) {
 // after a discard of the draft and after an "Undo" in the review sheet, so
 // the page loads the files route again (review of milestone 7a, visual
 // check of task 022).
-function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
+function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onRescan }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const { busy, error: opError, run } = useAction();
@@ -1415,6 +1452,20 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
     await load();
   });
 
+  const runLibraryScan = () => scan.run(async () => { await onRescan(); await load(); });
+
+  // Send the decision of the user for one difference. Then scan again and
+  // load the files again. A new file replaces the bytes of the feed, so
+  // the shell loads the draft again. A download starts for "Download
+  // again" and "Restore".
+  const changeLibrary = async (body) => {
+    await api(`/feeds/${feed.id}/library-changes`, { method: 'POST', body });
+    await onRescan();
+    await load();
+    if (body.action === 'use_new') onOpsChanged();
+    if (body.action === 'download' || body.action === 'restore') await loadDownloads();
+  };
+
   const setDefaultHost = (connectorId) => run(async () => {
     await api(`/feeds/${feed.id}/hosts`, { method: 'PUT', body: { files_connector_id: connectorId } });
     await load();
@@ -1449,10 +1500,20 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
 
   const defaultHost = data.files_connector_id ?? feed.connector_id;
 
-  return html`<section class="page-section"><h2>Files</h2>
+  return html`${differences.length > 0 && html`<section class="page-section"><h2>Changes in the library folder</h2>
+      <div class="group">
+        ${differences.map((difference) => html`<${ChangeRow}
+          key=${`${difference.kind}-${difference.file ?? difference.path}`} difference=${difference}
+          file=${data.files.find((f) => f.id === difference.file)} busy=${busy} onAct=${changeLibrary} />`)}
+      </div>
+    </section>`}
+
+    <section class="page-section"><h2>Files</h2>
       <div class="actions">
         <button class="button action" type="button" disabled=${scan.busy} onClick=${runScan}>
           ${scan.busy ? 'Scanning…' : 'Scan the hosts'}</button>
+        <button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
+          Scan the library folder</button>
       </div>
       <${ErrorNotice} error=${scan.error} />
       <${ErrorNotice} error=${opError} />
@@ -1505,7 +1566,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey }) {
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey }) {
+export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -1530,7 +1591,8 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing
   } else if (page === 'recipients') {
     body = html`<${RecipientsPage} model=${model} update=${update} />`;
   } else if (page === 'files') {
-    body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} reloadKey=${filesReloadKey} />`;
+    body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} reloadKey=${filesReloadKey}
+      differences=${differences} onRescan=${onRescan} />`;
   } else {
     body = html`<${AlbumPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} go=${go}
       onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} />`;

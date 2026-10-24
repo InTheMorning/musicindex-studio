@@ -1214,3 +1214,11 @@ textarea:focus { background: var(--fill); }
 .download-bar span { display: block; height: 100%; background: var(--accent); }
 .hint.error-text { color: var(--error); }
 .host-op-row .sub.waiting { color: var(--text); font-weight: 600; }
+
+/* The folder scan (task 023f, ADR 0038 items 13 to 15). */
+.scan-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 12px 16px 0; }
+.change-mark { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.change-row { display: grid; gap: 8px; padding: 10px 16px; }
+.change-row .title { font-weight: 500; overflow-wrap: anywhere; }
+.change-row .sub { color: var(--muted); font-size: .9rem; }
+.group > .change-row + .change-row { border-top: 1px solid var(--sep); }

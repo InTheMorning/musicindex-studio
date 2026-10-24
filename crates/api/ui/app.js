@@ -903,7 +903,7 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors }) {
+function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -945,17 +945,19 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
     </div>
     <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
-      connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey} />
+      connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
+      differences=${differences} onRescan=${onRescan} />
   </div>`;
 }
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors }) {
+function FeedDetail({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
   if (isEditable(feed)) {
     return html`<${EditableFeed} feed=${feed} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting}
-      onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} connectors=${connectors} />`;
+      onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} connectors=${connectors}
+      differences=${differences} onRescan=${onRescan} />`;
   }
   return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
 }
@@ -964,7 +966,7 @@ function FeedDetail({ feed, draft, view, go, adding, onAdding, importing, onImpo
 // items 5 and 6). A click on a different feed opens its pages. A click on
 // the open feed opens or closes its pages. Only the selected feed shows its
 // pages, and only after its draft loads.
-function FeedTree({ feeds, view, draft, go, onAdding, onImporting }) {
+function FeedTree({ feeds, view, draft, go, onAdding, onImporting, changedFeeds }) {
   const selectedId = view.name === 'feed' ? view.id : null;
   const [expanded, setExpanded] = useState(selectedId);
   useEffect(() => { setExpanded(selectedId); }, [selectedId]);
@@ -996,6 +998,7 @@ function FeedTree({ feeds, view, draft, go, onAdding, onImporting }) {
           ${canEdit && html`<span class="chev" aria-hidden="true">▸</span>`}
           <span class=${`dot ${kind.dot}`}></span>
           <span class="label">${feed.title || feed.path || 'Untitled feed'}</span>
+          ${changedFeeds.has(feed.id) && html`<span class="change-mark"><span class="visually-hidden">Changes in the library folder</span></span>`}
         </button>
         ${isOpen && html`<ul>
           <li><button class="node" type="button" aria-current=${isCurrent({}) ? 'page' : 'false'}
@@ -1257,7 +1260,7 @@ function AddFeeds({ connectors, onAdded, onMenu }) {
 // check of task 022). The wide `Shell` shows it in
 // `nav.sidebar`. The narrow `Shell` shows the same content in the drawer,
 // where a selection closes the drawer (task 014d, ADR 0029 item 15).
-function SidebarContent({ feeds, view, draft, go, onAdding, onImporting, vault, onLock, onSelect }) {
+function SidebarContent({ feeds, view, draft, go, onAdding, onImporting, vault, onLock, onSelect, changedFeeds }) {
   const select = (next, options) => { onSelect(); go(next, options); };
   const addTrack = (value) => { onSelect(); onAdding(value); };
   const importFiles = (value) => { onSelect(); onImporting(value); };
@@ -1265,7 +1268,8 @@ function SidebarContent({ feeds, view, draft, go, onAdding, onImporting, vault, 
     <div class="sidebar-scroll">
       <h2>Feeds</h2>
       ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
-      <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} onImporting=${importFiles} />
+      <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} onImporting=${importFiles}
+        changedFeeds=${changedFeeds} />
       <button class="row" type="button" onClick=${() => select({ name: 'add-feed' })}>＋ Add a feed</button>
     </div>
     <footer>
@@ -1310,6 +1314,26 @@ function Shell({ vault, onLock }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // The differences between the library folder and the records (ADR 0038
+  // items 13 to 15). One scan runs after the feeds load. The Files page
+  // runs it again on request and after each action.
+  const [differences, setDifferences] = useState([]);
+  const [noticeClosed, setNoticeClosed] = useState(false);
+  const rescan = useCallback(async () => {
+    const result = await api('/library/scan', { method: 'POST' });
+    setDifferences(result.differences);
+    return result.differences;
+  }, []);
+  const scanned = useRef(false);
+  useEffect(() => {
+    if (feeds === null || scanned.current) return;
+    scanned.current = true;
+    // A failed first scan shows nothing. The Files page shows the error
+    // of a scan that the user starts.
+    rescan().catch(() => {});
+  }, [feeds, rescan]);
+  const changedFeeds = new Set(differences.map((d) => d.feed_id));
+
   const lock = async () => { await api('/vault/lock', { method: 'POST' }).catch(() => {}); onLock(); };
   const selected = view.name === 'feed' && feeds ? feeds.find((f) => f.id === view.id) : null;
   // The shell holds the one draft of the selected feed (ADR 0029 item 4).
@@ -1337,7 +1361,8 @@ function Shell({ vault, onLock }) {
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}
       adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
-      onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} connectors=${connectors} />`;
+      onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} connectors=${connectors}
+      differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
   } else {
     main = withBar(html`<section class="center" style=${{ minHeight: 'calc(100% - var(--bar-h))' }}><div class="card">
       <h1>${feeds.length ? 'Select a feed' : 'Your collection is empty'}</h1>
@@ -1349,13 +1374,23 @@ function Shell({ vault, onLock }) {
   return html`<div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding} onImporting=${setImporting}
-        vault=${vault} onLock=${lock} onSelect=${NOOP} />
+        vault=${vault} onLock=${lock} onSelect=${NOOP} changedFeeds=${changedFeeds} />
     </nav>`}
-    <main class="main" ref=${mainRef}>${main}</main>
+    <main class="main" ref=${mainRef}>
+      ${differences.length > 0 && !noticeClosed && html`<div class="notice scan-notice" role="status">
+        <span>Studio found ${differences.length} ${differences.length === 1 ? 'change' : 'changes'} in the library folder.</span>
+        <div class="actions">
+          <button class="button" type="button"
+            onClick=${() => go({ name: 'feed', id: differences[0].feed_id, page: 'files' })}>Show</button>
+          <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => setNoticeClosed(true)}>✕</button>
+        </div>
+      </div>`}
+      ${main}
+    </main>
     <dialog class="drawer" ref=${drawerRef} aria-label="Collection" onClick=${onBackdrop}>
       ${narrow && html`<nav class="sidebar">
         <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding} onImporting=${setImporting}
-          vault=${vault} onLock=${lock} onSelect=${closeDrawer} />
+          vault=${vault} onLock=${lock} onSelect=${closeDrawer} changedFeeds=${changedFeeds} />
       </nav>`}
     </dialog>
   </div>`;

@@ -9,10 +9,9 @@ Received - 2026-10-24. This request comes from the research repository at
 This document binds nothing in Studio. Studio records each decision in its own
 ADR.
 
-**Wait before an ADR.** On 2026-10-24 the operator decided that Studio writes
-no ADR from this request yet. First the operator fixes the research mockups.
-Then a musicindex ADR codifies the shared rules. Read the request now. Do not draft
-an ADR yet.
+**The hold is lifted.** On 2026-10-25 the operator lifted the hold. musicindex
+ADRs 0027 to 0029 state the shared rules. [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md)
+states sections 1 and 2 of this request for Studio. Section 3 stays open.
 
 The research examined Studio at commit `563cce6`. The mockups are research
 commits `6bacd1c`, `4fedc27` and `8d02b00`.

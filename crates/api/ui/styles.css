@@ -47,6 +47,9 @@
   --grain-opacity: .22;
   --brand-filter: none;
   --bar-h: 56px;
+  /* musicindex ADR 0029 R-SCALE-3: the web scale of the Desktop profile. */
+  --target: 32px;
+  --target-min: 24px;
   /* Entity colors (ADR 0012). Feed, track, playlist and artist each have a
      hue of their own. Host and author are shades of artist. The business
      roles are shades of one violet. Red is only for live now. */
@@ -73,6 +76,11 @@
   --gloss-edge: rgba(45, 123, 255, .34);
   --mark-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='132 160 735 681'%3E%3Cpath d='M132 274L177 274L249 304L249 841L132 841Z'/%3E%3Cpath d='M339 160L489 160L657 280L657 841L546 841L546 388L456 331L456 841L339 841Z'/%3E%3Cpath d='M867 250L867 790L759 841L750 841L750 304L858 250Z'/%3E%3C/svg%3E");
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* musicindex ADR 0024 R-PROFILE-1 and R-TARGET-1: a coarse pointer selects Touch. */
+@media (pointer: coarse) {
+  :root { --target: 44px; --target-min: 28px; }
 }
 
 :root[data-theme="light"] {
@@ -217,7 +225,7 @@ code, .mono {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 18px;
   border: 1px solid var(--pill-edge);
   border-radius: 999px;
@@ -271,7 +279,7 @@ code, .mono {
 .field-body { display: grid; gap: 6px; min-width: 0; }
 .field input, .field textarea {
   width: 100%;
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 14px;
   border: 0;
   border-radius: 10px;
@@ -293,7 +301,7 @@ code, .mono {
 .meter .bars span.on { background: var(--accent); }
 .meter.weak .bars span.on { background: var(--error); }
 .meter .label { color: var(--muted); font-size: .9rem; }
-.check { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.check { display: flex; align-items: center; gap: 10px; min-height: var(--target); cursor: pointer; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 
 .form { display: grid; gap: 18px; }
@@ -381,7 +389,7 @@ code, .mono {
   line-height: 1.05;
 }
 .card p { color: var(--muted); }
-.brand { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; min-height: var(--target); }
 /* The same size and filter as the musicindex.org lockup. */
 .brand img { display: block; width: 150px; height: auto; filter: var(--brand-filter); }
 .brand .product {
@@ -456,7 +464,7 @@ code, .mono {
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 44px;
+  min-height: var(--target);
   padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -483,8 +491,8 @@ code, .mono {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: var(--target);
+  height: var(--target);
   flex-shrink: 0;
   background: transparent;
   border: 0;
@@ -580,7 +588,7 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   border-top: 1px solid var(--sep);
 }
 .sheet .group { background: var(--level-3); border-radius: 12px; padding: 4px 16px; }
-.icon-button { width: 44px; padding: 0; }
+.icon-button { width: var(--target); padding: 0; }
 
 @media (max-width: 760px) {
   dialog.sheet[open] {
@@ -671,7 +679,7 @@ dialog.drawer .sidebar { height: 100%; }
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 44px;
+  min-height: var(--target);
   padding: 8px 12px;
   border-radius: 10px;
   cursor: pointer;
@@ -771,7 +779,7 @@ textarea:focus { background: var(--fill); }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: end; }
 .grid2 > .field { align-content: end; }
 .field select {
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 10px;
   border: 0;
   border-radius: 10px;
@@ -785,7 +793,7 @@ textarea:focus { background: var(--fill); }
 .disclosure > summary {
   display: flex;
   gap: 12px;
-  min-height: 44px;
+  min-height: var(--target);
   align-items: center;
   cursor: pointer;
   list-style: none;
@@ -966,7 +974,7 @@ textarea:focus { background: var(--fill); }
    to row: the checkbox, the name and address, the status, the action. */
 .pick-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 9.5rem 6.5rem;
+  grid-template-columns: var(--target) minmax(0, 1fr) 9.5rem 6.5rem;
   cursor: default;
 }
 .pick-row .summary { white-space: normal; }
@@ -987,7 +995,7 @@ textarea:focus { background: var(--fill); }
 .pick-head .muted { color: var(--muted); font-weight: 400; }
 /* At a narrow width, the status goes below the name. */
 @media (max-width: 760px) {
-  .pick-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .pick-row { grid-template-columns: var(--target) minmax(0, 1fr) auto; }
   .pick-row .summary { grid-column: 2; grid-row: 2; }
   .pick-action { grid-column: 3; grid-row: 1 / span 2; }
 }
@@ -995,8 +1003,8 @@ textarea:focus { background: var(--fill); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: var(--target);
+  height: var(--target);
   flex: none;
   cursor: pointer;
 }
@@ -1079,7 +1087,7 @@ textarea:focus { background: var(--fill); }
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 10px;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -1113,7 +1121,7 @@ textarea:focus { background: var(--fill); }
    Each file of the sheet is one direct row of the group, so that the thin
    separator of the group falls between files. */
 .import-row { padding: 10px 16px; display: grid; gap: 8px; }
-.import-row .import-head { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.import-row .import-head { display: flex; align-items: center; gap: 12px; min-height: var(--target); }
 .import-row .import-head .title {
   flex: 1;
   min-width: 0;
@@ -1126,7 +1134,7 @@ textarea:focus { background: var(--fill); }
 .import-row .import-head .state.failed { color: var(--error); }
 .import-dest { display: grid; gap: 6px; }
 .import-dest select {
-  min-height: 44px;
+  min-height: var(--target);
   padding: 0 10px;
   border: 0;
   border-radius: 10px;

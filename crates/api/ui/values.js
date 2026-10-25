@@ -217,8 +217,8 @@ function identityOf(r) {
 }
 
 // One row of a part of the picker: a checkbox, the name, the address and a
-// status word. The checkbox sits in its own label of 44 px, so that a
-// Remove button can share the row (ADR 0010).
+// status word. The checkbox sits in its own label of one target size, so
+// that a Remove button can share the row (musicindex ADR 0029 R-SCALE-3).
 function PickRow({ name, address, status, checked, taken, onToggle, remove }) {
   const label = taken ? 'Already in this list' : status;
   return html`<div class="link-row pick-row">

@@ -1588,6 +1588,28 @@ fn each_background_uses_a_token() {
     }
 }
 
+/// musicindex ADR 0029 R-SCALE-3: on 2026-10-24 Studio gave each control
+/// 44 px with a mouse. A control takes its height from the `--target`
+/// token: 32 px with a mouse, and 44 px with a coarse pointer.
+#[test]
+fn each_control_height_uses_the_target_token() {
+    let (_, css) = crate::ui::text_files()
+        .find(|(name, _)| *name == "styles.css")
+        .unwrap();
+    let touch = "@media (pointer: coarse) {\n  :root { --target: 44px; --target-min: 28px; }\n}";
+    assert!(
+        css.contains("  --target: 32px;\n  --target-min: 24px;\n") && css.contains(touch),
+        "musicindex ADR 0029 R-SCALE-3: styles.css must set --target to 32 px and \
+         --target-min to 24 px in :root, and to 44 px and 28 px for a coarse pointer."
+    );
+    let rest = css.replacen(touch, "", 1);
+    assert!(
+        !rest.contains("44px"),
+        "musicindex ADR 0029 R-SCALE-3: styles.css has a fixed 44px. Use var(--target), \
+         which is 32 px with a mouse and 44 px with touch."
+    );
+}
+
 /// ADR 0037 item 5: on 2026-10-23 the operator asked for button roles that
 /// show what each button does. The class "button quiet" has no fill, so
 /// it is only for an icon button, such as the close button of a sheet.

@@ -40,6 +40,7 @@
 - [ADR 0036: Library records, the host inventory and host operations](adr/0036-library-records-host-inventory-and-host-operations.md)
 - [ADR 0037: Button roles](adr/0037-button-roles.md)
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
+- [ADR 0039: The shell, Releases and the outline of a feed](adr/0039-the-shell-releases-and-the-outline.md)
 
 ## Plans
 

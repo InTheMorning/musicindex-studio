@@ -1,6 +1,8 @@
 //! Connectors: read and write the files of one host type (ADR 0006, ADR 0015).
 
 mod local;
+#[cfg(any(test, feature = "testing"))]
+pub mod suite;
 
 use std::fmt;
 use std::io::Read;

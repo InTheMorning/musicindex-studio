@@ -32,5 +32,5 @@ The planning model uses this list after each packet, before its commit.
 | Work | Result | Required corrections |
 | --- | --- | --- |
 | [027a](../tasks/studio-v1-task-027a-trait-changes.md) | Pass | The planning model removed two copies of the hexadecimal text code in `digest.rs`. Both functions now use `finish_hex`. The planning model accepted two choices of the coding agent. `ConnectorError::new` is now public, so that the API test can make an error. A vault read error in `secret_of` gives `InvalidConfig`, with a message that holds no secret. |
-| 027b | Open | |
+| [027b](../tasks/studio-v1-task-027b-trait-test-module.md) | Pass | The planning model removed an assertion that `write_from` and `write` give the same version. The packet asks only for the same bytes, and an S3 multipart upload gives a different ETag for the same bytes. The planning model changed `allow` to `expect` with a reason for `clippy::missing_panics_doc`. The manual check passes: each check uses only the trait, and the suite reads no file. LocalFolder gives no SHA-256 and can make no redirect, so two checks assert nothing for it. |
 | 027c | Open | |

@@ -342,6 +342,7 @@ fn listed(path: String, meta: &fs::Metadata) -> ListedFile {
 
 #[cfg(test)]
 mod tests {
+    use super::super::suite;
     use super::*;
 
     #[test]
@@ -501,5 +502,96 @@ mod tests {
         );
         let old = r#"{"root":"/srv/feeds","base_url":"https://example.com"}"#;
         assert_eq!(LocalFolder::from_config(old).unwrap(), folder);
+    }
+
+    /// Run a check of the shared suite on a new temporary folder.
+    fn suite_check(check: fn(&dyn Fn() -> Box<dyn Connector>)) {
+        let dirs = std::cell::RefCell::new(Vec::new());
+        check(&|| {
+            let dir = tempfile::tempdir().unwrap();
+            let folder = LocalFolder::new(dir.path(), None);
+            dirs.borrow_mut().push(dir);
+            Box::new(folder)
+        });
+    }
+
+    #[test]
+    fn the_suite_runs_all_checks() {
+        suite_check(suite::run_all);
+    }
+
+    #[test]
+    fn suite_read_of_an_absent_file_gives_none() {
+        suite_check(suite::read_of_an_absent_file_gives_none);
+    }
+
+    #[test]
+    fn suite_write_then_read_gives_the_bytes_and_the_version() {
+        suite_check(suite::write_then_read_gives_the_bytes_and_the_version);
+    }
+
+    #[test]
+    fn suite_write_over_a_file_with_absent_is_a_conflict() {
+        suite_check(suite::write_over_a_file_with_absent_is_a_conflict);
+    }
+
+    #[test]
+    fn suite_write_with_an_old_version_is_a_conflict() {
+        suite_check(suite::write_with_an_old_version_is_a_conflict);
+    }
+
+    #[test]
+    fn suite_write_with_the_current_version_replaces_the_file() {
+        suite_check(suite::write_with_the_current_version_replaces_the_file);
+    }
+
+    #[test]
+    fn suite_write_from_gives_the_same_file_as_write() {
+        suite_check(suite::write_from_gives_the_same_file_as_write);
+    }
+
+    #[test]
+    fn suite_write_from_with_a_short_reader_writes_nothing() {
+        suite_check(suite::write_from_with_a_short_reader_writes_nothing);
+    }
+
+    #[test]
+    fn suite_stat_gives_the_size_and_a_new_stamp_after_a_change() {
+        suite_check(suite::stat_gives_the_size_and_a_new_stamp_after_a_change);
+    }
+
+    #[test]
+    fn suite_list_gives_each_file_in_path_sequence() {
+        suite_check(suite::list_gives_each_file_in_path_sequence);
+    }
+
+    #[test]
+    fn suite_delete_with_the_current_stamp_removes_the_file() {
+        suite_check(suite::delete_with_the_current_stamp_removes_the_file);
+    }
+
+    #[test]
+    fn suite_delete_with_an_old_stamp_is_a_conflict() {
+        suite_check(suite::delete_with_an_old_stamp_is_a_conflict);
+    }
+
+    #[test]
+    fn suite_delete_of_an_absent_file_is_not_found() {
+        suite_check(suite::delete_of_an_absent_file_is_not_found);
+    }
+
+    #[test]
+    fn suite_a_path_out_of_the_host_is_invalid() {
+        suite_check(suite::a_path_out_of_the_host_is_invalid);
+    }
+
+    #[test]
+    fn suite_sha256_when_given_is_the_sha256_of_the_bytes() {
+        suite_check(suite::sha256_when_given_is_the_sha256_of_the_bytes);
+    }
+
+    #[test]
+    fn suite_set_redirect_without_the_ability_is_unsupported() {
+        suite_check(suite::set_redirect_without_the_ability_is_unsupported);
     }
 }

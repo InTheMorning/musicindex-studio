@@ -46,6 +46,11 @@
 - [ADR 0042: UI models with Node tests](adr/0042-ui-models-with-node-tests.md)
 - [ADR 0043: The Phase 9 connectors and the interface change](adr/0043-phase-9-connectors-and-the-interface-change.md)
 - [ADR 0044: The nsite signer](adr/0044-the-nsite-signer.md)
+- [ADR 0045: The Phase 9 crates, test servers and host forms](adr/0045-phase-9-crates-test-servers-and-host-forms.md)
+- [ADR 0046: The S3 and R2 connector](adr/0046-the-s3-and-r2-connector.md)
+- [ADR 0047: The SFTP connector](adr/0047-the-sftp-connector.md)
+- [ADR 0048: The nsite and Blossom connectors](adr/0048-the-nsite-and-blossom-connectors.md)
+- [ADR 0049: The Rust toolchain is pinned](adr/0049-the-rust-toolchain-is-pinned.md)
 
 ## Plans
 
@@ -127,6 +132,13 @@
 - [Studio v1 task 027a: The trait changes](tasks/studio-v1-task-027a-trait-changes.md)
 - [Studio v1 task 027b: The test module of the trait](tasks/studio-v1-task-027b-trait-test-module.md)
 - [Studio v1 task 027c: The confirmation before the deletions](tasks/studio-v1-task-027c-confirmation.md)
+- [Studio v1 task 028: The S3 and R2 connector](tasks/studio-v1-task-028-s3-connector.md)
+- [Studio v1 task 028a: The fake S3 server](tasks/studio-v1-task-028a-fake-s3-server.md)
+- [Studio v1 task 028b: The S3 connector](tasks/studio-v1-task-028b-s3-connector.md)
+- [Studio v1 task 028c: The provider test and the host route](tasks/studio-v1-task-028c-provider-test-and-route.md)
+- [Studio v1 task 028d: The S3 host form](tasks/studio-v1-task-028d-s3-host-form.md)
+- [Studio v1 task 029: The SFTP connector](tasks/studio-v1-task-029-sftp-connector.md)
+- [Studio v1 task 030: The nsite and Blossom connectors](tasks/studio-v1-task-030-nsite-and-blossom.md)
 
 ## Reviews
 
@@ -147,6 +159,7 @@
 - [Phase 8 visual check, 2026-10-25](reviews/2026-10-25-phase-8-visual-check.md)
 - [Task 026 review checklist, 2026-10-25](reviews/2026-10-25-task-026-review-checklist.md)
 - [Task 027 review checklist, 2026-10-25](reviews/2026-10-25-task-027-review-checklist.md)
+- [Task 028 review checklist, 2026-10-25](reviews/2026-10-25-task-028-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

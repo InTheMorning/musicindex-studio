@@ -19,9 +19,9 @@ On 2026-10-25, Phase 0 to Phase 8 are complete. `studio-core` reads a feed into 
 
 The UI starts on Releases and shows the outline of an open feed. At narrow width it is one stack.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0044`. ADR 0017 is proposed.
+- Decisions: `docs/adr/0001` to `docs/adr/0049`. ADR 0017 is proposed.
 - Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check. Task 026 built the shell of ADR 0039, and Phase 9 (remaining connectors, [ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](docs/adr/0044-the-nsite-signer.md)) is next. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
-- [Task 027](docs/tasks/studio-v1-task-027-connector-interface.md) (the connector interface change) is complete. The S3 and R2 connector is next.
+- [Task 027](docs/tasks/studio-v1-task-027-connector-interface.md) (the connector interface change) is complete. [Task 028](docs/tasks/studio-v1-task-028-s3-connector.md) (S3 and R2, [ADR 0046](docs/adr/0046-the-s3-and-r2-connector.md)) is next, then SFTP and nsite with Blossom ([ADR 0045](docs/adr/0045-phase-9-crates-test-servers-and-host-forms.md) to [ADR 0048](docs/adr/0048-the-nsite-and-blossom-connectors.md)).
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
@@ -41,7 +41,7 @@ The UI starts on Releases and shows the outline of an open feed. At narrow width
 
 ## Commands
 
-These four checks must pass before each commit. CI runs the same checks ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md) adds the fourth).
+These four checks must pass before each commit. CI runs the same checks ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md) adds the fourth). `rust-toolchain.toml` pins the Rust version, and CI uses the same version ([ADR 0049](docs/adr/0049-the-rust-toolchain-is-pinned.md)).
 
 ```sh
 cargo fmt --all --check
@@ -94,6 +94,7 @@ Situational rules:
 
 - The v1 connectors are local folder, SFTP, S3 and R2, Blossom and nsite, and the optional self-hosted file host. The Git pages connector comes after v1 ([ADR 0006](docs/adr/0006-connectors-and-the-v1-set.md), [ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md)).
 - No deletion on a host occurs before each new file passes the confirmation ([ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md)).
+- No test sends a request to a host outside the computer. Each connector passes the trait suite against a local test server ([ADR 0045](docs/adr/0045-phase-9-crates-test-servers-and-host-forms.md)).
 - The draft status, "Versions" and "Review" stay in the toolbar at all scroll positions and widths. The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. At 760 px or less, Studio is one stack with a root page and an outline page, and no menu button ([ADR 0039](docs/adr/0039-the-shell-releases-and-the-outline.md), musicindex ADR 0030).
 - Do not copy code from `../mi-studio`. Use it as reference only ([ADR 0001](docs/adr/0001-one-core-with-desktop-and-server-shells.md)).
 

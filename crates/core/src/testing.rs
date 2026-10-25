@@ -3,6 +3,7 @@
 //! The `testing` feature makes it available to the tests of other crates.
 
 pub mod fake_s3;
+pub mod sshd;
 
 use std::collections::HashMap;
 use std::fmt::Write as _;

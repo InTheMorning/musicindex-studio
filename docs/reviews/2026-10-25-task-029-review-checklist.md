@@ -33,7 +33,7 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
-| 029a | Open | |
+| [029a](../tasks/studio-v1-task-029a-sshd-harness.md) | Pass | The planning model added a retry to `TestSshd::start`. When `sshd` stops because a different process took the free port, the harness tries a new port, a maximum of five times. Packet 029c runs many SFTP tests at the same time, so this race is more probable there. The manual check passes: no `sshd` child process stays after three runs, and CI installs `openssh-server`. |
 | 029b | Open | |
 | 029c | Open | |
 | 029d | Open | |

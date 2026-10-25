@@ -1,16 +1,17 @@
 //! The local folder connector (ADR 0006, ADR 0015).
 
 use std::fs;
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use sha2::Digest;
 
-use crate::digest::content_version;
+use crate::digest::{content_version, finish_hex, sha256_file};
 
 use super::{
     Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, LIST_MAX_DEPTH,
-    LIST_MAX_FILES, ListedFile, Stamp, Version, relative_path,
+    LIST_MAX_FILES, ListedFile, Stamp, Version, length_error, relative_path,
 };
 
 /// A folder on the machine that runs Studio.
@@ -110,6 +111,49 @@ fn io_error(path: &Path, error: &std::io::Error) -> ConnectorError {
     )
 }
 
+/// Copy exactly `length` bytes of `reader` into a new file, in blocks of
+/// 64 KiB. Gives the SHA-256 of the bytes as lowercase hexadecimal.
+fn copy_to_temporary(
+    temporary: &Path,
+    reader: &mut dyn Read,
+    length: u64,
+    path: &str,
+) -> Result<String, ConnectorError> {
+    let mut file = fs::File::create(temporary).map_err(|e| io_error(temporary, &e))?;
+    let mut hash = sha2::Sha256::new();
+    let mut block = vec![0_u8; 64 * 1024];
+    let mut left = length;
+    while left > 0 {
+        let want = usize::try_from(left).map_or(block.len(), |n| n.min(block.len()));
+        let count = reader.read(&mut block[..want]).map_err(|e| {
+            ConnectorError::new(
+                ConnectorErrorKind::Io,
+                format!("cannot read the data for {path}: {e}"),
+            )
+        })?;
+        if count == 0 {
+            return Err(length_error(path, length));
+        }
+        hash.update(&block[..count]);
+        file.write_all(&block[..count])
+            .map_err(|e| io_error(temporary, &e))?;
+        left -= count as u64;
+    }
+    // The reader must have no more bytes.
+    let mut extra = [0_u8; 1];
+    let more = reader.read(&mut extra).map_err(|e| {
+        ConnectorError::new(
+            ConnectorErrorKind::Io,
+            format!("cannot read the data for {path}: {e}"),
+        )
+    })?;
+    if more != 0 {
+        return Err(length_error(path, length));
+    }
+    file.sync_all().map_err(|e| io_error(temporary, &e))?;
+    Ok(finish_hex(hash))
+}
+
 fn version_of(bytes: &[u8]) -> Version {
     content_version(bytes)
 }
@@ -159,6 +203,56 @@ impl Connector for LocalFolder {
         drop(file);
         fs::rename(&temporary, &full).map_err(|e| io_error(&full, &e))?;
         Ok(version_of(bytes))
+    }
+
+    fn write_from(
+        &self,
+        path: &str,
+        reader: &mut dyn Read,
+        length: u64,
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        let full = self.full_path(path)?;
+        // The check reads the current file in blocks, or only asks for
+        // its metadata when the write expects no file.
+        let matches = match expected {
+            Expected::Absent => match fs::metadata(&full) {
+                Ok(_) => false,
+                Err(e) if e.kind() == ErrorKind::NotFound => true,
+                Err(e) => return Err(io_error(&full, &e)),
+            },
+            Expected::Version(want) => match sha256_file(&full) {
+                Ok(hex) => want.as_str() == format!("sha256:{hex}"),
+                Err(e) if e.kind() == ErrorKind::NotFound => false,
+                Err(e) => return Err(io_error(&full, &e)),
+            },
+        };
+        if !matches {
+            return Err(ConnectorError::new(
+                ConnectorErrorKind::Conflict,
+                format!("{} changed on the host", full.display()),
+            ));
+        }
+        if let Some(parent) = full.parent() {
+            fs::create_dir_all(parent).map_err(|e| io_error(parent, &e))?;
+        }
+        let mut temporary = full.as_os_str().to_owned();
+        temporary.push(".studio-tmp");
+        let temporary = PathBuf::from(temporary);
+        let result = copy_to_temporary(&temporary, reader, length, path);
+        match result {
+            Ok(hex) => {
+                if let Err(e) = fs::rename(&temporary, &full) {
+                    let _ = fs::remove_file(&temporary);
+                    return Err(io_error(&full, &e));
+                }
+                Ok(Version::new(format!("sha256:{hex}")))
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&temporary);
+                Err(error)
+            }
+        }
     }
 
     fn public_url(&self, path: &str) -> Option<String> {
@@ -288,6 +382,62 @@ mod tests {
             folder.public_url("a/b/01 Song (Live).mp3").as_deref(),
             Some("https://example.com/feeds/a/b/01%20Song%20%28Live%29.mp3")
         );
+    }
+
+    #[test]
+    fn write_from_gives_the_same_version_as_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = LocalFolder::new(dir.path(), None);
+        let bytes: Vec<u8> = (0..200_000_u32).map(|n| (n % 251) as u8).collect();
+        let v1 = folder.write("a.bin", &bytes, &Expected::Absent).unwrap();
+        let v2 = folder
+            .write_from(
+                "b/b.bin",
+                &mut bytes.as_slice(),
+                bytes.len() as u64,
+                &Expected::Absent,
+            )
+            .unwrap();
+        assert_eq!(v1, v2);
+        assert_eq!(fs::read(dir.path().join("b/b.bin")).unwrap(), bytes);
+        assert!(!dir.path().join("b/b.bin.studio-tmp").exists());
+
+        let v3 = folder
+            .write_from("b/b.bin", &mut &b"new"[..], 3, &Expected::Version(v2))
+            .unwrap();
+        assert_eq!(v3, content_version(b"new"));
+        let error = folder
+            .write_from("b/b.bin", &mut &b"x"[..], 1, &Expected::Version(v1))
+            .unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::Conflict);
+        assert_eq!(fs::read(dir.path().join("b/b.bin")).unwrap(), b"new");
+    }
+
+    #[test]
+    fn write_from_with_a_wrong_length_gives_io_and_leaves_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = LocalFolder::new(dir.path(), None);
+        for (data, length) in [(&b"abc"[..], 10_u64), (&b"abcdef"[..], 3)] {
+            let error = folder
+                .write_from("a.bin", &mut { data }, length, &Expected::Absent)
+                .unwrap_err();
+            assert_eq!(error.kind(), ConnectorErrorKind::Io);
+            assert!(!dir.path().join("a.bin").exists());
+            assert!(!dir.path().join("a.bin.studio-tmp").exists());
+        }
+    }
+
+    #[test]
+    fn write_from_with_absent_gives_conflict_when_a_file_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = LocalFolder::new(dir.path(), None);
+        folder.write("a.bin", b"one", &Expected::Absent).unwrap();
+        let error = folder
+            .write_from("a.bin", &mut &b"two"[..], 3, &Expected::Absent)
+            .unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::Conflict);
+        assert_eq!(fs::read(dir.path().join("a.bin")).unwrap(), b"one");
+        assert!(!dir.path().join("a.bin.studio-tmp").exists());
     }
 
     #[test]

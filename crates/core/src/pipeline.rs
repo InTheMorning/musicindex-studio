@@ -1678,14 +1678,17 @@ fn put_uploads_and_copies(
                 format!("feed {} has no release folder yet", row.id.0),
             )
         })?;
-        let bytes = std::fs::read(library.path(folder, &file.path)).map_err(|error| {
+        let library_path = library.path(folder, &file.path);
+        let read_error = |error: std::io::Error| {
             PipelineError::new(
                 PipelineErrorKind::Connector,
                 format!("{}: cannot read the library file: {error}", file.path),
             )
-        })?;
+        };
+        let mut source = std::fs::File::open(&library_path).map_err(read_error)?;
+        let length = source.metadata().map_err(read_error)?.len();
         let target = hosts.get(operation.connector_id)?;
-        match target.write(&operation.path, &bytes, &Expected::Absent) {
+        match target.write_from(&operation.path, &mut source, length, &Expected::Absent) {
             Ok(_) => {}
             Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
                 return Err(PipelineError::new(
@@ -1707,7 +1710,10 @@ fn put_uploads_and_copies(
             listed.size,
             &listed.stamp,
         )?;
-        let sha256 = file.sha256.clone().unwrap_or_else(|| sha256_hex(&[&bytes]));
+        let sha256 = match file.sha256.clone() {
+            Some(sha256) => sha256,
+            None => crate::digest::sha256_file(&library_path).map_err(read_error)?,
+        };
         collection.set_host_file_sha(operation.connector_id, &operation.path, &sha256)?;
         touched.insert(operation.connector_id);
     }

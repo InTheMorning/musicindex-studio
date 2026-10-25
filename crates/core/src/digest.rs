@@ -10,12 +10,7 @@ pub(crate) fn sha256_hex(parts: &[&[u8]]) -> String {
     for part in parts {
         hash.update(part);
     }
-    hash.finalize()
-        .iter()
-        .fold(String::with_capacity(64), |mut text, byte| {
-            let _ = write!(text, "{byte:02x}");
-            text
-        })
+    finish_hex(hash)
 }
 
 /// The SHA-256 of a file, as lowercase hexadecimal. The function reads the
@@ -33,16 +28,20 @@ pub(crate) fn sha256_file(path: &std::path::Path) -> std::io::Result<String> {
         }
         hash.update(&block[..read]);
     }
-    Ok(hash
-        .finalize()
-        .iter()
-        .fold(String::with_capacity(64), |mut text, byte| {
-            let _ = write!(text, "{byte:02x}");
-            text
-        }))
+    Ok(finish_hex(hash))
 }
 
 /// The version marker of file content: its SHA-256 (ADR 0015).
 pub(crate) fn content_version(bytes: &[u8]) -> crate::connector::Version {
     crate::connector::Version::new(format!("sha256:{}", sha256_hex(&[bytes])))
+}
+
+/// The lowercase hexadecimal text of a SHA-256 hasher.
+pub(crate) fn finish_hex(hash: Sha256) -> String {
+    hash.finalize()
+        .iter()
+        .fold(String::with_capacity(64), |mut text, byte| {
+            let _ = write!(text, "{byte:02x}");
+            text
+        })
 }

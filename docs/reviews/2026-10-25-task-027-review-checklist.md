@@ -31,6 +31,6 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
-| 027a | Open | |
+| [027a](../tasks/studio-v1-task-027a-trait-changes.md) | Pass | The planning model removed two copies of the hexadecimal text code in `digest.rs`. Both functions now use `finish_hex`. The planning model accepted two choices of the coding agent. `ConnectorError::new` is now public, so that the API test can make an error. A vault read error in `secret_of` gives `InvalidConfig`, with a message that holds no secret. |
 | 027b | Open | |
 | 027c | Open | |

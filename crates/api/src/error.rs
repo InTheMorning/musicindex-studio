@@ -96,6 +96,10 @@ impl From<ConnectorError> for ApiError {
             ConnectorErrorKind::InvalidConfig => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "invalid_config")
             }
+            ConnectorErrorKind::Unauthorized => (StatusCode::BAD_GATEWAY, "host_unauthorized"),
+            ConnectorErrorKind::Unavailable => {
+                (StatusCode::SERVICE_UNAVAILABLE, "host_unavailable")
+            }
             _ => (StatusCode::BAD_GATEWAY, "connector"),
         };
         Self::new(status, code, error.to_string())
@@ -243,5 +247,23 @@ impl From<ScanError> for ApiError {
                 error.to_string(),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_host_that_refuses_or_is_away_gives_its_own_code() {
+        let unauthorized = ConnectorError::new(ConnectorErrorKind::Unauthorized, "refused");
+        let error = ApiError::from(unauthorized);
+        assert_eq!(error.status, StatusCode::BAD_GATEWAY);
+        assert_eq!(error.code, "host_unauthorized");
+
+        let unavailable = ConnectorError::new(ConnectorErrorKind::Unavailable, "away");
+        let error = ApiError::from(unavailable);
+        assert_eq!(error.status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(error.code, "host_unavailable");
     }
 }

@@ -3,12 +3,14 @@
 mod local;
 
 use std::fmt;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 pub use local::LocalFolder;
 
 use crate::collection::ConnectorRow;
 use crate::vault::OpenVault;
+use zeroize::Zeroizing;
 
 /// A version marker of a file on a host. Each connector selects its form:
 /// a content hash, an ETag or a commit ID.
@@ -117,6 +119,10 @@ pub enum ConnectorErrorKind {
     Io,
     /// The connector cannot do this operation.
     Unsupported,
+    /// The host refused the credentials.
+    Unauthorized,
+    /// Studio cannot connect to the host.
+    Unavailable,
 }
 
 /// An error from a connector.
@@ -127,7 +133,9 @@ pub struct ConnectorError {
 }
 
 impl ConnectorError {
-    pub(crate) fn new(kind: ConnectorErrorKind, message: impl Into<String>) -> Self {
+    /// Make an error. The message must hold no secret.
+    #[must_use]
+    pub fn new(kind: ConnectorErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             message: message.into(),
@@ -174,6 +182,48 @@ pub trait Connector {
         bytes: &[u8],
         expected: &Expected,
     ) -> Result<Version, ConnectorError>;
+
+    /// Write the bytes of `reader` only when the file on the host is as
+    /// `expected`. Gives the new version marker. The function reads
+    /// `length` bytes, so a large file does not fill the memory.
+    ///
+    /// The default reads the bytes into memory and calls
+    /// [`Connector::write`]. A connector that can stream replaces it.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`ConnectorErrorKind::Io`] when the reader gives fewer or more
+    /// than `length` bytes. Gives [`ConnectorErrorKind::Conflict`] when the
+    /// file on the host is not as `expected`. The file then does not change.
+    fn write_from(
+        &self,
+        path: &str,
+        reader: &mut dyn Read,
+        length: u64,
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        let mut bytes = Vec::new();
+        reader
+            .take(length.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|e| ConnectorError::new(ConnectorErrorKind::Io, e.to_string()))?;
+        if bytes.len() as u64 != length {
+            return Err(length_error(path, length));
+        }
+        self.write(path, &bytes, expected)
+    }
+
+    /// The SHA-256 of a file as lowercase hexadecimal, when the host gives
+    /// it with no read of the file. The default gives `None`.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`ConnectorError`] when the path is not valid or the host
+    /// fails.
+    fn sha256(&self, path: &str) -> Result<Option<String>, ConnectorError> {
+        let _ = path;
+        Ok(None)
+    }
 
     /// The public URL of a file, when the connector knows it.
     fn public_url(&self, path: &str) -> Option<String>;
@@ -227,6 +277,48 @@ pub trait Connector {
     }
 }
 
+/// The error for a reader that gives a different number of bytes than its
+/// length.
+pub(crate) fn length_error(path: &str, length: u64) -> ConnectorError {
+    ConnectorError::new(
+        ConnectorErrorKind::Io,
+        format!("the data for {path} does not have the length {length}"),
+    )
+}
+
+/// The secret of a connector row, from the open vault.
+///
+/// # Errors
+///
+/// Gives [`ConnectorErrorKind::Unauthorized`] when the row has a secret and
+/// the vault is locked. Gives [`ConnectorErrorKind::InvalidConfig`] when the
+/// vault does not have the secret. The messages hold no secret.
+fn secret_of(
+    row: &ConnectorRow,
+    vault: Option<&OpenVault>,
+) -> Result<Option<Zeroizing<Vec<u8>>>, ConnectorError> {
+    let Some(secret_ref) = row.secret_ref.as_deref() else {
+        return Ok(None);
+    };
+    let Some(vault) = vault else {
+        return Err(ConnectorError::new(
+            ConnectorErrorKind::Unauthorized,
+            "the vault is locked",
+        ));
+    };
+    match vault.get(secret_ref) {
+        Ok(Some(secret)) => Ok(Some(secret)),
+        Ok(None) => Err(ConnectorError::new(
+            ConnectorErrorKind::InvalidConfig,
+            "the vault does not have the secret of the connector",
+        )),
+        Err(_) => Err(ConnectorError::new(
+            ConnectorErrorKind::InvalidConfig,
+            "the vault cannot open the secret of the connector",
+        )),
+    }
+}
+
 /// Make the connector of a collection row.
 ///
 /// The vault gives the secret of a connector that needs one.
@@ -234,11 +326,14 @@ pub trait Connector {
 /// # Errors
 ///
 /// Gives [`ConnectorErrorKind::InvalidConfig`] when the kind is not known or
-/// the configuration is not valid.
+/// the configuration is not valid. Gives [`ConnectorErrorKind::Unauthorized`]
+/// when the row has a secret and the vault is locked.
 pub fn from_row(
     row: &ConnectorRow,
-    _vault: Option<&OpenVault>,
+    vault: Option<&OpenVault>,
 ) -> Result<Box<dyn Connector>, ConnectorError> {
+    // The local folder kind ignores the secret. A remote kind uses it.
+    let _secret = secret_of(row, vault)?;
     match row.kind.as_str() {
         LocalFolder::KIND => Ok(Box::new(LocalFolder::from_config(&row.config)?)),
         other => Err(ConnectorError::new(
@@ -275,6 +370,43 @@ pub(crate) fn relative_path(path: &str) -> Result<PathBuf, ConnectorError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(secret_ref: Option<&str>) -> ConnectorRow {
+        ConnectorRow {
+            id: crate::collection::ConnectorId(1),
+            kind: LocalFolder::KIND.to_owned(),
+            name: "Home".to_owned(),
+            config: "{}".to_owned(),
+            secret_ref: secret_ref.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn secret_of_gives_each_result_of_the_four_cases() {
+        let mut vault = OpenVault::create("correct horse battery staple 2026").unwrap();
+        vault.put("host-1", b"s3cret").unwrap();
+
+        assert!(secret_of(&row(None), None).unwrap().is_none());
+        assert!(secret_of(&row(None), Some(&vault)).unwrap().is_none());
+
+        let error = secret_of(&row(Some("host-1")), None).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::Unauthorized);
+        assert_eq!(error.to_string(), "the vault is locked");
+
+        let error = secret_of(&row(Some("other")), Some(&vault)).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::InvalidConfig);
+
+        let secret = secret_of(&row(Some("host-1")), Some(&vault))
+            .unwrap()
+            .unwrap();
+        assert_eq!(secret.as_slice(), b"s3cret");
+    }
+
+    #[test]
+    fn from_row_refuses_a_row_with_a_secret_and_a_locked_vault() {
+        let error = from_row(&row(Some("host-1")), None).err().unwrap();
+        assert_eq!(error.kind(), ConnectorErrorKind::Unauthorized);
+    }
 
     #[test]
     fn relative_path_accepts_only_normal_segments() {

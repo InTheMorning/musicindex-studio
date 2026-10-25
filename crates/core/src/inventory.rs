@@ -230,6 +230,15 @@ pub fn host_sha(
         return Ok(Some(sha256));
     }
     let connector = hosts.get(connector_id)?;
+    // A host can give the SHA-256 with no read of the file.
+    if let Some(sha256) = connector.sha256(path)? {
+        let Some(listed) = connector.stat(path)? else {
+            return Ok(None);
+        };
+        collection.put_host_file(connector_id, path, listed.size, &listed.stamp)?;
+        collection.set_host_file_sha(connector_id, path, &sha256)?;
+        return Ok(Some(sha256));
+    }
     let Some(read) = connector.read(path)? else {
         return Ok(None);
     };
@@ -485,6 +494,60 @@ mod tests {
         fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
             self.0.delete(path, expected)
         }
+    }
+
+    /// A connector that gives a SHA-256 and refuses each read.
+    struct HostSha(LocalFolder);
+
+    impl Connector for HostSha {
+        fn read(&self, path: &str) -> Result<Option<crate::connector::FileRead>, ConnectorError> {
+            panic!("host_sha read {path}");
+        }
+        fn write(
+            &self,
+            path: &str,
+            bytes: &[u8],
+            expected: &Expected,
+        ) -> Result<crate::connector::Version, ConnectorError> {
+            self.0.write(path, bytes, expected)
+        }
+        fn sha256(&self, _path: &str) -> Result<Option<String>, ConnectorError> {
+            Ok(Some("ab".repeat(32)))
+        }
+        fn public_url(&self, path: &str) -> Option<String> {
+            self.0.public_url(path)
+        }
+        fn list(&self) -> Result<crate::connector::FileList, ConnectorError> {
+            self.0.list()
+        }
+        fn stat(&self, path: &str) -> Result<Option<crate::connector::ListedFile>, ConnectorError> {
+            self.0.stat(path)
+        }
+        fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
+            self.0.delete(path, expected)
+        }
+    }
+
+    #[test]
+    fn host_sha_uses_the_sha256_of_the_connector_with_no_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = open_connector(dir.path(), "https://example.com");
+        folder.write("a.mp3", b"one", &Expected::Absent).unwrap();
+        let collection = Collection::open_in_memory().unwrap();
+        let connector_id = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        let mut hosts = Hosts::new();
+        hosts.insert(connector_id, Box::new(HostSha(folder)));
+        scan(&collection, &hosts, connector_id).unwrap();
+
+        let sha256 = host_sha(&collection, &hosts, connector_id, "a.mp3").unwrap();
+        assert_eq!(sha256, Some("ab".repeat(32)));
+        let row = collection
+            .host_file(connector_id, "a.mp3")
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.sha256, Some("ab".repeat(32)));
     }
 
     #[test]

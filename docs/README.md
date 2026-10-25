@@ -138,6 +138,11 @@
 - [Studio v1 task 028c: The provider test and the host route](tasks/studio-v1-task-028c-provider-test-and-route.md)
 - [Studio v1 task 028d: The S3 host form](tasks/studio-v1-task-028d-s3-host-form.md)
 - [Studio v1 task 029: The SFTP connector](tasks/studio-v1-task-029-sftp-connector.md)
+- [Studio v1 task 029a: The sshd test harness](tasks/studio-v1-task-029a-sshd-harness.md)
+- [Studio v1 task 029b: The SFTP requests](tasks/studio-v1-task-029b-sftp-requests.md)
+- [Studio v1 task 029c: The SFTP connector](tasks/studio-v1-task-029c-sftp-connector.md)
+- [Studio v1 task 029d: The host key confirmation and the SFTP host route](tasks/studio-v1-task-029d-sftp-host-route.md)
+- [Studio v1 task 029e: The SFTP host form](tasks/studio-v1-task-029e-sftp-host-form.md)
 - [Studio v1 task 030: The nsite and Blossom connectors](tasks/studio-v1-task-030-nsite-and-blossom.md)
 
 ## Reviews
@@ -160,6 +165,7 @@
 - [Task 026 review checklist, 2026-10-25](reviews/2026-10-25-task-026-review-checklist.md)
 - [Task 027 review checklist, 2026-10-25](reviews/2026-10-25-task-027-review-checklist.md)
 - [Task 028 review checklist, 2026-10-25](reviews/2026-10-25-task-028-review-checklist.md)
+- [Task 029 review checklist, 2026-10-25](reviews/2026-10-25-task-029-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

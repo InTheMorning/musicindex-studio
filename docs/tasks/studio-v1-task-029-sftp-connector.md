@@ -9,13 +9,13 @@ A user can add an SFTP server as a host, with a private key, a password or ssh-a
 
 ## Packets
 
-The planning model writes the packets after task 028 is complete, so that they use what task 028 shows. The packets go in this sequence:
+The planning model examines each packet with the [review checklist](../reviews/2026-10-25-task-029-review-checklist.md) before its commit. The packets go in this sequence:
 
-1. 029a: the `sshd` test harness. A test starts the system `sshd` on a free loopback port with a temporary configuration, and CI installs `openssh-server`.
-2. 029b: the SFTP version 3 requests over an `ssh2` channel, with the OpenSSH extensions.
-3. 029c: the SFTP connector, with the trait suite against `sshd`.
-4. 029d: the host key confirmation and the host route.
-5. 029e: the SFTP host form.
+1. [029a: the sshd test harness](studio-v1-task-029a-sshd-harness.md).
+2. [029b: the SFTP requests](studio-v1-task-029b-sftp-requests.md). It depends on 029a.
+3. [029c: the SFTP connector](studio-v1-task-029c-sftp-connector.md). It depends on 029b.
+4. [029d: the host key confirmation and the SFTP host route](studio-v1-task-029d-sftp-host-route.md). It depends on 029c.
+5. [029e: the SFTP host form](studio-v1-task-029e-sftp-host-form.md). It depends on 029d.
 
 ## Acceptance Criteria
 
@@ -34,3 +34,4 @@ Visual:
 Human test, open until the operator can use a real SFTP host:
 
 - The operator adds a web host with SFTP and a public address. Studio writes a release to it, and a podcast app plays a track.
+- A login with a password, and a login with ssh-agent. An `sshd` that runs as a normal user cannot check a password, so no automatic test examines these logins.

@@ -2361,13 +2361,13 @@ mod tests {
         let error = collection.delete_connector(connector).unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::InUse);
         collection.delete_feed(feed).unwrap();
-        assert!(collection.feeds().unwrap().is_empty());
+        assert_eq!(collection.feeds().unwrap(), Vec::new());
         assert_eq!(
             collection.delete_feed(feed).unwrap_err().kind(),
             CollectionErrorKind::NotFound
         );
         collection.delete_connector(connector).unwrap();
-        assert!(collection.connectors().unwrap().is_empty());
+        assert_eq!(collection.connectors().unwrap(), Vec::new());
     }
 
     #[test]
@@ -2440,7 +2440,7 @@ mod tests {
         let collection = Collection::open(&path).unwrap();
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(collection.feeds().unwrap().len(), 1);
-        assert!(collection.known_recipients().unwrap().is_empty());
+        assert_eq!(collection.known_recipients().unwrap(), Vec::new());
         collection
             .save_recipient(&Recipient {
                 address: Some("addr".to_owned()),
@@ -2572,7 +2572,7 @@ mod tests {
                 &Version::new("v2"),
             )
             .unwrap();
-        assert!(collection.known_recipients().unwrap().is_empty());
+        assert_eq!(collection.known_recipients().unwrap(), Vec::new());
 
         collection
             .record_state(
@@ -2583,7 +2583,7 @@ mod tests {
             .unwrap();
         assert_eq!(collection.known_recipients().unwrap().len(), 1);
         collection.delete_feed(feed).unwrap();
-        assert!(collection.known_recipients().unwrap().is_empty());
+        assert_eq!(collection.known_recipients().unwrap(), Vec::new());
     }
 
     #[test]
@@ -2601,7 +2601,7 @@ mod tests {
         assert_eq!(known[0].feeds, 0);
         assert_eq!(known[0].saved_id, Some(id));
         collection.remove_saved_recipient(id).unwrap();
-        assert!(collection.known_recipients().unwrap().is_empty());
+        assert_eq!(collection.known_recipients().unwrap(), Vec::new());
         assert_eq!(
             collection.remove_saved_recipient(id).unwrap_err().kind(),
             CollectionErrorKind::NotFound
@@ -2735,7 +2735,7 @@ mod tests {
             .unwrap();
         assert_eq!(collection.host_files(connector).unwrap()[0].sha256, None);
         collection.remove_host_file(connector, "a.mp3").unwrap();
-        assert!(collection.host_files(connector).unwrap().is_empty());
+        assert_eq!(collection.host_files(connector).unwrap(), Vec::new());
 
         // Draft operations.
         let operation = collection
@@ -2752,7 +2752,7 @@ mod tests {
         assert_eq!(operations[0].id, operation);
         assert_eq!(operations[0].kind, DraftOperationKind::Copy);
         collection.remove_draft_operations(feed).unwrap();
-        assert!(collection.draft_operations(feed).unwrap().is_empty());
+        assert_eq!(collection.draft_operations(feed).unwrap(), Vec::new());
 
         collection.remove_library_file(file).unwrap();
         assert_eq!(
@@ -2784,7 +2784,7 @@ mod tests {
         assert_eq!(collection.draft_operations(feed).unwrap().len(), 1);
 
         collection.remove_draft_operation(feed, operation).unwrap();
-        assert!(collection.draft_operations(feed).unwrap().is_empty());
+        assert_eq!(collection.draft_operations(feed).unwrap(), Vec::new());
         assert_eq!(
             collection
                 .remove_draft_operation(feed, operation)
@@ -2828,7 +2828,7 @@ mod tests {
         assert_eq!(row.stamp.as_deref(), Some("9-1"));
         collection.remove_download(file).unwrap();
         collection.remove_download(file).unwrap();
-        assert!(collection.downloads().unwrap().is_empty());
+        assert_eq!(collection.downloads().unwrap(), Vec::new());
     }
 
     #[test]
@@ -2959,7 +2959,7 @@ mod tests {
         let collection = Collection::open_in_memory().unwrap();
         collection.drop_draft_files_table().unwrap();
         assert!(!collection.has_draft_files_table().unwrap());
-        assert!(collection.draft_files(FeedId(1)).unwrap().is_empty());
+        assert_eq!(collection.draft_files(FeedId(1)).unwrap(), Vec::new());
         // A second call does nothing: it does not give an error.
         collection.drop_draft_files_table().unwrap();
     }
@@ -2976,7 +2976,7 @@ mod tests {
         };
         collection.add_draft_file(feed, &file).unwrap();
         collection.delete_feed(feed).unwrap();
-        assert!(collection.draft_files(feed).unwrap().is_empty());
+        assert_eq!(collection.draft_files(feed).unwrap(), Vec::new());
     }
 
     #[test]

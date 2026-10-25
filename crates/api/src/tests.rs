@@ -3493,7 +3493,7 @@ async fn a_download_over_http_puts_the_file_in_the_library_with_its_sha256() {
     assert_eq!(sha256.len(), 64);
     assert!(sha256.bytes().all(|b| b.is_ascii_hexdigit()));
     assert!(file.stamp.is_some());
-    assert!(collection.downloads().unwrap().is_empty());
+    assert_eq!(collection.downloads().unwrap(), Vec::new());
 
     // The feed has no host. The files route gives the downloaded file
     // with no planned address, and the feed still uses it at its address.
@@ -3573,7 +3573,7 @@ async fn a_download_stops_and_its_record_goes_out() {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    assert!(collection.downloads().unwrap().is_empty());
+    assert_eq!(collection.downloads().unwrap(), Vec::new());
 }
 
 #[tokio::test]

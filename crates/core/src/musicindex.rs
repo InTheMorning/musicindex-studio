@@ -362,7 +362,7 @@ mod tests {
             .unwrap();
         assert_eq!(track.title, "Track One");
         assert_eq!(track.recipients.len(), 1);
-        assert!(track.tracks.is_empty());
+        assert_eq!(track.tracks, Vec::new());
 
         assert_eq!(
             index

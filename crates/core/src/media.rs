@@ -429,7 +429,7 @@ fn encode_mp3(
         left.clear();
         right.clear();
         if channel_count == 2 {
-            for frame in part.chunks_exact(2) {
+            for frame in part.as_chunks::<2>().0 {
                 left.push(frame[0] << shift);
                 right.push(frame[1] << shift);
             }

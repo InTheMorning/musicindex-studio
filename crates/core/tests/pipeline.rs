@@ -124,7 +124,7 @@ fn a_draft_that_changed_after_the_approval_does_not_write() {
     .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::DiffNotApproved);
     assert_eq!(live(&s), FEED);
-    assert!(s.collection.snapshots(s.feed).unwrap().is_empty());
+    assert_eq!(s.collection.snapshots(s.feed).unwrap(), Vec::new());
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn a_file_that_changed_on_the_host_after_the_draft_started_does_not_write() {
         .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
     assert_eq!(live(&s), theirs);
-    assert!(s.collection.snapshots(s.feed).unwrap().is_empty());
+    assert_eq!(s.collection.snapshots(s.feed).unwrap(), Vec::new());
     assert!(s.collection.draft(s.feed).unwrap().is_some());
 }
 
@@ -151,7 +151,10 @@ fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
     assert!(!live(&s).contains("track-1"));
-    assert!(s.collection.item_guids(s.feed).unwrap().is_empty());
+    assert_eq!(
+        s.collection.item_guids(s.feed).unwrap(),
+        Vec::<String>::new()
+    );
 
     let snapshot = s.collection.snapshots(s.feed).unwrap()[0].id;
     pipeline::draft_from_snapshot(&s.collection, s.connector.as_ref(), s.feed, snapshot).unwrap();
@@ -574,8 +577,8 @@ fn a_draft_that_refers_to_an_imported_file_gives_one_upload_until_it_is_on_the_h
     inventory::scan(&s.collection, &s.hosts, planned.connector_id).unwrap();
 
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    assert!(diff.operations.is_empty());
-    assert!(diff.files.is_empty());
+    assert_eq!(diff.operations, Vec::new());
+    assert_eq!(diff.files, Vec::new());
 }
 
 #[test]
@@ -860,8 +863,8 @@ fn a_remote_file_is_not_an_upload_in_the_diff() {
     })
     .unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    assert!(diff.operations.is_empty());
-    assert!(diff.files.is_empty());
+    assert_eq!(diff.operations, Vec::new());
+    assert_eq!(diff.files, Vec::new());
 }
 
 #[test]
@@ -1075,7 +1078,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
         )
         .unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    assert!(diff.operations.is_empty());
+    assert_eq!(diff.operations, Vec::new());
     assert_eq!(diff.blocked.len(), 1);
     assert_eq!(diff.blocked[0].feed_titles, ["Second Album".to_owned()]);
 
@@ -1521,7 +1524,7 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
         .add_draft_operation(s.feed, DraftOperationKind::Delete, None, s.a, "album.xml")
         .unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    assert!(diff.operations.is_empty());
+    assert_eq!(diff.operations, Vec::new());
     assert_eq!(diff.blocked.len(), 1);
     assert!(diff.blocked[0].pointer);
     pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();

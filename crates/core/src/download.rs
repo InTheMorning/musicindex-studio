@@ -473,7 +473,7 @@ mod tests {
         assert_eq!(row.size, 11);
         assert_eq!(row.sha256, Some(sha256_hex(&[b"audio bytes"])));
         assert!(row.stamp.is_some());
-        assert!(s.collection.downloads().unwrap().is_empty());
+        assert_eq!(s.collection.downloads().unwrap(), Vec::new());
         assert!(!part.exists());
         assert_eq!(
             std::fs::read(s.library.path("album", "a.mp3")).unwrap(),

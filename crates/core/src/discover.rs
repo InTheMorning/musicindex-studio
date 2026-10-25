@@ -441,7 +441,7 @@ mod tests {
                 ("Album B".to_owned(), Via::Release)
             ]
         );
-        assert!(found.failed.is_empty());
+        assert_eq!(found.failed, Vec::new());
     }
 
     #[test]

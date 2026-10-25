@@ -312,7 +312,7 @@ mod tests {
     fn a_new_feed_url_is_a_difference_and_never_the_address() {
         let moved = address(AddressSource::NewFeedUrl, "https://new.example/f.xml");
         assert_eq!(choose(std::slice::from_ref(&moved)), None);
-        assert!(differences(std::slice::from_ref(&moved)).is_empty());
+        assert_eq!(differences(std::slice::from_ref(&moved)), Vec::new());
         let read = address(AddressSource::Read, "https://a.example/f.xml");
         assert_eq!(differences(&[read, moved.clone()]), [moved]);
     }
@@ -363,7 +363,7 @@ mod tests {
             Some("https://m.example/feeds/c.xml")
         );
         assert_eq!(feed.address_source, Some(AddressSource::Folder));
-        assert!(disagreements(&collection, id).is_empty());
+        assert_eq!(disagreements(&collection, id), Vec::new());
         // A second match keeps the inferred address.
         assert_eq!(
             apply_folder_address(&mut collection, id).unwrap(),

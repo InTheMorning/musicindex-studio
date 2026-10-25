@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(report.release_folders, 2);
         assert_eq!(report.feed_files, 2);
         assert_eq!(report.moved_files, 1);
-        assert!(report.errors.is_empty());
+        assert_eq!(report.errors, Vec::new());
 
         let row_one = s.collection.feed(feed_one).unwrap();
         let row_two = s.collection.feed(feed_two).unwrap();
@@ -550,7 +550,7 @@ mod tests {
         s.hosts.insert(missing_connector, Box::new(gone_folder));
 
         let second = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
-        assert!(second.errors.is_empty());
+        assert_eq!(second.errors, Vec::new());
         assert_eq!(second.feed_files, 1);
         let row = s.collection.feed(broken).unwrap();
         assert_eq!(row.folder.as_deref(), Some("gone"));
@@ -571,7 +571,7 @@ mod tests {
         let report = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
         assert_eq!(report.release_folders, 1);
         assert_eq!(report.feed_files, 1);
-        assert!(report.errors.is_empty());
+        assert_eq!(report.errors, Vec::new());
 
         let row = s.collection.feed(feed).unwrap();
         let folder = row.folder.unwrap();

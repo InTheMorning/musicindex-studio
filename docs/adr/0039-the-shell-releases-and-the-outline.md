@@ -4,7 +4,7 @@
 - Date: 2026-10-25
 - Owner: operator
 - Replaces: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
-- Amended: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel.
+- Amended: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel. They always show, also with the outline of item 5 (musicindex ADR 0027 R-SHELL-1 item 4).
 
 ## Context
 
@@ -29,7 +29,7 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### The Outline Of An Open Feed
 
-5. While a feed is open, the left panel shows the outline of that feed in place of the destinations. The left panel is one panel at any time.
+5. While a feed is open, the left panel shows the outline of that feed in place of Releases and Add a feed. Hosts and Lock Studio stay at the bottom (item 1). The left panel is one panel at any time.
 6. The outline shows a link "Releases", the cover and the title of the feed, then these items in this sequence: Album, each track by its number and title, "Add a track", "Import files", Value routes, Credits and links, Files.
 7. The link "Releases" opens the Releases page at the same scroll position, with the row of the feed marked. It is a destination link, not a back control (musicindex ADR 0027 R-NAV-2 item 5).
 8. Each item of the outline opens one page of the editor. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
@@ -79,4 +79,4 @@ Visual, for the operator:
 
 Situational, until a decision replaces this layout:
 
-- The left panel holds the destinations, or the outline of the open feed. It never holds both.
+- The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom.

@@ -84,7 +84,7 @@ Durable rules:
 Situational rules:
 
 - The v1 connectors are local folder, SFTP, S3 and R2, Git pages, Blossom and nsite, and the optional self-hosted file host ([ADR 0006](docs/adr/0006-connectors-and-the-v1-set.md)).
-- The draft status, "Versions" and "Review" stay in the toolbar at all scroll positions and widths. The left panel holds the destinations, or the outline of the open feed, never both ([ADR 0039](docs/adr/0039-the-shell-releases-and-the-outline.md)).
+- The draft status, "Versions" and "Review" stay in the toolbar at all scroll positions and widths. The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom ([ADR 0039](docs/adr/0039-the-shell-releases-and-the-outline.md)).
 - Do not copy code from `../mi-studio`. Use it as reference only ([ADR 0001](docs/adr/0001-one-core-with-desktop-and-server-shells.md)).
 
 Documentation:

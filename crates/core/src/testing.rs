@@ -2,6 +2,8 @@
 //!
 //! The `testing` feature makes it available to the tests of other crates.
 
+pub mod fake_s3;
+
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::{BufRead, BufReader, Write};

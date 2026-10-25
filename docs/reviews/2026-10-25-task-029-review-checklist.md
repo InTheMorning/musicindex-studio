@@ -34,7 +34,7 @@ The planning model uses this list after each packet, before its commit.
 | Work | Result | Required corrections |
 | --- | --- | --- |
 | [029a](../tasks/studio-v1-task-029a-sshd-harness.md) | Pass | The planning model added a retry to `TestSshd::start`. When `sshd` stops because a different process took the free port, the harness tries a new port, a maximum of five times. Packet 029c runs many SFTP tests at the same time, so this race is more probable there. The manual check passes: no `sshd` child process stays after three runs, and CI installs `openssh-server`. |
-| 029b | Open | |
+| [029b](../tasks/studio-v1-task-029b-sftp-requests.md) | Pass | The planning model corrected eight code comments for Simplified Technical English. One comment gave the change time, but the code reads the modification time. The manual check passes. The code has no `unsafe` block, and a response with a different ID gives an `Io` error in a unit test. Each test against `TestSshd` has its own server, so it uses `TestSshd::root()` and not a folder below it. Each 32 KiB part of a write waits for its status, because the packet does not make a faster write necessary. |
 | 029c | Open | |
 | 029d | Open | |
 | 029e | Open | |

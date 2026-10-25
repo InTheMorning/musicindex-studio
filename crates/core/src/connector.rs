@@ -2,6 +2,7 @@
 
 mod local;
 mod s3;
+mod sftp_wire;
 #[cfg(any(test, feature = "testing"))]
 pub mod suite;
 

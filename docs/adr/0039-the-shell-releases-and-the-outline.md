@@ -5,6 +5,7 @@
 - Owner: operator
 - Replaces: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
 - Amended: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel. They always show, also with the outline of item 5 (musicindex ADR 0027 R-SHELL-1 item 4).
+- Amended: 2026-10-25 by operator decision. Items 10 and 11 put the left panel behind a menu button at narrow width. The menu button is at the top left and always visible. No tab bar shows.
 
 ## Context
 
@@ -40,8 +41,8 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### Narrow Width
 
-10. At 760 px or less, the destinations are in a tab bar when no feed is open.
-11. At 760 px or less, the outline of an open feed is a drawer. A button in the editor bar opens it.
+10. At 760 px or less, the left panel collapses behind a menu button. The button is the first control of the bar, at the top left, and it is always visible (musicindex ADR 0027 R-SHELL-1 item 7).
+11. The menu button opens the left panel as a drawer below the bar: the destinations or the outline, with Hosts and Lock Studio at its bottom. The back control of item 9 comes after the menu button (musicindex ADR 0027 R-NAV-2 item 6).
 
 ### Value Routes
 
@@ -58,7 +59,6 @@ The operator checked the Studio mockup of the research repository (`research_not
 - The sidebar tree of ADR 0029 goes, and the outline replaces it.
 - The tests that examine the tree change with the build of this ADR.
 - The draft status, "Versions" and "Review" stay in the editor bar ([ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 1 to 4).
-- Open: the drawer against a tab bar for the outline at narrow width (open question O-8 of the Studio journeys in the research repository).
 - Open: a search of the collection (O-9). No decision covers it.
 
 ## Verification
@@ -73,7 +73,7 @@ Visual, for the operator:
 
 - Studio starts on Releases, and a feed opens over it with its outline.
 - Hosts and Lock Studio are at the bottom of the left panel in a short window and in a tall window.
-- At 390 px, the outline opens as a drawer from the editor bar.
+- At 390 px, the menu button shows at the top left on each page, and it opens and closes the left panel.
 
 ## Invariants
 

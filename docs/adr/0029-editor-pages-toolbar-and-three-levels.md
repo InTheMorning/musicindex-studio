@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: musicindex ADR 0023 R-WORD-2, on 2026-10-25. The page "Recipients" of item 5 is "Value routes". [ADR 0010](0010-studio-uses-the-afterglow-direction.md#rules-that-musicindex-replaces) names the change.
 
 ## Context
 

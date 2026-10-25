@@ -61,6 +61,7 @@ Keep development and check data in `.studio-dev/` at the repository root. Git ig
 - Feed identity does not change. Studio keeps the feed GUID and each item GUID ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md)).
 - No write occurs without a diff that the user has seen ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md)).
 - Studio uses the musicindex.org "Afterglow" visual direction ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
+- musicindex ADRs 0020 to 0026 own the interface rules that musicindex.org, Studio and v4vmm share. They replace parts of ADR 0010, ADR 0029 and ADR 0037, and ADR 0010 names each part. A change to a shared rule needs a record in `../musicindex`.
 
 ## Working Rules
 
@@ -75,7 +76,7 @@ Durable rules:
 - The UI loads nothing from other servers, and it has no build step ([ADR 0016](docs/adr/0016-ui-without-a-build-step.md)). A test enforces the first part.
 - In local mode, each `/api/` request needs the access token, and each request needs a loopback `Host` ([ADR 0017](docs/adr/0017-local-api-access.md)). Tests enforce this.
 - The vault refuses a passphrase with fewer than 12 characters or a zxcvbn score below 3. The UI gives no advice on how to make a passphrase ([ADR 0018](docs/adr/0018-passphrase-strength-and-error-color.md)).
-- An entity color is not a general accent. An error uses the `--error` token, not an entity color ([ADR 0018](docs/adr/0018-passphrase-strength-and-error-color.md)). Each control is a minimum of 44 px high, and all functions work from the keyboard ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
+- An entity color is not a general accent. An error uses the `--error` token, not an entity color ([ADR 0018](docs/adr/0018-passphrase-strength-and-error-color.md)). All functions work from the keyboard ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)). A control has the target size of its profile: 28 px with a mouse and 44 px with touch (musicindex ADR 0024 R-TARGET-1).
 - Each labeled button has a role: primary, action, normal or destructive. A button with a text label is not a `button quiet` ([ADR 0037](docs/adr/0037-button-roles.md)).
 - Each entry of a list shows as one summary line, and one entry of a list is open at a time. A section that the user does not change in each visit starts collapsed, with a summary line ([ADR 0028](docs/adr/0028-summary-lines-and-one-open-entry.md)). A test enforces the `details` elements.
 - The editor uses a maximum of three background levels: the page, a group and an open entry. A level changes the fill only, and a border does not identify a level ([ADR 0029](docs/adr/0029-editor-pages-toolbar-and-three-levels.md)).
@@ -97,5 +98,6 @@ Documentation:
 
 - Research: `../musicindex-research`. It is private. Do not copy text that has a private notice.
 - Visual direction: `../musicindex`, musicindex ADR 0003 and ADR 0012, and `search.html`.
+- Shared interface rules: musicindex ADRs 0020 to 0026. Shared assets and tokens: `../musicindex-assets` (musicindex ADR 0022).
 - Feed API: Stophammer, through `../musicindex/api.json`.
 - MSP 2.0: `../MSP-2.0`.

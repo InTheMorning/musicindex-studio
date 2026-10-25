@@ -4,6 +4,7 @@
 - Date: 2026-10-25
 - Owner: operator
 - Replaces: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
+- Amended: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel.
 
 ## Context
 
@@ -21,7 +22,7 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### The Destinations
 
-1. With no feed open, the left panel holds the destinations: Releases, Add a feed, Hosts and Lock Studio.
+1. With no feed open, the left panel holds the destinations. Releases and Add a feed are at the top. Hosts and Lock Studio are at the bottom of the panel, and stay there at each height of the window.
 2. Releases is a list page at the full width of the content area. Each row shows the cover, the type label, the host and the draft state, for example "Saved, not written".
 3. Releases is the start page. An empty collection starts the first-run wizard of [ADR 0020](0020-first-run-asks-one-question.md).
 4. No page is a placeholder. "Select a feed" goes.
@@ -71,6 +72,7 @@ Mechanical, at the owning layer:
 Visual, for the operator:
 
 - Studio starts on Releases, and a feed opens over it with its outline.
+- Hosts and Lock Studio are at the bottom of the left panel in a short window and in a tall window.
 - At 390 px, the outline opens as a drawer from the editor bar.
 
 ## Invariants

@@ -371,7 +371,7 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
   </div>`;
 }
 
-function AddHostForm({ onAdded }) {
+function LocalHostForm({ onAdded }) {
   const [name, setName] = useState('');
   const [root, setRoot] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -401,6 +401,138 @@ function AddHostForm({ onAdded }) {
     <${ErrorNotice} error=${hostError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : 'Add the folder'}</button></div>
   </form>`;
+}
+
+// The fields of an S3 or R2 bucket (ADR 0046). The secret access key goes
+// to the vault. The form never shows it again.
+function S3HostForm({ onAdded }) {
+  const [values, setValues] = useState({
+    name: '', endpoint: '', region: 'auto', bucket: '', prefix: '',
+    url_style: 'path', base_url: '', access_key_id: '', secret_access_key: '',
+  });
+  const [needVault, setNeedVault] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState(null);
+  const { busy, error, run } = useAction();
+  // A functional update, so that two input events before the next render
+  // keep both values, as when a password manager fills the form.
+  const set = (key) => (e) => {
+    const { value } = e.target;
+    setValues((current) => ({ ...current, [key]: value }));
+  };
+  const send = () => run(async () => {
+    let connector;
+    try {
+      connector = await api('/connectors', {
+        method: 'POST',
+        // An empty name takes the bucket name.
+        body: {
+          kind: 's3',
+          name: values.name.trim() || values.bucket.trim(),
+          endpoint: values.endpoint.trim(),
+          region: values.region.trim() || 'auto',
+          bucket: values.bucket.trim(),
+          prefix: values.prefix.trim(),
+          url_style: values.url_style,
+          base_url: values.base_url.trim() || null,
+          access_key_id: values.access_key_id.trim(),
+          secret_access_key: values.secret_access_key,
+        },
+      });
+    } catch (e) {
+      if (e.code === 'vault_required') { setNeedVault(true); return; }
+      throw e;
+    }
+    onAdded(connector);
+  });
+  const submit = (event) => {
+    event.preventDefault();
+    send();
+  };
+  const ready = values.endpoint.trim() && values.bucket.trim() && values.access_key_id.trim() && values.secret_access_key;
+  // An invalid address belongs to the endpoint field or to the public
+  // address field. The message of the route names the field.
+  const addressError = error && error.code === 'invalid_address' ? FIELD_MESSAGES.invalid_address : null;
+  const publicAddressError = addressError && /public address/.test(error.message) ? addressError : null;
+  const endpointError = addressError && !publicAddressError ? addressError : null;
+  let notice = null;
+  if (error && !addressError) {
+    switch (error.code) {
+      case 'no_conditions':
+        notice = html`<div class="notice error" role="alert"><strong>Studio cannot write to this provider safely</strong>${error.message}</div>`;
+        break;
+      case 'host_unauthorized':
+        notice = html`<div class="notice error" role="alert"><strong>The provider refused the access key.</strong></div>`;
+        break;
+      case 'host_unavailable':
+        notice = html`<div class="notice error" role="alert"><strong>Studio cannot connect to the endpoint.</strong></div>`;
+        break;
+      case 'vault_locked':
+        notice = html`<div class="notice error" role="alert"><strong>Unlock the vault first.</strong></div>`;
+        break;
+      default:
+        notice = html`<${ErrorNotice} error=${error} />`;
+    }
+  }
+
+  if (recoveryKey) {
+    return html`<${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${() => { setRecoveryKey(null); send(); }} />`;
+  }
+  if (needVault) {
+    return html`<${CreateVault} onDone=${(key) => { setNeedVault(false); if (key) setRecoveryKey(key); else send(); }} />`;
+  }
+  return html`<form class="form" onSubmit=${submit}>
+    <${Field} id="s3-name" label="Name (optional)" hint="Studio uses the bucket name when you leave this empty."
+      value=${values.name} onInput=${set('name')} />
+    <${Field} id="s3-endpoint" label="Endpoint address" type="url" required
+      placeholder="https://<account>.r2.cloudflarestorage.com"
+      hint="The S3 API address that your provider gives."
+      error=${endpointError} value=${values.endpoint} onInput=${set('endpoint')} />
+    <${Field} id="s3-region" label="Region"
+      hint="R2 uses auto. AWS uses the region of the bucket, such as us-east-1."
+      value=${values.region} onInput=${set('region')} />
+    <${Field} id="s3-bucket" label="Bucket" required value=${values.bucket} onInput=${set('bucket')} />
+    <${Field} id="s3-prefix" label="Folder in the bucket (optional)" placeholder="feeds/"
+      value=${values.prefix} onInput=${set('prefix')} />
+    <div class="field"><label for="s3-style">Address style</label>
+      <div class="field-body">
+        <select id="s3-style" class="button" value=${values.url_style} onChange=${set('url_style')}>
+          <option value="path">Path style</option>
+          <option value="virtual">Virtual host style</option>
+        </select>
+      </div></div>
+    <${Field} id="s3-url" label="Public address of the bucket (optional)" type="url"
+      hint="The custom domain that publishes the bucket. R2 needs a custom domain for a public feed."
+      error=${publicAddressError} value=${values.base_url} onInput=${set('base_url')} />
+    <${Field} id="s3-key" label="Access key ID" required autocomplete="off"
+      value=${values.access_key_id} onInput=${set('access_key_id')} />
+    <${Field} id="s3-secret" label="Secret access key" type="password" required autocomplete="off"
+      hint="Studio keeps this key in your vault."
+      value=${values.secret_access_key} onInput=${set('secret_access_key')} />
+    ${notice}
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Testing the bucket…' : 'Add the bucket'}</button></div>
+  </form>`;
+}
+
+// The first choice is the type of the host. The form below it follows the
+// type (ADR 0045 item 4).
+function AddHostForm({ onAdded }) {
+  const [type, setType] = useState('local');
+  return html`<div class="form">
+    <fieldset class="choices">
+      <legend>Type of host</legend>
+      <label class="choice">
+        <input type="radio" name="host-type" value="local" checked=${type === 'local'} onChange=${() => setType('local')} />
+        <span class="text"><span class="title">Folder on this computer</span></span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="host-type" value="s3" checked=${type === 's3'} onChange=${() => setType('s3')} />
+        <span class="text"><span class="title">S3 or R2 bucket</span></span>
+      </label>
+    </fieldset>
+    ${type === 's3'
+      ? html`<${S3HostForm} onAdded=${onAdded} />`
+      : html`<${LocalHostForm} onAdded=${onAdded} />`}
+  </div>`;
 }
 
 // Make a new album feed in a connected folder, as a draft with no file on
@@ -1125,7 +1257,7 @@ function LibraryPanel() {
   </article>`;
 }
 
-// One local folder host. "Edit" opens the name field and the public
+// One host, a local folder or an S3 or R2 bucket. "Edit" opens the name field and the public
 // address field, with "Save" and "Cancel" (task 022b, ADR 0037). "Save"
 // calls `PUT /connectors/{id}`.
 function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged }) {
@@ -1150,9 +1282,11 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
     });
   };
   const addressError = splitError(error, ['invalid_address']);
+  const isS3 = connector.kind === 's3';
+  const noun = isS3 ? 'bucket' : 'folder';
   return html`<article class="panel host">
     <header class="host-head">
-      <span class="eyebrow"><span class="dot hosting"></span>Folder on this computer</span>
+      <span class="eyebrow"><span class="dot hosting"></span>${isS3 ? 'S3 or R2 bucket' : 'Folder on this computer'}</span>
       ${!editing && html`<div class="actions">
         <button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>
         <button class="button destructive" type="button" disabled=${removeBusy}
@@ -1163,7 +1297,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
       ? html`<form class="form" onSubmit=${save}>
           <${Field} id=${`host-${connector.id}-name`} label="Name" required
             value=${name} onInput=${(e) => setName(e.target.value)} />
-          <${Field} id=${`host-${connector.id}-url`} label="Public address of the folder" type="url"
+          <${Field} id=${`host-${connector.id}-url`} label=${`Public address of the ${noun}`} type="url"
             placeholder="https://music.example.com/feeds" error=${addressError.field}
             value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
           <${ErrorNotice} error=${addressError.other} />
@@ -1174,7 +1308,11 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
         </form>`
       : html`<h2>${connector.name}</h2>
           <dl class="facts">
-            <dt>Folder</dt><dd class="mono">${config.root}</dd>
+            ${isS3
+              ? html`<dt>Endpoint</dt><dd class="mono">${config.endpoint}</dd>
+                <dt>Bucket</dt><dd class="mono">${config.bucket}</dd>
+                <dt>Folder in the bucket</dt><dd class="mono">${config.prefix || '—'}</dd>`
+              : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
             <dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">

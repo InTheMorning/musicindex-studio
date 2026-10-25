@@ -44,7 +44,10 @@ This section replaces the confirmation of [ADR 0036](0036-library-records-host-i
 
 7. Studio calls `stat` on each new file through its connector. The step passes when the size is the size of the library file. Studio does not read the file again.
 8. Then Studio requests the public address of each new file and of the feed XML. The step passes when the host gives a success status. A host with no public address skips this step.
-9. When step 7 or step 8 does not pass, the feed XML and the new files stay on the host. Studio does no deletion. Each deletion stays a host operation, and the user can start it again.
+9. When step 7 or step 8 does not pass, the feed XML and the new files stay on the host. Studio does no deletion. Each deletion stays a host operation, and the user can start it again:
+   - The draft then starts from the written feed XML, and it keeps each deletion.
+   - The draft gets a "confirm" operation for each new file. A confirm operation keeps the host and the path of its file.
+   - The next write needs a new approval. It does steps 7 and 8 again for each confirm operation, before the deletions.
 
 ### The Hosts
 

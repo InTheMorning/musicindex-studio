@@ -123,6 +123,10 @@
 - [Studio v1 task 026c: The shell UI](tasks/studio-v1-task-026c-shell-ui.md)
 - [Studio v1 task 026d: The Value routes page](tasks/studio-v1-task-026d-value-routes.md)
 - [Studio v1 task 026e: One stack at narrow width](tasks/studio-v1-task-026e-narrow-stack.md)
+- [Studio v1 task 027: The connector interface change](tasks/studio-v1-task-027-connector-interface.md)
+- [Studio v1 task 027a: The trait changes](tasks/studio-v1-task-027a-trait-changes.md)
+- [Studio v1 task 027b: The test module of the trait](tasks/studio-v1-task-027b-trait-test-module.md)
+- [Studio v1 task 027c: The confirmation before the deletions](tasks/studio-v1-task-027c-confirmation.md)
 
 ## Reviews
 
@@ -142,6 +146,7 @@
 - [Phase 8 review checklist, 2026-10-25](reviews/2026-10-25-phase-8-review-checklist.md)
 - [Phase 8 visual check, 2026-10-25](reviews/2026-10-25-phase-8-visual-check.md)
 - [Task 026 review checklist, 2026-10-25](reviews/2026-10-25-task-026-review-checklist.md)
+- [Task 027 review checklist, 2026-10-25](reviews/2026-10-25-task-027-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

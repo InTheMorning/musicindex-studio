@@ -147,6 +147,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - Decisions: [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](../adr/0044-the-nsite-signer.md).
 - Sequence: the interface change, then S3 and R2, then SFTP, then nsite and Blossom.
+- Task: [027](../tasks/studio-v1-task-027-connector-interface.md) (the interface change), in three packets.
 - Mechanical check: each connector passes the test module of the trait against a local test server.
 - Mechanical check: a test confirms that Studio does no deletion when a new file does not pass the confirmation.
 - Open research items. Each one needs a live host, a container or a different computer:

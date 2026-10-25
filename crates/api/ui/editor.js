@@ -736,6 +736,7 @@ function operationKindLabel(kind) {
     case 'upload': return 'Upload';
     case 'copy': return 'Copy';
     case 'delete': return 'Delete';
+    case 'confirm': return 'Confirm';
     default: return kind;
   }
 }
@@ -746,6 +747,7 @@ const OPERATION_NOTE = {
   upload: 'The feed uses this file.',
   copy: 'A spare copy. The feed does not use it.',
   delete: 'Studio deletes it after the feed is written.',
+  confirm: 'Studio makes sure that the host gives this file.',
 };
 
 // One row of a host operation of the diff: its kind, its host, its path

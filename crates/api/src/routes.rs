@@ -1188,10 +1188,15 @@ pub(crate) async fn write_feed(
         // The write deletes the draft. Keep the feed that the write puts
         // on the host, for the remote file records.
         let written = pipeline::draft_model(&w.collection, id).ok();
+        let addresses: &dyn pipeline::AddressCheck = match &w.address_check {
+            Some(check) => check.0.as_ref(),
+            None => &w.web,
+        };
         pipeline::write_draft(
             &mut w.collection,
             &hosts,
             &library,
+            addresses,
             id,
             &pipeline::DiffId::new(body.diff_id),
         )?;

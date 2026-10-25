@@ -261,6 +261,14 @@ pub struct MediaFacts {
     pub media_type: Option<String>,
 }
 
+impl crate::pipeline::AddressCheck for Web {
+    fn check(&self, url: &str) -> Result<(), String> {
+        self.media_facts(url)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+}
+
 impl Web {
     /// Ask the host of a file for its size and its media type, and do not
     /// read the file.

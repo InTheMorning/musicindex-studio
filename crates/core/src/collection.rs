@@ -199,6 +199,23 @@ CREATE TABLE feed_pointers (
     r"
 ALTER TABLE feeds ADD COLUMN publisher_role TEXT CHECK (publisher_role IN ('artist', 'label'));
 ",
+    r"
+CREATE TABLE draft_operations_new (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('copy', 'delete', 'confirm')),
+    library_file_id INTEGER REFERENCES library_files(id) ON DELETE CASCADE,
+    connector_id INTEGER NOT NULL REFERENCES connectors(id),
+    path TEXT NOT NULL,
+    added_at INTEGER NOT NULL
+);
+INSERT INTO draft_operations_new
+    (id, feed_id, kind, library_file_id, connector_id, path, added_at)
+SELECT id, feed_id, kind, library_file_id, connector_id, path, added_at
+FROM draft_operations;
+DROP TABLE draft_operations;
+ALTER TABLE draft_operations_new RENAME TO draft_operations;
+",
 ];
 
 /// The schema version that this code writes.
@@ -489,6 +506,9 @@ pub enum DraftOperationKind {
     Copy,
     /// Delete a file from a host.
     Delete,
+    /// Make sure that the host gives a file that an earlier write put
+    /// there (ADR 0043 item 9).
+    Confirm,
 }
 
 impl DraftOperationKind {
@@ -498,6 +518,7 @@ impl DraftOperationKind {
         match self {
             Self::Copy => "copy",
             Self::Delete => "delete",
+            Self::Confirm => "confirm",
         }
     }
 
@@ -507,6 +528,7 @@ impl DraftOperationKind {
         match text {
             "copy" => Some(Self::Copy),
             "delete" => Some(Self::Delete),
+            "confirm" => Some(Self::Confirm),
             _ => None,
         }
     }
@@ -2191,7 +2213,8 @@ fn draft_operation_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<DraftOperation
     Ok(DraftOperation {
         id: DraftOperationId(r.get(0)?),
         feed_id: FeedId(r.get(1)?),
-        kind: DraftOperationKind::parse(&kind).expect("the kind column allows only copy or delete"),
+        kind: DraftOperationKind::parse(&kind)
+            .expect("the kind column allows only copy, delete or confirm"),
         library_file_id: r.get::<_, Option<i64>>(3)?.map(LibraryFileId),
         connector_id: ConnectorId(r.get(4)?),
         path: r.get(5)?,
@@ -2930,6 +2953,49 @@ mod tests {
         collection.add_draft_file(feed, &file).unwrap();
         let error = collection.add_draft_file(feed, &file).unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::InUse);
+    }
+
+    #[test]
+    fn the_confirm_migration_keeps_each_draft_operation_and_its_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = MIGRATIONS.len() - 1;
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        db.execute_batch(
+            "INSERT INTO connectors VALUES (1, 'local', 'Home', '{}', NULL, 0);
+               INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0);
+               INSERT INTO library_files VALUES (1, 1, 'a.mp3', 10, 'abc', 'audio/mpeg', 1, NULL, NULL, 5, NULL);
+               INSERT INTO draft_operations VALUES (7, 1, 'copy', 1, 1, 'a.mp3', 3);
+               INSERT INTO draft_operations VALUES (9, 1, 'delete', NULL, 1, 'b.mp3', 4);",
+        )
+        .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        let operations = collection.draft_operations(FeedId(1)).unwrap();
+        assert_eq!(operations.len(), 2);
+        assert_eq!(operations[0].id, DraftOperationId(7));
+        assert_eq!(operations[0].kind, DraftOperationKind::Copy);
+        assert_eq!(operations[0].library_file_id, Some(LibraryFileId(1)));
+        assert_eq!(operations[0].added_at, 3);
+        assert_eq!(operations[1].id, DraftOperationId(9));
+        assert_eq!(operations[1].kind, DraftOperationKind::Delete);
+        // The new table accepts the confirm kind.
+        let confirm = collection
+            .add_draft_operation(
+                FeedId(1),
+                DraftOperationKind::Confirm,
+                None,
+                ConnectorId(1),
+                "a.mp3",
+            )
+            .unwrap();
+        assert!(confirm.0 > 9);
     }
 
     #[test]

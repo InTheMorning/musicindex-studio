@@ -8,7 +8,9 @@ use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
-use studio_core::pipeline::{self, DiffFile, DiffId, OperationKind, PipelineErrorKind};
+use studio_core::pipeline::{
+    self, AddressCheck, DiffFile, DiffId, OperationKind, PipelineErrorKind,
+};
 use studio_core::xml::Document;
 
 const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -24,6 +26,16 @@ const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
   </channel>
 </rss>
 ";
+
+/// An address check that passes each address. No test sends a request to
+/// the network.
+struct PassAll;
+
+impl AddressCheck for PassAll {
+    fn check(&self, _url: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
 
 struct Setup {
     dir: tempfile::TempDir,
@@ -84,8 +96,15 @@ fn an_approved_draft_writes_the_file_and_keeps_a_snapshot() {
     assert!(diff.unified.contains("-    <title>Album</title>"));
     assert!(diff.unified.contains("+    <title>Album (Deluxe)</title>"));
 
-    let version =
-        pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    let version = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
     assert_eq!(
         live(&s),
         FEED.replace("<title>Album</title>", "<title>Album (Deluxe)</title>")
@@ -111,13 +130,21 @@ fn a_draft_that_changed_after_the_approval_does_not_write() {
         .unwrap()
         .id;
     pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Two".into())).unwrap();
-    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &approved)
-        .unwrap_err();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &approved,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::DiffNotApproved);
     let error = pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
+        &PassAll,
         s.feed,
         &DiffId::new("x"),
     )
@@ -135,8 +162,15 @@ fn a_file_that_changed_on_the_host_after_the_draft_started_does_not_write() {
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let theirs = FEED.replace("Track One", "Track One (edited elsewhere)");
     fs::write(s.dir.path().join("album.xml"), &theirs).unwrap();
-    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
-        .unwrap_err();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
     assert_eq!(live(&s), theirs);
     assert_eq!(s.collection.snapshots(s.feed).unwrap(), Vec::new());
@@ -149,7 +183,15 @@ fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
     pipeline::edit_draft(&s.collection, s.feed, |f| f.items.clear()).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
     assert!(!live(&s).contains("track-1"));
     assert_eq!(
         s.collection.item_guids(s.feed).unwrap(),
@@ -160,7 +202,15 @@ fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
     pipeline::draft_from_snapshot(&s.collection, s.connector.as_ref(), s.feed, snapshot).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert!(diff.unified.contains("+      <guid>track-1</guid>"));
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
     assert_eq!(live(&s), FEED);
     assert_eq!(s.collection.item_guids(s.feed).unwrap(), ["track-1"]);
     assert_eq!(s.collection.snapshots(s.feed).unwrap().len(), 2);
@@ -329,7 +379,8 @@ fn the_diff_of_a_new_feed_adds_the_full_file_and_the_write_puts_it() {
     assert!(diff.unified.contains("+<rss"));
     assert!(!diff.unified.contains("\n-<"));
 
-    let version = pipeline::write_draft(&mut collection, &hosts, &library, id, &diff.id).unwrap();
+    let version =
+        pipeline::write_draft(&mut collection, &hosts, &library, &PassAll, id, &diff.id).unwrap();
     let bytes = fs::read(dir.path().join("my-album.xml")).unwrap();
     let read_feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
     assert_eq!(read_feed.title.as_deref(), Some("New Album"));
@@ -359,7 +410,8 @@ fn a_file_put_by_another_tool_before_the_write_of_a_new_feed_gives_a_conflict() 
         b"<rss><channel><title>Other</title></channel></rss>",
     )
     .unwrap();
-    let error = pipeline::write_draft(&mut collection, &hosts, &library, id, &diff.id).unwrap_err();
+    let error = pipeline::write_draft(&mut collection, &hosts, &library, &PassAll, id, &diff.id)
+        .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
     assert!(collection.draft(id).unwrap().is_some());
 }
@@ -754,8 +806,15 @@ fn a_copy_of_a_remote_file_waits_for_its_download_and_the_write_refuses_it() {
     assert_eq!(copies.len(), 1);
     assert!(copies[0].waiting);
 
-    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
-        .unwrap_err();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::WaitingForDownload);
     assert!(!second_dir.path().join("01.mp3").exists());
     assert!(!live(&s).contains("second.example"));
@@ -782,7 +841,15 @@ fn a_copy_of_a_remote_file_waits_for_its_download_and_the_write_refuses_it() {
 
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert!(diff.operations.iter().all(|op| !op.waiting));
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
     assert_eq!(fs::read(second_dir.path().join("01.mp3")).unwrap(), b"one");
 }
 
@@ -917,7 +984,15 @@ fn a_release_with_files_on_two_hosts_writes_both_with_the_correct_address() {
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 2);
 
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
 
     assert_eq!(fs::read(s.dir.path().join("album/01.mp3")).unwrap(), b"one");
     assert_eq!(
@@ -952,7 +1027,15 @@ fn a_changed_library_file_gets_a_hash_name_and_the_write_deletes_the_old_file_af
     let old = import_file(&s, "01.mp3", b"one");
     let planned_old = reference_planned(&s, old.library_file_id);
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
     assert!(s.dir.path().join(&planned_old.path).exists());
 
     // The track changes: a new library file row takes the same path in
@@ -1014,7 +1097,15 @@ fn a_changed_library_file_gets_a_hash_name_and_the_write_deletes_the_old_file_af
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 2);
 
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
 
     // The new file is on the host, at its hash name.
     assert_eq!(
@@ -1061,6 +1152,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
         &mut s.collection,
         &s.hosts,
         &s.library,
+        &PassAll,
         second,
         &diff_second.id,
     )
@@ -1082,7 +1174,15 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
     assert_eq!(diff.blocked.len(), 1);
     assert_eq!(diff.blocked[0].feed_titles, ["Second Album".to_owned()]);
 
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
 
     assert!(s.dir.path().join("shared/cover.jpg").exists());
 }
@@ -1125,8 +1225,15 @@ fn a_host_file_that_changed_after_the_scan_stops_the_deletion_with_conflict() {
         )
         .unwrap();
 
-    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
-        .unwrap_err();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
 
     // The feed file is already written, with the title change.
@@ -1134,18 +1241,22 @@ fn a_host_file_that_changed_after_the_scan_stops_the_deletion_with_conflict() {
     assert!(s.dir.path().join("stray.jpg").exists());
 }
 
-/// A connector that cannot read one path back, as if a host had not yet
-/// made an upload reachable (ADR 0036 item 15).
-struct UnreachableAfterWrite {
+/// A connector that gives a wrong size for one path in `stat`, as if a
+/// host had cut an upload (ADR 0043 item 7). It panics in `read` for the
+/// path `no_read`, to show that the confirmation does not read a file.
+struct CheckedHost {
     inner: LocalFolder,
-    blind_to: String,
+    wrong_size: Option<String>,
+    no_read: Option<String>,
 }
 
-impl Connector for UnreachableAfterWrite {
+impl Connector for CheckedHost {
     fn read(&self, path: &str) -> Result<Option<connector::FileRead>, connector::ConnectorError> {
-        if path == self.blind_to {
-            return Ok(None);
-        }
+        assert_ne!(
+            Some(path),
+            self.no_read.as_deref(),
+            "the confirmation must not read {path}"
+        );
         self.inner.read(path)
     }
 
@@ -1167,7 +1278,13 @@ impl Connector for UnreachableAfterWrite {
     }
 
     fn stat(&self, path: &str) -> Result<Option<connector::ListedFile>, connector::ConnectorError> {
-        self.inner.stat(path)
+        let mut listed = self.inner.stat(path)?;
+        if let Some(file) = listed.as_mut()
+            && Some(path) == self.wrong_size.as_deref()
+        {
+            file.size += 1;
+        }
+        Ok(listed)
     }
 
     fn delete(
@@ -1179,20 +1296,40 @@ impl Connector for UnreachableAfterWrite {
     }
 }
 
-#[test]
-fn an_address_not_reachable_after_the_upload_stops_the_write_before_the_deletions() {
-    let mut s = setup();
+/// An address check that fails for the addresses in `failing`.
+struct FailOn {
+    failing: Vec<String>,
+}
+
+impl AddressCheck for FailOn {
+    fn check(&self, url: &str) -> Result<(), String> {
+        if self.failing.iter().any(|failing| failing == url) {
+            Err("answered with status 404".to_owned())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// A draft with an upload, a title edit and a deletion of `stray.jpg`.
+struct UploadAndDelete {
+    connector_id: ConnectorId,
+    upload_path: String,
+    upload_url: String,
+    diff_id: DiffId,
+}
+
+fn upload_and_delete(s: &mut Setup) -> UploadAndDelete {
     s.collection.set_feed_folder(s.feed, "album").unwrap();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
 
-    let imported = import_file(&s, "01.mp3", b"one");
-    let planned = reference_planned(&s, imported.library_file_id);
+    let imported = import_file(s, "01.mp3", b"one");
+    let planned = reference_planned(s, imported.library_file_id);
     pipeline::edit_draft(&s.collection, s.feed, |f| {
         f.title = Some("Album (Deluxe)".into());
     })
     .unwrap();
 
-    // A delete operation too, to show that it does not run either.
     let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
     s.connector
         .write("stray.jpg", b"stray", &Expected::Absent)
@@ -1210,27 +1347,217 @@ fn an_address_not_reachable_after_the_upload_stops_the_write_before_the_deletion
 
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 2);
-
-    // Studio cannot read the uploaded file back, as if the host had not
-    // yet made it reachable.
-    let inner = LocalFolder::new(s.dir.path(), Some("https://music.example".into()));
-    s.hosts.insert(
+    UploadAndDelete {
         connector_id,
-        Box::new(UnreachableAfterWrite {
-            inner,
-            blind_to: planned.path.clone(),
-        }),
-    );
+        upload_url: planned.url.clone().unwrap(),
+        upload_path: planned.path,
+        diff_id: diff.id,
+    }
+}
 
-    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
-        .unwrap_err();
+/// Write the draft of `upload_and_delete` and expect `NotReachable`. The
+/// deletion of the same write must not occur.
+fn write_that_does_not_pass(s: &mut Setup, draft: &UploadAndDelete, addresses: &dyn AddressCheck) {
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        addresses,
+        s.feed,
+        &draft.diff_id,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::NotReachable);
 
     // The feed file is already written, and the upload is on the host.
     // The deletion did not run.
-    assert!(live(&s).contains("Album (Deluxe)"));
-    assert_eq!(fs::read(s.dir.path().join(&planned.path)).unwrap(), b"one");
+    assert!(live(s).contains("Album (Deluxe)"));
+    assert_eq!(
+        fs::read(s.dir.path().join(&draft.upload_path)).unwrap(),
+        b"one"
+    );
     assert!(s.dir.path().join("stray.jpg").exists());
+}
+
+#[test]
+fn stat_with_a_different_size_stops_the_write_before_the_deletions() {
+    let mut s = setup();
+    let draft = upload_and_delete(&mut s);
+    let inner = LocalFolder::new(s.dir.path(), Some("https://music.example".into()));
+    s.hosts.insert(
+        draft.connector_id,
+        Box::new(CheckedHost {
+            inner,
+            wrong_size: Some(draft.upload_path.clone()),
+            no_read: None,
+        }),
+    );
+    write_that_does_not_pass(&mut s, &draft, &PassAll);
+}
+
+#[test]
+fn a_public_address_that_fails_the_check_stops_the_write_before_the_deletions() {
+    let mut s = setup();
+    let draft = upload_and_delete(&mut s);
+    let addresses = FailOn {
+        failing: vec![draft.upload_url.clone()],
+    };
+    write_that_does_not_pass(&mut s, &draft, &addresses);
+}
+
+#[test]
+fn a_feed_address_that_fails_the_check_stops_the_write_before_the_deletions() {
+    let mut s = setup();
+    let draft = upload_and_delete(&mut s);
+    let addresses = FailOn {
+        failing: vec!["https://music.example/album.xml".to_owned()],
+    };
+    write_that_does_not_pass(&mut s, &draft, &addresses);
+}
+
+#[test]
+fn after_a_write_that_does_not_pass_the_draft_starts_from_the_written_feed() {
+    let mut s = setup();
+    let draft = upload_and_delete(&mut s);
+    let draft_xml = s.collection.draft(s.feed).unwrap().unwrap().draft_xml;
+    let addresses = FailOn {
+        failing: vec![draft.upload_url.clone()],
+    };
+    write_that_does_not_pass(&mut s, &draft, &addresses);
+
+    // The base of the draft is the written version. The draft XML stays.
+    let kept = s.collection.draft(s.feed).unwrap().unwrap();
+    let written = s
+        .connector
+        .read("album.xml")
+        .unwrap()
+        .expect("the feed file is on the host");
+    assert_eq!(kept.base_version, Some(written.version));
+    assert_eq!(kept.base_xml, written.bytes);
+    assert_eq!(kept.draft_xml, draft_xml);
+
+    // The draft keeps the deletion and has one confirmation.
+    let operations = s.collection.draft_operations(s.feed).unwrap();
+    let kinds: Vec<_> = operations
+        .iter()
+        .map(|o| (o.kind, o.path.as_str()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            (DraftOperationKind::Delete, "stray.jpg"),
+            (DraftOperationKind::Confirm, draft.upload_path.as_str()),
+        ]
+    );
+
+    // The inventory knows the upload, so the next diff shows a confirm
+    // operation and no upload.
+    let next = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let next_kinds: Vec<_> = next.operations.iter().map(|o| o.kind).collect();
+    assert_eq!(next_kinds, [OperationKind::Delete, OperationKind::Confirm]);
+    assert_ne!(next.id, draft.diff_id);
+}
+
+#[test]
+fn a_second_write_after_a_write_that_does_not_pass_confirms_again_and_deletes() {
+    let mut s = setup();
+    let draft = upload_and_delete(&mut s);
+    let addresses = FailOn {
+        failing: vec![draft.upload_url.clone()],
+    };
+    write_that_does_not_pass(&mut s, &draft, &addresses);
+
+    // The diff ID from before the failed write is not current.
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &draft.diff_id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DiffNotApproved);
+
+    // The new diff, with an address check that passes, does the deletion.
+    let next = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &next.id,
+    )
+    .unwrap();
+    assert!(!s.dir.path().join("stray.jpg").exists());
+    assert_eq!(
+        fs::read(s.dir.path().join(&draft.upload_path)).unwrap(),
+        b"one"
+    );
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    assert_eq!(s.collection.draft_operations(s.feed).unwrap(), Vec::new());
+}
+
+#[test]
+fn a_confirmation_compares_the_host_file_with_the_library_file() {
+    let mut s = setup();
+    let draft = upload_and_delete(&mut s);
+    let addresses = FailOn {
+        failing: vec![draft.upload_url.clone()],
+    };
+    write_that_does_not_pass(&mut s, &draft, &addresses);
+
+    // The confirmation keeps the library file of the upload.
+    let operations = s.collection.draft_operations(s.feed).unwrap();
+    let confirm = operations
+        .iter()
+        .find(|o| o.kind == DraftOperationKind::Confirm)
+        .unwrap();
+    assert!(confirm.library_file_id.is_some());
+
+    // The host cuts the upload, and a scan records the new size. The
+    // next write compares the host file with the library file, so it
+    // does not pass, and the deletion does not occur.
+    fs::write(s.dir.path().join(&draft.upload_path), b"on").unwrap();
+    inventory::scan(&s.collection, &s.hosts, draft.connector_id).unwrap();
+    let next = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &next.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::NotReachable);
+    assert!(s.dir.path().join("stray.jpg").exists());
+}
+
+#[test]
+fn the_confirmation_does_not_read_the_uploaded_file() {
+    let mut s = setup();
+    let draft = upload_and_delete(&mut s);
+    let inner = LocalFolder::new(s.dir.path(), Some("https://music.example".into()));
+    s.hosts.insert(
+        draft.connector_id,
+        Box::new(CheckedHost {
+            inner,
+            wrong_size: None,
+            no_read: Some(draft.upload_path.clone()),
+        }),
+    );
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &draft.diff_id,
+    )
+    .unwrap();
+    assert!(!s.dir.path().join("stray.jpg").exists());
 }
 
 // ---- A move of the feed XML (ADR 0038 items 16 to 20) ----
@@ -1377,7 +1704,15 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
     );
     assert!(!diff.announce);
 
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
 
     let on_b = fs::read_to_string(s.dir_b.path().join("album.xml")).unwrap();
     assert!(on_b.contains("href=\"https://b.example/album.xml\""));
@@ -1416,7 +1751,15 @@ fn a_host_that_can_redirect_gets_a_redirect_and_keeps_its_file_with_no_pointer()
         diff.feed_move.as_ref().unwrap().method,
         pipeline::FeedMoveMethod::Redirect
     );
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
 
     assert_eq!(
         *s.redirects.lock().unwrap(),
@@ -1447,8 +1790,15 @@ fn a_file_put_on_the_new_host_after_the_diff_stops_the_write_with_file_exists() 
     pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     fs::write(s.dir_b.path().join("album.xml"), b"other").unwrap();
-    let error = pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id)
-        .unwrap_err();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::FileExists);
     let on_a = fs::read_to_string(s.dir_a.path().join("album.xml")).unwrap();
     assert_eq!(on_a, MOVE_FEED);
@@ -1465,7 +1815,15 @@ fn a_write_that_stopped_after_the_new_host_got_the_feed_can_finish_the_move() {
     let draft = s.collection.draft(s.feed).unwrap().unwrap();
     fs::write(s.dir_b.path().join("album.xml"), &draft.draft_xml).unwrap();
 
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
 
     let on_a = fs::read_to_string(s.dir_a.path().join("album.xml")).unwrap();
     assert!(on_a.contains("new-feed-url>https://b.example/album.xml</"));
@@ -1516,7 +1874,15 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
     let mut s = move_setup(false);
     pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
 
     let reader = connector::from_row(&s.collection.connector(s.b).unwrap(), None).unwrap();
     pipeline::start_draft(&s.collection, reader.as_ref(), s.feed).unwrap();
@@ -1527,6 +1893,14 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
     assert_eq!(diff.operations, Vec::new());
     assert_eq!(diff.blocked.len(), 1);
     assert!(diff.blocked[0].pointer);
-    pipeline::write_draft(&mut s.collection, &s.hosts, &s.library, s.feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
     assert!(s.dir_a.path().join("album.xml").exists());
 }

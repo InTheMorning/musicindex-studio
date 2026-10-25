@@ -13,6 +13,7 @@ use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
+use studio_core::pipeline::AddressCheck;
 use studio_core::remote;
 use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::{Web, WebImage};
@@ -77,6 +78,17 @@ pub enum VaultState {
     Open,
 }
 
+/// A replacement for the address check of the write. Only a test sets it,
+/// so that no test sends a request to the network.
+#[derive(Clone)]
+pub(crate) struct AddressChecker(pub(crate) Arc<dyn AddressCheck + Send + Sync>);
+
+impl std::fmt::Debug for AddressChecker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AddressChecker")
+    }
+}
+
 /// The collection and the vault in one data folder.
 #[derive(Debug)]
 pub struct Workspace {
@@ -84,6 +96,9 @@ pub struct Workspace {
     pub(crate) collection: Collection,
     pub(crate) vault: Option<OpenVault>,
     pub(crate) web: Web,
+    /// The address check of the write. `None` means that the write uses
+    /// `web`.
+    pub(crate) address_check: Option<AddressChecker>,
     pub(crate) index: MusicIndex,
     /// The feeds of the last discovery, by address, so that an import does
     /// not read them again.
@@ -119,6 +134,7 @@ impl Workspace {
             collection: Collection::open(&data_dir.join("collection.sqlite"))?,
             vault: None,
             web: Web::new(),
+            address_check: None,
             index: MusicIndex::new(Web::new(), DEFAULT_API),
             discovered: HashMap::new(),
             images: ImageCache::default(),
@@ -132,6 +148,14 @@ impl Workspace {
     #[must_use]
     pub fn with_musicindex(mut self, base: &str) -> Self {
         self.index = MusicIndex::new(self.web.clone(), base);
+        self
+    }
+
+    /// Use a different address check for the write, such as a test double.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_address_check(mut self, check: Arc<dyn AddressCheck + Send + Sync>) -> Self {
+        self.address_check = Some(AddressChecker(check));
         self
     }
 

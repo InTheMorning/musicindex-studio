@@ -24,6 +24,16 @@ const FEED_WITH_RECIPIENTS: &str = "<rss xmlns:podcast=\"https://podcastindex.or
     </podcast:value>\
     <item><guid>t-1</guid></item></channel></rss>";
 
+/// An address check that passes each address, so that no test sends a
+/// request to the network.
+struct PassAll;
+
+impl studio_core::pipeline::AddressCheck for PassAll {
+    fn check(&self, _url: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
 struct App {
     router: Router,
     data: tempfile::TempDir,
@@ -39,7 +49,10 @@ fn app_with_index(index: &str) -> App {
     let data = tempfile::tempdir().unwrap();
     let feeds = tempfile::tempdir().unwrap();
     std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
-    let workspace = Workspace::open(data.path()).unwrap().with_musicindex(index);
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex(index)
+        .with_address_check(std::sync::Arc::new(PassAll));
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
         data,
@@ -3703,7 +3716,9 @@ async fn a_download_row_from_before_a_restart_is_in_the_queue_again() {
         collection.queue_download(file).unwrap();
         (feed, file)
     };
-    let workspace = Workspace::open(data.path()).unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_address_check(std::sync::Arc::new(PassAll));
     workspace.resume_downloads();
     let app = App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),

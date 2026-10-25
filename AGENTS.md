@@ -21,7 +21,7 @@ The UI starts on Releases and shows the outline of an open feed. At narrow width
 
 - Decisions: `docs/adr/0001` to `docs/adr/0044`. ADR 0017 is proposed.
 - Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check. Task 026 built the shell of ADR 0039, and Phase 9 (remaining connectors, [ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](docs/adr/0044-the-nsite-signer.md)) is next. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
-- Phase 9 starts with [task 027](docs/tasks/studio-v1-task-027-connector-interface.md), which changes the connector interface.
+- [Task 027](docs/tasks/studio-v1-task-027-connector-interface.md) (the connector interface change) is complete. The S3 and R2 connector is next.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 

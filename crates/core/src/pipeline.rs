@@ -257,6 +257,9 @@ pub enum OperationKind {
     Copy,
     /// Delete a file from a host (ADR 0036 item 12).
     Delete,
+    /// Make sure that the host gives a file that an earlier write put
+    /// there (ADR 0043 item 9).
+    Confirm,
 }
 
 impl OperationKind {
@@ -267,12 +270,24 @@ impl OperationKind {
             Self::Upload => "upload",
             Self::Copy => "copy",
             Self::Delete => "delete",
+            Self::Confirm => "confirm",
         }
     }
 }
 
-/// An upload, a copy or a deletion that the write does on a host
-/// (ADR 0036 item 14).
+/// Request a public address, and give an error when the host does not
+/// give a success status (ADR 0043 item 8).
+pub trait AddressCheck {
+    /// Request `url`.
+    ///
+    /// # Errors
+    ///
+    /// Gives the reason as text when the host does not give the file.
+    fn check(&self, url: &str) -> Result<(), String>;
+}
+
+/// An upload, a copy, a confirmation or a deletion that the write does
+/// on a host (ADR 0036 item 14).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct HostOperation {
     /// The kind of operation.
@@ -283,7 +298,8 @@ pub struct HostOperation {
     pub path: String,
     /// The size of the file, in bytes.
     pub size: u64,
-    /// The library file of an upload or a copy. `None` for a deletion.
+    /// The library file of an upload, a copy or a confirmation. `None`
+    /// for a deletion.
     pub library_file_id: Option<i64>,
     /// The public address of the file, when the host gives one.
     pub url: Option<String>,
@@ -1043,6 +1059,42 @@ fn copy_operation(
     }))
 }
 
+/// The host operation of a draft confirmation. It does no write and no
+/// deletion. It only makes the write request the file again
+/// (ADR 0043 item 9).
+///
+/// The size is the size of the library file, so that the check of the
+/// write compares the host file with the library. A confirmation with no
+/// library file uses the size in the inventory.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or a host fails.
+fn confirm_operation(
+    collection: &Collection,
+    hosts: &Hosts,
+    operation: &crate::collection::DraftOperation,
+) -> Result<HostOperation, PipelineError> {
+    let size = match operation.library_file_id {
+        Some(file) => collection.library_file(file)?.size,
+        None => collection
+            .host_file(operation.connector_id, &operation.path)?
+            .map_or(0, |file| file.size),
+    };
+    Ok(HostOperation {
+        kind: OperationKind::Confirm,
+        connector_id: operation.connector_id,
+        path: operation.path.clone(),
+        size,
+        library_file_id: operation.library_file_id.map(|file| file.0),
+        url: hosts
+            .get(operation.connector_id)?
+            .public_url(&operation.path),
+        operation_id: Some(operation.id.0),
+        waiting: false,
+    })
+}
+
 /// Each host operation of the draft of a feed, and each deletion that
 /// Studio refuses because a feed refers to the file (ADR 0036 items 10,
 /// 12, 13 and 14).
@@ -1096,6 +1148,9 @@ fn host_operations(
                 if let Some(copy) = copy_operation(collection, hosts, &operation)? {
                     operations.push(copy);
                 }
+            }
+            DraftOperationKind::Confirm => {
+                operations.push(confirm_operation(collection, hosts, &operation)?);
             }
             DraftOperationKind::Delete => {
                 let connector = hosts.get(operation.connector_id)?;
@@ -1425,15 +1480,24 @@ pub fn library_file_in_use(
 ///
 /// Gives [`PipelineErrorKind::FileExists`] when a file exists already at
 /// the planned path of an upload or a copy. Gives
-/// [`PipelineErrorKind::NotReachable`] when a new address is not on its
-/// host after the uploads. The feed file is already written in both cases.
+/// [`PipelineErrorKind::NotReachable`] when a new file does not pass the
+/// check of its size or its public address, or when the public address of
+/// the feed file fails. The feed file is already written in both cases.
+/// In the second case, Studio deletes no file. The draft then starts from
+/// the written feed file. It keeps each deletion, and it gets a
+/// confirmation for each new file (ADR 0043 item 9).
 ///
 /// Gives [`PipelineErrorKind::Conflict`] when a host file changed after
 /// the scan, before its deletion. The feed file stays written.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the write is one sequence of steps, and it reads best in one function"
+)]
 pub fn write_draft(
     collection: &mut Collection,
     hosts: &Hosts,
     library: &Library,
+    addresses: &dyn AddressCheck,
     id: FeedId,
     approved: &DiffId,
 ) -> Result<Version, PipelineError> {
@@ -1532,9 +1596,28 @@ pub fn write_draft(
             .write_feed_xml(folder, file_name, &draft.draft_xml)
             .map_err(|error| PipelineError::new(PipelineErrorKind::Connector, error.to_string()))?;
     }
-    // Step 3: confirm that each upload and each copy is on its host,
-    // before Studio deletes any file (ADR 0036 item 15).
-    confirm_new_addresses(hosts, &operations)?;
+    // Step 3: confirm that each new file is on its host, and that the
+    // public address of each file works, before Studio deletes any file
+    // (ADR 0036 item 15, ADR 0043 items 7 and 8).
+    let feed_url = written_feed_url(
+        collection,
+        hosts,
+        id,
+        (connector_id, &path),
+        feed_move.as_ref(),
+    )?;
+    if let Err(error) = confirm_new_addresses(hosts, addresses, &operations, feed_url.as_deref()) {
+        keep_draft_after_failed_confirmation(
+            collection,
+            hosts,
+            id,
+            &draft,
+            &version,
+            &operations,
+            &touched,
+        )?;
+        return Err(error);
+    }
 
     // Step 4: each deletion, with the stamp from the inventory
     // (ADR 0036 item 16). `host_operations` ran again above, with the
@@ -1720,27 +1803,151 @@ fn put_uploads_and_copies(
     Ok(())
 }
 
-/// Confirm that each upload and each copy of `operations` is on its
-/// host: the third step of [`write_draft`], before any deletion
-/// (ADR 0036 item 15).
+/// The public address of the feed file after the write: the address of
+/// the feed row, or else the address that its host gives for its path
+/// (ADR 0021). With a feed move, the host and the path are the new ones.
 ///
 /// # Errors
 ///
-/// Gives [`PipelineErrorKind::NotReachable`] when a file is not on its
-/// host.
-fn confirm_new_addresses(hosts: &Hosts, operations: &[HostOperation]) -> Result<(), PipelineError> {
+/// Gives a [`PipelineError`] when the collection or the host set fails.
+fn written_feed_url(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+    (connector_id, path): (ConnectorId, &str),
+    feed_move: Option<&FeedMove>,
+) -> Result<Option<String>, PipelineError> {
+    if let Some(url) = collection.feed(id)?.public_url {
+        return Ok(Some(url));
+    }
+    let (connector_id, path) =
+        feed_move.map_or((connector_id, path), |m| (m.connector_id, m.path.as_str()));
+    Ok(hosts.get(connector_id)?.public_url(path))
+}
+
+/// Confirm each new file of `operations`, and the feed file: the third
+/// step of [`write_draft`], before any deletion (ADR 0036 item 15,
+/// ADR 0043 items 7 and 8).
+///
+/// A new file is an upload, a copy or a confirmation. `stat` of its host
+/// must give a file with the size of the operation. Then the public
+/// address of the file must pass `addresses`, when the file has one.
+/// The function also requests `feed_url`, when it is not `None`. It
+/// examines each file before it gives an error. It does not read the
+/// content of a file.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NotReachable`] with the name of each file
+/// that did not pass.
+fn confirm_new_addresses(
+    hosts: &Hosts,
+    addresses: &dyn AddressCheck,
+    operations: &[HostOperation],
+    feed_url: Option<&str>,
+) -> Result<(), PipelineError> {
+    let mut failed: Vec<String> = Vec::new();
     for operation in operations {
-        if !matches!(operation.kind, OperationKind::Upload | OperationKind::Copy) {
+        if !matches!(
+            operation.kind,
+            OperationKind::Upload | OperationKind::Copy | OperationKind::Confirm
+        ) {
             continue;
         }
         let target = hosts.get(operation.connector_id)?;
-        if target.read(&operation.path)?.is_none() {
-            let name = operation.url.as_deref().unwrap_or(&operation.path);
-            return Err(PipelineError::new(
-                PipelineErrorKind::NotReachable,
-                format!("{name} is not on its host after the uploads"),
-            ));
+        let listed = target.stat(&operation.path)?;
+        match listed {
+            None => {
+                failed.push(format!("{} is not on its host", operation.path));
+                continue;
+            }
+            Some(file) if file.size != operation.size => {
+                failed.push(format!(
+                    "{} has {} bytes on its host, not {}",
+                    operation.path, file.size, operation.size
+                ));
+                continue;
+            }
+            Some(_) => {}
         }
+        if let Some(url) = operation.url.as_deref()
+            && let Err(reason) = addresses.check(url)
+        {
+            failed.push(format!("{url} does not pass: {reason}"));
+        }
+    }
+    if let Some(url) = feed_url
+        && let Err(reason) = addresses.check(url)
+    {
+        failed.push(format!("{url} does not pass: {reason}"));
+    }
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(PipelineError::new(
+            PipelineErrorKind::NotReachable,
+            format!(
+                "these files did not pass the check, and Studio deleted nothing: {}",
+                failed.join("; ")
+            ),
+        ))
+    }
+}
+
+/// Keep the draft after a confirmation that failed (ADR 0043 item 9).
+/// Then scan each host in `touched`.
+///
+/// The draft XML does not change. The written version and the written
+/// bytes become the base of the draft. The draft loses its copies and its
+/// feed move, and keeps its deletions. It gets a confirmation for each
+/// upload, copy and confirmation of `operations`, so that the next write
+/// requests the files again.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn keep_draft_after_failed_confirmation(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+    draft: &DraftRow,
+    version: &Version,
+    operations: &[HostOperation],
+    touched: &HashSet<ConnectorId>,
+) -> Result<(), PipelineError> {
+    collection.save_draft(
+        id,
+        &DraftRow {
+            base_version: Some(version.clone()),
+            base_xml: draft.draft_xml.clone(),
+            draft_xml: draft.draft_xml.clone(),
+        },
+    )?;
+    for operation in collection.draft_operations(id)? {
+        if matches!(
+            operation.kind,
+            DraftOperationKind::Copy | DraftOperationKind::Confirm
+        ) {
+            collection.remove_draft_operation(id, operation.id)?;
+        }
+    }
+    collection.remove_draft_feed_move(id)?;
+    for operation in operations {
+        if matches!(
+            operation.kind,
+            OperationKind::Upload | OperationKind::Copy | OperationKind::Confirm
+        ) {
+            collection.add_draft_operation(
+                id,
+                DraftOperationKind::Confirm,
+                operation.library_file_id.map(LibraryFileId),
+                operation.connector_id,
+                &operation.path,
+            )?;
+        }
+    }
+    for &connector_id in touched {
+        inventory::scan(collection, hosts, connector_id)?;
     }
     Ok(())
 }

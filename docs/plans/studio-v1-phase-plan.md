@@ -18,6 +18,7 @@ An artist can do these steps on the desktop or on a public Studio server:
 
 - Studio as a host of files. Studio connects to hosts ([ADR 0009](../adr/0009-studio-connects-to-hosts-and-moves-files.md)).
 - MSP 2.0 hosting, Wavlake, Fountain and Castopod connectors ([ADR 0006](../adr/0006-connectors-and-the-v1-set.md)).
+- The Git pages connector. It comes after v1 ([ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md)).
 - Video feeds.
 - Proof tokens in feeds ([ADR 0005](../adr/0005-collection-and-first-run-discovery.md)).
 
@@ -144,8 +145,17 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ### Phase 9: Remaining Connectors
 
-- SFTP, S3 and R2, Git pages, Blossom and nsite.
-- Mechanical check: each connector passes the shared connector test set against a local test server.
+- Decisions: [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](../adr/0044-the-nsite-signer.md).
+- Sequence: the interface change, then S3 and R2, then SFTP, then nsite and Blossom.
+- Mechanical check: each connector passes the test module of the trait against a local test server.
+- Mechanical check: a test confirms that Studio does no deletion when a new file does not pass the confirmation.
+- Open research items. Each one needs a live host, a container or a different computer:
+  - R2: the conditional DeleteObject and the conditional CompleteMultipartUpload. Also Garage, B2, Wasabi, Spaces, Ceph and Versity.
+  - Hosts and gateways: the `Content-Type` of a feed, and `Range` for audio.
+  - nsite feeds: do podcast apps and Podcast Index accept a feed address on an nsite gateway?
+  - `ssh2`: a build on Windows and macOS.
+  - Docker tests with MinIO and Garage. Docker did not operate in the research session.
+- Each connector task records its client crate in an ADR before the work starts. The research proposes `rusty-s3` with `ureq`, `ssh2`, `nostr` and `tungstenite`.
 
 ### Phase 10: Announce
 

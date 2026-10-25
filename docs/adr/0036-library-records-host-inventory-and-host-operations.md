@@ -1,6 +1,6 @@
 # ADR 0036: Library Records, The Host Inventory And Host Operations
 
-- Status: Accepted
+- Status: Accepted. [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) replaces the confirmation of item 15 on 2026-10-25.
 - Date: 2026-10-23
 - Owner: operator, with the technical choices of the planning model
 

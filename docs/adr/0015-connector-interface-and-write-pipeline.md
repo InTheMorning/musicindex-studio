@@ -1,6 +1,6 @@
 # ADR 0015: The Connector Interface And The Write Pipeline
 
-- Status: Accepted
+- Status: Accepted. [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) adds a streaming write, two error types and a test module of the trait on 2026-10-25.
 - Date: 2026-10-22
 - Owner: operator
 

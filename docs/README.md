@@ -44,6 +44,8 @@
 - [ADR 0040: Replace the audio of a track](adr/0040-replace-the-audio-of-a-track.md)
 - [ADR 0041: Publisher feeds and two-way links](adr/0041-publisher-feeds-and-two-way-links.md)
 - [ADR 0042: UI models with Node tests](adr/0042-ui-models-with-node-tests.md)
+- [ADR 0043: The Phase 9 connectors and the interface change](adr/0043-phase-9-connectors-and-the-interface-change.md)
+- [ADR 0044: The nsite signer](adr/0044-the-nsite-signer.md)
 
 ## Plans
 

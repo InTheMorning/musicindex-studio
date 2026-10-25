@@ -2,7 +2,7 @@
 
 ## Status
 
-Received - 2026-10-25. This request comes from the research repository at
+Received - 2026-10-25. Answered - 2026-10-25 by [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](../adr/0044-the-nsite-signer.md). This request comes from the research repository at
 `../musicindex-research`. That repository has no Git remote, and it is private.
 Its index is `AGENTS.md`.
 

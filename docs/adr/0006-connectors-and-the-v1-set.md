@@ -1,6 +1,6 @@
 # ADR 0006: Connectors And The v1 Set
 
-- Status: Accepted
+- Status: Accepted. [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) moves the Git pages connector of item 3 after v1 on 2026-10-25. It also names the NIP-5A manifest, type 35128, as the stable pointer of Consequences.
 - Date: 2026-10-22
 - Owner: operator
 

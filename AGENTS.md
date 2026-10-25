@@ -19,8 +19,9 @@ On 2026-10-25, Phase 0 to Phase 8 are complete. `studio-core` reads a feed into 
 
 The UI starts on Releases and shows the outline of an open feed. At narrow width it is one stack.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0042`. ADR 0017 is proposed.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check. Task 026 built the shell of ADR 0039, and Phase 9 (remaining connectors) is next. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
+- Decisions: `docs/adr/0001` to `docs/adr/0044`. ADR 0017 is proposed.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check. Task 026 built the shell of ADR 0039, and Phase 9 (remaining connectors, [ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](docs/adr/0044-the-nsite-signer.md)) is next. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
+- Phase 9 starts with one task that changes the connector interface.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
@@ -91,7 +92,8 @@ Durable rules:
 
 Situational rules:
 
-- The v1 connectors are local folder, SFTP, S3 and R2, Git pages, Blossom and nsite, and the optional self-hosted file host ([ADR 0006](docs/adr/0006-connectors-and-the-v1-set.md)).
+- The v1 connectors are local folder, SFTP, S3 and R2, Blossom and nsite, and the optional self-hosted file host. The Git pages connector comes after v1 ([ADR 0006](docs/adr/0006-connectors-and-the-v1-set.md), [ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md)).
+- No deletion on a host occurs before each new file passes the confirmation ([ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md)).
 - The draft status, "Versions" and "Review" stay in the toolbar at all scroll positions and widths. The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. At 760 px or less, Studio is one stack with a root page and an outline page, and no menu button ([ADR 0039](docs/adr/0039-the-shell-releases-and-the-outline.md), musicindex ADR 0030).
 - Do not copy code from `../mi-studio`. Use it as reference only ([ADR 0001](docs/adr/0001-one-core-with-desktop-and-server-shells.md)).
 

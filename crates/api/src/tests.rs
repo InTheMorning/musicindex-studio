@@ -1466,6 +1466,203 @@ async fn an_msp_backup_needs_the_vault_and_keeps_its_token_there() {
     }
 }
 
+const S3_KEY_ID: &str = "AKIDEXAMPLE";
+const S3_SECRET: &str = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY";
+
+/// The body of a new S3 host on a fake server.
+fn s3_body(server: &studio_core::testing::fake_s3::FakeS3) -> Value {
+    json!({
+        "kind": "s3",
+        "name": "Bucket",
+        "endpoint": server.url(),
+        "region": "us-east-1",
+        "bucket": "bk",
+        "url_style": "path",
+        "prefix": "feeds",
+        "base_url": "https://cdn.example.com/feeds",
+        "access_key_id": S3_KEY_ID,
+        "secret_access_key": S3_SECRET,
+    })
+}
+
+async fn make_vault(app: &App) {
+    call(
+        app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+}
+
+/// The text of each file in the data folder of the app.
+fn data_files_text(app: &App) -> String {
+    let mut text = String::new();
+    for entry in std::fs::read_dir(app.data.path()).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_file() {
+            text.push_str(&String::from_utf8_lossy(&std::fs::read(path).unwrap()));
+        }
+    }
+    text
+}
+
+#[tokio::test]
+async fn an_s3_host_is_added_after_the_provider_test_and_keeps_its_key_in_the_vault() {
+    let server = studio_core::testing::fake_s3::FakeS3::start("bk");
+    let app = app();
+    make_vault(&app).await;
+    let (status, _, text) = send(
+        &app,
+        request("POST", "/api/v1/connectors", Some(s3_body(&server))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+    assert!(!text.contains(S3_SECRET) && !text.contains(S3_KEY_ID));
+    let row: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(row["kind"], "s3");
+    let secret_ref = row["secret_ref"].as_str().unwrap();
+    assert!(secret_ref.starts_with("connector-"), "{secret_ref}");
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["prefix"], "feeds/");
+    assert_eq!(config["bucket"], "bk");
+    // The provider test leaves no key on the host.
+    assert!(server.keys().is_empty(), "{:?}", server.keys());
+
+    let (_, _, list) = send(&app, request("GET", "/api/v1/connectors", None)).await;
+    assert!(!list.contains(S3_SECRET) && !list.contains(S3_KEY_ID));
+    assert!(!data_files_text(&app).contains(S3_SECRET));
+    let vault_file = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    assert!(!vault_file.contains(S3_SECRET));
+    let vault = studio_core::vault::VaultFile::from_json(&vault_file)
+        .unwrap()
+        .open_with_passphrase(PASSPHRASE)
+        .unwrap();
+    let secret: Value = serde_json::from_slice(&vault.get(secret_ref).unwrap().unwrap()).unwrap();
+    assert_eq!(
+        secret,
+        json!({ "access_key_id": S3_KEY_ID, "secret_access_key": S3_SECRET })
+    );
+}
+
+#[tokio::test]
+async fn an_s3_host_needs_the_vault() {
+    let server = studio_core::testing::fake_s3::FakeS3::start("bk");
+    let app = app();
+    let (status, body) = call(&app, "POST", "/api/v1/connectors", Some(s3_body(&server))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "vault_required");
+    make_vault(&app).await;
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    let (status, body) = call(&app, "POST", "/api/v1/connectors", Some(s3_body(&server))).await;
+    assert_eq!(status, StatusCode::LOCKED);
+    assert_eq!(body["error"]["code"], "vault_locked");
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors, json!([]));
+}
+
+#[tokio::test]
+async fn an_s3_host_that_fails_the_provider_test_changes_neither_vault_nor_collection() {
+    let server = studio_core::testing::fake_s3::FakeS3::start("bk");
+    let app = app();
+    make_vault(&app).await;
+    let vault_before = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+
+    server.ignore_put_conditions(true);
+    let (status, body) = call(&app, "POST", "/api/v1/connectors", Some(s3_body(&server))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "no_conditions");
+    assert!(server.keys().is_empty(), "{:?}", server.keys());
+
+    server.ignore_put_conditions(false);
+    server.refuse_all(true);
+    let (status, body) = call(&app, "POST", "/api/v1/connectors", Some(s3_body(&server))).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(body["error"]["code"], "host_unauthorized");
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors, json!([]));
+    let vault_after = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    assert_eq!(vault_before, vault_after);
+}
+
+#[tokio::test]
+async fn an_s3_host_with_a_bad_field_gives_422_and_no_request_to_the_host() {
+    let server = studio_core::testing::fake_s3::FakeS3::start("bk");
+    let app = app();
+    make_vault(&app).await;
+    let cases = [
+        ("endpoint", json!("ftp://s3.example.com"), "invalid_address"),
+        ("base_url", json!("cdn.example.com"), "invalid_address"),
+        ("bucket", json!(" "), "invalid_config"),
+        ("access_key_id", json!(""), "invalid_config"),
+        ("secret_access_key", json!(""), "invalid_config"),
+        ("region", json!(""), "invalid_config"),
+    ];
+    for (field, value, code) in cases {
+        let mut body = s3_body(&server);
+        body[field] = value;
+        let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{field}");
+        assert_eq!(answer["error"]["code"], code, "{field}");
+    }
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors, json!([]));
+}
+
+#[tokio::test]
+async fn an_s3_host_gets_a_new_public_address_and_the_match_route_links_its_feeds() {
+    let web = web_feeds();
+    web.set("/album.xml", 200, FEED.as_bytes().to_vec());
+    let server = studio_core::testing::fake_s3::FakeS3::start("bk");
+    server.put_object("feeds/album.xml", FEED.as_bytes());
+    let app = app_with_index(&web.url(""));
+    make_vault(&app).await;
+    call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [web.url("/album.xml")] })),
+    )
+    .await;
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(s3_body(&server))).await;
+    let id = connector["id"].as_i64().unwrap();
+
+    let (status, row) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{id}"),
+        Some(json!({ "base_url": "https://new.example.com/m" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["base_url"], "https://new.example.com/m");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{id}"),
+        Some(json!({ "base_url": "new.example.com" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_address");
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{id}/match"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["linked"][0]["path"], "album.xml");
+    assert_eq!(
+        body["folder_address"],
+        json!({ "state": "typed", "url": "https://new.example.com/m" })
+    );
+}
+
 /// The row of a feed in the list of `GET /api/v1/feeds`.
 async fn listed(app: &App, id: i64) -> Value {
     let (status, rows) = call(app, "GET", "/api/v1/feeds", None).await;

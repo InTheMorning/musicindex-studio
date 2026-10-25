@@ -212,6 +212,53 @@ impl S3Bucket {
         Self::new(config, credentials)
     }
 
+    /// Test that the provider refuses a conditional write that is not
+    /// correct (ADR 0046 items 4 and 5). The test uses a key below the
+    /// prefix whose name starts with `.studio-probe-`. It deletes the key at
+    /// the end, also after a failed step, when it can.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`ConnectorErrorKind::NoConditions`] when the second or the
+    /// third write does not give 412. Gives [`ConnectorErrorKind::Unauthorized`]
+    /// when the host refuses the credentials, and
+    /// [`ConnectorErrorKind::Unavailable`] when Studio cannot connect.
+    pub fn test_provider(&self) -> Result<(), ConnectorError> {
+        let path = format!(".studio-probe-{}", uuid::Uuid::new_v4());
+        let result = self.probe(&path);
+        // The delete has its own condition. A failed delete does not hide
+        // the result of the steps.
+        let cleanup = self
+            .stat(&path)
+            .and_then(|found| found.map_or(Ok(()), |file| self.delete(&path, &file.stamp)));
+        result?;
+        cleanup
+    }
+
+    /// The three writes of the provider test.
+    fn probe(&self, path: &str) -> Result<(), ConnectorError> {
+        let no_conditions = || {
+            ConnectorError::new(
+                ConnectorErrorKind::NoConditions,
+                "the provider does not refuse a conditional write, so Studio cannot write to it safely",
+            )
+        };
+        self.put(path, b"studio probe", &Expected::Absent)?;
+        // A second write with `If-None-Match` must give 412.
+        match self.put(path, b"studio probe", &Expected::Absent) {
+            Err(e) if e.kind == ConnectorErrorKind::Conflict => {}
+            Ok(_) => return Err(no_conditions()),
+            Err(e) => return Err(e),
+        }
+        // A write with an `If-Match` that is not correct must give 412.
+        let wrong = Expected::Version(Version::new("\"00000000000000000000000000000000\""));
+        match self.put(path, b"studio probe", &wrong) {
+            Err(e) if e.kind == ConnectorErrorKind::Conflict => Ok(()),
+            Ok(_) => Err(no_conditions()),
+            Err(e) => Err(e),
+        }
+    }
+
     /// The key of a path: the prefix and the path.
     fn key_of(&self, path: &str) -> Result<String, ConnectorError> {
         relative_path(path)?;
@@ -1288,6 +1335,47 @@ mod tests {
                 .write_from("c.bin", &mut &b"abcde"[..], 5, &Expected::Absent)
                 .map_err(kind),
             Err(ConnectorErrorKind::Unauthorized)
+        );
+    }
+
+    #[test]
+    fn the_provider_test_passes_on_a_correct_provider_and_leaves_no_key() {
+        let server = FakeS3::start("bk");
+        let bucket = connector(&server, "feeds/");
+        bucket.test_provider().unwrap();
+        assert!(server.keys().is_empty(), "{:?}", server.keys());
+    }
+
+    #[test]
+    fn the_provider_test_gives_no_conditions_and_leaves_no_key() {
+        let server = FakeS3::start("bk");
+        server.ignore_put_conditions(true);
+        let bucket = connector(&server, "");
+        let error = bucket.test_provider().unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::NoConditions);
+        assert!(error.to_string().contains("safely"), "{error}");
+        assert!(server.keys().is_empty(), "{:?}", server.keys());
+    }
+
+    #[test]
+    fn the_provider_test_gives_unauthorized_and_unavailable() {
+        let server = FakeS3::start("bk");
+        server.refuse_all(true);
+        let bucket = connector(&server, "");
+        assert_eq!(
+            bucket.test_provider().unwrap_err().kind(),
+            ConnectorErrorKind::Unauthorized
+        );
+        let port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().port()
+        };
+        let mut config = config(&server, "");
+        config.endpoint = format!("http://127.0.0.1:{port}");
+        let bucket = S3Bucket::new(config, credentials()).unwrap();
+        assert_eq!(
+            bucket.test_provider().unwrap_err().kind(),
+            ConnectorErrorKind::Unavailable
         );
     }
 

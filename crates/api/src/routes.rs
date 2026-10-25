@@ -16,7 +16,7 @@ use studio_core::collection::{
     Collection, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId, DraftOperationKind,
     FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
 };
-use studio_core::connector::{self, LocalFolder};
+use studio_core::connector::{self, LocalFolder, S3Bucket, S3Config, S3Credentials, S3UrlStyle};
 use studio_core::discover::PublicFeed;
 use studio_core::download;
 use studio_core::feed::{Feed, Recipient};
@@ -196,6 +196,121 @@ pub(crate) enum NewConnector {
         root: String,
         base_url: Option<String>,
     },
+    S3(NewS3),
+}
+
+/// The fields of a new S3 host (ADR 0046).
+#[derive(Deserialize)]
+pub(crate) struct NewS3 {
+    name: String,
+    endpoint: String,
+    region: String,
+    bucket: String,
+    url_style: S3UrlStyle,
+    #[serde(default)]
+    prefix: String,
+    base_url: Option<String>,
+    access_key_id: String,
+    secret_access_key: String,
+}
+
+/// Check that an address starts with `http://` or `https://`. Give 422
+/// `invalid_address` when it does not.
+fn check_http_address(address: &str, what: &str) -> Result<(), ApiError> {
+    let lower = address.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return Ok(());
+    }
+    Err(ApiError::new(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_address",
+        format!("{what} must start with http:// or https://"),
+    ))
+}
+
+/// Add an S3 host (ADR 0046). The steps are in this sequence: the vault,
+/// the field checks, the provider test, the secret in the vault, and the
+/// collection row. When one step fails, the next steps do not occur.
+fn add_s3_connector(
+    w: &mut Workspace,
+    body: &NewS3,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    if w.vault.is_none() {
+        return Err(match w.vault_state() {
+            crate::workspace::VaultState::Absent => ApiError::vault_required(),
+            _ => ApiError::vault_locked(),
+        });
+    }
+    let invalid =
+        |message: &str| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_config", message);
+    let endpoint = body.endpoint.trim().to_owned();
+    check_http_address(&endpoint, "the endpoint")?;
+    let base_url = body
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(str::to_owned);
+    if let Some(base_url) = &base_url {
+        check_http_address(base_url, "the public address")?;
+    }
+    let bucket = body.bucket.trim().to_owned();
+    if bucket.is_empty() {
+        return Err(invalid("the bucket must not be empty"));
+    }
+    if body.access_key_id.trim().is_empty() || body.secret_access_key.is_empty() {
+        return Err(invalid("the access key must not be empty"));
+    }
+    let mut prefix = body.prefix.trim().to_owned();
+    if !prefix.is_empty() && !prefix.ends_with('/') {
+        prefix.push('/');
+    }
+    let config = S3Config {
+        endpoint,
+        region: body.region.trim().to_owned(),
+        bucket,
+        url_style: body.url_style,
+        prefix,
+        base_url,
+    };
+    let secret = json!({
+        "access_key_id": body.access_key_id.trim(),
+        "secret_access_key": body.secret_access_key,
+    })
+    .to_string();
+    let host = S3Bucket::new(
+        config,
+        S3Credentials::new(body.access_key_id.trim(), body.secret_access_key.as_str()),
+    )?;
+    host.test_provider()?;
+    let secret_ref = format!("connector-{}", uuid::Uuid::new_v4());
+    let vault = w
+        .vault
+        .as_mut()
+        .ok_or_else(|| ApiError::internal("the vault closed"))?;
+    vault.put(&secret_ref, secret.as_bytes())?;
+    let added = w.save_vault().and_then(|()| {
+        w.collection
+            .add_connector(
+                S3Bucket::KIND,
+                &body.name,
+                &host.config(),
+                Some(&secret_ref),
+            )
+            .map_err(ApiError::from)
+    });
+    let id = match added {
+        Ok(id) => id,
+        Err(error) => {
+            // The secret does not stay in the vault without a row.
+            if let Some(vault) = w.vault.as_mut() {
+                vault.remove(&secret_ref);
+            }
+            let _ = w.save_vault();
+            return Err(error);
+        }
+    };
+    Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
 }
 
 pub(crate) async fn add_connector(
@@ -203,11 +318,14 @@ pub(crate) async fn add_connector(
     Json(body): Json<NewConnector>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     blocking(shared, move |w| {
-        let NewConnector::Local {
-            name,
-            root,
-            base_url,
-        } = body;
+        let (name, root, base_url) = match body {
+            NewConnector::Local {
+                name,
+                root,
+                base_url,
+            } => (name, root, base_url),
+            NewConnector::S3(body) => return add_s3_connector(w, &body),
+        };
         let root = expand_home(root.trim());
         if !std::path::Path::new(&root).is_absolute() {
             return Err(ApiError::new(
@@ -276,13 +394,13 @@ pub(crate) async fn update_connector(
     .await
 }
 
-/// Give a local folder host a new public address, or remove it with an
+/// Give a local folder host or an S3 host a new public address, or remove it with an
 /// empty `base_url` (ADR 0021, ADR 0036 item 11). The address is typed,
 /// not inferred, so Studio does not replace it after this. Each feed
 /// address of the folder then changes, as after a folder match.
 ///
-/// A connector of a different kind has no public address, so the
-/// function does nothing for it.
+/// A connector of another kind has no public address, so the function
+/// does nothing for it.
 ///
 /// # Errors
 ///
@@ -293,7 +411,7 @@ fn set_connector_base_url(
     row: &ConnectorRow,
     base_url: &str,
 ) -> Result<(), ApiError> {
-    if row.kind != LocalFolder::KIND {
+    if row.kind != LocalFolder::KIND && row.kind != S3Bucket::KIND {
         return Ok(());
     }
     let trimmed = base_url.trim();
@@ -313,10 +431,13 @@ fn set_connector_base_url(
     let mut config: Value =
         serde_json::from_str(&row.config).map_err(|e| ApiError::internal(e.to_string()))?;
     config["base_url"] = new_url.map_or(Value::Null, Value::String);
-    config["base_url_inferred"] = Value::Bool(false);
+    // Only a local folder can have an inferred address.
+    if row.kind == LocalFolder::KIND {
+        config["base_url_inferred"] = Value::Bool(false);
+    }
     w.collection
         .set_connector_config(row.id, &config.to_string())?;
-    studio_core::address::apply_folder_address(&mut w.collection, row.id)?;
+    studio_core::address::apply_folder_address(&mut w.collection, row.id, w.vault.as_ref())?;
     Ok(())
 }
 
@@ -765,7 +886,11 @@ pub(crate) async fn match_connector(
                 linked.push(feed.id);
             }
         }
-        let folder_address = studio_core::address::apply_folder_address(&mut w.collection, row.id)?;
+        let folder_address = studio_core::address::apply_folder_address(
+            &mut w.collection,
+            row.id,
+            w.vault.as_ref(),
+        )?;
         // A new host gets its inventory immediately, so that the Files
         // page shows its copies (ADR 0036 item 6).
         let hosts = w.hosts()?;

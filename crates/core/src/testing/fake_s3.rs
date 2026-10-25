@@ -253,6 +253,12 @@ impl FakeS3 {
         self.with(|state| state.objects.get(key).map(|o| o.bytes.clone()))
     }
 
+    /// The key of each object, in key sequence.
+    #[must_use]
+    pub fn keys(&self) -> Vec<String> {
+        self.with(|state| state.objects.keys().cloned().collect())
+    }
+
     /// Store an object with no request. The type is `binary/octet-stream`.
     pub fn put_object(&self, key: &str, bytes: &[u8]) {
         self.with(|state| {

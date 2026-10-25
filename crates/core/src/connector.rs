@@ -127,6 +127,8 @@ pub enum ConnectorErrorKind {
     Unauthorized,
     /// Studio cannot connect to the host.
     Unavailable,
+    /// The host does not refuse a conditional write that is not correct.
+    NoConditions,
 }
 
 /// An error from a connector.

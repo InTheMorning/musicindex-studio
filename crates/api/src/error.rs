@@ -100,6 +100,8 @@ impl From<ConnectorError> for ApiError {
             ConnectorErrorKind::Unavailable => {
                 (StatusCode::SERVICE_UNAVAILABLE, "host_unavailable")
             }
+            // ADR 0046 item 5: the provider test refused the host.
+            ConnectorErrorKind::NoConditions => (StatusCode::UNPROCESSABLE_ENTITY, "no_conditions"),
             _ => (StatusCode::BAD_GATEWAY, "connector"),
         };
         Self::new(status, code, error.to_string())

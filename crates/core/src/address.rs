@@ -9,7 +9,8 @@
 use serde::Serialize;
 
 use crate::collection::{Collection, CollectionError, ConnectorId, ConnectorRow, FeedId, FeedRow};
-use crate::connector::{self, ConnectorError, LocalFolder};
+use crate::connector::{self, ConnectorError, LocalFolder, S3Bucket, S3Config};
+use crate::vault::OpenVault;
 
 /// A source of a feed address (ADR 0021 item 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -163,7 +164,10 @@ fn candidates(feeds: &[FeedRow]) -> Candidates {
 ///
 /// Studio sets an inferred address only when the folder has no address and
 /// all the candidates are the same. It does not replace an address that the
-/// user typed.
+/// user typed. An S3 host has only a typed address.
+///
+/// The vault gives the secret of a connector that needs one. A host of the
+/// kind `s3` thus needs the open vault.
 ///
 /// # Errors
 ///
@@ -172,6 +176,7 @@ fn candidates(feeds: &[FeedRow]) -> Candidates {
 pub fn apply_folder_address(
     collection: &mut Collection,
     id: ConnectorId,
+    vault: Option<&OpenVault>,
 ) -> Result<FolderAddress, AddressError> {
     let row = collection.connector(id)?;
     let linked: Vec<FeedRow> = collection
@@ -197,10 +202,12 @@ pub fn apply_folder_address(
                 FolderAddress::Inferred { url, new: true }
             }
         }
+    } else if let Some(url) = folder_url(&row) {
+        FolderAddress::Typed { url }
     } else {
         FolderAddress::Unknown
     };
-    let made = connector::from_row(&collection.connector(id)?, None)?;
+    let made = connector::from_row(&collection.connector(id)?, vault)?;
     for feed in &linked {
         if let Some(path) = &feed.path {
             collection.set_address(
@@ -213,14 +220,19 @@ pub fn apply_folder_address(
     Ok(outcome)
 }
 
-/// The public address of a folder connector, typed or inferred. Other
-/// connector kinds give `None`.
+/// The public address of a folder connector, typed or inferred, or the
+/// public address of an S3 connector. Other connector kinds give `None`.
 #[must_use]
 pub fn folder_url(row: &ConnectorRow) -> Option<String> {
-    (row.kind == LocalFolder::KIND)
-        .then(|| LocalFolder::from_config(&row.config).ok())
-        .flatten()
-        .and_then(|f| f.base_url().map(str::to_owned))
+    match row.kind.as_str() {
+        LocalFolder::KIND => LocalFolder::from_config(&row.config)
+            .ok()
+            .and_then(|f| f.base_url().map(str::to_owned)),
+        S3Bucket::KIND => serde_json::from_str::<S3Config>(&row.config)
+            .ok()
+            .and_then(|c| c.base_url),
+        _ => None,
+    }
 }
 
 /// The linked feeds of a folder with an address that does not agree with
@@ -340,13 +352,45 @@ mod tests {
     }
 
     #[test]
+    fn an_s3_host_gives_its_public_address_as_a_typed_address() {
+        let collection = Collection::open_in_memory().unwrap();
+        let config = |base_url: Option<&str>| {
+            serde_json::json!({
+                "endpoint": "https://s3.example.com",
+                "region": "auto",
+                "bucket": "bk",
+                "url_style": "path",
+                "prefix": "",
+                "base_url": base_url,
+            })
+            .to_string()
+        };
+        let with = collection
+            .add_connector(
+                S3Bucket::KIND,
+                "R2",
+                &config(Some("https://cdn.example")),
+                None,
+            )
+            .unwrap();
+        let without = collection
+            .add_connector(S3Bucket::KIND, "R2 b", &config(None), None)
+            .unwrap();
+        assert_eq!(
+            folder_url(&collection.connector(with).unwrap()).as_deref(),
+            Some("https://cdn.example")
+        );
+        assert_eq!(folder_url(&collection.connector(without).unwrap()), None);
+    }
+
+    #[test]
     fn candidates_that_agree_give_the_folder_address_and_the_feed_from_the_folder_gets_it() {
         let (mut collection, id, [_, _, third]) = folder(
             "https://m.example/feeds/music/a.xml",
             "https://m.example/feeds/b.xml",
             None,
         );
-        let outcome = apply_folder_address(&mut collection, id).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, None).unwrap();
         let url = "https://m.example/feeds".to_owned();
         assert_eq!(
             outcome,
@@ -366,7 +410,7 @@ mod tests {
         assert_eq!(disagreements(&collection, id), Vec::new());
         // A second match keeps the inferred address.
         assert_eq!(
-            apply_folder_address(&mut collection, id).unwrap(),
+            apply_folder_address(&mut collection, id, None).unwrap(),
             FolderAddress::Inferred { url, new: false }
         );
     }
@@ -378,7 +422,7 @@ mod tests {
             "https://cdn.example/b.xml",
             None,
         );
-        let outcome = apply_folder_address(&mut collection, id).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, None).unwrap();
         assert_eq!(outcome, FolderAddress::Different);
         assert_eq!(folder_url(&collection.connector(id).unwrap()), None);
         assert_eq!(collection.feed(third).unwrap().public_url, None);
@@ -392,7 +436,7 @@ mod tests {
             "https://cdn.example/b.xml",
             Some("https://m.example"),
         );
-        let outcome = apply_folder_address(&mut collection, id).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, None).unwrap();
         assert_eq!(
             outcome,
             FolderAddress::Typed {

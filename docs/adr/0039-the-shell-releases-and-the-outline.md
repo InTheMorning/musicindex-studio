@@ -6,6 +6,11 @@
 - Replaces: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
 - Amended: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel. They always show, also with the outline of item 5 (musicindex ADR 0027 R-SHELL-1 item 4).
 - Amended: 2026-10-25 by operator decision. Items 10 and 11 put the left panel behind a menu button at narrow width. The menu button is at the top left and always visible. No tab bar shows.
+- Amended: 2026-10-25 by operator decision. Item 2a gives the sort and the view of Releases, as musicindex ADR 0027 R-LIST-1 item 6 asks. [ADR 0042](0042-ui-models-with-node-tests.md) gives the method of the mechanical criteria.
+- Amended: 2026-10-25 by operator decision, after the check of the touch back control in Firefox. Item 10a gives the bar of a feed two rows at narrow width.
+- Amended: 2026-10-25 by operator decision. musicindex ADR 0030 replaces the menu button and the drawer. Items 10, 10a, 11 and 11a now make Studio one stack at narrow width, with the root page and the outline page.
+- Amended: 2026-10-25 by operator decision. musicindex ADR 0031 makes the Touch back control of item 9 a circular icon button with no word.
+- Amended: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
 
 ## Context
 
@@ -25,6 +30,11 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 1. With no feed open, the left panel holds the destinations. Releases and Add a feed are at the top. Hosts and Lock Studio are at the bottom of the panel, and stay there at each height of the window.
 2. Releases is a list page at the full width of the content area. Each row shows the cover, the type label, the host and the draft state, for example "Saved, not written".
+2a. Releases has the sort and the view of musicindex ADR 0027 R-LIST-1:
+   - The sorts are "Newest", the default, and "A to Z" with a letter bar. "Newest" gives the feed that joined the collection last first.
+   - The views are rows, the default, and tiles.
+   - A sort or a view that is not the default is in the query of the address, as `sort=az` and `view=tiles`.
+
 3. Releases is the start page. An empty collection starts the first-run wizard of [ADR 0020](0020-first-run-asks-one-question.md).
 4. No page is a placeholder. "Select a feed" goes.
 
@@ -37,12 +47,17 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### Back
 
-9. The editor bar has the back control of musicindex ADR 0027 R-NAV-2 at its leading edge: the icons `‹ ›` on Desktop, and `‹ Back` on Touch.
+9. The editor bar has the back control of musicindex ADR 0027 R-NAV-2 at its leading edge: the icons `‹ ›` on Desktop, and the circular icon button `‹` named "Back" on Touch (musicindex ADR 0031 R-NAV-3).
 
 ### Narrow Width
 
-10. At 760 px or less, the left panel collapses behind a menu button. The button is the first control of the bar, at the top left, and it is always visible (musicindex ADR 0027 R-SHELL-1 item 7).
-11. The menu button opens the left panel as a drawer below the bar: the destinations or the outline, with Hosts and Lock Studio at its bottom. The back control of item 9 comes after the menu button (musicindex ADR 0027 R-NAV-2 item 6).
+10. At 760 px or less, Studio is one stack (musicindex ADR 0030 R-SHELL-2). It has no menu button and no drawer. The back control of item 9 is the first control of the bar.
+
+10a. At 760 px or less, the bar of a feed has two rows. The first row has the back control and the title. The second row has the draft status, then "Versions" and "Review". No part of the bar is hidden.
+
+11. The root page "Studio" shows the destinations of item 1: Releases and Add a feed, with Hosts and Lock Studio at its bottom. It has no back control. Releases stays the start page (item 3), and the root page is below it in the stack. The root page has the color of the left panel, and its bar has the color of the other bars.
+
+11a. A selection of a feed on Releases opens the outline page of the feed: the items of item 6 as a page. A selection on the outline page opens its part. Back from a part opens the outline page, and Back from the outline page opens Releases with the row of the feed marked. The outline page has the color of the left panel, as the root page has.
 
 ### Value Routes
 
@@ -63,20 +78,23 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ## Verification
 
-Mechanical, at the owning layer:
+Mechanical, at the owning layer, in the model modules of [ADR 0042](0042-ui-models-with-node-tests.md):
 
 - With no feed open, the UI model of the left panel gives the four destinations, and no text "Select a feed".
 - With a feed open, the outline model gives its items in the sequence of item 6.
 - After the link "Releases", the Releases page gives the marked feed row.
+- The Releases model gives the rows in the sequence of each sort, and the letter groups of "A to Z".
+- The navigation model disables Forward when no subsequent page exists (musicindex ADR 0027 R-NAV-2 item 4).
+- At narrow width, the navigation model gives the sequence of item 11a, and the root page below Releases (item 11).
 
 Visual, for the operator:
 
 - Studio starts on Releases, and a feed opens over it with its outline.
 - Hosts and Lock Studio are at the bottom of the left panel in a short window and in a tall window.
-- At 390 px, the menu button shows at the top left on each page, and it opens and closes the left panel.
+- At 390 px, no page has a menu button. Back on Releases opens the root page, and a feed opens on its outline page.
 
 ## Invariants
 
 Situational, until a decision replaces this layout:
 
-- The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom.
+- The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. At 760 px or less, the root page and the outline page hold the same content.

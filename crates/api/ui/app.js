@@ -1,7 +1,13 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
-import { html, render, useState, useEffect, useCallback, useRef } from './vendor/htm-preact-standalone.module.js';
-import { AlbumEditor, DraftToolbar, trackKey, isTrack, isPublisher } from './editor.js';
+import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
+import { AlbumEditor, DraftToolbar } from './editor.js';
 import { useDraft } from './draft.js';
+import {
+  mediumKind, isEditable, isPublisher, trackKey, isTrack,
+  leftPanel, releasesList, listQuery, queryText,
+  startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll,
+  isFeedView, openFeedView, navAtWidth,
+} from './shell.js';
 
 // ---- Access token (ADR 0017) ----
 // The API gives the UI address with the token in the fragment. The UI keeps
@@ -210,15 +216,6 @@ export function useAction() {
     }
   }, []);
   return { busy, error, run };
-}
-
-function mediumKind(medium) {
-  switch ((medium || '').toLowerCase()) {
-    case 'publisher': return { dot: 'publisher', label: 'Publisher' };
-    case 'musicl': return { dot: 'playlist', label: 'Playlist' };
-    case 'music': return { dot: 'feed', label: 'Album' };
-    default: return { dot: 'feed', label: 'Feed' };
-  }
 }
 
 // The source of a feed address (ADR 0021). `editor.js` uses this for the
@@ -493,7 +490,7 @@ function NewPublisherForm({ connectors, onAdded }) {
   </form>`;
 }
 
-// Select a feed file from the host, or type its path (ADR 0019).
+// Choose a feed file from the host, or type its path (ADR 0019).
 function AddFeedForm({ connectors, onAdded }) {
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
   const [found, setFound] = useState(null);
@@ -856,44 +853,60 @@ function NoToken() {
 
 // ---- Shell ----
 
-// A function that does nothing. Each wide-width use of SidebarContent gives
-// this as its onSelect, since a selection there needs no drawer to close
-// (task 014d).
-const NOOP = () => {};
-
-// Is the window 760 px wide or less (ADR 0029 item 15)? This follows each
-// change of the match, such as a resize or a turn of the device.
-function useNarrow() {
-  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 760px)').matches);
+// Does a media query apply? This follows each change, such as a resize or a
+// turn of the device.
+function useMedia(query) {
+  const [matches, setMatches] = useState(() => matchMedia(query).matches);
   useEffect(() => {
-    const query = matchMedia('(max-width: 760px)');
-    const onChange = () => setNarrow(query.matches);
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
-  return narrow;
+    const media = matchMedia(query);
+    const onChange = () => setMatches(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
 }
 
+// Is the window 760 px wide or less (ADR 0029 item 15)?
+function useNarrow() {
+  return useMedia('(max-width: 760px)');
+}
+
+// The back and forward state of the shell, for each Bar (ADR 0039 item 9).
+const NavContext = createContext(null);
+
 // The toolbar of a screen. Each screen gives its own content, such as a
-// title or a breadcrumb, after the menu button. CSS shows the menu button
-// only at 760 px or less, where the drawer holds the sidebar (ADR 0029 item
-// 15). `FeedDetail`, `Hosts` and `AddFeeds` use this (task 014d).
-function Bar({ onMenu, children }) {
+// title or a breadcrumb, after the back control. The root page has no back
+// control (ADR 0039 item 11), so `back` is false there. The kind of pointer
+// sets the back control: `‹ ›` with a mouse, and one circular `‹` named
+// "Back" by touch (musicindex ADR 0027 R-NAV-2, ADR 0031 R-NAV-3,
+// R-PROFILE-1).
+// A chevron icon of the back control and of the forward control, with the
+// path of the Lucide icons "chevron-left" and "chevron-right" (musicindex
+// ADR 0022). Its size is the line height of its text (musicindex ADR 0025).
+function Chevron({ direction }) {
+  return html`<svg class="chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d=${direction === 'back' ? 'm15 18-6-6 6-6' : 'm9 18 6-6-6-6'}></path>
+  </svg>`;
+}
+
+function Bar({ back = true, children }) {
+  const nav = useContext(NavContext);
   return html`<div class="bar">
-    <button class="button quiet icon-button menu" type="button" aria-label="Show the feeds" onClick=${onMenu}>☰</button>
+    ${back && nav && (nav.coarse
+      ? html`<button class="button icon-button back" type="button" aria-label="Back"
+          disabled=${!nav.canBack} onClick=${nav.back}><${Chevron} direction="back" /></button>`
+      : html`<button class="button quiet icon-button" type="button" aria-label="Back" title="Back"
+          disabled=${!nav.canBack} onClick=${nav.back}><${Chevron} direction="back" /></button>
+        <button class="button quiet icon-button" type="button" aria-label="Forward" title="Forward"
+          disabled=${!nav.canForward} onClick=${nav.forward}><${Chevron} direction="forward" /></button>`)}
     ${children}
   </div>`;
 }
 
-// Is this feed an album or a publisher feed that the editor can open (ADR
-// 0029 item 4, ADR 0041 item 3)?
-function isEditable(feed) {
-  return Boolean(feed.connector_id) && (mediumKind(feed.medium).label === 'Album' || isPublisher(feed));
-}
-
 // A feed that the editor cannot open yet: the full hero and the facts, as
 // before ADR 0029.
-function ReadOnlyFeed({ feed, onChanged, onRemoved, onMenu }) {
+function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -907,7 +920,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved, onMenu }) {
   };
   const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
   return html`<div>
-    <${Bar} onMenu=${onMenu}><span class="bar-title">${feed.title || 'Untitled feed'}</span><//>
+    <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span><//>
     <section class="hero" style=${{ '--glow': glow }}>
       <div class="art" aria-hidden="true"></div>
       <div>
@@ -937,7 +950,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved, onMenu }) {
 }
 
 // The names of the pages that are not the album page or a track.
-const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Recipients', files: 'Files' };
+const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Value routes', files: 'Files' };
 
 // The toolbar title: the feed title on the album page, or the feed title in
 // the muted color, then the name of the open page (review of task 014c,
@@ -956,7 +969,7 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
+function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -974,7 +987,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   const [filesReloadKey, setFilesReloadKey] = useState(0);
   const reloadFiles = () => setFilesReloadKey((n) => n + 1);
   return html`<div>
-    <${Bar} onMenu=${onMenu}>
+    <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
         onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} />
@@ -1006,84 +1019,14 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
+function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   if (isEditable(feed)) {
     return html`<${EditableFeed} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting}
-      onChanged=${onChanged} onListChanged=${onListChanged} onRemoved=${onRemoved} onMenu=${onMenu} connectors=${connectors}
+      onChanged=${onChanged} onListChanged=${onListChanged} onRemoved=${onRemoved} connectors=${connectors}
       differences=${differences} onRescan=${onRescan} />`;
   }
-  return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
-}
-
-// The sidebar tree: each feed, and the pages of the selected feed (ADR 0029
-// items 5 and 6). A click on a different feed opens its pages. A click on
-// the open feed opens or closes its pages. Only the selected feed shows its
-// pages, and only after its draft loads.
-function FeedTree({ feeds, view, draft, go, onAdding, onImporting, changedFeeds }) {
-  const selectedId = view.name === 'feed' ? view.id : null;
-  const [expanded, setExpanded] = useState(selectedId);
-  useEffect(() => { setExpanded(selectedId); }, [selectedId]);
-  const toggleFeed = (feed, canEdit) => {
-    if (feed.id === selectedId) {
-      if (canEdit) setExpanded((current) => (current === feed.id ? null : feed.id));
-    } else {
-      go({ name: 'feed', id: feed.id });
-      setExpanded(feed.id);
-    }
-  };
-  const openPage = (feed, page) => go({ name: 'feed', id: feed.id, ...page });
-  // Is this tree item the page that the view shows now?
-  const isCurrent = (page) => {
-    if (selectedId === null) return false;
-    const target = page.page || 'album';
-    if ((view.page || 'album') !== target) return false;
-    return target !== 'track' || view.track === page.track;
-  };
-  return html`<ul class="tree">
-    ${feeds.map((feed) => {
-      const kind = mediumKind(feed.medium);
-      const canEdit = isEditable(feed);
-      // A publisher feed has two pages and no tracks (ADR 0041 item 3).
-      const publisherFeed = isPublisher(feed);
-      const isOpen = canEdit && feed.id === selectedId && expanded === feed.id && draft.model !== null;
-      return html`<li key=${feed.id}>
-        <button class="node feed" type="button" aria-current=${feed.id === selectedId ? 'true' : 'false'}
-          aria-expanded=${canEdit ? (isOpen ? 'true' : 'false') : undefined}
-          onClick=${() => toggleFeed(feed, canEdit)}>
-          ${canEdit && html`<span class="chev" aria-hidden="true">▸</span>`}
-          <span class=${`dot ${kind.dot}`}></span>
-          <span class="label">${feed.title || feed.path || 'Untitled feed'}</span>
-          ${changedFeeds.has(feed.id) && html`<span class="change-mark"><span class="visually-hidden">Changes in the library folder</span></span>`}
-        </button>
-        ${isOpen && html`<ul>
-          <li><button class="node" type="button" aria-current=${isCurrent({}) ? 'page' : 'false'}
-            onClick=${() => openPage(feed, {})}><span class="label">${publisherFeed ? 'Publisher' : 'Album'}</span></button></li>
-          ${!publisherFeed && html`<li><button class="node" type="button" aria-current=${isCurrent({ page: 'credits' }) ? 'page' : 'false'}
-            onClick=${() => openPage(feed, { page: 'credits' })}><span class="label">Credits and links</span></button></li>
-          <li><button class="node" type="button" aria-current=${isCurrent({ page: 'recipients' }) ? 'page' : 'false'}
-            onClick=${() => openPage(feed, { page: 'recipients' })}><span class="label">Recipients</span></button></li>`}
-          <li><button class="node" type="button" aria-current=${isCurrent({ page: 'files' }) ? 'page' : 'false'}
-            onClick=${() => openPage(feed, { page: 'files' })}><span class="label">Files</span></button></li>
-          ${!publisherFeed && html`<li class="tree-sub">Tracks</li>
-          ${draft.model.items.map((item, i) => {
-            const key = trackKey(item);
-            const bad = draft.bad.some((b) => b.field.startsWith(`items/${i}/`));
-            return html`<li key=${key}><button class="node" type="button"
-              aria-current=${isCurrent({ page: 'track', track: key }) ? 'page' : 'false'}
-              onClick=${() => openPage(feed, { page: 'track', track: key })}>
-              <span class="num">${i + 1}</span><span class="label">${item.title || 'Untitled track'}</span>
-              ${bad && html`<span class="field-error">Address not correct</span>`}
-            </button></li>`;
-          })}
-          <li><button class="node add" type="button" onClick=${() => { openPage(feed, {}); onAdding(true); }}>
-            <span class="num">＋</span><span class="label">Add a track</span></button></li>
-          <li><button class="node add" type="button" onClick=${() => { openPage(feed, {}); onImporting(true); }}>
-            <span class="num">＋</span><span class="label">Import files</span></button></li>`}
-        </ul>`}
-      </li>`;
-    })}
-  </ul>`;
+  return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} />`;
 }
 
 // The feed files in a folder that are not in the collection. Studio shows
@@ -1247,7 +1190,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   </article>`;
 }
 
-function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
+function Hosts({ connectors, feeds, onChanged, onOpen }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -1273,7 +1216,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   });
   const showForm = adding || connectors.length === 0;
   return html`<div>
-    <${Bar} onMenu=${onMenu}><span class="bar-title">Hosts</span><//>
+    <${Bar}><span class="bar-title">Hosts</span><//>
     <section class="section">
       <${LibraryPanel} />
       ${error && error.code === 'in_use'
@@ -1303,9 +1246,9 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   </div>`;
 }
 
-function AddFeeds({ connectors, onAdded, onMenu, go }) {
+function AddFeeds({ connectors, onAdded, go }) {
   const [found, setFound] = useState(null);
-  return html`<div><${Bar} onMenu=${onMenu}><span class="bar-title">Add feeds</span><//><section class="section">
+  return html`<div><${Bar}><span class="bar-title">Add feeds</span><//><section class="section">
     <div class="panel"><h2>Make a new release</h2>
       ${connectors.length > 0
         ? html`<${NewReleaseForm} connectors=${connectors} onAdded=${onAdded} />`
@@ -1327,53 +1270,359 @@ function AddFeeds({ connectors, onAdded, onMenu, go }) {
   </section></div>`;
 }
 
-// The content of the sidebar: the brand, the theme toggle, the feed tree,
-// "Add a feed", Hosts and "Lock Studio". Only the feed tree and "Add a
-// feed" scroll, so that the brand and the footer stay in view (visual
-// check of task 022). The wide `Shell` shows it in
-// `nav.sidebar`. The narrow `Shell` shows the same content in the drawer,
-// where a selection closes the drawer (task 014d, ADR 0029 item 15).
-function SidebarContent({ feeds, view, draft, go, onAdding, onImporting, vault, onLock, onSelect, changedFeeds }) {
-  const select = (next, options) => { onSelect(); go(next, options); };
-  const addTrack = (value) => { onSelect(); onAdding(value); };
-  const importFiles = (value) => { onSelect(); onImporting(value); };
+// The left panel (ADR 0039 items 1, 5 and 6). It shows the destinations, or
+// the outline of the open feed, and Hosts and Lock Studio at the bottom.
+// `panel` is the value of `leftPanel()`. Only the scroll area scrolls, so
+// that the brand and the footer stay in view (visual check of task 022).
+// At 760 px or less the left panel is not shown: its content is the root
+// page and the outline page of the stack (ADR 0039 item 11, musicindex ADR
+// 0030 R-SHELL-2).
+function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onLock }) {
+  if (panel.kind === 'destinations') {
+    return html`<header><${Brand} /><${ThemeToggle} /></header>
+      <div class="sidebar-scroll">${destinationRows(panel.top, go)}</div>
+      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
+  }
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <div class="sidebar-scroll">
-      <h2>Feeds</h2>
-      ${feeds && feeds.length === 0 && html`<p class="empty">No feeds yet.</p>`}
-      <${FeedTree} feeds=${feeds || []} view=${view} draft=${draft} go=${select} onAdding=${addTrack} onImporting=${importFiles}
-        changedFeeds=${changedFeeds} />
-      <button class="row" type="button" onClick=${() => select({ name: 'add-feed' })}>＋ Add a feed</button>
+      <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${showReleases}
+        onAdding=${onAdding} onImporting=${onImporting} />
     </div>
-    <footer>
-      <button class="row" type="button" aria-current=${view.name === 'hosts' ? 'true' : 'false'}
-        onClick=${() => select({ name: 'hosts' })}><span class="dot hosting"></span>Hosts</button>
-      ${vault === 'open' && html`<button class="row" type="button" onClick=${() => { onSelect(); onLock(); }}>Lock Studio</button>`}
-    </footer>`;
+    <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
 }
 
+// The current row of a list gets aria-current.
+const currentAttr = (item) => (item.current ? 'page' : undefined);
+
+// The destination rows: Releases and Add a feed.
+function destinationRows(top, go) {
+  return top.map((item) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
+    onClick=${() => { if (!item.current) go({ name: item.id }); }}>${item.label}</button>`);
+}
+
+// The outline of an open feed (ADR 0039 item 6): the cover, the title and the
+// type label, then one row for each item. The left panel shows it at a wide
+// width, and the outline page shows it at a narrow width. `showReleases` is
+// given at a wide width only, where the item "Releases" is in the panel.
+function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting }) {
+  const feed = panel.feed;
+  const releases = panel.items.find((item) => item.id === 'releases');
+  const rest = panel.items.filter((item) => item.id !== 'releases');
+  const hasBadAddress = (number) => draft.bad.some((b) => b.field.startsWith(`items/${number - 1}/`));
+  return html`${releases && html`<button class="row" type="button" onClick=${() => showReleases(feed.id)}>${releases.label}</button>`}
+    <div class="outline-feed">
+      <${ImageThumb} url=${feed.image} className="outline-cover" always />
+      <div class="text">
+        <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
+        <span class="sub">${feed.typeLabel}</span>
+      </div>
+    </div>
+    <ul class="tree">
+      ${rest.map((item) => {
+        if (item.action) {
+          const isAddTrack = item.action === 'add-track';
+          return html`<li key=${item.id}><button class="node add" type="button"
+            onClick=${() => { go({ name: 'feed', id: feed.id, page: 'album' }); (isAddTrack ? onAdding : onImporting)(true); }}>
+            <span class="num">＋</span><span class="label">${item.label}</span></button></li>`;
+        }
+        const open = () => go({
+          name: 'feed', id: feed.id, page: item.page,
+          ...(item.track === undefined ? {} : { track: item.track }),
+        });
+        const numbered = item.number !== undefined;
+        return html`<li key=${item.id}><button class="node" type="button" aria-current=${currentAttr(item)} onClick=${open}>
+          ${numbered && html`<span class="num">${item.number}</span>`}
+          <span class="label">${item.label}</span>
+          ${numbered && hasBadAddress(item.number) && html`<span class="field-error">Address not correct</span>`}
+        </button></li>`;
+      })}
+    </ul>`;
+}
+
+// The footer of the left panel and of the root page: Hosts, and Lock Studio
+// when the vault is open.
+function LeftPanelFooter({ panel, go, onLock }) {
+  return html`<footer>
+    ${panel.bottom.map((item) => (item.id === 'lock'
+      ? html`<button class="row" type="button" onClick=${onLock}>Lock Studio</button>`
+      : html`<button class="row" type="button" aria-current=${currentAttr(item)}
+          onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}><span class="dot hosting"></span>${item.label}</button>`))}
+  </footer>`;
+}
+
+// The root page of a narrow window (ADR 0039 item 11): the destinations, with
+// Hosts and Lock Studio at its bottom. It has no back control.
+function RootPage({ panel, go, onLock }) {
+  return html`<div class="panel-page">
+    <${Bar} back=${false}><span class="bar-title">Studio</span><//>
+    <div class="stack-page">
+      <header><${Brand} /><${ThemeToggle} /></header>
+      ${destinationRows(panel.top, go)}
+      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />
+    </div>
+  </div>`;
+}
+
+// The outline page of a narrow window (ADR 0039 item 11a). Its bar has the
+// back control, the title of the feed and the draft toolbar of the feed.
+function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporting, onChanged, connectors }) {
+  // A host operation can change the draft XML. After it, the shell saves the
+  // edits of the user and loads the draft again (ADR 0036 item 14).
+  const opsChanged = async () => {
+    if (await draft.flush()) await draft.load();
+  };
+  return html`<div class="panel-page">
+    <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span>
+      ${isEditable(feed) && html`<${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft}
+        onWritten=${onChanged} connectors=${connectors} onOpsChanged=${opsChanged} onOpsCleared=${() => {}} />`}
+    <//>
+    <section class="section outline-page">
+      <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${null}
+        onAdding=${onAdding} onImporting=${onImporting} />
+    </section>
+  </div>`;
+}
+
+// The sort names of the Releases list (ADR 0039 item 2a).
+const SORTS = [{ id: 'newest', label: 'Newest' }, { id: 'az', label: 'A to Z' }];
+
+// The Releases page, the start page (ADR 0039 items 2, 2a and 3, musicindex
+// ADR 0027 R-LIST-1). `list` is the sort and the view from the address.
+// `marked` is the feed that the last Back selection left marked.
+function ReleasesPage({ feeds, connectors, marked, list, changedFeeds, onQuery, onOpen, onAddFeed }) {
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortButton = useRef(null);
+  const releases = releasesList({ feeds, connectors, sort: list.sort, view: list.view, marked });
+  const pickSort = (id) => {
+    setSortOpen(false);
+    onQuery({ sort: id });
+    if (sortButton.current) sortButton.current.focus();
+  };
+  // Escape closes the sort menu and keeps the focus on its button.
+  const onSortKey = (event) => {
+    if (event.key === 'Escape' && sortOpen) {
+      event.stopPropagation();
+      setSortOpen(false);
+      if (sortButton.current) sortButton.current.focus();
+    }
+  };
+  // A letter scrolls its first row into view.
+  const showLetter = (firstId) => {
+    const row = document.getElementById(`release-${firstId}`);
+    if (row) row.scrollIntoView({ block: 'start' });
+  };
+  const hasRows = releases.rows.length > 0;
+  const viewButton = (name, label, icon) => html`<button class="button quiet icon-button view-button" type="button"
+    aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
+    onClick=${() => onQuery({ view: name })}>${icon}</button>`;
+  return html`<div>
+    <${Bar}><span class="bar-title">Releases</span><//>
+    <section class="releases">
+      <div class="releases-head">
+        <h1>Releases</h1>
+        ${hasRows && html`<div class="releases-tools">
+          <div class="sort" onKeyDown=${onSortKey}>
+            <button class="button" type="button" ref=${sortButton} aria-haspopup="menu"
+              aria-expanded=${sortOpen ? 'true' : 'false'} onClick=${() => setSortOpen(!sortOpen)}>
+              ${list.sort === 'az' ? 'A to Z' : 'Newest'} ⌄</button>
+            ${sortOpen && html`<ul class="sort-menu" role="menu" aria-label="Sort">
+              ${SORTS.map((s) => html`<li><button type="button" role="menuitemradio" aria-checked=${list.sort === s.id ? 'true' : 'false'}
+                onClick=${() => pickSort(s.id)}><span class="sort-mark" aria-hidden="true">${list.sort === s.id ? '✓' : ''}</span>${s.label}</button></li>`)}
+            </ul>`}
+          </div>
+          ${viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
+          ${viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
+        </div>`}
+      </div>
+      ${releases.letters && html`<nav class="letters" aria-label="Letters">
+        ${releases.letters.map((g) => html`<button class="button letter" type="button" onClick=${() => showLetter(g.firstId)}>${g.letter}</button>`)}
+      </nav>`}
+      ${hasRows
+        ? html`<ul class=${`releases-list ${releases.view}`}>
+            ${releases.rows.map((row) => html`<li id=${`release-${row.id}`} data-marked=${row.marked ? 'true' : 'false'}>
+              <button class=${releases.view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" onClick=${() => onOpen(row.id)}>
+                <${ImageThumb} url=${row.image} className="releases-cover" always />
+                <span class="releases-text">
+                  <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
+                  <span class="sub">${row.typeLabel}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
+                  ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
+                </span>
+              </button>
+            </li>`)}
+          </ul>`
+        : html`<div class="empty-releases">
+            <p class="empty">No releases yet.</p>
+            <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button></div>
+          </div>`}
+    </section>
+  </div>`;
+}
+
+// The navigation state of the session (ADR 0039 item 8). A reload keeps it
+// in session storage. If the read fails, or the state is not valid, Studio
+// starts again at Releases.
+const NAV_KEY = 'studio-nav';
+
+function readNav() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(NAV_KEY));
+    if (saved && Array.isArray(saved.entries) && saved.entries.length > 0
+      && Number.isInteger(saved.index) && saved.index >= 0 && saved.index < saved.entries.length) {
+      return saved;
+    }
+  } catch (_) {}
+  return startNav({ name: 'releases' });
+}
+
+// If the write fails, the state stays in memory only.
+function writeNav(nav) {
+  try { sessionStorage.setItem(NAV_KEY, JSON.stringify(nav)); } catch (_) {}
+}
+
+// The shell. It owns the list of views, the left panel at a wide width, the
+// one stack at a narrow width and the Releases page. Each new view is a history entry, so
+// that the browser Back button works (musicindex ADR 0027 R-NAV-2).
 function Shell({ vault, onLock }) {
   const [feeds, setFeeds] = useState(null);
   const [connectors, setConnectors] = useState([]);
-  const [view, go] = useNav('shell', { name: 'feeds' });
-  const [error, setError] = useState(null);
-  // The Add a track sheet, by the tree and by the album page (ADR 0029 item 7).
-  const [adding, setAdding] = useState(false);
-  // The import sheet, by the tree and by the album page (task 018d).
-  const [importing, setImporting] = useState(false);
-  // At a narrow width, the drawer holds the sidebar (task 014d).
+  // At 760 px or less the window is one stack (musicindex ADR 0030 R-SHELL-2).
   const narrow = useNarrow();
-  const drawerRef = useRef(null);
-  // Each new page starts at its top.
+  const [nav, setNavState] = useState(() => navAtWidth(readNav(), narrow));
+  // The newest state. A scroll change saves here, without a new render.
+  const navRef = useRef(nav);
+  const [list, setList] = useState(() => listQuery(location.search));
+  const [error, setError] = useState(null);
+  // The Add a track sheet, by the left panel and by the album page (ADR 0029 item 7).
+  const [adding, setAdding] = useState(false);
+  // The import sheet, by the left panel and by the album page (task 018d).
+  const [importing, setImporting] = useState(false);
+  const coarse = useMedia('(pointer: coarse)');
+  // The scroll area of the page. Each new view starts at its own scroll.
   const mainRef = useRef(null);
-  useEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view]);
-  const openDrawer = useCallback(() => { if (drawerRef.current) drawerRef.current.showModal(); }, []);
-  const closeDrawer = useCallback(() => { if (drawerRef.current && drawerRef.current.open) drawerRef.current.close(); }, []);
-  // A click that lands on the dialog itself, and not on its content, is a
-  // click on the backdrop (task 014d architecture).
-  const onBackdrop = useCallback((event) => { if (event.target === event.currentTarget) closeDrawer(); }, [closeDrawer]);
-  // A width that grows past 760 px needs no open drawer.
-  useEffect(() => { if (!narrow) closeDrawer(); }, [narrow, closeDrawer]);
+  const view = nav.entries[nav.index];
+
+  // Saves the scroll of the page into the current entry.
+  const withScroll = () => {
+    if (mainRef.current) navRef.current = setScroll(navRef.current, mainRef.current.scrollTop);
+    return navRef.current;
+  };
+  // Shows a navigation state, and saves it.
+  const commit = (next) => {
+    navRef.current = next;
+    writeNav(next);
+    setNavState(next);
+  };
+  // A new view, or with `replace`, the current view changes.
+  const go = (next, { replace = false } = {}) => {
+    const base = withScroll();
+    if (replace) {
+      const entries = base.entries.slice();
+      entries[base.index] = next;
+      commit({ entries, index: base.index });
+      history.replaceState({ scope: 'shell', index: base.index, mirrored: mirrored.current }, '');
+      return;
+    }
+    const pushed = pushNav(base, next);
+    commit(pushed);
+    history.pushState({ scope: 'shell', index: pushed.index, mirrored: mirrored.current }, '');
+  };
+  // True while the browser history has one entry for each entry of the
+  // state, up to the current one. Then the browser Back button and the back
+  // control do the same (musicindex ADR 0030 R-SHELL-2).
+  const mirrored = useRef(false);
+  // Back. When the history agrees with the state, the browser goes back,
+  // and `popstate` moves the state. Otherwise the state moves in place, for
+  // example at index 0, where a feed gets a Releases entry before it.
+  const back = () => {
+    const current = withScroll();
+    if (mirrored.current && current.index > 0 && history.state
+      && history.state.scope === 'shell' && history.state.index === current.index) {
+      history.back();
+      return;
+    }
+    const next = backNav(current);
+    commit(next);
+    history.replaceState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
+  };
+  const forward = () => {
+    if (!canForward(nav)) return;
+    const next = forwardNav(withScroll());
+    commit(next);
+    history.pushState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
+  };
+  // The link "Releases" of an open feed. It goes back when the Releases
+  // entry is directly before it, so that the page keeps its scroll.
+  const showReleases = (feedId) => {
+    const current = withScroll();
+    const before = current.index > 0 ? current.entries[current.index - 1] : null;
+    if (before && before.name === 'releases') back();
+    else go({ name: 'releases', marked: feedId });
+  };
+  // The browser Back and Forward buttons. The state moves until its index
+  // agrees with the index of the history entry.
+  useEffect(() => {
+    const index = navRef.current.index;
+    const kept = history.state;
+    if (kept && kept.scope === 'shell' && kept.index === index && kept.mirrored === true) {
+      // A reload keeps the history entries of the state.
+      mirrored.current = true;
+    } else {
+      // A new start makes one history entry for each entry of the state, so
+      // that the browser Back button goes down the stack.
+      history.replaceState({ scope: 'shell', index: 0, mirrored: true }, '');
+      for (let i = 1; i <= index; i += 1) history.pushState({ scope: 'shell', index: i, mirrored: true }, '');
+      mirrored.current = true;
+    }
+    const onPop = (event) => {
+      const target = event.state && event.state.scope === 'shell' ? event.state.index : 0;
+      mirrored.current = Boolean(event.state && event.state.mirrored === true);
+      let next = withScroll();
+      while (next.index > target) {
+        const stepped = backNav(next);
+        if (stepped.index === next.index) break;
+        next = stepped;
+      }
+      while (next.index < target && canForward(next)) next = forwardNav(next);
+      commit(next);
+    };
+    addEventListener('popstate', onPop);
+    return () => removeEventListener('popstate', onPop);
+  }, []);
+  // A change of width makes the state of the new width (ADR 0039 item 11a).
+  // The current view stays. A state that already fits the width is kept.
+  useEffect(() => {
+    const current = navRef.current;
+    const next = navAtWidth(current, narrow);
+    if (next === current) return;
+    commit(next);
+    // The history entries before this one belong to the state of the other
+    // width, so Back moves the state in place until the next load.
+    mirrored.current = false;
+    history.replaceState({ scope: 'shell', index: next.index, mirrored: false }, '');
+  }, [narrow]);
+  // After a change of view, the page scrolls to the saved position. With no
+  // saved position, it scrolls to the marked row of Releases, or to the top.
+  // A marked row that the saved position does not show moves into view by
+  // the smallest scroll (musicindex ADR 0027 R-NAV-2 item 2).
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    const marked = view.name === 'releases' ? main.querySelector('[data-marked="true"]') : null;
+    if (typeof view.scroll === 'number') {
+      main.scrollTop = view.scroll;
+      if (marked) marked.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (marked) marked.scrollIntoView({ block: 'center' });
+    else main.scrollTop = 0;
+  }, [nav.index, view, feeds === null]);
+  // The sort and the view write their query into the address. The hash stays.
+  const changeList = (patch) => {
+    const next = { ...list, ...patch };
+    setList(next);
+    const text = queryText(next);
+    history.replaceState(history.state, '', `${location.pathname}${text ? `?${text}` : ''}${location.hash}`);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -1408,7 +1657,7 @@ function Shell({ vault, onLock }) {
   const changedFeeds = new Set(differences.map((d) => d.feed_id));
 
   const lock = async () => { await api('/vault/lock', { method: 'POST' }).catch(() => {}); onLock(); };
-  const selected = view.name === 'feed' && feeds ? feeds.find((f) => f.id === view.id) : null;
+  const selected = isFeedView(view) && feeds ? feeds.find((f) => f.id === view.id) : null;
   // The shell holds the one draft of the selected feed (ADR 0029 item 4).
   // A feed with no connector, or a feed that is not an album, needs no draft.
   const draftFeedId = selected && isEditable(selected) ? selected.id : null;
@@ -1416,39 +1665,43 @@ function Shell({ vault, onLock }) {
   // A different feed closes the Add a track sheet and the import sheet of
   // the feed before it.
   useEffect(() => { setAdding(false); setImporting(false); }, [draftFeedId]);
+  const panel = leftPanel({ view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open', narrow });
 
   let main;
-  // A screen with no bar of its own gets one, so that the menu button is
-  // always there at a narrow width (ADR 0029 item 15).
-  const withBar = (content) => html`<div><${Bar} onMenu=${openDrawer}><span class="bar-title">Studio</span><//>${content}</div>`;
+  // A screen with no bar of its own gets one.
+  const withBar = (content) => html`<div><${Bar}><span class="bar-title">Studio</span><//>${content}</div>`;
   if (error) {
     main = withBar(html`<section class="section"><${ErrorNotice} error=${error} /></section>`);
   } else if (feeds === null) {
     main = withBar(html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`);
+  } else if (view.name === 'root') {
+    main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} />`;
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
-      onOpen=${(id) => go({ name: 'feed', id })} onMenu=${openDrawer} />`;
+      onOpen=${(id) => go({ name: 'feed', id })} />`;
   } else if (view.name === 'add-feed') {
-    main = html`<${AddFeeds} connectors=${connectors} onMenu=${openDrawer} go=${go}
-      onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
+    main = html`<${AddFeeds} connectors=${connectors} go=${go}
+      onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); }} />`;
+  } else if (selected && view.name === 'outline') {
+    main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go}
+      onAdding=${setAdding} onImporting=${setImporting} onChanged=${() => load()} connectors=${connectors} />`;
   } else if (selected) {
-    main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}
+    main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
       onListChanged=${() => load()}
-      onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} connectors=${connectors}
+      onRemoved=${async () => { await load(); go({ name: 'releases' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
   } else {
-    main = withBar(html`<section class="center" style=${{ minHeight: 'calc(100% - var(--bar-h))' }}><div class="card">
-      <h1>${feeds.length ? 'Select a feed' : 'Your collection is empty'}</h1>
-      <p>${feeds.length ? 'Select one in the Feeds list.' : 'Add a feed to start.'}</p>
-      <div class="actions"><button class="button primary" type="button" onClick=${() => go({ name: 'add-feed' })}>Add a feed</button></div>
-    </div></section>`);
+    main = html`<${ReleasesPage} feeds=${feeds} connectors=${connectors} marked=${view.marked} list=${list}
+      changedFeeds=${changedFeeds} onQuery=${changeList}
+      onOpen=${(id) => go(openFeedView(id, narrow))} onAddFeed=${() => go({ name: 'add-feed' })} />`;
   }
 
-  return html`<div class="shell">
+  const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward };
+  const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onLock: lock };
+  return html`<${NavContext.Provider} value=${navValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
-      <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding} onImporting=${setImporting}
-        vault=${vault} onLock=${lock} onSelect=${NOOP} changedFeeds=${changedFeeds} />
+      <${LeftPanel} ...${panelProps} />
     </nav>`}
     <main class="main" ref=${mainRef}>
       ${differences.length > 0 && !noticeClosed && html`<div class="notice scan-notice" role="status">
@@ -1461,13 +1714,7 @@ function Shell({ vault, onLock }) {
       </div>`}
       ${main}
     </main>
-    <dialog class="drawer" ref=${drawerRef} aria-label="Collection" onClick=${onBackdrop}>
-      ${narrow && html`<nav class="sidebar">
-        <${SidebarContent} feeds=${feeds} view=${view} draft=${draft} go=${go} onAdding=${setAdding} onImporting=${setImporting}
-          vault=${vault} onLock=${lock} onSelect=${closeDrawer} changedFeeds=${changedFeeds} />
-      </nav>`}
-    </dialog>
-  </div>`;
+  </div><//>`;
 }
 
 // ---- App ----

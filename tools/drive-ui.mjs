@@ -1,10 +1,13 @@
 // Drive the Studio UI in headless Chromium through the DevTools protocol.
-// It needs Node.js 22 or later and `chromium` on the PATH. It is a check
-// tool for agents and developers. Studio itself does not use it.
+// It needs Node.js 22 or later and `chromium` on the PATH. `tools/node`
+// gives Node.js when the PATH has none. It is a check tool for agents and
+// developers. Studio itself does not use it.
 //
-// Usage: node tools/drive-ui.mjs <studio-url-with-token> <out-dir> '<steps-json>'
+// Usage: tools/node tools/drive-ui.mjs <studio-url-with-token> <out-dir> '<steps-json>'
 //
 // Each step is an object: {"wait": ms, "js": "expression", "shot": "name"}.
+// A step {"size": [width, height], "touch": true} sets the window size and
+// the touch emulation (a coarse pointer). Both keys are optional.
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
@@ -60,6 +63,8 @@ await sleep(1500);
 await evaluate(helpers);
 for (const step of steps) {
   if (step.wait) await sleep(step.wait);
+  if (step.size) await send('Emulation.setDeviceMetricsOverride', { width: step.size[0], height: step.size[1], deviceScaleFactor: 1, mobile: step.touch === true });
+  if (step.touch !== undefined) await send('Emulation.setTouchEmulationEnabled', { enabled: step.touch });
   if (step.js) { await evaluate(helpers); console.log(step.js.slice(0, 60), '=>', JSON.stringify(await evaluate(step.js))?.slice(0, 300)); }
   if (step.shot) await shot(step.shot);
 }

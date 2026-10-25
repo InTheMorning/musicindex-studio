@@ -320,8 +320,43 @@ fn set_connector_base_url(
     Ok(())
 }
 
+/// The feeds of the collection. Each row has its draft state and its cover
+/// image (ADR 0039 item 2, task 026a).
 pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
-    blocking(shared, |w| to_json(w.collection.feeds()?)).await
+    blocking(shared, |w| {
+        let mut rows = Vec::new();
+        for row in w.collection.feeds()? {
+            let state = draft_state(w, &row)?;
+            // The cover image comes from the same source as the file list.
+            // A feed with no readable source has no image.
+            let image = files_feed(w, row.id)
+                .ok()
+                .flatten()
+                .and_then(|feed| feed.image);
+            let mut value =
+                serde_json::to_value(&row).map_err(|e| ApiError::internal(e.to_string()))?;
+            value["draft_state"] = json!(state);
+            value["image"] = json!(image);
+            rows.push(value);
+        }
+        to_json(rows)
+    })
+    .await
+}
+
+/// The draft state of a feed: `none`, `new`, `changed` or `unchanged`.
+/// A failed change check gives `changed` (ADR 0039 item 2, task 026a).
+fn draft_state(w: &Workspace, row: &FeedRow) -> Result<&'static str, ApiError> {
+    if w.collection.draft(row.id)?.is_none() {
+        return Ok("none");
+    }
+    if row.last_version.is_none() {
+        return Ok("new");
+    }
+    Ok(match pipeline::draft_changed(&w.collection, row.id) {
+        Ok(false) => "unchanged",
+        Ok(true) | Err(_) => "changed",
+    })
 }
 
 #[derive(Deserialize)]

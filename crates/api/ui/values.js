@@ -53,7 +53,7 @@ const shortName = (name) => (name.includes('@') ? name.split('@')[0] : name);
 function shareParts(recipients) {
   const percent = percentages(recipients);
   const parts = recipients
-    .map((r, i) => ({ name: r.name || r.address || 'Recipient', percent: percent[i], fee: isFee(r) }))
+    .map((r, i) => ({ name: r.name || r.address || 'Recipient', percent: percent[i], share: shares(r), fee: isFee(r) }))
     .filter((p) => p.percent !== null && p.percent > 0);
   const named = new Set(
     [...parts].filter((p) => p.percent >= SMALL_PART).sort((a, b) => b.percent - a.percent).slice(0, NAMED_PARTS),
@@ -67,19 +67,22 @@ function shareParts(recipients) {
   return { all: parts, shown };
 }
 
+// The tooltip of one part has the name, the percentage and the raw share.
+// A fee part also has the word "fee".
+const partDetail = (p) => `${p.name} ${percentText(p.percent)} (share ${p.share}${p.fee ? ', fee' : ''})`;
+
 // The stacked bar and its legend. The legend names the biggest parts and
-// "Other", in the sequence of the bar.
-export function ShareStack({ recipients }) {
+// "Other", in the sequence of the bar. A segment takes the focus from the
+// keyboard, unless the bar is inside a button (`focusable` false).
+export function ShareStack({ recipients, focusable = true }) {
   const { all, shown } = shareParts(recipients);
   if (shown.length === 0) return null;
   const label = all.map((p) => `${p.name} ${percentText(p.percent)}${p.fee ? ' (fee)' : ''}`).join(', ');
-  const tip = (p) => (p.other
-    ? p.members.map((m) => `${m.name} ${percentText(m.percent)}`).join(', ')
-    : `${p.name} ${percentText(p.percent)}${p.fee ? ' (fee)' : ''}`);
+  const tip = (p) => (p.other ? p.members.map(partDetail).join(', ') : partDetail(p));
   return html`<span class="share-preview">
-    <span class="share-stack" role="img" aria-label=${`Shares: ${label}`}>
+    <span class="share-stack" role="group" aria-label=${`Shares: ${label}`}>
       ${shown.map((p) => html`<span class=${p.other ? 'other' : p.fee ? 'fee' : ''} style=${{ flexGrow: p.percent }}
-        data-tip=${tip(p)}></span>`)}
+        data-tip=${tip(p)} tabindex=${focusable ? '0' : null} role="img" aria-label=${tip(p)}></span>`)}
     </span>
     <span class="share-legend" aria-hidden="true">
       ${shown.map((p, i) => html`${i > 0 ? ' · ' : ''}<span class="part">${p.other ? 'Other' : shortName(p.name)} ${percentText(p.percent)}</span>`)}
@@ -119,7 +122,9 @@ function Choice({ id, label, value, options, onChange }) {
 
 // Recipients returns its rows with no wrapper div, so that each recipient
 // and the add row sit as direct rows of the group, each with the group's
-// own inset separator (review of task 014c, defect 3).
+// own inset separator (review of task 014c, defect 3). The rows form two
+// groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
+// fee "true" is in "Fees". The model keeps the sequence of the recipients.
 function Recipients({ id, recipients, defaultType, onChange }) {
   const percent = percentages(recipients);
   const blank = { name: null, recipient_type: defaultType, address: null, split: '', custom_key: null, custom_value: null, fee: null };
@@ -130,8 +135,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
     onChange([...recipients, ...added]);
     setPicking(false);
   };
-  return html`${recipients.length === 0 && html`<p class="hint">No recipients yet.</p>`}
-    ${recipients.map((r, i) => {
+  const row = (r, i) => {
       const change = (name) => (value) => onChange(setAt(recipients, i, set(r, name, value)));
       const rid = `${id}-r-${r._cid}`;
       const name = r.name || r.address || 'this recipient';
@@ -164,7 +168,12 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         <${EntryActions} list=${recipients} index=${i} name=${name} onChange=${onChange} />
         </div>
       </details>`;
-    })}
+  };
+  // A group holds the rows of one kind. Each row keeps its index in the list.
+  const ofGroup = (fee) => recipients.map((r, i) => (isFee(r) === fee ? row(r, i) : null));
+  return html`<h3 class="value-group">Recipients</h3>
+    ${ofGroup(false)}
+    ${!recipients.some((r) => !isFee(r)) && html`<p class="hint">No recipients.</p>`}
     <button class="link-row add" type="button"
       onClick=${() => {
         const added = withCids([blank])[0];
@@ -173,6 +182,9 @@ function Recipients({ id, recipients, defaultType, onChange }) {
       }}><span class="num">＋</span><span class="title">Add a recipient</span></button>
     <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
       <span class="num">＋</span><span class="title">Pick from your recipients</span></button>
+    <h3 class="value-group">Fees</h3>
+    ${ofGroup(true)}
+    ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
     <${PickerSheet} open=${picking} recipients=${recipients} onAdd=${addPicked} onClose=${() => setPicking(false)} />`;
 }
 
@@ -477,13 +489,13 @@ export function recipientSummary(blocks) {
   return `${count} recipient${count === 1 ? '' : 's'}`;
 }
 
-// The recipients page of the album: a section, not a disclosure group (ADR
-// 0029 item 9). `editor.js` puts this behind the Recipients link row of the
+// The Value routes page of the album: a section, not a disclosure group (ADR
+// 0029 item 9). `editor.js` puts this behind the Value routes link row of the
 // album page.
 export function AlbumPayments({ model, update }) {
   const onChange = (values) => update((m) => set(m, 'values', values));
   return html`<section class="page-section">
-    <div class="section-head"><h2>${recipientSummary(model.values)}</h2>
+    <div class="section-head"><h2>Value routes</h2>
       ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} />`}</div>
     <div class="group">
       <p class="hint">These recipients get the payments for each track that has no recipients of its own.</p>
@@ -507,7 +519,7 @@ export function TrackPayments({ id, item, albumBlocks, onChange }) {
     if (confirm('Remove the recipients of this track? The track then uses the album recipients.')) onChange([]);
   };
   return html`<section class="page-section">
-    <div class="section-head"><h2>Recipients</h2>
+    <div class="section-head"><h2>Value routes</h2>
       ${shown.length > 0 && html`<${ShareStack} recipients=${shown[0].recipients} />`}</div>
     <div class="group">
       ${blocks.length === 0

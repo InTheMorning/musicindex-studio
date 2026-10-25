@@ -1453,6 +1453,92 @@ async fn an_msp_backup_needs_the_vault_and_keeps_its_token_there() {
     }
 }
 
+/// The row of a feed in the list of `GET /api/v1/feeds`.
+async fn listed(app: &App, id: i64) -> Value {
+    let (status, rows) = call(app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(status, StatusCode::OK);
+    rows.as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == id)
+        .unwrap()
+        .clone()
+}
+
+#[tokio::test]
+async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
+    let app = app();
+    let root = app.feeds.path().to_str().unwrap();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    set_library_root(&app);
+
+    // A feed with no draft. Its draft starts only when Studio asks for it.
+    let (status, read_only) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let read_only_id = read_only["id"].as_i64().unwrap();
+    let row = listed(&app, read_only_id).await;
+    assert_eq!(row["draft_state"], "none");
+    assert_eq!(row["image"], Value::Null);
+    assert!(row["added_at"].as_i64().unwrap() > 0);
+
+    // A new release has a draft and no hosted file.
+    let feed = make_feed(
+        &app,
+        json!({
+            "connector_id": connector["id"],
+            "path": "my-album.xml",
+            "title": "New Album",
+            "author": "New Artist",
+        }),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    assert_eq!(listed(&app, id).await["draft_state"], "new");
+
+    // After its write, the draft is the same as the hosted file.
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // The route starts a draft when the feed has none after the write.
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(listed(&app, id).await["draft_state"], "unchanged");
+
+    // An edit of the cover address changes the draft and its image.
+    let mut model = draft["model"].clone();
+    model["image"] = json!("https://music.example/cover.jpg");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let row = listed(&app, id).await;
+    assert_eq!(row["draft_state"], "changed");
+    assert_eq!(row["image"], "https://music.example/cover.jpg");
+}
+
 /// The live file of the feed that `set_up` adds.
 fn live(app: &App) -> String {
     std::fs::read_to_string(app.feeds.path().join("album.xml")).unwrap()
@@ -1958,6 +2044,19 @@ fn each_background_uses_a_token() {
                  fill token."
             );
         }
+    }
+}
+
+/// ADR 0039 item 4: no page is a placeholder. The text "Select a feed" was
+/// the placeholder of the editor area, so no UI file may show it again.
+#[test]
+fn no_ui_file_has_the_select_a_feed_placeholder() {
+    for (name, text) in crate::ui::text_files() {
+        assert!(
+            !text.contains("Select a feed"),
+            "ADR 0039 item 4: {name} shows the placeholder \"Select a feed\". Show the \
+             Releases page, or the feed that is open, instead."
+        );
     }
 }
 

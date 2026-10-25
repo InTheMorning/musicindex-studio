@@ -1,0 +1,330 @@
+// The shell models (ADR 0042). This file imports nothing. It holds the logic
+// of the left panel, of the Releases list and of the navigation. The
+// components in `app.js` and `editor.js` use these functions. The Node tests
+// in `crates/api/ui-tests/` examine them.
+
+// The kind of a medium: its dot class and its label.
+export function mediumKind(medium) {
+  switch ((medium || '').toLowerCase()) {
+    case 'publisher': return { dot: 'publisher', label: 'Publisher' };
+    case 'musicl': return { dot: 'playlist', label: 'Playlist' };
+    case 'music': return { dot: 'feed', label: 'Album' };
+    default: return { dot: 'feed', label: 'Feed' };
+  }
+}
+
+// Is this feed a publisher feed (ADR 0041 item 1)?
+export function isPublisher(feed) {
+  return (feed.medium || '').toLowerCase() === 'publisher';
+}
+
+// Is this feed an album or a publisher feed that the editor can open (ADR
+// 0029 item 4, ADR 0041 item 3)?
+export function isEditable(feed) {
+  return Boolean(feed.connector_id) && (mediumKind(feed.medium).label === 'Album' || isPublisher(feed));
+}
+
+// The key of a track: its GUID, or its client ID when it has no GUID yet
+// (task 014c). The outline and the album page use this key to open the
+// track page of one track.
+export function trackKey(item) {
+  return item.guid ? item.guid : `cid-${item._cid}`;
+}
+
+// Is this track the track of the key? A new track has a key from its client
+// ID. After the first save, the server gives it a GUID and its key changes.
+// The client ID stays, so the old key continues to find the track.
+export function isTrack(item, key) {
+  return trackKey(item) === key || `cid-${item._cid}` === key;
+}
+
+// The title of a feed in the lists. A feed with no title shows its path.
+function displayTitle(feed) {
+  return feed.title || feed.path || 'Untitled feed';
+}
+
+// Is the page of an outline entry the page that the view shows now? Only a
+// feed view has a page. The outline view marks no entry.
+function isCurrentPage(view, page, track) {
+  if (view.name !== 'feed') return false;
+  if ((view.page || 'album') !== page) return false;
+  return page !== 'track' || view.track === track;
+}
+
+// The entries of the outline of an open feed (ADR 0039 item 6). At narrow
+// width there is no "Releases" entry, because Back opens Releases (ADR 0039
+// item 11a).
+function outlineItems(feed, view, model, narrow) {
+  const items = narrow ? [] : [{ id: 'releases', label: 'Releases' }];
+  const page = (id, label, pageName, track) => ({
+    id,
+    label,
+    page: pageName,
+    ...(track === undefined ? {} : { track }),
+    current: isCurrentPage(view, pageName, track),
+  });
+  if (isPublisher(feed)) {
+    // A publisher feed has two pages and no tracks (ADR 0041 item 3).
+    items.push(page('publisher', 'Publisher', 'album'));
+    items.push(page('files', 'Files', 'files'));
+    return items;
+  }
+  if (!isEditable(feed)) {
+    // A feed that the editor cannot open shows one page.
+    items.push(page('feed', 'Feed', 'album'));
+    return items;
+  }
+  items.push(page('album', 'Album', 'album'));
+  if (model) {
+    model.items.forEach((item, i) => {
+      const key = trackKey(item);
+      items.push({
+        id: `track:${key}`,
+        page: 'track',
+        track: key,
+        number: i + 1,
+        label: item.title || 'Untitled track',
+        current: isCurrentPage(view, 'track', key),
+      });
+    });
+    items.push({ id: 'add-track', label: 'Add a track', action: 'add-track' });
+    items.push({ id: 'import', label: 'Import files', action: 'import' });
+    items.push(page('recipients', 'Value routes', 'recipients'));
+    items.push(page('credits', 'Credits and links', 'credits'));
+  }
+  items.push(page('files', 'Files', 'files'));
+  return items;
+}
+
+// Is the view a feed, or the outline of a feed? Both open one feed.
+export function isFeedView(view) {
+  return view.name === 'feed' || view.name === 'outline';
+}
+
+// The left panel (ADR 0039 items 1, 5 and 6). With no open feed it gives the
+// destinations. With an open feed, or the outline view, it gives the outline
+// of that feed. `model` is the typed model of the draft of the open feed, or
+// null before it loads. `narrow` is true at 760 px or less.
+export function leftPanel({ view, feeds, model, vaultOpen, narrow = false }) {
+  const bottom = [{ id: 'hosts', label: 'Hosts', current: view.name === 'hosts' }];
+  if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', current: false });
+  const feed = isFeedView(view) && Array.isArray(feeds)
+    ? feeds.find((f) => f.id === view.id)
+    : undefined;
+  if (!feed) {
+    return {
+      kind: 'destinations',
+      top: [
+        { id: 'releases', label: 'Releases', current: view.name === 'releases' },
+        { id: 'add-feed', label: 'Add a feed', current: view.name === 'add-feed' },
+      ],
+      bottom,
+    };
+  }
+  return {
+    kind: 'outline',
+    feed: {
+      id: feed.id,
+      title: displayTitle(feed),
+      image: feed.image ?? null,
+      typeLabel: mediumKind(feed.medium).label,
+    },
+    items: outlineItems(feed, view, model, narrow),
+    bottom,
+  };
+}
+
+// The label of each draft state in the Releases list (ADR 0039 item 2).
+const DRAFT_LABELS = {
+  new: 'New, not written',
+  changed: 'Saved, not written',
+  unchanged: 'No changes',
+  none: 'No changes',
+};
+
+// The name of the host of a feed. A feed with no connector is read-only.
+function hostOf(feed, connectors) {
+  if (!feed.connector_id) return 'Read-only';
+  const connector = (connectors || []).find((c) => c.id === feed.connector_id);
+  return connector ? connector.name : 'Unknown host';
+}
+
+// The letter of a row in the A to Z sort. A title that does not start with
+// A to Z gives "#".
+function letterOf(title) {
+  return /^[A-Z]/i.test(title) ? title[0].toUpperCase() : '#';
+}
+
+// Newest first. The feed that joined the collection last comes first. Two
+// feeds that joined at the same time keep the greater ID first.
+function compareNewest(a, b) {
+  return (b.added_at ?? 0) - (a.added_at ?? 0) || Number(b.id) - Number(a.id);
+}
+
+// A to Z. A title with a letter from A to Z comes before a title with any
+// other first character, so that "#" comes after Z.
+function compareAz(a, b) {
+  const bucket = (feed) => (letterOf(displayTitle(feed)) === '#' ? 1 : 0);
+  return bucket(a) - bucket(b)
+    || displayTitle(a).localeCompare(displayTitle(b), 'en', { sensitivity: 'base' })
+    || Number(a.id) - Number(b.id);
+}
+
+// The first letter of each group of rows, in sequence (ADR 0039 item 2a).
+function letterGroups(rows) {
+  const groups = [];
+  for (const row of rows) {
+    const letter = letterOf(row.title);
+    if (groups.length === 0 || groups[groups.length - 1].letter !== letter) {
+      groups.push({ letter, firstId: row.id });
+    }
+  }
+  return groups;
+}
+
+// The Releases list (ADR 0039 items 2 and 2a). `marked` is the ID of the feed
+// that the last Back selection left marked.
+export function releasesList({ feeds, connectors, sort, view, marked }) {
+  const sortKey = sort === 'az' ? 'az' : 'newest';
+  const viewKey = view === 'tiles' ? 'tiles' : 'rows';
+  const sorted = (Array.isArray(feeds) ? feeds.slice() : [])
+    .sort(sortKey === 'az' ? compareAz : compareNewest);
+  const rows = sorted.map((feed) => ({
+    id: feed.id,
+    title: displayTitle(feed),
+    typeLabel: mediumKind(feed.medium).label,
+    host: hostOf(feed, connectors),
+    image: feed.image ?? null,
+    draftLabel: DRAFT_LABELS[feed.draft_state] || 'No changes',
+    marked: feed.id === marked,
+  }));
+  return {
+    sort: sortKey,
+    view: viewKey,
+    rows,
+    letters: sortKey === 'az' ? letterGroups(rows) : null,
+  };
+}
+
+// The sort and the view of the Releases list from a query text, such as
+// "sort=az". A value that is missing or not known gives the default.
+export function listQuery(search) {
+  const params = new URLSearchParams(typeof search === 'string' ? search : '');
+  return {
+    sort: params.get('sort') === 'az' ? 'az' : 'newest',
+    view: params.get('view') === 'tiles' ? 'tiles' : 'rows',
+  };
+}
+
+// The query text of a sort and a view. It holds only the values that are not
+// the default. It is empty when both values are the default.
+export function queryText({ sort, view }) {
+  const params = new URLSearchParams();
+  if (sort === 'az') params.set('sort', 'az');
+  if (view === 'tiles') params.set('view', 'tiles');
+  return params.toString();
+}
+
+// ---- Navigation (musicindex ADR 0027 R-NAV-2) ----
+// The state is { entries, index }. Each function gives a new state and does
+// not change its argument.
+
+// The state with one entry, the view at the start.
+export function startNav(view) {
+  return { entries: [view], index: 0 };
+}
+
+// A new view. It drops each entry after the current one.
+export function pushNav(nav, view) {
+  const entries = [...nav.entries.slice(0, nav.index + 1), view];
+  return { entries, index: entries.length - 1 };
+}
+
+// Back. From a feed or its outline, the Releases entry before it keeps its
+// scroll and gets the feed as its marked row. From a feed or an outline at
+// index 0, a Releases entry with the marked feed goes before it.
+export function backNav(nav) {
+  const { entries, index } = nav;
+  const current = entries[index];
+  if (current && isFeedView(current)) {
+    if (index === 0) {
+      return { entries: [{ name: 'releases', marked: current.id }, ...entries], index: 0 };
+    }
+    const next = entries.slice();
+    const before = entries[index - 1];
+    if (before.name === 'releases') next[index - 1] = { ...before, marked: current.id };
+    return { entries: next, index: index - 1 };
+  }
+  return { entries: entries.slice(), index: Math.max(0, index - 1) };
+}
+
+// Forward. It moves to the next entry, when an entry is after the current one.
+export function forwardNav(nav) {
+  return { entries: nav.entries.slice(), index: canForward(nav) ? nav.index + 1 : nav.index };
+}
+
+// Back is possible above index 0, and from a feed or an outline at index 0.
+// The root page has no Back.
+export function canBack(nav) {
+  return nav.index > 0 || isFeedView(nav.entries[nav.index]);
+}
+
+// Forward is possible when an entry is after the current one.
+export function canForward(nav) {
+  return nav.index < nav.entries.length - 1;
+}
+
+// The scroll position of the current entry.
+export function setScroll(nav, y) {
+  const entries = nav.entries.slice();
+  entries[nav.index] = { ...entries[nav.index], scroll: y };
+  return { entries, index: nav.index };
+}
+
+// ---- Narrow width (musicindex ADR 0030 R-SHELL-2, ADR 0039 items 10 to 11a) ----
+
+// The stack that a narrow window shows for one view. The entries go from the
+// root page to the view, and the view is the last entry.
+export function narrowStack(view) {
+  const root = { name: 'root' };
+  const releases = { name: 'releases' };
+  switch (view.name) {
+    case 'root': return [root];
+    case 'releases': return [root, releases];
+    case 'outline': return [root, releases, view];
+    case 'feed': return [root, releases, { name: 'outline', id: view.id }, view];
+    default: return [root, view];
+  }
+}
+
+// The view of a feed on Releases. At narrow width the selection opens the
+// outline of the feed first (ADR 0039 item 11a).
+export function openFeedView(id, narrow) {
+  return narrow ? { name: 'outline', id } : { name: 'feed', id };
+}
+
+// The view at a wide width. The outline has no wide view, so it becomes the
+// feed, and the root page becomes Releases.
+export function wideView(view) {
+  if (view.name === 'outline') return { name: 'feed', id: view.id };
+  if (view.name === 'root') return { name: 'releases' };
+  return view;
+}
+
+// The navigation state for a new width of the window. A narrow window gets
+// the stack of the view. A wide window gets the view alone.
+export function widthNav(view, narrow) {
+  if (!narrow) return startNav(wideView(view));
+  const entries = narrowStack(view);
+  return { entries, index: entries.length - 1 };
+}
+
+// The navigation state that fits a width. A state that already has the form
+// of the width is kept, so that a reload keeps its history. Any other state
+// becomes `widthNav` of its current view.
+export function navAtWidth(nav, narrow) {
+  const narrowForm = nav.entries[0].name === 'root';
+  const wideForm = nav.entries.every((e) => e.name !== 'root' && e.name !== 'outline');
+  if (narrow ? narrowForm : wideForm) return nav;
+  return widthNav(nav.entries[nav.index], narrow);
+}

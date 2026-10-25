@@ -17,8 +17,10 @@ The license is AGPL-3.0 ([ADR 0011](docs/adr/0011-agpl-license.md)).
 
 On 2026-10-25, Phase 0 to Phase 8 are complete. `studio-core` reads a feed into a lossless XML tree and a typed model, and writes each edit back. It has the encrypted secret vault, the SQLite collection, the release library, the local folder connector and the write pipeline. `studio-api` serves the local JSON API and the UI, with the album editor, a new release, the import of music files and the publisher feeds. A lossless import gives an MP3 enclosure and a FLAC alternative enclosure. `studio-desktop` runs them on a loopback address, and `studio-server` has no function yet.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0041`. ADR 0017 is proposed.
-- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check. Phase 9 (remaining connectors) is next. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
+The UI starts on Releases and shows the outline of an open feed. At narrow width it is one stack.
+
+- Decisions: `docs/adr/0001` to `docs/adr/0042`. ADR 0017 is proposed.
+- Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check. Task 026 built the shell of ADR 0039, and Phase 9 (remaining connectors) is next. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
 - Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
@@ -29,20 +31,25 @@ On 2026-10-25, Phase 0 to Phase 8 are complete. `studio-core` reads a feed into 
 | `crates/core` | `studio-core`. The feed model is in `feed`, `xml` and `guid`. The other modules are `vault`, `collection`, `address` (feed addresses), `connector`, `media`, `library`, `inventory`, `migrate` and `pipeline` (the write). No HTTP server code and no UI code. |
 | `crates/core/tests/corpus` | Published feeds for the round-trip tests. `manifest.json` gives the source URL, the fetch time and the SHA-256 of each file. |
 | `crates/api` | `studio-api`: the JSON API over the core, and the UI files in `crates/api/ui/` |
+| `crates/api/ui-tests` | The Node tests of the UI model modules ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)) |
 | `crates/server` | `studio-server`: the server shell |
 | `crates/desktop` | `studio-desktop`: the desktop shell. It runs the local API and prints the UI address. Tauri comes in the Desktop Shell phase. |
 | `docs/` | ADRs, plans, tasks and research. The index is `docs/README.md`. |
 | `tools/drive-ui.mjs` | Drives the UI in headless Chromium for a check. Its header gives the usage. |
+| `tools/node` | Runs a pinned Node.js from `.studio-dev/tools/` ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)). |
 
 ## Commands
 
-These three checks must pass before each commit. CI runs the same checks.
+These four checks must pass before each commit. CI runs the same checks ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md) adds the fourth).
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+node --test crates/api/ui-tests/*.test.mjs
 ```
+
+On a computer with no Node.js, run `tools/node --test crates/api/ui-tests/*.test.mjs`. `tools/node` gets a pinned Node.js into `.studio-dev/tools/` at its first run. It also runs `tools/drive-ui.mjs`.
 
 Run Studio locally. The command prints the UI address with its access token:
 
@@ -74,6 +81,7 @@ Durable rules:
 - A write to a host occurs only through `pipeline::write_draft`, with the ID of the diff that the user approved ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md), [ADR 0015](docs/adr/0015-connector-interface-and-write-pipeline.md)).
 - A read and a write with no edit give the same bytes. The writer changes only the elements that the user changed. The corpus tests enforce this ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md), [ADR 0012](docs/adr/0012-lossless-tree-with-a-typed-model.md)).
 - The UI loads nothing from other servers, and it has no build step ([ADR 0016](docs/adr/0016-ui-without-a-build-step.md)). A test enforces the first part.
+- UI logic that a test examines is in a model module with no Preact and no browser state. The Node tests in `crates/api/ui-tests/` examine it ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)).
 - In local mode, each `/api/` request needs the access token, and each request needs a loopback `Host` ([ADR 0017](docs/adr/0017-local-api-access.md)). Tests enforce this.
 - The vault refuses a passphrase with fewer than 12 characters or a zxcvbn score below 3. The UI gives no advice on how to make a passphrase ([ADR 0018](docs/adr/0018-passphrase-strength-and-error-color.md)).
 - An entity color is not a general accent. An error uses the `--error` token, not an entity color ([ADR 0018](docs/adr/0018-passphrase-strength-and-error-color.md)). All functions work from the keyboard ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)). A control has the target size of its profile: 32 px with a mouse and 44 px with touch (musicindex ADR 0029 R-SCALE-3 and ADR 0024 R-TARGET-1). A test enforces the token.
@@ -84,7 +92,7 @@ Durable rules:
 Situational rules:
 
 - The v1 connectors are local folder, SFTP, S3 and R2, Git pages, Blossom and nsite, and the optional self-hosted file host ([ADR 0006](docs/adr/0006-connectors-and-the-v1-set.md)).
-- The draft status, "Versions" and "Review" stay in the toolbar at all scroll positions and widths. The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom ([ADR 0039](docs/adr/0039-the-shell-releases-and-the-outline.md)).
+- The draft status, "Versions" and "Review" stay in the toolbar at all scroll positions and widths. The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. At 760 px or less, Studio is one stack with a root page and an outline page, and no menu button ([ADR 0039](docs/adr/0039-the-shell-releases-and-the-outline.md), musicindex ADR 0030).
 - Do not copy code from `../mi-studio`. Use it as reference only ([ADR 0001](docs/adr/0001-one-core-with-desktop-and-server-shells.md)).
 
 Documentation:

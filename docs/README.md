@@ -43,6 +43,7 @@
 - [ADR 0039: The shell, Releases and the outline of a feed](adr/0039-the-shell-releases-and-the-outline.md)
 - [ADR 0040: Replace the audio of a track](adr/0040-replace-the-audio-of-a-track.md)
 - [ADR 0041: Publisher feeds and two-way links](adr/0041-publisher-feeds-and-two-way-links.md)
+- [ADR 0042: UI models with Node tests](adr/0042-ui-models-with-node-tests.md)
 
 ## Plans
 
@@ -113,6 +114,12 @@
 - [Studio v1 task 025b: The publisher routes](tasks/studio-v1-task-025b-publisher-routes.md)
 - [Studio v1 task 025c: The publisher page](tasks/studio-v1-task-025c-publisher-page.md)
 - [Studio v1 task 025d: The publisher feeds of a release](tasks/studio-v1-task-025d-release-publishers.md)
+- [Studio v1 task 026: The shell, Releases and the outline](tasks/studio-v1-task-026-shell.md)
+- [Studio v1 task 026a: The feed list facts](tasks/studio-v1-task-026a-feed-list-facts.md)
+- [Studio v1 task 026b: The shell models and the Node tests](tasks/studio-v1-task-026b-shell-models.md)
+- [Studio v1 task 026c: The shell UI](tasks/studio-v1-task-026c-shell-ui.md)
+- [Studio v1 task 026d: The Value routes page](tasks/studio-v1-task-026d-value-routes.md)
+- [Studio v1 task 026e: One stack at narrow width](tasks/studio-v1-task-026e-narrow-stack.md)
 
 ## Reviews
 
@@ -131,6 +138,7 @@
 - [Phase 7 milestone 7b visual check, 2026-10-24](reviews/2026-10-24-phase-7b-visual-check.md)
 - [Phase 8 review checklist, 2026-10-25](reviews/2026-10-25-phase-8-review-checklist.md)
 - [Phase 8 visual check, 2026-10-25](reviews/2026-10-25-phase-8-visual-check.md)
+- [Task 026 review checklist, 2026-10-25](reviews/2026-10-25-task-026-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

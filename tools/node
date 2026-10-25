@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Run a pinned Node.js from a folder in the repository (ADR 0042).
+#
+# Usage: tools/node <node arguments>
+# Example: tools/node --test crates/api/ui-tests/*.test.mjs
+#
+# The first run downloads the Node.js archive for Linux x64 from
+# nodejs.org. The script compares the SHA-256 of the archive with the value
+# below, and refuses an archive with a different value. It then extracts
+# the archive to .studio-dev/tools/. Git ignores that folder. To remove
+# Node.js, delete .studio-dev/tools/. The next run downloads it again.
+#
+# To change the version, set NODE_VERSION and NODE_SHA256 from
+# https://nodejs.org/dist/v<version>/SHASUMS256.txt, the line of
+# node-v<version>-linux-x64.tar.xz.
+set -euo pipefail
+
+NODE_VERSION=22.23.4
+NODE_SHA256=1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tools="$root/.studio-dev/tools"
+name="node-v$NODE_VERSION-linux-x64"
+node="$tools/$name/bin/node"
+
+if [[ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]]; then
+  echo "tools/node: this script has the Node.js archive for Linux x64 only." >&2
+  echo "Install Node.js 22 and use node directly." >&2
+  exit 2
+fi
+
+if [[ ! -x "$node" ]]; then
+  mkdir -p "$tools"
+  archive="$tools/$name.tar.xz"
+  partial="$archive.part"
+  echo "tools/node: downloading Node.js $NODE_VERSION to .studio-dev/tools/" >&2
+  curl -fsSL --proto '=https' --tlsv1.2 -o "$partial" \
+    "https://nodejs.org/dist/v$NODE_VERSION/$name.tar.xz"
+  found="$(sha256sum "$partial" | cut -d ' ' -f 1)"
+  if [[ "$found" != "$NODE_SHA256" ]]; then
+    rm -f "$partial"
+    echo "tools/node: the archive has the SHA-256 $found, not $NODE_SHA256." >&2
+    echo "Studio does not use this archive." >&2
+    exit 1
+  fi
+  mv "$partial" "$archive"
+  tar -xJf "$archive" -C "$tools"
+  rm -f "$archive"
+fi
+
+exec "$node" "$@"

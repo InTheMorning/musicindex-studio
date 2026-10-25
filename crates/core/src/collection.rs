@@ -362,6 +362,9 @@ pub struct FeedRow {
     /// The role of a publisher feed (ADR 0041 item 1). `None` for a feed
     /// that has no recorded role.
     pub publisher_role: Option<PublisherRole>,
+    /// The time that the feed joined the collection, in seconds since the
+    /// Unix epoch. A feed that joins later has a greater or equal value.
+    pub added_at: i64,
 }
 
 /// The move of the feed XML to a different host, in the draft of a feed
@@ -1987,7 +1990,7 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_role FROM feeds";
+const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_role, created_at FROM feeds";
 
 /// Keep or remove the address of one source. An empty address is no address.
 fn put_address(
@@ -2148,6 +2151,7 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
             .get::<_, Option<String>>(11)?
             .as_deref()
             .and_then(PublisherRole::parse),
+        added_at: r.get(12)?,
     })
 }
 
@@ -2459,6 +2463,18 @@ mod tests {
              </item></channel></rss>"
         ))
         .unwrap()
+    }
+
+    #[test]
+    fn a_feed_row_gives_the_time_that_the_feed_joined_the_collection() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let first = collection.add_feed(None, None).unwrap();
+        let second = collection.add_feed(None, None).unwrap();
+        let feeds = collection.feeds().unwrap();
+        let added = |id: FeedId| feeds.iter().find(|row| row.id == id).unwrap().added_at;
+        assert!(added(first) > 0);
+        assert!(added(second) >= added(first));
+        assert_eq!(collection.feed(second).unwrap().added_at, added(second));
     }
 
     #[test]

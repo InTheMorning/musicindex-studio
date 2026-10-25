@@ -6,6 +6,7 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
+import { trackKey, isTrack, isPublisher } from './shell.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -61,20 +62,6 @@ export function EntryActions({ list, index, name, onChange }) {
     <button class="button destructive" type="button"
       aria-label=${`Remove ${name}`} onClick=${() => onChange(list.filter((_, i) => i !== index))}>Remove</button>
   </div>`;
-}
-
-// The key of a track: its GUID, or its client ID when it has no GUID yet
-// (task 014c). The sidebar tree and the album page use this key to open the
-// track page of one track.
-export function trackKey(item) {
-  return item.guid ? item.guid : `cid-${item._cid}`;
-}
-
-// Is this track the track of the key? A new track has a key from its client
-// ID. After the first save, the server gives it a GUID and its key changes.
-// The client ID stays, so the old key continues to find the track.
-export function isTrack(item, key) {
-  return trackKey(item) === key || `cid-${item._cid}` === key;
 }
 
 // ---- Summary lines (ADR 0028) ----
@@ -1149,8 +1136,8 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
           <span class="go" aria-hidden="true">›</span>
         </button>
         <button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
-          <span class="label">Recipients</span><span class="summary">${recipientSummary(model.values)}</span>
-          ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} />`}
+          <span class="label">Value routes</span><span class="summary">${recipientSummary(model.values)}</span>
+          ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} focusable=${false} />`}
           <span class="go" aria-hidden="true">›</span>
         </button>
         <${FeedFacts} feed=${feed} onRemoved=${onRemoved} />
@@ -1230,10 +1217,11 @@ function CreditsPage({ model, update, bad }) {
     </section>`;
 }
 
-// The recipients page: the album recipients, with no details around them
-// (task 014c step 3, ADR 0029 item 9).
+// The Value routes page: the album recipients, with no details around them
+// (task 014c step 3, ADR 0029 item 9). The page is at most 560 px wide
+// (ADR 0039 item 12).
 function RecipientsPage({ model, update }) {
-  return html`<${AlbumPayments} model=${model} update=${update} />`;
+  return html`<div class="value-routes"><${AlbumPayments} model=${model} update=${update} /></div>`;
 }
 
 // The track page: the track before it and the track after it, then its
@@ -1316,11 +1304,6 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChang
 }
 
 // ---- The publisher feed page (task 025c, ADR 0041) ----
-
-// Is this feed a publisher feed (ADR 0041 item 1)?
-export function isPublisher(feed) {
-  return (feed.medium || '').toLowerCase() === 'publisher';
-}
 
 // The medium of a feed in lower case, or an empty text.
 function mediumOf(feed) {

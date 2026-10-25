@@ -1,6 +1,7 @@
 //! Connectors: read and write the files of one host type (ADR 0006, ADR 0015).
 
 mod local;
+mod s3;
 #[cfg(any(test, feature = "testing"))]
 pub mod suite;
 
@@ -9,6 +10,7 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 pub use local::LocalFolder;
+pub use s3::{S3Bucket, S3Config, S3Credentials, S3UrlStyle};
 
 use crate::collection::ConnectorRow;
 use crate::vault::OpenVault;
@@ -335,9 +337,18 @@ pub fn from_row(
     vault: Option<&OpenVault>,
 ) -> Result<Box<dyn Connector>, ConnectorError> {
     // The local folder kind ignores the secret. A remote kind uses it.
-    let _secret = secret_of(row, vault)?;
+    let secret = secret_of(row, vault)?;
     match row.kind.as_str() {
         LocalFolder::KIND => Ok(Box::new(LocalFolder::from_config(&row.config)?)),
+        S3Bucket::KIND => {
+            let secret = secret.ok_or_else(|| {
+                ConnectorError::new(
+                    ConnectorErrorKind::InvalidConfig,
+                    "the S3 connector needs a secret",
+                )
+            })?;
+            Ok(Box::new(S3Bucket::from_config(&row.config, &secret)?))
+        }
         other => Err(ConnectorError::new(
             ConnectorErrorKind::InvalidConfig,
             format!("the connector kind {other:?} is not known"),

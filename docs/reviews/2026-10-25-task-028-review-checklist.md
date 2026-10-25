@@ -33,6 +33,6 @@ The planning model uses this list after each packet, before its commit.
 | Work | Result | Required corrections |
 | --- | --- | --- |
 | [028a](../tasks/studio-v1-task-028a-fake-s3-server.md) | Pass | The planning model replaced the MD5 constants from `sin()` with the fixed table of RFC 1321. The precision of `sin` can be different on a different platform. The planning model changed `allow` to `expect` with a reason. The manual check passes: a test with a real request examines each condition that gives 412. |
-| 028b | Open | |
+| [028b](../tasks/studio-v1-task-028b-s3-connector.md) | Pass | The planning model removed each address from the text of a connection error. A presigned address holds the access key ID. A new test examines this. The planning model accepted these choices of the coding agent. A 404 on a write with `If-Match` gives `Conflict`. A file of 64 MiB or less goes into memory for one PUT, so the memory has a limit of 64 MiB for each upload. |
 | 028c | Open | |
 | 028d | Open | |

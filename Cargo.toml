@@ -12,6 +12,8 @@ publish = false
 [workspace.dependencies]
 studio-core = { path = "crates/core" }
 studio-api = { path = "crates/api" }
+# Signing and the multipart upload body only. No default features.
+rusty-s3 = { version = "0.10", default-features = false, features = ["rustcrypto", "xml"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

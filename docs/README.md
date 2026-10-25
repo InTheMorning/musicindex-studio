@@ -50,6 +50,7 @@
 - [Studio v1 phase plan](plans/studio-v1-phase-plan.md)
 - [Research request on search, shared code and PodSovereign](plans/research-search-request.md)
 - [Research request on the shell](plans/research-ui-shell-request.md)
+- [Research request on the Phase 9 connectors](plans/research-phase-9-connectors-request.md)
 
 ## Tasks
 

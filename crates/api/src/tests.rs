@@ -531,6 +531,357 @@ async fn a_new_release_gives_422_for_no_public_address_409_for_a_file_and_422_fo
     assert_eq!(body["error"]["code"], "invalid_feed");
 }
 
+/// An app with a connected folder at a public address, and a library
+/// folder. Gives the app and the connector ID.
+async fn publisher_app() -> (App, i64) {
+    let app = app();
+    let root = app.feeds.path().to_str().unwrap().to_owned();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    set_library_root(&app);
+    (app, connector["id"].as_i64().unwrap())
+}
+
+/// The body of `POST /feeds/new`, with its optional medium and role.
+fn new_feed_body(
+    connector: i64,
+    path: &str,
+    title: &str,
+    medium: Option<&str>,
+    role: Option<&str>,
+) -> Value {
+    let mut body = json!({
+        "connector_id": connector,
+        "path": path,
+        "title": title,
+        "author": title,
+    });
+    if let Some(medium) = medium {
+        body["medium"] = json!(medium);
+    }
+    if let Some(role) = role {
+        body["role"] = json!(role);
+    }
+    body
+}
+
+async fn make_feed(app: &App, body: Value) -> Value {
+    let (status, feed) = call(app, "POST", "/api/v1/feeds/new", Some(body)).await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    feed
+}
+
+/// The model of the draft of a feed. The route starts the draft when the
+/// feed has none.
+async fn draft_model(app: &App, id: i64) -> Value {
+    let (status, draft) = call(app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    draft["model"].clone()
+}
+
+#[tokio::test]
+async fn a_publisher_feed_is_made_with_its_role_and_a_bad_medium_or_role_gives_422() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    assert_eq!(label["medium"], "publisher");
+    assert_eq!(label["publisher_role"], "label");
+    assert_eq!(
+        draft_model(&app, label["id"].as_i64().unwrap()).await["medium"],
+        "publisher"
+    );
+
+    // A music feed ignores the role.
+    let music = make_feed(
+        &app,
+        new_feed_body(connector, "music.xml", "Music", None, Some("band")),
+    )
+    .await;
+    assert_eq!(music["medium"], "music");
+    assert_eq!(music["publisher_role"], Value::Null);
+
+    for (path, medium, role) in [
+        ("p1.xml", Some("publisher"), None),
+        ("p2.xml", Some("publisher"), Some("band")),
+        ("p3.xml", Some("video"), None),
+    ] {
+        let body = new_feed_body(connector, path, "Label", medium, role);
+        let (status, response) = call(&app, "POST", "/api/v1/feeds/new", Some(body)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{path}");
+        assert_eq!(response["error"]["code"], "invalid_feed", "{path}");
+    }
+    let (status, response) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(new_feed_body(
+            connector,
+            "p4.xml",
+            " ",
+            Some("publisher"),
+            Some("label"),
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("publisher feed")
+    );
+    // A refusal makes no file and no feed.
+    assert!(!app.feeds.path().join("p1.xml").exists());
+}
+
+#[tokio::test]
+async fn a_link_changes_both_drafts_and_a_role_change_and_a_removal_follow_it() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let release = make_feed(
+        &app,
+        new_feed_body(connector, "release.xml", "Release", None, None),
+    )
+    .await;
+    let label_id = label["id"].as_i64().unwrap();
+    let release_id = release["id"].as_i64().unwrap();
+    let label_guid = draft_model(&app, label_id).await["podcast_guid"].clone();
+    let release_guid = draft_model(&app, release_id).await["podcast_guid"].clone();
+
+    let link_path = format!("/api/v1/feeds/{label_id}/links");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &link_path,
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["changed"],
+        json!([{ "id": label_id, "title": "Label" }, { "id": release_id, "title": "Release" }])
+    );
+
+    let label_model = draft_model(&app, label_id).await;
+    let label_item = &label_model["remote_items"][0];
+    assert_eq!(label_item["medium"], "music");
+    assert_eq!(label_item["rel"], "label");
+    assert_eq!(label_item["feed_guid"], release_guid);
+    assert_eq!(label_item["feed_url"], "https://music.example/release.xml");
+
+    let release_model = draft_model(&app, release_id).await;
+    let release_item = &release_model["publisher"]["remote_items"][0];
+    assert_eq!(release_item["medium"], "publisher");
+    assert_eq!(release_item["rel"], "label");
+    assert_eq!(release_item["feed_guid"], label_guid);
+    assert_eq!(release_item["feed_url"], "https://music.example/label.xml");
+
+    let role_path = format!("/api/v1/feeds/{label_id}/role");
+    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "role": "artist" }))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["changed"],
+        json!([{ "id": label_id, "title": "Label" }, { "id": release_id, "title": "Release" }])
+    );
+    assert_eq!(
+        draft_model(&app, label_id).await["remote_items"][0]["rel"],
+        "artist"
+    );
+    assert_eq!(
+        draft_model(&app, release_id).await["publisher"]["remote_items"][0]["rel"],
+        "artist"
+    );
+
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{label_id}/links/{release_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["changed"],
+        json!([{ "id": label_id, "title": "Label" }, { "id": release_id, "title": "Release" }])
+    );
+    assert_eq!(draft_model(&app, label_id).await["remote_items"], json!([]));
+    assert!(draft_model(&app, release_id).await["publisher"].is_null());
+
+    // A role of a feed with no link changes no other draft.
+    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "role": "label" }))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["changed"], json!([]));
+    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "role": "band" }))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_feed");
+}
+
+#[tokio::test]
+async fn a_link_starts_the_draft_of_a_written_release_with_no_draft() {
+    let app = app();
+    let release_id = set_up(&app).await;
+    // The medium of a feed comes from its last read.
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{release_id}/refresh"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let connector = connectors[0]["id"].as_i64().unwrap();
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let label_id = label["id"].as_i64().unwrap();
+    let album_before = std::fs::read(app.feeds.path().join("album.xml")).unwrap();
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{label_id}/links"),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        body["changed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feed| feed["id"] == release_id),
+        "{body}"
+    );
+    let release_model = draft_model(&app, release_id).await;
+    assert_eq!(
+        release_model["publisher"]["remote_items"][0]["rel"],
+        "label"
+    );
+    assert_eq!(
+        std::fs::read(app.feeds.path().join("album.xml")).unwrap(),
+        album_before,
+        "a draft does not write the hosted file"
+    );
+}
+
+#[tokio::test]
+async fn a_link_gives_422_for_a_music_feed_and_409_for_a_read_only_feed() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let music = make_feed(
+        &app,
+        new_feed_body(connector, "release.xml", "Release", None, None),
+    )
+    .await;
+    let label_id = label["id"].as_i64().unwrap();
+    let music_id = music["id"].as_i64().unwrap();
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{music_id}/links"),
+        Some(json!({ "release": label_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "not_publisher");
+
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{music_id}/role"),
+        Some(json!({ "role": "artist" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "not_publisher");
+
+    let (_, read_only) = call(&app, "POST", "/api/v1/feeds", Some(json!({}))).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{label_id}/links"),
+        Some(json!({ "release": read_only["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "read_only");
+}
+
+#[tokio::test]
+async fn each_publisher_route_needs_the_token() {
+    let app = app();
+    let routes = [
+        (
+            "POST",
+            "/api/v1/feeds/1/links",
+            Some(json!({ "release": 2 })),
+        ),
+        ("DELETE", "/api/v1/feeds/1/links/2", None),
+        (
+            "PUT",
+            "/api/v1/feeds/1/role",
+            Some(json!({ "role": "label" })),
+        ),
+    ];
+    for (method, path, body) in routes {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::HOST, HOST)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.map(|b| b.to_string()).unwrap_or_default()))
+            .unwrap();
+        let (status, value, _) = send(&app, request).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
+        assert_eq!(value["error"]["code"], "token_required", "{method} {path}");
+    }
+}
+
 #[tokio::test]
 async fn a_feed_without_an_address_is_read_only_and_a_missing_file_gives_404() {
     let app = app();

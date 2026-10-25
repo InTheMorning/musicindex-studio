@@ -1,6 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef } from './vendor/htm-preact-standalone.module.js';
-import { AlbumEditor, DraftToolbar, trackKey, isTrack } from './editor.js';
+import { AlbumEditor, DraftToolbar, trackKey, isTrack, isPublisher } from './editor.js';
 import { useDraft } from './draft.js';
 
 // ---- Access token (ADR 0017) ----
@@ -445,6 +445,54 @@ function NewReleaseForm({ connectors, onAdded }) {
   </form>`;
 }
 
+// Make a publisher feed in a connected folder, as a draft with no file on
+// the host yet (ADR 0041 item 2). The name goes to `title` and to `author`.
+function NewPublisherForm({ connectors, onAdded }) {
+  const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
+  const [path, setPath] = useState('');
+  const [name, setName] = useState('');
+  const [role, setRole] = useState(null);
+  const { busy, error, run } = useAction();
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const feed = await api('/feeds/new', {
+        method: 'POST',
+        body: { connector_id: connectorId, path, title: name, author: name, medium: 'publisher', role },
+      });
+      onAdded(feed);
+    });
+  };
+  const formError = splitError(error, ['no_public_address', 'file_exists']);
+  const ready = connectorId !== null && path.trim() && name.trim() && role !== null;
+  return html`<form class="form" onSubmit=${submit}>
+    ${connectors.length > 1 && html`<div class="field"><label for="publisher-host">Host</label>
+      <select id="publisher-host" class="button" value=${connectorId}
+        onChange=${(e) => setConnectorId(Number(e.target.value))}>
+        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+      </select></div>`}
+    <${Field} id="publisher-path" label="Feed file" required placeholder="my-label.xml"
+      hint="The path of the new feed file in the folder of the host."
+      error=${formError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
+    <${Field} id="publisher-name" label="Name" required
+      value=${name} onInput=${(e) => setName(e.target.value)} />
+    <fieldset class="choices">
+      <legend>Role</legend>
+      <label class="choice">
+        <input type="radio" name="publisher-role" value="artist" checked=${role === 'artist'} onChange=${() => setRole('artist')} />
+        <span class="text"><span class="title">Artist</span></span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="publisher-role" value="label" checked=${role === 'label'} onChange=${() => setRole('label')} />
+        <span class="text"><span class="title">Label</span></span>
+      </label>
+    </fieldset>
+    <${ErrorNotice} error=${formError.other} />
+    <div class="actions"><button class="button action" type="submit" disabled=${busy || !ready}>
+      ${busy ? 'Making the publisher feed…' : 'Make the Publisher Feed'}</button></div>
+  </form>`;
+}
+
 // Select a feed file from the host, or type its path (ADR 0019).
 function AddFeedForm({ connectors, onAdded }) {
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
@@ -837,9 +885,10 @@ function Bar({ onMenu, children }) {
   </div>`;
 }
 
-// Is this feed an album that the editor can open (ADR 0029 item 4)?
+// Is this feed an album or a publisher feed that the editor can open (ADR
+// 0029 item 4, ADR 0041 item 3)?
 function isEditable(feed) {
-  return Boolean(feed.connector_id) && mediumKind(feed.medium).label === 'Album';
+  return Boolean(feed.connector_id) && (mediumKind(feed.medium).label === 'Album' || isPublisher(feed));
 }
 
 // A feed that the editor cannot open yet: the full hero and the facts, as
@@ -907,7 +956,7 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
+function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
   const kind = mediumKind(feed.medium);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -943,25 +992,25 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
       </header>
       <${ErrorNotice} error=${error} />
       ${feed.last_version === null && html`<div class="notice" role="status">
-        <strong>The host has no file for this release yet.</strong>
+        <strong>The host has no file for this ${feed.medium === 'publisher' ? 'publisher feed' : 'release'} yet.</strong>
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
     </div>
-    <${AlbumEditor} key=${feed.id} feed=${feed} draft=${draft} view=${view} go=${go}
+    <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
       connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
-      differences=${differences} onRescan=${onRescan} />
+      differences=${differences} onRescan=${onRescan} onListChanged=${onListChanged} />
   </div>`;
 }
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
+function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, onMenu, connectors, differences, onRescan }) {
   if (isEditable(feed)) {
-    return html`<${EditableFeed} feed=${feed} draft=${draft} view=${view} go=${go}
+    return html`<${EditableFeed} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting}
-      onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} connectors=${connectors}
+      onChanged=${onChanged} onListChanged=${onListChanged} onRemoved=${onRemoved} onMenu=${onMenu} connectors=${connectors}
       differences=${differences} onRescan=${onRescan} />`;
   }
   return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} onMenu=${onMenu} />`;
@@ -995,6 +1044,8 @@ function FeedTree({ feeds, view, draft, go, onAdding, onImporting, changedFeeds 
     ${feeds.map((feed) => {
       const kind = mediumKind(feed.medium);
       const canEdit = isEditable(feed);
+      // A publisher feed has two pages and no tracks (ADR 0041 item 3).
+      const publisherFeed = isPublisher(feed);
       const isOpen = canEdit && feed.id === selectedId && expanded === feed.id && draft.model !== null;
       return html`<li key=${feed.id}>
         <button class="node feed" type="button" aria-current=${feed.id === selectedId ? 'true' : 'false'}
@@ -1007,14 +1058,14 @@ function FeedTree({ feeds, view, draft, go, onAdding, onImporting, changedFeeds 
         </button>
         ${isOpen && html`<ul>
           <li><button class="node" type="button" aria-current=${isCurrent({}) ? 'page' : 'false'}
-            onClick=${() => openPage(feed, {})}><span class="label">Album</span></button></li>
-          <li><button class="node" type="button" aria-current=${isCurrent({ page: 'credits' }) ? 'page' : 'false'}
+            onClick=${() => openPage(feed, {})}><span class="label">${publisherFeed ? 'Publisher' : 'Album'}</span></button></li>
+          ${!publisherFeed && html`<li><button class="node" type="button" aria-current=${isCurrent({ page: 'credits' }) ? 'page' : 'false'}
             onClick=${() => openPage(feed, { page: 'credits' })}><span class="label">Credits and links</span></button></li>
           <li><button class="node" type="button" aria-current=${isCurrent({ page: 'recipients' }) ? 'page' : 'false'}
-            onClick=${() => openPage(feed, { page: 'recipients' })}><span class="label">Recipients</span></button></li>
+            onClick=${() => openPage(feed, { page: 'recipients' })}><span class="label">Recipients</span></button></li>`}
           <li><button class="node" type="button" aria-current=${isCurrent({ page: 'files' }) ? 'page' : 'false'}
             onClick=${() => openPage(feed, { page: 'files' })}><span class="label">Files</span></button></li>
-          <li class="tree-sub">Tracks</li>
+          ${!publisherFeed && html`<li class="tree-sub">Tracks</li>
           ${draft.model.items.map((item, i) => {
             const key = trackKey(item);
             const bad = draft.bad.some((b) => b.field.startsWith(`items/${i}/`));
@@ -1028,7 +1079,7 @@ function FeedTree({ feeds, view, draft, go, onAdding, onImporting, changedFeeds 
           <li><button class="node add" type="button" onClick=${() => { openPage(feed, {}); onAdding(true); }}>
             <span class="num">＋</span><span class="label">Add a track</span></button></li>
           <li><button class="node add" type="button" onClick=${() => { openPage(feed, {}); onImporting(true); }}>
-            <span class="num">＋</span><span class="label">Import files</span></button></li>
+            <span class="num">＋</span><span class="label">Import files</span></button></li>`}
         </ul>`}
       </li>`;
     })}
@@ -1261,6 +1312,8 @@ function AddFeeds({ connectors, onAdded, onMenu, go }) {
         : html`<p class="hint">Studio puts the files of a release on a host. Connect a host first.</p>
           <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a Host</button></div>`}
     </div>
+    ${connectors.length > 0 && html`<div class="panel"><h2>Make a publisher feed</h2>
+      <${NewPublisherForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
     <div class="panel"><h2>Find feeds by address or name</h2>
       ${found
         ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
@@ -1379,8 +1432,9 @@ function Shell({ vault, onLock }) {
     main = html`<${AddFeeds} connectors=${connectors} onMenu=${openDrawer} go=${go}
       onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
   } else if (selected) {
-    main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}
+    main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}
       adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
+      onListChanged=${() => load()}
       onRemoved=${async () => { await load(); go({ name: 'feeds' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
   } else {

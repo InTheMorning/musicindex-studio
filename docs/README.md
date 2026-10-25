@@ -42,6 +42,7 @@
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
 - [ADR 0039: The shell, Releases and the outline of a feed](adr/0039-the-shell-releases-and-the-outline.md)
 - [ADR 0040: Replace the audio of a track](adr/0040-replace-the-audio-of-a-track.md)
+- [ADR 0041: Publisher feeds and two-way links](adr/0041-publisher-feeds-and-two-way-links.md)
 
 ## Plans
 
@@ -107,6 +108,11 @@
 - [Studio v1 task 023g: The move of the feed XML](tasks/studio-v1-task-023g-feed-xml-move.md)
 - [Studio v1 task 023h: The feed XML move UI](tasks/studio-v1-task-023h-feed-xml-move-ui.md)
 - [Studio v1 task 024: The open items of Phase 6](tasks/studio-v1-task-024-phase-6-open-items.md)
+- [Studio v1 task 025: Publisher feeds](tasks/studio-v1-task-025-publisher-feeds.md)
+- [Studio v1 task 025a: The role and the links in the core](tasks/studio-v1-task-025a-publisher-core.md)
+- [Studio v1 task 025b: The publisher routes](tasks/studio-v1-task-025b-publisher-routes.md)
+- [Studio v1 task 025c: The publisher page](tasks/studio-v1-task-025c-publisher-page.md)
+- [Studio v1 task 025d: The publisher feeds of a release](tasks/studio-v1-task-025d-release-publishers.md)
 
 ## Reviews
 
@@ -123,6 +129,8 @@
 - [Phase 7 milestone 7a visual check, 2026-10-23](reviews/2026-10-23-phase-7a-visual-check.md)
 - [Task 022 visual check, 2026-10-24](reviews/2026-10-24-task-022-visual-check.md)
 - [Phase 7 milestone 7b visual check, 2026-10-24](reviews/2026-10-24-phase-7b-visual-check.md)
+- [Phase 8 review checklist, 2026-10-25](reviews/2026-10-25-phase-8-review-checklist.md)
+- [Phase 8 visual check, 2026-10-25](reviews/2026-10-25-phase-8-visual-check.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

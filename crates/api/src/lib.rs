@@ -80,6 +80,9 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
         .route("/feeds/new", post(routes::new_album_feed))
         .route("/feeds/{id}", delete(routes::delete_feed))
+        .route("/feeds/{id}/links", post(routes::add_link))
+        .route("/feeds/{id}/links/{release}", delete(routes::remove_link))
+        .route("/feeds/{id}/role", put(routes::set_publisher_role))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
         .route(
             "/feeds/{id}/files",

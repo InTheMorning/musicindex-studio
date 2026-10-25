@@ -196,6 +196,9 @@ CREATE TABLE feed_pointers (
     PRIMARY KEY (connector_id, path)
 );
 ",
+    r"
+ALTER TABLE feeds ADD COLUMN publisher_role TEXT CHECK (publisher_role IN ('artist', 'label'));
+",
 ];
 
 /// The schema version that this code writes.
@@ -295,6 +298,37 @@ pub struct ConnectorRow {
     pub secret_ref: Option<String>,
 }
 
+/// The role of a publisher feed (ADR 0041 item 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PublisherRole {
+    /// The publisher feed of an artist.
+    Artist,
+    /// The publisher feed of a label.
+    Label,
+}
+
+impl PublisherRole {
+    /// The text of the role in the collection and in the `rel` of a link.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Artist => "artist",
+            Self::Label => "label",
+        }
+    }
+
+    /// The role for its text. Gives none for another text.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "artist" => Some(Self::Artist),
+            "label" => Some(Self::Label),
+            _ => None,
+        }
+    }
+}
+
 /// A feed as the collection keeps it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FeedRow {
@@ -325,6 +359,9 @@ pub struct FeedRow {
     /// the write pipeline still decides a default elsewhere (ADR 0036
     /// item 4 and item 8).
     pub files_connector_id: Option<ConnectorId>,
+    /// The role of a publisher feed (ADR 0041 item 1). `None` for a feed
+    /// that has no recorded role.
+    pub publisher_role: Option<PublisherRole>,
 }
 
 /// The move of the feed XML to a different host, in the draft of a feed
@@ -728,6 +765,24 @@ impl Collection {
         self.db.execute(
             "UPDATE feeds SET title = ?2, medium = ?3 WHERE id = ?1",
             params![id.0, title, medium],
+        )?;
+        Ok(())
+    }
+
+    /// Record the role of a publisher feed, or remove it with `None`
+    /// (ADR 0041 item 1).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_publisher_role(
+        &self,
+        id: FeedId,
+        role: Option<PublisherRole>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET publisher_role = ?2 WHERE id = ?1",
+            params![id.0, role.map(PublisherRole::as_str)],
         )?;
         Ok(())
     }
@@ -1932,7 +1987,7 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id FROM feeds";
+const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_role FROM feeds";
 
 /// Keep or remove the address of one source. An empty address is no address.
 fn put_address(
@@ -2089,6 +2144,10 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
         address_differences: Vec::new(),
         folder: r.get(9)?,
         files_connector_id: r.get::<_, Option<i64>>(10)?.map(ConnectorId),
+        publisher_role: r
+            .get::<_, Option<String>>(11)?
+            .as_deref()
+            .and_then(PublisherRole::parse),
     })
 }
 
@@ -2757,7 +2816,43 @@ mod tests {
     }
 
     #[test]
-    fn a_database_at_schema_version_5_opens_at_version_6_and_keeps_its_library_files() {
+    fn a_database_at_schema_version_6_opens_and_gets_the_publisher_role() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..6] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", 6).unwrap();
+        db.execute_batch(
+            "INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0);",
+        )
+        .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(collection.feed(FeedId(1)).unwrap().publisher_role, None);
+        collection
+            .set_publisher_role(FeedId(1), Some(PublisherRole::Label))
+            .unwrap();
+        assert_eq!(
+            collection.feed(FeedId(1)).unwrap().publisher_role,
+            Some(PublisherRole::Label)
+        );
+        collection.set_publisher_role(FeedId(1), None).unwrap();
+        assert_eq!(collection.feed(FeedId(1)).unwrap().publisher_role, None);
+        // The schema accepts only the two roles.
+        assert!(
+            collection
+                .db
+                .execute("UPDATE feeds SET publisher_role = 'band' WHERE id = 1", [])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn a_database_at_schema_version_5_opens_at_the_current_version_and_keeps_its_library_files() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
@@ -2775,7 +2870,7 @@ mod tests {
         drop(db);
 
         let collection = Collection::open(&path).unwrap();
-        assert_eq!(collection.schema_version().unwrap(), 6);
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         let files = collection.library_files(FeedId(1)).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].sha256.as_deref(), Some("abc"));

@@ -1154,6 +1154,14 @@ textarea:focus { background: var(--fill); }
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
+/* The file button of a group, with the padding of the other group rows
+   (task 025c). */
+.group > .import-pick { padding: 10px 16px; }
+/* A release row of the publisher page: the title, its state, and the
+   buttons that move or remove it (task 025c, ADR 0041 item 10). */
+.release-row { display: grid; gap: 8px; padding: 10px 16px; }
+.release-row .title { font-weight: 600; overflow-wrap: anywhere; }
+.release-row .sub { color: var(--muted); font-size: .85rem; }
 
 /* An alternate enclosure of a track, as one summary line in the Audio file
    group, with a Remove button. There is no form to edit it (task 019d,

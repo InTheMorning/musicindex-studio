@@ -448,12 +448,13 @@ const NEW_FEED_TEMPLATE: &str = concat!(
     "</rss>\n",
 );
 
-/// Make a new album feed in a connected folder, as a draft with no hosted
+/// Make a new feed in a connected folder, as a draft with no hosted
 /// file (ADR 0032 items 6 to 9).
 ///
 /// The feed GUID is the `UUIDv5` of the public address of `path`
-/// ([`podcast_guid_for_url`]). The draft sets `podcast:medium` to `music`
-/// and `language` to `en`. The user sets each other field in the editor,
+/// ([`podcast_guid_for_url`]). The draft sets `podcast:medium` to `medium`
+/// and `language` to `en`. The caller gives `music` for an album feed
+/// and `publisher` for a publisher feed (ADR 0041 item 2). The user sets each other field in the editor,
 /// examines the diff, and writes it. The write puts the file only when no
 /// file exists at the path (ADR 0007).
 ///
@@ -469,6 +470,7 @@ pub fn new_feed(
     path: &str,
     title: &str,
     author: &str,
+    medium: &str,
 ) -> Result<FeedId, PipelineError> {
     let address = connector.public_url(path).ok_or_else(|| {
         PipelineError::new(
@@ -487,14 +489,14 @@ pub fn new_feed(
         title: Some(title.to_owned()),
         author: Some(author.to_owned()),
         podcast_guid: Some(podcast_guid_for_url(&address)),
-        medium: Some("music".to_owned()),
+        medium: Some(medium.to_owned()),
         language: Some("en".to_owned()),
         ..Feed::default()
     };
     feed.write(&mut doc)?;
     let id = collection.add_feed(None, Some((connector_id, path)))?;
     collection.set_address(id, AddressSource::Folder, Some(&address))?;
-    collection.set_new_feed(id, title, "music")?;
+    collection.set_new_feed(id, title, medium)?;
     collection.save_draft(
         id,
         &DraftRow {

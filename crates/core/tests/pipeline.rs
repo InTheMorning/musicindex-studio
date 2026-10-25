@@ -199,6 +199,27 @@ fn new_setup() -> (
 }
 
 #[test]
+fn a_new_publisher_feed_has_the_publisher_medium_in_its_draft_and_row() {
+    let (_dir, mut collection, connector, connector_id, _hosts, _library) = new_setup();
+    let id = pipeline::new_feed(
+        &mut collection,
+        connector.as_ref(),
+        connector_id,
+        "label.xml",
+        "New Label",
+        "New Label",
+        "publisher",
+    )
+    .unwrap();
+    let (model, _revision) = pipeline::draft_model(&collection, id).unwrap();
+    assert_eq!(model.medium.as_deref(), Some("publisher"));
+    assert_eq!(
+        collection.feed(id).unwrap().medium.as_deref(),
+        Some("publisher")
+    );
+}
+
+#[test]
 fn a_new_feed_makes_a_draft_with_no_hosted_file() {
     let (dir, mut collection, connector, connector_id, _hosts, _library) = new_setup();
     let id = pipeline::new_feed(
@@ -208,6 +229,7 @@ fn a_new_feed_makes_a_draft_with_no_hosted_file() {
         "my-album.xml",
         "New Album",
         "New Artist",
+        "music",
     )
     .unwrap();
     // The folder has no file before the write.
@@ -261,6 +283,7 @@ fn a_new_feed_in_a_folder_with_no_public_address_gives_an_error() {
         "my-album.xml",
         "New Album",
         "New Artist",
+        "music",
     )
     .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::NoPublicAddress);
@@ -277,6 +300,7 @@ fn a_new_feed_at_a_path_with_a_file_gives_an_error() {
         "taken.xml",
         "New Album",
         "New Artist",
+        "music",
     )
     .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::FileExists);
@@ -292,6 +316,7 @@ fn the_diff_of_a_new_feed_adds_the_full_file_and_the_write_puts_it() {
         "my-album.xml",
         "New Album",
         "New Artist",
+        "music",
     )
     .unwrap();
     let diff = pipeline::diff(&collection, &hosts, &library, id).unwrap();
@@ -321,6 +346,7 @@ fn a_file_put_by_another_tool_before_the_write_of_a_new_feed_gives_a_conflict() 
         "my-album.xml",
         "New Album",
         "New Artist",
+        "music",
     )
     .unwrap();
     let diff = pipeline::diff(&collection, &hosts, &library, id).unwrap();
@@ -1018,6 +1044,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
         "second.xml",
         "Second Album",
         "Second Artist",
+        "music",
     )
     .unwrap();
     s.collection.set_feed_folder(second, "second").unwrap();

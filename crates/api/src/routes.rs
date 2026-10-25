@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use studio_core::address::AddressSource;
 use studio_core::collection::{
     Collection, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId, DraftOperationKind,
-    FeedId, FeedRow, LibraryFile, LibraryFileId, SnapshotId,
+    FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
 };
 use studio_core::connector::{self, LocalFolder};
 use studio_core::discover::PublicFeed;
@@ -26,6 +26,7 @@ use studio_core::library::{self, Library};
 use studio_core::media;
 use studio_core::migrate;
 use studio_core::pipeline;
+use studio_core::publisher;
 use studio_core::vault::OpenVault;
 use tokio::io::AsyncWriteExt;
 
@@ -367,24 +368,59 @@ pub(crate) struct NewAlbumFeed {
     path: String,
     title: String,
     author: String,
+    /// `music` (the default) or `publisher` (ADR 0041 item 2).
+    medium: Option<String>,
+    /// `artist` or `label`. A publisher feed needs it (ADR 0041 item 1).
+    role: Option<String>,
 }
 
-/// Make a new album feed in a connected folder, as a draft with no hosted
-/// file (ADR 0032 items 6 to 9).
+/// Make a new feed in a connected folder, as a draft with no hosted file
+/// (ADR 0032 items 6 to 9, ADR 0041 items 1 and 2).
 pub(crate) async fn new_album_feed(
     State(shared): State<Shared>,
     Json(body): Json<NewAlbumFeed>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     blocking(shared, move |w| {
+        let medium = body.medium.as_deref().unwrap_or("music");
+        let publisher = match medium {
+            "music" => false,
+            "publisher" => true,
+            _ => {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_feed",
+                    "the medium is music or publisher",
+                ));
+            }
+        };
         let title = body.title.trim();
         let author = body.author.trim();
         if title.is_empty() || author.is_empty() {
+            let message = if publisher {
+                "give the name of the publisher feed"
+            } else {
+                "give the album title and the artist"
+            };
             return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "invalid_feed",
-                "give the album title and the artist",
+                message,
             ));
         }
+        // The role is checked before any change, so a refusal changes
+        // nothing.
+        let role = if publisher {
+            let text = body.role.as_deref().unwrap_or_default();
+            Some(PublisherRole::parse(text).ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_feed",
+                    "give the role of the publisher feed: artist or label",
+                )
+            })?)
+        } else {
+            None
+        };
         let row = w.collection.connector(ConnectorId(body.connector_id))?;
         if row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
@@ -397,7 +433,11 @@ pub(crate) async fn new_album_feed(
             &body.path,
             title,
             author,
+            medium,
         )?;
+        if let Some(role) = role {
+            w.collection.set_publisher_role(id, Some(role))?;
+        }
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
     })
     .await
@@ -815,6 +855,162 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
         return Err(ApiError::vault_locked());
     }
     Ok(connector::from_row(&connector_row, w.vault.as_ref())?)
+}
+
+/// Start the draft of a feed when it has none (ADR 0041 item 8). A feed
+/// with a draft is not changed.
+fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
+    if w.collection.draft(id)?.is_none() {
+        let made = writer(w, id)?;
+        pipeline::start_draft(&w.collection, made.as_ref(), id)?;
+    }
+    Ok(())
+}
+
+/// Refuse a link route for a read-only feed or a feed of the wrong medium
+/// before a draft starts, so that a refusal starts no draft. The core
+/// makes the same checks again (ADR 0041 items 1 and 5).
+fn check_mediums(
+    w: &Workspace,
+    publisher: FeedId,
+    release: Option<FeedId>,
+) -> Result<(), ApiError> {
+    for id in std::iter::once(publisher).chain(release) {
+        if w.collection.feed(id)?.connector_id.is_none() {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "read_only",
+                format!("feed {} has no connector, so Studio cannot write it", id.0),
+            ));
+        }
+    }
+    if w.collection.feed(publisher)?.medium.as_deref() != Some("publisher") {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "not_publisher",
+            format!("feed {} is not a publisher feed", publisher.0),
+        ));
+    }
+    if let Some(release) = release
+        && w.collection.feed(release)?.medium.as_deref() != Some("music")
+    {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "not_release",
+            format!("feed {} is not a music feed", release.0),
+        ));
+    }
+    Ok(())
+}
+
+/// The draft bytes of a feed before a publisher change, for each feed
+/// that the change can alter.
+type DraftBytes = Vec<(FeedId, Option<Vec<u8>>)>;
+
+fn draft_bytes(w: &Workspace, id: FeedId) -> Result<Option<Vec<u8>>, ApiError> {
+    Ok(w.collection.draft(id)?.map(|draft| draft.draft_xml))
+}
+
+fn before_change(w: &Workspace, ids: &[FeedId]) -> Result<DraftBytes, ApiError> {
+    ids.iter()
+        .map(|&id| Ok((id, draft_bytes(w, id)?)))
+        .collect()
+}
+
+/// The feeds whose draft a publisher change altered, the publisher feed
+/// too, in the sequence of their IDs (ADR 0041 item 8). Each page leaves
+/// out its own feed. The title is the title of the feed row.
+fn changed_json(w: &Workspace, before: &DraftBytes) -> ApiResult {
+    let mut changed = Vec::new();
+    for (id, old) in before {
+        if draft_bytes(w, *id)? != *old {
+            let row = w.collection.feed(*id)?;
+            changed.push(json!({ "id": id.0, "title": row.title }));
+        }
+    }
+    Ok(Json(json!({ "changed": changed })))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct LinkBody {
+    release: i64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RoleBody {
+    role: String,
+}
+
+/// Link a publisher feed to a release. Both drafts change (ADR 0041
+/// items 6 to 8).
+pub(crate) async fn add_link(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<LinkBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let publisher_id = FeedId(id);
+        let release_id = FeedId(body.release);
+        check_mediums(w, publisher_id, Some(release_id))?;
+        ensure_draft(w, publisher_id)?;
+        ensure_draft(w, release_id)?;
+        let before = before_change(w, &[publisher_id, release_id])?;
+        publisher::link(&w.collection, publisher_id, release_id)?;
+        changed_json(w, &before)
+    })
+    .await
+}
+
+/// Remove the link between a publisher feed and a release from both
+/// drafts (ADR 0041 items 7 and 8).
+pub(crate) async fn remove_link(
+    State(shared): State<Shared>,
+    Path((id, release)): Path<(i64, i64)>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let publisher_id = FeedId(id);
+        let release_id = FeedId(release);
+        check_mediums(w, publisher_id, None)?;
+        ensure_draft(w, publisher_id)?;
+        ensure_draft(w, release_id)?;
+        let before = before_change(w, &[publisher_id, release_id])?;
+        publisher::unlink(&w.collection, publisher_id, release_id)?;
+        changed_json(w, &before)
+    })
+    .await
+}
+
+/// Change the role of a publisher feed. The `rel` of each link changes in
+/// its draft and in each linked release (ADR 0041 item 11).
+pub(crate) async fn set_publisher_role(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<RoleBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let role = PublisherRole::parse(&body.role).ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_feed",
+                "give the role of the publisher feed: artist or label",
+            )
+        })?;
+        let publisher_id = FeedId(id);
+        check_mediums(w, publisher_id, None)?;
+        ensure_draft(w, publisher_id)?;
+        let mut releases = publisher::linked_releases(&w.collection, publisher_id)?;
+        releases.sort_by_key(|release| release.0);
+        for release in &releases {
+            ensure_draft(w, *release)?;
+        }
+        let mut feeds = vec![publisher_id];
+        feeds.extend(&releases);
+        feeds.sort_by_key(|feed| feed.0);
+        let before = before_change(w, &feeds)?;
+        publisher::set_role(&w.collection, publisher_id, role)?;
+        changed_json(w, &before)
+    })
+    .await
 }
 
 /// The draft as the UI edits it: the model, its revision, `changed` and

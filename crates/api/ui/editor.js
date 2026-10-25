@@ -1078,9 +1078,55 @@ function FeedFacts({ feed, onRemoved }) {
 
 // The album page: the album fields, the album details and the tracks
 // (task 014c step 3).
-function AlbumPage({ feed, model, update, bad, go, onAdding, onImporting, onRemoved }) {
+// The label of a role in the `rel` of a link (ADR 0041 item 1).
+const ROLE_LABEL = { artist: 'Artist', label: 'Label' };
+
+// The second line of a publisher row on the album page: the role, the link
+// state and the primary mark (ADR 0041 items 6 and 9).
+function publisherLine(entry, match, index) {
+  const parts = [ROLE_LABEL[entry.rel] || 'No role'];
+  if (!match) parts.push('Not in the collection');
+  if (index === 0) parts.push('Primary');
+  return parts.join(' · ');
+}
+
+function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
+  const linkAction = useAction();
+  // The feeds whose draft the last link change altered.
+  const [changed, setChanged] = useState([]);
+  const [chosen, setChosen] = useState('');
+  // The publisher feeds of this release, in the sequence of
+  // `podcast:publisher` (ADR 0041 item 9). The first one is the primary.
+  const publishers = model.publisher ? model.publisher.remote_items : [];
+  const rows = publishers.map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }));
+  const linkedIds = new Set(rows.filter((row) => row.match).map((row) => row.match.id));
+  const candidates = feeds.filter((f) => f.connector_id && mediumOf(f) === 'publisher' && !linkedIds.has(f.id));
+  const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
+  // Swap this publisher feed with the one above or below it. No other feed
+  // changes (ADR 0041 item 9).
+  const movePublisher = (index, by) => update((m) => set(m, 'publisher',
+    set(m.publisher, 'remote_items', move(m.publisher.remote_items, index, by))));
+  const removeRow = (row) => {
+    if (!row.match) {
+      // Studio keeps no link to a feed that is not in the collection. The
+      // entry leaves this release only. Without entries, the element goes
+      // (ADR 0041 item 13).
+      update((m) => {
+        const rest = m.publisher.remote_items.filter((_, i) => i !== row.index);
+        return set(m, 'publisher', rest.length === 0 ? null : set(m.publisher, 'remote_items', rest));
+      });
+      return;
+    }
+    twoDrafts(linkAction, async () => (await api(`/feeds/${row.match.id}/links/${feed.id}`, { method: 'DELETE' })).changed);
+  };
+  const addPublisher = async () => {
+    const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${chosen}/links`, {
+      method: 'POST', body: { release: feed.id },
+    })).changed);
+    if (done) setChosen('');
+  };
   // No wrapper: each section is a direct row of .page, with the gap of
   // .page between sections (review of task 014c, defect 2).
   return html`<section class="page-section"><h2>Album</h2>
@@ -1108,6 +1154,41 @@ function AlbumPage({ feed, model, update, bad, go, onAdding, onImporting, onRemo
           <span class="go" aria-hidden="true">›</span>
         </button>
         <${FeedFacts} feed=${feed} onRemoved=${onRemoved} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Publisher feeds</h2>
+      <div class="group">
+        <${ChangedNotices} changed=${changed} go=${go} />
+        ${rows.length === 0 && html`<p class="hint">No publisher feeds yet.</p>`}
+        ${rows.map((row) => html`<div class="release-row" key=${row.entry._cid}>
+          <span class="title">${row.entry.title || row.entry.feed_url}</span>
+          <span class="sub">${publisherLine(row.entry, row.match, row.index)}</span>
+          <div class="actions">
+            <button class="button" type="button" disabled=${row.index === 0 || linkAction.busy}
+              aria-label=${`Move ${row.entry.title || 'this publisher feed'} up`}
+              onClick=${() => movePublisher(row.index, -1)}>Move up</button>
+            <button class="button" type="button" disabled=${row.index === rows.length - 1 || linkAction.busy}
+              aria-label=${`Move ${row.entry.title || 'this publisher feed'} down`}
+              onClick=${() => movePublisher(row.index, 1)}>Move down</button>
+            <button class="button destructive" type="button" disabled=${linkAction.busy}
+              aria-label=${`Remove ${row.entry.title || 'this publisher feed'}`}
+              onClick=${() => removeRow(row)}>Remove</button>
+          </div>
+        </div>`)}
+        ${candidates.length > 0 && html`<div class="field">
+          <label for="album-publisher">Publisher feed</label>
+          <div class="field-body">
+            <select id="album-publisher" value=${chosen} onChange=${(e) => setChosen(e.target.value)}>
+              <option value="">Select a publisher feed</option>
+              ${candidates.map((f) => html`<option value=${f.id}>${f.title || f.path || 'Untitled feed'}</option>`)}
+            </select>
+          </div>
+        </div>
+        <div class="actions"><button class="button action" type="button" disabled=${!chosen || linkAction.busy}
+          onClick=${addPublisher}>Add the Publisher Feed</button></div>`}
+        ${candidates.length === 0 && html`<p class="hint">Studio has no other publisher feed in the collection to add.</p>`}
+        <${ErrorNotice} error=${publisherError(linkAction.error, 'Open the publisher feed and select its role first.')} />
       </div>
     </section>
 
@@ -1232,6 +1313,215 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChang
       <button class="button" type="button" disabled=${trackIndex === items.length - 1} onClick=${() => changeItems(move(items, trackIndex, 1))}>Move down</button>
       <button class="button destructive" type="button" onClick=${removeTrack}>Remove the track</button>
     </div>`;
+}
+
+// ---- The publisher feed page (task 025c, ADR 0041) ----
+
+// Is this feed a publisher feed (ADR 0041 item 1)?
+export function isPublisher(feed) {
+  return (feed.medium || '').toLowerCase() === 'publisher';
+}
+
+// The medium of a feed in lower case, or an empty text.
+function mediumOf(feed) {
+  return (feed.medium || '').toLowerCase();
+}
+
+// The role that the music items give (ADR 0041 item 4). Studio takes the
+// role when each music item gives the same `rel`. Otherwise it gives none.
+function inferredRole(items) {
+  const rels = items.filter((entry) => entry.medium === 'music').map((entry) => entry.rel);
+  if (rels.length === 0) return null;
+  const [first] = rels;
+  return rels.every((rel) => rel === first) && (first === 'artist' || first === 'label') ? first : null;
+}
+
+// The feed of the list that a release entry names, by its feed GUID or its
+// public address (ADR 0041, the releases of a publisher feed).
+function linkedFeed(feeds, entry) {
+  return feeds.find((f) => (f.podcast_guid && f.podcast_guid === entry.feed_guid)
+    || (f.public_url && f.public_url === entry.feed_url)) || null;
+}
+
+// The text of an error of a publisher change. A missing role has its own
+// text, and each page gives that text (ADR 0041 item 4).
+function publisherError(error, roleText) {
+  if (!error || error.code !== 'role_required') return error;
+  return Object.assign(new Error(roleText), { code: error.code });
+}
+
+// The steps of a change of two drafts (task 025c, ADR 0041 item 8). `call`
+// makes the change and returns the `changed` list of the route. The
+// notices name each feed of that list, but not the open feed `feedId`.
+// The helper returns true when the change worked.
+async function changeTwoDrafts(action, { feedId, draft, onListChanged, setChanged, call }) {
+  const done = await action.run(async () => {
+    setChanged([]);
+    if (!(await draft.flush())) return false;
+    const named = (await call()).filter((c) => c.id !== feedId);
+    await draft.load();
+    await onListChanged();
+    setChanged(named);
+    return true;
+  });
+  return done === true;
+}
+
+// One notice for each feed whose draft a change altered (ADR 0041 item 8).
+// Each notice has a button that opens its feed.
+function ChangedNotices({ changed, go }) {
+  return changed.map((c) => html`<div class="notice" role="status" key=${c.id}>
+      <span>Studio also changed the draft of ${c.title || 'Untitled feed'}. Open it to examine and write it.</span>
+      <div class="actions"><button class="button" type="button"
+        onClick=${() => go({ name: 'feed', id: c.id })}>Open ${c.title || 'Untitled feed'}</button></div>
+    </div>`);
+}
+
+const PUBLISHER_ROLE_TEXT = 'Select the role of this publisher feed first.';
+
+// The publisher page: the fields, the role and the releases (ADR 0041 item
+// 3). Each link changes the draft of this feed and the draft of the release,
+// so the page loads both drafts and names each release that changed.
+function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged }) {
+  const field = (name) => (value) => update((m) => set(m, name, value));
+  const roleAction = useAction();
+  const linkAction = useAction();
+  const imageAction = useAction();
+  // The feeds whose draft the last link or role change altered.
+  const [changed, setChanged] = useState([]);
+  const [chosen, setChosen] = useState('');
+  const items = model.remote_items;
+  // The releases in the sequence of the model (ADR 0041 item 10).
+  const rows = items
+    .map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }))
+    .filter((row) => row.entry.medium === 'music');
+  const linkedIds = new Set(rows.filter((row) => row.match).map((row) => row.match.id));
+  const candidates = feeds.filter((f) => f.connector_id && mediumOf(f) === 'music' && !linkedIds.has(f.id));
+  const inferred = inferredRole(items);
+  const shownRole = feed.publisher_role || inferred || '';
+
+  // The steps of this page for one change of two drafts.
+  const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
+  const setRole = (role) => {
+    if (!role) return;
+    twoDrafts(roleAction, async () => (await api(`/feeds/${feed.id}/role`, { method: 'PUT', body: { role } })).changed);
+  };
+  const addRelease = async () => {
+    const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links`, {
+      method: 'POST',
+      body: { release: Number(chosen) },
+    })).changed);
+    if (done) setChosen('');
+  };
+  const removeRow = (row) => {
+    if (!row.match) {
+      // Studio keeps no link to a feed that is not in the collection. Only
+      // this feed changes (ADR 0041 item 13).
+      update((m) => set(m, 'remote_items', m.remote_items.filter((e) => e._cid !== row.entry._cid)));
+      return;
+    }
+    twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links/${row.match.id}`, { method: 'DELETE' })).changed);
+  };
+  // Swap a release with the release above or below it (ADR 0041 item 10).
+  // Other entries of the list keep their place.
+  const moveRow = (position, by) => {
+    const target = position + by;
+    if (target < 0 || target >= rows.length) return;
+    const a = rows[position].index;
+    const b = rows[target].index;
+    update((m) => set(m, 'remote_items', m.remote_items.map((e, i) => {
+      if (i === a) return m.remote_items[b];
+      if (i === b) return m.remote_items[a];
+      return e;
+    })));
+  };
+  // Send one image to the release folder, and use its address as the
+  // cover image. A file that is not an image is removed again.
+  const importImage = (file) => imageAction.run(async () => {
+    if (!(await draft.flush())) return;
+    const facts = await api(`/feeds/${feed.id}/files?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      body: file,
+    });
+    if (facts.kind !== 'image') {
+      if (!facts.on_host) {
+        api(`/feeds/${feed.id}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});
+      }
+      throw Object.assign(new Error('Select an image file.'), { code: 'not_image' });
+    }
+    update((m) => set(m, 'image', facts.url));
+    await draft.flush();
+  });
+  return html`<${ChangedNotices} changed=${changed} go=${go} />
+    <section class="page-section"><h2>Publisher</h2>
+      <div class="group">
+        <${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />
+        <${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
+        <${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />
+        <${TextField} id="pub-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')}>
+          <${ImageThumb} url=${model.image} className="field-cover" />
+        <//>
+        <div class="import-pick">
+          <input id="pub-image-input" class="visually-hidden" type="file" disabled=${imageAction.busy}
+            accept="image/*"
+            onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) importImage(file); }} />
+          <label for="pub-image-input" class="button action">Import Image</label>
+          ${imageAction.error && html`<p class="field-error" role="alert">${imageAction.error.message}</p>`}
+        </div>
+        <${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Role</h2>
+      <div class="group">
+        <div class="field">
+          <label for="pub-role">Role</label>
+          <div class="field-body">
+            <select id="pub-role" value=${shownRole} disabled=${roleAction.busy} onChange=${(e) => setRole(e.target.value)}>
+              ${shownRole === '' && html`<option value="" disabled>Select a role</option>`}
+              <option value="artist">Artist</option>
+              <option value="label">Label</option>
+            </select>
+            ${!feed.publisher_role && inferred && html`<span class="hint">Studio found this role in the feed.</span>`}
+          </div>
+        </div>
+        <${ErrorNotice} error=${publisherError(roleAction.error, PUBLISHER_ROLE_TEXT)} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Releases</h2>
+      <div class="group">
+        ${rows.length === 0 && html`<p class="hint">No releases yet.</p>`}
+        ${rows.map((row, position) => html`<div class="release-row" key=${row.entry._cid}>
+          <span class="title">${row.entry.title || row.entry.feed_url}</span>
+          <span class="sub">${row.match ? 'In the collection' : 'Not in the collection'}</span>
+          <div class="actions">
+            <button class="button" type="button" disabled=${position === 0 || linkAction.busy}
+              aria-label=${`Move ${row.entry.title || 'this release'} up`}
+              onClick=${() => moveRow(position, -1)}>Move up</button>
+            <button class="button" type="button" disabled=${position === rows.length - 1 || linkAction.busy}
+              aria-label=${`Move ${row.entry.title || 'this release'} down`}
+              onClick=${() => moveRow(position, 1)}>Move down</button>
+            <button class="button destructive" type="button" disabled=${linkAction.busy}
+              aria-label=${`Remove ${row.entry.title || 'this release'}`}
+              onClick=${() => removeRow(row)}>Remove</button>
+          </div>
+        </div>`)}
+        ${candidates.length > 0 && html`<div class="field">
+          <label for="pub-release">Release</label>
+          <div class="field-body">
+            <select id="pub-release" value=${chosen} onChange=${(e) => setChosen(e.target.value)}>
+              <option value="">Select a release</option>
+              ${candidates.map((f) => html`<option value=${f.id}>${f.title || f.path || 'Untitled feed'}</option>`)}
+            </select>
+          </div>
+        </div>
+        <div class="actions"><button class="button action" type="button" disabled=${!chosen || linkAction.busy}
+          onClick=${addRelease}>Add the Release</button></div>`}
+        ${candidates.length === 0 && html`<p class="hint">Studio has no other release in the collection to add.</p>`}
+        <${ErrorNotice} error=${publisherError(linkAction.error, PUBLISHER_ROLE_TEXT)} />
+      </div>
+    </section>`;
 }
 
 // ---- The Files page (task 021g, ADR 0036 items 4, 7 to 14) ----
@@ -1718,7 +2008,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan }) {
+export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -1732,11 +2022,17 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing
     return html`<div class="page"><p class="hint" role="status">${STATUS[draft.status]}</p>
       <${ErrorNotice} error=${draft.error} /></div>`;
   }
+  // A publisher feed has the publisher page and the Files page only (ADR
+  // 0041 item 3).
+  const publisher = isPublisher(feed);
   let body;
   // When the track key of the view is not in the model, for example after a
   // write that gave each item a new client ID, the editor shows the album
   // page (task 014c, Architecture).
-  if (page === 'track' && trackIndex !== -1) {
+  if (publisher && page !== 'files') {
+    body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
+      draft=${draft} go=${go} onListChanged=${onListChanged} />`;
+  } else if (page === 'track' && trackIndex !== -1) {
     body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go}
       draft=${draft} onOpsChanged=${onOpsChanged} />`;
   } else if (page === 'credits') {
@@ -1747,8 +2043,8 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing
     body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} reloadKey=${filesReloadKey}
       differences=${differences} onRescan=${onRescan} />`;
   } else {
-    body = html`<${AlbumPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} go=${go}
-      onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} />`;
+    body = html`<${AlbumPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad} draft=${draft} go=${go}
+      onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} onListChanged=${onListChanged} />`;
   }
   const onAdd = (item) => {
     const [added] = withCids([item]);
@@ -1770,8 +2066,8 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing
   };
   return html`<div class="page">
     ${body}
-    <${AddTrackSheet} open=${adding} onClose=${() => onAdding(false)} onAdd=${onAdd} />
-    <${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(model.image)}
-      onClose=${() => onImporting(false)} onAdd=${onImport} />
+    ${!publisher && html`<${AddTrackSheet} open=${adding} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
+    ${!publisher && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(model.image)}
+      onClose=${() => onImporting(false)} onAdd=${onImport} />`}
   </div>`;
 }

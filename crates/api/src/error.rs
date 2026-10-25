@@ -13,6 +13,7 @@ use studio_core::inventory::{InventoryError, InventoryErrorKind};
 use studio_core::media::{MediaError, MediaErrorKind};
 use studio_core::migrate::MigrateError;
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
+use studio_core::publisher::{PublisherError, PublisherErrorKind};
 use studio_core::vault::{VaultError, VaultErrorKind};
 
 /// An error that the API sends as `{"error": {"code", "message"}}`.
@@ -147,6 +148,30 @@ impl From<PipelineError> for ApiError {
             // ADR 0038 item 12: a copy waits for the download of its file.
             PipelineErrorKind::WaitingForDownload => (StatusCode::CONFLICT, "waiting_for_download"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
+        };
+        Self::new(status, code, error.to_string())
+    }
+}
+
+impl From<PublisherError> for ApiError {
+    fn from(error: PublisherError) -> Self {
+        // A pipeline failure keeps the mapping of its own error (ADR 0041).
+        if error.kind() == PublisherErrorKind::Pipeline {
+            return match error.pipeline() {
+                Some(pipeline) => pipeline.clone().into(),
+                None => Self::internal(error.to_string()),
+            };
+        }
+        let (status, code) = match error.kind() {
+            PublisherErrorKind::NotPublisher => (StatusCode::UNPROCESSABLE_ENTITY, "not_publisher"),
+            PublisherErrorKind::NotRelease => (StatusCode::UNPROCESSABLE_ENTITY, "not_release"),
+            PublisherErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
+            PublisherErrorKind::NoRole => (StatusCode::CONFLICT, "role_required"),
+            PublisherErrorKind::NoGuid => (StatusCode::UNPROCESSABLE_ENTITY, "no_guid"),
+            PublisherErrorKind::NoAddress => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "no_public_address")
+            }
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "publisher"),
         };
         Self::new(status, code, error.to_string())
     }

@@ -97,8 +97,9 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ### Phase 6: New Releases
 
-- Decisions: [ADR 0025](../adr/0025-studio-serves-cover-art.md), [ADR 0026](../adr/0026-import-music-files-through-the-draft.md), [ADR 0032](../adr/0032-new-releases-formats-paths-and-new-feeds.md) [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md) and [ADR 0034](../adr/0034-an-import-reuses-the-same-file-on-the-host.md).
+- Decisions: [ADR 0025](../adr/0025-studio-serves-cover-art.md), [ADR 0026](../adr/0026-import-music-files-through-the-draft.md), [ADR 0032](../adr/0032-new-releases-formats-paths-and-new-feeds.md) [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md), [ADR 0034](../adr/0034-an-import-reuses-the-same-file-on-the-host.md) and [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md).
 - Tasks: [016](../tasks/studio-v1-task-016-cover-art.md) (cover art), [017](../tasks/studio-v1-task-017-new-album-feed.md) (a new album feed) and [018](../tasks/studio-v1-task-018-import-music-files.md) (the import, in four packets) are complete. The [visual check](../reviews/2026-10-23-phase-6-visual-check.md) passes. [Task 019](../tasks/studio-v1-task-019-lossless-import.md) (an MP3 enclosure for a lossless import, in four packets) is complete, and its check passes. [Task 020](../tasks/studio-v1-task-020-reuse-the-file-on-the-host.md) (an import uses the same file on the host) is complete, and its check passes. The [review checklist](../reviews/2026-10-23-phase-6-review-checklist.md) applies to each.
+- [Task 024](../tasks/studio-v1-task-024-phase-6-open-items.md) corrects the six open items of the visual check, and its check passes.
 - Show the art of the album and of each track in the editor ([ADR 0025](../adr/0025-studio-serves-cover-art.md)).
 - Make a new album feed in a connected folder. Its feed GUID comes from its address ([ADR 0008](../adr/0008-feed-types-and-feed-identity.md)).
 - Import audio files and art into the draft. The approved write puts them on the host ([ADR 0026](../adr/0026-import-music-files-through-the-draft.md)).

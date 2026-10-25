@@ -1144,10 +1144,12 @@ textarea:focus { background: var(--fill); }
 }
 .import-dest select:focus { background: var(--fill); }
 
-/* The file button of the import sheet. The browser field is hidden, and its
-   focus shows on the label (ADR 0010: all functions work from the keyboard). */
+/* A file button: of the import sheet, of the track page (ADR 0040) and of
+   the MSP 2.0 import. The browser field is hidden, and its focus shows on
+   the label (ADR 0010: all functions work from the keyboard). */
 .import-pick { display: grid; gap: 10px; justify-items: start; }
 .import-pick label.button { cursor: pointer; }
+.import-pick input:disabled + label { opacity: .5; cursor: default; }
 .import-pick input:focus + label {
   outline: 3px solid var(--focus);
   outline-offset: 2px;

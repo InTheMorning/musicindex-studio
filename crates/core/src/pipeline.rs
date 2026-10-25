@@ -1218,6 +1218,76 @@ pub fn import_into_library(
     file_name: &str,
     media_type: &str,
 ) -> Result<ImportedFile, PipelineError> {
+    import_file(
+        collection,
+        library,
+        hosts,
+        id,
+        source,
+        file_name,
+        media_type,
+        NameConflict::Refuse,
+    )
+}
+
+/// Put the new audio file of a track into the release folder, as
+/// [`import_into_library`] does, for a replacement of the audio of the
+/// track (ADR 0040 items 2 and 3).
+///
+/// When a different file is at `file_name`, the new file gets the hash
+/// name of ADR 0035 item 16 in the release folder, for example
+/// `01 Song.3f9a2c1d.mp3`. Studio does not write over the file from
+/// before.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NoFolder`] when the feed has no release
+/// folder yet. Gives [`PipelineErrorKind::FileExists`] when a different
+/// file is at the hash name too. Gives a [`PipelineError`] when Studio
+/// cannot read `source`, or cannot write the release folder, or the
+/// collection fails.
+pub fn import_replacement_into_library(
+    collection: &Collection,
+    library: &Library,
+    hosts: &Hosts,
+    id: FeedId,
+    source: &Path,
+    file_name: &str,
+    media_type: &str,
+) -> Result<ImportedFile, PipelineError> {
+    import_file(
+        collection,
+        library,
+        hosts,
+        id,
+        source,
+        file_name,
+        media_type,
+        NameConflict::HashName,
+    )
+}
+
+/// What an import does when a different file is at its name in the
+/// release folder.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NameConflict {
+    /// Give [`PipelineErrorKind::FileExists`] (ADR 0036 item 5).
+    Refuse,
+    /// Use the hash name of ADR 0035 item 16 (ADR 0040 item 3).
+    HashName,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn import_file(
+    collection: &Collection,
+    library: &Library,
+    hosts: &Hosts,
+    id: FeedId,
+    source: &Path,
+    file_name: &str,
+    media_type: &str,
+    conflict: NameConflict,
+) -> Result<ImportedFile, PipelineError> {
     let feed_row = collection.feed(id)?;
     let folder = feed_row.folder.clone().ok_or_else(|| {
         PipelineError::new(
@@ -1241,10 +1311,17 @@ pub fn import_into_library(
     let sha256 = sha256_hex(&[&bytes]);
     let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
 
-    let existing = collection
-        .library_files(id)?
-        .into_iter()
-        .find(|file| file.path == file_name);
+    let files = collection.library_files(id)?;
+    let mut file_name = file_name.to_owned();
+    if conflict == NameConflict::HashName
+        && files
+            .iter()
+            .any(|file| file.path == file_name && file.sha256.as_deref() != Some(sha256.as_str()))
+    {
+        file_name = inventory::hash_name(&file_name, &sha256);
+    }
+    let file_name = file_name.as_str();
+    let existing = files.into_iter().find(|file| file.path == file_name);
     let library_file_id = match existing {
         Some(file) if file.sha256.as_deref() == Some(sha256.as_str()) => {
             // The same file, imported again. Studio keeps the one copy,

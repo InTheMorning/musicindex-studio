@@ -630,10 +630,13 @@ function MspImport({ onAdded }) {
   const [result, setResult] = useState(null);
   const { busy, error, run } = useAction();
 
+  const [names, setNames] = useState([]);
   const read = async (event) => {
     setFileError(null);
     const parsed = [];
-    for (const file of event.target.files) {
+    const files = Array.from(event.target.files);
+    setNames(files.map((file) => file.name));
+    for (const file of files) {
       try {
         parsed.push(JSON.parse(await file.text()));
       } catch (_) {
@@ -667,11 +670,12 @@ function MspImport({ onAdded }) {
     </div>`;
   }
   return html`<div class="form">
-    <div class="field">
-      <label for="msp-files">MSP 2.0 backup files</label>
+    <div class="field import-pick">
       <span class="hint" id="msp-files-hint">The .json files that MSP 2.0 saved for your hosted feeds. You can select more than one.</span>
-      <input id="msp-files" type="file" accept=".json,application/json" multiple aria-describedby="msp-files-hint"
+      <input id="msp-files" class="visually-hidden" type="file" accept=".json,application/json" multiple aria-describedby="msp-files-hint"
         aria-invalid=${fileError ? 'true' : undefined} onChange=${read} />
+      <label for="msp-files" class="button action">Choose Backup Files</label>
+      ${names.length > 0 && html`<p class="hint mono">${names.join(', ')}</p>`}
       ${fileError && html`<span class="field-error">${fileError}</span>`}
     </div>
     <${ErrorNotice} error=${error} />
@@ -934,7 +938,8 @@ function EditableFeed({ feed, draft, view, go, adding, onAdding, importing, onIm
           <h1>${feed.title || 'Untitled feed'}</h1>
           <p class="sub mono">${feed.public_url || 'This feed has no public address yet.'}</p>
         </div>
-        <button class="button" type="button" disabled=${busy} onClick=${refresh}>${busy ? 'Reading…' : 'Read again'}</button>
+        ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
+          ${busy ? 'Reading…' : 'Read again'}</button>`}
       </header>
       <${ErrorNotice} error=${error} />
       ${feed.last_version === null && html`<div class="notice" role="status">
@@ -1247,11 +1252,15 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMenu }) {
   </div>`;
 }
 
-function AddFeeds({ connectors, onAdded, onMenu }) {
+function AddFeeds({ connectors, onAdded, onMenu, go }) {
   const [found, setFound] = useState(null);
   return html`<div><${Bar} onMenu=${onMenu}><span class="bar-title">Add feeds</span><//><section class="section">
-    ${connectors.length > 0 && html`<div class="panel"><h2>Make a new release</h2>
-      <${NewReleaseForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
+    <div class="panel"><h2>Make a new release</h2>
+      ${connectors.length > 0
+        ? html`<${NewReleaseForm} connectors=${connectors} onAdded=${onAdded} />`
+        : html`<p class="hint">Studio puts the files of a release on a host. Connect a host first.</p>
+          <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a Host</button></div>`}
+    </div>
     <div class="panel"><h2>Find feeds by address or name</h2>
       ${found
         ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
@@ -1367,7 +1376,7 @@ function Shell({ vault, onLock }) {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} onMenu=${openDrawer} />`;
   } else if (view.name === 'add-feed') {
-    main = html`<${AddFeeds} connectors=${connectors} onMenu=${openDrawer}
+    main = html`<${AddFeeds} connectors=${connectors} onMenu=${openDrawer} go=${go}
       onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'feeds' }); }} />`;
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} draft=${draft} view=${view} go=${go} onMenu=${openDrawer}

@@ -65,12 +65,23 @@ On 2026-10-23 the operator did the check of [task 020](../tasks/studio-v1-task-0
 - An import of the FLAC file of the task 019 check gave `file_exists` for its MP3 file. Its MP3 file came from the build before task 020, which wrote the ID3 frames in a random sequence. The refusal is correct (ADR 0034 item 3).
 - The badges of the file rows had different widths, so the file names were not in line. Each badge now has a width of 56 px.
 
+## Task 024 Check
+
+On 2026-10-25 the agent did the visual check of [task 024](../tasks/studio-v1-task-024-phase-6-open-items.md) ([ADR 0040](../adr/0040-replace-the-audio-of-a-track.md)). The agent used `tools/drive-ui.mjs` in headless Chromium, with a new data folder and a local folder host. Node.js was not on the PATH, so Bun ran the script. A DataTransfer object set the files of each file field. Result: pass.
+
+| Item of the Phase 6 check | Procedure | Result |
+| --- | --- | --- |
+| A new import gives a new item GUID | Write a release with `tagged.mp3`. Replace the audio of its track with `tagged.wav` on the track page. Examine the track page and the review, and write. | Pass |
+| The art preview of a pending file shows the placeholder | Import a PNG file as the album art, and examine the album page before the write | Pass |
+| The row of a converted WAV file does not show the FLAC name | Import `tagged.wav` in a second new release | Pass. The row lists `tagged.mp3` and `tagged.flac`. Task 019 made this change. |
+| "Add feeds" gives no hint with no host | Open "Add feeds" with one read-only feed and no host. Select "Connect a Host". | Pass. Hosts opens. |
+| The MSP 2.0 field uses the native control | Open the MSP 2.0 step of the wizard, and select two files | Pass. The names show, with the error of the file that is not JSON. |
+| "Read again" has no function on a new release | Open a new release with no hosted file | Pass. After the first write, "Read again" shows. |
+
+After the replacement, the track page kept the title "Test Title". It showed the enclosure `tagged.8a152e8e.mp3` and the two alternative enclosures. The review listed the upload of `tagged.8a152e8e.mp3` and `tagged.flac`, and the deletion of `tagged.mp3`. The diff kept the item GUID. After the write, the host had `tagged.8a152e8e.mp3` and `tagged.flac`, and did not have `tagged.mp3`. The release folder kept `tagged.mp3` (ADR 0040 item 7).
+
+The agent did not examine the focus ring of "Choose Backup Files". The headless page did not have the focus. The button uses the same style as the file button of the import sheet.
+
 ## Open Items
 
-- A removed track and a new import of the same file give a new item GUID, so listener apps show a new track. A function to replace the audio of a track can keep its GUID.
-
-- The art preview of a pending file shows the placeholder, because the image is not on the host before the write. The preview can use the pending copy.
-- The row of a converted WAV file shows the name of the WAV file. It does not show the name of the FLAC file.
-- The "Add feeds" screen gives no hint to connect a host when the user has no host.
-- The MSP 2.0 file field uses the native "Browse…" control.
-- "Read again" on a new release with no hosted file has no function.
+None. Task 024 closes the six open items of this check.

@@ -1722,6 +1722,10 @@ pub(crate) enum FileOperation {
     Move { file: i64, from: i64, to: i64 },
     /// Delete a file from a host.
     Delete { connector_id: i64, path: String },
+    /// Delete each copy of a library file at one of these addresses that
+    /// the draft does not use, after a replacement of the audio of a
+    /// track (ADR 0040 item 6).
+    DeleteUnused { urls: Vec<String> },
 }
 
 /// Change the draft or add a draft operation of a release, from one user
@@ -1816,10 +1820,60 @@ pub(crate) async fn add_operation(
                     &path,
                 )?;
             }
+            FileOperation::DeleteUnused { urls } => {
+                delete_unused_copies(w, &hosts, id, &urls)?;
+            }
         }
         diff_json(w, id)
     })
     .await
+}
+
+/// Add a deletion for each copy of a library file of the feed whose
+/// address is in `urls` and not in the draft (ADR 0040 item 6). A copy
+/// that has a deletion in the draft already gets no second one.
+fn delete_unused_copies(
+    w: &Workspace,
+    hosts: &Hosts,
+    id: FeedId,
+    urls: &[String],
+) -> Result<(), ApiError> {
+    let addresses = feed_address_list(files_feed(w, id)?.as_ref());
+    let unused: Vec<&str> = urls
+        .iter()
+        .map(String::as_str)
+        .filter(|url| !is_in_use(Some(url), &addresses))
+        .collect();
+    if unused.is_empty() {
+        return Ok(());
+    }
+    let mut deleted: Vec<(ConnectorId, String)> = w
+        .collection
+        .draft_operations(id)?
+        .into_iter()
+        .filter(|op| op.kind == DraftOperationKind::Delete)
+        .map(|op| (op.connector_id, op.path))
+        .collect();
+    for file in w.collection.library_files(id)? {
+        for copy in inventory::copies(&w.collection, hosts, &file)? {
+            if !copy.url.as_deref().is_some_and(|url| unused.contains(&url)) {
+                continue;
+            }
+            let key = (copy.connector_id, copy.path);
+            if deleted.contains(&key) {
+                continue;
+            }
+            w.collection.add_draft_operation(
+                id,
+                DraftOperationKind::Delete,
+                None,
+                key.0,
+                &key.1,
+            )?;
+            deleted.push(key);
+        }
+    }
+    Ok(())
 }
 
 /// Check that a remote library file can download now: it has a source and
@@ -2305,6 +2359,10 @@ pub(crate) async fn scan_host(State(shared): State<Shared>, Path(id): Path<i64>)
 #[derive(Deserialize)]
 pub(crate) struct UploadQuery {
     name: String,
+    /// True for the new audio file of a track (ADR 0040 item 3). A
+    /// different file at the same name then gets the hash name, not 409.
+    #[serde(default)]
+    replace: bool,
 }
 
 /// The ID of a library file, in the query of the route that removes it.
@@ -2375,6 +2433,7 @@ pub(crate) async fn upload_file(
     request: Request,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let file_name = upload_file_name(&query.name)?;
+    let replace = query.replace;
     // Read the staging folder, with no lock held during the write of the
     // body (ADR 0026 item 5, ADR 0032 item 10, ADR 0033 item 1).
     let incoming = { lock(&shared)?.incoming_dir.clone() };
@@ -2423,7 +2482,7 @@ pub(crate) async fn upload_file(
 
     blocking(shared, move |w| {
         let _guard = guard;
-        import_upload(w, FeedId(id), imported)
+        import_upload(w, FeedId(id), imported, replace)
     })
     .await
 }
@@ -2431,12 +2490,19 @@ pub(crate) async fn upload_file(
 /// The blocking steps of an upload, with the workspace locked: the public
 /// address check, and the import of the MP3 file and of the FLAC file
 /// into the library (ADR 0026, ADR 0032 items 1 to 5 and 10, ADR 0033
-/// items 1 to 7, ADR 0034, ADR 0036 items 5, 9 and 10).
+/// items 1 to 7, ADR 0034, ADR 0036 items 5, 9 and 10). With `replace`,
+/// a different file at the same name gets the hash name (ADR 0040 item 3).
 fn import_upload(
     w: &mut Workspace,
     id: FeedId,
     imported: media::Imported,
+    replace: bool,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let import = if replace {
+        pipeline::import_replacement_into_library
+    } else {
+        pipeline::import_into_library
+    };
     let made = writer(w, id)?;
     let row = w.collection.feed(id)?;
     let feed_path = row
@@ -2456,7 +2522,7 @@ fn import_upload(
     give_release_folder(w, id, &row, feed_path)?;
 
     let main_before = library_file_at(w, id, &imported.file_name)?;
-    let main = pipeline::import_into_library(
+    let main = import(
         &w.collection,
         &library,
         &hosts,
@@ -2468,7 +2534,7 @@ fn import_upload(
 
     let lossless = match imported.lossless.as_ref() {
         Some(file) => {
-            match pipeline::import_into_library(
+            match import(
                 &w.collection,
                 &library,
                 &hosts,
@@ -2653,11 +2719,19 @@ pub(crate) async fn get_image(
     // the host of the image occurs with no lock, so that a slow host does
     // not stop the other requests, such as a save of the draft.
     let url = query.url;
-    let (cached, web) = {
+    let (cached, pending, web) = {
         let w = lock(&shared)?;
-        (w.images.get(&url).cloned(), w.web.clone())
+        let cached = w.images.get(&url).cloned();
+        let pending = if cached.is_none() {
+            pending_image(&w, &url)
+        } else {
+            None
+        };
+        (cached, pending, w.web.clone())
     };
     let image = if let Some(image) = cached {
+        image
+    } else if let Some(image) = pending {
         image
     } else {
         let read_url = url.clone();
@@ -2675,6 +2749,41 @@ pub(crate) async fn get_image(
         image.bytes,
     )
         .into_response())
+}
+
+/// The image at `url` from the release folder, when `url` is the planned
+/// address of a library image that is not on its host yet. The preview of
+/// an imported image then shows before the write (ADR 0025 item 2, ADR
+/// 0036 items 5 and 9). Each failure gives `None`, so the route then
+/// reads the address from the web.
+fn pending_image(w: &Workspace, url: &str) -> Option<studio_core::web::WebImage> {
+    let library = w.library().ok()?;
+    let hosts = w.hosts().ok()?;
+    for feed in w.collection.feeds().ok()? {
+        let Some(folder) = feed.folder.as_deref() else {
+            continue;
+        };
+        let Ok(files) = w.collection.library_files(feed.id) else {
+            continue;
+        };
+        for file in files {
+            if !file.local || !file.media_type.starts_with("image/") {
+                continue;
+            }
+            let Ok(planned) = inventory::planned_path(&w.collection, &hosts, &feed, &file) else {
+                continue;
+            };
+            if planned.on_host || planned.url.as_deref() != Some(url) {
+                continue;
+            }
+            let bytes = std::fs::read(library.path(folder, &file.path)).ok()?;
+            return Some(studio_core::web::WebImage {
+                bytes,
+                media_type: file.media_type,
+            });
+        }
+    }
+    None
 }
 
 // ---- Recipients (ADR 0027) ----

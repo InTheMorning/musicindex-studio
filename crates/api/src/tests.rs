@@ -1392,6 +1392,28 @@ async fn the_image_route_gives_the_bytes_and_caches_until_a_refresh() {
     assert_eq!(body["error"]["code"], "not_image");
 }
 
+/// An imported image that is not on its host yet comes from the release
+/// folder. The planned address `https://music.example/...` has no web
+/// server in this test, so only the library can give the bytes.
+#[tokio::test]
+async fn the_image_route_gives_an_imported_image_before_the_write() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("image.png")).unwrap();
+    let (status, file) = upload(&app, id, "image.png", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    assert_eq!(file["on_host"], false);
+
+    let path = format!(
+        "/api/v1/images?url={}",
+        url_encode(file["url"].as_str().unwrap())
+    );
+    let (status, headers, body) = send_raw(&app, request("GET", &path, None)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_TYPE], "image/png");
+    assert_eq!(body, bytes);
+}
+
 #[tokio::test]
 async fn an_api_request_with_no_token_to_images_gives_401() {
     let app = app();
@@ -1888,6 +1910,105 @@ async fn a_second_upload_of_the_same_wav_file_after_a_write_gives_on_host_true()
         lossless_id
     );
     assert!(incoming_is_empty(&app));
+}
+
+/// A replacement of the audio of a written track: the new MP3 file has
+/// the name of the file from before with different bytes, so it gets the
+/// hash name in the library and no 409. After the draft refers to the new
+/// files, `delete_unused` puts a deletion of the copy from before into
+/// the draft, one time only (ADR 0040 items 3 and 6).
+#[tokio::test]
+async fn a_replacement_gets_the_hash_name_and_deletes_the_unused_copy() {
+    let app = app();
+    let id = set_up(&app).await;
+    let mp3 = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, first) = upload(&app, id, "tagged.mp3", mp3).await;
+    assert_eq!(status, StatusCode::CREATED, "{first}");
+
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": first["url"],
+        "length": first["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let guid = model["items"][0]["guid"].clone();
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+
+    // The WAV file gives `tagged.mp3` with different bytes, and
+    // `tagged.flac`.
+    let wav = std::fs::read(media_path("tagged.wav")).unwrap();
+    let uri = format!("/api/v1/feeds/{id}/files?name=tagged.wav&replace=true");
+    let request = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::HOST, HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::from(wav))
+        .unwrap();
+    let (status, replaced, _) = send(&app, request).await;
+    assert_eq!(status, StatusCode::CREATED, "{replaced}");
+    let new_path = replaced["path"].as_str().unwrap();
+    let short = new_path
+        .strip_prefix("album/tagged.")
+        .and_then(|rest| rest.strip_suffix(".mp3"))
+        .unwrap_or_default();
+    assert!(
+        short.len() == 8 && short.chars().all(|c| c.is_ascii_hexdigit()),
+        "{new_path}"
+    );
+    assert_eq!(replaced["lossless"]["path"], "album/tagged.flac");
+    assert!(app.data.path().join("library/album/tagged.mp3").exists());
+    assert!(incoming_is_empty(&app));
+
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": replaced["url"],
+        "length": replaced["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(saved["model"]["items"][0]["guid"], guid);
+
+    let operation = json!({ "op": "delete_unused", "urls": [first["url"], replaced["url"]] });
+    let operations_path = format!("/api/v1/feeds/{id}/operations");
+    let (status, diff) = call(&app, "POST", &operations_path, Some(operation.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let (status, diff) = call(&app, "POST", &operations_path, Some(operation)).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let deletions: Vec<&Value> = diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|op| op["kind"] == "delete")
+        .collect();
+    assert_eq!(deletions.len(), 1, "{diff}");
+    assert_eq!(deletions[0]["path"], "album/tagged.mp3");
 }
 
 #[tokio::test]

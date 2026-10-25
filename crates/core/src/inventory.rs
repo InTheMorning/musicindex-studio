@@ -355,7 +355,7 @@ fn file_matches(
 
 /// Give a path the hash name: the first 8 hexadecimal characters of a
 /// SHA-256, before the extension (ADR 0035 item 16).
-fn hash_name(path: &str, sha256: &str) -> String {
+pub(crate) fn hash_name(path: &str, sha256: &str) -> String {
     let short = &sha256[..sha256.len().min(8)];
     let (parent, file) = path.rsplit_once('/').map_or(("", path), |(p, f)| (p, f));
     let named = match file.rsplit_once('.') {

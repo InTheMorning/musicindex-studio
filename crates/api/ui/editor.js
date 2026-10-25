@@ -287,6 +287,76 @@ function AddTrackSheet({ open, onClose, onAdd }) {
   </dialog>`;
 }
 
+// ---- The replacement of the audio of a track (ADR 0040) ----
+
+// The track with the facts of its new audio file. Only the enclosure, the
+// alternative enclosures with an audio type, and the duration change. The
+// GUID, the title and the track number stay (ADR 0040 items 4 and 5).
+function withNewAudio(item, facts) {
+  const isAudio = (enc) => (enc.media_type || '').startsWith('audio/');
+  return {
+    ...item,
+    enclosure: { url: facts.url, length: String(facts.size), media_type: facts.media_type },
+    alternate_enclosures: [
+      ...item.alternate_enclosures.filter((enc) => !isAudio(enc)),
+      ...withCids(alternateEnclosures(facts)),
+    ],
+    duration: facts.duration || item.duration,
+  };
+}
+
+// Each address of the audio of a track: its enclosure and the sources of
+// its alternative enclosures with an audio type.
+function audioAddresses(item) {
+  const found = item.enclosure && item.enclosure.url ? [item.enclosure.url] : [];
+  for (const enc of item.alternate_enclosures) {
+    if (!(enc.media_type || '').startsWith('audio/')) continue;
+    for (const source of enc.sources) if (source.uri) found.push(source.uri);
+  }
+  return found;
+}
+
+// "Replace the Audio File" (ADR 0040 items 1 to 6). The new file goes into
+// the release folder, with the hash name when a different file has its
+// name. The draft then gets the new addresses, and each copy from before
+// that the draft does not use gets a deletion.
+function ReplaceAudio({ feedId, item, update, draft, onOpsChanged }) {
+  const { busy, error, run } = useAction();
+  const [done, setDone] = useState(false);
+  const inputId = `replace-${item._cid}`;
+  const replace = (file) => run(async () => {
+    setDone(false);
+    if (!(await draft.flush())) return;
+    const facts = await api(`/feeds/${feedId}/files?name=${encodeURIComponent(file.name)}&replace=true`, {
+      method: 'POST',
+      body: file,
+    });
+    if (facts.kind !== 'audio') {
+      if (!facts.on_host) {
+        api(`/feeds/${feedId}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});
+      }
+      throw Object.assign(new Error('Select an audio file.'), { code: 'not_audio' });
+    }
+    const before = audioAddresses(item);
+    update((m) => set(m, 'items', m.items.map((i) => (i._cid === item._cid ? withNewAudio(i, facts) : i))));
+    if (!(await draft.flush())) return;
+    await api(`/feeds/${feedId}/operations`, { method: 'POST', body: { op: 'delete_unused', urls: before } });
+    onOpsChanged();
+    setDone(true);
+  });
+  return html`<div class="import-pick">
+    <input id=${inputId} class="visually-hidden" type="file" disabled=${busy}
+      aria-describedby=${`${inputId}-hint`}
+      accept="audio/*,.wav,.flac,.m4a,.ogg,.opus"
+      onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) replace(file); }} />
+    <label for=${inputId} class="button action">${busy ? 'Replacing…' : 'Replace the Audio File'}</label>
+    <p class="hint" id=${`${inputId}-hint`} role="status">${done
+      ? 'Studio replaced the audio file. The review lists the deletion of the file from before.'
+      : 'The track keeps its GUID and its other values. Studio deletes the file from before on the host when you write.'}</p>
+    ${error && html`<p class="field-error" role="alert">${importErrorText(error)}</p>`}
+  </div>`;
+}
+
 // ---- The import sheet (task 018d, ADR 0026, ADR 0032) ----
 // The user selects music files and image files. The sheet sends each file to
 // the draft, one file at a time, and shows its state and its facts. The add
@@ -1088,7 +1158,7 @@ function RecipientsPage({ model, update }) {
 // The track page: the track before it and the track after it, then its
 // fields, its audio file, its recipients and its other facts (task 014c
 // step 3). The current editor has no credits for a track.
-function TrackPage({ feed, model, update, bad, trackIndex, go }) {
+function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChanged }) {
   const items = model.items;
   const item = items[trackIndex];
   const id = `track-${item._cid}`;
@@ -1130,6 +1200,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
         <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} />
         <${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />
       </div>
+      <${ReplaceAudio} feedId=${feed.id} item=${item} update=${update} draft=${draft} onOpsChanged=${onOpsChanged} />
     </section>
 
     <${TrackPayments} id=${id} item=${item} albumBlocks=${model.values} onChange=${change('values')} />
@@ -1666,7 +1737,8 @@ export function AlbumEditor({ feed, draft, view, go, adding, onAdding, importing
   // write that gave each item a new client ID, the editor shows the album
   // page (task 014c, Architecture).
   if (page === 'track' && trackIndex !== -1) {
-    body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} />`;
+    body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go}
+      draft=${draft} onOpsChanged=${onOpsChanged} />`;
   } else if (page === 'credits') {
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {

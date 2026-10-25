@@ -41,6 +41,7 @@
 - [ADR 0037: Button roles](adr/0037-button-roles.md)
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
 - [ADR 0039: The shell, Releases and the outline of a feed](adr/0039-the-shell-releases-and-the-outline.md)
+- [ADR 0040: Replace the audio of a track](adr/0040-replace-the-audio-of-a-track.md)
 
 ## Plans
 
@@ -105,6 +106,7 @@
 - [Studio v1 task 023f: The folder scan UI](tasks/studio-v1-task-023f-folder-scan-ui.md)
 - [Studio v1 task 023g: The move of the feed XML](tasks/studio-v1-task-023g-feed-xml-move.md)
 - [Studio v1 task 023h: The feed XML move UI](tasks/studio-v1-task-023h-feed-xml-move-ui.md)
+- [Studio v1 task 024: The open items of Phase 6](tasks/studio-v1-task-024-phase-6-open-items.md)
 
 ## Reviews
 

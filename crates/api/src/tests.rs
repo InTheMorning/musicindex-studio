@@ -5735,3 +5735,91 @@ async fn a_playlist_with_two_remote_items_is_written_with_no_item() {
     }
     assert_eq!(xml.matches("medium=\"music\"").count(), 2, "{xml}");
 }
+
+#[tokio::test]
+async fn a_live_item_goes_live_and_ends_through_three_writes() {
+    let app = app();
+    let id = set_up(&app).await;
+    let base = format!("/api/v1/feeds/{id}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{base}/live-items"),
+        Some(json!({ "title": " ", "start": "2026-11-01T10:00:00Z" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_live_item");
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/live-items"),
+        Some(json!({ "title": "Show", "start": "2026-11-01T10:00:00Z" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(live(&app), FEED);
+    let entry = &draft["model"]["live_items"][0];
+    assert_eq!(entry["status"], "pending");
+    let guid = entry["item"]["guid"].as_str().unwrap().to_owned();
+
+    // A show with no content link does not pass the write.
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["content_links"] =
+        json!([{ "href": "https://example.com/show", "label": "Watch" }]);
+    let (status, draft) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    write_once(&app, id).await;
+    assert!(live(&app).contains("status=\"pending\""));
+
+    for (next, word) in [("live", "live"), ("ended", "ended")] {
+        let (status, draft) = call(
+            &app,
+            "POST",
+            &format!("{base}/live-items/{guid}/status"),
+            Some(json!({ "status": next })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{draft}");
+        assert_eq!(draft["model"]["live_items"][0]["status"], word);
+        // The route does not write.
+        assert!(!live(&app).contains(&format!("status=\"{word}\"")));
+        write_once(&app, id).await;
+        let xml = live(&app);
+        assert!(xml.contains(&format!("status=\"{word}\"")), "{xml}");
+        assert!(xml.contains(&guid), "{xml}");
+    }
+}
+
+#[tokio::test]
+async fn a_live_status_cannot_go_back() {
+    let app = app();
+    let id = set_up(&app).await;
+    let base = format!("/api/v1/feeds/{id}");
+    let (_, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/live-items"),
+        Some(json!({ "title": "Show", "start": "2026-11-01T10:00:00Z" })),
+    )
+    .await;
+    let guid = draft["model"]["live_items"][0]["item"]["guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let path = format!("{base}/live-items/{guid}/status");
+    let (status, body) = call(&app, "POST", &path, Some(json!({ "status": "ended" }))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "bad_status");
+    call(&app, "POST", &path, Some(json!({ "status": "live" }))).await;
+    call(&app, "POST", &path, Some(json!({ "status": "ended" }))).await;
+    let (status, body) = call(&app, "POST", &path, Some(json!({ "status": "live" }))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "bad_status");
+}

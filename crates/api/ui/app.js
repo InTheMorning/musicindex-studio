@@ -1,6 +1,7 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { AlbumEditor, DraftToolbar } from './editor.js';
+import { isLiveItem } from './live.js';
 import { useDraft } from './draft.js';
 import {
   mediumKind, isEditable, isPublisher, trackKey, isTrack,
@@ -957,7 +958,7 @@ function AddHostForm({ feeds, onAdded }) {
 
 // Make a new album feed in a connected folder, as a draft with no file on
 // the host yet (ADR 0032 items 6 to 9).
-function NewReleaseForm({ connectors, onAdded }) {
+function NewReleaseForm({ connectors, onAdded, show = false }) {
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
   const [path, setPath] = useState('');
   const [title, setTitle] = useState('');
@@ -968,29 +969,30 @@ function NewReleaseForm({ connectors, onAdded }) {
     run(async () => {
       const feed = await api('/feeds/new', {
         method: 'POST',
-        body: { connector_id: connectorId, path, title, author },
+        body: { connector_id: connectorId, path, title, author, medium: 'music' },
       });
       onAdded(feed);
     });
   };
+  const prefix = show ? 'show' : 'release';
   const releaseError = splitError(error, ['no_public_address', 'file_exists']);
   const ready = connectorId !== null && path.trim() && title.trim() && author.trim();
   return html`<form class="form" onSubmit=${submit}>
-    ${connectors.length > 1 && html`<div class="field"><label for="release-host">Host</label>
-      <select id="release-host" class="button" value=${connectorId}
+    ${connectors.length > 1 && html`<div class="field"><label for=${`${prefix}-host`}>Host</label>
+      <select id=${`${prefix}-host`} class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
       </select></div>`}
-    <${Field} id="release-path" label="Feed file" required placeholder="my-album.xml"
+    <${Field} id=${`${prefix}-path`} label="Feed file" required placeholder=${show ? 'my-shows.xml' : 'my-album.xml'}
       hint="The path of the new feed file in the folder of the host."
       error=${releaseError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
-    <${Field} id="release-title" label="Album title" required
+    <${Field} id=${`${prefix}-title`} label=${show ? 'Show feed title' : 'Album title'} required
       value=${title} onInput=${(e) => setTitle(e.target.value)} />
-    <${Field} id="release-author" label="Artist" required
+    <${Field} id=${`${prefix}-author`} label="Artist" required
       value=${author} onInput=${(e) => setAuthor(e.target.value)} />
     <${ErrorNotice} error=${releaseError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
-      ${busy ? 'Making the release…' : 'Make the release'}</button></div>
+      ${busy ? (show ? 'Making the show feed…' : 'Making the release…') : show ? 'Make the show feed' : 'Make the release'}</button></div>
   </form>`;
 }
 
@@ -1555,6 +1557,10 @@ function Crumb({ feed, view, draft }) {
     const item = draft.model && draft.model.items.find((i) => isTrack(i, view.track));
     label = item ? item.title || 'Untitled track' : 'Track';
   }
+  if (page === 'live') {
+    const live = draft.model && (draft.model.live_items || []).find((l) => isLiveItem(l, view.track));
+    label = live ? live.item.title || 'Untitled show' : 'Live show';
+  }
   return html`<span class="bar-title"><span class="muted">${name}</span> › ${label}</span>`;
 }
 
@@ -1997,6 +2003,10 @@ function AddFeeds({ connectors, onAdded, go }) {
     </div>
     ${connectors.length > 0 && html`<div class="panel"><h2>Make a publisher feed</h2>
       <${NewPublisherForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
+    ${connectors.length > 0 && html`<div class="panel"><h2>Make a show feed</h2>
+      <p class="hint">A show feed holds live shows. It is a music feed.</p>
+      <${NewReleaseForm} connectors=${connectors} onAdded=${onAdded} show />
+    </div>`}
     ${connectors.length > 0 && html`<div class="panel"><h2>Make a playlist</h2>
       <${NewPlaylistForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
     <div class="panel"><h2>Find feeds by address or name</h2>
@@ -2061,10 +2071,16 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     </div>
     <ul class="tree">
       ${rest.map((item) => {
+        if (item.heading) {
+          return html`<li key=${item.id} class="tree-heading"><span class="label">${item.label}</span></li>`;
+        }
         if (item.action) {
-          const isAddTrack = item.action === 'add-track';
-          return html`<li key=${item.id}><button class="node add" type="button"
-            onClick=${() => { go({ name: 'feed', id: feed.id, page: 'album' }); (isAddTrack ? onAdding : onImporting)(true); }}>
+          const open = () => {
+            go({ name: 'feed', id: feed.id, page: 'album' });
+            if (item.action === 'import') onImporting(true);
+            else onAdding(item.action === 'add-live' ? 'live' : true);
+          };
+          return html`<li key=${item.id}><button class="node add" type="button" onClick=${open}>
             <span class="num">＋</span><span class="label">${item.label}</span></button></li>`;
         }
         const open = () => go({
@@ -2075,6 +2091,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
         return html`<li key=${item.id}><button class="node" type="button" aria-current=${currentAttr(item)} onClick=${open}>
           ${numbered && html`<span class="num">${item.number}</span>`}
           <span class="label">${item.label}</span>
+          ${item.status && html`<span class="sub">${item.status}</span>`}
           ${numbered && hasBadAddress(item.number) && html`<span class="field-error">Address not correct</span>`}
         </button></li>`;
       })}

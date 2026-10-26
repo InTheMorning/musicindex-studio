@@ -23,10 +23,11 @@ use studio_core::connector::{
 };
 use studio_core::discover::PublicFeed;
 use studio_core::download;
-use studio_core::feed::{Feed, Recipient};
+use studio_core::feed::{Entry, Feed, Recipient};
 use studio_core::folder_scan;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::{self, Library};
+use studio_core::live::{self, LiveStatus};
 use studio_core::media;
 use studio_core::migrate;
 use studio_core::nostr_events::Signing;
@@ -1913,6 +1914,87 @@ pub(crate) async fn put_draft(
         let id = FeedId(id);
         writer(w, id)?;
         pipeline::replace_model(&w.collection, id, &body.revision, body.model)?;
+        draft_json(w, id)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NewLiveItem {
+    title: String,
+    start: String,
+}
+
+/// Add a live item to the draft of a music feed (ADR 0054 items 1 and 2).
+/// The route changes the draft only. It never writes to a host.
+pub(crate) async fn add_live_item(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<NewLiveItem>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let invalid = |message: &str| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_live_item",
+                message,
+            )
+        };
+        let title = body.title.trim();
+        let start = body.start.trim();
+        if title.is_empty() || start.is_empty() {
+            return Err(invalid("give the title and the start time of the show"));
+        }
+        ensure_draft(w, id)?;
+        let (mut model, revision) = pipeline::draft_model(&w.collection, id)?;
+        // A feed with no medium is an album for the UI, so it can also
+        // have a live show.
+        if !matches!(model.medium.as_deref(), None | Some("music")) {
+            return Err(invalid("only a music feed can have a live show"));
+        }
+        model
+            .live_items
+            .push(Entry::new(live::new_live_item(title, start)));
+        pipeline::replace_model(&w.collection, id, &revision, model)?;
+        draft_json(w, id)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SentLiveStatus {
+    status: String,
+}
+
+/// Change the status of a live item in the draft (ADR 0054 item 5). The
+/// route changes the draft only. It never writes to a host.
+pub(crate) async fn set_live_status(
+    State(shared): State<Shared>,
+    Path((id, guid)): Path<(i64, String)>,
+    Json(body): Json<SentLiveStatus>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let bad = |message: String| ApiError::new(StatusCode::CONFLICT, "bad_status", message);
+        let next = LiveStatus::parse(&body.status)
+            .filter(|s| *s != LiveStatus::Pending)
+            .ok_or_else(|| bad("the status is live or ended".to_owned()))?;
+        ensure_draft(w, id)?;
+        let (mut model, revision) = pipeline::draft_model(&w.collection, id)?;
+        let Some(entry) = model
+            .live_items
+            .iter_mut()
+            .find(|e| e.value.item.guid.as_deref() == Some(guid.as_str()))
+        else {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "the draft has no live show with this guid",
+            ));
+        };
+        live::set_status(&mut entry.value, next).map_err(|e| bad(e.to_string()))?;
+        pipeline::replace_model(&w.collection, id, &revision, model)?;
         draft_json(w, id)
     })
     .await

@@ -511,23 +511,24 @@ export function AlbumPayments({ model, update }) {
 // The recipients of one track, as a section of the track page, not a
 // disclosure group (ADR 0029 item 9). They replace the album recipients for
 // that track.
-export function TrackPayments({ id, item, albumBlocks, onChange }) {
+// `noun` names the item in the texts: "track", or "show" for a live item.
+export function TrackPayments({ id, item, albumBlocks, onChange, noun = 'track' }) {
   const blocks = item.values;
   const shown = blocks.length > 0 ? blocks : albumBlocks;
   const copy = () => onChange(withCids(fresh(albumBlocks.length > 0 ? [albumBlocks[0]] : [BLANK_BLOCK]).map((b) => ({ ...b, time_splits: [] }))));
   const useAlbum = () => {
-    if (confirm('Remove the recipients of this track? The track then uses the album recipients.')) onChange([]);
+    if (confirm(`Remove the recipients of this ${noun}? The ${noun} then uses the album recipients.`)) onChange([]);
   };
   return html`<section class="page-section">
     <div class="section-head"><h2>Value routes</h2>
       ${shown.length > 0 && html`<${ShareStack} recipients=${shown[0].recipients} />`}</div>
     <div class="group">
       ${blocks.length === 0
-        ? html`<p class="hint">This track uses the album recipients.</p>
+        ? html`<p class="hint">This ${noun} uses the album recipients.</p>
           <div class="actions"><button class="button" type="button" onClick=${copy}>
-            Give this track its own recipients</button></div>`
+            Give this ${noun} its own recipients</button></div>`
         : html`<div class="actions"><button class="button" type="button" onClick=${useAlbum}>Use the album recipients</button></div>
-          <p class="hint">These recipients replace the album recipients for this track only.</p>
+          <p class="hint">These recipients replace the album recipients for this ${noun} only.</p>
           <${Payments} id=${`${id}-pay`} blocks=${blocks} onChange=${onChange} />`}
     </div>
   </section>`;

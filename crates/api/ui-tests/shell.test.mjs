@@ -67,14 +67,51 @@ test('an open album gives the outline in the sequence of ADR 0039 item 6', () =>
   assert.deepEqual(panel.items[0], { id: 'releases', label: 'Releases' });
   assert.deepEqual(labels(panel.items), [
     'Releases', 'Album', 'First', 'Untitled track', 'Add a track', 'Import files',
-    'Value routes', 'Credits and links', 'Files',
+    'Live shows', 'Add a live show', 'Value routes', 'Credits and links', 'Files',
   ]);
   assert.equal(panel.items[2].number, 1);
   assert.equal(panel.items[2].current, true);
   assert.equal(panel.items[1].current, false);
   assert.equal(panel.items[4].action, 'add-track');
   assert.equal(panel.items[5].action, 'import');
-  assert.equal(panel.items[6].page, 'recipients');
+  assert.equal(panel.items[6].heading, true);
+  assert.equal(panel.items[7].action, 'add-live');
+  assert.equal(panel.items[8].page, 'recipients');
+});
+
+test('the live shows come after the tracks, one entry for each live item', () => {
+  const withLive = {
+    ...model,
+    live_items: [
+      { _cid: 11, status: 'pending', item: { guid: 'l-1', title: 'Launch' } },
+      { _cid: 12, status: 'live', item: { title: '' } },
+    ],
+  };
+  const view = { name: 'feed', id: 1, page: 'live', track: 'l-1' };
+  const panel = leftPanel({ view, feeds: [album], model: withLive, vaultOpen: false });
+  assert.deepEqual(labels(panel.items).slice(5, 11), [
+    'Import files', 'Live shows', 'Launch', 'Untitled show', 'Add a live show', 'Value routes',
+  ]);
+  const entry = panel.items[7];
+  assert.equal(entry.page, 'live');
+  assert.equal(entry.track, 'l-1');
+  assert.equal(entry.status, 'Planned');
+  assert.equal(entry.current, true);
+  assert.equal(panel.items[8].track, 'cid-12');
+  assert.equal(panel.items[8].status, 'Live now');
+  assert.equal(panel.items[8].current, false);
+  assert.equal(panel.items[9].action, 'add-live');
+  // The track entries do not become current on a live page.
+  assert.equal(panel.items.filter((i) => i.current).length, 1);
+});
+
+test('a playlist and a publisher feed have no live shows', () => {
+  const withLive = { ...model, live_items: [{ _cid: 1, status: 'pending', item: { guid: 'l-1' } }] };
+  const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: withLive, vaultOpen: false });
+  const list = leftPanel({ view: { name: 'feed', id: 4 }, feeds: [{ ...album, id: 4, medium: 'musicL' }], model: withLive, vaultOpen: false });
+  for (const panel of [pub, list]) {
+    assert.equal(labels(panel.items).includes('Live shows'), false);
+  }
 });
 
 test('an open album before its draft loads gives the Releases link, Album and Files', () => {
@@ -220,7 +257,7 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
   assert.equal(narrow.kind, 'outline');
   assert.equal(narrow.items.some((item) => item.id === 'releases'), false);
   assert.deepEqual(labels(narrow.items), [
-    'Album', 'First', 'Untitled track', 'Add a track', 'Import files',
+    'Album', 'First', 'Untitled track', 'Add a track', 'Import files', 'Live shows', 'Add a live show',
     'Value routes', 'Credits and links', 'Files',
   ]);
   assert.equal(narrow.items.some((item) => item.current), false);

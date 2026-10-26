@@ -1,7 +1,9 @@
-// The shell models (ADR 0042). This file imports nothing. It holds the logic
+// The shell models (ADR 0042). This file imports only the live item model.
+// It holds the logic
 // of the left panel, of the Releases list and of the navigation. The
 // components in `app.js` and `editor.js` use these functions. The Node tests
 // in `crates/api/ui-tests/` examine them.
+import { liveKey, isLiveItem, statusLabel } from './live.js';
 
 // The kind of a medium: its dot class and its label.
 export function mediumKind(medium) {
@@ -103,6 +105,21 @@ function outlineItems(feed, view, model, narrow) {
     });
     items.push({ id: 'add-track', label: 'Add a track', action: 'add-track' });
     items.push({ id: 'import', label: 'Import files', action: 'import' });
+    // The live shows come after the tracks (ADR 0054 item 3). An entry of
+    // a live show uses `track` for the key of the live item.
+    items.push({ id: 'live-shows', label: 'Live shows', heading: true });
+    (model.live_items || []).forEach((live) => {
+      const key = liveKey(live);
+      items.push({
+        id: `live:${key}`,
+        page: 'live',
+        track: key,
+        label: live.item.title || 'Untitled show',
+        status: statusLabel(live.status),
+        current: view.name === 'feed' && view.page === 'live' && isLiveItem(live, view.track),
+      });
+    });
+    items.push({ id: 'add-live', label: 'Add a live show', action: 'add-live' });
     items.push(page('recipients', 'Value routes', 'recipients'));
     items.push(page('credits', 'Credits and links', 'credits'));
   }

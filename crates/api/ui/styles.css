@@ -1122,6 +1122,9 @@ textarea:focus { background: var(--fill); }
 .node .num { width: 2ch; flex: none; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .node.add { color: var(--accent); }
 .node .field-error { flex: none; font-size: .78rem; }
+/* The heading of a group of entries, such as Live shows. */
+.tree-heading { padding: 10px 10px 2px; color: var(--muted); font-size: .8rem; font-weight: 600; }
+.node .sub { flex: none; color: var(--muted); font-size: .78rem; }
 
 /* The outline of the open feed: its cover and title, then its items. */
 .outline-feed { display: flex; align-items: center; gap: 10px; padding: 8px 10px; min-width: 0; }
@@ -1290,6 +1293,8 @@ textarea:focus { background: var(--fill); }
 /* The file button of a group, with the padding of the other group rows
    (task 025c). */
 .group > .import-pick { padding: 10px 16px; }
+/* A line of text in a group, such as the status of a live show. */
+.group > .live-line { padding: 10px 16px; }
 /* A release row of the publisher page: the title, its state, and the
    buttons that move or remove it (task 025c, ADR 0041 item 10). */
 .release-row { display: grid; gap: 8px; padding: 10px 16px; }

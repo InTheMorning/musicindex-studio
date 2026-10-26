@@ -7,6 +7,7 @@ import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from '.
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
+import { isLiveItem, liveKey, liveProblems, nextAction, showSummary, statusLabel, startToIso, isoToLocalInput } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError } from './signing.js';
@@ -845,6 +846,10 @@ function AnnounceLines({ diff }) {
 // again, such as after a write.
 const ANNOUNCE_RELOAD = 'studio-announce-reload';
 
+// A page sends this window event to open the review sheet, for example after
+// "Go live". `DraftToolbar` listens to it.
+const OPEN_REVIEW = 'studio-open-review';
+
 // A sheet opens with showModal() when `open` turns true, and closes with
 // close() when `open` turns false. The close event covers the Escape key,
 // and each caller passes its handler as `onClose` (ADR 0029 item 5 and 6).
@@ -1052,6 +1057,11 @@ function toolbarStatus(draft) {
 export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpsChanged, onOpsCleared }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
+  useEffect(() => {
+    const openReview = () => setOpen('review');
+    window.addEventListener(OPEN_REVIEW, openReview);
+    return () => window.removeEventListener(OPEN_REVIEW, openReview);
+  }, []);
   const status = toolbarStatus(draft);
   return html`<div class="draft-toolbar">
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
@@ -1528,6 +1538,188 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChang
       <button class="button" type="button" disabled=${trackIndex === items.length - 1} onClick=${() => changeItems(move(items, trackIndex, 1))}>Move down</button>
       <button class="button destructive" type="button" onClick=${removeTrack}>Remove the track</button>
     </div>`;
+}
+
+// ---- The live item page (task 033b, ADR 0054) ----
+
+// The start time of a live item in the language of the user, for the
+// summary line.
+const timeText = (text) => {
+  const time = new Date(text);
+  return text && !Number.isNaN(time.getTime()) ? time.toLocaleString() : '';
+};
+
+// A field for a time. The field shows local time. The model keeps ISO 8601
+// text.
+function TimeField({ id, label, value, onChange }) {
+  return html`<${Field} id=${id} label=${label} type="datetime-local" value=${isoToLocalInput(value)}
+    onInput=${(e) => onChange(startToIso(e.target.value))} />`;
+}
+
+// A small sheet that asks for the title and the start time of a new live
+// show (ADR 0054 item 2). `onAdd` gets the title and the start as ISO text.
+function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
+  const ref = useSheet(open);
+  const [title, setTitle] = useState('');
+  const [start, setStart] = useState('');
+  // Clear the sheet each time that it opens.
+  useEffect(() => {
+    if (!open) return;
+    setTitle('');
+    setStart('');
+  }, [open]);
+  const iso = startToIso(start);
+  const ready = title.trim() && iso && !busy;
+  const submit = (event) => {
+    event.preventDefault();
+    if (ready) onAdd({ title: title.trim(), start: iso });
+  };
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-live-title" onClose=${onClose}>
+    <header>
+      <h2 id="add-live-title">Add a live show</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <form class="body" id="add-live-form" onSubmit=${submit}>
+      <div class="group">
+        <${Field} id="new-live-title" label="Title" required value=${title} onInput=${(e) => setTitle(e.target.value)} />
+        <${Field} id="new-live-start" label="Start time" type="datetime-local" required
+          value=${start} onInput=${(e) => setStart(e.target.value)} />
+        <${ErrorNotice} error=${error} />
+      </div>
+    </form>
+    <footer>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="submit" form="add-live-form" disabled=${!ready}>＋ Add the show</button>
+    </footer>
+  </dialog>`;
+}
+
+// The content links of a live item, each as one entry row (ADR 0028). A
+// show needs one link before Studio writes it (ADR 0054 item 4).
+function ContentLinks({ id, links, onChange }) {
+  const blank = { href: null, label: '' };
+  return html`${links.length === 0 && html`<p class="hint">A show needs one content link. Studio does not write the show without it.</p>`}
+    ${links.map((link, i) => {
+      const change = (name) => (value) => onChange(setAt(links, i, set(link, name, value)));
+      const rowId = `${id}-link-${link._cid}`;
+      const summary = html`<span class="title">${link.label || 'New content link'}</span>
+        <span class="sub mono">${link.href || 'No address'}</span>`;
+      return html`<${EntryRow} key=${link._cid} group=${`${id}-links`} cid=${link._cid} summary=${summary}>
+        <${TextField} id=${`${rowId}-href`} label="Link address" type="url" value=${link.href} onChange=${change('href')} />
+        <${TextField} id=${`${rowId}-label`} label="Link text" value=${link.label} onChange=${change('label')} />
+        <${EntryActions} list=${links} index=${i} name=${link.label || 'this content link'} onChange=${onChange} />
+      <//>`;
+    })}
+    <button class="link-row add" type="button" onClick=${() => onChange(addOpen(links, blank))}>
+      <span class="num">＋</span><span class="title">Add a content link</span>
+    </button>`;
+}
+
+// The page of one live item. It edits the show, the stream, the content
+// links, the live value and the value routes. "Go live" and "End the show"
+// change the draft and open the review sheet (ADR 0054 items 3 and 5).
+function LivePage({ feed, model, update, bad, liveIndex, draft }) {
+  const lives = model.live_items;
+  const live = lives[liveIndex];
+  const id = `live-${live._cid}`;
+  const action = useAction();
+  const changeLive = (next) => update((m) => set(m, 'live_items', setAt(m.live_items, liveIndex, next)));
+  const field = (name) => (value) => changeLive(set(live, name, value));
+  const itemField = (name) => (value) => changeLive(set(live, 'item', set(live.item, name, value)));
+  const stream = live.item.enclosure || { url: null, length: null, media_type: null };
+  const streamField = (name) => (text) => {
+    const next = set(stream, name, text);
+    itemField('enclosure')(next.url === null && next.length === null && next.media_type === null ? null : next);
+  };
+  const value = live.live_value || { uri: null, protocol: null };
+  const valueField = (name) => (text) => {
+    const next = set(value, name, text);
+    field('live_value')(next.uri === null && next.protocol === null ? null : next);
+  };
+  const links = live.content_links;
+  const next = nextAction(live.status);
+  const problems = liveProblems(live);
+  const start = timeText(live.start);
+  const changeStatus = (status) => action.run(async () => {
+    // Send each edit first, so that the status route works on the draft that
+    // the user sees.
+    if (!(await draft.flush())) return;
+    const response = await api(`/feeds/${feed.id}/live-items/${encodeURIComponent(live.item.guid)}/status`, {
+      method: 'POST',
+      body: { status },
+    });
+    draft.show(response);
+    window.dispatchEvent(new Event(OPEN_REVIEW));
+  });
+  return html`<header class="head">
+      <${ImageThumb} url=${live.item.image || model.image} glow="var(--c-track)" className="cover" always />
+      <div class="text"><span class="eyebrow">Live show</span>
+        <h1>${live.item.title || 'Untitled show'}</h1>
+        <p class="sub">${showSummary(live, start)}</p></div>
+    </header>
+
+    <section class="page-section"><h2>Status</h2>
+      <div class="group">
+        <p class="live-line">${statusLabel(live.status)}</p>
+        ${problems.map((text) => html`<p class="live-line field-error" key=${text}>${text}</p>`)}
+        <${ErrorNotice} error=${action.error} />
+        ${next && html`<div class="actions"><button class="button primary" type="button"
+          disabled=${action.busy || !live.item.guid} onClick=${() => changeStatus(next.status)}>${next.label}</button></div>`}
+        ${next && html`<p class="hint">The button changes the draft and opens the review sheet. The host does not change until you write.</p>`}
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Show</h2>
+      <div class="group">
+        <${TextField} id=${`${id}-title`} label="Title" value=${live.item.title} onChange=${itemField('title')} />
+        <${TextArea} id=${`${id}-description`} label="Description" value=${live.item.description} onChange=${itemField('description')} />
+        <${TimeField} id=${`${id}-start`} label="Start time" value=${live.start} onChange=${field('start')} />
+        <${TimeField} id=${`${id}-end`} label="End time" value=${live.end} onChange=${field('end')} />
+        <${TextField} id=${`${id}-image`} label="Image address" type="url" address=${`live_items/${liveIndex}/item/image`} bad=${bad}
+          value=${live.item.image} onChange=${itemField('image')}>
+          <${ImageThumb} url=${live.item.image} glow="var(--c-track)" className="field-cover" />
+        <//>
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Stream</h2>
+      <div class="group">
+        <${TextField} id=${`${id}-stream-url`} label="Stream address" type="url" address=${`live_items/${liveIndex}/item/enclosure/url`} bad=${bad}
+          value=${stream.url} onChange=${streamField('url')} />
+        <${TextField} id=${`${id}-stream-type`} label="Stream type" hint="For example application/x-mpegURL." value=${stream.media_type} onChange=${streamField('media_type')} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Content links</h2>
+      <div class="group">
+        <${ContentLinks} id=${id} links=${links} onChange=${field('content_links')} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Live value</h2>
+      <div class="group">
+        <${TextField} id=${`${id}-value-uri`} label="Live value address" value=${value.uri} onChange=${valueField('uri')} />
+        <${TextField} id=${`${id}-value-protocol`} label="Live value protocol" value=${value.protocol} onChange=${valueField('protocol')} />
+        ${live.live_value && html`<div class="actions"><button class="button destructive" type="button"
+          onClick=${() => field('live_value')(null)}>Remove the live value</button></div>`}
+      </div>
+    </section>
+
+    <${TrackPayments} id=${id} item=${live.item} albumBlocks=${model.values} onChange=${itemField('values')} noun="show" />
+
+    <section class="page-section"><h2>More</h2>
+      <div class="group">
+        <details class="disclosure">
+          <summary class="link-row"><span class="label">Identity</span>
+            <span class="summary">${live.item.guid ? 'Has a GUID' : 'No GUID yet'}</span></summary>
+          <div class="form">
+            <dl class="facts">
+              <dt>Show GUID</dt><dd class="mono">${live.item.guid || 'Studio gives one when it saves'}</dd>
+            </dl>
+          </div>
+        </details>
+      </div>
+    </section>`;
 }
 
 // ---- The publisher feed page (task 025c, ADR 0041) ----
@@ -2222,6 +2414,8 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
+  const liveIndex = model && page === 'live' ? (model.live_items || []).findIndex((live) => isLiveItem(live, view.track)) : -1;
+  const addLive = useAction();
   // When the track got its GUID, put the new key in the view, so that the
   // tree shows the current track.
   const currentKey = trackIndex === -1 ? null : trackKey(model.items[trackIndex]);
@@ -2250,6 +2444,8 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   } else if (page === 'track' && trackIndex !== -1) {
     body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go}
       draft=${draft} onOpsChanged=${onOpsChanged} />`;
+  } else if (page === 'live' && liveIndex !== -1 && !publisher && !playlist) {
+    body = html`<${LivePage} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
   } else if (page === 'credits') {
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {
@@ -2267,6 +2463,16 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     onAdding(false);
     go({ name: 'feed', id: feed.id, page: 'track', track: trackKey(added) });
   };
+  // The route adds the live item to the draft. Then the page shows the
+  // draft of the response and opens the page of the new show.
+  const onAddLive = ({ title, start }) => addLive.run(async () => {
+    if (!(await draft.flush())) return;
+    const response = await api(`/feeds/${feed.id}/live-items`, { method: 'POST', body: { title, start } });
+    draft.show(response);
+    onAdding(false);
+    const added = response.model.live_items[response.model.live_items.length - 1];
+    go({ name: 'feed', id: feed.id, page: 'live', track: liveKey(added) });
+  });
   // The import sheet already sent each file to the draft of this feed. Add
   // the tracks that it built, and the image that it chose for the album, to
   // the model (task architecture).
@@ -2281,7 +2487,9 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   };
   return html`<div class="page">
     ${body}
-    ${!publisher && !playlist && html`<${AddTrackSheet} open=${adding} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
+    ${!publisher && !playlist && html`<${AddTrackSheet} open=${adding === true} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
+    ${!publisher && !playlist && html`<${AddLiveSheet} open=${adding === 'live'} onClose=${() => onAdding(false)}
+      onAdd=${onAddLive} busy=${addLive.busy} error=${addLive.error} />`}
     ${!publisher && !playlist && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(model.image)}
       onClose=${() => onImporting(false)} onAdd=${onImport} />`}
   </div>`;

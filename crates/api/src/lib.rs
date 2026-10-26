@@ -129,6 +129,11 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
                 .put(routes::put_draft)
                 .delete(routes::delete_draft),
         )
+        .route("/feeds/{id}/live-items", post(routes::add_live_item))
+        .route(
+            "/feeds/{id}/live-items/{guid}/status",
+            post(routes::set_live_status),
+        )
         .route("/feeds/{id}/diff", get(routes::get_diff))
         .route("/feeds/{id}/write", post(routes::write_feed))
         .route("/feeds/{id}/snapshots", get(routes::list_snapshots))

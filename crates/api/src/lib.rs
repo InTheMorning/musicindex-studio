@@ -79,6 +79,12 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/vault/strength", post(routes::passphrase_strength))
         .route("/vault/unlock", post(routes::unlock_vault))
         .route("/vault/lock", post(routes::lock_vault))
+        .route("/vault/unlock-key", post(routes::unlock_vault_with_key))
+        .route(
+            "/vault/nostr-wrapper",
+            get(routes::get_nostr_wrapper).post(routes::add_nostr_wrapper),
+        )
+        .route("/vault/signer-key", post(routes::signer_key))
         .route(
             "/connectors",
             get(routes::list_connectors).post(routes::add_connector),

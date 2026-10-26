@@ -6640,3 +6640,99 @@ async fn the_handle_reports_the_storage_and_locks_an_idle_vault() {
     handle.delete_folder().await.unwrap();
     assert!(!data.path().exists());
 }
+
+#[tokio::test]
+async fn the_nostr_wrapper_routes_add_read_and_open_a_vault() {
+    let app = app();
+    let (status, body) = call(&app, "GET", "/api/v1/vault/nostr-wrapper", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "no_nostr_wrapper");
+    let (status, body) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "vault_required");
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, body) = call(&app, "GET", "/api/v1/vault/nostr-wrapper", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "no_nostr_wrapper");
+
+    let (status, body) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let key = body["key"].as_str().unwrap().to_owned();
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(json!({ "pubkey": "aa", "ciphertext": "test-ciphertext" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(&app, "GET", "/api/v1/vault/nostr-wrapper", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["pubkey"], "aa");
+    assert_eq!(body["ciphertext"], "test-ciphertext");
+
+    // The wrapper routes work while the vault is closed, and the closed
+    // vault refuses the two routes that need it.
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    let (status, _) = call(&app, "GET", "/api/v1/vault/nostr-wrapper", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(status, StatusCode::LOCKED);
+    assert!(!body.to_string().contains(&key));
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(json!({ "pubkey": "bb", "ciphertext": "x" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::LOCKED);
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock-key",
+        Some(json!({ "key": key })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["vault"], "open");
+}
+
+#[tokio::test]
+async fn unlock_key_with_an_incorrect_key_gives_401_and_the_vault_stays_closed() {
+    let app = app();
+    call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    for key in [
+        "not base64 !",
+        "AAAA",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    ] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            "/api/v1/vault/unlock-key",
+            Some(json!({ "key": key })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{key}");
+        assert_eq!(body["error"]["code"], "wrong_key");
+    }
+    let (_, body) = call(&app, "GET", "/api/v1/status", None).await;
+    assert_eq!(body["vault"], "locked");
+}

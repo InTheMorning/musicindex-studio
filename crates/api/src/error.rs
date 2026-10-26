@@ -42,6 +42,11 @@ impl ApiError {
         }
     }
 
+    /// The code of the error.
+    pub(crate) fn code(&self) -> &'static str {
+        self.code
+    }
+
     /// The code and the message as one text, for a record in a collection.
     pub(crate) fn coded(&self) -> String {
         format!("{}: {}", self.code, self.message)

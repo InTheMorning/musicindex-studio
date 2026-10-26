@@ -2072,6 +2072,7 @@ dependencies = [
  "axum",
  "getrandom 0.4.3",
  "http-body-util",
+ "nostr",
  "rusqlite",
  "serde",
  "serde_json",

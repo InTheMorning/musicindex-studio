@@ -11,7 +11,8 @@ use sha2::{Digest, Sha256};
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
 /// to version `n + 1`.
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
     CREATE TABLE accounts (
         id INTEGER PRIMARY KEY,
         folder TEXT NOT NULL UNIQUE,
@@ -32,7 +33,24 @@ const MIGRATIONS: &[&str] = &["
         created_at INTEGER NOT NULL,
         used_at INTEGER
     );
-"];
+",
+    "
+    CREATE TABLE challenges (
+        challenge TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE account_nostr (
+        account_id INTEGER NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
+        pubkey TEXT NOT NULL UNIQUE
+    );
+",
+];
+
+/// A challenge is valid for this many seconds (ADR 0056 item 5).
+pub const CHALLENGE_SECONDS: i64 = 300;
+/// The most challenges that the database keeps. A call with more gets
+/// no new challenge until old ones expire.
+const MAX_CHALLENGES: i64 = 20_000;
 
 /// Give `bytes` as lowercase hexadecimal.
 pub fn hex(bytes: &[u8]) -> String {
@@ -70,7 +88,7 @@ pub fn now() -> i64 {
 pub enum SignUpError {
     /// The mode needs an invite code, and the code is missing or used.
     InviteRequired,
-    /// Another account has the email address.
+    /// Another account has the email address or the public key.
     EmailInUse,
     /// The database failed.
     Database(String),
@@ -219,6 +237,143 @@ impl Accounts {
         )?;
         tx.commit()?;
         Ok(id)
+    }
+
+    /// Make a challenge, and give it with its end time. The call removes
+    /// the challenges that expired. Gives `None` when the table is full.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the random source or the database fails.
+    pub fn create_challenge(&self) -> Result<Option<(String, i64)>, String> {
+        let challenge = random_hex(32)?;
+        let time = now();
+        let db = self.db();
+        db.execute("DELETE FROM challenges WHERE expires_at <= ?1", [time])
+            .map_err(|e| e.to_string())?;
+        let count: i64 = db
+            .query_row("SELECT COUNT(*) FROM challenges", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        if count >= MAX_CHALLENGES {
+            return Ok(None);
+        }
+        let expires_at = time + CHALLENGE_SECONDS;
+        db.execute(
+            "INSERT INTO challenges (challenge, expires_at) VALUES (?1, ?2)",
+            params![challenge, expires_at],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(Some((challenge, expires_at)))
+    }
+
+    /// Remove a challenge in one statement. Gives true when the challenge
+    /// existed and had not expired. Two calls with one challenge give
+    /// true one time only.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn take_challenge(&self, challenge: &str) -> Result<bool, String> {
+        let expires_at: Option<i64> = self
+            .db()
+            .query_row(
+                "DELETE FROM challenges WHERE challenge = ?1 RETURNING expires_at",
+                [challenge],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        Ok(expires_at.is_some_and(|end| end > now()))
+    }
+
+    /// Keep a challenge with a chosen end time, for tests.
+    #[cfg(test)]
+    pub fn insert_challenge(&self, challenge: &str, expires_at: i64) {
+        self.db()
+            .execute(
+                "INSERT INTO challenges (challenge, expires_at) VALUES (?1, ?2)",
+                params![challenge, expires_at],
+            )
+            .unwrap();
+    }
+
+    /// Make an account for a Nostr public key (hexadecimal). The rules of
+    /// [`Accounts::sign_up`] apply to the invite code.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`SignUpError`] when the invite is missing or used, when the
+    /// key has an account, or when the database fails.
+    pub fn sign_up_nostr(
+        &self,
+        invite: Option<&str>,
+        pubkey: &str,
+        folder: &str,
+    ) -> Result<i64, SignUpError> {
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        let time = now();
+        if let Some(code) = invite {
+            let used = tx.execute(
+                "UPDATE invites SET used_at = ?2 WHERE code_hash = ?1 AND used_at IS NULL",
+                params![sha256_hex(code), time],
+            )?;
+            if used == 0 {
+                return Err(SignUpError::InviteRequired);
+            }
+        }
+        let taken: bool = tx.query_row(
+            "SELECT EXISTS (SELECT 1 FROM account_nostr WHERE pubkey = ?1)",
+            [pubkey],
+            |r| r.get(0),
+        )?;
+        if taken {
+            return Err(SignUpError::EmailInUse);
+        }
+        tx.execute(
+            "INSERT INTO accounts (folder, created_at) VALUES (?1, ?2)",
+            params![folder, time],
+        )?;
+        let id = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO account_nostr (account_id, pubkey) VALUES (?1, ?2)",
+            params![id, pubkey],
+        )?;
+        tx.commit()?;
+        Ok(id)
+    }
+
+    /// The account ID and the folder of a Nostr public key.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn account_by_pubkey(&self, pubkey: &str) -> Result<Option<(i64, String)>, String> {
+        self.db()
+            .query_row(
+                "SELECT a.id, a.folder FROM accounts a
+                 JOIN account_nostr n ON n.account_id = a.id WHERE n.pubkey = ?1",
+                [pubkey],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    /// The Nostr public key of an account.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn pubkey_of(&self, account_id: i64) -> Result<Option<String>, String> {
+        self.db()
+            .query_row(
+                "SELECT pubkey FROM account_nostr WHERE account_id = ?1",
+                [account_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())
     }
 
     /// Remove an account that the server could not finish, and give its
@@ -407,6 +562,7 @@ impl Accounts {
         for sql in [
             "DELETE FROM sessions WHERE account_id = ?1",
             "DELETE FROM account_emails WHERE account_id = ?1",
+            "DELETE FROM account_nostr WHERE account_id = ?1",
             "DELETE FROM accounts WHERE id = ?1",
         ] {
             tx.execute(sql, [account_id]).map_err(|e| e.to_string())?;
@@ -504,6 +660,39 @@ mod tests {
         );
         accounts.delete_session("h").unwrap();
         assert!(accounts.session("h").unwrap().is_none());
+    }
+
+    #[test]
+    fn a_challenge_works_one_time_and_an_expired_one_never() {
+        let accounts = Accounts::open_in_memory().unwrap();
+        let (challenge, end) = accounts.create_challenge().unwrap().unwrap();
+        assert_eq!(challenge.len(), 64);
+        assert_eq!(end - now(), CHALLENGE_SECONDS);
+        assert!(accounts.take_challenge(&challenge).unwrap());
+        assert!(!accounts.take_challenge(&challenge).unwrap());
+        assert!(!accounts.take_challenge("unknown").unwrap());
+        accounts
+            .db()
+            .execute("INSERT INTO challenges VALUES ('old', ?1)", [now() - 1])
+            .unwrap();
+        assert!(!accounts.take_challenge("old").unwrap());
+    }
+
+    #[test]
+    fn a_nostr_account_is_found_by_its_key() {
+        let accounts = Accounts::open_in_memory().unwrap();
+        let id = accounts.sign_up_nostr(None, "ab", "f1").unwrap();
+        assert_eq!(
+            accounts.account_by_pubkey("ab").unwrap(),
+            Some((id, "f1".to_owned()))
+        );
+        assert_eq!(accounts.pubkey_of(id).unwrap().as_deref(), Some("ab"));
+        assert_eq!(
+            accounts.sign_up_nostr(None, "ab", "f2"),
+            Err(SignUpError::EmailInUse)
+        );
+        accounts.delete_account(id).unwrap();
+        assert!(accounts.account_by_pubkey("ab").unwrap().is_none());
     }
 
     #[test]

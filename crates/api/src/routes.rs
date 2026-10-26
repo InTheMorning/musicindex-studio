@@ -154,6 +154,110 @@ pub(crate) async fn lock_vault(State(shared): State<Shared>) -> ApiResult {
     .await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct UnlockKey {
+    key: String,
+}
+
+/// Open the vault with the vault key that the signer of the user decrypted
+/// (ADR 0056 item 10). The route does no key derivation. A key that does
+/// not open the vault gives 401, and the vault stays closed.
+pub(crate) async fn unlock_vault_with_key(
+    State(shared): State<Shared>,
+    Json(body): Json<UnlockKey>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        w.unlock_with_key(&body.key).map_err(|error| {
+            if error.code() == "wrong_key" {
+                ApiError::new(
+                    StatusCode::UNAUTHORIZED,
+                    "wrong_key",
+                    "the key does not open the vault",
+                )
+            } else {
+                error
+            }
+        })?;
+        Ok(Json(json!({ "vault": w.vault_state() })))
+    })
+    .await
+}
+
+/// The first Nostr wrapper of the vault file. The vault can be closed.
+pub(crate) async fn get_nostr_wrapper(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        if w.vault_state() == crate::workspace::VaultState::Absent {
+            return Err(no_nostr_wrapper());
+        }
+        let file = w.vault_file()?;
+        let (pubkey, ciphertext) = file.first_nostr_wrapper().ok_or_else(no_nostr_wrapper)?;
+        Ok(Json(json!({ "pubkey": pubkey, "ciphertext": ciphertext })))
+    })
+    .await
+}
+
+fn no_nostr_wrapper() -> ApiError {
+    ApiError::new(
+        StatusCode::NOT_FOUND,
+        "no_nostr_wrapper",
+        "the vault has no Nostr wrapper",
+    )
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NostrWrapper {
+    pubkey: String,
+    ciphertext: String,
+}
+
+/// Add a Nostr wrapper to the open vault, and save the vault.
+pub(crate) async fn add_nostr_wrapper(
+    State(shared): State<Shared>,
+    Json(body): Json<NostrWrapper>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        if body.pubkey.is_empty() || body.ciphertext.is_empty() {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_wrapper",
+                "give a public key and a ciphertext",
+            ));
+        }
+        require_open_vault(w)?;
+        if let Some(vault) = w.vault.as_mut() {
+            vault.add_nostr_wrapper(&body.pubkey, &body.ciphertext);
+        }
+        w.save_vault()?;
+        Ok(Json(json!({ "vault": w.vault_state() })))
+    })
+    .await
+}
+
+/// The vault key for the signer of the user, as base64. This is the only
+/// route that gives the vault key. The signer encrypts it with NIP-44.
+pub(crate) async fn signer_key(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        require_open_vault(w)?;
+        let vault = w
+            .vault
+            .as_ref()
+            .ok_or_else(|| ApiError::internal("the vault closed"))?;
+        w.touch_vault();
+        Ok(Json(json!({ "key": vault.key_for_signer().as_str() })))
+    })
+    .await
+}
+
+fn require_open_vault(w: &Workspace) -> Result<(), ApiError> {
+    if w.vault.is_some() {
+        return Ok(());
+    }
+    Err(match w.vault_state() {
+        crate::workspace::VaultState::Absent => ApiError::vault_required(),
+        _ => ApiError::vault_locked(),
+    })
+}
+
 /// The connectors. Each connector lists the linked feeds with an address
 /// that does not agree with the folder (ADR 0021 item 8).
 pub(crate) async fn list_connectors(State(shared): State<Shared>) -> ApiResult {

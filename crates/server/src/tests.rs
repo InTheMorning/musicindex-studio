@@ -802,3 +802,342 @@ async fn a_user_folder_refuses_a_local_host_on_the_server() {
     let reply = api(&app, &who, "PUT", "/api/v1/library", Some(other)).await;
     assert_eq!(reply.code(), "not_on_server");
 }
+
+// Task 034e: the NIP-07 sign-in.
+
+use nostr::prelude::{Keys, Kind, SecretKey, Tag, Timestamp, UnsignedEvent};
+
+const NOSTR_URL: &str = "http://127.0.0.1:8080/auth/v1/nostr";
+
+async fn new_challenge(app: &App) -> String {
+    let reply = send(app, call("POST", "/auth/v1/challenge", None)).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    reply.json["challenge"].as_str().unwrap().to_owned()
+}
+
+/// A new key pair.
+fn new_keys() -> Keys {
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes).unwrap();
+    Keys::new(SecretKey::from_slice(&bytes).unwrap())
+}
+
+/// A signed event of a kind, with the given tags and time.
+fn signed_kind(keys: &Keys, kind: u16, tags: &[[&str; 2]], created_at: u64) -> Value {
+    let tags: Vec<Tag> = tags
+        .iter()
+        .map(|tag| Tag::parse(tag.to_vec()).unwrap())
+        .collect();
+    let unsigned = UnsignedEvent::new(
+        keys.public_key(),
+        Timestamp::from(created_at),
+        Kind::from_u16(kind),
+        tags,
+        "",
+    );
+    let event = studio_core::nostr_events::sign_with_keys(unsigned, keys).unwrap();
+    serde_json::to_value(&event).unwrap()
+}
+
+/// A signed sign-in event with the given tags and time.
+fn signed_event(keys: &Keys, tags: &[[&str; 2]], created_at: u64) -> Value {
+    signed_kind(keys, 27_235, tags, created_at)
+}
+
+fn now_secs() -> u64 {
+    crate::accounts::now().unsigned_abs()
+}
+
+fn good_event(keys: &Keys, challenge: &str) -> Value {
+    signed_event(
+        keys,
+        &[
+            ["u", NOSTR_URL],
+            ["method", "POST"],
+            ["challenge", challenge],
+        ],
+        now_secs(),
+    )
+}
+
+async fn nostr_call(app: &App, event: Value, invite: Option<&str>) -> Reply {
+    let body = json!({ "event": event, "invite": invite });
+    send(app, call("POST", "/auth/v1/nostr", Some(body))).await
+}
+
+async fn nostr_sign_in(app: &App, keys: &Keys) -> Reply {
+    let challenge = new_challenge(app).await;
+    nostr_call(app, good_event(keys, &challenge), None).await
+}
+
+fn who_of(reply: &Reply) -> (String, String) {
+    (
+        reply.token(),
+        reply.json["csrf"].as_str().unwrap().to_owned(),
+    )
+}
+
+#[tokio::test]
+async fn a_nostr_user_signs_up_adds_a_wrapper_signs_in_and_opens_the_vault_with_the_key() {
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    let up = nostr_sign_in(&app, &keys).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    assert_eq!(up.json["new_account"], true);
+    assert!(up.json["recovery_key"].is_null());
+    let who = who_of(&up);
+
+    let status = api(&app, &who, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.json["vault"], "open");
+    let key = api(&app, &who, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(key.status, StatusCode::OK);
+    let key = key.json["key"].as_str().unwrap().to_owned();
+    let pubkey = keys.public_key().to_hex();
+    let add = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(json!({ "pubkey": pubkey, "ciphertext": "test-nip44-ciphertext" })),
+    )
+    .await;
+    assert_eq!(add.status, StatusCode::OK, "{:?}", add.json);
+
+    let out = send(&app, sign_out_call(&who)).await;
+    assert_eq!(out.status, StatusCode::OK);
+    let again = nostr_sign_in(&app, &keys).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    assert_eq!(again.json["new_account"], false);
+    // The sign-in does not open the vault.
+    assert_eq!(again.json["vault"], "locked");
+    let who = who_of(&again);
+    let locked = api(&app, &who, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(locked.status, StatusCode::LOCKED);
+    let wrapper = api(&app, &who, "GET", "/api/v1/vault/nostr-wrapper", None).await;
+    assert_eq!(wrapper.json["pubkey"], pubkey.as_str());
+    assert_eq!(wrapper.json["ciphertext"], "test-nip44-ciphertext");
+    let wrong = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/unlock-key",
+        Some(json!({ "key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" })),
+    )
+    .await;
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    let open = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/unlock-key",
+        Some(json!({ "key": key })),
+    )
+    .await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+    assert_eq!(open.json["vault"], "open");
+    let session = send(&app, {
+        let mut c = call("GET", "/auth/v1/session", None);
+        c.token = Some(&who.0);
+        c
+    })
+    .await;
+    assert_eq!(session.json["signed_in"], true);
+    assert_eq!(session.json["pubkey"], pubkey.as_str());
+}
+
+#[tokio::test]
+async fn an_invite_server_needs_an_invite_for_a_new_nostr_key() {
+    let app = app(Signup::Invite);
+    let keys = new_keys();
+    let challenge = new_challenge(&app).await;
+    let none = nostr_call(&app, good_event(&keys, &challenge), None).await;
+    assert_eq!(none.status, StatusCode::FORBIDDEN);
+    assert_eq!(none.code(), "invite_required");
+    let invite = app.state.accounts.create_invite().unwrap();
+    let challenge = new_challenge(&app).await;
+    let up = nostr_call(&app, good_event(&keys, &challenge), Some(&invite)).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+}
+
+#[tokio::test]
+async fn a_challenge_works_one_time_and_an_unknown_or_expired_one_never() {
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    let challenge = new_challenge(&app).await;
+    let first = nostr_call(&app, good_event(&keys, &challenge), None).await;
+    assert_eq!(first.status, StatusCode::CREATED);
+    let used = nostr_call(&app, good_event(&keys, &challenge), None).await;
+    assert_eq!(used.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(used.code(), "challenge_invalid");
+
+    let unknown = nostr_call(&app, good_event(&keys, &"ab".repeat(32)), None).await;
+    assert_eq!(unknown.code(), "challenge_invalid");
+
+    let old = "cd".repeat(32);
+    app.state
+        .accounts
+        .insert_challenge(&old, crate::accounts::now() - 1);
+    let expired = nostr_call(&app, good_event(&keys, &old), None).await;
+    assert_eq!(expired.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(expired.code(), "challenge_invalid");
+
+    let no_tag = signed_event(&keys, &[["u", NOSTR_URL], ["method", "POST"]], now_secs());
+    assert_eq!(
+        nostr_call(&app, no_tag, None).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test]
+async fn two_requests_with_one_challenge_give_one_session() {
+    let app = app(Signup::Open);
+    let challenge = new_challenge(&app).await;
+    let one = good_event(&new_keys(), &challenge);
+    let two = good_event(&new_keys(), &challenge);
+    let (a, b) = tokio::join!(nostr_call(&app, one, None), nostr_call(&app, two, None));
+    let mut statuses = [a.status, b.status];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::CREATED, StatusCode::UNAUTHORIZED]);
+    assert_eq!(app.state.accounts.folders().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_wrong_event_is_refused_and_does_not_use_the_challenge() {
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    let challenge = new_challenge(&app).await;
+    let tag = |name: &'static str, value: &str| -> Value {
+        let mut tags = vec![
+            ["u", NOSTR_URL],
+            ["method", "POST"],
+            ["challenge", challenge.as_str()],
+        ];
+        for t in &mut tags {
+            if t[0] == name {
+                t[1] = value;
+            }
+        }
+        signed_event(&keys, &tags, now_secs())
+    };
+    let other_url = tag("u", "http://127.0.0.1:8080/auth/v1/other");
+    let other_method = tag("method", "GET");
+    let old = signed_event(
+        &keys,
+        &[
+            ["u", NOSTR_URL],
+            ["method", "POST"],
+            ["challenge", &challenge],
+        ],
+        now_secs() - 120,
+    );
+    let mut bad_signature = good_event(&keys, &challenge);
+    let other_signature = good_event(&new_keys(), &challenge);
+    bad_signature["sig"] = other_signature["sig"].clone();
+    let mut bad_id = good_event(&keys, &challenge);
+    bad_id["content"] = json!("changed");
+    let wrong_kind = signed_kind(
+        &keys,
+        1,
+        &[
+            ["u", NOSTR_URL],
+            ["method", "POST"],
+            ["challenge", &challenge],
+        ],
+        now_secs(),
+    );
+    for (name, event) in [
+        ("other url", other_url),
+        ("other method", other_method),
+        ("old event", old),
+        ("bad signature", bad_signature),
+        ("bad id", bad_id),
+        ("wrong kind", wrong_kind),
+        ("not an event", json!({ "kind": 1 })),
+    ] {
+        let reply = nostr_call(&app, event, None).await;
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{name}");
+        assert_ne!(reply.code(), "", "{name}");
+    }
+    assert_eq!(app.state.accounts.folders().unwrap().len(), 0);
+    // No refusal used the challenge.
+    let good = nostr_call(&app, good_event(&keys, &challenge), None).await;
+    assert_eq!(good.status, StatusCode::CREATED, "{:?}", good.json);
+}
+
+#[tokio::test]
+async fn an_account_with_no_vault_file_gets_a_new_vault_at_the_next_sign_in() {
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    let up = nostr_sign_in(&app, &keys).await;
+    let who = who_of(&up);
+    let folder = app.state.accounts.folders().unwrap().remove(0).1;
+    let vault_file = app
+        .data
+        .path()
+        .join("users")
+        .join(folder)
+        .join("vault.json");
+    assert!(!vault_file.exists());
+    let out = send(&app, sign_out_call(&who)).await;
+    assert_eq!(out.status, StatusCode::OK);
+    let again = nostr_sign_in(&app, &keys).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    assert_eq!(again.json["vault"], "open");
+    let who = who_of(&again);
+    let status = api(&app, &who, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.json["vault"], "open");
+    assert!(!vault_file.exists());
+}
+
+#[tokio::test]
+async fn the_failures_of_a_nostr_key_are_counted_and_the_key_is_blocked() {
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    for _ in 0..crate::limits::ACCOUNT_LIMIT {
+        let reply = nostr_call(&app, good_event(&keys, &"00".repeat(32)), None).await;
+        assert_eq!(reply.code(), "challenge_invalid");
+    }
+    let challenge = new_challenge(&app).await;
+    let blocked = nostr_call(&app, good_event(&keys, &challenge), None).await;
+    assert_eq!(blocked.status, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn an_event_with_a_wrong_signature_does_not_block_its_public_key() {
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    for _ in 0..crate::limits::ACCOUNT_LIMIT {
+        let mut event = good_event(&keys, &"00".repeat(32));
+        event["sig"] = json!("00".repeat(64));
+        let reply = nostr_call(&app, event, None).await;
+        assert_eq!(reply.code(), "event_invalid");
+    }
+    let reply = nostr_sign_in(&app, &keys).await;
+    assert_eq!(reply.status, StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn a_nostr_account_can_delete_itself_with_its_public_key() {
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    let who = who_of(&nostr_sign_in(&app, &keys).await);
+    let wrong = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": "nobody" })),
+    )
+    .await;
+    assert_eq!(wrong.code(), "confirm_mismatch");
+    let gone = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": keys.public_key().to_hex() })),
+    )
+    .await;
+    assert_eq!(gone.status, StatusCode::NO_CONTENT, "{:?}", gone.json);
+    assert_eq!(app.state.accounts.folders().unwrap().len(), 0);
+}

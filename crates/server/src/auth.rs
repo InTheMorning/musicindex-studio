@@ -25,6 +25,8 @@ pub fn server_router(state: &Shared) -> Router {
         .route("/auth/v1/session", get(get_session))
         .route("/auth/v1/signup/email", post(sign_up))
         .route("/auth/v1/signin/email", post(sign_in))
+        .route("/auth/v1/challenge", post(challenge))
+        .route("/auth/v1/nostr", post(nostr_sign_in))
         .route("/auth/v1/signout", post(sign_out))
         .route("/auth/v1/account/delete", post(delete_account))
         // A wildcard route would add a path parameter to the request, and the
@@ -108,10 +110,13 @@ async fn get_session(State(state): State<Shared>, request: Request) -> Response 
     let Resolved::Active(session) = resolved else {
         return signed_out();
     };
-    let (Ok(Some(email)), Ok(Some(folder))) = (
-        state.accounts.email_of(session.account_id),
+    let (Ok(identity), Ok(Some(folder))) = (
+        identity_of(&state, session.account_id),
         state.accounts.folder_of(session.account_id),
     ) else {
+        return signed_out();
+    };
+    let Some((email, pubkey)) = identity else {
         return signed_out();
     };
     let user = match state.users.get(session.account_id, &folder).await {
@@ -127,9 +132,21 @@ async fn get_session(State(state): State<Shared>, request: Request) -> Response 
         "signed_in": true,
         "csrf": csrf_of(&session.token),
         "email": email,
+        "pubkey": pubkey,
         "vault": vault,
     }))
     .into_response()
+}
+
+/// The email address and the Nostr public key of an account.
+type Identity = (Option<String>, Option<String>);
+
+/// The email address and the Nostr public key of an account. One of them
+/// is `None`. The outer `None` means that the account does not exist.
+fn identity_of(state: &Shared, account_id: i64) -> Result<Option<Identity>, String> {
+    let email = state.accounts.email_of(account_id)?;
+    let pubkey = state.accounts.pubkey_of(account_id)?;
+    Ok((email.is_some() || pubkey.is_some()).then_some((email, pubkey)))
 }
 
 #[derive(Deserialize)]
@@ -358,8 +375,8 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
         Ok(body) => body,
         Err(response) => return response,
     };
-    let (Ok(Some(email)), Ok(Some(folder))) = (
-        state.accounts.email_of(session.account_id),
+    let (Ok(Some((email, pubkey))), Ok(Some(folder))) = (
+        identity_of(&state, session.account_id),
         state.accounts.folder_of(session.account_id),
     ) else {
         return failure(
@@ -368,11 +385,14 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
             "the account does not exist",
         );
     };
-    if body.confirm.trim().to_lowercase() != email {
+    // An email account confirms with its address. A Nostr account confirms
+    // with its public key in hexadecimal.
+    let name = email.or(pubkey).unwrap_or_default();
+    if body.confirm.trim().to_lowercase() != name {
         return failure(
             StatusCode::UNPROCESSABLE_ENTITY,
             "confirm_mismatch",
-            "the confirmation is not the email address of the account",
+            "the confirmation is not the email address or the public key of the account",
         );
     }
     let user = match state.users.get(session.account_id, &folder).await {
@@ -396,4 +416,223 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
     }
     state.users.forget(session.account_id).await;
     with_cookie(StatusCode::NO_CONTENT.into_response(), &cleared_cookie())
+}
+
+/// Give a challenge for a sign-in event (ADR 0056 item 5).
+async fn challenge(State(state): State<Shared>) -> Response {
+    match state.accounts.create_challenge() {
+        Ok(Some((challenge, expires_at))) => axum::Json(json!({
+            "challenge": challenge,
+            "expires_at": expires_at,
+        }))
+        .into_response(),
+        Ok(None) => limits::too_many_attempts(),
+        Err(_) => internal("the account database failed"),
+    }
+}
+
+/// The kind of a sign-in event (NIP-98).
+const KIND_HTTP_AUTH: u16 = 27_235;
+/// A sign-in event can differ this many seconds from the server time.
+const EVENT_WINDOW: u64 = 60;
+
+#[derive(Deserialize)]
+struct NostrSignIn {
+    event: serde_json::Value,
+    #[serde(default)]
+    invite: Option<String>,
+    #[serde(default)]
+    recovery_key: bool,
+}
+
+fn event_invalid() -> Response {
+    failure(
+        StatusCode::UNAUTHORIZED,
+        "event_invalid",
+        "the sign-in event is not correct",
+    )
+}
+
+fn challenge_invalid() -> Response {
+    failure(
+        StatusCode::UNAUTHORIZED,
+        "challenge_invalid",
+        "the challenge is missing, used or expired",
+    )
+}
+
+/// The first value of the tag `name`.
+fn tag_value<'a>(event: &'a nostr::prelude::Event, name: &str) -> Option<&'a str> {
+    event.tags.iter().find_map(|tag| match tag.as_slice() {
+        [first, value, ..] if first == name => Some(value.as_str()),
+        _ => None,
+    })
+}
+
+/// Check the kind, the ID, the signature, the tags and the time of a
+/// sign-in event (ADR 0056 item 6). Gives the challenge of the event.
+fn check_event<'a>(state: &Shared, event: &'a nostr::prelude::Event) -> Option<&'a str> {
+    let url = format!("{}/auth/v1/nostr", state.origin.text);
+    let now = accounts::now().unsigned_abs();
+    let near = event.created_at.as_secs().abs_diff(now) <= EVENT_WINDOW;
+    let correct = event.kind.as_u16() == KIND_HTTP_AUTH
+        && near
+        && tag_value(event, "u") == Some(url.as_str())
+        && tag_value(event, "method") == Some("POST")
+        && event.verify().is_ok();
+    if correct {
+        tag_value(event, "challenge")
+    } else {
+        None
+    }
+}
+
+/// Sign up or sign in with a NIP-07 signer (ADR 0056 items 5, 6, 9 and 11).
+async fn nostr_sign_in(State(state): State<Shared>, request: Request) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
+    let body: NostrSignIn = match read_json(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    let event = serde_json::from_value::<nostr::prelude::Event>(body.event).ok();
+    // The counter uses the public key only when the signature is correct.
+    // Thus a person cannot block the account of a different key. An event
+    // with no correct signature counts for the address only.
+    let account_key = event
+        .as_ref()
+        .filter(|event| event.verify().is_ok())
+        .map_or_else(
+            || format!("nostr-unverified:{address}"),
+            |event| event.pubkey.to_hex(),
+        );
+    if state.attempts.blocked(&account_key, &address) {
+        return limits::too_many_attempts();
+    }
+    let failed = |response: Response| {
+        state.attempts.record_failure(&account_key, &address);
+        response
+    };
+    let Some(event) = event else {
+        return failed(event_invalid());
+    };
+    // The server removes the challenge after the checks, so that a wrong
+    // event does not use a challenge.
+    let Some(challenge) = check_event(&state, &event) else {
+        return failed(event_invalid());
+    };
+    match state.accounts.take_challenge(challenge) {
+        Ok(true) => {}
+        Ok(false) => return failed(challenge_invalid()),
+        Err(_) => return internal("the account database failed"),
+    }
+    let pubkey = event.pubkey.to_hex();
+    let Ok(known) = state.accounts.account_by_pubkey(&pubkey) else {
+        return internal("the account database failed");
+    };
+    if let Some((account_id, folder)) = known {
+        return nostr_known(&state, account_id, &folder).await;
+    }
+    nostr_new(&state, &pubkey, body.invite.as_deref(), body.recovery_key).await
+}
+
+/// A sign-in of a known key. The vault stays closed when its file exists.
+/// An account with no vault file gets a new vault with no wrapper.
+async fn nostr_known(state: &Shared, account_id: i64, folder: &str) -> Response {
+    let user = match state.users.get(account_id, folder).await {
+        Ok(user) => user,
+        Err(error) => return error.into_response(),
+    };
+    let current = match user.handle.vault_state().await {
+        Ok(current) => current,
+        Err(error) => return error.into_response(),
+    };
+    if current == studio_api::VaultState::Absent
+        && let Err(error) = user.handle.create_vault(None, false).await
+        && error.into_response().status() != StatusCode::CONFLICT
+    {
+        return internal("the vault could not be made");
+    }
+    let vault = match user.handle.vault_state().await {
+        Ok(vault) => vault,
+        Err(error) => return error.into_response(),
+    };
+    start_session(
+        state,
+        account_id,
+        StatusCode::OK,
+        json!({ "new_account": false, "recovery_key": null, "vault": vault }),
+    )
+}
+
+/// The sign-up of an unknown key. The rules of the email sign-up apply.
+async fn nostr_new(
+    state: &Shared,
+    pubkey: &str,
+    invite: Option<&str>,
+    recovery_key: bool,
+) -> Response {
+    let invite = match state.signup {
+        crate::config::Signup::Open => None,
+        crate::config::Signup::Invite => match invite.map(str::trim).filter(|c| !c.is_empty()) {
+            Some(code) => Some(code.to_owned()),
+            None => return invite_required(),
+        },
+    };
+    // The recovery key uses an Argon2id derivation, and it needs a permit.
+    let _permit = if recovery_key {
+        match limits::derivation_permit(state).await {
+            Ok(permit) => Some(permit),
+            Err(response) => return response,
+        }
+    } else {
+        None
+    };
+    let Ok(folder) = accounts::random_hex(16) else {
+        return internal("the random source is not available");
+    };
+    let account_id = match state
+        .accounts
+        .sign_up_nostr(invite.as_deref(), pubkey, &folder)
+    {
+        Ok(id) => id,
+        Err(SignUpError::InviteRequired) => return invite_required(),
+        Err(SignUpError::EmailInUse) => {
+            return failure(
+                StatusCode::CONFLICT,
+                "pubkey_in_use",
+                "another account has this public key",
+            );
+        }
+        Err(SignUpError::Database(_)) => return internal("the account database failed"),
+    };
+    let made = async {
+        let user = state
+            .users
+            .get(account_id, &folder)
+            .await
+            .map_err(IntoResponse::into_response)?;
+        user.handle
+            .set_library_root(&state.users.folder_path(&folder).join("library"))
+            .await
+            .map_err(IntoResponse::into_response)?;
+        user.handle
+            .create_vault(None, recovery_key)
+            .await
+            .map_err(IntoResponse::into_response)
+    }
+    .await;
+    match made {
+        Ok(recovery) => start_session(
+            state,
+            account_id,
+            StatusCode::CREATED,
+            json!({ "new_account": true, "recovery_key": recovery, "vault": "open" }),
+        ),
+        Err(response) => {
+            state.users.forget(account_id).await;
+            let _ = state.accounts.undo_sign_up(account_id, invite.as_deref());
+            let _ = std::fs::remove_dir_all(state.users.folder_path(&folder));
+            response
+        }
+    }
 }

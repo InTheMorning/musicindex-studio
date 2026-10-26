@@ -81,6 +81,15 @@ impl VaultFile {
         })
     }
 
+    /// The public key and the NIP-44 ciphertext of the first Nostr wrapper.
+    #[must_use]
+    pub fn first_nostr_wrapper(&self) -> Option<(&str, &str)> {
+        self.wrappers.iter().find_map(|w| match w {
+            Wrapper::Nostr { pubkey, ciphertext } => Some((pubkey.as_str(), ciphertext.as_str())),
+            _ => None,
+        })
+    }
+
     /// Read a vault from JSON.
     ///
     /// # Errors

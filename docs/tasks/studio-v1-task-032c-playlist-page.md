@@ -23,28 +23,29 @@ These choices are fixed. Do not change them.
 
 - The new feed form of "Add a feed" gets the kind "Playlist", after "Album" and "Publisher feed". It asks for the name, the author, the host and the path, and sends `medium` `musicL`.
 
-### The Playlist Page
+### The Playlist Pages
 
-- A `PlaylistPage` shows:
-  - The channel fields of the album page: title, author, description, image, link and language.
-  - The value routes of the channel, with the value editor of the album page.
-  - A "Tracks" group. Each remote item is one row with `trackRow` of `playlist.js`, the buttons "Move up" and "Move down" with the normal role, and "Remove" with the destructive role. The group ends with "Add a track" with the action role.
-  - `FeedFacts`.
-- Each change goes into the draft model as the album page does ([ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md)).
-- The page has no import of music files.
+The outline of a playlist from 032b gives four pages. `AlbumEditor` shows each page for a playlist, as it does for a publisher feed:
+
+- The page `album` shows `PlaylistPage`. It has the channel fields of the album page (title, author, description, image, link and language) and `FeedFacts`.
+- The page `tracks` shows `PlaylistTracksPage`. It has a "Tracks" group. Each remote item is one row with `trackRow` of `playlist.js`, the buttons "Move up" and "Move down" with the normal role, and "Remove" with the destructive role. The group ends with "Add a track" with the action role. The toolbar title of this page is "Tracks".
+- The page `recipients` shows the `RecipientsPage` of the album, with the value editor of the album page.
+- The page `files` shows the `FilesPage`.
+- Each change goes into the draft model as the album page does ([ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md)). A new remote item gets its entry key from `withCids` of `draft.js`.
+- No page of a playlist has an import of music files.
 
 ### The Picker Sheet
 
 - "Add a track" opens a sheet with two tabs: "Search musicindex" and "My releases".
-- "Search musicindex" has a search field. It uses `GET /api/v1/search?q=`. Each result is a feed row. A click on a feed row loads `GET /api/v1/musicindex/feeds/{guid}/tracks` and shows its tracks below it.
+- "Search musicindex" has a search field. It uses `GET /api/v1/search?q=`. Each result is a feed row. A click on a feed row loads `GET /api/v1/musicindex/feeds/{guid}/tracks` and shows its tracks below it. Each track of a feed gives its pick with `pickFromIndex`.
 - "My releases" uses `GET /api/v1/playlist/tracks`, grouped by feed title.
 - Each track row has "Add" with the action role. A track that the playlist has already shows "In the playlist" in place of the button (`hasTrack`).
-- "Add" uses `addTrack` and keeps the sheet open, so that the user can add more tracks. "Done" with the primary role closes the sheet.
+- "Add" uses `remoteItemFromPick`, `withCids` and `addTrack`, and keeps the sheet open, so that the user can add more tracks. "Done" with the primary role closes the sheet.
 
 ## Steps
 
 1. Add "Playlist" to the new feed form.
-2. Add `PlaylistPage` and its routing from the view.
+2. Add `PlaylistPage`, `PlaylistTracksPage` and their routing from the view.
 3. Add the picker sheet.
 4. Do the visual check of the acceptance criteria.
 

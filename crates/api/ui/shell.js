@@ -18,10 +18,16 @@ export function isPublisher(feed) {
   return (feed.medium || '').toLowerCase() === 'publisher';
 }
 
-// Is this feed an album or a publisher feed that the editor can open (ADR
-// 0029 item 4, ADR 0041 item 3)?
+// Is this feed a playlist, a musicL feed (ADR 0053 item 1)?
+export function isPlaylist(feed) {
+  return (feed.medium || '').toLowerCase() === 'musicl';
+}
+
+// Is this feed an album, a publisher feed or a playlist that the editor can
+// open (ADR 0029 item 4, ADR 0041 item 3, ADR 0053 item 1)?
 export function isEditable(feed) {
-  return Boolean(feed.connector_id) && (mediumKind(feed.medium).label === 'Album' || isPublisher(feed));
+  return Boolean(feed.connector_id)
+    && (mediumKind(feed.medium).label === 'Album' || isPublisher(feed) || isPlaylist(feed));
 }
 
 // The key of a track: its GUID, or its client ID when it has no GUID yet
@@ -66,6 +72,14 @@ function outlineItems(feed, view, model, narrow) {
   if (isPublisher(feed)) {
     // A publisher feed has two pages and no tracks (ADR 0041 item 3).
     items.push(page('publisher', 'Publisher', 'album'));
+    items.push(page('files', 'Files', 'files'));
+    return items;
+  }
+  if (isEditable(feed) && isPlaylist(feed)) {
+    // A playlist has no track pages and no import (ADR 0053 item 4).
+    items.push(page('playlist', 'Playlist', 'album'));
+    items.push(page('tracks', 'Tracks', 'tracks'));
+    items.push(page('recipients', 'Value routes', 'recipients'));
     items.push(page('files', 'Files', 'files'));
     return items;
   }

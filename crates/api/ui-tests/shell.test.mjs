@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mediumKind, isEditable, isPublisher, trackKey, isTrack,
+  mediumKind, isEditable, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView,
@@ -31,7 +31,8 @@ test('an album or a publisher feed with a connector is editable', () => {
   assert.equal(isEditable(album), true);
   assert.equal(isEditable(publisher), true);
   assert.equal(isEditable(readOnly), false);
-  assert.equal(isEditable({ ...album, medium: 'musicL' }), false);
+  assert.equal(isEditable({ ...album, medium: 'musicL' }), true);
+  assert.equal(isEditable({ ...album, medium: 'musicL', connector_id: null }), false);
   assert.equal(isPublisher(publisher), true);
   assert.equal(isPublisher(album), false);
 });
@@ -260,4 +261,19 @@ test('a width change gives the stack, or the view at wide width', () => {
   assert.deepEqual(navAtWidth(narrowNav, true), narrowNav);
   assert.deepEqual(wideView({ name: 'outline', id: 5 }), { name: 'feed', id: 5 });
   assert.deepEqual(wideView({ name: 'root' }), { name: 'releases' });
+});
+
+test('a musicL feed is a playlist, with no regard to case', () => {
+  assert.equal(isPlaylist({ medium: 'musicL' }), true);
+  assert.equal(isPlaylist({ medium: 'MUSICL' }), true);
+  assert.equal(isPlaylist(album), false);
+  assert.equal(isPlaylist({}), false);
+});
+
+test('a playlist gives Playlist, Tracks, Value routes and Files, with no add or import entry', () => {
+  const playlist = { ...album, id: 4, medium: 'musicL' };
+  const panel = leftPanel({ view: { name: 'feed', id: 4, page: 'tracks' }, feeds: [playlist], model, vaultOpen: false });
+  assert.deepEqual(labels(panel.items), ['Releases', 'Playlist', 'Tracks', 'Value routes', 'Files']);
+  assert.equal(panel.items.find((item) => item.label === 'Tracks').current, true);
+  assert.equal(panel.items.some((item) => item.action), false);
 });

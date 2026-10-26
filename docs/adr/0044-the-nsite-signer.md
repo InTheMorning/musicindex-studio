@@ -1,6 +1,6 @@
 # ADR 0044: The nsite Signer
 
-- Status: Accepted
+- Status: Accepted. [ADR 0050](0050-nsite-and-blossom-signer-environment-and-plan.md) limits "My signer" of item 3 to NIP-07 on 2026-10-25.
 - Date: 2026-10-25
 - Owner: operator, with the technical choices of the planning model
 

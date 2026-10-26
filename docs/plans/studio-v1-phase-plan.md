@@ -145,12 +145,12 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ### Phase 9: Remaining Connectors
 
-- Decisions: [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0046](../adr/0046-the-s3-and-r2-connector.md), [ADR 0047](../adr/0047-the-sftp-connector.md) and [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md).
+- Decisions: [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0046](../adr/0046-the-s3-and-r2-connector.md), [ADR 0047](../adr/0047-the-sftp-connector.md), [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md) and [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md).
 - Sequence: the interface change, then S3 and R2, then SFTP, then nsite and Blossom.
 - Task: [027](../tasks/studio-v1-task-027-connector-interface.md) (the interface change), in three packets, is complete. The [review checklist](../reviews/2026-10-25-task-027-review-checklist.md) records each packet.
 - Task: [028](../tasks/studio-v1-task-028-s3-connector.md) (S3 and R2), in four packets, is complete. The [review checklist](../reviews/2026-10-25-task-028-review-checklist.md) records each packet. Its human test with a real bucket is open.
 - Task: [029](../tasks/studio-v1-task-029-sftp-connector.md) (SFTP), in five packets, is complete. The [review checklist](../reviews/2026-10-25-task-029-review-checklist.md) records each packet. Its human tests of the password login and the ssh-agent login on a real server are open.
-- Task: [030](../tasks/studio-v1-task-030-nsite-and-blossom.md) (nsite and Blossom). The planning model writes its packets after task 029.
+- Task: [030](../tasks/studio-v1-task-030-nsite-and-blossom.md) (nsite and Blossom), in eight packets. The [review checklist](../reviews/2026-10-25-task-030-review-checklist.md) records each packet.
 - Human tests against real hosts stay open until the operator can use a real host of each type ([ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) item 5).
 - Mechanical check: each connector passes the test module of the trait against a local test server.
 - Mechanical check: a test confirms that Studio does no deletion when a new file does not pass the confirmation.
@@ -158,6 +158,8 @@ A phase gets task files in `docs/tasks/` before work starts.
   - R2: the conditional DeleteObject and the conditional CompleteMultipartUpload. Also Garage, B2, Wasabi, Spaces, Ceph and Versity.
   - Hosts and gateways: the `Content-Type` of a feed, and `Range` for audio.
   - nsite feeds: do podcast apps and Podcast Index accept a feed address on an nsite gateway?
+  - nsite manifests: the event size limit of the relays, with a manifest of 500 paths.
+  - NIP-46 as a second "My signer" method ([ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md) item 1).
   - `ssh2`: a build on Windows and macOS.
   - Docker tests with MinIO and Garage. Docker did not operate in the research session.
 

@@ -1,24 +1,24 @@
 # Studio v1 Task 030: The nsite And Blossom Connectors
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 9, the fourth task.
-Decisions: [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md).
+Decisions: [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md), [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md).
 
 ## Goal
 
-A user can add an nsite site for a feed and its media, and a Blossom host for media only. Each host signs with a key in the vault or with the signer of the user. A write publishes one manifest for each step.
+A user can add an nsite site for a feed and its media, and a Blossom host for media only. Each host signs with a key in the vault or with the NIP-07 signer of the user. A write publishes one manifest for each write step.
 
 ## Packets
 
-The planning model writes the packets after task 029 is complete. The packets go in this sequence:
+The planning model examines each packet with the [review checklist](../reviews/2026-10-25-task-030-review-checklist.md) before its commit. The packets go in this sequence:
 
-1. 030a: the test relay and the test Blossom server in the `testing` module.
-2. 030b: the Nostr events: the manifest, the authorization event and the relay client, with `nostr` and `tungstenite`.
-3. 030c: `finish` in the trait and in the pipeline.
-4. 030d: the Blossom connector and its collection table.
-5. 030e: the nsite connector.
-6. 030f: the planned events in the diff, and the signed events in the write request.
-7. 030g: the host routes, with the relay list and the server list of the key.
-8. 030h: the nsite and Blossom host forms, and the signer step of a write.
+1. [030a: the test relay and the test Blossom server](studio-v1-task-030a-test-relay-and-blossom.md).
+2. [030b: the Nostr events and the relay client](studio-v1-task-030b-nostr-events-and-relay-client.md). It depends on 030a.
+3. [030c: the trait functions, the host environment and `finish` in the pipeline](studio-v1-task-030c-trait-and-finish.md). It depends on 030b.
+4. [030d: the Blossom connector](studio-v1-task-030d-blossom-connector.md). It depends on 030c.
+5. [030e: the nsite connector](studio-v1-task-030e-nsite-connector.md). It depends on 030d.
+6. [030f: the planned events in the diff, and the signed events in the write](studio-v1-task-030f-signing-plan.md). It depends on 030e.
+7. [030g: the nsite and Blossom host routes](studio-v1-task-030g-host-routes.md). It depends on 030f.
+8. [030h: the host forms and the signer step](studio-v1-task-030h-host-forms-and-signer-step.md). It depends on 030g.
 
 ## Acceptance Criteria
 
@@ -27,8 +27,9 @@ Mechanical:
 - The Blossom connector and the nsite connector pass the test module of the trait against the test servers.
 - A write with uploads, a feed XML and deletions publishes two manifests.
 - A write with "My signer" and a signed event that is not the planned event changes nothing on a host.
-- Studio does not delete a blob that a manifest of the host refers to.
-- The four commit checks pass.
+- Studio does not delete a blob that a manifest or a kept record of the host refers to.
+- The core enables no `nostr` feature other than the default features.
+- The four commit checks pass, in CI too.
 
 Visual:
 

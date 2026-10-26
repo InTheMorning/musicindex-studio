@@ -51,6 +51,7 @@
 - [ADR 0047: The SFTP connector](adr/0047-the-sftp-connector.md)
 - [ADR 0048: The nsite and Blossom connectors](adr/0048-the-nsite-and-blossom-connectors.md)
 - [ADR 0049: The Rust toolchain is pinned](adr/0049-the-rust-toolchain-is-pinned.md)
+- [ADR 0050: The nsite and Blossom signer, host environment and signing plan](adr/0050-nsite-and-blossom-signer-environment-and-plan.md)
 
 ## Plans
 
@@ -144,6 +145,14 @@
 - [Studio v1 task 029d: The host key confirmation and the SFTP host route](tasks/studio-v1-task-029d-sftp-host-route.md)
 - [Studio v1 task 029e: The SFTP host form](tasks/studio-v1-task-029e-sftp-host-form.md)
 - [Studio v1 task 030: The nsite and Blossom connectors](tasks/studio-v1-task-030-nsite-and-blossom.md)
+- [Studio v1 task 030a: The test relay and the test Blossom server](tasks/studio-v1-task-030a-test-relay-and-blossom.md)
+- [Studio v1 task 030b: The Nostr events and the relay client](tasks/studio-v1-task-030b-nostr-events-and-relay-client.md)
+- [Studio v1 task 030c: The trait functions, the host environment and finish in the pipeline](tasks/studio-v1-task-030c-trait-and-finish.md)
+- [Studio v1 task 030d: The Blossom connector](tasks/studio-v1-task-030d-blossom-connector.md)
+- [Studio v1 task 030e: The nsite connector](tasks/studio-v1-task-030e-nsite-connector.md)
+- [Studio v1 task 030f: The planned events in the diff, and the signed events in the write](tasks/studio-v1-task-030f-signing-plan.md)
+- [Studio v1 task 030g: The nsite and Blossom host routes](tasks/studio-v1-task-030g-host-routes.md)
+- [Studio v1 task 030h: The host forms and the signer step](tasks/studio-v1-task-030h-host-forms-and-signer-step.md)
 
 ## Reviews
 
@@ -166,6 +175,7 @@
 - [Task 027 review checklist, 2026-10-25](reviews/2026-10-25-task-027-review-checklist.md)
 - [Task 028 review checklist, 2026-10-25](reviews/2026-10-25-task-028-review-checklist.md)
 - [Task 029 review checklist, 2026-10-25](reviews/2026-10-25-task-029-review-checklist.md)
+- [Task 030 review checklist, 2026-10-25](reviews/2026-10-25-task-030-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

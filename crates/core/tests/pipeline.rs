@@ -7,15 +7,18 @@ use std::sync::{Arc, Mutex};
 use studio_core::collection::{Collection, ConnectorId, DraftOperationKind, FeedId, LibraryFileId};
 use studio_core::connector::{
     self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, KeptBlob,
-    ListedFile, LocalFolder, Stamp, Version,
+    ListedFile, LocalFolder, NsiteHost, Stamp, Version,
 };
 use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
+use studio_core::nostr_events::Signing;
 use studio_core::pipeline::{
     self, AddressCheck, DiffFile, DiffId, OperationKind, PipelineErrorKind,
 };
+use studio_core::testing::blossom::TestBlossom;
+use studio_core::testing::relay::TestRelay;
 use studio_core::xml::Document;
 
 const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -2173,4 +2176,128 @@ fn a_host_that_gives_kept_blobs_has_them_in_the_collection_after_the_write() {
     .unwrap();
     let connector_id = s.collection.connectors().unwrap()[0].id;
     assert_eq!(s.collection.kept_blobs(connector_id).unwrap(), blobs);
+}
+
+// ---- A feed on an nsite host (ADR 0048) ----
+
+/// A shared nsite host, so that the draft reads and the write use one view.
+struct SharedHost(Arc<NsiteHost>);
+
+impl Connector for SharedHost {
+    fn read(&self, path: &str) -> Result<Option<FileRead>, ConnectorError> {
+        self.0.read(path)
+    }
+    fn write(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        self.0.write(path, bytes, expected)
+    }
+    fn write_from(
+        &self,
+        path: &str,
+        reader: &mut dyn Read,
+        length: u64,
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        self.0.write_from(path, reader, length, expected)
+    }
+    fn sha256(&self, path: &str) -> Result<Option<String>, ConnectorError> {
+        self.0.sha256(path)
+    }
+    fn public_url(&self, path: &str) -> Option<String> {
+        self.0.public_url(path)
+    }
+    fn finish(&self) -> Result<(), ConnectorError> {
+        self.0.finish()
+    }
+    fn list(&self) -> Result<FileList, ConnectorError> {
+        self.0.list()
+    }
+    fn stat(&self, path: &str) -> Result<Option<ListedFile>, ConnectorError> {
+        self.0.stat(path)
+    }
+    fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
+        self.0.delete(path, expected)
+    }
+}
+
+#[test]
+fn a_feed_on_an_nsite_host_writes_an_upload_and_a_deletion_with_two_manifests() {
+    let relays = [TestRelay::start(), TestRelay::start()];
+    let blossoms = [TestBlossom::start(), TestBlossom::start()];
+    let secret_hex = "01".repeat(32);
+    let keys = studio_core::nostr_events::parse_secret_key(&secret_hex).unwrap();
+    let config = serde_json::json!({
+        "public_key": keys.public_key().to_hex(),
+        "d": "album",
+        "relays": relays.iter().map(TestRelay::url).collect::<Vec<_>>(),
+        "servers": blossoms.iter().map(TestBlossom::url).collect::<Vec<_>>(),
+        "signing": "vault",
+    })
+    .to_string();
+    let secret = serde_json::json!({ "secret_key": secret_hex })
+        .to_string()
+        .into_bytes();
+    let host =
+        Arc::new(NsiteHost::from_config(&config, Some(&secret), Signing::default()).unwrap());
+    host.write("album.xml", FEED.as_bytes(), &Expected::Absent)
+        .unwrap();
+    host.finish().unwrap();
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let connector_id = collection
+        .add_connector(NsiteHost::KIND, "Site", &config, None)
+        .unwrap();
+    let mut hosts = Hosts::new();
+    hosts.insert(connector_id, Box::new(SharedHost(Arc::clone(&host))));
+    let library = Library::open(dir.path().join("library")).unwrap();
+    let feed = collection
+        .add_feed(
+            host.public_url("album.xml").as_deref(),
+            Some((connector_id, "album.xml")),
+        )
+        .unwrap();
+    let connector: Box<dyn Connector> = Box::new(SharedHost(Arc::clone(&host)));
+    pipeline::refresh(&mut collection, connector.as_ref(), feed).unwrap();
+    let mut s = Setup {
+        dir,
+        collection,
+        connector,
+        hosts,
+        library,
+        feed,
+    };
+
+    // The draft writes an upload first. The second draft uploads a changed
+    // file and deletes the old file.
+    let (diff_id, new_path, old_path) = draft_with_upload_and_deletion(&mut s);
+    let before: Vec<usize> = relays.iter().map(TestRelay::received).collect();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff_id,
+    )
+    .unwrap();
+    for (relay, before) in relays.iter().zip(before) {
+        assert_eq!(relay.received() - before, 2);
+    }
+    assert!(blossoms.iter().all(|b| b.deletes().is_empty()));
+
+    // A new connector on the same site sees the new file and not the old.
+    let reader = NsiteHost::from_config(&config, Some(&secret), Signing::default()).unwrap();
+    assert!(reader.read(&new_path).unwrap().is_some());
+    assert!(reader.read(&old_path).unwrap().is_none());
+    let feed_xml = reader.read("album.xml").unwrap().unwrap();
+    assert!(
+        String::from_utf8(feed_xml.bytes)
+            .unwrap()
+            .contains(&new_path)
+    );
 }

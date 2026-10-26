@@ -41,6 +41,8 @@ fs4 = "1.1"
 testing = []
 
 [dev-dependencies]
+# The integration tests use the test servers.
+studio-core = { path = ".", features = ["testing"] }
 tempfile = "3"
 
 [lints]

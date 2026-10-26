@@ -272,10 +272,6 @@ pub(crate) fn mirror(
 }
 
 /// `HEAD <server>/<sha256>`. Gives the size, or `None` for a missing blob.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the nsite connector checks blobs with it")
-)]
 pub(crate) fn head(server: &str, sha256: &str) -> Result<Option<u64>, ConnectorError> {
     let response = send("HEAD", &format!("{server}/{sha256}"), &[], ())?;
     match response.status().as_u16() {

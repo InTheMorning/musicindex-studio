@@ -25,7 +25,7 @@ use crate::nostr_events::{self, AuthAction, Signing};
 /// Who signs the authorization events of a host.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
-enum SigningMode {
+pub(super) enum SigningMode {
     /// The key is in the vault.
     Vault,
     /// The user signs each event with "My signer".
@@ -78,22 +78,22 @@ impl fmt::Debug for BlossomHost {
     }
 }
 
-fn invalid(message: &str) -> ConnectorError {
+pub(super) fn invalid(message: &str) -> ConnectorError {
     ConnectorError::new(ConnectorErrorKind::InvalidConfig, message)
 }
 
-fn now() -> u64 {
+pub(super) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
 }
 
-fn version_of(sha256: &str) -> String {
+pub(super) fn version_of(sha256: &str) -> String {
     format!("sha256:{sha256}")
 }
 
 /// The media type of a file name, from its extension.
-fn media_type_of(path: &str) -> String {
+pub(super) fn media_type_of(path: &str) -> String {
     if let Some(known) = crate::remote::media_type_of_name(path) {
         return known;
     }
@@ -127,7 +127,7 @@ fn extension_of(path: &str) -> String {
 }
 
 /// True when the unsigned event has an `x` tag with this SHA-256.
-fn has_x_tag(event: &UnsignedEvent, sha256: &str) -> bool {
+pub(super) fn has_x_tag(event: &UnsignedEvent, sha256: &str) -> bool {
     event
         .tags
         .iter()

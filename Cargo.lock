@@ -2047,6 +2047,7 @@ dependencies = [
  "sha2",
  "similar",
  "ssh2",
+ "studio-core",
  "tempfile",
  "tungstenite",
  "ureq",

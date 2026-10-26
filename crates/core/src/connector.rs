@@ -3,13 +3,7 @@
 mod blossom;
 mod blossom_http;
 mod local;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the nsite and Blossom connectors use the relay client"
-    )
-)]
+mod nsite;
 mod relay;
 mod s3;
 mod sftp;
@@ -23,6 +17,7 @@ use std::path::{Component, Path, PathBuf};
 
 pub use blossom::BlossomHost;
 pub use local::LocalFolder;
+pub use nsite::{ManifestRef, NsiteHost, RelayState, SiteState};
 pub use s3::{S3Bucket, S3Config, S3Credentials, S3UrlStyle};
 pub use sftp::{SftpConfig, SftpCredentials, SftpHost, SftpLogin};
 
@@ -493,6 +488,11 @@ pub fn from_row_in(
             &row.config,
             secret.as_deref().map(Vec::as_slice),
             env.blobs.clone(),
+            env.signing.clone(),
+        )?)),
+        NsiteHost::KIND => Ok(Box::new(NsiteHost::from_config(
+            &row.config,
+            secret.as_deref().map(Vec::as_slice),
             env.signing.clone(),
         )?)),
         other => Err(ConnectorError::new(

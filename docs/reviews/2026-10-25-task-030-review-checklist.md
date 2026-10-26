@@ -40,7 +40,7 @@ The planning model uses this list after each packet, before its commit.
 | Work | Result | Required corrections |
 | --- | --- | --- |
 | 030a | Pass, 2026-10-25 | The unit test of `sign_with_keys` compares the event IDs (the planning model added it). |
-| 030b | Open | |
+| 030b | Pass, 2026-10-25 | None. `Reads::into_newest` gives the `Unavailable` rule of `newest`. |
 | 030c | Open | |
 | 030d | Open | |
 | 030e | Open | |

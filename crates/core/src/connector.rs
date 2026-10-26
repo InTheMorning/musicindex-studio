@@ -1,6 +1,14 @@
 //! Connectors: read and write the files of one host type (ADR 0006, ADR 0015).
 
 mod local;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the nsite and Blossom connectors use the relay client"
+    )
+)]
+mod relay;
 mod s3;
 mod sftp;
 mod sftp_wire;
@@ -132,6 +140,8 @@ pub enum ConnectorErrorKind {
     Unavailable,
     /// The host does not refuse a conditional write that is not correct.
     NoConditions,
+    /// The write needs an event that the user did not sign.
+    SignatureMissing,
 }
 
 /// An error from a connector.

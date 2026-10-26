@@ -7,7 +7,7 @@ import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from '.
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
-import { isLiveItem, liveKey, liveProblems, nextAction, showSummary, statusLabel, startToIso, isoToLocalInput } from './live.js';
+import { isLiveItem, liveKey, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError } from './signing.js';
@@ -311,7 +311,7 @@ function audioAddresses(item) {
 // the release folder, with the hash name when a different file has its
 // name. The draft then gets the new addresses, and each copy from before
 // that the draft does not use gets a deletion.
-function ReplaceAudio({ feedId, item, update, draft, onOpsChanged }) {
+function ReplaceAudio({ feedId, item, change, draft, onOpsChanged, hadAudio = true, label = 'Replace the Audio File', hint }) {
   const { busy, error, run } = useAction();
   const [done, setDone] = useState(false);
   const inputId = `replace-${item._cid}`;
@@ -328,22 +328,27 @@ function ReplaceAudio({ feedId, item, update, draft, onOpsChanged }) {
       }
       throw Object.assign(new Error('Select an audio file.'), { code: 'not_audio' });
     }
-    const before = audioAddresses(item);
-    update((m) => set(m, 'items', m.items.map((i) => (i._cid === item._cid ? withNewAudio(i, facts) : i))));
+    // The stream address of a show is not a file of the host. Only audio
+    // from before gives addresses for the deletion.
+    const before = hadAudio ? audioAddresses(item) : [];
+    change((i) => withNewAudio(i, facts));
     if (!(await draft.flush())) return;
     await api(`/feeds/${feedId}/operations`, { method: 'POST', body: { op: 'delete_unused', urls: before } });
     onOpsChanged();
-    setDone(true);
+    // The done text tells whether a file from before goes out.
+    setDone(before.length > 0 ? 'replaced' : 'added');
   });
   return html`<div class="import-pick">
     <input id=${inputId} class="visually-hidden" type="file" disabled=${busy}
       aria-describedby=${`${inputId}-hint`}
       accept="audio/*,.wav,.flac,.m4a,.ogg,.opus"
       onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) replace(file); }} />
-    <label for=${inputId} class="button action">${busy ? 'Replacing…' : 'Replace the Audio File'}</label>
+    <label for=${inputId} class="button action">${busy ? 'Replacing…' : label}</label>
     <p class="hint" id=${`${inputId}-hint`} role="status">${done
-      ? 'Studio replaced the audio file. The review lists the deletion of the file from before.'
-      : 'The track keeps its GUID and its other values. Studio deletes the file from before on the host when you write.'}</p>
+      ? (done === 'replaced'
+        ? 'Studio replaced the audio file. The review lists the deletion of the file from before.'
+        : 'Studio added the audio file. Open Review to write it.')
+      : (hint || 'The track keeps its GUID and its other values. Studio deletes the file from before on the host when you write.')}</p>
     ${error && html`<p class="field-error" role="alert">${importErrorText(error)}</p>`}
   </div>`;
 }
@@ -1506,7 +1511,8 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChang
         <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} />
         <${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />
       </div>
-      <${ReplaceAudio} feedId=${feed.id} item=${item} update=${update} draft=${draft} onOpsChanged=${onOpsChanged} />
+      <${ReplaceAudio} feedId=${feed.id} item=${item} draft=${draft} onOpsChanged=${onOpsChanged}
+          change=${(edit) => update((m) => set(m, 'items', m.items.map((i) => (i._cid === item._cid ? edit(i) : i))))} />
     </section>
 
     <${TrackPayments} id=${id} item=${item} albumBlocks=${model.values} onChange=${change('values')} />
@@ -1618,7 +1624,7 @@ function ContentLinks({ id, links, onChange }) {
 // The page of one live item. It edits the show, the stream, the content
 // links, the live value and the value routes. "Go live" and "End the show"
 // change the draft and open the review sheet (ADR 0054 items 3 and 5).
-function LivePage({ feed, model, update, bad, liveIndex, draft }) {
+function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) {
   const lives = model.live_items;
   const live = lives[liveIndex];
   const id = `live-${live._cid}`;
@@ -1682,13 +1688,26 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
       </div>
     </section>
 
-    <section class="page-section"><h2>Stream</h2>
+    ${!canRecord(live) && html`<section class="page-section"><h2>Stream</h2>
       <div class="group">
         <${TextField} id=${`${id}-stream-url`} label="Stream address" type="url" address=${`live_items/${liveIndex}/item/enclosure/url`} bad=${bad}
           value=${stream.url} onChange=${streamField('url')} />
         <${TextField} id=${`${id}-stream-type`} label="Stream type" hint="For example application/x-mpegURL." value=${stream.media_type} onChange=${streamField('media_type')} />
       </div>
-    </section>
+    </section>`}
+
+    ${canRecord(live) && html`<section class="page-section"><h2>Recording</h2>
+      ${hasRecording(live) && html`<div class="group">
+        <${Enclosure} id=${`${id}-recording`} path=${`live_items/${liveIndex}/item/`} bad=${bad} enclosure=${live.item.enclosure}
+          onChange=${itemField('enclosure')} />
+        <${AlternateEnclosures} list=${live.item.alternate_enclosures} onChange=${itemField('alternate_enclosures')} />
+      </div>`}
+      <${ReplaceAudio} feedId=${feed.id} item=${live.item} draft=${draft} onOpsChanged=${onOpsChanged}
+        hadAudio=${hasRecording(live)}
+        label=${hasRecording(live) ? 'Replace the recording' : 'Add the recording'}
+        hint="Studio puts the audio file in the enclosure of the show. The stream address goes out of the draft."
+        change=${(edit) => changeLive(set(live, 'item', edit(live.item)))} />
+    </section>`}
 
     <section class="page-section"><h2>Content links</h2>
       <div class="group">
@@ -2445,7 +2464,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go}
       draft=${draft} onOpsChanged=${onOpsChanged} />`;
   } else if (page === 'live' && liveIndex !== -1 && !publisher && !playlist) {
-    body = html`<${LivePage} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
+    body = html`<${LivePage} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} onOpsChanged=${onOpsChanged} />`;
   } else if (page === 'credits') {
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {

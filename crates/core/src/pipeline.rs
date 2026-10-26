@@ -819,23 +819,26 @@ pub fn host_file_matches(
     }
 }
 
-/// Each address that the draft gives for the channel or for a track: the
-/// `url` of an enclosure, the `uri` of a `podcast:source`, or the `href`
-/// of `itunes:image` of the channel or of an item (ADR 0032 item 10,
-/// ADR 0033 item 7, ADR 0036 item 7 and item 10).
+/// Each address that the draft gives for the channel, for a track or for a
+/// live item: the `url` of an enclosure, the `uri` of a `podcast:source`,
+/// or the `href` of `itunes:image` of the channel or of an item (ADR 0032
+/// item 10, ADR 0033 item 7, ADR 0036 item 7 and item 10). The recording of
+/// a live item is a file of the feed, as the audio of a track is (ADR 0054
+/// item 6).
 #[must_use]
 pub fn feed_addresses(feed: &Feed) -> Vec<&str> {
     let mut urls: Vec<&str> = Vec::new();
     urls.extend(feed.image.as_deref());
-    for item in &feed.items {
+    let items = feed.items.iter().map(|entry| &entry.value);
+    let live_items = feed.live_items.iter().map(|entry| &entry.value.item);
+    for item in items.chain(live_items) {
         urls.extend(
-            item.value
-                .enclosure
+            item.enclosure
                 .as_ref()
                 .and_then(|enclosure| enclosure.url.as_deref()),
         );
-        urls.extend(item.value.image.as_deref());
-        for enclosure in &item.value.alternate_enclosures {
+        urls.extend(item.image.as_deref());
+        for enclosure in &item.alternate_enclosures {
             for source in &enclosure.sources {
                 urls.extend(source.uri.as_deref());
             }

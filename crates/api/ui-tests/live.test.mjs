@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  liveKey, isLiveItem, statusLabel, nextAction, showSummary, liveProblems,
+  liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary, liveProblems,
   startToIso, isoToLocalInput,
 } from '../ui/live.js';
 
@@ -60,4 +60,18 @@ test('the start time converts to ISO text and back', () => {
   assert.equal(isoToLocalInput(iso), '2026-11-01T20:30');
   assert.equal(isoToLocalInput('x'), '');
   assert.equal(isoToLocalInput(null), '');
+});
+
+test('only an ended show can have a recording', () => {
+  assert.equal(canRecord({ ...live, status: 'ended' }), true);
+  assert.equal(canRecord(live), false);
+  assert.equal(canRecord({ ...live, status: 'live' }), false);
+});
+
+test('a recording is an enclosure with an audio type', () => {
+  const enclosure = (media_type) => ({ ...live, item: { ...live.item, enclosure: { url: 'https://example.com/a', length: '1', media_type } } });
+  assert.equal(hasRecording(live), false);
+  assert.equal(hasRecording(enclosure('application/x-mpegURL')), false);
+  assert.equal(hasRecording(enclosure('audio/mpeg')), true);
+  assert.equal(hasRecording({ ...live, item: { ...live.item, enclosure: { url: null, length: null, media_type: 'audio/mpeg' } } }), false);
 });

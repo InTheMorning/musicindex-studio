@@ -36,6 +36,20 @@ export function nextAction(status) {
   return null;
 }
 
+// Can the user add a recording? Only an ended show can have one (ADR 0054
+// item 6).
+export function canRecord(live) {
+  return live.status === 'ended';
+}
+
+// Does the live item have a recording? A recording is an enclosure with an
+// audio type. The enclosure of a stream has another type, such as
+// application/x-mpegURL.
+export function hasRecording(live) {
+  const enclosure = live.item && live.item.enclosure;
+  return Boolean(enclosure && enclosure.url && (enclosure.media_type || '').startsWith('audio/'));
+}
+
 // The summary line of a live item: the status and the start time.
 // `timeText` is the start time in the language of the user. The caller gives
 // it, so that this module has no date formatting that depends on the browser.

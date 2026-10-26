@@ -5797,6 +5797,94 @@ async fn a_live_item_goes_live_and_ends_through_three_writes() {
     }
 }
 
+/// The recording of an ended show: the file goes through the upload route
+/// with `replace=true`, the draft puts its enclosure on the live item in
+/// place of the stream, and the write puts the file on the host (task 033c).
+#[tokio::test]
+async fn an_ended_live_item_gets_the_enclosure_of_an_uploaded_recording() {
+    let app = app();
+    let id = set_up(&app).await;
+    let base = format!("/api/v1/feeds/{id}");
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/live-items"),
+        Some(json!({ "title": "Show", "start": "2026-11-01T10:00:00Z" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    let guid = draft["model"]["live_items"][0]["item"]["guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["content_links"] =
+        json!([{ "href": "https://example.com/show", "label": "Watch" }]);
+    model["live_items"][0]["item"]["enclosure"] = json!({
+        "url": "https://example.com/stream.m3u8",
+        "length": "0",
+        "media_type": "application/x-mpegURL",
+    });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    for next in ["live", "ended"] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("{base}/live-items/{guid}/status"),
+            Some(json!({ "status": next })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    write_once(&app, id).await;
+    assert!(live(&app).contains("stream.m3u8"));
+
+    let mp3 = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!("{base}/files?name=tagged.mp3&replace=true"))
+        .header(header::HOST, HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::from(mp3))
+        .unwrap();
+    let (status, facts, _) = send(&app, request).await;
+    assert_eq!(status, StatusCode::CREATED, "{facts}");
+    assert_eq!(facts["kind"], "audio");
+
+    let (_, draft) = call(&app, "GET", &format!("{base}/draft"), None).await;
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["item"]["enclosure"] = json!({
+        "url": facts["url"],
+        "length": facts["size"].to_string(),
+        "media_type": facts["media_type"],
+    });
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    write_once(&app, id).await;
+    let xml = live(&app);
+    assert!(
+        xml.contains("https://music.example/album/tagged.mp3"),
+        "{xml}"
+    );
+    assert!(!xml.contains("stream.m3u8"), "{xml}");
+    assert!(xml.contains("status=\"ended\""), "{xml}");
+    // The write puts the recording on the host (ADR 0054 item 6).
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+}
+
 #[tokio::test]
 async fn a_live_status_cannot_go_back() {
     let app = app();

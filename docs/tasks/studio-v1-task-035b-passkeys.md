@@ -1,7 +1,7 @@
 # Studio v1 Task 035b: Passkeys With PRF
 
 Parent: [task 035](studio-v1-task-035-phone.md). Decisions: [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 2, 3, 5 and 20 to 27, and [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
-Sequence: the second packet of task 035. It depends on 035a.
+Sequence: the third packet of task 035. It depends on 035a and 035g.
 
 ## Goal
 
@@ -30,6 +30,7 @@ These choices are fixed. Do not change them.
 ### The Server
 
 - A migration adds `account_passkeys (credential_id TEXT PRIMARY KEY, account_id INTEGER NOT NULL, public_key BLOB NOT NULL, counter INTEGER NOT NULL, prf_salt TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL)` and a column `user_handle` of 16 random bytes for each account.
+- A restricted session of [035g](studio-v1-task-035g-recovery-sign-in.md) reaches `POST /auth/v1/passkeys/options` and `POST /auth/v1/passkeys`. A passkey that the server adds removes the limit of that session. The page "Add a sign-in method" of 035g gets the passkey method.
 - `POST /auth/v1/passkeys/options` needs a session and an open vault. It gives `{"challenge", "assertion_challenge", "rp_id", "user_handle", "user_name", "prf_salt", "exclude"}`. The registration uses `challenge`, and the assertion after it uses `assertion_challenge`. The PRF salt is 32 new random bytes. The server keeps it with the two challenges.
 - `POST /auth/v1/passkeys` with `{"name", "registration": {...}, "assertion": {...}, "prf_output"}`. The server checks the registration and then the assertion of the same credential. It refuses a missing PRF output with 422 `passkey_no_prf`. It adds the passkey wrapper through the handle and keeps the row.
 - `GET /auth/v1/passkeys` lists the name, the creation time and the credential ID. `DELETE /auth/v1/passkeys/{credential_id}` needs the open vault. It removes the wrapper and the row. It refuses the last method of the account (ADR 0056 item 3).

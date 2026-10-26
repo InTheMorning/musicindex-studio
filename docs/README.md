@@ -187,6 +187,7 @@
 - [Studio v1 task 034f: The sign-in pages and the account panel](tasks/studio-v1-task-034f-sign-in-ui.md)
 - [Studio v1 task 035: The phone](tasks/studio-v1-task-035-phone.md)
 - [Studio v1 task 035a: The HKDF wrappers](tasks/studio-v1-task-035a-hkdf-wrappers.md)
+- [Studio v1 task 035g: Sign-in with the recovery key](tasks/studio-v1-task-035g-recovery-sign-in.md)
 - [Studio v1 task 035b: Passkeys with PRF](tasks/studio-v1-task-035b-passkeys.md)
 - [Studio v1 task 035c: The NIP-46 client and NIP-46 sign-in](tasks/studio-v1-task-035c-nip46-sign-in.md)
 - [Studio v1 task 035d: "My signer" through NIP-46](tasks/studio-v1-task-035d-nip46-signing.md)

@@ -17,6 +17,7 @@ The planning model uses this list after each packet, before its commit.
 ## Manual Checks
 
 - 035a: a vault file of the earlier format still opens. No PRF output and no recovery key text is in a `Debug` output.
+- 035g: a restricted session reaches only the routes of the packet. Only a new method removes the limit. An unknown account, an incorrect key and an account with no vault file give the same answer. No recovery key text is in a log or an error message.
 - 035b: the verifier checks the origin, the challenge, the relying party ID, the UV flag and the counter on each path. No PRF output is in a log, a row or a response.
 - 035c: each answer of a remote signer comes from its public key. Each relay goes through the network policy. No client key is in a log.
 - 035d: the write route and the pipeline do not change. The sign route permits only the kinds 35128 and 24242.

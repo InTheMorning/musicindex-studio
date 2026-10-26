@@ -9,7 +9,9 @@
 use serde::Serialize;
 
 use crate::collection::{Collection, CollectionError, ConnectorId, ConnectorRow, FeedId, FeedRow};
-use crate::connector::{self, ConnectorError, LocalFolder, S3Bucket, S3Config};
+use crate::connector::{
+    self, ConnectorError, LocalFolder, S3Bucket, S3Config, SftpConfig, SftpHost,
+};
 use crate::vault::OpenVault;
 
 /// A source of a feed address (ADR 0021 item 1).
@@ -221,7 +223,8 @@ pub fn apply_folder_address(
 }
 
 /// The public address of a folder connector, typed or inferred, or the
-/// public address of an S3 connector. Other connector kinds give `None`.
+/// public address of an S3 or SFTP connector. Other connector kinds give
+/// `None`.
 #[must_use]
 pub fn folder_url(row: &ConnectorRow) -> Option<String> {
     match row.kind.as_str() {
@@ -229,6 +232,9 @@ pub fn folder_url(row: &ConnectorRow) -> Option<String> {
             .ok()
             .and_then(|f| f.base_url().map(str::to_owned)),
         S3Bucket::KIND => serde_json::from_str::<S3Config>(&row.config)
+            .ok()
+            .and_then(|c| c.base_url),
+        SftpHost::KIND => serde_json::from_str::<SftpConfig>(&row.config)
             .ok()
             .and_then(|c| c.base_url),
         _ => None,
@@ -375,6 +381,39 @@ mod tests {
             .unwrap();
         let without = collection
             .add_connector(S3Bucket::KIND, "R2 b", &config(None), None)
+            .unwrap();
+        assert_eq!(
+            folder_url(&collection.connector(with).unwrap()).as_deref(),
+            Some("https://cdn.example")
+        );
+        assert_eq!(folder_url(&collection.connector(without).unwrap()), None);
+    }
+
+    #[test]
+    fn an_sftp_host_gives_its_public_address_as_a_typed_address() {
+        let collection = Collection::open_in_memory().unwrap();
+        let config = |base_url: Option<&str>| {
+            serde_json::json!({
+                "host": "sftp.example.com",
+                "port": 22,
+                "user": "me",
+                "root": "/srv/feeds",
+                "base_url": base_url,
+                "login": "agent",
+                "host_key": "SHA256:abc",
+            })
+            .to_string()
+        };
+        let with = collection
+            .add_connector(
+                SftpHost::KIND,
+                "Host",
+                &config(Some("https://cdn.example")),
+                None,
+            )
+            .unwrap();
+        let without = collection
+            .add_connector(SftpHost::KIND, "Host b", &config(None), None)
             .unwrap();
         assert_eq!(
             folder_url(&collection.connector(with).unwrap()).as_deref(),

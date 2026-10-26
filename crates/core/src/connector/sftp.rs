@@ -264,6 +264,35 @@ impl SftpHost {
         fingerprint(&session)
     }
 
+    /// Connect and look at the root folder. The route that adds a host
+    /// uses this check before it keeps a secret. The root can be a symbolic
+    /// link to a folder, because the operations go through the root.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`ConnectorErrorKind::NotFound`] when the root does not exist
+    /// or is not a folder. The connection errors are those of the other
+    /// requests.
+    pub fn check_root(&self) -> Result<(), ConnectorError> {
+        let root = self.full_path(&[]);
+        let not_a_folder = || {
+            ConnectorError::new(
+                ConnectorErrorKind::NotFound,
+                format!("{} is not a folder on the host", self.config.root),
+            )
+        };
+        self.with_wire(|wire| match wire.stat(&root)?.map(|attrs| attrs.kind) {
+            Some(FileKind::Folder) => Ok(()),
+            // Only a folder opens as a folder.
+            Some(FileKind::SymbolicLink) => match wire.read_dir(&root) {
+                Ok(_) => Ok(()),
+                Err(error) if error.kind() == ConnectorErrorKind::Unavailable => Err(error),
+                Err(_) => Err(not_a_folder()),
+            },
+            _ => Err(not_a_folder()),
+        })
+    }
+
     /// Connect, check the host key, log in and open the SFTP requests.
     fn connect(&self) -> Result<Connection, ConnectorError> {
         let session = handshake(&self.config.host, self.config.port)?;
@@ -940,6 +969,39 @@ mod tests {
         assert_eq!(error.kind(), ConnectorErrorKind::Unauthorized);
         assert_eq!(names_in(&root), ["keep.txt"]);
         assert_eq!(fs::read(root.join("keep.txt")).expect("a file"), b"keep");
+    }
+
+    #[test]
+    fn check_root_accepts_a_folder_or_a_link_to_one_and_refuses_the_rest() {
+        let mut server = TestSshd::start();
+        let (host, root) = host(&mut server);
+        host.check_root().expect("a folder");
+        fs::write(root.join("file.txt"), b"x").expect("a file");
+        fs::create_dir(root.join("folder")).expect("a folder");
+        std::os::unix::fs::symlink(root.join("folder"), root.join("folder-link")).expect("a link");
+        std::os::unix::fs::symlink(root.join("file.txt"), root.join("file-link")).expect("a link");
+        let mut linked = config(&server, &root.join("folder-link"), SftpLogin::Key);
+        linked.root = root
+            .join("folder-link")
+            .to_str()
+            .expect("a path")
+            .to_owned();
+        SftpHost::new(linked, key_credentials(&server.key_path(), None))
+            .expect("a connector")
+            .check_root()
+            .expect("a link to a folder");
+        for bad in [
+            root.join("missing"),
+            root.join("file.txt"),
+            root.join("file-link"),
+        ] {
+            let mut config = config(&server, &bad, SftpLogin::Key);
+            config.root = bad.to_str().expect("a path").to_owned();
+            let other = SftpHost::new(config, key_credentials(&server.key_path(), None))
+                .expect("a connector");
+            let error = other.check_root().expect_err("an error");
+            assert_eq!(error.kind(), ConnectorErrorKind::NotFound, "{bad:?}");
+        }
     }
 
     #[test]

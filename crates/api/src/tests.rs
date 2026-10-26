@@ -4270,3 +4270,278 @@ async fn the_feed_host_route_puts_a_feed_move_into_the_diff() {
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "file_exists");
 }
+
+/// The body of a new SFTP host on a test server. The login is the plain key.
+fn sftp_body(server: &mut studio_core::testing::sshd::TestSshd) -> Value {
+    json!({
+        "kind": "sftp",
+        "name": "Server",
+        "host": "127.0.0.1",
+        "port": server.port(),
+        "user": server.user(),
+        "root": server.root().to_str().unwrap(),
+        "base_url": "https://cdn.example.com/feeds",
+        "login": "key",
+        "private_key": std::fs::read_to_string(server.key_path()).unwrap(),
+        "host_key": server.host_key_fingerprint(),
+    })
+}
+
+#[tokio::test]
+async fn the_fingerprint_route_gives_the_host_key_without_a_vault() {
+    let server = studio_core::testing::sshd::TestSshd::start();
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors/fingerprint",
+        Some(json!({ "host": "127.0.0.1", "port": server.port() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["fingerprint"], server.host_key_fingerprint());
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors/fingerprint",
+        Some(json!({ "host": " ", "port": 22 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_config");
+    let closed = {
+        let other = studio_core::testing::sshd::TestSshd::start();
+        other.port()
+    };
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors/fingerprint",
+        Some(json!({ "host": "127.0.0.1", "port": closed })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["error"]["code"], "host_unavailable");
+}
+
+#[tokio::test]
+async fn an_sftp_host_is_added_after_the_connection_and_keeps_its_key_in_the_vault() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let app = app();
+    make_vault(&app).await;
+    let key = std::fs::read_to_string(server.key_path()).unwrap();
+    let body = sftp_body(&mut server);
+    let (status, _, text) = send(&app, request("POST", "/api/v1/connectors", Some(body))).await;
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+    assert!(!text.contains(key.trim()));
+    let row: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(row["kind"], "sftp");
+    let secret_ref = row["secret_ref"].as_str().unwrap();
+    assert!(secret_ref.starts_with("connector-"), "{secret_ref}");
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["host_key"], server.host_key_fingerprint());
+    assert_eq!(config["login"], "key");
+    assert!(config.get("private_key").is_none());
+
+    let (_, _, list) = send(&app, request("GET", "/api/v1/connectors", None)).await;
+    assert!(!list.contains(key.trim()));
+    let key_body = key
+        .lines()
+        .find(|l| l.len() > 20 && !l.starts_with("-----"))
+        .unwrap();
+    assert!(!data_files_text(&app).contains(key_body));
+    let vault_file = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    assert!(!vault_file.contains(key_body));
+    let vault = studio_core::vault::VaultFile::from_json(&vault_file)
+        .unwrap()
+        .open_with_passphrase(PASSPHRASE)
+        .unwrap();
+    let secret: Value = serde_json::from_slice(&vault.get(secret_ref).unwrap().unwrap()).unwrap();
+    assert_eq!(secret["private_key"], key);
+}
+
+#[tokio::test]
+async fn an_sftp_host_with_a_wrong_host_key_or_root_changes_neither_vault_nor_collection() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let app = app();
+    make_vault(&app).await;
+    let vault_before = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    let data_before = data_files_text(&app);
+
+    let mut body = sftp_body(&mut server);
+    body["host_key"] = json!("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(answer["error"]["code"], "host_unauthorized");
+    assert!(
+        answer["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(&server.host_key_fingerprint())
+    );
+
+    // A root that does not exist, and a root that is a file.
+    let mut missing = sftp_body(&mut server);
+    let root = missing["root"].as_str().unwrap().to_owned();
+    std::fs::write(format!("{root}/file.txt"), b"x").unwrap();
+    for bad in [format!("{root}/missing"), format!("{root}/file.txt")] {
+        missing["root"] = json!(bad);
+        let (status, answer) =
+            call(&app, "POST", "/api/v1/connectors", Some(missing.clone())).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}");
+        assert_eq!(answer["error"]["code"], "folder_not_found", "{bad}");
+    }
+
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors, json!([]));
+    let vault_after = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    assert_eq!(vault_before, vault_after);
+    assert_eq!(data_before.len(), data_files_text(&app).len());
+}
+
+#[tokio::test]
+async fn an_sftp_host_with_a_closed_port_gives_503() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let app = app();
+    make_vault(&app).await;
+    let mut body = sftp_body(&mut server);
+    drop(server);
+    body["port"] = json!(body["port"].as_u64().unwrap());
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(answer["error"]["code"], "host_unavailable");
+}
+
+#[tokio::test]
+async fn an_sftp_host_needs_the_vault_for_a_key_but_not_for_the_agent_checks() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let app = app();
+    let body = sftp_body(&mut server);
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body.clone())).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(answer["error"]["code"], "vault_required");
+    make_vault(&app).await;
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body.clone())).await;
+    assert_eq!(status, StatusCode::LOCKED);
+    assert_eq!(answer["error"]["code"], "vault_locked");
+
+    // The agent login needs no vault, so the field checks come first.
+    let mut agent = body;
+    agent["login"] = json!("agent");
+    agent["user"] = json!("");
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(agent)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(answer["error"]["code"], "invalid_config");
+}
+
+#[tokio::test]
+async fn an_sftp_host_with_a_bad_field_gives_422_before_any_connection() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let app = app();
+    make_vault(&app).await;
+    let cases = [
+        ("host", json!(" "), "invalid_config"),
+        ("user", json!(""), "invalid_config"),
+        ("root", json!(""), "invalid_config"),
+        ("host_key", json!(""), "invalid_config"),
+        ("private_key", json!(""), "invalid_config"),
+        ("base_url", json!("cdn.example.com"), "invalid_address"),
+    ];
+    for (field, value, code) in cases {
+        let mut body = sftp_body(&mut server);
+        body[field] = value;
+        let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{field}");
+        assert_eq!(answer["error"]["code"], code, "{field}");
+    }
+    let mut body = sftp_body(&mut server);
+    body["login"] = json!("password");
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(answer["error"]["code"], "invalid_config");
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors, json!([]));
+}
+
+#[tokio::test]
+async fn an_sftp_host_accepts_a_new_host_key_only_when_the_server_gives_it() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let app = app();
+    make_vault(&app).await;
+    let body = sftp_body(&mut server);
+    let (_, row) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    let id = row["id"].as_i64().unwrap();
+    let old = server.host_key_fingerprint();
+    server.with_host_key_change();
+    let new = server.host_key_fingerprint();
+    assert_ne!(old, new);
+    let path = format!("/api/v1/connectors/{id}");
+
+    let (status, answer) = call(&app, "PUT", &path, Some(json!({ "host_key": old }))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(answer["error"]["code"], "host_key_mismatch");
+    let (_, rows) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let config: Value = serde_json::from_str(rows[0]["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["host_key"], old);
+
+    let (status, answer) = call(&app, "PUT", &path, Some(json!({ "host_key": new }))).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    let config: Value = serde_json::from_str(answer["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["host_key"], new);
+    // A connection works with the new key.
+    let (status, answer) = call(&app, "GET", &format!("{path}/feeds"), None).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+}
+
+#[tokio::test]
+async fn an_sftp_host_gets_a_new_public_address_and_the_match_route_links_its_feeds() {
+    let web = web_feeds();
+    web.set("/album.xml", 200, FEED.as_bytes().to_vec());
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let app = app_with_index(&web.url(""));
+    make_vault(&app).await;
+    call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [web.url("/album.xml")] })),
+    )
+    .await;
+    let body = sftp_body(&mut server);
+    std::fs::write(
+        format!("{}/album.xml", body["root"].as_str().unwrap()),
+        FEED,
+    )
+    .unwrap();
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    let id = connector["id"].as_i64().unwrap();
+    let path = format!("/api/v1/connectors/{id}");
+    let (status, row) = call(
+        &app,
+        "PUT",
+        &path,
+        Some(json!({ "base_url": "https://new.example.com/m" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["base_url"], "https://new.example.com/m");
+    let (status, answer) = call(
+        &app,
+        "PUT",
+        &path,
+        Some(json!({ "base_url": "new.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(answer["error"]["code"], "invalid_address");
+
+    let (status, answer) = call(&app, "POST", &format!("{path}/match"), None).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    assert_eq!(answer["linked"][0]["path"], "album.xml");
+    assert_eq!(
+        answer["folder_address"],
+        json!({ "state": "typed", "url": "https://new.example.com/m" })
+    );
+}

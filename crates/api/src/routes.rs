@@ -16,7 +16,10 @@ use studio_core::collection::{
     Collection, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId, DraftOperationKind,
     FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
 };
-use studio_core::connector::{self, LocalFolder, S3Bucket, S3Config, S3Credentials, S3UrlStyle};
+use studio_core::connector::{
+    self, ConnectorErrorKind, LocalFolder, S3Bucket, S3Config, S3Credentials, S3UrlStyle,
+    SftpConfig, SftpCredentials, SftpHost, SftpLogin,
+};
 use studio_core::discover::PublicFeed;
 use studio_core::download;
 use studio_core::feed::{Feed, Recipient};
@@ -197,6 +200,7 @@ pub(crate) enum NewConnector {
         base_url: Option<String>,
     },
     S3(NewS3),
+    Sftp(NewSftp),
 }
 
 /// The fields of a new S3 host (ADR 0046).
@@ -212,6 +216,178 @@ pub(crate) struct NewS3 {
     base_url: Option<String>,
     access_key_id: String,
     secret_access_key: String,
+}
+
+/// The fields of a new SFTP host (ADR 0047).
+#[derive(Deserialize)]
+pub(crate) struct NewSftp {
+    name: String,
+    host: String,
+    #[serde(default = "default_sftp_port")]
+    port: u16,
+    user: String,
+    root: String,
+    base_url: Option<String>,
+    login: SftpLogin,
+    private_key: Option<String>,
+    passphrase: Option<String>,
+    password: Option<String>,
+    host_key: String,
+}
+
+fn default_sftp_port() -> u16 {
+    22
+}
+
+/// The fields of a host key request.
+#[derive(Deserialize)]
+pub(crate) struct FingerprintRequest {
+    host: String,
+    #[serde(default = "default_sftp_port")]
+    port: u16,
+}
+
+/// Give the fingerprint of the host key of an SFTP server (ADR 0047
+/// item 3). The route needs no vault. It does not log in.
+pub(crate) async fn connector_fingerprint(Json(body): Json<FingerprintRequest>) -> ApiResult {
+    blocking_unlocked(move || {
+        let host = body.host.trim().to_owned();
+        if host.is_empty() || body.port == 0 {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_config",
+                "the host and the port must not be empty",
+            ));
+        }
+        let fingerprint = SftpHost::fingerprint_of(&host, body.port)?;
+        Ok(Json(json!({ "fingerprint": fingerprint })))
+    })
+    .await
+}
+
+/// Add an SFTP host (ADR 0047). The steps are in this sequence:
+/// - the vault,
+/// - the field checks,
+/// - the connection with the root check,
+/// - the secret in the vault,
+/// - the collection row.
+///
+/// When one step fails, the next steps do not occur.
+fn add_sftp_connector(
+    w: &mut Workspace,
+    body: &NewSftp,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let needs_secret = body.login != SftpLogin::Agent;
+    if needs_secret && w.vault.is_none() {
+        return Err(match w.vault_state() {
+            crate::workspace::VaultState::Absent => ApiError::vault_required(),
+            _ => ApiError::vault_locked(),
+        });
+    }
+    let invalid =
+        |message: &str| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_config", message);
+    let host_name = body.host.trim().to_owned();
+    let user = body.user.trim().to_owned();
+    let root = body.root.trim().to_owned();
+    let host_key = body.host_key.trim().to_owned();
+    if host_name.is_empty() || user.is_empty() || root.is_empty() || host_key.is_empty() {
+        return Err(invalid(
+            "the host, the user, the folder and the host key must not be empty",
+        ));
+    }
+    let base_url = body
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(str::to_owned);
+    if let Some(base_url) = &base_url {
+        check_http_address(base_url, "the public address")?;
+    }
+    let (credentials, secret) = sftp_credentials(body)?;
+    let config = SftpConfig {
+        host: host_name,
+        port: body.port,
+        user,
+        root,
+        base_url,
+        login: body.login,
+        host_key,
+    };
+    let host = SftpHost::new(config, credentials)?;
+    // A missing root is a field error. The other errors keep their codes.
+    host.check_root().map_err(|error| {
+        if error.kind() == ConnectorErrorKind::NotFound {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "folder_not_found",
+                error.to_string(),
+            )
+        } else {
+            ApiError::from(error)
+        }
+    })?;
+    let secret_ref = secret
+        .as_ref()
+        .map(|_| format!("connector-{}", uuid::Uuid::new_v4()));
+    if let (Some(secret), Some(secret_ref)) = (&secret, &secret_ref) {
+        let vault = w
+            .vault
+            .as_mut()
+            .ok_or_else(|| ApiError::internal("the vault closed"))?;
+        vault.put(secret_ref, secret.as_bytes())?;
+    }
+    let added = w.save_vault().and_then(|()| {
+        w.collection
+            .add_connector(
+                SftpHost::KIND,
+                &body.name,
+                &host.config(),
+                secret_ref.as_deref(),
+            )
+            .map_err(ApiError::from)
+    });
+    let id = match added {
+        Ok(id) => id,
+        Err(error) => {
+            // The secret does not stay in the vault without a row.
+            if let (Some(vault), Some(secret_ref)) = (w.vault.as_mut(), &secret_ref) {
+                vault.remove(secret_ref);
+                let _ = w.save_vault();
+            }
+            return Err(error);
+        }
+    };
+    Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
+}
+
+/// The credentials of a new SFTP host and the secret JSON for the vault.
+/// The agent login has no secret.
+fn sftp_credentials(body: &NewSftp) -> Result<(SftpCredentials, Option<String>), ApiError> {
+    let invalid =
+        |message: &str| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_config", message);
+    let secret = match body.login {
+        SftpLogin::Key => {
+            let key = body
+                .private_key
+                .as_deref()
+                .filter(|k| !k.trim().is_empty())
+                .ok_or_else(|| invalid("the private key must not be empty"))?;
+            let passphrase = body.passphrase.as_deref().filter(|p| !p.is_empty());
+            json!({ "private_key": key, "passphrase": passphrase }).to_string()
+        }
+        SftpLogin::Password => {
+            let password = body
+                .password
+                .as_deref()
+                .filter(|p| !p.is_empty())
+                .ok_or_else(|| invalid("the password must not be empty"))?;
+            json!({ "password": password }).to_string()
+        }
+        SftpLogin::Agent => return Ok((SftpCredentials::Agent, None)),
+    };
+    let credentials = SftpCredentials::from_secret(body.login, Some(secret.as_bytes()))?;
+    Ok((credentials, Some(secret)))
 }
 
 /// Check that an address starts with `http://` or `https://`. Give 422
@@ -325,6 +501,7 @@ pub(crate) async fn add_connector(
                 base_url,
             } => (name, root, base_url),
             NewConnector::S3(body) => return add_s3_connector(w, &body),
+            NewConnector::Sftp(body) => return add_sftp_connector(w, &body),
         };
         let root = expand_home(root.trim());
         if !std::path::Path::new(&root).is_absolute() {
@@ -367,6 +544,7 @@ fn expand_home(path: &str) -> String {
 pub(crate) struct UpdateConnector {
     name: Option<String>,
     base_url: Option<String>,
+    host_key: Option<String>,
 }
 
 /// Change the name or the public address of a connector (ADR 0021,
@@ -383,6 +561,11 @@ pub(crate) async fn update_connector(
     blocking(shared, move |w| {
         let id = ConnectorId(id);
         let row = w.collection.connector(id)?;
+        // The new host key is checked first, so that a refusal changes nothing.
+        if let Some(host_key) = &body.host_key {
+            accept_host_key(w, &row, host_key)?;
+        }
+        let row = w.collection.connector(id)?;
         if let Some(name) = &body.name {
             w.collection.set_connector_name(id, name)?;
         }
@@ -394,10 +577,41 @@ pub(crate) async fn update_connector(
     .await
 }
 
-/// Give a local folder host or an S3 host a new public address, or remove it with an
-/// empty `base_url` (ADR 0021, ADR 0036 item 11). The address is typed,
-/// not inferred, so Studio does not replace it after this. Each feed
-/// address of the folder then changes, as after a folder match.
+/// Accept a new host key for an SFTP host (ADR 0047 item 3). The server
+/// must give the same fingerprint at this time. If it gives a different
+/// fingerprint, the route gives 409 `host_key_mismatch`, and the row does
+/// not change.
+fn accept_host_key(w: &mut Workspace, row: &ConnectorRow, host_key: &str) -> Result<(), ApiError> {
+    let invalid =
+        |message: &str| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_config", message);
+    if row.kind != SftpHost::KIND {
+        return Err(invalid("only an SFTP host has a host key"));
+    }
+    let host_key = host_key.trim();
+    if !host_key.starts_with("SHA256:") {
+        return Err(invalid("the host key must be a SHA256 fingerprint"));
+    }
+    let mut config: SftpConfig =
+        serde_json::from_str(&row.config).map_err(|e| ApiError::internal(e.to_string()))?;
+    let seen = SftpHost::fingerprint_of(&config.host, config.port)?;
+    if seen != host_key {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "host_key_mismatch",
+            format!("the server gives the host key {seen}"),
+        ));
+    }
+    config.host_key = seen;
+    let text = serde_json::to_string(&config).map_err(|e| ApiError::internal(e.to_string()))?;
+    w.collection.set_connector_config(row.id, &text)?;
+    Ok(())
+}
+
+/// Give a local folder host, an S3 host or an SFTP host a new public
+/// address. An empty `base_url` removes the address (ADR 0021, ADR 0036
+/// item 11). The address is typed, not inferred, so Studio does not
+/// replace it after this. Each feed address of the folder then changes,
+/// as after a folder match.
 ///
 /// A connector of another kind has no public address, so the function
 /// does nothing for it.
@@ -411,7 +625,7 @@ fn set_connector_base_url(
     row: &ConnectorRow,
     base_url: &str,
 ) -> Result<(), ApiError> {
-    if row.kind != LocalFolder::KIND && row.kind != S3Bucket::KIND {
+    if ![LocalFolder::KIND, S3Bucket::KIND, SftpHost::KIND].contains(&row.kind.as_str()) {
         return Ok(());
     }
     let trimmed = base_url.trim();

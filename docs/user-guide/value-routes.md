@@ -26,8 +26,8 @@ Select **Add a recipient**. Studio opens a new line. Fill in these fields:
 | Name | The name of the recipient. |
 | Type | **node (keysend)** or **lnaddress**. |
 | Address | The public key of the Lightning node (66 hexadecimal characters), or a Lightning address such as `name@example.com`. |
-| Custom key | Only for a node that many people share. |
-| Custom value | The account on that node. |
+| Custom key | Only for a node that many people share. This field shows only for the type **node (keysend)**. |
+| Custom value | The account on that node. This field shows only for the type **node (keysend)**. |
 | Split (shares) | The share of this recipient. |
 
 Each line shows the name, a bar, the percent and the address.

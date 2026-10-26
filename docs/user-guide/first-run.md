@@ -48,11 +48,12 @@ See [Make a new release](new-release.md).
 
 Select **Import from MSP 2.0**.
 Then select **Choose Backup Files** and select the .json files that MSP 2.0 saved.
-Select **Import** to add the feeds.
+Select **Import backups** to add the feeds.
 Studio keeps the edit tokens from the backup files in your vault.
 If you have no vault, Studio asks you to make one. See [Passphrase, unlock and lock](vault.md).
 
 ## Open Studio later
 
 On the next start, Studio opens the Releases page.
+If your collection is empty and you have no host, Studio asks "Do you already have a feed?" again.
 If you made a vault, Studio asks for your passphrase first.

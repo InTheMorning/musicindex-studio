@@ -124,6 +124,7 @@ Select the feeds and select **Add N feeds**.
 ## Change or remove a host
 
 Each host has a card on the Hosts page. The card lists the settings of the host and the feeds that use it.
+The line **Different addresses** shows when the address of a feed does not agree with the public address of the folder. Select the feed to open it.
 
 - Select **Edit** to change the name and the public address. For an nsite site, you can also change the relays, the Blossom servers and the gateway. Then select **Save**.
 - Select **Check the connection** on an SFTP card to test the login.

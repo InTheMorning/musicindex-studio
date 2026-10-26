@@ -55,7 +55,8 @@ These actions go into the draft. Studio does them when you write.
 
 ## Files that are not in the library
 
-A file that is on a host but not in the library shows "Not in the library".
+These files are in the list **Library files**. Each one shows "Not in the library".
+The top of the list tells you the number of these files and the space that they use.
 Select **Download** to get it. The page shows the progress.
 Select **Stop** to stop a download.
 Select **Download all** to download each such file. Select **Stop all** to stop all downloads.

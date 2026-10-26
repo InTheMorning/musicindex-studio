@@ -46,7 +46,7 @@ Use the panel **From MSP 2.0 backup files** to move your hosted feeds from MSP 2
 
 1. Select **Choose Backup Files**.
 2. Select one or more .json files that MSP 2.0 saved.
-3. Select **Import**.
+3. Select **Import backups**.
 
 Studio adds the feeds and keeps the edit tokens in your vault.
 If you have no vault, Studio asks you to make one. See [Passphrase, unlock and lock](vault.md).

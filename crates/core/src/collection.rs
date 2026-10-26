@@ -14,6 +14,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::address::{self, Address, AddressSource};
+use crate::announce::{Announcement, AnnouncementState};
 use crate::connector::{KeptBlob, Stamp, Version};
 use crate::feed::{Feed, Recipient};
 
@@ -232,6 +233,20 @@ CREATE TABLE signing_plans (
     plan_time INTEGER NOT NULL
 );
 ",
+    r"
+CREATE TABLE announcements (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    podping INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    next_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    last_error TEXT
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -268,6 +283,11 @@ impl CollectionError {
             kind,
             message: message.into(),
         }
+    }
+
+    /// An error for a value that the collection refuses.
+    pub(crate) fn invalid(message: impl Into<String>) -> Self {
+        Self::with_kind(CollectionErrorKind::Invalid, message)
     }
 
     /// The kind of the error.
@@ -601,6 +621,47 @@ impl fmt::Debug for Collection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Collection").finish_non_exhaustive()
     }
+}
+
+/// The columns and the table of an announcement query.
+const ANNOUNCEMENT_COLUMNS: &str = "SELECT id, feed_id, url, podping, state, attempts, created_at,
+     next_at, finished_at, last_error FROM announcements";
+
+/// The result of one attempt to send an announcement.
+#[derive(Debug, Clone, Copy)]
+pub struct AnnouncementAttempt<'a> {
+    /// The new state.
+    pub state: AnnouncementState,
+    /// The number of attempts, with this one.
+    pub attempts: u32,
+    /// The time of the next attempt.
+    pub next_at: i64,
+    /// The time of the end, for `sent` and `failed`.
+    pub finished_at: Option<i64>,
+    /// The error text, for a failed attempt.
+    pub error: Option<&'a str>,
+}
+
+fn announcement_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Announcement> {
+    let state: String = r.get(4)?;
+    Ok(Announcement {
+        id: r.get(0)?,
+        feed_id: FeedId(r.get(1)?),
+        url: r.get(2)?,
+        podping: r.get(3)?,
+        state: AnnouncementState::from_name(&state).ok_or_else(|| {
+            rusqlite::Error::FromSqlConversionFailure(
+                4,
+                rusqlite::types::Type::Text,
+                format!("announcement state {state:?}").into(),
+            )
+        })?,
+        attempts: r.get(5)?,
+        created_at: r.get(6)?,
+        next_at: r.get(7)?,
+        finished_at: r.get(8)?,
+        last_error: r.get(9)?,
+    })
 }
 
 fn now() -> i64 {
@@ -1014,6 +1075,258 @@ impl Collection {
     pub fn remove_draft_feed_move(&self, feed: FeedId) -> Result<(), CollectionError> {
         self.db
             .execute("DELETE FROM draft_feed_moves WHERE feed_id = ?1", [feed.0])?;
+        Ok(())
+    }
+
+    /// The ID of the `waiting` announcement of a feed for an address.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn waiting_announcement(
+        &self,
+        feed: FeedId,
+        url: &str,
+    ) -> Result<Option<i64>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT id FROM announcements
+                 WHERE feed_id = ?1 AND url = ?2 AND state = 'waiting'",
+                params![feed.0, url],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Give a `waiting` announcement a new podping value and new times. Set
+    /// its attempts to 0, and remove the error of an earlier attempt.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn restart_announcement(
+        &self,
+        id: i64,
+        podping: bool,
+        created_at: i64,
+        next_at: i64,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE announcements
+             SET podping = ?2, created_at = ?3, next_at = ?4, attempts = 0, last_error = NULL
+             WHERE id = ?1",
+            params![id, podping, created_at, next_at],
+        )?;
+        Ok(())
+    }
+
+    /// Add a `waiting` announcement.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn insert_announcement(
+        &self,
+        feed: FeedId,
+        url: &str,
+        podping: bool,
+        created_at: i64,
+        next_at: i64,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO announcements (feed_id, url, podping, state, created_at, next_at)
+             VALUES (?1, ?2, ?3, 'waiting', ?4, ?5)",
+            params![feed.0, url, podping, created_at, next_at],
+        )?;
+        Ok(())
+    }
+
+    /// The oldest `waiting` announcement with a `next_at` of `now` or less.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn oldest_due_announcement(
+        &self,
+        now: i64,
+    ) -> Result<Option<Announcement>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                &format!(
+                    "{ANNOUNCEMENT_COLUMNS} WHERE state = 'waiting' AND next_at <= ?1
+                     ORDER BY created_at, id LIMIT 1"
+                ),
+                [now],
+                announcement_row,
+            )
+            .optional()?)
+    }
+
+    /// One announcement.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when the row does not exist or SQLite
+    /// fails.
+    pub fn announcement(&self, id: i64) -> Result<Announcement, CollectionError> {
+        self.db
+            .query_row(
+                &format!("{ANNOUNCEMENT_COLUMNS} WHERE id = ?1"),
+                [id],
+                announcement_row,
+            )
+            .optional()?
+            .ok_or_else(|| {
+                CollectionError::with_kind(
+                    CollectionErrorKind::NotFound,
+                    format!("announcement {id}"),
+                )
+            })
+    }
+
+    /// Set the state of an announcement.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_announcement_state(
+        &self,
+        id: i64,
+        state: AnnouncementState,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE announcements SET state = ?2 WHERE id = ?1",
+            params![id, state.as_str()],
+        )?;
+        Ok(())
+    }
+
+    /// The smallest `next_at` of the `waiting` announcements.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn earliest_waiting_announcement(&self) -> Result<Option<i64>, CollectionError> {
+        Ok(self.db.query_row(
+            "SELECT MIN(next_at) FROM announcements WHERE state = 'waiting'",
+            [],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Record the result of an attempt: the new state, the number of
+    /// attempts, the time of the next attempt, the time of the end and the
+    /// error text.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn record_announcement_attempt(
+        &self,
+        id: i64,
+        attempt: &AnnouncementAttempt<'_>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE announcements
+             SET state = ?2, attempts = ?3, next_at = ?4, finished_at = ?5, last_error = ?6
+             WHERE id = ?1",
+            params![
+                id,
+                attempt.state.as_str(),
+                attempt.attempts,
+                attempt.next_at,
+                attempt.finished_at,
+                attempt.error
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Set each `sending` announcement to `waiting`.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn release_sending_announcements(&self) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE announcements SET state = 'waiting' WHERE state = 'sending'",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Set each `waiting` announcement with a `created_at` before `oldest`
+    /// to `failed`.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn fail_old_announcements(
+        &self,
+        oldest: i64,
+        now: i64,
+        error: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE announcements
+             SET state = 'failed', finished_at = ?2, last_error = ?3
+             WHERE state = 'waiting' AND created_at < ?1",
+            params![oldest, now, error],
+        )?;
+        Ok(())
+    }
+
+    /// Delete the `sent` and `failed` announcements of each feed after its
+    /// newest `keep` announcements of these states.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn trim_announcements(&self, keep: i64) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM announcements
+             WHERE state IN ('sent', 'failed')
+               AND id NOT IN (
+                 SELECT id FROM (
+                   SELECT id, ROW_NUMBER() OVER (
+                     PARTITION BY feed_id ORDER BY created_at DESC, id DESC
+                   ) AS place
+                   FROM announcements
+                   WHERE state IN ('sent', 'failed')
+                 ) WHERE place <= ?1
+               )",
+            [keep],
+        )?;
+        Ok(())
+    }
+
+    /// The announcements of a feed, the newest first.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn announcements(&self, feed: FeedId) -> Result<Vec<Announcement>, CollectionError> {
+        let mut statement = self.db.prepare(&format!(
+            "{ANNOUNCEMENT_COLUMNS} WHERE feed_id = ?1 ORDER BY created_at DESC, id DESC"
+        ))?;
+        let rows = statement.query_map([feed.0], announcement_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Set `next_at` to `now` on each `waiting` announcement, so that a
+    /// test does not wait.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn make_announcements_due(&self, now: i64) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE announcements SET next_at = ?1 WHERE state = 'waiting'",
+            [now],
+        )?;
         Ok(())
     }
 

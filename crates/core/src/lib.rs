@@ -6,6 +6,7 @@
 //! member. It makes HTTP requests to read remote files.
 
 pub mod address;
+pub mod announce;
 pub mod collection;
 pub mod connector;
 mod digest;

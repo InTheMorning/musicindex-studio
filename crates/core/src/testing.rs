@@ -4,8 +4,11 @@
 
 pub mod blossom;
 pub mod fake_s3;
+pub mod hub;
 pub mod relay;
 pub mod sshd;
+
+pub use hub::{HubRequest, TestHub};
 
 use std::collections::HashMap;
 use std::fmt::Write as _;

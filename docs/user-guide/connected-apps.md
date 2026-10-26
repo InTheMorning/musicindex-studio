@@ -7,7 +7,7 @@ The other app does not get a secret from your vault.
 A show grant lets a connected app change one show without your approval of each change.
 Without a grant, Studio writes only changes that you reviewed.
 
-<!-- PHASE-12-GAP: say that a granted write works while the vault is locked because it uses a grant vault, and that apps connect to the server address; source: ADR 0058, task 036 -->
+<!-- PHASE-12-GAP: say that apps connect to the public address of the server; source: ADR 0058 item 16, task 036b -->
 
 ## Connect an app
 
@@ -20,6 +20,10 @@ Without a grant, Studio writes only changes that you reviewed.
 
 The app uses the token to send its requests to Studio.
 The token works for connected apps only. It does not open the Studio pages.
+
+An app from an earlier version of Studio has no key.
+Its line shows "This app has no key, so it cannot use a grant."
+Select **Connect again** to give the app a new token. Studio asks you to confirm. The token from before stops working.
 
 ## Remove an app
 
@@ -36,6 +40,9 @@ You give a grant when you write a planned show.
 4. Select **Write to the host**.
 
 If you have no connected app, the sheet shows "No app is connected. Connect an app in Hosts."
+
+A host that uses **My signer** cannot do a granted write. During a granted write, no person can use the signer.
+If the feed file is on such a host, the check box is disabled.
 
 ## What a grant allows
 
@@ -54,8 +61,10 @@ It ends when the show has the status **Ended**, leaves the feed, or you stop the
 A granted change is refused in these cases:
 
 - The feed has a draft with changes. Write or discard the draft first.
-- The vault is locked. Unlock Studio first.
 - The grant ended.
+
+A granted write works while the vault is locked.
+Each grant has a small grant vault. It holds a copy of the secrets of the host of the feed file only.
 
 ## See what a grant did
 

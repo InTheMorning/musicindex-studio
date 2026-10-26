@@ -4,8 +4,6 @@ Open an album. The outline lists the tracks.
 Studio sets the track numbers from the order of the tracks.
 It does not change the publication dates.
 
-<!-- PHASE-12-GAP: say that Studio sends each file in parts of 8 MB, tries a failed part again, and continues an upload after you select the same file; source: ADR 0059 items 1 to 7, task 035e -->
-
 ## Import music and image files
 
 Use this method to add audio files from your computer.
@@ -17,6 +15,11 @@ Studio puts the files in the release folder. It sends them to the host when you 
 4. Check the facts of each track: **Title**, **Track number** and **Duration**.
 5. For an image, use **Use for** to select **Album art**, a track, or **Not used**.
 6. Select **＋ Add N tracks**. If you only chose album art, select **＋ Add the album art**.
+
+Studio sends each file in parts of 8 MiB. The row shows the percent that Studio sent.
+If a part fails, Studio tries it again 3 times. The row then shows "A part failed. Trying again…".
+If the page closes during a send, open **Import files** again and select the same file.
+Studio continues from the first part that it does not have.
 
 Studio adds the tracks in the order of their track numbers.
 Files with no track number come after them, in the order that you selected them.

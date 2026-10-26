@@ -44,7 +44,7 @@ Select **Examine the changes** to look at the draft again.
 2. Studio writes the feed. The sheet closes.
 
 If a feed needs your Nostr signer, the sheet says "This write signs N events with your signer."
-The button then shows "Signing 1 of N…".
+The button then shows "Signing 0 of N…", and the number increases after each signature.
 Your signer asks you to approve each signature.
 If you have no signer, Studio writes nothing.
 

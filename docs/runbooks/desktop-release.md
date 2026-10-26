@@ -30,7 +30,7 @@ If a draft already exists, a new run replaces its assets after all five jobs pas
 A run refuses to change a published Release.
 
 The smoke test extracts the archive, runs the binary, and checks the local UI.
-It also checks the API token and the loopback Host rule.
+It also checks the API token, the loopback Host rule, and vault data after a restart.
 This test does not verify an installer, because this milestone has archives only.
 
 ## Data and updates

@@ -19,6 +19,7 @@ The UI is in the binary, so an archive needs no separate UI files ([ADR 0016](..
 
 The desktop data path uses `HOME` or `XDG_DATA_HOME`. Windows has no default path through this code.
 The library default and `~` expansion also use `HOME`. Some tests require Unix permissions, symbolic links, or `sshd`.
+
 The workspace has Linux CI, but it has no release workflow, checksums, signing, or artifact smoke test.
 The local Linux release binary links system `libz`, `libgcc_s`, and `glibc`.
 The Ubuntu 22.04 runner sets the Linux compatibility floor for the first archives.
@@ -53,7 +54,7 @@ An archive is an interim download. It does not meet the final one-click installa
 3. Keep `--data-dir` for a user who selected a custom folder.
 4. Build five desktop binaries on native GitHub runners.
 5. Package each binary with the license and short start instructions.
-6. Run each packaged binary on its build runner. Check its version, local UI, and API access rules.
+6. Run each packaged binary on its build runner. Check its version, local UI, API access rules, and vault after restart.
 7. Check that the Git tag matches the Cargo workspace version.
 8. Give each artifact a name with the product, version, operating system, and architecture.
 9. Put SHA-256 checksums and generated release notes in a draft GitHub Release.
@@ -65,6 +66,7 @@ The release contains desktop artifacts only. It does not contain `studio-server`
 
 ## Milestone 2: Native desktop installers
 
+Start this milestone after Phase 12 and its human tests are complete.
 Build the Tauri shell required by ADR 0002. Keep the same core, API, and UI.
 Use Tauri's [distribution tools](https://v2.tauri.app/distribute/) for the native application and installers.
 Test the installed app, its update path, and its removal on each target operating system.
@@ -102,7 +104,7 @@ The interim archives use manual replacement. Their checksums help users check a 
 
 Keep the four repository checks before each commit.
 Run the release smoke test on the packaged binary, after the archive is made.
-The smoke test must check the local UI and refuse an API request without its token.
+The smoke test must check the local UI, refuse an API request without its token, and keep a vault through restart.
 The Linux runner can also run the full workspace tests with a local `sshd`.
 Record each native runner result. A local Linux build does not verify a Windows or macOS artifact.
 

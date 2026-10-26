@@ -3,10 +3,12 @@
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import platform
 import queue
 import re
+import secrets
 import subprocess
 import tarfile
 import tempfile
@@ -68,13 +70,89 @@ def package(target, binary, output):
     print(archive)
 
 
-def response_status(opener, url, headers=None):
-    request = urllib.request.Request(url, headers=headers or {})
+def response_status(opener, url, headers=None, payload=None):
+    headers = dict(headers or {})
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers=headers)
     try:
         with opener.open(request, timeout=5) as response:
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, error.read()
+
+
+def smoke_start(binary, data, expected_vault_hash):
+    process = subprocess.Popen([str(binary), "--data-dir", str(data)],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, bufsize=1)
+    lines = queue.Queue()
+
+    def read_output():
+        for line in process.stdout:
+            lines.put(line)
+        lines.put(None)
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+    try:
+        address = None
+        for _ in range(8):
+            try:
+                line = lines.get(timeout=20)
+            except queue.Empty as error:
+                raise ValueError("desktop startup timed out") from error
+            if line is None:
+                raise ValueError(f"desktop exited with status {process.poll()}")
+            line = line.strip()
+            if line.startswith("http://127.0.0.1:"):
+                address = line
+                break
+        if address is None:
+            raise ValueError("desktop did not print its local address")
+        match = re.fullmatch(r"(http://127\.0\.0\.1:\d+)/#token=([A-Za-z0-9_-]+)", address)
+        if match is None:
+            raise ValueError("desktop printed an invalid local address")
+        origin, token = match.groups()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        status, body = response_status(opener, origin + "/")
+        if status != 200 or b"Music Index Studio" not in body:
+            raise ValueError("the packaged UI did not load")
+        status, _ = response_status(opener, origin + "/api/v1/status")
+        if status != 401:
+            raise ValueError("the API accepted a request without its token")
+        auth = {"Authorization": f"Bearer {token}"}
+        status, body = response_status(opener, origin + "/api/v1/status", auth)
+        if status != 200:
+            raise ValueError("the API refused its desktop token")
+        expected_state = "locked" if expected_vault_hash else "absent"
+        if json.loads(body)["vault"] != expected_state:
+            raise ValueError("the vault has the wrong state after startup")
+        status, _ = response_status(opener, origin + "/api/v1/status",
+                                    {**auth, "Host": "example.invalid"})
+        if status != 403:
+            raise ValueError("the API accepted a non-loopback Host")
+        if not (data / "collection.sqlite").is_file():
+            raise ValueError("the desktop did not create its collection")
+        vault = data / "vault.json"
+        if expected_vault_hash:
+            if hashlib.sha256(vault.read_bytes()).digest() != expected_vault_hash:
+                raise ValueError("the desktop changed the vault during restart")
+            return expected_vault_hash
+        status, _ = response_status(opener, origin + "/api/v1/vault", auth,
+                                    {"passphrase": secrets.token_urlsafe(24)})
+        if status != 201 or not vault.is_file():
+            raise ValueError("the desktop did not save its vault")
+        return hashlib.sha256(vault.read_bytes()).digest()
+    finally:
+        process.terminate()
+        try:
+            process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
 
 
 def smoke(target, archive):
@@ -99,62 +177,8 @@ def smoke(target, archive):
         if result.stdout.strip() != f"Music Index Studio {version()}":
             raise ValueError("the packaged binary has the wrong version")
         data = folder / "data"
-        process = subprocess.Popen([str(binary), "--data-dir", str(data)],
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   text=True, bufsize=1)
-        lines = queue.Queue()
-
-        def read_output():
-            for line in process.stdout:
-                lines.put(line)
-            lines.put(None)
-
-        reader = threading.Thread(target=read_output, daemon=True)
-        reader.start()
-        try:
-            address = None
-            for _ in range(8):
-                try:
-                    line = lines.get(timeout=20)
-                except queue.Empty as error:
-                    raise ValueError("desktop startup timed out") from error
-                if line is None:
-                    raise ValueError(f"desktop exited with status {process.poll()}")
-                line = line.strip()
-                if line.startswith("http://127.0.0.1:"):
-                    address = line
-                    break
-            if address is None:
-                raise ValueError("desktop did not print its local address")
-            match = re.fullmatch(r"(http://127\.0\.0\.1:\d+)/#token=([A-Za-z0-9_-]+)", address)
-            if match is None:
-                raise ValueError("desktop printed an invalid local address")
-            origin, token = match.groups()
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            status, body = response_status(opener, origin + "/")
-            if status != 200 or b"Music Index Studio" not in body:
-                raise ValueError("the packaged UI did not load")
-            status, _ = response_status(opener, origin + "/api/v1/status")
-            if status != 401:
-                raise ValueError("the API accepted a request without its token")
-            status, _ = response_status(opener, origin + "/api/v1/status",
-                                        {"Authorization": f"Bearer {token}"})
-            if status != 200:
-                raise ValueError("the API refused its desktop token")
-            status, _ = response_status(opener, origin + "/api/v1/status",
-                                        {"Authorization": f"Bearer {token}",
-                                         "Host": "example.invalid"})
-            if status != 403:
-                raise ValueError("the API accepted a non-loopback Host")
-            if not (data / "collection.sqlite").is_file():
-                raise ValueError("the desktop did not create its collection")
-        finally:
-            process.terminate()
-            try:
-                process.communicate(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.communicate()
+        vault_hash = smoke_start(binary, data, None)
+        smoke_start(binary, data, vault_hash)
     print(f"Smoke test passed: {expected}")
 
 

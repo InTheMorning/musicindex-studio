@@ -4,9 +4,6 @@
 //! `PROTOCOL`, section 4. The connector of the SFTP host uses this module.
 //! A function sends one request and reads its response.
 
-// The SFTP connector uses these items. Until it is available, only the tests use them.
-#![cfg_attr(not(test), allow(dead_code))]
-
 use std::fmt::Display;
 use std::io::{Read, Write};
 
@@ -90,10 +87,11 @@ pub(crate) struct DirEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Handle(Vec<u8>);
 
-/// A byte stream that reads and writes. An SSH channel is one.
-trait Stream: Read + Write {}
+/// A byte stream that reads and writes. An SSH channel is one. The stream
+/// is `Send`, so the connector can move between threads.
+trait Stream: Read + Write + Send {}
 
-impl<T: Read + Write> Stream for T {}
+impl<T: Read + Write + Send> Stream for T {}
 
 /// An open SFTP session.
 pub(crate) struct SftpWire {
@@ -144,6 +142,7 @@ impl SftpWire {
     }
 
     /// The extension names and versions that the server gave.
+    #[cfg(test)]
     pub(crate) fn extensions(&self) -> &[(String, String)] {
         &self.extensions
     }

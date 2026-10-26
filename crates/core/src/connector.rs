@@ -2,6 +2,7 @@
 
 mod local;
 mod s3;
+mod sftp;
 mod sftp_wire;
 #[cfg(any(test, feature = "testing"))]
 pub mod suite;
@@ -12,6 +13,7 @@ use std::path::{Component, Path, PathBuf};
 
 pub use local::LocalFolder;
 pub use s3::{S3Bucket, S3Config, S3Credentials, S3UrlStyle};
+pub use sftp::{SftpConfig, SftpCredentials, SftpHost, SftpLogin};
 
 use crate::collection::ConnectorRow;
 use crate::vault::OpenVault;
@@ -352,6 +354,10 @@ pub fn from_row(
             })?;
             Ok(Box::new(S3Bucket::from_config(&row.config, &secret)?))
         }
+        SftpHost::KIND => Ok(Box::new(SftpHost::from_config(
+            &row.config,
+            secret.as_deref().map(Vec::as_slice),
+        )?)),
         other => Err(ConnectorError::new(
             ConnectorErrorKind::InvalidConfig,
             format!("the connector kind {other:?} is not known"),

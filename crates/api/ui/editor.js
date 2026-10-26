@@ -6,7 +6,8 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
-import { trackKey, isTrack, isPublisher } from './shell.js';
+import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
+import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError } from './signing.js';
 
@@ -1140,8 +1141,22 @@ function publisherLine(entry, match, index) {
   return parts.join(' · ');
 }
 
-function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged }) {
+// The channel fields that the album page and the playlist page share: the
+// title, the author, the description, the image, the link and the language.
+function ChannelFields({ model, update, bad, artistLabel }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
+  return html`        <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
+        <${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
+        <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
+        <${TextField} id="ch-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')}>
+          <${ImageThumb} url=${model.image} className="field-cover" />
+        <//>
+        <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
+        <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
+`;
+}
+
+function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged }) {
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   const linkAction = useAction();
   // The feeds whose draft the last link change altered.
@@ -1181,14 +1196,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
   // .page between sections (review of task 014c, defect 2).
   return html`<section class="page-section"><h2>Album</h2>
       <div class="group">
-        <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
-        <${TextField} id="ch-author" label="Artist" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
-        <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${TextField} id="ch-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')}>
-          <${ImageThumb} url=${model.image} className="field-cover" />
-        <//>
-        <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
-        <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
+        <${ChannelFields} model=${model} update=${update} bad=${bad} artistLabel="Artist" />
       </div>
     </section>
 
@@ -1260,6 +1268,162 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
       </div>
       <p class="note">Studio sets the track numbers (podcast:episode) from this sequence. It does not change the publication dates.</p>
     </section>`;
+}
+
+// The playlist page (ADR 0053 item 4): the channel fields and the feed facts.
+function PlaylistPage({ feed, model, update, bad, onRemoved }) {
+  return html`<section class="page-section"><h2>Playlist</h2>
+      <div class="group">
+        <${ChannelFields} model=${model} update=${update} bad=${bad} artistLabel="Author" />
+      </div>
+    </section>
+    <section class="page-section"><h2>Playlist details</h2>
+      <div class="group"><${FeedFacts} feed=${feed} onRemoved=${onRemoved} /></div>
+    </section>`;
+}
+
+// The Tracks page of a playlist: one row for each remote item, with the
+// buttons to move it and to remove it, then "Add a track" (ADR 0053 item 4).
+function PlaylistTracksPage({ feed, model, update }) {
+  const [picking, setPicking] = useState(false);
+  const items = model.remote_items || [];
+  // Each change applies to the current model, as `update` gives it.
+  const change = (step) => update((m) => set(m, 'remote_items', step(m.remote_items || [])));
+  return html`<section class="page-section"><h2>Tracks</h2>
+      <p class="hint" role="status">${tracksSummary(items)}</p>
+      <div class="group">
+        ${items.map((item, i) => {
+          const row = trackRow(item);
+          return html`<div class="release-row" key=${item._cid}>
+            <span class="title">${row.title}</span>
+            <span class="sub mono">${row.sub}</span>
+            <div class="actions">
+              <button class="button" type="button" disabled=${i === 0}
+                aria-label=${`Move ${row.title} up`} onClick=${() => change((list) => moveTrack(list, i, -1))}>Move up</button>
+              <button class="button" type="button" disabled=${i === items.length - 1}
+                aria-label=${`Move ${row.title} down`} onClick=${() => change((list) => moveTrack(list, i, 1))}>Move down</button>
+              <button class="button destructive" type="button"
+                aria-label=${`Remove ${row.title}`} onClick=${() => change((list) => removeTrack(list, i))}>Remove</button>
+            </div>
+          </div>`;
+        })}
+        <div class="actions"><button class="button action" type="button" onClick=${() => setPicking(true)}>Add a track</button></div>
+      </div>
+      <${PlaylistPickerSheet} feedId=${feed.id} open=${picking} remoteItems=${items}
+        onClose=${() => setPicking(false)} onAdd=${(pick) => change((list) => addTrack(list, withCids([remoteItemFromPick(pick)])[0]))} />
+    </section>`;
+}
+
+// One track row of the picker: the title and "Add", or "In the playlist".
+function PickerTrack({ pick, remoteItems, onAdd }) {
+  const taken = hasTrack(remoteItems, pick);
+  return html`<div class="link-row playlist-pick">
+    <span class="text"><span class="title">${pick.title || 'Untitled track'}</span></span>
+    ${taken
+      ? html`<span class="summary">In the playlist</span>`
+      : html`<button class="button action" type="button" aria-label=${`Add ${pick.title || 'this track'}`}
+          onClick=${() => onAdd(pick)}>Add</button>`}
+  </div>`;
+}
+
+// The picker sheet of a playlist (ADR 0053 item 4): a search of musicindex
+// and the releases of the collection. "Add" keeps the sheet open.
+function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
+  const ref = useSheet(open);
+  const [tab, setTab] = useState('index');
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState(null);
+  const [opened, setOpened] = useState(null);
+  const [mine, setMine] = useState(null);
+  const search = useAction();
+  const load = useAction();
+  const own = useAction();
+  useEffect(() => {
+    if (!open) return;
+    setTab('index');
+    setQuery('');
+    setHits(null);
+    setOpened(null);
+    setMine(null);
+  }, [open]);
+  useEffect(() => {
+    if (open && tab === 'mine' && mine === null) own.run(async () => setMine(await api('/playlist/tracks')));
+  }, [open, tab]);
+  const runSearch = (event) => {
+    event.preventDefault();
+    if (!query.trim()) return;
+    search.run(async () => {
+      setOpened(null);
+      setHits(await api(`/search?q=${encodeURIComponent(query.trim())}`));
+    });
+  };
+  const openFeed = (guid) => {
+    if (opened && opened.guid === guid) { setOpened(null); return; }
+    load.run(async () => setOpened({ guid, ...(await api(`/musicindex/feeds/${encodeURIComponent(guid)}/tracks`)) }));
+  };
+  // The tracks of the collection, grouped by the title of their feed.
+  const groups = [];
+  for (const t of mine || []) {
+    const title = t.feed_title || 'Untitled feed';
+    let group = groups.find((g) => g.key === t.feed_guid);
+    if (!group) { group = { key: t.feed_guid, title, tracks: [] }; groups.push(group); }
+    group.tracks.push({ feed_guid: t.feed_guid, item_guid: t.item_guid, feed_url: t.feed_url, title: t.title });
+  }
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="playlist-picker-title" onClose=${onClose}>
+    <header>
+      <h2 id="playlist-picker-title">Add tracks</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <div class="actions playlist-tabs" role="group" aria-label="Where the tracks come from">
+        <button class="button" type="button" aria-pressed=${tab === 'index'} onClick=${() => setTab('index')}>Search musicindex</button>
+        <button class="button" type="button" aria-pressed=${tab === 'mine'} onClick=${() => setTab('mine')}>My releases</button>
+      </div>
+      ${tab === 'index' && html`<section class="page-section">
+        <form class="form" onSubmit=${runSearch} role="search">
+          <div class="field">
+            <label for="playlist-search">Search musicindex</label>
+            <div class="inline">
+              <input id="playlist-search" type="search" value=${query} placeholder="Artist or feed name"
+                onInput=${(e) => setQuery(e.target.value)} />
+              <button class="button" type="submit" disabled=${search.busy || !query.trim()}>
+                ${search.busy ? 'Searching…' : 'Search'}</button>
+            </div>
+          </div>
+        </form>
+        <${ErrorNotice} error=${search.error} />
+        <${ErrorNotice} error=${load.error} />
+        ${hits && hits.length === 0 && html`<p class="hint">musicindex found no feed with that name.</p>`}
+        ${hits && hits.length > 0 && html`<div class="group">
+          ${hits.map((h) => html`<div key=${h.feed_guid}>
+            <button class="link-row playlist-feed" type="button" disabled=${load.busy} aria-expanded=${opened && opened.guid === h.feed_guid ? 'true' : 'false'}
+              onClick=${() => openFeed(h.feed_guid)}>
+              <span class="dot feed"></span><span class="title">${h.title || h.feed_guid}</span>
+              <span class=${opened && opened.guid === h.feed_guid ? 'go open' : 'go'} aria-hidden="true">›</span>
+            </button>
+            ${opened && opened.guid === h.feed_guid && html`<div>
+              ${opened.tracks.length === 0 && html`<p class="hint">This feed has no tracks.</p>`}
+              ${opened.tracks.map((t) => html`<${PickerTrack} key=${t.track_guid} pick=${pickFromIndex(opened, t)}
+                remoteItems=${remoteItems} onAdd=${onAdd} />`)}
+            </div>`}
+          </div>`)}
+        </div>`}
+      </section>`}
+      ${tab === 'mine' && html`<section class="page-section">
+        <${ErrorNotice} error=${own.error} />
+        ${mine === null && !own.error && html`<p class="hint" role="status">Loading your releases…</p>`}
+        ${mine && mine.length === 0 && html`<p class="hint">Your collection has no release with tracks.</p>`}
+        ${groups.map((g) => html`<div class="group" key=${g.key}>
+          <h3 class="pick-head">${g.title}</h3>
+          ${g.tracks.map((pick) => html`<${PickerTrack} key=${pick.item_guid} pick=${pick} remoteItems=${remoteItems} onAdd=${onAdd} />`)}
+        </div>`)}
+      </section>`}
+    </div>
+    <footer class="pick-footer">
+      <div class="pick-footer-row"><span class="spacer"></span>
+        <button class="button primary" type="button" onClick=${() => ref.current.close()}>Done</button></div>
+    </footer>
+  </dialog>`;
 }
 
 // The credits and links page: people, support links and the license, each
@@ -2071,6 +2235,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   // A publisher feed has the publisher page and the Files page only (ADR
   // 0041 item 3).
   const publisher = isPublisher(feed);
+  const playlist = isPlaylist(feed);
   let body;
   // When the track key of the view is not in the model, for example after a
   // write that gave each item a new client ID, the editor shows the album
@@ -2078,6 +2243,10 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   if (publisher && page !== 'files') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
       draft=${draft} go=${go} onListChanged=${onListChanged} />`;
+  } else if (playlist && page === 'tracks') {
+    body = html`<${PlaylistTracksPage} feed=${feed} model=${model} update=${update} />`;
+  } else if (playlist && page !== 'recipients' && page !== 'files') {
+    body = html`<${PlaylistPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} onRemoved=${onRemoved} />`;
   } else if (page === 'track' && trackIndex !== -1) {
     body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go}
       draft=${draft} onOpsChanged=${onOpsChanged} />`;
@@ -2112,8 +2281,8 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   };
   return html`<div class="page">
     ${body}
-    ${!publisher && html`<${AddTrackSheet} open=${adding} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
-    ${!publisher && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(model.image)}
+    ${!publisher && !playlist && html`<${AddTrackSheet} open=${adding} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
+    ${!publisher && !playlist && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(model.image)}
       onClose=${() => onImporting(false)} onAdd=${onImport} />`}
   </div>`;
 }

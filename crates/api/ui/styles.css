@@ -1001,6 +1001,14 @@ textarea:focus { background: var(--fill); }
 .pick-head .dot { display: inline-block; margin-right: 8px; vertical-align: middle; }
 .pick-head.sub { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .pick-head .muted { color: var(--muted); font-weight: 400; }
+/* The track picker of a playlist (task 032c). The title takes the free
+   width, and the button or the status keeps its own width. */
+.playlist-pick { cursor: default; }
+.playlist-pick .text { flex: 1; min-width: 0; }
+.playlist-pick .text .title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playlist-pick > .button, .playlist-pick > .summary { flex: none; }
+.playlist-feed .go.open { display: inline-block; transform: rotate(90deg); }
+.playlist-tabs .button[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent); }
 /* At a narrow width, the status goes below the name. */
 @media (max-width: 760px) {
   .pick-row { grid-template-columns: var(--target) minmax(0, 1fr) auto; }

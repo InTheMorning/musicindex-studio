@@ -1042,6 +1042,45 @@ function NewPublisherForm({ connectors, onAdded }) {
   </form>`;
 }
 
+// Make a playlist in a connected folder, as a draft with no file on the host
+// yet (ADR 0053 item 2). The author goes to `author`, and `medium` is musicL.
+function NewPlaylistForm({ connectors, onAdded }) {
+  const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
+  const [path, setPath] = useState('');
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const { busy, error, run } = useAction();
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const feed = await api('/feeds/new', {
+        method: 'POST',
+        body: { connector_id: connectorId, path, title, author, medium: 'musicL' },
+      });
+      onAdded(feed);
+    });
+  };
+  const formError = splitError(error, ['no_public_address', 'file_exists']);
+  const ready = connectorId !== null && path.trim() && title.trim() && author.trim();
+  return html`<form class="form" onSubmit=${submit}>
+    ${connectors.length > 1 && html`<div class="field"><label for="playlist-host">Host</label>
+      <select id="playlist-host" class="button" value=${connectorId}
+        onChange=${(e) => setConnectorId(Number(e.target.value))}>
+        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+      </select></div>`}
+    <${Field} id="playlist-path" label="Feed file" required placeholder="my-playlist.xml"
+      hint="The path of the new feed file in the folder of the host."
+      error=${formError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
+    <${Field} id="playlist-title" label="Playlist name" required
+      value=${title} onInput=${(e) => setTitle(e.target.value)} />
+    <${Field} id="playlist-author" label="Author" required
+      value=${author} onInput=${(e) => setAuthor(e.target.value)} />
+    <${ErrorNotice} error=${formError.other} />
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
+      ${busy ? 'Making the playlist…' : 'Make the playlist'}</button></div>
+  </form>`;
+}
+
 // Choose a feed file from the host, or type its path (ADR 0019).
 function AddFeedForm({ connectors, onAdded }) {
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
@@ -1502,7 +1541,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
 }
 
 // The names of the pages that are not the album page or a track.
-const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Value routes', files: 'Files' };
+const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
 
 // The toolbar title: the feed title on the album page, or the feed title in
 // the muted color, then the name of the open page (review of task 014c,
@@ -1958,6 +1997,8 @@ function AddFeeds({ connectors, onAdded, go }) {
     </div>
     ${connectors.length > 0 && html`<div class="panel"><h2>Make a publisher feed</h2>
       <${NewPublisherForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
+    ${connectors.length > 0 && html`<div class="panel"><h2>Make a playlist</h2>
+      <${NewPlaylistForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
     <div class="panel"><h2>Find feeds by address or name</h2>
       ${found
         ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />

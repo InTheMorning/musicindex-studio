@@ -4,6 +4,8 @@ import { AlbumEditor, DraftToolbar, useSheet } from './editor.js';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods, accountName, deleteConfirmation,
   recoveryAccount, addMethodChoices, recoveryErrorText,
+  toBase64Url, creationOptions, requestOptions, registrationPayload, assertionPayload,
+  prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
 } from './account.js';
 import { isLiveItem } from './live.js';
 import { useDraft } from './draft.js';
@@ -2661,6 +2663,60 @@ async function signerAuth({ invite, recoveryKey }) {
   return result;
 }
 
+// True when the browser can make and use passkeys (ADR 0056 item 20).
+const hasPasskeys = typeof window.PublicKeyCredential === 'function';
+
+// Run a call of `navigator.credentials`. The user can cancel it, and the
+// error becomes an `ApiError` with a code that the UI has text for.
+async function credentialCall(work) {
+  try {
+    return await work();
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    const code = passkeyBrowserCode(e);
+    throw new ApiError(0, code, authErrorText(code));
+  }
+}
+
+function missingPrf() {
+  return new ApiError(422, 'passkey_no_prf', authErrorText('passkey_no_prf'));
+}
+
+// Add a passkey to the open vault (ADR 0056 items 21 to 23). The browser
+// makes the credential, and then it does one assertion with the PRF
+// extension. The server checks both before it trusts the PRF output.
+async function registerPasskey(name) {
+  const options = await withUnlock(() => authCall('/passkeys/options', { body: {} }));
+  const { created, asserted } = await credentialCall(async () => {
+    const made = await navigator.credentials.create({ publicKey: creationOptions(options) });
+    const again = await navigator.credentials.get({
+      publicKey: requestOptions({
+        ...options,
+        challenge: options.assertion_challenge,
+        allow: [toBase64Url(made.rawId)],
+      }),
+    });
+    return { created: made, asserted: again };
+  });
+  const registration = registrationPayload(created);
+  if (!registration) throw new ApiError(0, 'passkey_unsupported', authErrorText('passkey_unsupported'));
+  const prf = prfOutputOf(asserted);
+  if (!prf) throw missingPrf();
+  return authCall('/passkeys', {
+    body: { name, registration, assertion: assertionPayload(asserted), prf_output: prf },
+  });
+}
+
+// Sign in with a passkey, or open the vault with it when a session exists
+// (ADR 0056 items 22 and 24). One assertion gives the proof and the PRF output.
+async function passkeyAuth() {
+  const options = await authCall('/passkey/options', { body: {} });
+  const credential = await credentialCall(() => navigator.credentials.get({ publicKey: requestOptions(options) }));
+  const prf = prfOutputOf(credential);
+  if (!prf) throw missingPrf();
+  return authCall('/passkey', { body: { assertion: assertionPayload(credential), prf_output: prf } });
+}
+
 function SignInPage({ onDone, onSignUp, onRecovery }) {
   const [email, setEmail] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -2677,6 +2733,11 @@ function SignInPage({ onDone, onSignUp, onRecovery }) {
     const result = await signerAuth({ invite: null, recoveryKey: false });
     onDone(result.recovery_key || null);
   });
+  const byPasskey = () => run(async () => {
+    const result = await passkeyAuth();
+    csrfToken = result.csrf;
+    onDone(null);
+  });
   return html`<main class="center"><form class="card" onSubmit=${submit}>
     <${Brand} />
     <div><h1>Sign in</h1></div>
@@ -2688,6 +2749,7 @@ function SignInPage({ onDone, onSignUp, onRecovery }) {
     <div class="actions">
       <button class="button primary" type="submit" disabled=${busy || !email.trim() || !passphrase}>${busy ? 'Signing in…' : 'Sign in'}</button>
       ${window.nostr && html`<button class="button action" type="button" disabled=${busy} onClick=${signer}>Sign in with a signer extension</button>`}
+      ${hasPasskeys && html`<button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Sign in with a passkey</button>`}
     </div>
     <button class="button link" type="button" onClick=${onSignUp}>Make an account</button>
     <button class="button link" type="button" onClick=${onRecovery}>Sign in with the recovery key</button>
@@ -2734,7 +2796,7 @@ function AddMethodPage() {
   const [passphrase, setPassphrase] = useState('');
   const { busy, error, run } = useAction();
   const strength = useStrength(passphrase, true);
-  const choices = addMethodChoices(session, !!window.nostr);
+  const choices = addMethodChoices(session, !!window.nostr, hasPasskeys);
   const vaultError = splitError(error, ['passphrase_too_short', 'passphrase_too_weak']);
   const passError = passphraseError(passphrase, strength) || vaultError.field;
   const ready = strength && strength.acceptable;
@@ -2765,6 +2827,10 @@ function AddMethodPage() {
     }
     await reload();
   });
+  const byPasskey = () => run(async () => {
+    await registerPasskey('Passkey 1');
+    await reload();
+  });
   const signOut = () => run(async () => {
     await authCall('/signout');
     await reload();
@@ -2785,6 +2851,8 @@ function AddMethodPage() {
     </form>`}
     ${choices.includes('nip07') && html`<div class="actions">
       <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Use the signer extension</button></div>`}
+    ${choices.includes('passkey') && html`<div class="actions">
+      <button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Use a passkey</button></div>`}
     ${choices.length === 0 && html`<p class="hint">This account signs in with a Nostr signer. Studio found no signer extension in this browser.</p>`}
     <${AuthNotice} error=${signerError || vaultError.other} />
     <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign out</button></div>
@@ -2871,7 +2939,7 @@ function UnlockSheet({ session, onDone }) {
     settled.current = true;
     onDone(ok);
   };
-  const methods = unlockMethods(session, !!window.nostr);
+  const methods = unlockMethods(session, !!window.nostr, hasPasskeys);
   const byPassphrase = (event) => {
     event.preventDefault();
     run(async () => {
@@ -2890,6 +2958,10 @@ function UnlockSheet({ session, onDone }) {
     await api('/vault/unlock-key', { method: 'POST', body: { key } });
     finish(true);
   });
+  const byPasskey = () => run(async () => {
+    await passkeyAuth();
+    finish(true);
+  });
   const passError = splitError(error, ['wrong_key']);
   const signerError = error && error.code === 'wrong_key' && methods.includes('nip07') && !methods.includes('passphrase') ? error : null;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="unlock-title" onClose=${() => finish(false)}>
@@ -2898,7 +2970,7 @@ function UnlockSheet({ session, onDone }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <p>This step needs the vault. Your passphrase or your signer opens it.</p>
+      <p>This step needs the vault. Your passphrase, your signer or your passkey opens it.</p>
       ${methods.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase}>
         <${Field} id="unlock-sheet-passphrase" label="Passphrase" type="password" autocomplete="current-password" required autofocus
           error=${passError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
@@ -2906,6 +2978,8 @@ function UnlockSheet({ session, onDone }) {
       </form>`}
       ${methods.includes('nip07') && html`<div class="actions">
         <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Unlock with a signer extension</button></div>`}
+      ${methods.includes('passkey') && html`<div class="actions">
+        <button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Use a passkey</button></div>`}
       ${methods.length === 0 && html`<p class="hint">This account opens with a Nostr signer. Studio found no signer extension in this browser.</p>`}
       <${AuthNotice} error=${signerError || passError.other} />
     </div>
@@ -2915,6 +2989,54 @@ function UnlockSheet({ session, onDone }) {
 
 // The session of the signed-in user, and the function that reloads it.
 const SessionContext = createContext(null);
+
+// The passkeys of the account, with "Add a passkey" and "Remove" (ADR 0056
+// items 3 and 20 to 23). The browser must support passkeys.
+function PasskeyList() {
+  const { reload } = useContext(SessionContext);
+  const [list, setList] = useState(null);
+  const [name, setName] = useState('');
+  const { busy, error, run } = useAction();
+  const load = useCallback(async () => {
+    try {
+      const next = await authCall('/passkeys', { method: 'GET' });
+      setList(next);
+      setName((current) => current || defaultPasskeyName(next));
+    } catch (_) {
+      setList([]);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const add = (event) => {
+    event.preventDefault();
+    run(async () => {
+      await registerPasskey(name.trim() || defaultPasskeyName(list));
+      setName('');
+      await load();
+      await reload();
+    });
+  };
+  const remove = (item) => run(async () => {
+    await withUnlock(() => authCall(`/passkeys/${item.credential_id}`, { method: 'DELETE' }));
+    setName('');
+    await load();
+    await reload();
+  });
+  return html`<form class="form" onSubmit=${add}>
+    <h3>Passkeys</h3>
+    ${list && list.length > 0 && html`<ul class="passkey-list">
+      ${list.map((item) => html`<li key=${item.credential_id}>
+        <span>${item.name}<span class="hint"> · added ${new Date(item.created_at * 1000).toLocaleDateString()}</span></span>
+        <button class="button destructive" type="button" disabled=${busy} onClick=${() => remove(item)}>Remove</button>
+      </li>`)}
+    </ul>`}
+    ${list && list.length === 0 && html`<p class="hint">This account has no passkey.</p>`}
+    <${Field} id="passkey-name" label="Name of the new passkey" autocomplete="off" value=${name}
+      onInput=${(e) => setName(e.target.value)} />
+    <div class="actions"><button class="button action" type="submit" disabled=${busy}>${busy ? 'Waiting for the passkey…' : 'Add a passkey'}</button></div>
+    <${AuthNotice} error=${error} />
+  </form>`;
+}
 
 // The Account panel of the Hosts page, on a server only (ADR 0055 item 9).
 function AccountPanel() {
@@ -2939,6 +3061,7 @@ function AccountPanel() {
   return html`<article class="panel">
     <h2>Account</h2>
     <dl class="facts"><dt>${byEmail ? 'Email address' : 'Nostr key'}</dt><dd class="mono">${accountName(session)}</dd></dl>
+    ${hasPasskeys && html`<${PasskeyList} />`}
     ${deleting
       ? html`<form class="form" onSubmit=${remove}>
           <p class="hint">Studio removes your feeds, your vault and your library files from the server. This cannot be undone.</p>

@@ -8,6 +8,15 @@
 // Each step is an object: {"wait": ms, "js": "expression", "shot": "name"}.
 // A step {"size": [width, height], "touch": true} sets the window size and
 // the touch emulation (a coarse pointer). Both keys are optional.
+// A step {"webauthn": true} adds a virtual authenticator to the page. It is a
+// CTAP2 platform authenticator with a resident key, user verification and the
+// PRF extension, and it confirms each request by itself. It lasts until the
+// run ends, so one run must hold a whole passkey flow. A step
+// {"webauthn": "replace"} removes the earlier virtual authenticator and adds
+// a new one with no credential. A page cannot add a second passkey to one
+// authenticator, so a flow with two passkeys needs this step. The page needs
+// a secure context, such as `http://localhost:PORT`. An IP address is not a
+// relying party ID.
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
@@ -57,6 +66,7 @@ const helpers = `
   window.$text = () => document.body.innerText;
   window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
+let authenticatorId;
 const steps = JSON.parse(process.argv[4] || '[]');
 await send('Page.navigate', { url });
 await sleep(1500);
@@ -65,6 +75,20 @@ for (const step of steps) {
   if (step.wait) await sleep(step.wait);
   if (step.size) await send('Emulation.setDeviceMetricsOverride', { width: step.size[0], height: step.size[1], deviceScaleFactor: 1, mobile: step.touch === true });
   if (step.touch !== undefined) await send('Emulation.setTouchEmulationEnabled', { enabled: step.touch });
+  if (step.webauthn) {
+    await send('WebAuthn.enable');
+    if (step.webauthn === 'replace' && authenticatorId) {
+      await send('WebAuthn.removeVirtualAuthenticator', { authenticatorId });
+    }
+    const added = await send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+        isUserVerified: true, hasPrf: true, automaticPresenceSimulation: true,
+      },
+    });
+    authenticatorId = added.result?.authenticatorId;
+    console.log('webauthn =>', added.error ? 'ERROR ' + JSON.stringify(added.error) : 'virtual authenticator ' + authenticatorId);
+  }
   if (step.js) { await evaluate(helpers); console.log(step.js.slice(0, 60), '=>', JSON.stringify(await evaluate(step.js))?.slice(0, 300)); }
   if (step.shot) await shot(step.shot);
 }

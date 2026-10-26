@@ -20,6 +20,8 @@ ssh2 = { version = "0.9", features = ["vendored-openssl"] }
 nostr = "0.45"
 # Signs Nostr events (ADR 0051). The version and features follow nostr.
 secp256k1 = { version = "0.30", default-features = false, features = ["std"] }
+# ES256 check of WebAuthn responses (ADR 0056 item 26).
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 # WebSocket client for relays, and the test relay.
 tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 

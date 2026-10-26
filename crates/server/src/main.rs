@@ -27,6 +27,7 @@ mod idle;
 mod limits;
 mod session;
 mod users;
+mod webauthn;
 
 #[cfg(test)]
 mod tests;

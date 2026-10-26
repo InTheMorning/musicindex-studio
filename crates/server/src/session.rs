@@ -211,10 +211,13 @@ const RESTRICTED_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/v1/vault/nostr-wrapper"),
     ("GET", "/auth/v1/session"),
     ("POST", "/auth/v1/signout"),
+    ("POST", "/auth/v1/passkeys/options"),
+    ("POST", "/auth/v1/passkeys"),
 ];
 
 /// The routes whose success adds a sign-in method. A response 2xx of one of
-/// them removes the limit of the session.
+/// them removes the limit of the session. `POST /auth/v1/passkeys` is not
+/// here: its handler removes the limit itself, after the checks.
 const METHOD_ROUTES: &[&str] = &["/api/v1/vault/passphrase", "/api/v1/vault/nostr-wrapper"];
 
 /// Give 403 `method_required` when the session is restricted and the route

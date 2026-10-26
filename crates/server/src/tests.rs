@@ -1423,3 +1423,664 @@ async fn a_restricted_session_cannot_delete_the_account() {
     assert_eq!(delete.code(), "method_required");
     assert_eq!(app.state.accounts.folders().unwrap().len(), 1);
 }
+
+// ---- Passkeys (task 035b) ----
+
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
+use p256::ecdsa::signature::Signer as _;
+use p256::ecdsa::{Signature, SigningKey};
+use p256::pkcs8::EncodePublicKey as _;
+use sha2::{Digest, Sha256};
+
+/// A virtual authenticator: one key, one credential and one PRF secret.
+struct Device {
+    key: SigningKey,
+    id: Vec<u8>,
+    secret: [u8; 32],
+}
+
+impl Device {
+    fn new(seed: u8) -> Self {
+        Self {
+            key: SigningKey::from_slice(&[seed; 32]).unwrap(),
+            id: vec![seed; 16],
+            secret: [seed ^ 0x55; 32],
+        }
+    }
+
+    fn credential_id(&self) -> String {
+        B64.encode(&self.id)
+    }
+
+    /// The PRF output for a salt (base64url).
+    fn prf(&self, salt: &str) -> String {
+        let mut hash = Sha256::new();
+        hash.update(self.secret);
+        hash.update(B64.decode(salt).unwrap());
+        B64.encode(hash.finalize())
+    }
+
+    fn client_data(kind: &str, challenge: &str, origin: &str) -> Vec<u8> {
+        json!({ "type": kind, "challenge": challenge, "origin": origin, "crossOrigin": false })
+            .to_string()
+            .into_bytes()
+    }
+
+    fn authenticator_data(&self, rp_id: &str, flags: u8, counter: u32, attested: bool) -> Vec<u8> {
+        let mut data = Sha256::digest(rp_id.as_bytes()).to_vec();
+        data.push(flags);
+        data.extend_from_slice(&counter.to_be_bytes());
+        if attested {
+            data.extend_from_slice(&[0; 16]);
+            data.extend_from_slice(&u16::try_from(self.id.len()).unwrap().to_be_bytes());
+            data.extend_from_slice(&self.id);
+            data.extend_from_slice(&[0xa5, 0x01, 0x02]);
+        }
+        data
+    }
+
+    fn registration(&self, challenge: &str) -> Value {
+        let spki = self.key.verifying_key().to_public_key_der().unwrap();
+        json!({
+            "client_data": B64.encode(Self::client_data("webauthn.create", challenge, ORIGIN)),
+            "authenticator_data": B64.encode(self.authenticator_data("127.0.0.1", 0x45, 0, true)),
+            "public_key": B64.encode(spki.as_bytes()),
+            "algorithm": -7,
+        })
+    }
+
+    fn assertion_with(&self, challenge: &str, origin: &str, counter: u32, flags: u8) -> Value {
+        let client = Self::client_data("webauthn.get", challenge, origin);
+        let auth = self.authenticator_data("127.0.0.1", flags, counter, false);
+        let mut signed = auth.clone();
+        signed.extend_from_slice(&Sha256::digest(&client));
+        let signature: Signature = self.key.sign(&signed);
+        json!({
+            "credential_id": self.credential_id(),
+            "client_data": B64.encode(client),
+            "authenticator_data": B64.encode(auth),
+            "signature": B64.encode(signature.to_der().as_bytes()),
+        })
+    }
+
+    fn assertion(&self, challenge: &str, counter: u32) -> Value {
+        self.assertion_with(challenge, ORIGIN, counter, 0x05)
+    }
+}
+
+/// Add a passkey to a signed-in account. Gives the reply of the add call.
+async fn add_passkey(app: &App, who: &(String, String), device: &Device, name: &str) -> Reply {
+    let options = api(
+        app,
+        who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(options.status, StatusCode::OK, "{:?}", options.json);
+    let salt = options.json["prf_salt"].as_str().unwrap();
+    let body = json!({
+        "name": name,
+        "registration": device.registration(options.json["challenge"].as_str().unwrap()),
+        "assertion": device.assertion(options.json["assertion_challenge"].as_str().unwrap(), 0),
+        "prf_output": device.prf(salt),
+    });
+    api(app, who, "POST", "/auth/v1/passkeys", Some(body)).await
+}
+
+/// The options of a sign-in: the challenge and the salt.
+async fn passkey_options(app: &App, who: Option<&(String, String)>) -> Reply {
+    let mut c = call("POST", "/auth/v1/passkey/options", Some(json!({})));
+    if let Some(who) = who {
+        c.token = Some(&who.0);
+        c.csrf = Some(&who.1);
+    }
+    let reply = send(app, c).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    reply
+}
+
+/// Sign in with a passkey. The caller gives the counter of the assertion.
+async fn passkey_sign_in(app: &App, device: &Device, counter: u32) -> Reply {
+    let options = passkey_options(app, None).await;
+    let challenge = options.json["challenge"].as_str().unwrap();
+    let body = json!({
+        "assertion": device.assertion(challenge, counter),
+        "prf_output": device.prf(options.json["prf_salt"].as_str().unwrap()),
+    });
+    send(app, call("POST", "/auth/v1/passkey", Some(body))).await
+}
+
+#[tokio::test]
+async fn a_passkey_is_added_signs_in_and_opens_the_vault() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    let added = add_passkey(&app, &who, &device, "Phone").await;
+    assert_eq!(added.status, StatusCode::CREATED, "{:?}", added.json);
+    assert_eq!(added.json["credential_id"], device.credential_id().as_str());
+    let list = api(&app, &who, "GET", "/auth/v1/passkeys", None).await;
+    assert_eq!(list.json[0]["name"], "Phone");
+    assert_eq!(list.json.as_array().unwrap().len(), 1);
+
+    send(&app, sign_out_call(&who)).await;
+    let reply = passkey_sign_in(&app, &device, 0).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    assert_eq!(reply.json["vault"], "open");
+    let again = who_of(&reply);
+    let status = api(&app, &again, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.json["vault"], "open");
+
+    // The vault locks, and the passkey unlocks it in the same session.
+    let lock = api(&app, &again, "POST", "/api/v1/vault/lock", Some(json!({}))).await;
+    assert_eq!(lock.json["vault"], "locked");
+    let options = passkey_options(&app, Some(&again)).await;
+    assert_eq!(options.json["allow"][0], device.credential_id().as_str());
+    let body = json!({
+        "assertion": device.assertion(options.json["challenge"].as_str().unwrap(), 0),
+        "prf_output": device.prf(options.json["prf_salt"].as_str().unwrap()),
+    });
+    let mut c = call("POST", "/auth/v1/passkey", Some(body));
+    c.token = Some(&again.0);
+    let unlocked = send(&app, c).await;
+    assert_eq!(unlocked.status, StatusCode::OK, "{:?}", unlocked.json);
+    assert_eq!(unlocked.json["vault"], "open");
+    assert!(unlocked.headers.get(header::SET_COOKIE).is_none());
+    let status = api(&app, &again, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.json["vault"], "open");
+}
+
+#[tokio::test]
+async fn a_passkey_wrapper_is_in_the_vault_and_the_server_keeps_no_prf_output() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(2);
+    let added = add_passkey(&app, &who, &device, "Phone").await;
+    assert_eq!(added.status, StatusCode::CREATED);
+    let probe = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    let prf = device.prf(probe.json["prf_salt"].as_str().unwrap());
+    assert!(!added.text.contains(&prf));
+    let (_, folder) = app
+        .state
+        .accounts
+        .account_by_email("a@example.org")
+        .unwrap()
+        .unwrap();
+    let vault =
+        std::fs::read_to_string(app.state.users.folder_path(&folder).join("vault.json")).unwrap();
+    assert!(vault.contains(&device.credential_id()));
+    assert!(!vault.contains(&prf));
+    let database = std::fs::read(app.data.path().join("server.sqlite")).unwrap();
+    assert!(!database.windows(prf.len()).any(|w| w == prf.as_bytes()));
+}
+
+#[tokio::test]
+async fn a_registration_with_no_prf_output_gets_422_passkey_no_prf() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    let options = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    let body = json!({
+        "name": "Phone",
+        "registration": device.registration(options.json["challenge"].as_str().unwrap()),
+        "assertion": device.assertion(options.json["assertion_challenge"].as_str().unwrap(), 0),
+    });
+    let reply = api(&app, &who, "POST", "/auth/v1/passkeys", Some(body.clone())).await;
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(reply.code(), "passkey_no_prf");
+    // A PRF output of the wrong length is the same error.
+    let mut short = body;
+    short["prf_output"] = json!(B64.encode([1_u8; 16]));
+    let reply = api(&app, &who, "POST", "/auth/v1/passkeys", Some(short)).await;
+    assert_eq!(reply.code(), "passkey_no_prf");
+    let list = api(&app, &who, "GET", "/auth/v1/passkeys", None).await;
+    assert_eq!(list.json.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn a_registration_challenge_works_one_time_and_only_for_its_account() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let other = new_user(&app, "b@example.org", PASS_TWO).await;
+    let device = Device::new(1);
+    let options = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    let salt = options.json["prf_salt"].as_str().unwrap();
+    let body = json!({
+        "name": "Phone",
+        "registration": device.registration(options.json["challenge"].as_str().unwrap()),
+        "assertion": device.assertion(options.json["assertion_challenge"].as_str().unwrap(), 0),
+        "prf_output": device.prf(salt),
+    });
+    let stolen = api(
+        &app,
+        &other,
+        "POST",
+        "/auth/v1/passkeys",
+        Some(body.clone()),
+    )
+    .await;
+    assert_eq!(stolen.code(), "challenge_invalid");
+    let first = api(&app, &who, "POST", "/auth/v1/passkeys", Some(body.clone())).await;
+    assert_eq!(first.status, StatusCode::CREATED);
+    let again = api(&app, &who, "POST", "/auth/v1/passkeys", Some(body)).await;
+    assert_eq!(again.code(), "challenge_invalid");
+}
+
+#[tokio::test]
+async fn a_wrong_registration_or_assertion_adds_no_passkey() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    let intruder = Device::new(9);
+    let cases = ["origin", "challenge", "uv", "other_credential", "swapped"];
+    for case in cases {
+        let options = api(
+            &app,
+            &who,
+            "POST",
+            "/auth/v1/passkeys/options",
+            Some(json!({})),
+        )
+        .await;
+        let challenge = options.json["challenge"].as_str().unwrap();
+        let assertion_challenge = options.json["assertion_challenge"].as_str().unwrap();
+        let salt = options.json["prf_salt"].as_str().unwrap();
+        let (registration, assertion) = match case {
+            "origin" => (
+                device.registration(challenge),
+                device.assertion_with(assertion_challenge, "https://evil.example.org", 0, 0x05),
+            ),
+            // The assertion uses the challenge of the registration.
+            "challenge" => (
+                device.registration(challenge),
+                device.assertion(challenge, 0),
+            ),
+            "uv" => (
+                device.registration(challenge),
+                device.assertion_with(assertion_challenge, ORIGIN, 0, 0x01),
+            ),
+            // The assertion comes from a different credential.
+            "other_credential" => (
+                device.registration(challenge),
+                intruder.assertion(assertion_challenge, 0),
+            ),
+            _ => (
+                device.registration(assertion_challenge),
+                device.assertion(challenge, 0),
+            ),
+        };
+        let body = json!({
+            "name": "Phone", "registration": registration, "assertion": assertion,
+            "prf_output": device.prf(salt),
+        });
+        let reply = api(&app, &who, "POST", "/auth/v1/passkeys", Some(body)).await;
+        assert!(!reply.status.is_success(), "{case}: {:?}", reply.json);
+    }
+    let list = api(&app, &who, "GET", "/auth/v1/passkeys", None).await;
+    assert_eq!(list.json.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn the_passkey_routes_need_a_session_the_csrf_header_and_an_open_vault() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let none = send(
+        &app,
+        call("POST", "/auth/v1/passkeys/options", Some(json!({}))),
+    )
+    .await;
+    assert_eq!(none.status, StatusCode::UNAUTHORIZED);
+    let mut no_csrf = call("POST", "/auth/v1/passkeys/options", Some(json!({})));
+    no_csrf.token = Some(&who.0);
+    assert_eq!(send(&app, no_csrf).await.code(), "csrf_required");
+    api(&app, &who, "POST", "/api/v1/vault/lock", Some(json!({}))).await;
+    let locked = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(locked.status, StatusCode::LOCKED);
+}
+
+#[tokio::test]
+async fn the_last_method_cannot_be_removed_and_another_one_can() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let id = app
+        .state
+        .accounts
+        .account_by_email("a@example.org")
+        .unwrap()
+        .unwrap()
+        .0;
+    let one = Device::new(1);
+    let two = Device::new(2);
+    add_passkey(&app, &who, &one, "One").await;
+    add_passkey(&app, &who, &two, "Two").await;
+    let path = |d: &Device| format!("/auth/v1/passkeys/{}", d.credential_id());
+    let removed = api(&app, &who, "DELETE", &path(&one), None).await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT);
+    // The wrapper is gone: the first passkey cannot sign in any more.
+    send(&app, sign_out_call(&who)).await;
+    assert_eq!(
+        passkey_sign_in(&app, &one, 0).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    let reply = passkey_sign_in(&app, &two, 0).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    let who = who_of(&reply);
+    // Without the email address, the second passkey is the last method.
+    app.state.accounts.delete_email(id);
+    let last = api(&app, &who, "DELETE", &path(&two), None).await;
+    assert_eq!(last.status, StatusCode::CONFLICT);
+    assert_eq!(last.code(), "last_method");
+    let missing = api(&app, &who, "DELETE", &path(&one), None).await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_passkey_of_one_account_cannot_be_removed_by_another() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let other = new_user(&app, "b@example.org", PASS_TWO).await;
+    let device = Device::new(1);
+    add_passkey(&app, &who, &device, "One").await;
+    let path = format!("/auth/v1/passkeys/{}", device.credential_id());
+    let reply = api(&app, &other, "DELETE", &path, None).await;
+    assert_eq!(reply.status, StatusCode::NOT_FOUND);
+    let list = api(&app, &other, "GET", "/auth/v1/passkeys", None).await;
+    assert_eq!(list.json.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn a_passkey_challenge_works_one_time_and_a_replayed_assertion_fails() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    add_passkey(&app, &who, &device, "Phone").await;
+    send(&app, sign_out_call(&who)).await;
+    let options = passkey_options(&app, None).await;
+    let body = json!({
+        "assertion": device.assertion(options.json["challenge"].as_str().unwrap(), 0),
+        "prf_output": device.prf(options.json["prf_salt"].as_str().unwrap()),
+    });
+    let first = send(&app, call("POST", "/auth/v1/passkey", Some(body.clone()))).await;
+    assert_eq!(first.status, StatusCode::OK);
+    let replay = send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
+    assert_eq!(replay.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(replay.code(), "challenge_invalid");
+    // A challenge that the server never gave.
+    let fake = B64.encode([5_u8; 32]);
+    let body = json!({ "assertion": device.assertion(&fake, 0), "prf_output": device.prf(options.json["prf_salt"].as_str().unwrap()) });
+    let unknown = send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
+    assert_eq!(unknown.code(), "challenge_invalid");
+}
+
+#[tokio::test]
+async fn the_counter_must_increase() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    add_passkey(&app, &who, &device, "Phone").await;
+    send(&app, sign_out_call(&who)).await;
+    assert_eq!(
+        passkey_sign_in(&app, &device, 5).await.status,
+        StatusCode::OK
+    );
+    let same = passkey_sign_in(&app, &device, 5).await;
+    assert_eq!(same.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(same.code(), "passkey_invalid");
+    assert_eq!(
+        passkey_sign_in(&app, &device, 3).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        passkey_sign_in(&app, &device, 6).await.status,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn a_sign_in_with_a_wrong_part_gives_no_session() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    add_passkey(&app, &who, &device, "Phone").await;
+    send(&app, sign_out_call(&who)).await;
+    let unknown = Device::new(7);
+    let forger = Device::new(1);
+    // The forger has the credential ID of the device but another key.
+    let forger = Device {
+        key: SigningKey::from_slice(&[8_u8; 32]).unwrap(),
+        ..forger
+    };
+    for (name, who_signs, origin, flags) in [
+        ("unknown", &unknown, ORIGIN, 0x05),
+        ("forged", &forger, ORIGIN, 0x05),
+        ("origin", &device, "https://evil.example.org", 0x05),
+        ("uv", &device, ORIGIN, 0x01),
+    ] {
+        let options = passkey_options(&app, None).await;
+        let challenge = options.json["challenge"].as_str().unwrap();
+        let body = json!({
+            "assertion": who_signs.assertion_with(challenge, origin, 1, flags),
+            "prf_output": device.prf(options.json["prf_salt"].as_str().unwrap()),
+        });
+        let reply = send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{name}");
+        assert!(reply.headers.get(header::SET_COOKIE).is_none(), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn a_wrong_prf_output_gives_no_session_and_no_prf_gives_422() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    add_passkey(&app, &who, &device, "Phone").await;
+    send(&app, sign_out_call(&who)).await;
+    let options = passkey_options(&app, None).await;
+    let challenge = options.json["challenge"].as_str().unwrap();
+    let body = json!({
+        "assertion": device.assertion(challenge, 0),
+        "prf_output": B64.encode([3_u8; 32]),
+    });
+    let wrong = send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    assert!(wrong.headers.get(header::SET_COOKIE).is_none());
+    let options = passkey_options(&app, None).await;
+    let body = json!({
+        "assertion": device.assertion(options.json["challenge"].as_str().unwrap(), 0),
+    });
+    let none = send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
+    assert_eq!(none.code(), "passkey_no_prf");
+}
+
+#[tokio::test]
+async fn false_assertions_do_not_block_the_account_of_the_credential() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    add_passkey(&app, &who, &device, "Phone").await;
+    send(&app, sign_out_call(&who)).await;
+    let forger = Device {
+        key: SigningKey::from_slice(&[8_u8; 32]).unwrap(),
+        ..Device::new(1)
+    };
+    for i in 0..15 {
+        let options = passkey_options(&app, None).await;
+        let challenge = options.json["challenge"].as_str().unwrap();
+        let body = json!({
+            "assertion": forger.assertion(challenge, 0),
+            "prf_output": device.prf(options.json["prf_salt"].as_str().unwrap()),
+        });
+        let mut c = call("POST", "/auth/v1/passkey", Some(body));
+        // Each false assertion comes from a different address.
+        let addr = format!("10.1.0.{}:4000", i + 1);
+        c.addr = &addr;
+        assert_eq!(send(&app, c).await.status, StatusCode::UNAUTHORIZED);
+    }
+    let reply = passkey_sign_in(&app, &device, 0).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+}
+
+#[tokio::test]
+async fn false_assertions_from_one_address_block_that_address() {
+    let app = app(Signup::Invite);
+    let forger = Device::new(4);
+    for _ in 0..30 {
+        let options = passkey_options(&app, None).await;
+        let body = json!({
+            "assertion": forger.assertion(options.json["challenge"].as_str().unwrap(), 0),
+            "prf_output": forger.prf(options.json["prf_salt"].as_str().unwrap()),
+        });
+        send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
+    }
+    let options = passkey_options(&app, None).await;
+    let body = json!({
+        "assertion": forger.assertion(options.json["challenge"].as_str().unwrap(), 0),
+    });
+    let reply = send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
+    assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn a_recovery_session_adds_a_passkey_and_loses_its_limit() {
+    let app = app(Signup::Invite);
+    let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
+    let who = who_of(&send(&app, recovery_call("a@example.org", &key)).await);
+    // A restricted session cannot list the passkeys.
+    let list = api(&app, &who, "GET", "/auth/v1/passkeys", None).await;
+    assert_eq!(list.code(), "method_required");
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.code(), "method_required");
+    let device = Device::new(1);
+    let added = add_passkey(&app, &who, &device, "Phone").await;
+    assert_eq!(added.status, StatusCode::CREATED, "{:?}", added.json);
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.status, StatusCode::OK);
+    let list = api(&app, &who, "GET", "/auth/v1/passkeys", None).await;
+    assert_eq!(list.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_failed_passkey_add_keeps_the_limit_of_a_recovery_session() {
+    let app = app(Signup::Invite);
+    let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
+    let who = who_of(&send(&app, recovery_call("a@example.org", &key)).await);
+    let device = Device::new(1);
+    let options = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    let body = json!({
+        "name": "Phone",
+        "registration": device.registration(options.json["challenge"].as_str().unwrap()),
+        "assertion": device.assertion(options.json["challenge"].as_str().unwrap(), 0),
+        "prf_output": device.prf(options.json["prf_salt"].as_str().unwrap()),
+    });
+    let reply = api(&app, &who, "POST", "/auth/v1/passkeys", Some(body)).await;
+    assert!(!reply.status.is_success());
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.code(), "method_required");
+}
+
+#[tokio::test]
+async fn a_nostr_account_can_add_a_passkey_and_sign_in_with_it() {
+    let app = app(Signup::Open);
+    let up = nostr_sign_in(&app, &new_keys()).await;
+    let who = who_of(&up);
+    let device = Device::new(3);
+    let added = add_passkey(&app, &who, &device, "Phone").await;
+    assert_eq!(added.status, StatusCode::CREATED, "{:?}", added.json);
+    let options = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    assert!(
+        options.json["user_name"]
+            .as_str()
+            .unwrap()
+            .starts_with("nostr:")
+    );
+    send(&app, sign_out_call(&who)).await;
+    let reply = passkey_sign_in(&app, &device, 0).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    assert_eq!(reply.json["vault"], "open");
+}
+
+#[tokio::test]
+async fn the_options_name_the_relying_party_and_exclude_known_passkeys() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let device = Device::new(1);
+    let first = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(first.json["rp_id"], "127.0.0.1");
+    assert_eq!(first.json["user_name"], "a@example.org");
+    assert_eq!(
+        B64.decode(first.json["user_handle"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        16
+    );
+    assert_eq!(
+        B64.decode(first.json["prf_salt"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        32
+    );
+    assert_ne!(first.json["challenge"], first.json["assertion_challenge"]);
+    assert_eq!(first.json["exclude"].as_array().unwrap().len(), 0);
+    add_passkey(&app, &who, &device, "Phone").await;
+    let second = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(second.json["exclude"][0], device.credential_id().as_str());
+    assert_eq!(second.json["user_handle"], first.json["user_handle"]);
+}

@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-26
 - Owner: operator
+- Amended: 2026-10-26 by operator decision, after packet 035b. Item 21 uses one fixed PRF salt for each passkey of the server, not a random salt for each credential. A discoverable sign-in does not know the credential before the assertion, so the browser can send only one salt.
 
 ## Context
 
@@ -67,7 +68,7 @@ On 2026-10-26 the operator selected the decisions below.
 ### Passkeys With PRF
 
 20. A passkey is a discoverable credential with user verification. Studio accepts only the ES256 algorithm, which iCloud Keychain and Google Password Manager use. The relying party ID is the host of the public origin.
-21. To add a passkey, the browser makes the credential and then does one assertion with the PRF extension. The PRF input is a random 32-byte salt of that credential. The browser sends the PRF output to the server.
+21. To add a passkey, the browser makes the credential and then does one assertion with the PRF extension. The PRF input is one fixed 32-byte salt of the server: the SHA-256 of `musicindex-studio passkey prf salt v1`. The PRF output is different for each credential, because the secret of each credential is different. The browser sends the PRF output to the server.
 22. The server derives a wrapper key from the PRF output with HKDF-SHA-256, with the salt of the credential. That key encrypts the vault key with XChaCha20-Poly1305. The vault keeps a passkey wrapper with the credential ID. This adds a wrapper type to ADR 0013.
 23. The server refuses a passkey that gives no PRF output, with 422 `passkey_no_prf`. The UI tells the user that this passkey manager cannot open the vault.
 24. A passkey sign-in makes a session and opens the vault in one step. The server checks the signature over the authenticator data and the hash of the client data. It also checks the challenge, the origin, the hash of the relying party ID and the user verification flag. A signature counter that is not zero must increase.

@@ -47,6 +47,24 @@ const MIGRATIONS: &[&str] = &[
     "
     ALTER TABLE sessions ADD COLUMN restricted INTEGER NOT NULL DEFAULT 0;
 ",
+    "
+    CREATE TABLE account_passkeys (
+        credential_id TEXT PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        public_key BLOB NOT NULL,
+        counter INTEGER NOT NULL,
+        prf_salt TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE passkey_pending (
+        challenge TEXT PRIMARY KEY,
+        assertion_challenge TEXT NOT NULL,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        expires_at INTEGER NOT NULL
+    );
+    ALTER TABLE accounts ADD COLUMN user_handle BLOB;
+",
 ];
 
 /// A challenge is valid for this many seconds (ADR 0056 item 5).
@@ -102,6 +120,54 @@ impl From<rusqlite::Error> for SignUpError {
         Self::Database(error.to_string())
     }
 }
+
+/// A passkey row. It holds no secret.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PasskeyRow {
+    /// The credential ID as base64url.
+    pub credential_id: String,
+    /// The account of the passkey.
+    pub account_id: i64,
+    /// The public key as SPKI.
+    pub public_key: Vec<u8>,
+    /// The last signature counter.
+    pub counter: u32,
+    /// The PRF salt as base64url.
+    pub prf_salt: String,
+    /// The name that the user gave.
+    pub name: String,
+    /// The time of the registration.
+    pub created_at: i64,
+}
+
+/// Two challenges that one registration of a passkey uses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PasskeyChallenges {
+    /// The challenge of the registration, as hexadecimal.
+    pub challenge: String,
+    /// The challenge of the assertion after it, as hexadecimal.
+    pub assertion_challenge: String,
+    /// The end time of both.
+    pub expires_at: i64,
+}
+
+/// The most registrations that one account can have in progress.
+const MAX_PENDING_PER_ACCOUNT: i64 = 5;
+
+fn passkey_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<PasskeyRow> {
+    Ok(PasskeyRow {
+        credential_id: r.get(0)?,
+        account_id: r.get(1)?,
+        public_key: r.get(2)?,
+        counter: u32::try_from(r.get::<_, i64>(3)?).unwrap_or(u32::MAX),
+        prf_salt: r.get(4)?,
+        name: r.get(5)?,
+        created_at: r.get(6)?,
+    })
+}
+
+const PASSKEY_COLUMNS: &str =
+    "credential_id, account_id, public_key, counter, prf_salt, name, created_at";
 
 /// A session row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -292,6 +358,17 @@ impl Accounts {
         Ok(expires_at.is_some_and(|end| end > now()))
     }
 
+    /// Remove the email address of an account, for tests of the last method.
+    #[cfg(test)]
+    pub fn delete_email(&self, account_id: i64) {
+        self.db()
+            .execute(
+                "DELETE FROM account_emails WHERE account_id = ?1",
+                [account_id],
+            )
+            .unwrap();
+    }
+
     /// Keep a challenge with a chosen end time, for tests.
     #[cfg(test)]
     pub fn insert_challenge(&self, challenge: &str, expires_at: i64) {
@@ -379,6 +456,221 @@ impl Accounts {
                 |r| r.get(0),
             )
             .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    /// The 16 random bytes that name the account to a passkey manager. The
+    /// call makes them at the first use.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the random source or the database fails.
+    pub fn user_handle(&self, account_id: i64) -> Result<Vec<u8>, String> {
+        let mut fresh = [0_u8; 16];
+        getrandom::fill(&mut fresh).map_err(|_| "the random source is not available".to_owned())?;
+        let db = self.db();
+        db.execute(
+            "UPDATE accounts SET user_handle = ?2 WHERE id = ?1 AND user_handle IS NULL",
+            params![account_id, fresh.as_slice()],
+        )
+        .map_err(|e| e.to_string())?;
+        db.query_row(
+            "SELECT user_handle FROM accounts WHERE id = ?1",
+            [account_id],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// Make the two challenges of a passkey registration. The call removes
+    /// the registrations that expired, and the oldest registrations of the
+    /// account when it has too many. Gives `None` when the table is full.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the random source or the database fails.
+    pub fn create_passkey_challenges(
+        &self,
+        account_id: i64,
+    ) -> Result<Option<PasskeyChallenges>, String> {
+        let challenge = random_hex(32)?;
+        let assertion_challenge = random_hex(32)?;
+        let time = now();
+        let db = self.db();
+        db.execute("DELETE FROM passkey_pending WHERE expires_at <= ?1", [time])
+            .map_err(|e| e.to_string())?;
+        let total: i64 = db
+            .query_row("SELECT COUNT(*) FROM passkey_pending", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        if total >= MAX_CHALLENGES {
+            return Ok(None);
+        }
+        db.execute(
+            "DELETE FROM passkey_pending WHERE account_id = ?1 AND challenge NOT IN
+             (SELECT challenge FROM passkey_pending WHERE account_id = ?1
+              ORDER BY expires_at DESC LIMIT ?2)",
+            params![account_id, MAX_PENDING_PER_ACCOUNT - 1],
+        )
+        .map_err(|e| e.to_string())?;
+        let expires_at = time + CHALLENGE_SECONDS;
+        db.execute(
+            "INSERT INTO passkey_pending (challenge, assertion_challenge, account_id, expires_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![challenge, assertion_challenge, account_id, expires_at],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(Some(PasskeyChallenges {
+            challenge,
+            assertion_challenge,
+            expires_at,
+        }))
+    }
+
+    /// Remove the registration with this challenge in one statement. Gives
+    /// the challenges when the registration belongs to the account and has
+    /// not expired. Two calls give them one time only.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn take_passkey_challenges(
+        &self,
+        account_id: i64,
+        challenge: &str,
+    ) -> Result<Option<PasskeyChallenges>, String> {
+        let row: Option<(String, i64)> = self
+            .db()
+            .query_row(
+                "DELETE FROM passkey_pending WHERE challenge = ?1 AND account_id = ?2
+                 RETURNING assertion_challenge, expires_at",
+                params![challenge, account_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        Ok(row
+            .filter(|(_, end)| *end > now())
+            .map(|(assertion_challenge, expires_at)| PasskeyChallenges {
+                challenge: challenge.to_owned(),
+                assertion_challenge,
+                expires_at,
+            }))
+    }
+
+    /// Keep a passkey. Gives false when another row has the credential ID.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn add_passkey(&self, row: &PasskeyRow) -> Result<bool, String> {
+        let added = self
+            .db()
+            .execute(
+                "INSERT OR IGNORE INTO account_passkeys
+                 (credential_id, account_id, public_key, counter, prf_salt, name, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    row.credential_id,
+                    row.account_id,
+                    row.public_key,
+                    i64::from(row.counter),
+                    row.prf_salt,
+                    row.name,
+                    row.created_at
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(added == 1)
+    }
+
+    /// The passkey with this credential ID.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn passkey(&self, credential_id: &str) -> Result<Option<PasskeyRow>, String> {
+        self.db()
+            .query_row(
+                &format!("SELECT {PASSKEY_COLUMNS} FROM account_passkeys WHERE credential_id = ?1"),
+                [credential_id],
+                passkey_from_row,
+            )
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    /// The passkeys of an account, the oldest first.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn passkeys_of(&self, account_id: i64) -> Result<Vec<PasskeyRow>, String> {
+        let db = self.db();
+        let mut statement = db
+            .prepare(&format!(
+                "SELECT {PASSKEY_COLUMNS} FROM account_passkeys WHERE account_id = ?1
+                 ORDER BY created_at, credential_id"
+            ))
+            .map_err(|e| e.to_string())?;
+        statement
+            .query_map([account_id], passkey_from_row)
+            .and_then(Iterator::collect)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Keep the new counter of a passkey. The step succeeds only when the
+    /// stored counter is still `old`, so two assertions cannot both win.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn update_passkey_counter(
+        &self,
+        credential_id: &str,
+        old: u32,
+        new: u32,
+    ) -> Result<bool, String> {
+        self.db()
+            .execute(
+                "UPDATE account_passkeys SET counter = ?3
+                 WHERE credential_id = ?1 AND counter = ?2",
+                params![credential_id, i64::from(old), i64::from(new)],
+            )
+            .map(|changed| changed == 1)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove a passkey of an account. Gives true when it existed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn delete_passkey(&self, account_id: i64, credential_id: &str) -> Result<bool, String> {
+        self.db()
+            .execute(
+                "DELETE FROM account_passkeys WHERE credential_id = ?1 AND account_id = ?2",
+                params![credential_id, account_id],
+            )
+            .map(|changed| changed == 1)
+            .map_err(|e| e.to_string())
+    }
+
+    /// The number of sign-in methods of an account: the email address with
+    /// its passphrase, the Nostr key and each passkey. The recovery key does
+    /// not count (ADR 0056 item 3).
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn method_count(&self, account_id: i64) -> Result<i64, String> {
+        self.db()
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM account_emails WHERE account_id = ?1)
+                      + (SELECT COUNT(*) FROM account_nostr WHERE account_id = ?1)
+                      + (SELECT COUNT(*) FROM account_passkeys WHERE account_id = ?1)",
+                [account_id],
+                |r| r.get(0),
+            )
             .map_err(|e| e.to_string())
     }
 
@@ -591,6 +883,8 @@ impl Accounts {
             "DELETE FROM sessions WHERE account_id = ?1",
             "DELETE FROM account_emails WHERE account_id = ?1",
             "DELETE FROM account_nostr WHERE account_id = ?1",
+            "DELETE FROM account_passkeys WHERE account_id = ?1",
+            "DELETE FROM passkey_pending WHERE account_id = ?1",
             "DELETE FROM accounts WHERE id = ?1",
         ] {
             tx.execute(sql, [account_id]).map_err(|e| e.to_string())?;
@@ -721,6 +1015,73 @@ mod tests {
         );
         accounts.delete_account(id).unwrap();
         assert!(accounts.account_by_pubkey("ab").unwrap().is_none());
+    }
+
+    #[test]
+    fn passkey_challenges_work_one_time_for_their_account_and_the_account_keeps_five() {
+        let accounts = Accounts::open_in_memory().unwrap();
+        let a = accounts.sign_up(None, "a@example.org", "f1").unwrap();
+        let b = accounts.sign_up(None, "b@example.org", "f2").unwrap();
+        let first = accounts.create_passkey_challenges(a).unwrap().unwrap();
+        assert_ne!(first.challenge, first.assertion_challenge);
+        assert!(
+            accounts
+                .take_passkey_challenges(b, &first.challenge)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            accounts
+                .take_passkey_challenges(a, &first.challenge)
+                .unwrap(),
+            Some(first.clone())
+        );
+        assert!(
+            accounts
+                .take_passkey_challenges(a, &first.challenge)
+                .unwrap()
+                .is_none()
+        );
+        let all: Vec<_> = (0..7)
+            .map(|_| accounts.create_passkey_challenges(a).unwrap().unwrap())
+            .collect();
+        let kept = all
+            .iter()
+            .filter(|c| {
+                accounts
+                    .take_passkey_challenges(a, &c.challenge)
+                    .unwrap()
+                    .is_some()
+            })
+            .count();
+        assert_eq!(kept, 5);
+    }
+
+    #[test]
+    fn methods_are_counted_and_a_user_handle_stays_the_same() {
+        let accounts = Accounts::open_in_memory().unwrap();
+        let id = accounts.sign_up(None, "a@example.org", "f1").unwrap();
+        assert_eq!(accounts.method_count(id).unwrap(), 1);
+        let row = PasskeyRow {
+            credential_id: "c1".to_owned(),
+            account_id: id,
+            public_key: vec![1, 2],
+            counter: 0,
+            prf_salt: "s".to_owned(),
+            name: "Phone".to_owned(),
+            created_at: 1,
+        };
+        assert!(accounts.add_passkey(&row).unwrap());
+        assert!(!accounts.add_passkey(&row).unwrap());
+        assert_eq!(accounts.method_count(id).unwrap(), 2);
+        assert!(accounts.update_passkey_counter("c1", 0, 4).unwrap());
+        assert!(!accounts.update_passkey_counter("c1", 0, 5).unwrap());
+        assert_eq!(accounts.passkey("c1").unwrap().unwrap().counter, 4);
+        let handle = accounts.user_handle(id).unwrap();
+        assert_eq!(handle.len(), 16);
+        assert_eq!(accounts.user_handle(id).unwrap(), handle);
+        accounts.delete_account(id).unwrap();
+        assert!(accounts.passkey("c1").unwrap().is_none());
     }
 
     #[test]

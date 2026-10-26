@@ -53,6 +53,14 @@ const AUTH_ERRORS = {
   no_signer: 'Studio found no signer extension in this browser.',
   method_required: 'Add a new sign-in method first.',
   method_not_usable: 'This method cannot sign in to the account. Use a different method.',
+  passkey_no_prf: 'This passkey manager cannot open the vault. Use iCloud Keychain or Google Password Manager, or a different method.',
+  passkey_invalid: 'The passkey was not accepted. Try again or use a different method.',
+  passkey_cancelled: 'The passkey request was cancelled or timed out. Try again.',
+  passkey_unsupported: 'This browser cannot give the passkey data that Studio needs. Use a different method.',
+  passkey_exists: 'This passkey is already in use. Use a different passkey manager or device.',
+  last_method: 'This is the last way to sign in to the account. Add a different method first.',
+  invalid_name: 'Give the passkey a name of 1 to 64 characters.',
+  vault_locked: 'Unlock the vault first.',
 };
 
 // The text for an error code of the auth routes. An unknown code gives a
@@ -61,13 +69,15 @@ export function authErrorText(code) {
   return Object.hasOwn(AUTH_ERRORS, code) ? AUTH_ERRORS[code] : 'Something went wrong. Try again.';
 }
 
-// The methods of the unlock sheet, in order (ADR 0056 items 7 and 10).
+// The methods of the unlock sheet, in order (ADR 0056 items 7, 10 and 24).
 // `session` is the answer of `GET /auth/v1/session`. `hasNip07` is true when
-// the browser has `window.nostr`.
-export function unlockMethods(session, hasNip07) {
+// the browser has `window.nostr`. `hasPasskeys` is true when the browser has
+// `PublicKeyCredential`.
+export function unlockMethods(session, hasNip07, hasPasskeys = false) {
   const methods = [];
   if (session && session.email) methods.push('passphrase');
   if (session && session.pubkey && hasNip07) methods.push('nip07');
+  if (session && session.passkeys > 0 && hasPasskeys) methods.push('passkey');
   return methods;
 }
 
@@ -107,10 +117,135 @@ export function recoveryAccount(text) {
 
 // The methods that the page "Add a sign-in method" offers, in order.
 // `session` is the answer of `GET /auth/v1/session`. `hasNip07` is true when
-// the browser has `window.nostr`.
-export function addMethodChoices(session, hasNip07) {
+// the browser has `window.nostr`. `hasPasskeys` is true when the browser has
+// `PublicKeyCredential`.
+export function addMethodChoices(session, hasNip07, hasPasskeys = false) {
   const choices = [];
   if (session && session.email) choices.push('passphrase');
   if (session && session.pubkey && hasNip07) choices.push('nip07');
+  if (session && hasPasskeys) choices.push('passkey');
   return choices;
+}
+
+// ---- Passkeys with PRF (ADR 0056 items 20 to 24) ----
+
+// The text of a byte array in base64url, with no padding. `bytes` is an
+// `ArrayBuffer` or a typed array.
+export function toBase64Url(bytes) {
+  const view = bytes instanceof ArrayBuffer
+    ? new Uint8Array(bytes)
+    : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let binary = '';
+  for (let i = 0; i < view.length; i += 0x8000) {
+    binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// The bytes of a base64url text, as a `Uint8Array`.
+export function fromBase64Url(text) {
+  const base = String(text ?? '').replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base + '='.repeat((4 - (base.length % 4)) % 4));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// The COSE number of ES256. Studio accepts this algorithm only.
+export const ES256 = -7;
+
+const PASSKEY_TIMEOUT = 300000;
+
+function prfExtension(options) {
+  return { prf: { eval: { first: fromBase64Url(options.prf_salt) } } };
+}
+
+// The `publicKey` object for `navigator.credentials.create`. `options` is
+// the answer of `POST /auth/v1/passkeys/options`.
+export function creationOptions(options) {
+  return {
+    challenge: fromBase64Url(options.challenge),
+    rp: { id: options.rp_id, name: 'Music Index Studio' },
+    user: {
+      id: fromBase64Url(options.user_handle),
+      name: options.user_name,
+      displayName: options.user_name,
+    },
+    pubKeyCredParams: [{ type: 'public-key', alg: ES256 }],
+    authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+    excludeCredentials: (options.exclude || []).map((id) => ({ type: 'public-key', id: fromBase64Url(id) })),
+    attestation: 'none',
+    timeout: PASSKEY_TIMEOUT,
+    extensions: prfExtension(options),
+  };
+}
+
+// The `publicKey` object for `navigator.credentials.get`. `options` is the
+// answer of `POST /auth/v1/passkey/options`. For the assertion after a
+// registration, the caller sets `challenge` to `assertion_challenge` and
+// `allow` to the new credential.
+export function requestOptions(options) {
+  return {
+    challenge: fromBase64Url(options.challenge),
+    rpId: options.rp_id,
+    userVerification: 'required',
+    allowCredentials: (options.allow || []).map((id) => ({ type: 'public-key', id: fromBase64Url(id) })),
+    timeout: PASSKEY_TIMEOUT,
+    extensions: prfExtension(options),
+  };
+}
+
+// The part of a registration that `POST /auth/v1/passkeys` needs, or `null`
+// when the browser cannot give the public key or the algorithm.
+export function registrationPayload(credential) {
+  const response = credential && credential.response;
+  if (!response || typeof response.getPublicKey !== 'function'
+    || typeof response.getAuthenticatorData !== 'function'
+    || typeof response.getPublicKeyAlgorithm !== 'function') return null;
+  const key = response.getPublicKey();
+  if (!key) return null;
+  return {
+    client_data: toBase64Url(response.clientDataJSON),
+    authenticator_data: toBase64Url(response.getAuthenticatorData()),
+    public_key: toBase64Url(key),
+    algorithm: response.getPublicKeyAlgorithm(),
+  };
+}
+
+// The part of an assertion that the passkey routes need.
+export function assertionPayload(credential) {
+  const response = credential.response;
+  return {
+    credential_id: toBase64Url(credential.rawId),
+    client_data: toBase64Url(response.clientDataJSON),
+    authenticator_data: toBase64Url(response.authenticatorData),
+    signature: toBase64Url(response.signature),
+  };
+}
+
+// The PRF output of an assertion in base64url, or `null` when the passkey
+// manager gave none.
+export function prfOutputOf(credential) {
+  const results = credential && typeof credential.getClientExtensionResults === 'function'
+    ? credential.getClientExtensionResults()
+    : null;
+  const first = results && results.prf && results.prf.results && results.prf.results.first;
+  return first ? toBase64Url(first) : null;
+}
+
+// The error code for a failure of `navigator.credentials`. The user can
+// cancel the request, and the request can time out.
+export function passkeyBrowserCode(error) {
+  if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) return 'passkey_cancelled';
+  if (error && error.name === 'InvalidStateError') return 'passkey_exists';
+  return 'passkey_unsupported';
+}
+
+// A name for a new passkey, such as "Passkey 2". `list` is the answer of
+// `GET /auth/v1/passkeys`.
+export function defaultPasskeyName(list) {
+  const names = new Set((list || []).map((item) => item.name));
+  for (let n = (list || []).length + 1; ; n += 1) {
+    if (!names.has(`Passkey ${n}`)) return `Passkey ${n}`;
+  }
 }

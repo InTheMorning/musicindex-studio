@@ -22,6 +22,7 @@ use studio_core::remote;
 use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::{Web, WebImage};
 use studio_core::xml::Document;
+use zeroize::Zeroizing;
 
 use studio_core::announce::{self, Timing};
 
@@ -159,6 +160,71 @@ impl WorkspaceHandle {
         let recovery_key = recovery_key.to_owned();
         self.run(move |w| w.unlock_with_recovery_key(&recovery_key))
             .await
+    }
+
+    /// Open the vault with the PRF output of a passkey (ADR 0056 item 22).
+    /// The call clears the PRF output after use.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when no vault file exists, when the vault has
+    /// no wrapper for the credential, or when the PRF output is not correct.
+    pub async fn unlock_with_passkey(
+        &self,
+        credential_id: &str,
+        prf_output: Zeroizing<[u8; 32]>,
+    ) -> Result<(), ApiError> {
+        let credential_id = credential_id.to_owned();
+        self.run(move |w| w.unlock_with_passkey(&credential_id, &prf_output))
+            .await
+    }
+
+    /// Add the wrapper of a passkey to the open vault, and save the vault.
+    /// The call clears the PRF output after use.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the vault is not open or cannot be saved.
+    pub async fn add_passkey_wrapper(
+        &self,
+        credential_id: &str,
+        salt: [u8; 32],
+        prf_output: Zeroizing<[u8; 32]>,
+    ) -> Result<(), ApiError> {
+        let credential_id = credential_id.to_owned();
+        self.run(move |w| {
+            w.require_open_vault()?;
+            let vault = w
+                .vault
+                .as_mut()
+                .ok_or_else(|| ApiError::internal("the vault closed"))?;
+            vault.add_passkey_wrapper(&credential_id, &salt, &prf_output)?;
+            w.touch_vault();
+            w.save_vault()
+        })
+        .await
+    }
+
+    /// Remove the wrapper of a passkey from the open vault, and save the
+    /// vault. Gives true when the vault had the wrapper.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the vault is not open or cannot be saved.
+    pub async fn remove_passkey_wrapper(&self, credential_id: &str) -> Result<bool, ApiError> {
+        let credential_id = credential_id.to_owned();
+        self.run(move |w| {
+            w.require_open_vault()?;
+            let vault = w
+                .vault
+                .as_mut()
+                .ok_or_else(|| ApiError::internal("the vault closed"))?;
+            let removed = vault.remove_passkey_wrapper(&credential_id);
+            w.touch_vault();
+            w.save_vault()?;
+            Ok(removed)
+        })
+        .await
     }
 
     /// Close the vault.
@@ -554,6 +620,28 @@ impl Workspace {
         self.vault = Some(file.open_with_key(key_base64)?);
         self.touch_vault();
         Ok(())
+    }
+
+    pub(crate) fn unlock_with_passkey(
+        &mut self,
+        credential_id: &str,
+        prf_output: &[u8; 32],
+    ) -> Result<(), ApiError> {
+        let file = self.vault_file()?;
+        self.vault = Some(file.open_with_passkey(credential_id, prf_output)?);
+        self.touch_vault();
+        Ok(())
+    }
+
+    /// Give 423 or 404 when the vault is not open.
+    pub(crate) fn require_open_vault(&self) -> Result<(), ApiError> {
+        if self.vault.is_some() {
+            return Ok(());
+        }
+        Err(match self.vault_state() {
+            VaultState::Absent => ApiError::vault_required(),
+            _ => ApiError::vault_locked(),
+        })
     }
 
     pub(crate) fn unlock_with_recovery_key(&mut self, recovery_key: &str) -> Result<(), ApiError> {

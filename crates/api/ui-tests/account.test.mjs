@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods,
   accountName, deleteConfirmation, recoveryAccount, addMethodChoices, recoveryErrorText,
+  toBase64Url, fromBase64Url, creationOptions, requestOptions, registrationPayload,
+  assertionPayload, prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
 } from '../ui/account.js';
 
 const PUBKEY = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
@@ -114,4 +116,156 @@ test('the text of method_required and of a failed recovery sign-in', () => {
   assert.equal(authErrorText('method_not_usable'), 'This method cannot sign in to the account. Use a different method.');
   assert.match(recoveryErrorText('sign_in_failed'), /recovery key/);
   assert.equal(recoveryErrorText('too_many_attempts'), authErrorText('too_many_attempts'));
+});
+
+// ---- Passkeys (ADR 0056 items 20 to 24) ----
+
+test('toBase64Url writes no padding and uses - and _', () => {
+  assert.equal(toBase64Url(new Uint8Array([0xfb, 0xff, 0xfe])), '-__-');
+  assert.equal(toBase64Url(new Uint8Array([1])), 'AQ');
+  assert.equal(toBase64Url(new Uint8Array([1, 2])), 'AQI');
+  assert.equal(toBase64Url(new Uint8Array(0)), '');
+});
+
+test('toBase64Url takes an ArrayBuffer and a view with an offset', () => {
+  const bytes = new Uint8Array([9, 8, 7, 6]);
+  assert.equal(toBase64Url(bytes.buffer), 'CQgHBg');
+  assert.equal(toBase64Url(bytes.subarray(1, 3)), 'CAc');
+});
+
+test('fromBase64Url reverses toBase64Url for each length', () => {
+  for (let length = 0; length < 70; length += 1) {
+    const bytes = Uint8Array.from({ length }, (_, i) => (i * 37 + 11) % 256);
+    assert.deepEqual(fromBase64Url(toBase64Url(bytes)), bytes);
+  }
+  assert.deepEqual(fromBase64Url('-__-'), new Uint8Array([0xfb, 0xff, 0xfe]));
+});
+
+test('toBase64Url handles a large buffer', () => {
+  const bytes = new Uint8Array(100000).fill(255);
+  assert.deepEqual(fromBase64Url(toBase64Url(bytes)), bytes);
+});
+
+const SALT = toBase64Url(new Uint8Array(32).fill(5));
+const CREATE = {
+  challenge: toBase64Url(new Uint8Array(32).fill(1)),
+  assertion_challenge: toBase64Url(new Uint8Array(32).fill(2)),
+  rp_id: 'studio.example.org',
+  user_handle: toBase64Url(new Uint8Array(16).fill(3)),
+  user_name: 'a@example.org',
+  prf_salt: SALT,
+  exclude: [toBase64Url(new Uint8Array([7, 7]))],
+};
+
+test('creationOptions asks for a resident key, user verification and ES256 only', () => {
+  const options = creationOptions(CREATE);
+  assert.equal(options.rp.id, 'studio.example.org');
+  assert.deepEqual(options.challenge, new Uint8Array(32).fill(1));
+  assert.deepEqual(options.user.id, new Uint8Array(16).fill(3));
+  assert.equal(options.user.name, 'a@example.org');
+  assert.deepEqual(options.pubKeyCredParams, [{ type: 'public-key', alg: -7 }]);
+  assert.equal(options.authenticatorSelection.residentKey, 'required');
+  assert.equal(options.authenticatorSelection.userVerification, 'required');
+  assert.deepEqual(options.excludeCredentials, [{ type: 'public-key', id: new Uint8Array([7, 7]) }]);
+});
+
+test('creationOptions sets the PRF salt', () => {
+  const options = creationOptions(CREATE);
+  assert.deepEqual(options.extensions.prf.eval.first, new Uint8Array(32).fill(5));
+});
+
+test('requestOptions asks for user verification and sets the PRF salt', () => {
+  const options = requestOptions({ challenge: CREATE.challenge, rp_id: 'studio.example.org', prf_salt: SALT, allow: [] });
+  assert.equal(options.rpId, 'studio.example.org');
+  assert.equal(options.userVerification, 'required');
+  assert.deepEqual(options.allowCredentials, []);
+  assert.deepEqual(options.challenge, new Uint8Array(32).fill(1));
+  assert.deepEqual(options.extensions.prf.eval.first, new Uint8Array(32).fill(5));
+});
+
+test('requestOptions names the allowed credentials and accepts a missing list', () => {
+  const allowed = requestOptions({ challenge: CREATE.challenge, rp_id: 'x', prf_salt: SALT, allow: ['AQI'] });
+  assert.deepEqual(allowed.allowCredentials, [{ type: 'public-key', id: new Uint8Array([1, 2]) }]);
+  const none = requestOptions({ challenge: CREATE.challenge, rp_id: 'x', prf_salt: SALT });
+  assert.deepEqual(none.allowCredentials, []);
+});
+
+test('registrationPayload reads the key, the algorithm and the data', () => {
+  const credential = {
+    response: {
+      clientDataJSON: new Uint8Array([1]).buffer,
+      getAuthenticatorData: () => new Uint8Array([2]).buffer,
+      getPublicKey: () => new Uint8Array([3]).buffer,
+      getPublicKeyAlgorithm: () => -7,
+    },
+  };
+  assert.deepEqual(registrationPayload(credential), {
+    client_data: 'AQ', authenticator_data: 'Ag', public_key: 'Aw', algorithm: -7,
+  });
+});
+
+test('registrationPayload gives null when the browser gives no public key', () => {
+  assert.equal(registrationPayload({ response: {} }), null);
+  assert.equal(registrationPayload(null), null);
+  const none = {
+    response: {
+      clientDataJSON: new Uint8Array([1]).buffer,
+      getAuthenticatorData: () => new Uint8Array([2]).buffer,
+      getPublicKey: () => null,
+      getPublicKeyAlgorithm: () => -7,
+    },
+  };
+  assert.equal(registrationPayload(none), null);
+});
+
+test('assertionPayload and prfOutputOf read an assertion', () => {
+  const credential = {
+    rawId: new Uint8Array([1, 2]).buffer,
+    response: {
+      clientDataJSON: new Uint8Array([3]).buffer,
+      authenticatorData: new Uint8Array([4]).buffer,
+      signature: new Uint8Array([5]).buffer,
+    },
+    getClientExtensionResults: () => ({ prf: { results: { first: new Uint8Array(32).fill(255).buffer } } }),
+  };
+  assert.deepEqual(assertionPayload(credential), {
+    credential_id: 'AQI', client_data: 'Aw', authenticator_data: 'BA', signature: 'BQ',
+  });
+  assert.equal(prfOutputOf(credential), toBase64Url(new Uint8Array(32).fill(255)));
+});
+
+test('prfOutputOf gives null when the passkey manager gives no PRF result', () => {
+  assert.equal(prfOutputOf({ getClientExtensionResults: () => ({}) }), null);
+  assert.equal(prfOutputOf({ getClientExtensionResults: () => ({ prf: { enabled: false } }) }), null);
+  assert.equal(prfOutputOf({}), null);
+  assert.equal(prfOutputOf(null), null);
+});
+
+test('passkey_no_prf has the text of the task', () => {
+  assert.equal(
+    authErrorText('passkey_no_prf'),
+    'This passkey manager cannot open the vault. Use iCloud Keychain or Google Password Manager, or a different method.',
+  );
+});
+
+test('passkeyBrowserCode separates a cancel from other failures', () => {
+  assert.equal(passkeyBrowserCode({ name: 'NotAllowedError' }), 'passkey_cancelled');
+  assert.equal(passkeyBrowserCode({ name: 'InvalidStateError' }), 'passkey_exists');
+  assert.equal(passkeyBrowserCode({ name: 'NotSupportedError' }), 'passkey_unsupported');
+  assert.equal(passkeyBrowserCode(null), 'passkey_unsupported');
+});
+
+test('defaultPasskeyName gives the next free number', () => {
+  assert.equal(defaultPasskeyName([]), 'Passkey 1');
+  assert.equal(defaultPasskeyName([{ name: 'Phone' }]), 'Passkey 2');
+  assert.equal(defaultPasskeyName([{ name: 'Passkey 2' }, { name: 'Passkey 3' }]), 'Passkey 4');
+});
+
+test('unlockMethods and addMethodChoices add the passkey only with a passkey and a browser that supports it', () => {
+  const email = { email: 'a@example.org', passkeys: 1 };
+  assert.deepEqual(unlockMethods(email, false, true), ['passphrase', 'passkey']);
+  assert.deepEqual(unlockMethods(email, false, false), ['passphrase']);
+  assert.deepEqual(unlockMethods({ email: 'a@example.org', passkeys: 0 }, false, true), ['passphrase']);
+  assert.deepEqual(addMethodChoices(email, false, true), ['passphrase', 'passkey']);
+  assert.deepEqual(addMethodChoices(email, false, false), ['passphrase']);
 });

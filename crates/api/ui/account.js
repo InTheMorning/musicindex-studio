@@ -11,7 +11,10 @@ export function bootView(session, status) {
   if (!session || session.mode === 'local') return 'local';
   // The vault state of `status` does not change the result on a server.
   void status;
-  return session.signed_in ? 'shell' : 'sign_in';
+  if (!session.signed_in) return 'sign_in';
+  // A session from a recovery sign-in must add a sign-in method first
+  // (ADR 0056 item 3).
+  return session.recovery ? 'add_method' : 'shell';
 }
 
 // The kind of an HTTP authorization event (NIP-98).
@@ -48,6 +51,8 @@ const AUTH_ERRORS = {
   session_ended: 'Your session ended. Sign in again.',
   wrong_key: 'The key does not open the vault.',
   no_signer: 'Studio found no signer extension in this browser.',
+  method_required: 'Add a new sign-in method first.',
+  method_not_usable: 'This method cannot sign in to the account. Use a different method.',
 };
 
 // The text for an error code of the auth routes. An unknown code gives a
@@ -81,4 +86,31 @@ export function deleteConfirmation(session, typed) {
   if (session.email) return normalEmail(text) === session.email ? session.email : null;
   const npub = npubOf(session.pubkey);
   return npub && text === npub ? npub : null;
+}
+
+// The text for a failed recovery sign-in. The server gives `sign_in_failed`
+// for an unknown account and for a key that is not correct.
+export function recoveryErrorText(code) {
+  if (code === 'sign_in_failed') return 'The account or the recovery key is not correct.';
+  return authErrorText(code);
+}
+
+// The account text of the recovery page (ADR 0056 item 3). It gives an email
+// address in lowercase, an `npub`, or `null` for other text. It does no
+// bech32 check. The server does that check.
+export function recoveryAccount(text) {
+  const value = String(text ?? '').trim().toLowerCase();
+  if (/^npub1\S+$/.test(value)) return { kind: 'npub', value };
+  if (/^[^\s@]+@[^\s@]+$/.test(value)) return { kind: 'email', value };
+  return null;
+}
+
+// The methods that the page "Add a sign-in method" offers, in order.
+// `session` is the answer of `GET /auth/v1/session`. `hasNip07` is true when
+// the browser has `window.nostr`.
+export function addMethodChoices(session, hasNip07) {
+  const choices = [];
+  if (session && session.email) choices.push('passphrase');
+  if (session && session.pubkey && hasNip07) choices.push('nip07');
+  return choices;
 }

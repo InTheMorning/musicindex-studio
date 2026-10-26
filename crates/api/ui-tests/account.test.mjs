@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods,
-  accountName, deleteConfirmation,
+  accountName, deleteConfirmation, recoveryAccount, addMethodChoices, recoveryErrorText,
 } from '../ui/account.js';
 
 const PUBKEY = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
@@ -85,4 +85,33 @@ test('deleteConfirmation accepts only the email address or the npub of the accou
   const npub = accountName({ email: null, pubkey: PUBKEY });
   assert.equal(deleteConfirmation({ email: null, pubkey: PUBKEY }, npub), npub);
   assert.equal(deleteConfirmation({ email: null, pubkey: PUBKEY }, PUBKEY), null);
+});
+
+test('bootView gives add_method for a session from a recovery sign-in', () => {
+  const session = { mode: 'server', signed_in: true, recovery: true };
+  assert.equal(bootView(session, null), 'add_method');
+  assert.equal(bootView({ ...session, recovery: false }, null), 'shell');
+});
+
+test('recoveryAccount reads an email address or an npub and no other text', () => {
+  assert.deepEqual(recoveryAccount('  A@X.org '), { kind: 'email', value: 'a@x.org' });
+  assert.deepEqual(recoveryAccount(' npub1abc '), { kind: 'npub', value: 'npub1abc' });
+  assert.equal(recoveryAccount('nobody'), null);
+  assert.equal(recoveryAccount('a b@x.org'), null);
+  assert.equal(recoveryAccount(''), null);
+  assert.equal(recoveryAccount(undefined), null);
+});
+
+test('addMethodChoices lists the passphrase for an email and NIP-07 for a key with a signer', () => {
+  assert.deepEqual(addMethodChoices({ email: 'a@x.org', pubkey: null }, true), ['passphrase']);
+  assert.deepEqual(addMethodChoices({ email: null, pubkey: PUBKEY }, true), ['nip07']);
+  assert.deepEqual(addMethodChoices({ email: null, pubkey: PUBKEY }, false), []);
+  assert.deepEqual(addMethodChoices(null, true), []);
+});
+
+test('the text of method_required and of a failed recovery sign-in', () => {
+  assert.equal(authErrorText('method_required'), 'Add a new sign-in method first.');
+  assert.equal(authErrorText('method_not_usable'), 'This method cannot sign in to the account. Use a different method.');
+  assert.match(recoveryErrorText('sign_in_failed'), /recovery key/);
+  assert.equal(recoveryErrorText('too_many_attempts'), authErrorText('too_many_attempts'));
 });

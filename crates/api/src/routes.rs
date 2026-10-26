@@ -146,6 +146,25 @@ pub(crate) async fn unlock_vault(
     .await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct NewPassphrase {
+    passphrase: String,
+}
+
+/// Replace the passphrase of the open vault (ADR 0018). The rule for the
+/// passphrase is the rule of the vault creation. The response contains no
+/// part of the passphrase.
+pub(crate) async fn set_passphrase(
+    State(shared): State<Shared>,
+    Json(body): Json<NewPassphrase>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        w.set_passphrase(&body.passphrase)?;
+        Ok(Json(json!({ "vault": w.vault_state() })))
+    })
+    .await
+}
+
 pub(crate) async fn lock_vault(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         w.lock();

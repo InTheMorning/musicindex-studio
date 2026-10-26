@@ -69,7 +69,10 @@ async fn run() -> Result<(), String> {
 fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Shared, String> {
     let accounts = accounts::Accounts::open(&options.data_dir)?;
     // The passphrase is random and nobody keeps it.
-    let dummy = OpenVault::create(&accounts::random_hex(16)?).map_err(|e| e.to_string())?;
+    let mut dummy = OpenVault::create(&accounts::random_hex(16)?).map_err(|e| e.to_string())?;
+    // A recovery sign-in with an unknown account opens this vault with the
+    // given key. Nobody keeps the recovery key.
+    drop(dummy.add_recovery_key().map_err(|e| e.to_string())?);
     let users = Users::new(UserSettings {
         data_dir: options.data_dir.clone(),
         musicindex: options.musicindex.clone(),

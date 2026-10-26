@@ -329,6 +329,71 @@ async fn a_weak_passphrase_gives_422() {
 }
 
 #[tokio::test]
+async fn the_passphrase_route_replaces_the_passphrase_and_applies_the_vault_rule() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(json!({ "passphrase": "staple orange umbrella river" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "vault_required");
+    call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(json!({ "passphrase": "passwordpassword" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "passphrase_too_weak");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(json!({ "passphrase": "short" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "passphrase_too_short");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(json!({ "passphrase": "staple orange umbrella river" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["vault"], "open");
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": "staple orange umbrella river" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn a_short_passphrase_gives_422() {
     let app = app();
     let (status, body) = call(

@@ -3,6 +3,7 @@ import { html, render, useState, useEffect, useCallback, useRef, useContext, cre
 import { AlbumEditor, DraftToolbar, useSheet } from './editor.js';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods, accountName, deleteConfirmation,
+  recoveryAccount, addMethodChoices, recoveryErrorText,
 } from './account.js';
 import { isLiveItem } from './live.js';
 import { useDraft } from './draft.js';
@@ -2660,7 +2661,7 @@ async function signerAuth({ invite, recoveryKey }) {
   return result;
 }
 
-function SignInPage({ onDone, onSignUp }) {
+function SignInPage({ onDone, onSignUp, onRecovery }) {
   const [email, setEmail] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const { busy, error, run } = useAction();
@@ -2689,7 +2690,105 @@ function SignInPage({ onDone, onSignUp }) {
       ${window.nostr && html`<button class="button action" type="button" disabled=${busy} onClick=${signer}>Sign in with a signer extension</button>`}
     </div>
     <button class="button link" type="button" onClick=${onSignUp}>Make an account</button>
+    <button class="button link" type="button" onClick=${onRecovery}>Sign in with the recovery key</button>
   </form></main>`;
+}
+
+// Sign in with the recovery key (ADR 0056 item 3). The session then has a
+// limit, and the page "Add a sign-in method" follows.
+function RecoveryPage({ onDone, onBack }) {
+  const [account, setAccount] = useState('');
+  const [key, setKey] = useState('');
+  const { busy, error, run } = useAction();
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const parsed = recoveryAccount(account);
+      const result = await authCall('/recovery', {
+        body: { account: parsed ? parsed.value : account.trim(), recovery_key: key.trim() },
+      });
+      csrfToken = result.csrf;
+      onDone();
+    });
+  };
+  return html`<main class="center"><form class="card" onSubmit=${submit}>
+    <${Brand} />
+    <div><h1>Sign in with the recovery key</h1>
+      <p>Give the email address or the public key of the account, and the recovery key.</p></div>
+    <${Field} id="recovery-account" label="Email address or npub" autocomplete="username" required autofocus
+      value=${account} onInput=${(e) => setAccount(e.target.value)} />
+    <${Field} id="recovery-key" label="Recovery key" autocomplete="off" spellcheck="false" required
+      value=${key} onInput=${(e) => setKey(e.target.value)} />
+    ${error && html`<div class="notice error" role="alert">${error.code === 'offline' ? error.message : recoveryErrorText(error.code)}</div>`}
+    <div class="actions">
+      <button class="button primary" type="submit" disabled=${busy || !account.trim() || !key.trim()}>${busy ? 'Signing in…' : 'Sign in'}</button>
+    </div>
+    <button class="button link" type="button" onClick=${onBack}>Back to sign in</button>
+  </form></main>`;
+}
+
+// The page after a recovery sign-in (ADR 0056 item 3). The session can do
+// nothing else until the user adds a sign-in method.
+function AddMethodPage() {
+  const { session, reload } = useContext(SessionContext);
+  const [passphrase, setPassphrase] = useState('');
+  const { busy, error, run } = useAction();
+  const strength = useStrength(passphrase, true);
+  const choices = addMethodChoices(session, !!window.nostr);
+  const vaultError = splitError(error, ['passphrase_too_short', 'passphrase_too_weak']);
+  const passError = passphraseError(passphrase, strength) || vaultError.field;
+  const ready = strength && strength.acceptable;
+  const byPassphrase = (event) => {
+    event.preventDefault();
+    if (!ready) return;
+    run(async () => {
+      await api('/vault/passphrase', { method: 'POST', body: { passphrase } });
+      await reload();
+    });
+  };
+  const bySigner = () => run(async () => {
+    const signer = window.nostr;
+    if (!signer.nip44) {
+      throw new ApiError(0, 'signer', 'This signer does not support NIP-44. Studio needs NIP-44 to open the vault.');
+    }
+    try {
+      const pubkey = await signer.getPublicKey();
+      if (pubkey !== session.pubkey) {
+        throw new ApiError(0, 'signer', 'This signer has another key than this account.');
+      }
+      const { key } = await api('/vault/signer-key', { method: 'POST' });
+      const ciphertext = await signer.nip44.encrypt(pubkey, key);
+      await api('/vault/nostr-wrapper', { method: 'POST', body: { pubkey, ciphertext } });
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      throw new ApiError(0, 'signer', 'The signer did not encrypt the vault key.');
+    }
+    await reload();
+  });
+  const signOut = () => run(async () => {
+    await authCall('/signout');
+    await reload();
+  });
+  const signerError = error && (error.code === 'signer' || error.code === 'no_signer') ? error : null;
+  return html`<main class="center"><div class="card">
+    <${Brand} />
+    <div><h1>Add a sign-in method</h1>
+      <p>The recovery key opened the vault. Add a new way to sign in before you continue.</p></div>
+    ${choices.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase} noValidate>
+      <${Field} id="add-method-passphrase" label="New passphrase" type="password" autocomplete="new-password" required autofocus
+        value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} error=${passError}>
+        <${Meter} strength=${strength} />
+      <//>
+      <div class="actions">
+        <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Saving…' : 'Save the passphrase'}</button>
+      </div>
+    </form>`}
+    ${choices.includes('nip07') && html`<div class="actions">
+      <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Use the signer extension</button></div>`}
+    ${choices.length === 0 && html`<p class="hint">This account signs in with a Nostr signer. Studio found no signer extension in this browser.</p>`}
+    <${AuthNotice} error=${signerError || vaultError.other} />
+    <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign out</button></div>
+  </div></main>`;
 }
 
 function SignUpPage({ signup, onDone, onSignIn }) {
@@ -2754,8 +2853,10 @@ function SignedOut({ session, onSignedIn }) {
       <${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${onSignedIn} /></div></main>`;
   }
   return page === 'sign_in'
-    ? html`<${SignInPage} onDone=${done} onSignUp=${() => setPage('sign_up')} />`
-    : html`<${SignUpPage} signup=${session.signup} onDone=${done} onSignIn=${() => setPage('sign_in')} />`;
+    ? html`<${SignInPage} onDone=${done} onSignUp=${() => setPage('sign_up')} onRecovery=${() => setPage('recovery')} />`
+    : page === 'recovery'
+      ? html`<${RecoveryPage} onDone=${onSignedIn} onBack=${() => setPage('sign_in')} />`
+      : html`<${SignUpPage} signup=${session.signup} onDone=${done} onSignIn=${() => setPage('sign_in')} />`;
 }
 
 // The unlock sheet (ADR 0056 items 7 and 10). `onDone(true)` follows an
@@ -2941,6 +3042,8 @@ function App() {
     body = html`<${Studio} epoch=${0} />`;
   } else if (view === 'sign_in') {
     body = html`<${SignedOut} session=${session} onSignedIn=${reload} />`;
+  } else if (view === 'add_method') {
+    body = html`<${SessionContext.Provider} value=${{ session, reload }}><${AddMethodPage} /><//>`;
   } else {
     body = html`<${SessionContext.Provider} value=${{ session, reload }}><${Studio} epoch=${epoch} /><//>`;
   }

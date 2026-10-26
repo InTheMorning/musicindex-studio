@@ -44,6 +44,9 @@ const MIGRATIONS: &[&str] = &[
         pubkey TEXT NOT NULL UNIQUE
     );
 ",
+    "
+    ALTER TABLE sessions ADD COLUMN restricted INTEGER NOT NULL DEFAULT 0;
+",
 ];
 
 /// A challenge is valid for this many seconds (ADR 0056 item 5).
@@ -109,6 +112,9 @@ pub struct SessionRow {
     pub created_at: i64,
     /// The time of the last request that the server counted.
     pub last_seen: i64,
+    /// True for a session from a recovery sign-in that can only add a new
+    /// sign-in method (ADR 0056 item 3).
+    pub restricted: bool,
 }
 
 /// The database of the server.
@@ -466,13 +472,33 @@ impl Accounts {
     /// # Errors
     ///
     /// Gives a message when the database fails.
-    pub fn create_session(&self, token_hash: &str, account_id: i64) -> Result<(), String> {
+    pub fn create_session(
+        &self,
+        token_hash: &str,
+        account_id: i64,
+        restricted: bool,
+    ) -> Result<(), String> {
         let time = now();
         self.db()
             .execute(
-                "INSERT INTO sessions (token_hash, account_id, created_at, last_seen)
-                 VALUES (?1, ?2, ?3, ?3)",
-                params![token_hash, account_id, time],
+                "INSERT INTO sessions (token_hash, account_id, created_at, last_seen, restricted)
+                 VALUES (?1, ?2, ?3, ?3, ?4)",
+                params![token_hash, account_id, time, restricted],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove the limit of a session.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn lift_restriction(&self, token_hash: &str) -> Result<(), String> {
+        self.db()
+            .execute(
+                "UPDATE sessions SET restricted = 0 WHERE token_hash = ?1",
+                [token_hash],
             )
             .map(|_| ())
             .map_err(|e| e.to_string())
@@ -486,13 +512,15 @@ impl Accounts {
     pub fn session(&self, token_hash: &str) -> Result<Option<SessionRow>, String> {
         self.db()
             .query_row(
-                "SELECT account_id, created_at, last_seen FROM sessions WHERE token_hash = ?1",
+                "SELECT account_id, created_at, last_seen, restricted FROM sessions
+                 WHERE token_hash = ?1",
                 [token_hash],
                 |r| {
                     Ok(SessionRow {
                         account_id: r.get(0)?,
                         created_at: r.get(1)?,
                         last_seen: r.get(2)?,
+                        restricted: r.get(3)?,
                     })
                 },
             )
@@ -641,7 +669,7 @@ mod tests {
     fn a_session_is_found_by_its_hash_and_touched_at_most_once_in_the_gap() {
         let accounts = Accounts::open_in_memory().unwrap();
         let id = accounts.sign_up(None, "a@example.org", "f1").unwrap();
-        accounts.create_session("h", id).unwrap();
+        accounts.create_session("h", id, false).unwrap();
         let first = accounts.session("h").unwrap().unwrap();
         assert_eq!(first.account_id, id);
         accounts

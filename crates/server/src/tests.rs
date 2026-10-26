@@ -1170,3 +1170,256 @@ async fn a_nostr_account_can_delete_itself_with_its_public_key() {
     assert_eq!(gone.status, StatusCode::NO_CONTENT, "{:?}", gone.json);
     assert_eq!(app.state.accounts.folders().unwrap().len(), 0);
 }
+
+const NEW_PASS: &str = "river umbrella orange staple";
+
+/// Sign up an email account with a recovery key. Gives the key.
+async fn user_with_recovery(app: &App, email: &str, passphrase: &str) -> String {
+    let invite = app.state.accounts.create_invite().unwrap();
+    let body = json!({
+        "email": email, "passphrase": passphrase, "invite": invite, "recovery_key": true,
+    });
+    let up = send(app, call("POST", "/auth/v1/signup/email", Some(body))).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let key = up.json["recovery_key"].as_str().unwrap().to_owned();
+    send(app, sign_out_call(&who_of(&up))).await;
+    key
+}
+
+fn recovery_call<'a>(account: &str, key: &str) -> Call<'a> {
+    call(
+        "POST",
+        "/auth/v1/recovery",
+        Some(json!({ "account": account, "recovery_key": key })),
+    )
+}
+
+#[tokio::test]
+async fn a_recovery_sign_in_is_limited_until_a_new_passphrase() {
+    let app = app(Signup::Invite);
+    let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
+    let reply = send(&app, recovery_call("A@Example.org ", &key)).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    assert_eq!(reply.json["recovery"], true);
+    assert_eq!(reply.json["vault"], "open");
+    let who = who_of(&reply);
+
+    let mut session = call("GET", "/auth/v1/session", None);
+    session.token = Some(&who.0);
+    assert_eq!(send(&app, session).await.json["recovery"], true);
+    let status = api(&app, &who, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.status, StatusCode::OK);
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.status, StatusCode::FORBIDDEN);
+    assert_eq!(feeds.code(), "method_required");
+    let weak = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(json!({ "passphrase": "passwordpassword" })),
+    )
+    .await;
+    assert_eq!(weak.code(), "passphrase_too_weak");
+    let still = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(still.code(), "method_required");
+    let set = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(json!({ "passphrase": NEW_PASS })),
+    )
+    .await;
+    assert_eq!(set.status, StatusCode::OK, "{:?}", set.json);
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.status, StatusCode::OK);
+    let mut session = call("GET", "/auth/v1/session", None);
+    session.token = Some(&who.0);
+    assert_eq!(send(&app, session).await.json["recovery"], false);
+
+    send(&app, sign_out_call(&who)).await;
+    let new = send(&app, sign_in_call("a@example.org", NEW_PASS)).await;
+    assert_eq!(new.status, StatusCode::OK);
+    let old = send(&app, sign_in_call("a@example.org", PASS_ONE)).await;
+    assert_eq!(old.status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn a_nostr_account_signs_in_with_its_npub_and_a_new_wrapper_lifts_the_limit() {
+    use nostr::prelude::ToBech32;
+    let app = app(Signup::Open);
+    let keys = new_keys();
+    let challenge = new_challenge(&app).await;
+    let body = json!({ "event": good_event(&keys, &challenge), "recovery_key": true });
+    let up = send(&app, call("POST", "/auth/v1/nostr", Some(body))).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let key = up.json["recovery_key"].as_str().unwrap().to_owned();
+    send(&app, sign_out_call(&who_of(&up))).await;
+
+    let npub = keys.public_key().to_bech32().unwrap();
+    let reply = send(&app, recovery_call(&npub, &key)).await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    let who = who_of(&reply);
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.code(), "method_required");
+    let delete = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": npub })),
+    )
+    .await;
+    assert_eq!(delete.code(), "method_required");
+    let vault_key = api(&app, &who, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(vault_key.status, StatusCode::OK);
+    let add = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(json!({ "pubkey": keys.public_key().to_hex(), "ciphertext": "test-ciphertext" })),
+    )
+    .await;
+    assert_eq!(add.status, StatusCode::OK, "{:?}", add.json);
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_failed_nostr_wrapper_keeps_the_limit() {
+    let app = app(Signup::Invite);
+    let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
+    let who = who_of(&send(&app, recovery_call("a@example.org", &key)).await);
+    let bad = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(json!({ "pubkey": "", "ciphertext": "" })),
+    )
+    .await;
+    assert!(!bad.status.is_success());
+    let feeds = api(&app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.code(), "method_required");
+}
+
+#[tokio::test]
+async fn a_restricted_session_must_add_a_method_of_its_own_account() {
+    let email_app = app(Signup::Invite);
+    let key = user_with_recovery(&email_app, "a@example.org", PASS_ONE).await;
+    let who = who_of(&send(&email_app, recovery_call("a@example.org", &key)).await);
+    // An email account cannot sign in with a Nostr wrapper.
+    let keys = new_keys();
+    let wrapper = json!({ "pubkey": keys.public_key().to_hex(), "ciphertext": "test-ciphertext" });
+    let add = api(
+        &email_app,
+        &who,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(wrapper),
+    )
+    .await;
+    assert_eq!(add.code(), "method_not_usable");
+    let feeds = api(&email_app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.code(), "method_required");
+
+    // A Nostr account cannot sign in with a passphrase, or with the
+    // wrapper of a different key.
+    let nostr_app = app(Signup::Open);
+    let challenge = new_challenge(&nostr_app).await;
+    let body = json!({ "event": good_event(&keys, &challenge), "recovery_key": true });
+    let up = send(&nostr_app, call("POST", "/auth/v1/nostr", Some(body))).await;
+    let key = up.json["recovery_key"].as_str().unwrap().to_owned();
+    send(&nostr_app, sign_out_call(&who_of(&up))).await;
+    let npub = keys.public_key().to_bech32().unwrap();
+    let who = who_of(&send(&nostr_app, recovery_call(&npub, &key)).await);
+    let passphrase = json!({ "passphrase": NEW_PASS });
+    let set = api(
+        &nostr_app,
+        &who,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(passphrase),
+    )
+    .await;
+    assert_eq!(set.code(), "method_not_usable");
+    let other =
+        json!({ "pubkey": new_keys().public_key().to_hex(), "ciphertext": "test-ciphertext" });
+    let add = api(
+        &nostr_app,
+        &who,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(other),
+    )
+    .await;
+    assert_eq!(add.code(), "method_not_usable");
+    let feeds = api(&nostr_app, &who, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.code(), "method_required");
+}
+
+#[tokio::test]
+async fn an_unknown_account_a_wrong_key_and_no_vault_file_give_the_same_error() {
+    let app = app(Signup::Invite);
+    let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
+    // An account with no vault file.
+    new_user(&app, "b@example.org", PASS_TWO).await;
+    let (_, folder) = app
+        .state
+        .accounts
+        .account_by_email("b@example.org")
+        .unwrap()
+        .unwrap();
+    app.state.users.forget(2).await;
+    std::fs::remove_file(app.state.users.folder_path(&folder).join("vault.json")).unwrap();
+
+    let wrong = "0000-0000-0000-0000-0000-0000-0000-0000";
+    let replies = [
+        send(&app, recovery_call("nobody@example.org", &key)).await,
+        send(&app, recovery_call("a@example.org", wrong)).await,
+        send(&app, recovery_call("b@example.org", &key)).await,
+        send(&app, recovery_call("not an account", &key)).await,
+        send(&app, recovery_call("npub1invalid", &key)).await,
+    ];
+    for reply in &replies {
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{:?}", reply.json);
+        assert_eq!(reply.code(), "sign_in_failed");
+        assert_eq!(reply.message(), replies[0].message());
+    }
+}
+
+#[tokio::test]
+async fn ten_failed_recovery_sign_ins_block_the_account_also_for_the_correct_key() {
+    let app = app(Signup::Invite);
+    let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
+    let wrong = "0000-0000-0000-0000-0000-0000-0000-0000";
+    for _ in 0..10 {
+        let reply = send(&app, recovery_call("a@example.org", wrong)).await;
+        assert_eq!(reply.code(), "sign_in_failed");
+    }
+    let mut next = recovery_call("a@example.org", &key);
+    next.addr = "10.0.0.99:4000";
+    let reply = send(&app, next).await;
+    assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(reply.code(), "too_many_attempts");
+}
+
+#[tokio::test]
+async fn a_restricted_session_cannot_delete_the_account() {
+    let app = app(Signup::Invite);
+    let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
+    let who = who_of(&send(&app, recovery_call("a@example.org", &key)).await);
+    let delete = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": "a@example.org" })),
+    )
+    .await;
+    assert_eq!(delete.status, StatusCode::FORBIDDEN);
+    assert_eq!(delete.code(), "method_required");
+    assert_eq!(app.state.accounts.folders().unwrap().len(), 1);
+}

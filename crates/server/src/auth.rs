@@ -28,6 +28,7 @@ pub fn server_router(state: &Shared) -> Router {
         .route("/auth/v1/strength", post(strength))
         .route("/auth/v1/challenge", post(challenge))
         .route("/auth/v1/nostr", post(nostr_sign_in))
+        .route("/auth/v1/recovery", post(recovery_sign_in))
         .route("/auth/v1/signout", post(sign_out))
         .route("/auth/v1/account/delete", post(delete_account))
         // A wildcard route would add a path parameter to the request, and the
@@ -76,6 +77,18 @@ fn start_session(
     state: &Shared,
     account_id: i64,
     status: StatusCode,
+    body: serde_json::Value,
+) -> Response {
+    start_session_with(state, account_id, false, status, body)
+}
+
+/// Make a session with or without the limit of a recovery sign-in, and
+/// give the response with its cookie.
+fn start_session_with(
+    state: &Shared,
+    account_id: i64,
+    restricted: bool,
+    status: StatusCode,
     mut body: serde_json::Value,
 ) -> Response {
     let Ok(token) = accounts::random_hex(32) else {
@@ -83,7 +96,7 @@ fn start_session(
     };
     if state
         .accounts
-        .create_session(&accounts::sha256_hex(&token), account_id)
+        .create_session(&accounts::sha256_hex(&token), account_id, restricted)
         .is_err()
     {
         return internal("the account database failed");
@@ -135,6 +148,7 @@ async fn get_session(State(state): State<Shared>, request: Request) -> Response 
         "email": email,
         "pubkey": pubkey,
         "vault": vault,
+        "recovery": session.restricted,
     }))
     .into_response()
 }
@@ -370,6 +384,11 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
         Err(response) => return response,
     };
     if let Err(response) = session::check_csrf(&session, request.headers()) {
+        return response;
+    }
+    if let Err(response) =
+        session::check_restricted(&session, request.method(), request.uri().path())
+    {
         return response;
     }
     let body: DeleteAccount = match read_json(request).await {
@@ -665,4 +684,119 @@ async fn nostr_new(
             response
         }
     }
+}
+
+#[derive(Deserialize)]
+struct RecoverySignIn {
+    account: String,
+    recovery_key: String,
+}
+
+/// The account of a recovery sign-in: an email address or an `npub`.
+enum RecoveryAccount {
+    Email(String),
+    Pubkey(String),
+}
+
+impl RecoveryAccount {
+    /// Read the account text. Gives `None` for other text.
+    fn parse(text: &str) -> Option<Self> {
+        use nostr::prelude::FromBech32;
+        let text = text.trim();
+        if text.to_ascii_lowercase().starts_with("npub1") {
+            return nostr::prelude::PublicKey::from_bech32(text)
+                .ok()
+                .map(|key| Self::Pubkey(key.to_hex()));
+        }
+        normalize_email(text).map(Self::Email)
+    }
+
+    /// The key of the failure counter.
+    fn counter_key(&self) -> &str {
+        match self {
+            Self::Email(value) | Self::Pubkey(value) => value,
+        }
+    }
+}
+
+/// Sign in with the recovery key (ADR 0056 items 3 and 8). The session has
+/// a limit until the user adds a new sign-in method.
+async fn recovery_sign_in(State(state): State<Shared>, request: Request) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
+    let body: RecoverySignIn = match read_json(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    let account = RecoveryAccount::parse(&body.account);
+    // Other text counts for the client address only.
+    let account_key = account.as_ref().map_or_else(
+        || format!("recovery-unknown:{address}"),
+        |account| account.counter_key().to_owned(),
+    );
+    if state.attempts.blocked(&account_key, &address) {
+        return limits::too_many_attempts();
+    }
+    // A recovery wrapper of the earlier type uses Argon2id.
+    let _permit = match limits::derivation_permit(&state).await {
+        Ok(permit) => permit,
+        Err(response) => return response,
+    };
+    let failed = || {
+        state.attempts.record_failure(&account_key, &address);
+        sign_in_failed()
+    };
+    let found = match &account {
+        Some(RecoveryAccount::Email(email)) => state.accounts.account_by_email(email),
+        Some(RecoveryAccount::Pubkey(pubkey)) => state.accounts.account_by_pubkey(pubkey),
+        None => Ok(None),
+    };
+    let Ok(found) = found else {
+        return internal("the account database failed");
+    };
+    // Do the same work for an unknown account and for an account with no
+    // vault file (ADR 0056 item 8).
+    let dummy_work = || async {
+        let dummy = state.dummy_wrapper.clone();
+        let key = body.recovery_key.clone();
+        let _ = tokio::task::spawn_blocking(move || dummy.open_with_recovery_key(&key)).await;
+    };
+    let Some((account_id, folder)) = found else {
+        dummy_work().await;
+        return failed();
+    };
+    let user = match state.users.get(account_id, &folder).await {
+        Ok(user) => user,
+        Err(error) => return error.into_response(),
+    };
+    match user.handle.vault_state().await {
+        Ok(studio_api::VaultState::Absent) => {
+            dummy_work().await;
+            return failed();
+        }
+        Ok(_) => {}
+        Err(error) => return error.into_response(),
+    }
+    if let Err(error) = user
+        .handle
+        .unlock_with_recovery_key(&body.recovery_key)
+        .await
+    {
+        let response = error.into_response();
+        // A wrong key gives 422, and a missing vault gives 404.
+        return match response.status() {
+            StatusCode::UNPROCESSABLE_ENTITY | StatusCode::NOT_FOUND => failed(),
+            _ => internal("the vault could not be opened"),
+        };
+    }
+    let vault = match user.handle.vault_state().await {
+        Ok(vault) => vault,
+        Err(error) => return error.into_response(),
+    };
+    start_session_with(
+        &state,
+        account_id,
+        true,
+        StatusCode::OK,
+        json!({ "recovery": true, "vault": vault }),
+    )
 }

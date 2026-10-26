@@ -149,6 +149,18 @@ impl WorkspaceHandle {
         self.run(move |w| w.unlock_with_key(&key)).await
     }
 
+    /// Open the vault with its recovery key.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when no vault file exists or the recovery key
+    /// is not correct.
+    pub async fn unlock_with_recovery_key(&self, recovery_key: &str) -> Result<(), ApiError> {
+        let recovery_key = recovery_key.to_owned();
+        self.run(move |w| w.unlock_with_recovery_key(&recovery_key))
+            .await
+    }
+
     /// Close the vault.
     ///
     /// # Errors
@@ -542,6 +554,30 @@ impl Workspace {
         self.vault = Some(file.open_with_key(key_base64)?);
         self.touch_vault();
         Ok(())
+    }
+
+    pub(crate) fn unlock_with_recovery_key(&mut self, recovery_key: &str) -> Result<(), ApiError> {
+        let file = self.vault_file()?;
+        self.vault = Some(file.open_with_recovery_key(recovery_key)?);
+        self.touch_vault();
+        Ok(())
+    }
+
+    /// Replace the passphrase of the open vault, and save the vault.
+    pub(crate) fn set_passphrase(&mut self, passphrase: &str) -> Result<(), ApiError> {
+        if self.vault.is_none() {
+            return Err(match self.vault_state() {
+                VaultState::Absent => ApiError::vault_required(),
+                _ => ApiError::vault_locked(),
+            });
+        }
+        let vault = self
+            .vault
+            .as_mut()
+            .ok_or_else(|| ApiError::internal("the vault closed"))?;
+        vault.set_passphrase(passphrase)?;
+        self.touch_vault();
+        self.save_vault()
     }
 
     pub(crate) fn lock(&mut self) {

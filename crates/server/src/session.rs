@@ -197,6 +197,104 @@ pub struct Session {
     pub token: String,
     /// The account of the session.
     pub account_id: i64,
+    /// True when the session can only add a new sign-in method.
+    pub restricted: bool,
+}
+
+/// The routes that a restricted session reaches, as a method and a path
+/// (ADR 0056 item 3). This is the one list. A route that needs a session
+/// and is not here gives 403 `method_required`.
+const RESTRICTED_ROUTES: &[(&str, &str)] = &[
+    ("GET", "/api/v1/status"),
+    ("POST", "/api/v1/vault/passphrase"),
+    ("POST", "/api/v1/vault/signer-key"),
+    ("POST", "/api/v1/vault/nostr-wrapper"),
+    ("GET", "/auth/v1/session"),
+    ("POST", "/auth/v1/signout"),
+];
+
+/// The routes whose success adds a sign-in method. A response 2xx of one of
+/// them removes the limit of the session.
+const METHOD_ROUTES: &[&str] = &["/api/v1/vault/passphrase", "/api/v1/vault/nostr-wrapper"];
+
+/// Give 403 `method_required` when the session is restricted and the route
+/// is not in the list of [`RESTRICTED_ROUTES`].
+///
+/// # Errors
+///
+/// Gives the 403 response.
+pub fn check_restricted(session: &Session, method: &Method, path: &str) -> Result<(), Response> {
+    if !session.restricted
+        || RESTRICTED_ROUTES
+            .iter()
+            .any(|(m, p)| *m == method.as_str() && *p == path)
+    {
+        return Ok(());
+    }
+    Err(failure(
+        StatusCode::FORBIDDEN,
+        "method_required",
+        "add a new sign-in method first",
+    ))
+}
+
+/// True when a response 2xx for this request adds a sign-in method.
+fn adds_method(method: &Method, path: &str) -> bool {
+    method == Method::POST && METHOD_ROUTES.contains(&path)
+}
+
+/// A restricted session must add a method that signs in to its own
+/// account: a passphrase for an account with an email address, or a Nostr
+/// wrapper for the public key of a Nostr account (ADR 0056 item 29). The
+/// function gives the request again, with its body.
+async fn usable_method(
+    state: &ServerState,
+    session: &Session,
+    request: Request,
+) -> Result<Request, Response> {
+    let refused = || {
+        failure(
+            StatusCode::FORBIDDEN,
+            "method_not_usable",
+            "this method cannot sign in to the account",
+        )
+    };
+    let db_error = |_: String| internal("the account database failed");
+    if request.uri().path() == "/api/v1/vault/passphrase" {
+        let email = state
+            .accounts
+            .email_of(session.account_id)
+            .map_err(db_error)?;
+        return if email.is_some() {
+            Ok(request)
+        } else {
+            Err(refused())
+        };
+    }
+    let Some(pubkey) = state
+        .accounts
+        .pubkey_of(session.account_id)
+        .map_err(db_error)?
+    else {
+        return Err(refused());
+    };
+    let (parts, body) = request.into_parts();
+    let bytes = axum::body::to_bytes(body, MAX_AUTH_BODY)
+        .await
+        .map_err(|_| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+                "the body is too large",
+            )
+        })?;
+    let given = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|value| value["pubkey"].as_str().map(str::to_ascii_lowercase));
+    if given.as_deref() != Some(pubkey.as_str()) {
+        return Err(refused());
+    }
+    Ok(Request::from_parts(parts, axum::body::Body::from(bytes)))
 }
 
 /// The state of the session of a request.
@@ -239,6 +337,7 @@ pub async fn resolve(state: &ServerState, headers: &HeaderMap) -> Result<Resolve
     Ok(Resolved::Active(Session {
         token,
         account_id: row.account_id,
+        restricted: row.restricted,
     }))
 }
 
@@ -310,6 +409,9 @@ pub async fn api(State(state): State<Shared>, request: Request) -> Response {
     if let Err(response) = check_csrf(&session, request.headers()) {
         return response;
     }
+    if let Err(response) = check_restricted(&session, request.method(), request.uri().path()) {
+        return response;
+    }
     let folder = match state.accounts.folder_of(session.account_id) {
         Ok(Some(folder)) => folder,
         Ok(None) => {
@@ -327,7 +429,7 @@ pub async fn api(State(state): State<Shared>, request: Request) -> Response {
     };
     // An unlock with a passphrase derives a key with Argon2id. The permit
     // stays until the router has answered (ADR 0055 item 22).
-    let _permit = if is_unlock(&request) {
+    let _permit = if needs_derivation(&request) {
         match limits::derivation_permit(&state).await {
             Ok(permit) => Some(permit),
             Err(response) => return response,
@@ -335,15 +437,37 @@ pub async fn api(State(state): State<Shared>, request: Request) -> Response {
     } else {
         None
     };
-    match user.router.oneshot(request).await {
+    let lifts = session.restricted && adds_method(request.method(), request.uri().path());
+    let request = if lifts {
+        match usable_method(&state, &session, request).await {
+            Ok(request) => request,
+            Err(response) => return response,
+        }
+    } else {
+        request
+    };
+    let response = match user.router.oneshot(request).await {
         Ok(response) => response,
         Err(never) => match never {},
+    };
+    // The limit ends only when the method was added.
+    if lifts && response.status().is_success() {
+        let hash = accounts::sha256_hex(&session.token);
+        if state.accounts.lift_restriction(&hash).is_err() {
+            return internal("the account database failed");
+        }
     }
+    response
 }
 
-/// True for the request that opens the vault with a passphrase.
-fn is_unlock(request: &Request) -> bool {
-    request.method() == Method::POST && request.uri().path() == "/api/v1/vault/unlock"
+/// True for the request that derives a key with Argon2id: the unlock with
+/// a passphrase and the change of the passphrase.
+fn needs_derivation(request: &Request) -> bool {
+    request.method() == Method::POST
+        && matches!(
+            request.uri().path(),
+            "/api/v1/vault/unlock" | "/api/v1/vault/passphrase"
+        )
 }
 
 /// The fallback of the router: `/api/` goes to the `/api/` layer, and each

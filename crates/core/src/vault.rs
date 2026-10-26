@@ -5,7 +5,9 @@
 //! encrypted copy of the vault key, called a wrapper:
 //!
 //! - a passphrase, through Argon2id;
-//! - an optional recovery key, through Argon2id;
+//! - an optional recovery key, through HKDF-SHA-256 (an older vault can
+//!   have a recovery key through Argon2id);
+//! - passkeys, through HKDF-SHA-256 over a PRF output;
 //! - a Nostr signer, through NIP-44. The signer in the browser does the
 //!   NIP-44 step. This module only keeps its ciphertext.
 //!
@@ -20,8 +22,14 @@ use std::fmt;
 use zeroize::Zeroizing;
 
 use crypto::{KDF_LANES, KDF_MEMORY_KIB, KDF_PASSES, Key};
-pub use file::VaultFile;
-use file::{DerivedWrapper, FORMAT, Record, Wrapper};
+use file::{DerivedWrapper, FORMAT, HkdfWrapper, Record, Wrapper};
+pub use file::{VaultFile, VaultMethod};
+
+/// The HKDF info text of a recovery wrapper.
+const RECOVERY_INFO: &str = "musicindex-studio recovery wrapper v1";
+
+/// The HKDF info text of a passkey wrapper.
+const PASSKEY_INFO: &str = "musicindex-studio passkey wrapper v1";
 
 /// The digits of a recovery key.
 const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -248,11 +256,11 @@ impl OpenVault {
             hex.push(char::from(HEX[usize::from(byte >> 4)]));
             hex.push(char::from(HEX[usize::from(byte & 0x0f)]));
         }
-        let wrapper = self.derived_wrapper("recovery", hex.as_bytes())?;
+        let wrapper = self.hkdf_wrapper("recovery_hkdf", bytes.as_slice(), RECOVERY_INFO, None)?;
         self.file
             .wrappers
-            .retain(|w| !matches!(w, Wrapper::Recovery(_)));
-        self.file.wrappers.push(Wrapper::Recovery(wrapper));
+            .retain(|w| !matches!(w, Wrapper::Recovery(_) | Wrapper::RecoveryHkdf(_)));
+        self.file.wrappers.push(Wrapper::RecoveryHkdf(wrapper));
         let groups: Vec<&str> = (0..hex.len()).step_by(4).map(|i| &hex[i..i + 4]).collect();
         Ok(RecoveryKey(Zeroizing::new(groups.join("-"))))
     }
@@ -276,6 +284,43 @@ impl OpenVault {
             pubkey: pubkey.to_owned(),
             ciphertext: ciphertext.to_owned(),
         });
+    }
+
+    /// Keep a wrapper for a passkey. `salt` is the PRF salt of the credential
+    /// and `prf_output` is the PRF output for that salt. A wrapper with the
+    /// same credential ID is replaced.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`VaultError`] when the random source is not available.
+    pub fn add_passkey_wrapper(
+        &mut self,
+        credential_id: &str,
+        salt: &[u8; 32],
+        prf_output: &[u8; 32],
+    ) -> Result<(), VaultError> {
+        let wrapper = self.hkdf_wrapper(
+            "passkey",
+            prf_output,
+            PASSKEY_INFO,
+            Some((credential_id, salt)),
+        )?;
+        self.remove_passkey_wrapper(credential_id);
+        self.file.wrappers.push(Wrapper::Passkey {
+            credential_id: credential_id.to_owned(),
+            inner: wrapper,
+        });
+        Ok(())
+    }
+
+    /// Remove the passkey wrapper of a credential. Gives `true` when the
+    /// vault had it.
+    pub fn remove_passkey_wrapper(&mut self, credential_id: &str) -> bool {
+        let before = self.file.wrappers.len();
+        self.file.wrappers.retain(
+            |w| !matches!(w, Wrapper::Passkey { credential_id: c, .. } if c == credential_id),
+        );
+        before != self.file.wrappers.len()
     }
 
     /// Add or replace a secret. Each write uses a new nonce.
@@ -325,6 +370,31 @@ impl OpenVault {
     /// The IDs of the secrets.
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         self.file.records.iter().map(|r| r.id.as_str())
+    }
+
+    /// Make a wrapper whose key comes from HKDF-SHA-256. A passkey wrapper
+    /// gives its credential ID and its PRF salt. A recovery wrapper has a
+    /// new random salt.
+    fn hkdf_wrapper(
+        &self,
+        kind: &str,
+        input: &[u8],
+        info: &str,
+        passkey: Option<(&str, &[u8; 32])>,
+    ) -> Result<HkdfWrapper, VaultError> {
+        let salt = match passkey {
+            Some((_, salt)) => salt.to_vec(),
+            None => crypto::random_salt_bytes()?.to_vec(),
+        };
+        let wrapping = Key::expand(input, &salt, info);
+        let sealed = wrapping.seal(
+            self.key.as_bytes(),
+            hkdf_aad(kind, &self.file.vault_id, passkey.map(|(id, _)| id)).as_bytes(),
+        )?;
+        Ok(HkdfWrapper {
+            salt: crypto::encode(&salt),
+            sealed,
+        })
     }
 
     fn derived_wrapper(&self, kind: &str, secret: &[u8]) -> Result<DerivedWrapper, VaultError> {
@@ -380,7 +450,56 @@ impl VaultFile {
                 .map(|c| c.to_ascii_lowercase())
                 .collect(),
         );
+        if let Some(bytes) = recovery_bytes(&normal) {
+            let found = self.wrappers.iter().find_map(|w| match w {
+                Wrapper::RecoveryHkdf(h) => Some(h),
+                _ => None,
+            });
+            if let Some(wrapper) = found {
+                let aad = hkdf_aad("recovery_hkdf", &self.vault_id, None);
+                return self.open_hkdf(wrapper, bytes.as_slice(), RECOVERY_INFO, &aad);
+            }
+        }
         self.open_derived("recovery", normal.as_bytes())
+    }
+
+    /// Open the vault with the PRF output of a passkey.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`VaultErrorKind::WrongKey`] when the vault has no wrapper for
+    /// the credential or the PRF output is not correct.
+    pub fn open_with_passkey(
+        self,
+        credential_id: &str,
+        prf_output: &[u8; 32],
+    ) -> Result<OpenVault, VaultError> {
+        let wrapper = self
+            .wrappers
+            .iter()
+            .find_map(|w| match w {
+                Wrapper::Passkey {
+                    credential_id: c,
+                    inner,
+                } if c == credential_id => Some(inner),
+                _ => None,
+            })
+            .ok_or_else(VaultError::wrong_key)?;
+        let aad = hkdf_aad("passkey", &self.vault_id, Some(credential_id));
+        self.open_hkdf(wrapper, prf_output, PASSKEY_INFO, &aad)
+    }
+
+    fn open_hkdf(
+        &self,
+        wrapper: &HkdfWrapper,
+        input: &[u8],
+        info: &str,
+        aad: &str,
+    ) -> Result<OpenVault, VaultError> {
+        let wrapping = Key::expand(input, &crypto::decode(&wrapper.salt)?, info);
+        let key_bytes = wrapping.open(&wrapper.sealed, aad.as_bytes())?;
+        let key = Key::from_slice(&key_bytes)?;
+        self.clone().open_checked(key)
     }
 
     /// Open the vault with the vault key, as base64. The user's signer gives
@@ -449,6 +568,28 @@ fn record_aad(vault_id: &str, record_id: &str) -> String {
 
 fn wrapper_aad(kind: &str, vault_id: &str) -> String {
     format!("musicindex-studio vault {FORMAT} wrapper {kind} {vault_id}")
+}
+
+/// The associated data of an HKDF wrapper. A passkey wrapper adds its
+/// credential ID.
+fn hkdf_aad(kind: &str, vault_id: &str, credential_id: Option<&str>) -> String {
+    let base = wrapper_aad(kind, vault_id);
+    match credential_id {
+        Some(id) => format!("{base} {id}"),
+        None => base,
+    }
+}
+
+/// The 16 bytes of a recovery key from its 32 hex digits.
+fn recovery_bytes(hex: &str) -> Option<Zeroizing<[u8; 16]>> {
+    if hex.len() != 32 {
+        return None;
+    }
+    let mut out = Zeroizing::new([0_u8; 16]);
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).ok()?;
+    }
+    Some(out)
 }
 
 fn check_aad(vault_id: &str) -> String {
@@ -653,20 +794,18 @@ mod tests {
 
     #[test]
     fn a_saved_vault_file_loads_again() {
-        let dir = std::env::temp_dir().join(format!("studio-vault-test-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("vault.json");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.json");
         let vault = vault_with_secret();
         vault.file().save(&path).unwrap();
         let loaded = VaultFile::load(&path).unwrap();
         assert_eq!(&loaded, vault.file());
-        assert!(!dir.join("vault.json.tmp").exists());
+        assert!(!dir.path().join("vault.json.tmp").exists());
         let opened = loaded.open_with_passphrase(PASSPHRASE).unwrap();
         assert_eq!(
             opened.get("sftp:example").unwrap().unwrap().as_slice(),
             SECRET
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -679,5 +818,155 @@ mod tests {
             VaultFile::from_json(&json).unwrap_err().kind(),
             VaultErrorKind::Corrupt
         );
+    }
+
+    const OLD_FILE: &str = include_str!("../tests/fixtures/vault-recovery-v1.json");
+    const OLD_KEY: &str = "9411-83f3-1ad1-2dab-8213-ba0f-2c32-cacc";
+
+    #[test]
+    fn a_new_recovery_key_uses_the_hkdf_wrapper_after_save_and_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.json");
+        let mut vault = vault_with_secret();
+        let recovery = vault.add_recovery_key().unwrap();
+        vault.file().save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"kind\": \"recovery_hkdf\""));
+        assert!(!text.contains("\"kind\": \"recovery\""));
+        let opened = VaultFile::load(&path)
+            .unwrap()
+            .open_with_recovery_key(recovery.as_str())
+            .unwrap();
+        assert_eq!(
+            opened.get("sftp:example").unwrap().unwrap().as_slice(),
+            SECRET
+        );
+    }
+
+    #[test]
+    fn a_vault_file_with_an_argon2_recovery_wrapper_still_opens() {
+        let file = VaultFile::from_json(OLD_FILE).unwrap();
+        assert!(file.to_json().contains("\"kind\": \"recovery\""));
+        let opened = file.clone().open_with_recovery_key(OLD_KEY).unwrap();
+        assert_eq!(
+            opened.get("sftp:example").unwrap().unwrap().as_slice(),
+            SECRET
+        );
+        assert_eq!(
+            file.open_with_recovery_key("0000-0000").unwrap_err().kind(),
+            VaultErrorKind::WrongKey
+        );
+    }
+
+    #[test]
+    fn a_new_recovery_key_replaces_both_older_recovery_wrappers() {
+        let mut vault = VaultFile::from_json(OLD_FILE)
+            .unwrap()
+            .open_with_recovery_key(OLD_KEY)
+            .unwrap();
+        let first = vault.add_recovery_key().unwrap();
+        let second = vault.add_recovery_key().unwrap();
+        let file = vault.file().clone();
+        let count = file
+            .methods()
+            .iter()
+            .filter(|m| **m == VaultMethod::Recovery)
+            .count();
+        assert_eq!(count, 1);
+        assert!(file.clone().open_with_recovery_key(first.as_str()).is_err());
+        assert!(file.open_with_recovery_key(second.as_str()).is_ok());
+    }
+
+    #[test]
+    fn a_passkey_opens_the_vault_only_with_its_prf_output_and_credential() {
+        let mut vault = vault_with_secret();
+        vault
+            .add_passkey_wrapper("cred-a", &[1; 32], &[7; 32])
+            .unwrap();
+        let file = vault.file().clone();
+        let opened = file.clone().open_with_passkey("cred-a", &[7; 32]).unwrap();
+        assert_eq!(
+            opened.get("sftp:example").unwrap().unwrap().as_slice(),
+            SECRET
+        );
+        assert_eq!(
+            file.clone()
+                .open_with_passkey("cred-a", &[8; 32])
+                .unwrap_err()
+                .kind(),
+            VaultErrorKind::WrongKey
+        );
+        assert_eq!(
+            file.open_with_passkey("cred-b", &[7; 32])
+                .unwrap_err()
+                .kind(),
+            VaultErrorKind::WrongKey
+        );
+    }
+
+    #[test]
+    fn a_passkey_wrapper_with_the_same_credential_replaces_the_earlier_one() {
+        let mut vault = vault_with_secret();
+        vault
+            .add_passkey_wrapper("cred-a", &[1; 32], &[7; 32])
+            .unwrap();
+        vault
+            .add_passkey_wrapper("cred-a", &[2; 32], &[9; 32])
+            .unwrap();
+        let file = vault.file().clone();
+        assert_eq!(file.methods().len(), 2);
+        assert!(file.clone().open_with_passkey("cred-a", &[7; 32]).is_err());
+        assert!(file.open_with_passkey("cred-a", &[9; 32]).is_ok());
+    }
+
+    #[test]
+    fn a_removed_passkey_wrapper_does_not_open_the_vault() {
+        let mut vault = vault_with_secret();
+        vault
+            .add_passkey_wrapper("cred-a", &[1; 32], &[7; 32])
+            .unwrap();
+        assert!(vault.remove_passkey_wrapper("cred-a"));
+        assert!(!vault.remove_passkey_wrapper("cred-a"));
+        assert_eq!(
+            vault
+                .file()
+                .clone()
+                .open_with_passkey("cred-a", &[7; 32])
+                .unwrap_err()
+                .kind(),
+            VaultErrorKind::WrongKey
+        );
+    }
+
+    #[test]
+    fn methods_give_no_salt_and_no_ciphertext() {
+        let mut vault = vault_with_secret();
+        vault.add_recovery_key().unwrap();
+        vault.add_nostr_wrapper("npub-hex", "nip44-ciphertext");
+        vault
+            .add_passkey_wrapper("cred-a", &[1; 32], &[7; 32])
+            .unwrap();
+        let methods = vault.file().methods();
+        assert_eq!(
+            methods,
+            vec![
+                VaultMethod::Passphrase,
+                VaultMethod::Recovery,
+                VaultMethod::Nostr {
+                    pubkey: "npub-hex".to_owned()
+                },
+                VaultMethod::Passkey {
+                    credential_id: "cred-a".to_owned()
+                },
+            ]
+        );
+        let text = format!("{methods:?}");
+        assert!(!text.contains("nip44-ciphertext"));
+        for wrapper in &vault.file().wrappers {
+            if let Wrapper::Passkey { inner, .. } = wrapper {
+                assert!(!text.contains(&inner.salt));
+                assert!(!text.contains(&inner.sealed.ciphertext));
+            }
+        }
     }
 }

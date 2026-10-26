@@ -36,3 +36,4 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
+| [035a](../tasks/studio-v1-task-035a-hkdf-wrappers.md) | Pass | `hkdf` 0.13 uses the `hmac` 0.13 and `sha2` 0.11 of the workspace, so no escalation occurred. `hkdf` is a dependency of `studio-core` only, as `sha2` is, so the root `Cargo.toml` did not change. The planning model changed two new tests to `tempfile`, as the other tests do. In the manual checks, a fixed file of the earlier format, made with the code before the change, opens with its recovery key. The `Debug` output of a wrapper shows only the salt and the sealed data. The associated data of a passkey wrapper has its credential ID. A file with both recovery wrapper types tries only the HKDF wrapper, but `add_recovery_key` never makes such a file. |

@@ -7,6 +7,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
+use hkdf::Hkdf;
+use sha2::Sha256;
 use zeroize::Zeroizing;
 
 use super::VaultError;
@@ -58,6 +60,18 @@ impl Key {
             .hash_password_into(passphrase, salt, out.as_mut_slice())
             .map_err(|_| VaultError::corrupt("the key derivation failed"))?;
         Ok(Self(out))
+    }
+
+    /// Derive a key from input with high entropy with HKDF-SHA-256.
+    ///
+    /// Use it only for input that is not a passphrase, such as a recovery key
+    /// or a PRF output.
+    pub(crate) fn expand(input: &[u8], salt: &[u8], info: &str) -> Self {
+        let mut out = Zeroizing::new([0_u8; KEY_LEN]);
+        Hkdf::<Sha256>::new(Some(salt), input)
+            .expand(info.as_bytes(), out.as_mut_slice())
+            .expect("32 bytes are a valid HKDF-SHA-256 output length");
+        Self(out)
     }
 
     /// Encrypt `plaintext` with a new random nonce.
@@ -119,6 +133,12 @@ impl fmt::Debug for Key {
 pub(crate) struct Sealed {
     pub(crate) nonce: String,
     pub(crate) ciphertext: String,
+}
+
+pub(crate) fn random_salt_bytes() -> Result<[u8; SALT_LEN], VaultError> {
+    let mut salt = [0_u8; SALT_LEN];
+    random_fill(&mut salt)?;
+    Ok(salt)
 }
 
 pub(crate) fn random_salt() -> Result<String, VaultError> {

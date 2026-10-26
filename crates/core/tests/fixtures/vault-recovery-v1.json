@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "vault_id": "5d02a256-fdad-4b8b-85c7-dd31908a5866",
+  "check": {
+    "nonce": "9gr9gFFEz/DgalmE7E0G9i3Ij+dtdXt8",
+    "ciphertext": "s/w6xLGxRhWuTeUB96Hw0g=="
+  },
+  "wrappers": [
+    {
+      "kind": "passphrase",
+      "salt": "qwMuTe1OrGOpPB1ynLVg7w==",
+      "memory_kib": 65536,
+      "passes": 3,
+      "lanes": 1,
+      "nonce": "Qj0cn6HxzNbp3+dN0knXrGV7oDAvp3Wn",
+      "ciphertext": "+QvGKmmlEzxYzQybTq7bPzKvnYXW8nR2oAAdQX/AvBmFL+d+XI2Oq/BurQqJVOaF"
+    },
+    {
+      "kind": "recovery",
+      "salt": "4og9gmIJFIW2hgeJBMG04w==",
+      "memory_kib": 65536,
+      "passes": 3,
+      "lanes": 1,
+      "nonce": "/SZrzRGK/YsDPqycd9Zj3WXrcB+XMm16",
+      "ciphertext": "GLqDfj/DQ73uhUu/dKAbnUophVZLTq9YZK+3JJ3EyN4WLy7+7MR+AiRJEm4/NIuW"
+    }
+  ],
+  "records": [
+    {
+      "id": "sftp:example",
+      "nonce": "0xgZTLF2aNUBzdcTTuS1NUR9cOwUXPfj",
+      "ciphertext": "F4ccxTwV1lxrRIpIm6X1/o2zz2NQfsKc4n/iY0W+mPMbdkOS"
+    }
+  ]
+}

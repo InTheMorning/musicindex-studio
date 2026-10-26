@@ -35,6 +35,16 @@ pub(crate) enum Wrapper {
     Passphrase(DerivedWrapper),
     /// A key from the recovery key encrypts the vault key.
     Recovery(DerivedWrapper),
+    /// A key from HKDF-SHA-256 over the 16 bytes of the recovery key
+    /// encrypts the vault key.
+    RecoveryHkdf(HkdfWrapper),
+    /// A key from HKDF-SHA-256 over the PRF output of a passkey encrypts the
+    /// vault key.
+    Passkey {
+        credential_id: String,
+        #[serde(flatten)]
+        inner: HkdfWrapper,
+    },
     /// The user's signer encrypted the vault key to the user's own public key
     /// with NIP-44.
     Nostr { pubkey: String, ciphertext: String },
@@ -49,6 +59,33 @@ pub(crate) struct DerivedWrapper {
     pub(crate) lanes: u32,
     #[serde(flatten)]
     pub(crate) sealed: Sealed,
+}
+
+/// A wrapper whose key comes from HKDF-SHA-256.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct HkdfWrapper {
+    pub(crate) salt: String,
+    #[serde(flatten)]
+    pub(crate) sealed: Sealed,
+}
+
+/// One unlock method of a vault, without salt and without ciphertext.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VaultMethod {
+    /// A passphrase.
+    Passphrase,
+    /// A recovery key, of either wrapper type.
+    Recovery,
+    /// A Nostr signer, with its public key.
+    Nostr {
+        /// The public key of the signer.
+        pubkey: String,
+    },
+    /// A passkey, with its credential ID.
+    Passkey {
+        /// The credential ID.
+        credential_id: String,
+    },
 }
 
 /// One encrypted secret.
@@ -88,6 +125,25 @@ impl VaultFile {
             Wrapper::Nostr { pubkey, ciphertext } => Some((pubkey.as_str(), ciphertext.as_str())),
             _ => None,
         })
+    }
+
+    /// The unlock methods of the vault. The result has no salt and no
+    /// ciphertext.
+    #[must_use]
+    pub fn methods(&self) -> Vec<VaultMethod> {
+        self.wrappers
+            .iter()
+            .map(|w| match w {
+                Wrapper::Passphrase(_) => VaultMethod::Passphrase,
+                Wrapper::Recovery(_) | Wrapper::RecoveryHkdf(_) => VaultMethod::Recovery,
+                Wrapper::Nostr { pubkey, .. } => VaultMethod::Nostr {
+                    pubkey: pubkey.clone(),
+                },
+                Wrapper::Passkey { credential_id, .. } => VaultMethod::Passkey {
+                    credential_id: credential_id.clone(),
+                },
+            })
+            .collect()
     }
 
     /// Read a vault from JSON.

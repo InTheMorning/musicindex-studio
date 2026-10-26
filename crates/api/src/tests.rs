@@ -6364,3 +6364,100 @@ async fn the_handle_makes_locks_and_unlocks_the_vault_and_a_vault_with_no_wrappe
         crate::VaultState::Absent
     );
 }
+
+/// An app with the network policy `Public` and no exception (ADR 0057).
+fn public_app() -> App {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_net_policy(studio_core::net::NetPolicy::public());
+    App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    }
+}
+
+fn assert_not_public(status: StatusCode, body: &Value, host: &str) {
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "address_not_public", "{body}");
+    assert_eq!(
+        body["error"]["message"],
+        format!("Studio on a server cannot connect to {host}, because it is not a public address.")
+    );
+}
+
+#[tokio::test]
+async fn with_the_policy_public_a_feed_an_image_and_a_media_address_on_loopback_give_422() {
+    let server = web_feeds();
+    server.set_file("/a.mp3", vec![0; 10], "audio/mpeg", false);
+    let app = public_app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/discover",
+        Some(json!({ "addresses": [server.url("/publisher.xml")] })),
+    )
+    .await;
+    assert_not_public(status, &body, "127.0.0.1");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/media/facts",
+        Some(json!({ "url": server.url("/a.mp3") })),
+    )
+    .await;
+    assert_not_public(status, &body, "127.0.0.1");
+    let path = format!("/api/v1/images?url={}", url_encode(&server.url("/a.png")));
+    let (status, body) = call(&app, "GET", &path, None).await;
+    assert_not_public(status, &body, "127.0.0.1");
+}
+
+#[tokio::test]
+async fn with_the_policy_public_an_s3_host_and_an_sftp_host_on_loopback_give_422() {
+    let s3 = studio_core::testing::fake_s3::FakeS3::start("bk");
+    let mut sshd = studio_core::testing::sshd::TestSshd::start();
+    let app = public_app();
+    make_vault(&app).await;
+    let (status, body) = call(&app, "POST", "/api/v1/connectors", Some(s3_body(&s3))).await;
+    assert_not_public(status, &body, "127.0.0.1");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(sftp_body(&mut sshd)),
+    )
+    .await;
+    assert_not_public(status, &body, "127.0.0.1");
+    let (status, list) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list, json!([]));
+}
+
+#[tokio::test]
+async fn with_the_policy_public_an_nsite_host_and_the_fingerprint_route_on_loopback_give_422() {
+    let servers = nsite_servers();
+    let sshd = studio_core::testing::sshd::TestSshd::start();
+    let app = public_app();
+    make_vault(&app).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(servers.body("vault")),
+    )
+    .await;
+    assert_not_public(status, &body, "127.0.0.1");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors/fingerprint",
+        Some(json!({ "host": "127.0.0.1", "port": sshd.port() })),
+    )
+    .await;
+    assert_not_public(status, &body, "127.0.0.1");
+}

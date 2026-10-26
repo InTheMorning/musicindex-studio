@@ -277,7 +277,11 @@ pub(crate) struct FingerprintRequest {
 
 /// Give the fingerprint of the host key of an SFTP server (ADR 0047
 /// item 3). The route needs no vault. It does not log in.
-pub(crate) async fn connector_fingerprint(Json(body): Json<FingerprintRequest>) -> ApiResult {
+pub(crate) async fn connector_fingerprint(
+    State(shared): State<Shared>,
+    Json(body): Json<FingerprintRequest>,
+) -> ApiResult {
+    let policy = lock(&shared)?.net_policy.clone();
     blocking_unlocked(move || {
         let host = body.host.trim().to_owned();
         if host.is_empty() || body.port == 0 {
@@ -287,7 +291,7 @@ pub(crate) async fn connector_fingerprint(Json(body): Json<FingerprintRequest>) 
                 "the host and the port must not be empty",
             ));
         }
-        let fingerprint = SftpHost::fingerprint_of(&host, body.port)?;
+        let fingerprint = SftpHost::fingerprint_of(&host, body.port, &policy)?;
         Ok(Json(json!({ "fingerprint": fingerprint })))
     })
     .await
@@ -342,7 +346,7 @@ fn add_sftp_connector(
         login: body.login,
         host_key,
     };
-    let host = SftpHost::new(config, credentials)?;
+    let host = SftpHost::new(config, credentials)?.with_policy(&w.net_policy);
     // A missing root is a field error. The other errors keep their codes.
     host.check_root().map_err(|error| {
         if error.kind() == ConnectorErrorKind::NotFound {
@@ -485,7 +489,8 @@ fn add_s3_connector(
     let host = S3Bucket::new(
         config,
         S3Credentials::new(body.access_key_id.trim(), body.secret_access_key.as_str()),
-    )?;
+    )?
+    .with_policy(&w.net_policy);
     host.test_provider()?;
     let secret_ref = format!("connector-{}", uuid::Uuid::new_v4());
     let vault = w
@@ -727,16 +732,26 @@ fn add_nsite_connector(
         &config,
         secret.as_deref().map(String::as_bytes),
         Signing::default(),
-    )?;
+    )?
+    .with_policy(&w.net_policy);
     let state = made.site_state()?;
     if state.relays.iter().all(|r| r.newest.is_err()) {
+        // The policy refused each relay (ADR 0057).
+        if let Some(refused) = state
+            .relays
+            .iter()
+            .filter_map(|r| r.newest.as_ref().err())
+            .find(|e| e.kind() == ConnectorErrorKind::NotPublic)
+        {
+            return Err(refused.clone().into());
+        }
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "host_unavailable",
             "no relay answered",
         ));
     }
-    connector::check_blossom_servers(&host.servers)?;
+    connector::check_blossom_servers(&host.servers, &w.net_policy)?;
     add_nostr_row(
         w,
         studio_core::connector::NsiteHost::KIND,
@@ -777,7 +792,7 @@ fn add_blossom_connector(
         Vec::new(),
         Signing::default(),
     )?;
-    connector::check_blossom_servers(&host.servers)?;
+    connector::check_blossom_servers(&host.servers, &w.net_policy)?;
     add_nostr_row(
         w,
         studio_core::connector::BlossomHost::KIND,
@@ -854,7 +869,7 @@ pub(crate) async fn connector_site(State(shared): State<Shared>, Path(id): Path<
         if row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
         }
-        let state = connector::nsite_site_state(&row, w.vault.as_ref())?;
+        let state = connector::nsite_site_state(&row, w.vault.as_ref(), &w.net_policy)?;
         let relays: Vec<Value> = state
             .relays
             .iter()
@@ -1052,7 +1067,7 @@ fn accept_host_key(w: &mut Workspace, row: &ConnectorRow, host_key: &str) -> Res
     }
     let mut config: SftpConfig =
         serde_json::from_str(&row.config).map_err(|e| ApiError::internal(e.to_string()))?;
-    let seen = SftpHost::fingerprint_of(&config.host, config.port)?;
+    let seen = SftpHost::fingerprint_of(&config.host, config.port, &w.net_policy)?;
     if seen != host_key {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -1167,7 +1182,7 @@ pub(crate) async fn add_feed(
         let connector = match (body.connector_id, body.path.as_deref()) {
             (Some(id), Some(path)) => {
                 let row = w.collection.connector(ConnectorId(id))?;
-                let made = connector::from_row(&row, w.vault.as_ref())?;
+                let made = w.connector_of(&row)?;
                 Some((row.id, path.to_owned(), made.public_url(path)))
             }
             (None, None) => None,
@@ -1258,7 +1273,7 @@ pub(crate) async fn new_album_feed(
         if row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
         }
-        let made = connector::from_row(&row, w.vault.as_ref())?;
+        let made = w.connector_of(&row)?;
         let id = pipeline::new_feed(
             &mut w.collection,
             made.as_ref(),
@@ -1293,7 +1308,7 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
         if connector_row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
         }
-        let made = connector::from_row(&connector_row, w.vault.as_ref())?;
+        let made = w.connector_of(&connector_row)?;
         let hosted = pipeline::refresh(&mut w.collection, made.as_ref(), id)?;
         // A feed that the user added from a host folder gets its release
         // folder at its first read (ADR 0038 item 4).
@@ -1353,7 +1368,7 @@ pub(crate) async fn connector_feeds(
         if row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
         }
-        let made = connector::from_row(&row, w.vault.as_ref())?;
+        let made = w.connector_of(&row)?;
         let candidates = studio_core::discover::feed_candidates(made.as_ref())?;
         let known: Vec<String> = w
             .collection
@@ -1413,6 +1428,17 @@ pub(crate) async fn discover(
     blocking(shared, move |w| {
         let found =
             studio_core::discover::from_sources(&w.web, &w.index, &body.addresses, &body.guids);
+        // The policy refused an address and discovery found nothing
+        // (ADR 0057 item 6).
+        if found.feeds.is_empty()
+            && let Some(refused) = found.failed.iter().find(|f| f.not_public)
+        {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "address_not_public",
+                refused.message.clone(),
+            ));
+        }
         let keys = collection_keys(w)?;
         let feeds: Vec<Value> = found
             .feeds
@@ -1541,7 +1567,7 @@ pub(crate) async fn match_connector(
         if row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
         }
-        let made = connector::from_row(&row, w.vault.as_ref())?;
+        let made = w.connector_of(&row)?;
         let candidates = studio_core::discover::feed_candidates(made.as_ref())?;
         let mut linked = Vec::new();
         for feed in w.collection.feeds()? {
@@ -1691,7 +1717,7 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
     if connector_row.secret_ref.is_some() && w.vault.is_none() {
         return Err(ApiError::vault_locked());
     }
-    Ok(connector::from_row(&connector_row, w.vault.as_ref())?)
+    Ok(w.connector_of(&connector_row)?)
 }
 
 /// Start the draft of a feed when it has none (ADR 0041 item 8). A feed

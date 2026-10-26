@@ -14,6 +14,7 @@ use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
+use studio_core::net::NetPolicy;
 use studio_core::nostr_events::{LOOKUP_RELAYS, Signing};
 use studio_core::pipeline::AddressCheck;
 use studio_core::remote;
@@ -209,6 +210,11 @@ pub struct Workspace {
     pub(crate) collection: Collection,
     pub(crate) vault: Option<OpenVault>,
     pub(crate) web: Web,
+    /// The client for the hub. The operator gives the hub address, so the
+    /// client keeps the policy `Open` (ADR 0057).
+    pub(crate) hub_web: Web,
+    /// The rule for the addresses that a user gives (ADR 0057).
+    pub(crate) net_policy: NetPolicy,
     /// The address check of the write. `None` means that the write uses
     /// `web`.
     pub(crate) address_check: Option<AddressChecker>,
@@ -265,6 +271,8 @@ impl Workspace {
             collection: Collection::open(&data_dir.join("collection.sqlite"))?,
             vault: None,
             web: Web::new(),
+            hub_web: Web::new(),
+            net_policy: NetPolicy::Open,
             address_check: None,
             index: MusicIndex::new(Web::new(), DEFAULT_API),
             lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
@@ -279,10 +287,22 @@ impl Workspace {
         })
     }
 
-    /// Use a different musicindex API, such as a test server.
+    /// Use a different musicindex API, such as a test server. The
+    /// operator gives this address, so the client keeps the policy `Open`.
     #[must_use]
     pub fn with_musicindex(mut self, base: &str) -> Self {
-        self.index = MusicIndex::new(self.web.clone(), base);
+        self.index = MusicIndex::new(Web::new(), base);
+        self
+    }
+
+    /// Use the network policy `policy` for each address that a user gives
+    /// (ADR 0057). The feed client, the host connectors and the
+    /// fingerprint route follow it. The musicindex client and the hub
+    /// client keep `Open`.
+    #[must_use]
+    pub fn with_net_policy(mut self, policy: NetPolicy) -> Self {
+        self.web = Web::with_policy(&policy);
+        self.net_policy = policy;
         self
     }
 
@@ -414,6 +434,26 @@ impl Workspace {
         self.hosts_with(Signing::default())
     }
 
+    /// The connector of one row, with the network policy of the workspace
+    /// (ADR 0057).
+    ///
+    /// # Errors
+    ///
+    /// Gives the errors of `connector::from_row`.
+    pub(crate) fn connector_of(
+        &self,
+        row: &studio_core::collection::ConnectorRow,
+    ) -> Result<Box<dyn connector::Connector>, studio_core::connector::ConnectorError> {
+        connector::from_row_in(
+            row,
+            &HostEnv {
+                vault: self.vault.as_ref(),
+                policy: self.net_policy.clone(),
+                ..HostEnv::default()
+            },
+        )
+    }
+
     /// The connector of each host, like [`Workspace::hosts`], with the
     /// events that the user signed for a write (ADR 0050 item 4).
     ///
@@ -435,6 +475,7 @@ impl Workspace {
                 vault: self.vault.as_ref(),
                 blobs: self.collection.kept_blobs(row.id)?,
                 signing: signing.clone(),
+                policy: self.net_policy.clone(),
             };
             let made = connector::from_row_in(&row, &env)?;
             hosts.insert(row.id, made);

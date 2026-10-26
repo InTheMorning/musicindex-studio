@@ -6,7 +6,6 @@
 
 use std::fmt;
 use std::io::{ErrorKind, Read};
-use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
@@ -17,6 +16,7 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::digest::{content_version, finish_hex};
+use crate::net::{self, NetError, NetPolicy};
 
 use super::sftp_wire::{Attrs, FileKind, Handle, SftpWire};
 use super::{
@@ -176,6 +176,7 @@ struct Connection {
 pub struct SftpHost {
     config: SftpConfig,
     credentials: SftpCredentials,
+    policy: NetPolicy,
     connection: Mutex<Option<Connection>>,
 }
 
@@ -228,8 +229,16 @@ impl SftpHost {
         Ok(Self {
             config,
             credentials,
+            policy: NetPolicy::Open,
             connection: Mutex::new(None),
         })
+    }
+
+    /// The same host with the network policy `policy` (ADR 0057).
+    #[must_use]
+    pub fn with_policy(mut self, policy: &NetPolicy) -> Self {
+        self.policy = policy.clone();
+        self
     }
 
     /// The configuration text for the collection.
@@ -258,9 +267,14 @@ impl SftpHost {
     /// # Errors
     ///
     /// Gives [`ConnectorErrorKind::Unavailable`] when Studio cannot connect
-    /// or the handshake fails.
-    pub fn fingerprint_of(host: &str, port: u16) -> Result<String, ConnectorError> {
-        let session = handshake(host, port)?;
+    /// or the handshake fails. Gives [`ConnectorErrorKind::NotPublic`] when
+    /// the policy refuses the host.
+    pub fn fingerprint_of(
+        host: &str,
+        port: u16,
+        policy: &NetPolicy,
+    ) -> Result<String, ConnectorError> {
+        let session = handshake(host, port, policy)?;
         fingerprint(&session)
     }
 
@@ -295,7 +309,7 @@ impl SftpHost {
 
     /// Connect, check the host key, log in and open the SFTP requests.
     fn connect(&self) -> Result<Connection, ConnectorError> {
-        let session = handshake(&self.config.host, self.config.port)?;
+        let session = handshake(&self.config.host, self.config.port, &self.policy)?;
         let seen = fingerprint(&session)?;
         if seen != self.config.host_key {
             return Err(ConnectorError::new(
@@ -541,27 +555,16 @@ fn unavailable(text: &str) -> ConnectorError {
 }
 
 /// The TCP connection and the SSH handshake.
-fn handshake(host: &str, port: u16) -> Result<ssh2::Session, ConnectorError> {
+fn handshake(host: &str, port: u16, policy: &NetPolicy) -> Result<ssh2::Session, ConnectorError> {
     let cannot =
         |e: &dyn fmt::Display| unavailable(&format!("cannot connect to {host}:{port}: {e}"));
-    let addresses = (host, port).to_socket_addrs().map_err(|e| cannot(&e))?;
-    let mut last = None;
-    let mut stream = None;
-    for address in addresses {
-        match TcpStream::connect_timeout(&address, CONNECT_TIMEOUT) {
-            Ok(connected) => {
-                stream = Some(connected);
-                break;
-            }
-            Err(e) => last = Some(e),
-        }
-    }
-    let Some(stream) = stream else {
-        return Err(match last {
-            Some(e) => cannot(&e),
-            None => unavailable(&format!("cannot find the address of {host}")),
-        });
-    };
+    let stream = net::connect(host, port, policy, CONNECT_TIMEOUT).map_err(|e| match e {
+        NetError::NotPublic { host } => ConnectorError::new(
+            ConnectorErrorKind::NotPublic,
+            net::not_public_message(&host),
+        ),
+        NetError::Io(e) => cannot(&e),
+    })?;
     let mut session = ssh2::Session::new().map_err(|e| cannot(&e))?;
     session.set_timeout(SESSION_TIMEOUT_MS);
     session.set_tcp_stream(stream);
@@ -1007,7 +1010,8 @@ mod tests {
     #[test]
     fn fingerprint_of_gives_the_host_key_fingerprint() {
         let server = TestSshd::start();
-        let seen = SftpHost::fingerprint_of("127.0.0.1", server.port()).expect("a fingerprint");
+        let seen = SftpHost::fingerprint_of("127.0.0.1", server.port(), &NetPolicy::Open)
+            .expect("a fingerprint");
         assert_eq!(seen, server.host_key_fingerprint());
     }
 
@@ -1017,7 +1021,8 @@ mod tests {
             let server = TestSshd::start();
             server.port()
         };
-        let error = SftpHost::fingerprint_of("127.0.0.1", port).expect_err("an error");
+        let error =
+            SftpHost::fingerprint_of("127.0.0.1", port, &NetPolicy::Open).expect_err("an error");
         assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
     }
 

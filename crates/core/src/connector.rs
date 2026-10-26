@@ -23,6 +23,7 @@ pub use s3::{S3Bucket, S3Config, S3Credentials, S3UrlStyle};
 pub use sftp::{SftpConfig, SftpCredentials, SftpHost, SftpLogin};
 
 use crate::collection::ConnectorRow;
+use crate::net::NetPolicy;
 use crate::nostr_events;
 use crate::vault::OpenVault;
 use zeroize::Zeroizing;
@@ -140,6 +141,8 @@ pub enum ConnectorErrorKind {
     Unavailable,
     /// The host does not refuse a conditional write that is not correct.
     NoConditions,
+    /// The network policy refused the address of the host (ADR 0057).
+    NotPublic,
     /// The write needs an event that the user did not sign.
     SignatureMissing,
 }
@@ -234,6 +237,9 @@ pub struct HostEnv<'a> {
     pub blobs: Vec<KeptBlob>,
     /// The events that the user signed for the write.
     pub signing: nostr_events::Signing,
+    /// The rule for the addresses that the connector connects to
+    /// (ADR 0057).
+    pub policy: NetPolicy,
 }
 
 /// Read and write the files of one host.
@@ -448,6 +454,7 @@ fn secret_of(
 pub fn nsite_site_state(
     row: &ConnectorRow,
     vault: Option<&OpenVault>,
+    policy: &NetPolicy,
 ) -> Result<SiteState, ConnectorError> {
     if row.kind != NsiteHost::KIND {
         return Err(ConnectorError::new(
@@ -461,6 +468,7 @@ pub fn nsite_site_state(
         secret.as_deref().map(Vec::as_slice),
         nostr_events::Signing::default(),
     )?
+    .with_policy(policy)
     .site_state()
 }
 
@@ -470,12 +478,13 @@ pub fn nsite_site_state(
 ///
 /// # Errors
 ///
-/// Gives `Unavailable` when a server does not connect. Gives the error of
-/// a server that answers with an error status.
-pub fn check_blossom_servers(servers: &[String]) -> Result<(), ConnectorError> {
+/// Gives `Unavailable` when a server does not connect. Gives `NotPublic`
+/// when the policy refuses a server. Gives the error of a server that
+/// answers with an error status.
+pub fn check_blossom_servers(servers: &[String], policy: &NetPolicy) -> Result<(), ConnectorError> {
     let zeros = "0".repeat(64);
     for server in servers {
-        blossom_http::head(server.trim().trim_end_matches('/'), &zeros)?;
+        blossom_http::head(policy, server.trim().trim_end_matches('/'), &zeros)?;
     }
     Ok(())
 }
@@ -499,6 +508,7 @@ pub fn from_row(
             vault,
             blobs: Vec::new(),
             signing: nostr_events::Signing::default(),
+            policy: NetPolicy::Open,
         },
     )
 }
@@ -523,23 +533,31 @@ pub fn from_row_in(
                     "the S3 connector needs a secret",
                 )
             })?;
-            Ok(Box::new(S3Bucket::from_config(&row.config, &secret)?))
+            Ok(Box::new(
+                S3Bucket::from_config(&row.config, &secret)?.with_policy(&env.policy),
+            ))
         }
-        SftpHost::KIND => Ok(Box::new(SftpHost::from_config(
-            &row.config,
-            secret.as_deref().map(Vec::as_slice),
-        )?)),
-        BlossomHost::KIND => Ok(Box::new(BlossomHost::from_config(
-            &row.config,
-            secret.as_deref().map(Vec::as_slice),
-            env.blobs.clone(),
-            env.signing.clone(),
-        )?)),
-        NsiteHost::KIND => Ok(Box::new(NsiteHost::from_config(
-            &row.config,
-            secret.as_deref().map(Vec::as_slice),
-            env.signing.clone(),
-        )?)),
+        SftpHost::KIND => Ok(Box::new(
+            SftpHost::from_config(&row.config, secret.as_deref().map(Vec::as_slice))?
+                .with_policy(&env.policy),
+        )),
+        BlossomHost::KIND => Ok(Box::new(
+            BlossomHost::from_config(
+                &row.config,
+                secret.as_deref().map(Vec::as_slice),
+                env.blobs.clone(),
+                env.signing.clone(),
+            )?
+            .with_policy(&env.policy),
+        )),
+        NsiteHost::KIND => Ok(Box::new(
+            NsiteHost::from_config(
+                &row.config,
+                secret.as_deref().map(Vec::as_slice),
+                env.signing.clone(),
+            )?
+            .with_policy(&env.policy),
+        )),
         other => Err(ConnectorError::new(
             ConnectorErrorKind::InvalidConfig,
             format!("the connector kind {other:?} is not known"),
@@ -628,7 +646,8 @@ mod tests {
     fn nsite_site_state_gives_the_state_of_each_relay() {
         use crate::testing::relay::TestRelay;
         let (one, two) = (TestRelay::start(), TestRelay::start());
-        let state = nsite_site_state(&nsite_row(&[one.url(), two.url()]), None).unwrap();
+        let state =
+            nsite_site_state(&nsite_row(&[one.url(), two.url()]), None, &NetPolicy::Open).unwrap();
         assert_eq!(state.relays.len(), 2);
         assert!(state.consistent);
         assert_eq!(state.relays[0].address, one.url());
@@ -637,19 +656,30 @@ mod tests {
 
     #[test]
     fn nsite_site_state_refuses_a_row_of_another_kind() {
-        let error = nsite_site_state(&row(None), None).unwrap_err();
+        let error = nsite_site_state(&row(None), None, &NetPolicy::Open).unwrap_err();
         assert_eq!(error.kind(), ConnectorErrorKind::InvalidConfig);
+    }
+
+    #[test]
+    fn the_policy_public_refuses_a_blossom_server_on_loopback() {
+        let server = crate::testing::blossom::TestBlossom::start();
+        let error = check_blossom_servers(&[server.url()], &NetPolicy::public()).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::NotPublic);
+        assert_eq!(
+            error.to_string(),
+            "Studio on a server cannot connect to 127.0.0.1, because it is not a public address."
+        );
     }
 
     #[test]
     fn check_blossom_servers_accepts_a_404_and_refuses_a_missing_server() {
         use crate::testing::blossom::TestBlossom;
         let server = TestBlossom::start();
-        check_blossom_servers(&[server.url()]).unwrap();
+        check_blossom_servers(&[server.url()], &NetPolicy::Open).unwrap();
         let dead = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = format!("http://{}", dead.local_addr().unwrap());
         drop(dead);
-        let error = check_blossom_servers(&[address]).unwrap_err();
+        let error = check_blossom_servers(&[address], &NetPolicy::Open).unwrap_err();
         assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
     }
 

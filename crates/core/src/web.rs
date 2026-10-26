@@ -1,9 +1,8 @@
 //! Read public files over HTTP and HTTPS (ADR 0020).
 //!
 //! The desktop shell reads the addresses that its own user gives. The
-//! server shell must also refuse addresses in private networks before it
-//! uses this module, or a user can make the server read them (the
-//! Server Shell phase).
+//! server shell uses the policy `Public`, so that a client refuses each
+//! address in a private network, also after a redirect (ADR 0057).
 
 use std::fmt;
 use std::fmt::Write as _;
@@ -13,6 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use ureq::ResponseExt;
+
+use crate::net::{self, NetPolicy};
 
 /// The kind of a [`WebError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +32,9 @@ pub enum WebErrorKind {
     NotImage,
     /// The caller asked to stop the transfer. The partial file stays.
     Stopped,
+    /// The policy refused the address of the host or of a redirect
+    /// (ADR 0057).
+    NotPublic,
 }
 
 /// An error from [`Web`].
@@ -96,17 +100,27 @@ impl Default for Web {
 }
 
 impl Web {
-    /// Make a client. Each request has a time limit of 20 seconds and a
-    /// maximum of 5 redirects.
+    /// Make a client with the policy `Open`. Each request has a time limit
+    /// of 20 seconds and a maximum of 5 redirects.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_policy(&NetPolicy::Open)
+    }
+
+    /// Make a client that follows `policy`. With `Public`, the client
+    /// refuses each address that is not public, also the address of a
+    /// redirect, and it uses no proxy from the environment (ADR 0057).
+    #[must_use]
+    pub fn with_policy(policy: &NetPolicy) -> Self {
         let config = ureq::Agent::config_builder()
+            .proxy(net::proxy(policy))
             .timeout_global(Some(Duration::from_secs(20)))
             .http_status_as_error(false)
             .max_redirects(5)
             .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
             .build();
         let transfer = ureq::Agent::config_builder()
+            .proxy(net::proxy(policy))
             .timeout_connect(Some(Duration::from_secs(20)))
             .timeout_recv_response(Some(Duration::from_secs(20)))
             .http_status_as_error(false)
@@ -114,8 +128,8 @@ impl Web {
             .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
             .build();
         Self {
-            agent: config.into(),
-            transfer: transfer.into(),
+            agent: net::agent(config, policy),
+            transfer: net::agent(transfer, policy),
         }
     }
 
@@ -152,9 +166,7 @@ impl Web {
         for (key, value) in query {
             request = request.query(*key, *value);
         }
-        let mut response = request
-            .call()
-            .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+        let mut response = request.call().map_err(|e| network_error(url, &e))?;
         let status = response.status().as_u16();
         if status != 200 {
             return Err(WebError {
@@ -216,7 +228,7 @@ impl Web {
             .agent
             .get(url.trim())
             .call()
-            .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+            .map_err(|e| network_error(url, &e))?;
         let status = response.status().as_u16();
         if status != 200 {
             return Err(WebError {
@@ -293,7 +305,7 @@ impl Web {
             .agent
             .head(url.trim())
             .call()
-            .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+            .map_err(|e| network_error(url, &e))?;
         let status = response.status().as_u16();
         if !(200..300).contains(&status) {
             return Err(WebError {
@@ -314,7 +326,7 @@ impl Web {
                 .get(url.trim())
                 .header("Range", "bytes=0-0")
                 .call()
-                .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))?;
+                .map_err(|e| network_error(url, &e))?;
             facts.length = header(&ranged, "content-range").and_then(|v| {
                 v.rsplit_once('/')
                     .and_then(|(_, total)| total.trim().parse().ok())
@@ -460,9 +472,16 @@ impl Web {
         if have > 0 {
             request = request.header("Range", format!("bytes={have}-"));
         }
-        request
-            .call()
-            .map_err(|e| WebError::new(WebErrorKind::Network, format!("{url}: {e}")))
+        request.call().map_err(|e| network_error(url, &e))
+    }
+}
+
+/// The error for a failed request. A host that the policy refuses gets its
+/// own kind.
+fn network_error(url: &str, error: &ureq::Error) -> WebError {
+    match net::refused_host(error) {
+        Some(host) => WebError::new(WebErrorKind::NotPublic, net::not_public_message(host)),
+        None => WebError::new(WebErrorKind::Network, format!("{url}: {error}")),
     }
 }
 
@@ -666,6 +685,56 @@ mod tests {
             .get_to_file(&server.url("/a.bin"), &part, 2000, &mut |_, _| {}, &stop)
             .unwrap_err();
         assert_eq!(error.kind(), WebErrorKind::Stopped);
+    }
+
+    #[test]
+    fn the_policy_public_refuses_a_loopback_address_and_open_reaches_it() {
+        let server = TestServer::start(vec![("/a.xml", 200, b"<rss/>".to_vec())]);
+        let url = server.url("/a.xml");
+        let public = Web::with_policy(&NetPolicy::public());
+        for error in [
+            public.get(&url, 1000).unwrap_err(),
+            public.get_image(&url).unwrap_err(),
+            public.media_facts(&url).unwrap_err(),
+        ] {
+            assert_eq!(error.kind(), WebErrorKind::NotPublic);
+            assert_eq!(
+                error.to_string(),
+                "Studio on a server cannot connect to 127.0.0.1, because it is not a public address."
+            );
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let part = dir.path().join("a.part");
+        let stop = AtomicBool::new(false);
+        let error = public
+            .get_to_file(&url, &part, 1000, &mut |_, _| {}, &stop)
+            .unwrap_err();
+        assert_eq!(error.kind(), WebErrorKind::NotPublic);
+        let open = Web::with_policy(&NetPolicy::Open);
+        assert_eq!(open.get(&url, 1000).unwrap().bytes, b"<rss/>");
+    }
+
+    #[test]
+    fn the_policy_public_checks_the_target_of_a_redirect() {
+        use crate::net::PublicRules;
+
+        let target = TestServer::start(vec![("/b.xml", 200, b"<rss/>".to_vec())]);
+        let first = TestServer::start(Vec::new());
+        first.set("/a.xml", 302, target.url("/b.xml").into_bytes());
+        // Only the first server is an exception. The target is not.
+        let exception = std::net::SocketAddr::from(([127, 0, 0, 1], first.port()));
+        let policy = NetPolicy::Public(PublicRules::with_test_exceptions(vec![exception]));
+        let web = Web::with_policy(&policy);
+
+        let error = web.get(&first.url("/a.xml"), 1000).unwrap_err();
+        assert_eq!(error.kind(), WebErrorKind::NotPublic);
+
+        // The exception alone is enough for a file with no redirect.
+        first.set("/c.xml", 200, b"<rss/>".to_vec());
+        assert_eq!(
+            web.get(&first.url("/c.xml"), 1000).unwrap().bytes,
+            b"<rss/>"
+        );
     }
 
     #[test]

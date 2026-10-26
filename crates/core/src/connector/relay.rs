@@ -4,7 +4,7 @@
 //! It uses `ws://` and `wss://` addresses.
 
 use std::io;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::TcpStream;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -14,6 +14,7 @@ use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Error as WsError, Message, WebSocket};
 
 use super::{ConnectorError, ConnectorErrorKind};
+use crate::net::{self, NetError, NetPolicy};
 
 /// The timeout for a real relay.
 pub(crate) const RELAY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -50,10 +51,17 @@ impl Reads {
     ///
     /// # Errors
     ///
-    /// Gives `Unavailable` when no relay answered.
+    /// Gives `Unavailable` when no relay answered. Gives `NotPublic` when
+    /// the policy refused each relay.
     pub(crate) fn into_newest(self) -> Result<Option<Event>, ConnectorError> {
         if self.results.iter().any(|r| r.result.is_ok()) {
             Ok(self.newest)
+        } else if let Some(refused) = self.results.into_iter().find_map(|r| {
+            r.result
+                .err()
+                .filter(|e| e.kind() == ConnectorErrorKind::NotPublic)
+        }) {
+            Err(refused)
         } else {
             Err(ConnectorError::new(
                 ConnectorErrorKind::Unavailable,
@@ -113,24 +121,16 @@ fn parse_relay(url: &str) -> Result<(bool, String, u16), ConnectorError> {
     Ok((secure, host.to_owned(), port))
 }
 
-fn connect(url: &str, timeout: Duration) -> Result<Connection, ConnectorError> {
+fn connect(url: &str, timeout: Duration, policy: &NetPolicy) -> Result<Connection, ConnectorError> {
     let (_, host, port) = parse_relay(url)?;
     let deadline = Instant::now() + timeout;
-    let addresses = (host.as_str(), port)
-        .to_socket_addrs()
-        .map_err(|_| unavailable("the relay address cannot be resolved"))?;
-    let mut stream = None;
-    for address in addresses {
-        let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
-            break;
-        }
-        if let Ok(connected) = TcpStream::connect_timeout(&address, left) {
-            stream = Some(connected);
-            break;
-        }
-    }
-    let stream = stream.ok_or_else(|| unavailable("Studio cannot connect to the relay"))?;
+    let stream = net::connect(&host, port, policy, timeout).map_err(|e| match e {
+        NetError::NotPublic { host } => ConnectorError::new(
+            ConnectorErrorKind::NotPublic,
+            net::not_public_message(&host),
+        ),
+        NetError::Io(_) => unavailable("Studio cannot connect to the relay"),
+    })?;
     let control = stream
         .try_clone()
         .map_err(|_| unavailable("Studio cannot use the connection to the relay"))?;
@@ -212,8 +212,9 @@ pub(crate) fn fetch(
     relay_url: &str,
     filter: &Filter,
     timeout: Duration,
+    policy: &NetPolicy,
 ) -> Result<Vec<Event>, ConnectorError> {
-    let mut connection = connect(relay_url, timeout)?;
+    let mut connection = connect(relay_url, timeout, policy)?;
     let id = uuid::Uuid::new_v4().simple().to_string();
     connection.send(&json!(["REQ", id, filter]))?;
     let mut events = Vec::new();
@@ -265,8 +266,9 @@ pub(crate) fn publish(
     relay_url: &str,
     event: &Event,
     timeout: Duration,
+    policy: &NetPolicy,
 ) -> Result<Published, ConnectorError> {
-    let mut connection = connect(relay_url, timeout)?;
+    let mut connection = connect(relay_url, timeout, policy)?;
     let wanted: EventId = event.id;
     let result = (|| {
         connection.send(&json!(["EVENT", event]))?;
@@ -298,11 +300,16 @@ fn is_newer(a: &Event, b: &Event) -> bool {
 
 /// Read a filter from each relay at the same time, and find the newest
 /// event of all relays.
-pub(crate) fn newest(relays: &[String], filter: &Filter, timeout: Duration) -> Reads {
+pub(crate) fn newest(
+    relays: &[String],
+    filter: &Filter,
+    timeout: Duration,
+    policy: &NetPolicy,
+) -> Reads {
     let results: Vec<RelayRead> = thread::scope(|scope| {
         let handles: Vec<_> = relays
             .iter()
-            .map(|relay| scope.spawn(move || fetch(relay, filter, timeout)))
+            .map(|relay| scope.spawn(move || fetch(relay, filter, timeout, policy)))
             .collect();
         relays
             .iter()
@@ -362,7 +369,8 @@ fn tag_values(event: Option<&Event>, name: &str, write_only: bool) -> Vec<String
 }
 
 /// Read the newest relay list (kind 10002) and the newest server list
-/// (kind 10063) of a key from the lookup relays.
+/// (kind 10063) of a key from the lookup relays. The operator gives the
+/// lookup relays, so the policy is `Open`.
 ///
 /// `relays` has each `r` tag with no marker or with the marker `write`.
 /// A key with no event has empty lists.
@@ -375,8 +383,20 @@ pub fn key_lists(
     lookup_relays: &[String],
 ) -> Result<KeyLists, ConnectorError> {
     let filter = |kind: u16| Filter::new().author(*public_key).kind(Kind::Custom(kind));
-    let relay_list = newest(lookup_relays, &filter(10002), RELAY_TIMEOUT).into_newest()?;
-    let server_list = newest(lookup_relays, &filter(10063), RELAY_TIMEOUT).into_newest()?;
+    let relay_list = newest(
+        lookup_relays,
+        &filter(10002),
+        RELAY_TIMEOUT,
+        &NetPolicy::Open,
+    )
+    .into_newest()?;
+    let server_list = newest(
+        lookup_relays,
+        &filter(10063),
+        RELAY_TIMEOUT,
+        &NetPolicy::Open,
+    )
+    .into_newest()?;
     Ok(KeyLists {
         relays: tag_values(relay_list.as_ref(), "r", true),
         servers: tag_values(server_list.as_ref(), "server", false),
@@ -429,7 +449,7 @@ mod tests {
         let mine = event(&a, 100, "site", "mine");
         relay.insert(mine.clone());
         relay.insert(event(&b, 100, "site", "other"));
-        let events = fetch(&relay.url(), &filter(&a), SHORT).expect("events");
+        let events = fetch(&relay.url(), &filter(&a), SHORT, &NetPolicy::Open).expect("events");
         assert_eq!(events, vec![mine]);
     }
 
@@ -461,7 +481,13 @@ mod tests {
                 .expect("sent");
             let _ = socket.read();
         });
-        let events = fetch(&format!("ws://127.0.0.1:{port}"), &filter(&a), SHORT).expect("events");
+        let events = fetch(
+            &format!("ws://127.0.0.1:{port}"),
+            &filter(&a),
+            SHORT,
+            &NetPolicy::Open,
+        )
+        .expect("events");
         assert_eq!(events, vec![good]);
         server.join().expect("the server thread");
     }
@@ -471,7 +497,7 @@ mod tests {
         let relay = TestRelay::start();
         let a = keys(1);
         let e = event(&a, 100, "site", "x");
-        let answer = publish(&relay.url(), &e, RELAY_TIMEOUT).expect("an answer");
+        let answer = publish(&relay.url(), &e, RELAY_TIMEOUT, &NetPolicy::Open).expect("an answer");
         assert!(answer.accepted);
         assert_eq!(relay.events(), vec![e]);
     }
@@ -481,7 +507,7 @@ mod tests {
         let relay = TestRelay::start();
         relay.refuse_events(Some("blocked: no"));
         let e = event(&keys(1), 100, "site", "x");
-        let answer = publish(&relay.url(), &e, SHORT).expect("an answer");
+        let answer = publish(&relay.url(), &e, SHORT, &NetPolicy::Open).expect("an answer");
         assert!(!answer.accepted);
         assert_eq!(answer.message, "blocked: no");
     }
@@ -495,7 +521,7 @@ mod tests {
         one.insert(old);
         two.insert(new.clone());
         let relays = vec![one.url(), two.url()];
-        let reads = newest(&relays, &filter(&a), SHORT);
+        let reads = newest(&relays, &filter(&a), SHORT, &NetPolicy::Open);
         assert_eq!(reads.results.len(), 2);
         assert_eq!(reads.results[0].relay, relays[0]);
         assert_eq!(reads.into_newest().expect("answered"), Some(new));
@@ -515,7 +541,7 @@ mod tests {
         one.insert(first.clone());
         two.insert(second.clone());
         let relays = vec![one.url(), two.url()];
-        let reads = newest(&relays, &filter(&a), SHORT);
+        let reads = newest(&relays, &filter(&a), SHORT, &NetPolicy::Open);
         assert_eq!(reads.newest.as_ref(), Some(lowest));
     }
 
@@ -526,7 +552,7 @@ mod tests {
         let e = event(&a, 100, "site", "x");
         relay.insert(e.clone());
         let relays = vec![dead_address(), relay.url()];
-        let reads = newest(&relays, &filter(&a), SHORT);
+        let reads = newest(&relays, &filter(&a), SHORT, &NetPolicy::Open);
         assert_eq!(
             reads.results[0]
                 .result
@@ -540,7 +566,7 @@ mod tests {
 
     #[test]
     fn newest_gives_unavailable_when_no_relay_answers() {
-        let reads = newest(&[dead_address()], &Filter::new(), SHORT);
+        let reads = newest(&[dead_address()], &Filter::new(), SHORT, &NetPolicy::Open);
         let error = reads.into_newest().expect_err("no answer");
         assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
     }
@@ -606,7 +632,13 @@ mod tests {
 
     #[test]
     fn an_address_that_is_not_a_relay_address_gives_invalid_config() {
-        let error = fetch("http://127.0.0.1:1", &Filter::new(), SHORT).expect_err("refused");
+        let error = fetch(
+            "http://127.0.0.1:1",
+            &Filter::new(),
+            SHORT,
+            &NetPolicy::Open,
+        )
+        .expect_err("refused");
         assert_eq!(error.kind(), ConnectorErrorKind::InvalidConfig);
     }
 

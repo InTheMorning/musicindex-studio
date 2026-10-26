@@ -20,6 +20,7 @@ use super::{
     KeptBlob, LIST_MAX_DEPTH, LIST_MAX_FILES, ListedFile, PlannedEvent, Stamp, Version,
     relative_path,
 };
+use crate::net::NetPolicy;
 use crate::nostr_events::{self, AuthAction, Signing};
 
 /// Who signs the authorization events of a host.
@@ -64,6 +65,7 @@ pub struct BlossomHost {
     mode: SigningMode,
     keys: Option<Keys>,
     signing: Signing,
+    policy: NetPolicy,
     state: Mutex<State>,
 }
 
@@ -138,6 +140,13 @@ impl BlossomHost {
     /// The kind of a Blossom connector row.
     pub const KIND: &'static str = "blossom";
 
+    /// The same host with the network policy `policy` (ADR 0057).
+    #[must_use]
+    pub fn with_policy(mut self, policy: &NetPolicy) -> Self {
+        self.policy = policy.clone();
+        self
+    }
+
     /// Make a host from the configuration JSON of a row.
     ///
     /// `secret` is the JSON `{"secret_key": "<hex>"}` for the signing
@@ -205,6 +214,7 @@ impl BlossomHost {
             mode: config.signing,
             keys,
             signing,
+            policy: NetPolicy::Open,
             state: Mutex::new(State {
                 records,
                 ..State::default()
@@ -306,11 +316,11 @@ impl BlossomHost {
         let media_type = media_type_of(path);
         let first = &self.servers[0];
         let header = self.authorization(0, AuthAction::Upload, sha256)?;
-        blossom_http::upload(first, spooled, &media_type, &header)?;
+        blossom_http::upload(&self.policy, first, spooled, &media_type, &header)?;
         let source = format!("{first}/{sha256}");
         for (index, server) in self.servers.iter().enumerate().skip(1) {
             let header = self.authorization(index, AuthAction::Upload, sha256)?;
-            blossom_http::mirror(server, &source, sha256, &header)?;
+            blossom_http::mirror(&self.policy, server, &source, sha256, &header)?;
         }
         self.state().records.insert(
             path.to_owned(),
@@ -359,7 +369,7 @@ impl Connector for BlossomHost {
         };
         let mut last_error = None;
         for server in &self.servers {
-            match blossom_http::get(server, &record.sha256) {
+            match blossom_http::get(&self.policy, server, &record.sha256) {
                 Ok(Some(bytes)) => {
                     return Ok(Some(FileRead {
                         bytes,
@@ -520,7 +530,7 @@ impl Connector for BlossomHost {
         for (index, server) in self.servers.iter().enumerate() {
             let header = self.authorization(index, AuthAction::Delete, &record.sha256)?;
             // A missing blob is not an error: the goal is that it is gone.
-            blossom_http::delete(server, &record.sha256, &header)?;
+            blossom_http::delete(&self.policy, server, &record.sha256, &header)?;
         }
         Ok(())
     }
@@ -644,6 +654,7 @@ mod tests {
                 vault: Some(&vault),
                 blobs: vec![blob.clone()],
                 signing: Signing::default(),
+                policy: NetPolicy::Open,
             },
         )
         .expect("a connector");

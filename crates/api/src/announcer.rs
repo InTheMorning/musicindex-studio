@@ -103,7 +103,7 @@ impl Announcer {
         match announce::take_due(&w.collection, now()) {
             Ok(Some(announcement)) => Some(Step::Send(
                 Box::new(announcement),
-                w.web.clone(),
+                w.hub_web.clone(),
                 w.hub.clone(),
             )),
             Ok(None) => Some(Step::Idle(

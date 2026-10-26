@@ -8,7 +8,7 @@ use crate::connector::{Connector, ConnectorError, Version};
 use crate::digest::content_version;
 use crate::feed::{Feed, RemoteItem};
 use crate::musicindex::MusicIndex;
-use crate::web::{Web, host_of};
+use crate::web::{Web, WebErrorKind, host_of};
 use crate::xml::{Document, Ns};
 
 /// The largest file that discovery reads, in bytes (ADR 0019).
@@ -162,6 +162,9 @@ pub struct Failed {
     pub source: String,
     /// Why the read failed.
     pub message: String,
+    /// True when the network policy refused the address (ADR 0057).
+    #[serde(skip)]
+    pub not_public: bool,
 }
 
 /// The result of a discovery from addresses.
@@ -219,10 +222,18 @@ pub struct PublicFeed {
 ///
 /// Gives a message when the read fails or the file is not an RSS feed.
 pub fn read_public(web: &Web, url: &str) -> Result<PublicFeed, String> {
+    read_public_checked(web, url).map_err(|(message, _)| message)
+}
+
+/// Like [`read_public`]. The error also tells whether the network policy
+/// refused the address.
+fn read_public_checked(web: &Web, url: &str) -> Result<PublicFeed, (String, bool)> {
     let limit = u64::try_from(MAX_FEED_BYTES).unwrap_or(u64::MAX);
-    let file = web.get(url, limit).map_err(|e| e.to_string())?;
-    let doc = Document::parse_bytes(&file.bytes).map_err(|e| e.to_string())?;
-    let feed = Feed::read(&doc).map_err(|e| e.to_string())?;
+    let file = web
+        .get(url, limit)
+        .map_err(|e| (e.to_string(), e.kind() == WebErrorKind::NotPublic))?;
+    let doc = Document::parse_bytes(&file.bytes).map_err(|e| (e.to_string(), false))?;
+    let feed = Feed::read(&doc).map_err(|e| (e.to_string(), false))?;
     Ok(PublicFeed {
         feed,
         version: content_version(&file.bytes),
@@ -240,10 +251,12 @@ fn resolve(source: &Source, index: &MusicIndex) -> Result<String, Failed> {
             Ok(None) => Err(Failed {
                 source: guid.clone(),
                 message: "musicindex does not know this feed GUID".to_owned(),
+                not_public: false,
             }),
             Err(e) => Err(Failed {
                 source: guid.clone(),
                 message: e.to_string(),
+                not_public: false,
             }),
         },
     }
@@ -334,12 +347,13 @@ pub fn from_sources(
             version,
             url: read_url,
             bytes,
-        } = match read_public(web, &url) {
+        } = match read_public_checked(web, &url) {
             Ok(read) => read,
-            Err(message) => {
+            Err((message, not_public)) => {
                 result.failed.push(Failed {
                     source: source.label().to_owned(),
                     message,
+                    not_public,
                 });
                 continue;
             }

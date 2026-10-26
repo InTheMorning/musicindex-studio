@@ -107,6 +107,10 @@ impl From<ConnectorError> for ApiError {
             ConnectorErrorKind::Unavailable => {
                 (StatusCode::SERVICE_UNAVAILABLE, "host_unavailable")
             }
+            // ADR 0057 item 6: the network policy refused the host.
+            ConnectorErrorKind::NotPublic => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "address_not_public")
+            }
             // ADR 0046 item 5: the provider test refused the host.
             ConnectorErrorKind::NoConditions => (StatusCode::UNPROCESSABLE_ENTITY, "no_conditions"),
             // ADR 0050 item 12: the user did not sign a planned event.
@@ -236,6 +240,8 @@ impl From<studio_core::web::WebError> for ApiError {
             // an image, or an image that is larger than the limit.
             studio_core::web::WebErrorKind::NotImage => Some("not_image"),
             studio_core::web::WebErrorKind::TooLarge => Some("too_large"),
+            // ADR 0057 item 6: the network policy refused the address.
+            studio_core::web::WebErrorKind::NotPublic => Some("address_not_public"),
             _ => None,
         };
         match code {

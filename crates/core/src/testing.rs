@@ -106,6 +106,12 @@ impl TestServer {
         format!("http://127.0.0.1:{}{path}", self.port)
     }
 
+    /// The loopback port of this server.
+    #[must_use]
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     /// Add or replace a route while the server runs.
     ///
     /// # Panics

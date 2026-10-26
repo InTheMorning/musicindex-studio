@@ -11,6 +11,8 @@ use rusty_s3::actions::{CompleteMultipartUpload, CreateMultipartUpload, ListObje
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use serde::{Deserialize, Serialize};
 
+use crate::net::{self, NetPolicy, refused_host};
+
 use super::{
     Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, LIST_MAX_DEPTH,
     LIST_MAX_FILES, ListedFile, Stamp, Version, length_error, relative_path,
@@ -145,23 +147,24 @@ impl S3Bucket {
             config.region.clone(),
         )
         .map_err(|e| invalid(&format!("the endpoint is not usable: {e}")))?;
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_connect(Some(Duration::from_secs(20)))
-            .timeout_recv_response(Some(Duration::from_secs(120)))
-            .http_status_as_error(false)
-            .max_redirects(0)
-            .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .into();
         Ok(Self {
             config,
             bucket,
             credentials: Credentials::new(credentials.access_key_id, credentials.secret_access_key),
-            agent,
+            agent: agent(&NetPolicy::Open),
             single_max: SINGLE_MAX,
             part_size: PART_SIZE,
             page_size: None,
         })
+    }
+
+    /// The same connector with the network policy `policy` (ADR 0057).
+    #[must_use]
+    pub fn with_policy(self, policy: &NetPolicy) -> Self {
+        Self {
+            agent: agent(policy),
+            ..self
+        }
     }
 
     /// The same connector with other limits for a single `PutObject` and for
@@ -302,7 +305,13 @@ impl S3Bucket {
             builder = builder.header(*name, *value);
         }
         let request = builder.body(body).map_err(|e| unavailable(&e))?;
-        self.agent.run(request).map_err(|e| unavailable(&e))
+        self.agent.run(request).map_err(|e| match refused_host(&e) {
+            Some(host) => ConnectorError::new(
+                ConnectorErrorKind::NotPublic,
+                crate::net::not_public_message(host),
+            ),
+            None => unavailable(&e),
+        })
     }
 
     /// The error for a response that is not a success.
@@ -725,6 +734,19 @@ impl Connector for S3Bucket {
 }
 
 /// The stamp of an object: its `ETag` and its size.
+/// The HTTP client of a connector. It follows no redirect.
+fn agent(policy: &NetPolicy) -> ureq::Agent {
+    let config = ureq::Agent::config_builder()
+        .proxy(net::proxy(policy))
+        .timeout_connect(Some(Duration::from_secs(20)))
+        .timeout_recv_response(Some(Duration::from_secs(120)))
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
+        .build();
+    net::agent(config, policy)
+}
+
 fn stamp_of(etag: &str, size: u64) -> Stamp {
     Stamp::new(format!("{etag}|{size}"))
 }

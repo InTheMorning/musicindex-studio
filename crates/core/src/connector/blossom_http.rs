@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 
 use super::{ConnectorError, ConnectorErrorKind};
 use crate::digest::{finish_hex, sha256_hex};
+use crate::net::{self, NetPolicy, refused_host};
 
 /// The size of each block that `Spooled::from_reader` reads.
 const BLOCK: usize = 64 * 1024;
@@ -141,15 +142,16 @@ pub(crate) struct Descriptor {
 
 type Response = ureq::http::Response<ureq::Body>;
 
-fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder()
+fn agent(policy: &NetPolicy) -> ureq::Agent {
+    let config = ureq::Agent::config_builder()
+        .proxy(net::proxy(policy))
         .timeout_connect(Some(Duration::from_secs(20)))
         .timeout_recv_response(Some(Duration::from_secs(300)))
         .http_status_as_error(false)
         .max_redirects(0)
         .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .into()
+        .build();
+    net::agent(config, policy)
 }
 
 fn unavailable() -> ConnectorError {
@@ -178,6 +180,7 @@ fn status_error(status: u16) -> ConnectorError {
 }
 
 fn send<B: ureq::AsSendBody>(
+    policy: &NetPolicy,
     method: &str,
     url: &str,
     headers: &[(&str, &str)],
@@ -188,7 +191,14 @@ fn send<B: ureq::AsSendBody>(
         builder = builder.header(*name, *value);
     }
     let request = builder.body(body).map_err(|_| unavailable())?;
-    agent().run(request).map_err(|_| unavailable())
+    agent(policy)
+        .run(request)
+        .map_err(|e| match refused_host(&e) {
+            Some(host) => {
+                ConnectorError::new(ConnectorErrorKind::NotPublic, net::not_public_message(host))
+            }
+            None => unavailable(),
+        })
 }
 
 fn descriptor_of(
@@ -224,6 +234,7 @@ fn descriptor_of(
 /// `PUT <server>/upload`. The descriptor must have the SHA-256 of the
 /// bytes.
 pub(crate) fn upload(
+    policy: &NetPolicy,
     server: &str,
     spooled: &Spooled<'_>,
     media_type: &str,
@@ -237,7 +248,7 @@ pub(crate) fn upload(
         ("content-length", length.as_str()),
     ];
     let response = match &spooled.store {
-        Store::Memory(bytes) => send("PUT", &url, &headers, *bytes)?,
+        Store::Memory(bytes) => send(policy, "PUT", &url, &headers, *bytes)?,
         Store::File(path) => {
             let file = File::open(path).map_err(|e| {
                 ConnectorError::new(
@@ -245,7 +256,7 @@ pub(crate) fn upload(
                     format!("cannot read the spooled data: {e}"),
                 )
             })?;
-            send("PUT", &url, &headers, file)?
+            send(policy, "PUT", &url, &headers, file)?
         }
     };
     descriptor_of(response, spooled.sha256())
@@ -253,6 +264,7 @@ pub(crate) fn upload(
 
 /// `PUT <server>/mirror`. The server fetches the blob from `source_url`.
 pub(crate) fn mirror(
+    policy: &NetPolicy,
     server: &str,
     source_url: &str,
     sha256: &str,
@@ -260,6 +272,7 @@ pub(crate) fn mirror(
 ) -> Result<Descriptor, ConnectorError> {
     let body = serde_json::json!({ "url": source_url }).to_string();
     let response = send(
+        policy,
         "PUT",
         &format!("{server}/mirror"),
         &[
@@ -272,8 +285,12 @@ pub(crate) fn mirror(
 }
 
 /// `HEAD <server>/<sha256>`. Gives the size, or `None` for a missing blob.
-pub(crate) fn head(server: &str, sha256: &str) -> Result<Option<u64>, ConnectorError> {
-    let response = send("HEAD", &format!("{server}/{sha256}"), &[], ())?;
+pub(crate) fn head(
+    policy: &NetPolicy,
+    server: &str,
+    sha256: &str,
+) -> Result<Option<u64>, ConnectorError> {
+    let response = send(policy, "HEAD", &format!("{server}/{sha256}"), &[], ())?;
     match response.status().as_u16() {
         404 => Ok(None),
         200 => Ok(response
@@ -286,8 +303,12 @@ pub(crate) fn head(server: &str, sha256: &str) -> Result<Option<u64>, ConnectorE
 }
 
 /// `GET <server>/<sha256>`. Gives the bytes, or `None` for a missing blob.
-pub(crate) fn get(server: &str, sha256: &str) -> Result<Option<Vec<u8>>, ConnectorError> {
-    let mut response = send("GET", &format!("{server}/{sha256}"), &[], ())?;
+pub(crate) fn get(
+    policy: &NetPolicy,
+    server: &str,
+    sha256: &str,
+) -> Result<Option<Vec<u8>>, ConnectorError> {
+    let mut response = send(policy, "GET", &format!("{server}/{sha256}"), &[], ())?;
     match response.status().as_u16() {
         404 => return Ok(None),
         200 => {}
@@ -310,11 +331,13 @@ pub(crate) fn get(server: &str, sha256: &str) -> Result<Option<Vec<u8>>, Connect
 
 /// `DELETE <server>/<sha256>`. Gives `false` for a missing blob.
 pub(crate) fn delete(
+    policy: &NetPolicy,
     server: &str,
     sha256: &str,
     auth_header: &str,
 ) -> Result<bool, ConnectorError> {
     let response = send(
+        policy,
         "DELETE",
         &format!("{server}/{sha256}"),
         &[("authorization", auth_header)],
@@ -359,6 +382,7 @@ mod tests {
         let sha = sha256_hex(&[b"abc"]);
         let spooled = Spooled::from_bytes(b"abc");
         let descriptor = upload(
+            &NetPolicy::Open,
             &url,
             &spooled,
             "audio/mpeg",
@@ -366,12 +390,31 @@ mod tests {
         )
         .expect("an upload");
         assert_eq!(descriptor.sha256, sha);
-        assert_eq!(head(&url, &sha).expect("a head"), Some(3));
-        assert_eq!(get(&url, &sha).expect("a get"), Some(b"abc".to_vec()));
-        assert!(delete(&url, &sha, &token(&url, AuthAction::Delete, &sha)).expect("a delete"));
-        assert_eq!(head(&url, &sha).expect("a head"), None);
-        assert_eq!(get(&url, &sha).expect("a get"), None);
-        assert!(!delete(&url, &sha, &token(&url, AuthAction::Delete, &sha)).expect("a delete"));
+        assert_eq!(head(&NetPolicy::Open, &url, &sha).expect("a head"), Some(3));
+        assert_eq!(
+            get(&NetPolicy::Open, &url, &sha).expect("a get"),
+            Some(b"abc".to_vec())
+        );
+        assert!(
+            delete(
+                &NetPolicy::Open,
+                &url,
+                &sha,
+                &token(&url, AuthAction::Delete, &sha)
+            )
+            .expect("a delete")
+        );
+        assert_eq!(head(&NetPolicy::Open, &url, &sha).expect("a head"), None);
+        assert_eq!(get(&NetPolicy::Open, &url, &sha).expect("a get"), None);
+        assert!(
+            !delete(
+                &NetPolicy::Open,
+                &url,
+                &sha,
+                &token(&url, AuthAction::Delete, &sha)
+            )
+            .expect("a delete")
+        );
     }
 
     #[test]
@@ -383,6 +426,7 @@ mod tests {
             .expect("a spooled file");
         assert_eq!(spooled.sha256(), sha256_hex(&[&bytes]));
         upload(
+            &NetPolicy::Open,
             &url,
             &spooled,
             "application/octet-stream",
@@ -390,7 +434,7 @@ mod tests {
         )
         .expect("an upload");
         assert_eq!(
-            get(&url, spooled.sha256()).expect("a get"),
+            get(&NetPolicy::Open, &url, spooled.sha256()).expect("a get"),
             Some(bytes.clone())
         );
     }
@@ -401,6 +445,7 @@ mod tests {
         let second = TestBlossom::start();
         let sha = sha256_hex(&[b"abc"]);
         upload(
+            &NetPolicy::Open,
             &first.url(),
             &Spooled::from_bytes(b"abc"),
             "audio/mpeg",
@@ -408,6 +453,7 @@ mod tests {
         )
         .expect("an upload");
         let descriptor = mirror(
+            &NetPolicy::Open,
             &second.url(),
             &format!("{}/{sha}", first.url()),
             &sha,
@@ -425,6 +471,7 @@ mod tests {
         let sha = sha256_hex(&[b"abc"]);
         server.refuse_uploads(true);
         let error = upload(
+            &NetPolicy::Open,
             &url,
             &Spooled::from_bytes(b"abc"),
             "audio/mpeg",
@@ -434,8 +481,14 @@ mod tests {
         assert_eq!(error.kind(), ConnectorErrorKind::Unauthorized);
         server.refuse_uploads(false);
         let wrong = token(&url, AuthAction::Upload, &sha256_hex(&[b"other"]));
-        let error = upload(&url, &Spooled::from_bytes(b"abc"), "audio/mpeg", &wrong)
-            .expect_err("a wrong token");
+        let error = upload(
+            &NetPolicy::Open,
+            &url,
+            &Spooled::from_bytes(b"abc"),
+            "audio/mpeg",
+            &wrong,
+        )
+        .expect_err("a wrong token");
         assert_eq!(error.kind(), ConnectorErrorKind::Unauthorized);
         assert!(!error.to_string().contains("Nostr "));
     }
@@ -446,7 +499,7 @@ mod tests {
             let server = TestBlossom::start();
             server.url()
         };
-        let error = head(&url, &sha256_hex(&[b"abc"])).expect_err("no server");
+        let error = head(&NetPolicy::Open, &url, &sha256_hex(&[b"abc"])).expect_err("no server");
         assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
     }
 

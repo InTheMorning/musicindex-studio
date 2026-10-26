@@ -21,6 +21,7 @@ use super::{
     Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, HostChanges,
     LIST_MAX_DEPTH, LIST_MAX_FILES, ListedFile, PlannedEvent, Stamp, Version, relative_path,
 };
+use crate::net::NetPolicy;
 use crate::nostr_events::{self, AuthAction, Manifest, Signing};
 
 /// The kind of the nsite named site manifest (NIP-5A).
@@ -89,6 +90,7 @@ pub struct NsiteHost {
     mode: SigningMode,
     keys: Option<Keys>,
     signing: Signing,
+    policy: NetPolicy,
     state: Mutex<State>,
 }
 
@@ -215,6 +217,13 @@ impl NsiteHost {
     /// The kind of an nsite connector row.
     pub const KIND: &'static str = "nsite";
 
+    /// The same host with the network policy `policy` (ADR 0057).
+    #[must_use]
+    pub fn with_policy(mut self, policy: &NetPolicy) -> Self {
+        self.policy = policy.clone();
+        self
+    }
+
     /// Make a host from the configuration JSON of a row.
     ///
     /// `secret` is the JSON `{"secret_key": "<hex>"}` for the signing
@@ -285,6 +294,7 @@ impl NsiteHost {
             mode: config.signing,
             keys,
             signing,
+            policy: NetPolicy::Open,
             state: Mutex::new(State::default()),
         })
     }
@@ -303,7 +313,7 @@ impl NsiteHost {
 
     /// Read the manifest of the site from each relay.
     fn read_relays(&self) -> Reads {
-        relay::newest(&self.relays, &self.filter(), RELAY_TIMEOUT)
+        relay::newest(&self.relays, &self.filter(), RELAY_TIMEOUT, &self.policy)
     }
 
     /// Read the newest manifest into the view, at the first need.
@@ -421,10 +431,10 @@ impl NsiteHost {
             .collect::<Result<Vec<_>, _>>()?;
         let media_type = media_type_of(path);
         let first = &self.servers[0];
-        blossom_http::upload(first, spooled, &media_type, &headers[0])?;
+        blossom_http::upload(&self.policy, first, spooled, &media_type, &headers[0])?;
         let source = format!("{first}/{sha256}");
         for (index, server) in self.servers.iter().enumerate().skip(1) {
-            blossom_http::mirror(server, &source, sha256, &headers[index])?;
+            blossom_http::mirror(&self.policy, server, &source, sha256, &headers[index])?;
         }
         let mut state = self.state();
         state.paths.insert(manifest_path(path), sha256.to_owned());
@@ -441,7 +451,7 @@ impl NsiteHost {
         }
         let mut last_error = None;
         for server in &self.servers {
-            match blossom_http::head(server, sha256) {
+            match blossom_http::head(&self.policy, server, sha256) {
                 Ok(Some(size)) => {
                     self.state().sizes.insert(sha256.to_owned(), size);
                     return Ok(size);
@@ -502,19 +512,28 @@ impl NsiteHost {
     fn publish_to_relays(&self, event: &Event) -> Result<(), ConnectorError> {
         let mut accepted = false;
         let mut only_authorization = true;
+        let mut refused = Vec::new();
         for relay in &self.relays {
-            match relay::publish(relay, event, RELAY_TIMEOUT) {
+            match relay::publish(relay, event, RELAY_TIMEOUT, &self.policy) {
                 Ok(answer) if answer.accepted => accepted = true,
                 Ok(answer) => {
                     if !is_authorization_refusal(&answer.message) {
                         only_authorization = false;
                     }
                 }
-                Err(_) => only_authorization = false,
+                Err(error) => {
+                    only_authorization = false;
+                    if error.kind() == ConnectorErrorKind::NotPublic {
+                        refused.push(error);
+                    }
+                }
             }
         }
         if accepted {
             Ok(())
+        } else if !self.relays.is_empty() && refused.len() == self.relays.len() {
+            // The policy refused each relay (ADR 0057).
+            Err(refused.swap_remove(0))
         } else if only_authorization {
             Err(ConnectorError::new(
                 ConnectorErrorKind::Unauthorized,
@@ -585,7 +604,7 @@ impl Connector for NsiteHost {
         };
         let mut last_error = None;
         for server in &self.servers {
-            match blossom_http::get(server, &sha256) {
+            match blossom_http::get(&self.policy, server, &sha256) {
                 Ok(Some(bytes)) => {
                     return Ok(Some(FileRead {
                         bytes,
@@ -967,6 +986,7 @@ mod tests {
                 vault: Some(&vault),
                 blobs: Vec::new(),
                 signing: Signing::default(),
+                policy: NetPolicy::Open,
             },
         )
         .expect("a connector");

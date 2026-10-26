@@ -23,7 +23,7 @@ Studio does not host files. It connects to your hosts.
 
 Studio can connect to these hosts:
 
-- A folder on this computer
+- A folder on this computer (desktop only)
 - An S3 or R2 bucket
 - An SFTP server
 - A Blossom server
@@ -39,9 +39,10 @@ The Releases page shows your collection.
 
 ## Library folder
 
-Studio keeps one folder for each release on your computer.
+Studio keeps one folder for each release in the library folder.
 The folder holds the feed file, the images and the audio files of the release.
-Studio asks for this folder the first time that you start it.
+On the desktop, the library folder is on your computer. Studio asks for it the first time that you start it.
+On a server, the library folder is in your account on the server.
 
 ## Draft, review and write
 
@@ -60,5 +61,6 @@ You can go back to an earlier version.
 
 The vault holds your secrets, for example the access key of a bucket.
 Only your passphrase opens the vault.
-Studio asks you to make the vault when you add the first secret.
+On the desktop, Studio asks you to make the vault when you add the first secret.
+On a server, Studio makes the vault when it makes your account.
 See [Passphrase, unlock and lock](vault.md).

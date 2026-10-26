@@ -3,7 +3,6 @@
 Studio changes a hosted file only when you write.
 This page shows how to look at your changes, write them and go back.
 
-<!-- PHASE-12-GAP: say that Studio asks for an unlock when a write needs a secret and the vault is locked, and that a signer can sign through a remote connection; source: ADR 0055 item 17, ADR 0056 items 17 to 19 -->
 
 ## Your changes are a draft
 
@@ -43,9 +42,18 @@ Select **Examine the changes** to look at the draft again.
 1. Select **Write to the host**.
 2. Studio writes the feed. The sheet closes.
 
+On a server, a write that needs a secret needs an open vault.
+If the vault is locked, Studio shows the sheet **Unlock Studio**. After the unlock, Studio writes.
+See [Passphrase, unlock and lock](vault.md).
+
 If a feed needs your Nostr signer, the sheet says "This write signs N events with your signer."
 The button then shows "Signing 0 of N…", and the number increases after each signature.
 Your signer asks you to approve each signature.
+
+Studio uses the NIP-07 signer extension of the browser.
+If the browser has none, Studio uses a remote signer, such as Amber, through NIP-46.
+If no remote signer is connected, select **Connect a signer**. Then scan the QR code or paste a bunker address. See [Sign in to a Studio server](sign-in.md#connect-a-remote-signer).
+If the connected signer has a different key than the host, select **Connect a different signer**.
 If you have no signer, Studio writes nothing.
 
 Before each write, Studio keeps the file that the write replaces.

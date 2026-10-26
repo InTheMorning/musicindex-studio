@@ -8,6 +8,7 @@ Studio has a left panel with these entries:
 - **Add a feed**
 - **Hosts** (at the bottom)
 - **Lock Studio** (at the bottom, when the vault is open)
+- **Unlock Studio** (at the bottom, on a server with a locked vault)
 
 Studio starts on **Releases**.
 
@@ -94,4 +95,10 @@ A small mark on a release shows that its folder changed.
 
 Use the sun and moon button in the left panel to change the theme.
 
-<!-- PHASE-12-GAP: describe the Account panel with sign-out and account deletion, and the way to install the app on the home screen of a phone; source: task 034f, task 035f -->
+## Your account on a server
+
+On a server, the Hosts page has the panel **Account**.
+Use it to add a passkey, to sign out and to delete the account.
+See [Your account on a server](account.md).
+
+To open Studio from the home screen of a phone, see [Add Studio to the home screen](home-screen-app.md).

@@ -5,7 +5,8 @@ This page shows the files of the release and the hosts that hold them.
 Use this page to keep copies on more than one host.
 You can also move a release to a different host.
 
-<!-- PHASE-12-GAP: say which actions of this page work on the server, and how the server handles downloads and the storage limit; source: ADR 0055 item 21, ADR 0057 -->
+Each button of this page also works on a server.
+On a server, the library folder is in your account on the server. It is not on your computer.
 
 ## What the page shows
 
@@ -65,6 +66,12 @@ Select **Download all** to download each such file. Select **Stop all** to stop 
 If a download fails, select **Try again**.
 
 A copy or a move can need a download first. Studio then asks you to confirm. The write waits for the download.
+
+On a server, your account has a storage limit. The default is 10 GiB, and the operator can change it.
+The limit includes the library files, the downloads and the music files that you send.
+When the account is full, a download fails with "storage_full: the storage limit of this account is reached".
+An import of a music file then shows "the storage limit of this account is reached".
+Remove files that you do not use, or get a larger limit from the operator.
 
 ## Other files on the hosts
 

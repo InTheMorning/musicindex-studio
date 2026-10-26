@@ -260,4 +260,7 @@
 - [Live shows](user-guide/live-shows.md)
 - [Connected apps and show grants](user-guide/connected-apps.md)
 - [Announcements](user-guide/announcements.md)
-- [Phase 12 gaps in the user guide](user-guide/phase-12-gaps.md) (for maintainers)
+- [Sign in to a Studio server](user-guide/sign-in.md)
+- [Your account on a server](user-guide/account.md)
+- [Use Studio from a phone](user-guide/use-on-a-phone.md)
+- [Add Studio to the home screen](user-guide/home-screen-app.md)

@@ -8,7 +8,9 @@ The page lists the hosts that you connected.
 If you have no host, the page shows the form "Connect your first host".
 Otherwise select **＋ Add a host**.
 
-<!-- PHASE-12-GAP: say that the host type "Folder on this computer" is not available on the server, and that the server refuses addresses in a private network; source: ADR 0055 item 24, ADR 0057 -->
+On a server, the type **Folder on this computer** is not available.
+The server also does not connect to an address in a private network, such as `192.168.1.10` or `localhost`.
+It then shows "Studio on a server cannot connect to HOST, because it is not a public address."
 
 ## Choose the type of host
 
@@ -16,7 +18,7 @@ Under **Type of host**, select one of these:
 
 | Type | Use it when |
 | --- | --- |
-| Folder on this computer | A web server publishes a folder of this computer. |
+| Folder on this computer | A web server publishes a folder of this computer. Desktop only. |
 | S3 or R2 bucket | Your files are in an S3 bucket or a Cloudflare R2 bucket. |
 | SFTP server | You upload files to a web server with SFTP. |
 | nsite site | You publish a static site on Nostr. |
@@ -88,7 +90,7 @@ An nsite site needs a Nostr key.
 
 1. Select **nsite site**.
 2. Under **Signing**, select how Studio gets the signature:
-   - **My signer**. Select **Use my signer**. Your browser needs a NIP-07 signer extension. Studio asks the signer for your public key.
+   - **My signer**. Select **Use my signer**. Studio asks the signer for your public key. Studio uses the NIP-07 signer extension of the browser. If the browser has none, Studio shows a QR code to connect a remote signer, such as Amber. See [Sign in to a Studio server](sign-in.md#connect-a-remote-signer).
    - **Key in the vault**. Paste the private key (the nsec) in **Private key of the site**. Studio keeps it in your vault.
 3. Studio shows your public key (the npub). It also fills **Relays** and **Blossom servers** from the lists of your key. If the key has no lists, type the addresses.
 4. Fill in the other fields:
@@ -138,6 +140,7 @@ Studio shows "Feeds use this host." Remove those feeds from your collection firs
 
 The Hosts page has three more panels:
 
-- **Library**. It shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the limits**.
+- **Library**. On the desktop, it shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the limits**.
 - **Announcements**. See [Announcements](announcements.md).
+- **Account**, on a server only. See [Your account on a server](account.md).
 - **Connected apps**. See [Connected apps and show grants](connected-apps.md).

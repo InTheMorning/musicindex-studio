@@ -1,13 +1,12 @@
 # Connected apps and show grants
 
-A connected app is an application on your computer that asks Studio to change a live show.
+A connected app is an application that asks Studio to change a live show.
 Studio keeps the vault, the collection and the write.
 The other app does not get a secret from your vault.
 
 A show grant lets a connected app change one show without your approval of each change.
 Without a grant, Studio writes only changes that you reviewed.
 
-<!-- PHASE-12-GAP: say that apps connect to the public address of the server; source: ADR 0058 item 16, task 036b -->
 
 ## Connect an app
 
@@ -20,6 +19,10 @@ Without a grant, Studio writes only changes that you reviewed.
 
 The app uses the token to send its requests to Studio.
 The token works for connected apps only. It does not open the Studio pages.
+
+On the desktop, the app must be on the same computer as Studio.
+On a server, the app sends its requests to the address of the server, for example `https://studio.musicindex.org`.
+The app can then be on a different computer. The server permits 60 requests for each app in each minute.
 
 An app from an earlier version of Studio has no key.
 Its line shows "This app has no key, so it cannot use a grant."

@@ -3,7 +3,8 @@
 This page is for the desktop app only.
 The desktop app runs on your computer and opens in your web browser.
 
-<!-- PHASE-12-GAP: say that this page is for the desktop only, and link the sign-in page for the server; source: ADR 0055 -->
+On a server, you do not start Studio. You open the address of the server and sign in.
+See [Sign in to a Studio server](sign-in.md).
 
 ## Start the app
 

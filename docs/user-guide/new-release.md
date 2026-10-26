@@ -3,7 +3,8 @@
 A new release is a new album feed.
 Studio makes it as a draft. The feed file does not exist on the host until you write.
 
-<!-- PHASE-12-GAP: say which hosts a new release can use on the server and that the library folder is set by the server; source: ADR 0055 items 3 and 24 -->
+On a server, use an S3 or R2 bucket, an SFTP server or an nsite site for the feed file.
+The host type "Folder on this computer" is not available on a server.
 
 ## Before you start
 

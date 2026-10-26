@@ -4,7 +4,8 @@ Music Index Studio helps you edit your Podcasting 2.0 music feeds.
 You change a feed in Studio. Studio then writes the new feed file to the host.
 
 This guide has one page for each task.
-It describes the desktop app as it works today.
+It describes the desktop app and Studio on a server.
+Most steps are the same in the two. A page tells you when a step is different.
 
 ## Start here
 
@@ -12,7 +13,12 @@ It describes the desktop app as it works today.
 2. [Start Studio on your computer](start-on-desktop.md)
 3. [Set up Studio for the first time](first-run.md)
 
-<!-- PHASE-12-GAP: link the sign-in page and the phone pages in this list; source: ADR 0055, task 034, task 035 -->
+## Use Studio on a server
+
+- [Sign in to a Studio server](sign-in.md)
+- [Your account on a server](account.md)
+- [Use Studio from a phone](use-on-a-phone.md)
+- [Add Studio to the home screen](home-screen-app.md)
 
 ## Keep your keys safe
 

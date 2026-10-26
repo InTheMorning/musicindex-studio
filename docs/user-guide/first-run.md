@@ -4,7 +4,9 @@ The first time that you open Studio, it asks you two things.
 First, it asks for the library folder.
 Then it asks if you have a feed.
 
-<!-- PHASE-12-GAP: say how a new account is made on the server, with an invite code, and that the server sets the library folder; source: ADR 0055 items 3 and 7, task 034f -->
+On a server, you first make an account. See [Sign in to a Studio server](sign-in.md).
+The server sets the library folder of your account, so Studio does not ask for it.
+Studio then asks "Do you already have a feed?".
 
 ## Choose the library folder
 
@@ -20,6 +22,7 @@ Select **Continue**.
 
 Studio asks for this folder one time only.
 The Hosts page shows the folder. You cannot move the library to a different folder in this version.
+This step is for the desktop only.
 
 ## Answer the first question
 
@@ -51,9 +54,11 @@ Then select **Choose Backup Files** and select the .json files that MSP 2.0 save
 Select **Import backups** to add the feeds.
 Studio keeps the edit tokens from the backup files in your vault.
 If you have no vault, Studio asks you to make one. See [Passphrase, unlock and lock](vault.md).
+On a server, the vault exists from the sign-up. If it is locked, Studio asks you to unlock it.
 
 ## Open Studio later
 
 On the next start, Studio opens the Releases page.
 If your collection is empty and you have no host, Studio asks "Do you already have a feed?" again.
-If you made a vault, Studio asks for your passphrase first.
+On the desktop, if you made a vault, Studio asks for your passphrase first.
+On a server, you sign in first.

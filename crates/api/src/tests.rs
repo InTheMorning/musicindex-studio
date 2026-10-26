@@ -1232,6 +1232,41 @@ async fn the_ui_files_load_without_the_token_and_with_a_strict_policy() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+#[tokio::test]
+async fn the_manifest_and_its_icons_load_without_the_token() {
+    let app = app();
+    let get = |path: String| {
+        let router = app.router.clone();
+        async move {
+            let request = Request::builder()
+                .uri(&path)
+                .header(header::HOST, HOST)
+                .body(Body::empty())
+                .unwrap();
+            router.oneshot(request).await.unwrap()
+        }
+    };
+    let response = get("/manifest.webmanifest".to_owned()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "application/manifest+json"
+    );
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let manifest: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(manifest["display"], "standalone");
+    let icons = manifest["icons"].as_array().unwrap();
+    assert_eq!(icons.len(), 3);
+    for icon in icons {
+        let src = icon["src"].as_str().unwrap();
+        let response = get(src.to_owned()).await;
+        assert_eq!(response.status(), StatusCode::OK, "{src}");
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
+    }
+}
+
 #[test]
 fn the_ui_names_no_other_server_and_sends_the_token() {
     for (name, text) in crate::ui::text_files() {

@@ -101,6 +101,26 @@ const FILES: &[(&str, &str, &[u8])] = &[
         "image/svg+xml",
         include_bytes!("../ui/assets/musicindex-lockup-horizontal.svg"),
     ),
+    (
+        "assets/icon-192.png",
+        "image/png",
+        include_bytes!("../ui/assets/icon-192.png"),
+    ),
+    (
+        "assets/icon-512.png",
+        "image/png",
+        include_bytes!("../ui/assets/icon-512.png"),
+    ),
+    (
+        "assets/icon-maskable-512.png",
+        "image/png",
+        include_bytes!("../ui/assets/icon-maskable-512.png"),
+    ),
+    (
+        "assets/apple-touch-icon.png",
+        "image/png",
+        include_bytes!("../ui/assets/apple-touch-icon.png"),
+    ),
     // The licenses of the vendored files.
     (
         "assets/Figtree-OFL.txt",
@@ -139,6 +159,17 @@ pub(crate) async fn index() -> Response {
         .into_response()
 }
 
+/// The web app manifest. The icons in it are UI files. It has no token and
+/// no session, because the browser fetches it without credentials.
+pub(crate) async fn manifest() -> Response {
+    (
+        SECURITY_HEADERS,
+        [(header::CONTENT_TYPE, "application/manifest+json")],
+        include_str!("../ui/manifest.webmanifest"),
+    )
+        .into_response()
+}
+
 pub(crate) async fn file(Path(path): Path<String>) -> Response {
     match FILES.iter().find(|(name, _, _)| *name == path) {
         Some((_, media_type, bytes)) => (
@@ -160,8 +191,14 @@ pub(crate) fn paths() -> impl Iterator<Item = &'static str> {
 /// The text UI files, for tests.
 #[cfg(test)]
 pub(crate) fn text_files() -> impl Iterator<Item = (&'static str, &'static str)> {
-    let index = std::iter::once(("index.html", include_str!("../ui/index.html")));
-    index.chain(
+    let index = [
+        ("index.html", include_str!("../ui/index.html")),
+        (
+            "manifest.webmanifest",
+            include_str!("../ui/manifest.webmanifest"),
+        ),
+    ];
+    index.into_iter().chain(
         FILES.iter().filter_map(|(name, _, bytes)| {
             std::str::from_utf8(bytes).ok().map(|text| (*name, text))
         }),

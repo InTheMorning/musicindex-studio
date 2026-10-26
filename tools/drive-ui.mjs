@@ -21,6 +21,9 @@
 // path on this computer) through `DOM.setFileInputFiles`, and the input then
 // fires its `change` event. Use a step for the click that opens the sheet
 // first, because the input must be in the page.
+// A step {"manifest": true} sends `Page.getAppManifest`. It prints the
+// manifest `url`, the `errors` and the parsed `name` and `display`. An empty
+// `errors` list means that Chromium found no manifest error.
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
@@ -100,6 +103,12 @@ for (const step of steps) {
     if (!found.result?.nodeId) throw new Error('no input ' + selector);
     await send('DOM.setFileInputFiles', { nodeId: found.result.nodeId, files: [path] });
     console.log('file =>', path);
+  }
+  if (step.manifest) {
+    const m = (await send('Page.getAppManifest')).result;
+    let parsed = {};
+    try { parsed = JSON.parse(m.data || '{}'); } catch (_) {}
+    console.log('manifest =>', JSON.stringify({ url: m.url, errors: m.errors, name: parsed.name, display: parsed.display }));
   }
   if (step.js) { await evaluate(helpers); console.log(step.js.slice(0, 60), '=>', JSON.stringify(await evaluate(step.js))?.slice(0, 300)); }
   if (step.shot) await shot(step.shot);

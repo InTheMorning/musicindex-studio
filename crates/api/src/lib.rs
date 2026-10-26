@@ -54,11 +54,12 @@ pub fn qr_svg(text: &str) -> String {
     )
 }
 
-/// The UI routes: `/` and `/ui/{*path}`, with the security headers
+/// The UI routes: `/`, `/manifest.webmanifest` and `/ui/{*path}`, with the security headers
 /// (ADR 0016).
 pub fn ui_router() -> Router {
     Router::new()
         .route("/", get(ui::index))
+        .route("/manifest.webmanifest", get(ui::manifest))
         .route("/ui/{*path}", get(ui::file))
 }
 

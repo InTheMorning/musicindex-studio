@@ -494,6 +494,38 @@ async fn the_ui_files_are_served_without_a_session() {
     assert_eq!(root.status(), StatusCode::OK);
 }
 
+#[tokio::test]
+async fn the_manifest_and_its_icons_are_served_without_a_session() {
+    let app = app(Signup::Invite);
+    let get = |path: String| {
+        let router = app.router.clone();
+        async move {
+            let request = Request::builder()
+                .uri(&path)
+                .header(header::HOST, HOST)
+                .body(Body::empty())
+                .unwrap();
+            router.oneshot(request).await.unwrap()
+        }
+    };
+    let response = get("/manifest.webmanifest".to_owned()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "application/manifest+json"
+    );
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let manifest: Value = serde_json::from_slice(&bytes).unwrap();
+    let icons = manifest["icons"].as_array().unwrap();
+    assert_eq!(icons.len(), 3);
+    for icon in icons {
+        let src = icon["src"].as_str().unwrap();
+        assert_eq!(get(src.to_owned()).await.status(), StatusCode::OK, "{src}");
+    }
+}
+
 // ---- The vault window, the limits and the account deletion (task 034d) ----
 
 fn s3_body() -> Value {

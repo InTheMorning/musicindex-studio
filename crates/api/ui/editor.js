@@ -7,6 +7,7 @@ import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from '.
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher } from './shell.js';
+import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError } from './signing.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
@@ -817,14 +818,31 @@ function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
 function HostOperations({ diff, connectors, onRemove, onUndoMove, busy }) {
   if (diff.operations.length === 0 && diff.blocked.length === 0 && !diff.feed_move) return null;
   return html`<div class="group host-ops">
-    ${diff.feed_move && html`<${FeedMoveRow} move=${diff.feed_move} connectors=${connectors} onUndo=${onUndoMove} busy=${busy} />
-      <p class="hint move-hint">Studio does not tell the musicindex API and Podcast Index the new address yet.</p>`}
+    ${diff.feed_move && html`<${FeedMoveRow} move=${diff.feed_move} connectors=${connectors} onUndo=${onUndoMove} busy=${busy} />`}
     ${diff.operations.map((op) => html`<${HostOperationRow}
       key=${`${op.kind}-${op.connector_id}-${op.path}`} op=${op} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
     ${diff.blocked.map((b) => html`<${BlockedDeleteRow}
       key=${`blocked-${b.operation_id}`} blocked=${b} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
   </div>`;
 }
+
+// The announcements of a write (ADR 0052 item 11). The lines show when the
+// sheet can write, also when the feed text did not change. Each line has the
+// form of a host operation row, with no button.
+function AnnounceLines({ diff }) {
+  const lines = announceLines(diff);
+  if (lines.length === 0) return null;
+  return html`<div class="group announce-lines">
+    ${lines.map((line) => html`<div class="host-op-row" key=${line}>
+      <span class="kind">Announce</span>
+      <span class="text">${line}</span>
+    </div>`)}
+  </div>`;
+}
+
+// The name of the event that tells the feed page to load the announcements
+// again, such as after a write.
+const ANNOUNCE_RELOAD = 'studio-announce-reload';
 
 // A sheet opens with showModal() when `open` turns true, and closes with
 // close() when `open` turns false. The close event covers the Escape key,
@@ -894,6 +912,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     await draft.load();
     onOpsCleared();
     onWritten(feed);
+    // The feed page loads the new announcements.
+    window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
     ref.current.close();
   });
   const discard = () => {
@@ -960,6 +980,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
+      ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} unified=${diff.unified} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
@@ -1061,6 +1082,26 @@ function creditSummary(model) {
 // the former Facts section showed, and the Remove from collection button.
 function FeedFacts({ feed, onRemoved }) {
   const { busy, error, run } = useAction();
+  // The announcements of the feed, the newest first (ADR 0052 item 20). The
+  // list loads when the page opens, after each write, and each 5 seconds
+  // while the newest one waits.
+  const [announcements, setAnnouncements] = useState(null);
+  const loadAnnouncements = () => api(`/feeds/${feed.id}/announcements`).then(setAnnouncements, () => {});
+  useEffect(() => {
+    setAnnouncements(null);
+    loadAnnouncements();
+    window.addEventListener(ANNOUNCE_RELOAD, loadAnnouncements);
+    return () => window.removeEventListener(ANNOUNCE_RELOAD, loadAnnouncements);
+  }, [feed.id]);
+  const waiting = isWaiting(announcements);
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const timer = setInterval(loadAnnouncements, 5000);
+    return () => clearInterval(timer);
+  }, [waiting, feed.id]);
+  const announcementText = announcements
+    ? announceStatus(announcements, (seconds) => new Date(seconds * 1000).toLocaleString())
+    : 'Not loaded yet.';
   const remove = () => {
     const name = feed.title || feed.path || 'this feed';
     if (!confirm(`Remove “${name}” from your collection? The feed file on the host does not change.`)) return;
@@ -1070,13 +1111,14 @@ function FeedFacts({ feed, onRemoved }) {
     });
   };
   return html`<details class="disclosure">
-    <summary class="link-row"><span class="label">Feed facts</span><span class="summary">GUID, file and version</span></summary>
+    <summary class="link-row"><span class="label">Feed facts</span><span class="summary">GUID, file, version and announcement</span></summary>
     <div class="form">
       <dl class="facts">
         <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
+        <dt>Announcement</dt><dd>${announcementText.split('\n').map((line, i) => html`${i > 0 && html`<br />`}${line}`)}</dd>
       </dl>
       <${ErrorNotice} error=${error} />
       <div class="actions"><button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button></div>

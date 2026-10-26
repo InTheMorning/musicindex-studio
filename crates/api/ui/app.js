@@ -1677,6 +1677,45 @@ function LibraryPanel() {
   </article>`;
 }
 
+// The two announcement settings (ADR 0052 items 5 and 6). The podping check box
+// is off and disabled while the first check box is off.
+function AnnouncePanel() {
+  const [saved, setSaved] = useState(null);
+  const [pubnotify, setPubnotify] = useState(false);
+  const [podping, setPodping] = useState(false);
+  const { busy, error, run } = useAction();
+  const load = () => api('/settings/announcements').then((result) => {
+    setSaved(result);
+    setPubnotify(result.pubnotify);
+    setPodping(result.podping);
+  });
+  useEffect(() => { load(); }, []);
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      await api('/settings/announcements', { method: 'PUT', body: { pubnotify, podping } });
+      await load();
+    });
+  };
+  if (!saved) return null;
+  const same = pubnotify === saved.pubnotify && podping === saved.podping;
+  return html`<article class="panel">
+    <h2>Announcements</h2>
+    <form class="form" onSubmit=${submit}>
+      <label class="check"><input type="checkbox" checked=${pubnotify}
+        onChange=${(e) => setPubnotify(e.target.checked)} />
+        <span>Tell Podcast Index after each write</span></label>
+      <label class="check"><input type="checkbox" checked=${pubnotify && podping} disabled=${!pubnotify}
+        onChange=${(e) => setPodping(e.target.checked)} />
+        <span>Send a podping with it</span></label>
+      <p class="hint">Studio sends the announcement 30 seconds after a write.</p>
+      <${ErrorNotice} error=${error} />
+      <div class="actions"><button class="button primary" type="submit" disabled=${busy || same}>
+        ${busy ? 'Saving…' : 'Save'}</button></div>
+    </form>
+  </article>`;
+}
+
 // The ID of the newest manifest among the relays of a site state.
 function newestManifest(state) {
   let newest = null;
@@ -1880,6 +1919,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     <${Bar}><span class="bar-title">Hosts</span><//>
     <section class="section">
       <${LibraryPanel} />
+      <${AnnouncePanel} />
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
         : html`<${ErrorNotice} error=${error} />`}

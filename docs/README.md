@@ -238,3 +238,26 @@
 
 - [Studio baseline research, 2026-10-22](research/2026-10-22-studio-baseline-research.md)
 - [Phase 12 authentication research, 2026-10-26](research/2026-10-26-phase-12-auth-research.md)
+
+## User guide
+
+- [Studio user guide](user-guide/README.md)
+- [How Studio works](user-guide/how-studio-works.md)
+- [Start Studio on your computer](user-guide/start-on-desktop.md)
+- [Set up Studio for the first time](user-guide/first-run.md)
+- [Passphrase, unlock and lock](user-guide/vault.md)
+- [Connect a host](user-guide/hosts.md)
+- [Add feeds that you already have](user-guide/add-feeds.md)
+- [Make a new release](user-guide/new-release.md)
+- [Publisher feeds](user-guide/publisher-feeds.md)
+- [Playlists](user-guide/playlists.md)
+- [Find and open a release](user-guide/find-your-way.md)
+- [Edit the album details](user-guide/edit-album.md)
+- [Add, import and change tracks](user-guide/tracks.md)
+- [Value routes](user-guide/value-routes.md)
+- [Review and write your changes](user-guide/review-and-write.md)
+- [Manage the files of a release](user-guide/release-files.md)
+- [Live shows](user-guide/live-shows.md)
+- [Connected apps and show grants](user-guide/connected-apps.md)
+- [Announcements](user-guide/announcements.md)
+- [Phase 12 gaps in the user guide](user-guide/phase-12-gaps.md) (for maintainers)

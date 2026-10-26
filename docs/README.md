@@ -230,6 +230,11 @@
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 
+## Runbooks
+
+- [Start Music Index Studio](runbooks/install-desktop.md)
+- [Desktop release drafts](runbooks/desktop-release.md)
+
 ## Research
 
 - [Studio baseline research, 2026-10-22](research/2026-10-22-studio-baseline-research.md)

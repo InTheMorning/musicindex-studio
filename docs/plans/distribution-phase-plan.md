@@ -20,6 +20,8 @@ The UI is in the binary, so an archive needs no separate UI files ([ADR 0016](..
 The desktop data path uses `HOME` or `XDG_DATA_HOME`. Windows has no default path through this code.
 The library default and `~` expansion also use `HOME`. Some tests require Unix permissions, symbolic links, or `sshd`.
 The workspace has Linux CI, but it has no release workflow, checksums, signing, or artifact smoke test.
+The local Linux release binary links system `libz`, `libgcc_s`, and `glibc`.
+The Ubuntu 22.04 runner sets the Linux compatibility floor for the first archives.
 
 Phase 12 is in progress. The server has a working core, but its phone, grant vault, runbook, and human tests remain open.
 No server artifact is a production release in this plan until those gates pass.
@@ -74,6 +76,9 @@ Test server startup, health, sign-in, persistent data, upgrade, and shutdown on 
 Use a non-root image user and a documented persistent data volume.
 Evaluate Windows and macOS server binaries after the Linux server release works.
 Evaluate FreeBSD and OpenBSD with native builders and test hosts before naming them supported targets.
+Rust supplies host tools for FreeBSD x86-64 and ARM64 ([Rust FreeBSD target notes](https://doc.rust-lang.org/rustc/platform-support/freebsd.html)).
+OpenBSD targets have Tier 3 support and no prebuilt Rust artifacts ([Rust OpenBSD target notes](https://doc.rust-lang.org/rustc/platform-support/openbsd.html)).
+FreeBSD is the more practical first experiment. Neither BSD target has an available Studio build or smoke test.
 
 ## Signing and updates
 

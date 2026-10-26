@@ -17,6 +17,7 @@
 //! - `--version`: print the version and stop.
 //! - `--help`: print the options and stop.
 
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -136,6 +137,7 @@ async fn run() -> Result<(), String> {
     println!("Data: {}", options.data_dir.display());
     println!("Open this address in your browser:");
     println!("{}", access.ui_url());
+    std::io::stdout().flush().map_err(|e| e.to_string())?;
     axum_serve(listener, local_router(workspace, access)).await
 }
 

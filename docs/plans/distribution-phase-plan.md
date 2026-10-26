@@ -28,12 +28,12 @@ Phase 12 is in progress. Its server core, phone, and grant vault milestones are 
 The deployment on `studio.musicindex.org` and the human tests remain open.
 No server artifact is a production release in this plan until those gates pass.
 
-## Milestone 1 local status
+## Milestone 1 status
 
 The release workflow and five native build jobs are on `main`.
-The local Linux x86-64 archive passed its packaged startup, UI, token, and Host smoke tests.
-The four repository checks pass. No GitHub job or draft Release has run.
-Windows, macOS, and Linux ARM64 artifacts need native runner results before they are verified.
+A manual run on `8e820e6` built, packaged, and tested the five archives on their native runners.
+No workflow run has made a draft Release. The first release candidate tag is `v0.1.0-rc.1`.
+The draft job marks a tag with a hyphen as a pre-release.
 
 ## Platform order
 

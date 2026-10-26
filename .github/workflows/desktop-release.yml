@@ -126,8 +126,13 @@ jobs:
             fi
             gh release upload "$tag" .studio-dev/release/* --clobber
           else
+            # A tag with a hyphen, such as v0.1.0-rc.1, is a pre-release.
+            prerelease=()
+            if [[ "$tag" == *-* ]]; then
+              prerelease=(--prerelease)
+            fi
             gh release create "$tag" .studio-dev/release/* \
-              --draft --verify-tag --generate-notes \
+              --draft --verify-tag --generate-notes "${prerelease[@]}" \
               --title "Music Index Studio $tag" \
               --notes 'Desktop archives only. These archives are unsigned. The server shell is not ready for public use.'
           fi

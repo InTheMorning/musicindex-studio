@@ -14,8 +14,9 @@ No public Release or signing credential was created during this review.
 
 ## Release gates
 
-1. **Native results are absent.** No GitHub release job has run. Windows, macOS, and Linux ARM64 archives remain unverified.
-   Run the manual workflow and inspect each native smoke result before a version tag is pushed.
+1. **Native results are present.** A manual run of the release workflow on `8e820e6` passed on the five native runners.
+   After a change to the workflow, the release tool, or the desktop shell, run the manual workflow again.
+   Do this before you push the next version tag.
 2. **The archives have no installer or signature.** Users must extract an archive and start the binary.
    Complete Phase 12 before work starts on the Tauri installers in Phase 13.
 3. **Installation tests are absent.** The archive smoke test checks startup, API access, and vault data after restart.

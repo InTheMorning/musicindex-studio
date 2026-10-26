@@ -359,7 +359,11 @@ mod tests {
         let gone = record(&s, "gone.mp3", b"gone");
         let changed = record(&s, "changed.mp3", b"before");
         fs::remove_file(s.library.path("album", "gone.mp3")).unwrap();
-        fs::write(s.library.path("album", "changed.mp3"), b"after!").unwrap();
+        let changed_path = s.library.path("album", "changed.mp3");
+        fs::write(&changed_path, b"after!").unwrap();
+        // The new bytes have the same size. Two writes in a short time can
+        // give the same modification time, and then the stamp is the same.
+        set_modified(&changed_path, SystemTime::now() - Duration::from_secs(3600));
         fs::write(s.library.path("album", "new.mp3"), b"new").unwrap();
         // These give no difference.
         fs::write(s.library.path("album", "album.xml"), b"<rss/>").unwrap();

@@ -36,3 +36,4 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
+| [034a](../tasks/studio-v1-task-034a-workspace-router.md) | Pass | The coding model added `ApiError::status` as a public function for a test. The planning model made it a crate function in test builds only. `set_library_root` only writes the setting, with no move of files, because a new account has no feeds. `core/src/vault.rs` also changed, for `OpenVault::create_with_no_wrapper` and `VaultFile::has_wrapper` (item 6). In the manual checks, the three vault routes and the handle call the same `Workspace` functions. `local_router` keeps the same routes and the same layer sequence. `local_router` does not keep the handle. The routes keep the workspace in their state. |

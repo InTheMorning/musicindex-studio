@@ -6291,3 +6291,76 @@ async fn a_granted_change_while_the_user_has_a_changed_draft_gives_draft_open() 
     assert_eq!(live(&app), before);
     assert_eq!(draft_model(&app, id).await["title"], "Album (Deluxe)");
 }
+
+#[tokio::test]
+async fn the_session_route_gives_the_local_mode_with_a_loopback_host_and_no_token() {
+    let app = app();
+    let get_session = |host: &str| {
+        Request::builder()
+            .uri("/auth/v1/session")
+            .header(header::HOST, host)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let (status, value, _) = send(&app, get_session(HOST)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value, json!({ "mode": "local" }));
+    let (status, value, _) = send(&app, get_session("example.com:4100")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(value["error"]["code"], "host_not_allowed");
+}
+
+#[tokio::test]
+async fn the_workspace_router_has_no_access_layer() {
+    let data = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path()).unwrap();
+    let (router, _handle) = crate::workspace_router(workspace);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_handle_makes_locks_and_unlocks_the_vault_and_a_vault_with_no_wrapper_stays_in_memory()
+{
+    let data = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path()).unwrap();
+    let (_router, handle) = crate::workspace_router(workspace);
+    assert_eq!(
+        handle.vault_state().await.unwrap(),
+        crate::VaultState::Absent
+    );
+    let recovery = handle.create_vault(Some(PASSPHRASE), true).await.unwrap();
+    assert!(recovery.is_some());
+    assert_eq!(handle.vault_state().await.unwrap(), crate::VaultState::Open);
+    let error = handle
+        .create_vault(Some(PASSPHRASE), false)
+        .await
+        .unwrap_err();
+    assert_eq!(error.status(), StatusCode::CONFLICT);
+    handle.lock().await.unwrap();
+    assert_eq!(
+        handle.vault_state().await.unwrap(),
+        crate::VaultState::Locked
+    );
+    handle.unlock_with_passphrase(PASSPHRASE).await.unwrap();
+    assert_eq!(handle.vault_state().await.unwrap(), crate::VaultState::Open);
+
+    let other = tempfile::tempdir().unwrap();
+    let (_router, handle) = crate::workspace_router(Workspace::open(other.path()).unwrap());
+    assert_eq!(handle.create_vault(None, false).await.unwrap(), None);
+    assert_eq!(handle.vault_state().await.unwrap(), crate::VaultState::Open);
+    assert!(!other.path().join("vault.json").exists());
+    handle.lock().await.unwrap();
+    assert_eq!(
+        handle.vault_state().await.unwrap(),
+        crate::VaultState::Absent
+    );
+}

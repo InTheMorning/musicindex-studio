@@ -1,11 +1,12 @@
 //! The state of one local user: the collection and the vault.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use std::collections::{HashMap, VecDeque};
 
 use axum::http::StatusCode;
+use serde_json::json;
 use studio_core::collection::{Collection, FeedId};
 use studio_core::connector::{self, HostEnv};
 use studio_core::discover::Found;
@@ -68,6 +69,114 @@ impl ImageCache {
         self.order.clear();
         self.images.clear();
     }
+}
+
+/// A clone of the shared workspace, for the shell that owns it. The server
+/// uses it for the vault (ADR 0055 items 4 and 5). Each function runs on a
+/// blocking thread.
+#[derive(Debug, Clone)]
+pub struct WorkspaceHandle {
+    shared: Arc<Mutex<Workspace>>,
+}
+
+impl WorkspaceHandle {
+    pub(crate) fn new(shared: Arc<Mutex<Workspace>>) -> Self {
+        Self { shared }
+    }
+
+    async fn run<T, F>(&self, work: F) -> Result<T, ApiError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Workspace) -> Result<T, ApiError> + Send + 'static,
+    {
+        let shared = Arc::clone(&self.shared);
+        tokio::task::spawn_blocking(move || {
+            let mut workspace = lock_workspace(&shared)?;
+            work(&mut workspace)
+        })
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))?
+    }
+
+    /// The state of the vault.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the workspace lock is poisoned.
+    pub async fn vault_state(&self) -> Result<VaultState, ApiError> {
+        self.run(|w| Ok(w.vault_state())).await
+    }
+
+    /// Make the vault. With no passphrase, the vault has no wrapper and
+    /// stays in memory only. Gives the recovery key when one was asked.
+    ///
+    /// # Errors
+    ///
+    /// Gives 409 `vault_exists` when a vault exists, and an [`ApiError`]
+    /// when the passphrase is not accepted or the vault cannot be saved.
+    pub async fn create_vault(
+        &self,
+        passphrase: Option<&str>,
+        recovery_key: bool,
+    ) -> Result<Option<String>, ApiError> {
+        let passphrase = passphrase.map(str::to_owned);
+        self.run(move |w| w.create_vault(passphrase.as_deref(), recovery_key))
+            .await
+    }
+
+    /// Open the vault with its passphrase.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when no vault file exists or the passphrase
+    /// is not correct.
+    pub async fn unlock_with_passphrase(&self, passphrase: &str) -> Result<(), ApiError> {
+        let passphrase = passphrase.to_owned();
+        self.run(move |w| w.unlock_with_passphrase(&passphrase))
+            .await
+    }
+
+    /// Open the vault with the vault key, as base64.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when no vault file exists or the key is not
+    /// correct.
+    pub async fn unlock_with_key(&self, key_base64: &str) -> Result<(), ApiError> {
+        let key = key_base64.to_owned();
+        self.run(move |w| w.unlock_with_key(&key)).await
+    }
+
+    /// Close the vault.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the workspace lock is poisoned.
+    pub async fn lock(&self) -> Result<(), ApiError> {
+        self.run(|w| {
+            w.lock();
+            Ok(())
+        })
+        .await
+    }
+
+    /// Give the workspace its library folder.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the collection cannot save the setting.
+    pub async fn set_library_root(&self, root: &Path) -> Result<(), ApiError> {
+        let root = root.to_path_buf();
+        self.run(move |w| w.set_library_root(&root)).await
+    }
+}
+
+pub(crate) fn lock_workspace(
+    shared: &Arc<Mutex<Workspace>>,
+) -> Result<MutexGuard<'_, Workspace>, ApiError> {
+    shared
+        .lock()
+        .map_err(|_| ApiError::internal("the workspace lock is poisoned"))
 }
 
 /// The state of the vault.
@@ -223,10 +332,70 @@ impl Workspace {
         Ok(VaultFile::load(&self.vault_path)?)
     }
 
+    /// Write the vault to the disk. A vault with no wrapper stays in
+    /// memory only, because no key could open the stored form.
     pub(crate) fn save_vault(&self) -> Result<(), ApiError> {
-        if let Some(vault) = &self.vault {
+        if let Some(vault) = &self.vault
+            && vault.file().has_wrapper()
+        {
             vault.file().save(&self.vault_path)?;
         }
+        Ok(())
+    }
+
+    /// Make the vault. With no passphrase, the vault has no wrapper and
+    /// stays in memory only. Gives the recovery key when one was asked.
+    /// The recovery key is in this one result only (ADR 0013).
+    pub(crate) fn create_vault(
+        &mut self,
+        passphrase: Option<&str>,
+        recovery_key: bool,
+    ) -> Result<Option<String>, ApiError> {
+        if self.vault_state() != VaultState::Absent {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "vault_exists",
+                "the vault already exists",
+            ));
+        }
+        let mut vault = match passphrase {
+            Some(passphrase) => OpenVault::create(passphrase)?,
+            None => OpenVault::create_with_no_wrapper()?,
+        };
+        let recovery = if recovery_key {
+            Some(vault.add_recovery_key()?.as_str().to_owned())
+        } else {
+            None
+        };
+        self.vault = Some(vault);
+        self.save_vault()?;
+        Ok(recovery)
+    }
+
+    pub(crate) fn unlock_with_passphrase(&mut self, passphrase: &str) -> Result<(), ApiError> {
+        let file = self.vault_file()?;
+        self.vault = Some(file.open_with_passphrase(passphrase)?);
+        Ok(())
+    }
+
+    pub(crate) fn unlock_with_key(&mut self, key_base64: &str) -> Result<(), ApiError> {
+        let file = self.vault_file()?;
+        self.vault = Some(file.open_with_key(key_base64)?);
+        Ok(())
+    }
+
+    pub(crate) fn lock(&mut self) {
+        self.vault = None;
+    }
+
+    /// Give the workspace its library folder. A new account has no library
+    /// folder yet, and the first start of the library does the move of
+    /// the files (ADR 0036 item 1).
+    pub(crate) fn set_library_root(&self, root: &Path) -> Result<(), ApiError> {
+        let text = root
+            .to_str()
+            .ok_or_else(|| ApiError::internal("the library folder is not valid text"))?;
+        self.collection.set_setting("library_root", &json!(text))?;
         Ok(())
     }
 

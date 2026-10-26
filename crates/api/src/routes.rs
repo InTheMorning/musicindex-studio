@@ -36,7 +36,6 @@ use studio_core::nostr_events::Signing;
 use studio_core::pipeline;
 use studio_core::playlist;
 use studio_core::publisher;
-use studio_core::vault::OpenVault;
 use tokio::io::AsyncWriteExt;
 
 use crate::error::ApiError;
@@ -76,9 +75,7 @@ where
 }
 
 fn lock(shared: &Shared) -> Result<MutexGuard<'_, Workspace>, ApiError> {
-    shared
-        .lock()
-        .map_err(|_| ApiError::internal("the workspace lock is poisoned"))
+    crate::workspace::lock_workspace(shared)
 }
 
 fn to_json(value: impl serde::Serialize) -> ApiResult {
@@ -111,26 +108,12 @@ pub(crate) async fn create_vault(
     Json(body): Json<CreateVault>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     blocking(shared, move |w| {
-        if w.vault_state() != crate::workspace::VaultState::Absent {
-            return Err(ApiError::new(
-                StatusCode::CONFLICT,
-                "vault_exists",
-                "the vault already exists",
-            ));
-        }
-        let mut vault = OpenVault::create(&body.passphrase)?;
-        let recovery = if body.recovery_key {
-            Some(vault.add_recovery_key()?)
-        } else {
-            None
-        };
-        w.vault = Some(vault);
-        w.save_vault()?;
+        let recovery = w.create_vault(Some(&body.passphrase), body.recovery_key)?;
         // The recovery key is in this one response only. Studio cannot show
         // it again (ADR 0013).
         Ok((
             StatusCode::CREATED,
-            Json(json!({ "recovery_key": recovery.as_ref().map(studio_core::vault::RecoveryKey::as_str) })),
+            Json(json!({ "recovery_key": recovery })),
         ))
     })
     .await
@@ -157,8 +140,7 @@ pub(crate) async fn unlock_vault(
     Json(body): Json<Unlock>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        let file = w.vault_file()?;
-        w.vault = Some(file.open_with_passphrase(&body.passphrase)?);
+        w.unlock_with_passphrase(&body.passphrase)?;
         Ok(Json(json!({ "vault": w.vault_state() })))
     })
     .await
@@ -166,7 +148,7 @@ pub(crate) async fn unlock_vault(
 
 pub(crate) async fn lock_vault(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
-        w.vault = None;
+        w.lock();
         Ok(Json(json!({ "vault": w.vault_state() })))
     })
     .await

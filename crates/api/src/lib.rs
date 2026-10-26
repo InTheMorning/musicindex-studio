@@ -21,7 +21,7 @@ use axum::routing::{delete, get, post, put};
 pub use access::Access;
 pub use axum::Router;
 pub use error::ApiError;
-pub use workspace::{VaultState, Workspace};
+pub use workspace::{VaultState, Workspace, WorkspaceHandle};
 
 /// The body limit of the upload route (ADR 0026, ADR 0032). The other
 /// routes keep the default limit of 2 MiB.
@@ -36,9 +36,36 @@ pub async fn serve(listener: tokio::net::TcpListener, router: Router) -> std::io
     axum::serve(listener, router).await
 }
 
-/// The router of the local API and the UI.
-#[expect(clippy::too_many_lines, reason = "the function is one list of routes")]
+/// The UI routes: `/` and `/ui/{*path}`, with the security headers
+/// (ADR 0016).
+pub fn ui_router() -> Router {
+    Router::new()
+        .route("/", get(ui::index))
+        .route("/ui/{*path}", get(ui::file))
+}
+
+/// The routes of local mode that need no token: the session route
+/// (ADR 0055 item 20).
+async fn local_session() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({ "mode": "local" }))
+}
+
+/// The router of the local API and the UI. It has the UI routes, the
+/// session route and the routes of one workspace, all under the access
+/// layer (ADR 0017).
 pub fn local_router(workspace: Workspace, access: Access) -> Router {
+    let (workspace_routes, _handle) = workspace_router(workspace);
+    ui_router()
+        .route("/auth/v1/session", get(local_session))
+        .merge(workspace_routes)
+        .layer(middleware::from_fn_with_state(access, access::check))
+}
+
+/// The routes of one workspace: `/api/v1` and `/app/v1`, with the workers
+/// attached. The router has no access layer and no UI routes. The caller
+/// adds its own access rules (ADR 0055 item 4).
+#[expect(clippy::too_many_lines, reason = "the function is one list of routes")]
+pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
     let queue = Arc::clone(&workspace.downloads);
     let announcer = Arc::clone(&workspace.announcer);
     let shared: routes::Shared = Arc::new(Mutex::new(workspace));
@@ -177,13 +204,12 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             put(routes::put_show_live_value).delete(routes::delete_show_live_value),
         )
         .with_state(Arc::clone(&shared))
-        .layer(middleware::from_fn_with_state(shared, routes::app_check));
-    Router::new()
-        .route("/", get(ui::index))
-        .route("/ui/{*path}", get(ui::file))
-        .nest("/api/v1", api)
-        .nest("/app/v1", app_api)
-        .layer(middleware::from_fn_with_state(access, access::check))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&shared),
+            routes::app_check,
+        ));
+    let router = Router::new().nest("/api/v1", api).nest("/app/v1", app_api);
+    (router, WorkspaceHandle::new(shared))
 }
 
 #[cfg(test)]

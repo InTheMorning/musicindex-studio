@@ -189,6 +189,29 @@ impl OpenVault {
         Ok(vault)
     }
 
+    /// Make a new empty vault with no wrapper. No passphrase, recovery key
+    /// or Nostr key opens it. Keep it in memory only, because the stored
+    /// form has no way to open it again.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`VaultError`] when the random source is not available.
+    pub fn create_with_no_wrapper() -> Result<Self, VaultError> {
+        let key = Key::random()?;
+        let vault_id = uuid::Uuid::new_v4().to_string();
+        let check = key.seal(&[], check_aad(&vault_id).as_bytes())?;
+        Ok(Self {
+            file: VaultFile {
+                format: FORMAT,
+                vault_id,
+                check,
+                wrappers: Vec::new(),
+                records: Vec::new(),
+            },
+            key,
+        })
+    }
+
     /// The stored form of the vault. Save it after each change.
     #[must_use]
     pub fn file(&self) -> &VaultFile {
@@ -328,6 +351,12 @@ impl OpenVault {
 }
 
 impl VaultFile {
+    /// True when at least one wrapper can open the vault.
+    #[must_use]
+    pub fn has_wrapper(&self) -> bool {
+        !self.wrappers.is_empty()
+    }
+
     /// Open the vault with its passphrase.
     ///
     /// # Errors
@@ -437,6 +466,23 @@ mod tests {
         let mut vault = OpenVault::create(PASSPHRASE).unwrap();
         vault.put("sftp:example", SECRET).unwrap();
         vault
+    }
+
+    #[test]
+    fn a_vault_with_no_wrapper_keeps_secrets_and_no_key_opens_its_file() {
+        let mut vault = OpenVault::create_with_no_wrapper().unwrap();
+        vault.put("sftp:example", SECRET).unwrap();
+        assert_eq!(
+            vault.get("sftp:example").unwrap().unwrap().as_slice(),
+            SECRET
+        );
+        assert!(!vault.file().has_wrapper());
+        let error = vault
+            .file()
+            .clone()
+            .open_with_passphrase(PASSPHRASE)
+            .unwrap_err();
+        assert_eq!(error.kind(), VaultErrorKind::WrongKey);
     }
 
     #[test]

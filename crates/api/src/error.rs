@@ -27,6 +27,13 @@ pub struct ApiError {
 }
 
 impl ApiError {
+    /// The HTTP status of the error, for the tests.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn status(&self) -> StatusCode {
+        self.status
+    }
+
     pub(crate) fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status,

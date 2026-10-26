@@ -102,6 +102,51 @@ pub struct PlannedAnnouncement {
     pub podping: bool,
 }
 
+/// The reason why a write plans no announcement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnnounceSkip {
+    /// The setting `announce_pubnotify` is off.
+    Off,
+    /// The write has no public address to announce.
+    NoAddress,
+}
+
+impl AnnounceSkip {
+    /// The text of the reason, for the diff ID.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::NoAddress => "no_address",
+        }
+    }
+}
+
+/// The announcements that a write plans, or the reason for none
+/// (ADR 0052 items 7 to 9). It gives one announcement for each address, in
+/// the sequence of `addresses`. A second copy of an address goes out too.
+#[must_use]
+pub fn plan(
+    settings: &AnnounceSettings,
+    addresses: &[String],
+) -> (Vec<PlannedAnnouncement>, Option<AnnounceSkip>) {
+    if !settings.pubnotify {
+        return (Vec::new(), Some(AnnounceSkip::Off));
+    }
+    if addresses.is_empty() {
+        return (Vec::new(), Some(AnnounceSkip::NoAddress));
+    }
+    let planned = addresses
+        .iter()
+        .map(|url| PlannedAnnouncement {
+            url: url.clone(),
+            podping: settings.podping,
+        })
+        .collect();
+    (planned, None)
+}
+
 /// The state of an announcement in the queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -412,6 +457,57 @@ mod tests {
             now,
         )
         .unwrap();
+    }
+
+    fn settings(pubnotify: bool, podping: bool) -> AnnounceSettings {
+        AnnounceSettings { pubnotify, podping }
+    }
+
+    #[test]
+    fn plan_gives_one_announcement_for_each_address_in_sequence() {
+        let addresses = vec![
+            "https://m.example/b.xml".to_owned(),
+            "https://m.example/a.xml".to_owned(),
+            "https://m.example/b.xml".to_owned(),
+        ];
+        let (got, skip) = plan(&settings(true, true), &addresses);
+        assert_eq!(skip, None);
+        assert_eq!(
+            got,
+            [
+                planned("https://m.example/b.xml", true),
+                planned("https://m.example/a.xml", true),
+                planned("https://m.example/b.xml", true),
+            ]
+        );
+    }
+
+    #[test]
+    fn plan_copies_the_podping_setting() {
+        let addresses = vec!["https://m.example/a.xml".to_owned()];
+        let (planned, _) = plan(&settings(true, false), &addresses);
+        assert!(!planned[0].podping);
+    }
+
+    #[test]
+    fn plan_gives_off_when_pubnotify_is_off_even_with_no_address() {
+        let addresses = vec!["https://m.example/a.xml".to_owned()];
+        assert_eq!(
+            plan(&settings(false, true), &addresses),
+            (Vec::new(), Some(AnnounceSkip::Off))
+        );
+        assert_eq!(
+            plan(&settings(false, true), &[]),
+            (Vec::new(), Some(AnnounceSkip::Off))
+        );
+    }
+
+    #[test]
+    fn plan_gives_no_address_when_there_is_no_address() {
+        assert_eq!(
+            plan(&settings(true, true), &[]),
+            (Vec::new(), Some(AnnounceSkip::NoAddress))
+        );
     }
 
     #[test]

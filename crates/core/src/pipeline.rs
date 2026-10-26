@@ -10,6 +10,7 @@ use std::path::Path;
 use similar::TextDiff;
 
 use crate::address::AddressSource;
+use crate::announce::{self, AnnounceSettings, AnnounceSkip, PlannedAnnouncement, Timing};
 use crate::collection::{
     Collection, CollectionError, ConnectorId, DraftFeedMove, DraftOperationKind, DraftRow, FeedId,
     FeedRow, LibraryFile, LibraryFileId, SnapshotId,
@@ -266,9 +267,12 @@ pub struct Diff {
     /// The move of the feed XML to a different host, when the draft has
     /// one (ADR 0038 item 18).
     pub feed_move: Option<FeedMove>,
-    /// Always `false`: Studio does not tell the musicindex API and
-    /// Podcast Index about a new address yet (ADR 0038 items 18 and 21).
-    pub announce: bool,
+    /// Each announcement that the write puts into the queue
+    /// (ADR 0052 items 7 to 9).
+    pub announcements: Vec<PlannedAnnouncement>,
+    /// The reason why `announcements` is empty, or `None` when it is not
+    /// empty.
+    pub announce_skip: Option<AnnounceSkip>,
     /// Each Nostr event that the write signs, with no signature
     /// (ADR 0050 item 11).
     pub events: Vec<DiffEvent>,
@@ -882,6 +886,9 @@ pub fn diff_at(
     let feed_move = feed_move(collection, hosts, &feed_row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
+    let (announcements, announce_skip) =
+        plan_announcements(collection, hosts, &feed_row, feed_move.as_ref())?;
+    extra.extend(announce_bytes(&announcements, announce_skip));
     let files = upload_files(collection, &operations)?;
     let diff_id = diff_id(&draft, &extra);
     let changes = host_changes(
@@ -932,7 +939,8 @@ pub fn diff_at(
         operations,
         blocked,
         feed_move,
-        announce: false,
+        announcements,
+        announce_skip,
         events,
     })
 }
@@ -1095,6 +1103,73 @@ fn feed_move_bytes(feed_move: Option<&FeedMove>) -> Vec<u8> {
     bytes.extend_from_slice(feed_move.path.as_bytes());
     bytes.push(0);
     bytes.extend_from_slice(feed_move.method.as_str().as_bytes());
+    bytes
+}
+
+/// The addresses that a write announces, before the first change on a host
+/// (ADR 0052 items 7 and 8). Without a feed move, it is the public address
+/// of the feed file. With a feed move, it is the new address and then the
+/// address from before. An address that is not known goes out.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or the host set fails.
+fn announce_addresses(
+    collection: &Collection,
+    hosts: &Hosts,
+    row: &FeedRow,
+    feed_move: Option<&FeedMove>,
+) -> Result<Vec<String>, PipelineError> {
+    if let Some(moved) = feed_move {
+        return Ok([moved.url.clone(), moved.from_url.clone()]
+            .into_iter()
+            .flatten()
+            .collect());
+    }
+    // A feed with no host has only the address of its row.
+    let url = match writable(row) {
+        Ok(host) => written_feed_url(collection, hosts, row.id, host, None)?,
+        Err(_) => row.public_url.clone(),
+    };
+    Ok(url.into_iter().collect())
+}
+
+/// The announcements of a write. [`diff_at`] and [`write_draft_signed`]
+/// both call this function, so that they give the same plan (ADR 0052
+/// item 10).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or the host set fails, or
+/// a setting of the announcements is not a boolean.
+fn plan_announcements(
+    collection: &Collection,
+    hosts: &Hosts,
+    row: &FeedRow,
+    feed_move: Option<&FeedMove>,
+) -> Result<(Vec<PlannedAnnouncement>, Option<AnnounceSkip>), PipelineError> {
+    let settings = AnnounceSettings::load(collection)?;
+    let addresses = announce_addresses(collection, hosts, row, feed_move)?;
+    Ok(announce::plan(&settings, &addresses))
+}
+
+/// The bytes that [`diff_id`] adds for the announcements: each address with
+/// its podping flag, and the reason for none. A change of a setting after
+/// the diff changes the ID.
+fn announce_bytes(planned: &[PlannedAnnouncement], skip: Option<AnnounceSkip>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.push(0);
+    bytes.extend_from_slice(b"announce");
+    for item in planned {
+        bytes.push(0);
+        bytes.extend_from_slice(item.url.as_bytes());
+        bytes.push(0);
+        bytes.push(if item.podping { b'1' } else { b'0' });
+    }
+    if let Some(skip) = skip {
+        bytes.push(0);
+        bytes.extend_from_slice(skip.as_str().as_bytes());
+    }
     bytes
 }
 
@@ -1879,6 +1954,9 @@ pub fn write_draft_signed(
     let feed_move = feed_move(collection, hosts, &row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
+    let (announcements, announce_skip) =
+        plan_announcements(collection, hosts, &row, feed_move.as_ref())?;
+    extra.extend(announce_bytes(&announcements, announce_skip));
     if &diff_id(&draft, &extra) != approved {
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
@@ -2022,6 +2100,11 @@ pub fn write_draft_signed(
     collection.remove_draft_feed_move(id)?;
     collection.remove_signing_plan(id)?;
     collection.delete_draft(id)?;
+
+    // Step 6: the feed is written, and each step on a host passed. The
+    // announcements go into the queue before the scans, so that a failed
+    // scan does not lose them (ADR 0052 item 13).
+    announce::queue(collection, id, &announcements, &Timing::DEFAULT, now)?;
 
     for connector_id in touched {
         inventory::scan(collection, hosts, connector_id)?;

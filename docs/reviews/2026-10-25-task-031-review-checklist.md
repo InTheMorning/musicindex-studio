@@ -37,6 +37,6 @@ The planning model uses this list after each packet, before its commit.
 | Work | Result | Required corrections |
 | --- | --- | --- |
 | [031a](../tasks/studio-v1-task-031a-queue-and-sender.md) | Pass | A replaced `waiting` row kept the error text of an earlier attempt. The planning model made `restart_announcement` remove it, and added a test. The manual checks pass. No test uses `DEFAULT_HUB`, and `TestHub` stops when its value is dropped. The rules and the constants are in `announce.rs`, and `collection.rs` has only storage steps. `trim_announcements` trims each feed in one SQL step. The result agrees with the packet. The removal of a feed needed no change, because `ON DELETE CASCADE` removes its rows, and a test examines this. |
-| [031b](../tasks/studio-v1-task-031b-diff-and-write.md) | Open | |
+| [031b](../tasks/studio-v1-task-031b-diff-and-write.md) | Pass | The queue call came after the scans of the hosts, so a failed scan lost the announcements of a written feed. The planning model moved it to directly after step 5, before the scans. The manual checks pass. `diff_at` and `write_draft_signed` get the plan from `plan_announcements` with the same values. No error path before step 5 reaches the queue call. For a feed with no writable host, the address is the public address of its row. |
 | [031c](../tasks/studio-v1-task-031c-worker-and-routes.md) | Open | |
 | [031d](../tasks/studio-v1-task-031d-announce-ui.md) | Open | |

@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 
+use studio_core::announce::{self, AnnounceSkip, AnnouncementState};
 use studio_core::collection::{Collection, ConnectorId, DraftOperationKind, FeedId, LibraryFileId};
 use studio_core::connector::{
     self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, HostChanges,
@@ -1710,7 +1711,14 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
         moved.from_url.as_deref(),
         Some("https://a.example/album.xml")
     );
-    assert!(!diff.announce);
+    assert_eq!(diff.announce_skip, None);
+    assert_eq!(
+        announced(&diff),
+        [
+            ("https://b.example/album.xml".to_owned(), true),
+            ("https://a.example/album.xml".to_owned(), true),
+        ]
+    );
 
     pipeline::write_draft(
         &mut s.collection,
@@ -2663,4 +2671,178 @@ fn a_write_to_a_local_folder_host_needs_no_plan() {
     )
     .unwrap();
     assert!(live(&s).contains("Album (Deluxe)"));
+}
+
+fn announced(diff: &pipeline::Diff) -> Vec<(String, bool)> {
+    diff.announcements
+        .iter()
+        .map(|item| (item.url.clone(), item.podping))
+        .collect()
+}
+
+fn queued(collection: &Collection, feed: FeedId) -> usize {
+    announce::recent(collection, feed).unwrap().len()
+}
+
+fn edit_title(s: &Setup) {
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Changed".into())).unwrap();
+}
+
+fn write_s(s: &mut Setup, id: &DiffId) -> Result<(), pipeline::PipelineError> {
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        id,
+    )
+    .map(|_| ())
+}
+
+#[test]
+fn a_write_of_a_feed_with_a_public_address_queues_one_announcement() {
+    let mut s = setup();
+    edit_title(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.announce_skip, None);
+    assert_eq!(
+        announced(&diff),
+        [("https://music.example/album.xml".to_owned(), true)]
+    );
+    write_s(&mut s, &diff.id).unwrap();
+    let rows = announce::recent(&s.collection, s.feed).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].state, AnnouncementState::Waiting);
+    assert_eq!(rows[0].url, "https://music.example/album.xml");
+    assert!(rows[0].podping);
+}
+
+#[test]
+fn with_pubnotify_off_the_diff_gives_off_and_the_write_queues_nothing() {
+    let mut s = setup();
+    announce::AnnounceSettings {
+        pubnotify: false,
+        podping: true,
+    }
+    .save(&s.collection)
+    .unwrap();
+    edit_title(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.announce_skip, Some(AnnounceSkip::Off));
+    assert_eq!(announced(&diff), []);
+    write_s(&mut s, &diff.id).unwrap();
+    assert_eq!(queued(&s.collection, s.feed), 0);
+}
+
+#[test]
+fn with_podping_off_the_queued_announcement_has_no_podping() {
+    let mut s = setup();
+    announce::AnnounceSettings {
+        pubnotify: true,
+        podping: false,
+    }
+    .save(&s.collection)
+    .unwrap();
+    edit_title(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    write_s(&mut s, &diff.id).unwrap();
+    let rows = announce::recent(&s.collection, s.feed).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].podping);
+}
+
+#[test]
+fn a_feed_and_a_host_with_no_public_address_give_no_address_and_the_write_succeeds() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = LocalFolder::new(dir.path(), None);
+    folder
+        .write("album.xml", FEED.as_bytes(), &Expected::Absent)
+        .unwrap();
+    let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let connector_id = collection
+        .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
+        .unwrap();
+    let connector =
+        connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
+    let mut hosts = Hosts::new();
+    hosts.insert(connector_id, Box::new(folder));
+    let library = Library::open(dir.path().join("library")).unwrap();
+    let feed = collection
+        .add_feed(None, Some((connector_id, "album.xml")))
+        .unwrap();
+    pipeline::refresh(&mut collection, connector.as_ref(), feed).unwrap();
+    pipeline::start_draft(&collection, connector.as_ref(), feed).unwrap();
+    pipeline::edit_draft(&collection, feed, |f| f.title = Some("Changed".into())).unwrap();
+    let diff = pipeline::diff(&collection, &hosts, &library, feed).unwrap();
+    assert_eq!(diff.announce_skip, Some(AnnounceSkip::NoAddress));
+    assert_eq!(announced(&diff), []);
+    pipeline::write_draft(&mut collection, &hosts, &library, &PassAll, feed, &diff.id).unwrap();
+    assert_eq!(queued(&collection, feed), 0);
+}
+
+#[test]
+fn a_feed_move_queues_the_new_address_and_the_address_from_before() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(
+        announced(&diff),
+        [
+            ("https://b.example/album.xml".to_owned(), true),
+            ("https://a.example/album.xml".to_owned(), true),
+        ]
+    );
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    let mut urls: Vec<String> = announce::recent(&s.collection, s.feed)
+        .unwrap()
+        .into_iter()
+        .map(|row| row.url)
+        .collect();
+    urls.sort();
+    assert_eq!(
+        urls,
+        ["https://a.example/album.xml", "https://b.example/album.xml"]
+    );
+}
+
+#[test]
+fn a_change_of_a_setting_after_the_diff_gives_diff_not_approved() {
+    let mut s = setup();
+    edit_title(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    announce::AnnounceSettings {
+        pubnotify: true,
+        podping: false,
+    }
+    .save(&s.collection)
+    .unwrap();
+    let error = write_s(&mut s, &diff.id).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DiffNotApproved);
+    assert_eq!(queued(&s.collection, s.feed), 0);
+}
+
+#[test]
+fn a_write_that_stops_with_conflict_queues_nothing() {
+    let mut s = setup();
+    edit_title(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    // A different tool changes the live file after the draft started.
+    fs::write(
+        s.dir.path().join("album.xml"),
+        b"<rss><channel><title>Other</title></channel></rss>",
+    )
+    .unwrap();
+    let error = write_s(&mut s, &diff.id).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::Conflict);
+    assert_eq!(queued(&s.collection, s.feed), 0);
 }

@@ -1963,7 +1963,8 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
         "operations": diff.operations,
         "blocked": diff.blocked,
         "feed_move": diff.feed_move,
-        "announce": diff.announce,
+        "announcements": diff.announcements,
+        "announce_skip": diff.announce_skip,
         "events": diff
             .events
             .iter()

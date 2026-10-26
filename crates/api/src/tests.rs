@@ -4258,7 +4258,11 @@ async fn the_feed_host_route_puts_a_feed_move_into_the_diff() {
         "https://music.example/album.xml"
     );
     assert_eq!(diff["feed_move"]["method"], "pointer");
-    assert_eq!(diff["announce"], false);
+    assert_eq!(
+        diff["announcements"][0]["url"],
+        "https://new.example/album.xml"
+    );
+    assert_eq!(diff["announce_skip"], Value::Null);
 
     // A host that has a file at the path gives 409.
     let busy_dir = tempfile::tempdir().unwrap();

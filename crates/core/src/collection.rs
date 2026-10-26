@@ -277,7 +277,37 @@ CREATE TABLE grant_writes (
     written_at INTEGER NOT NULL
 );
 ",
+    r"
+CREATE TABLE uploads (
+    id TEXT PRIMARY KEY,
+    feed_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    replace TEXT,
+    received TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+",
 ];
+
+/// An upload in parts that is not finished (ADR 0059 item 1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadRow {
+    /// The random ID, as hexadecimal text.
+    pub id: String,
+    /// The feed that receives the file.
+    pub feed_id: FeedId,
+    /// The file name that the user selected.
+    pub name: String,
+    /// The size of the full file in bytes.
+    pub size: u64,
+    /// `Some` when the file replaces the bytes of a track (ADR 0040 item 3).
+    pub replace: Option<String>,
+    /// The numbers of the parts that Studio has, from small to large.
+    pub received: Vec<u32>,
+    /// The Unix time of the start, or of the last new part.
+    pub updated_at: u64,
+}
 
 /// The schema version that this code writes.
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
@@ -2101,6 +2131,130 @@ impl Collection {
             .optional()?)
     }
 
+    /// Add an upload with no part yet (ADR 0059 item 1).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_upload(&self, upload: &UploadRow) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO uploads (id, feed_id, name, size, replace, received, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, '[]', ?6)",
+            params![
+                upload.id,
+                upload.feed_id.0,
+                upload.name,
+                i64::try_from(upload.size).unwrap_or(i64::MAX),
+                upload.replace,
+                i64::try_from(upload.updated_at).unwrap_or(i64::MAX)
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn upload_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<UploadRow> {
+        let received: String = row.get(5)?;
+        let mut received: Vec<u32> = serde_json::from_str(&received).unwrap_or_default();
+        received.sort_unstable();
+        received.dedup();
+        Ok(UploadRow {
+            id: row.get(0)?,
+            feed_id: FeedId(row.get(1)?),
+            name: row.get(2)?,
+            size: u64::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
+            replace: row.get(4)?,
+            received,
+            updated_at: u64::try_from(row.get::<_, i64>(6)?).unwrap_or(0),
+        })
+    }
+
+    /// One upload by its ID.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] of kind `NotFound` when there is no such
+    /// upload, and one of kind `Database` when SQLite fails.
+    pub fn upload(&self, id: &str) -> Result<UploadRow, CollectionError> {
+        self.db
+            .query_row(
+                "SELECT id, feed_id, name, size, replace, received, updated_at
+                 FROM uploads WHERE id = ?1",
+                [id],
+                Self::upload_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| {
+                CollectionError::with_kind(CollectionErrorKind::NotFound, format!("upload {id}"))
+            })
+    }
+
+    /// The open uploads of a feed, the oldest first.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn uploads_of_feed(&self, feed: FeedId) -> Result<Vec<UploadRow>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT id, feed_id, name, size, replace, received, updated_at
+             FROM uploads WHERE feed_id = ?1 ORDER BY updated_at, id",
+        )?;
+        let rows = statement.query_map([feed.0], Self::upload_from_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The uploads with no new part since `before` (a Unix time).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn uploads_older_than(&self, before: u64) -> Result<Vec<UploadRow>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT id, feed_id, name, size, replace, received, updated_at
+             FROM uploads WHERE updated_at < ?1 ORDER BY updated_at, id",
+        )?;
+        let rows = statement.query_map(
+            [i64::try_from(before).unwrap_or(i64::MAX)],
+            Self::upload_from_row,
+        )?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Record that Studio has part `part` of an upload, in one statement,
+    /// so that two parts at the same time cannot lose one. A part that
+    /// comes again changes nothing except the time.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] of kind `NotFound` when there is no such
+    /// upload, and one of kind `Database` when SQLite fails.
+    pub fn record_upload_part(&self, id: &str, part: u32, now: u64) -> Result<(), CollectionError> {
+        let changed = self.db.execute(
+            "UPDATE uploads SET
+                 received = (SELECT json_group_array(v) FROM (
+                     SELECT value AS v FROM json_each(uploads.received)
+                     UNION SELECT ?2 ORDER BY v)),
+                 updated_at = ?3
+             WHERE id = ?1",
+            params![id, part, i64::try_from(now).unwrap_or(i64::MAX)],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("upload {id}"),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Remove an upload row. Gives true when the row was there.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_upload(&self, id: &str) -> Result<bool, CollectionError> {
+        Ok(self.db.execute("DELETE FROM uploads WHERE id = ?1", [id])? > 0)
+    }
+
     /// The blob records that a host keeps, in the sequence of the paths
     /// (ADR 0050 item 6).
     ///
@@ -3748,5 +3902,35 @@ mod tests {
             crate::grant::writes(&collection, grant.id).unwrap(),
             Vec::new()
         );
+    }
+
+    #[test]
+    fn an_upload_row_keeps_its_parts_in_sequence_and_without_a_double() {
+        let collection = Collection::open_in_memory().unwrap();
+        let row = UploadRow {
+            id: "ab".repeat(16),
+            feed_id: FeedId(1),
+            name: "a.mp3".to_owned(),
+            size: 20,
+            replace: None,
+            received: Vec::new(),
+            updated_at: 100,
+        };
+        collection.add_upload(&row).unwrap();
+        for part in [2, 0, 2, 1, 10] {
+            collection.record_upload_part(&row.id, part, 200).unwrap();
+        }
+        let found = collection.upload(&row.id).unwrap();
+        assert_eq!(found.received, vec![0, 1, 2, 10]);
+        assert_eq!(found.updated_at, 200);
+        assert_eq!(collection.uploads_of_feed(FeedId(1)).unwrap().len(), 1);
+        assert_eq!(collection.uploads_older_than(200).unwrap().len(), 0);
+        assert_eq!(collection.uploads_older_than(201).unwrap().len(), 1);
+        assert!(collection.remove_upload(&row.id).unwrap());
+        assert!(!collection.remove_upload(&row.id).unwrap());
+        let error = collection.upload(&row.id).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::NotFound);
+        let error = collection.record_upload_part(&row.id, 0, 1).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::NotFound);
     }
 }

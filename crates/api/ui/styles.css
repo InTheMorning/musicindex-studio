@@ -1263,9 +1263,11 @@ textarea:focus { background: var(--fill); }
    Each file of the sheet is one direct row of the group, so that the thin
    separator of the group falls between files. */
 .import-row { padding: 10px 16px; display: grid; gap: 8px; }
-.import-row .import-head { display: flex; align-items: center; gap: 12px; min-height: var(--target); }
+/* At narrow width the state and the button go to a second line, so that
+   the file name stays visible. */
+.import-row .import-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: var(--target); }
 .import-row .import-head .title {
-  flex: 1;
+  flex: 1 1 10em;
   min-width: 0;
   font-weight: 600;
   overflow: hidden;
@@ -1274,6 +1276,7 @@ textarea:focus { background: var(--fill); }
 }
 .import-row .import-head .state { color: var(--muted); font-size: .9rem; flex: none; }
 .import-row .import-head .state.failed { color: var(--error); }
+.import-row .import-progress { width: 100%; height: 8px; accent-color: var(--muted); }
 .import-dest { display: grid; gap: 6px; }
 .import-dest select {
   min-height: var(--target);

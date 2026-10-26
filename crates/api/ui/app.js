@@ -11,6 +11,7 @@ import {
 import { isLiveItem } from './live.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
+import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
 import {
   mediumKind, isEditable, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
@@ -124,6 +125,50 @@ export function api(path, options = {}) {
     const headers = serverMode ? { 'X-Studio-CSRF': csrfToken || '' } : { Authorization: `Bearer ${token}` };
     return exchange(`/api/v1${path}`, headers, options);
   });
+}
+
+// ---- Uploads in parts (ADR 0059 items 1 to 6) ----
+
+// A part is sent again only after a failure that a new try can fix: no
+// answer, or an error of the server.
+function canTryAgain(error) {
+  return error.status === 0 || error.status >= 500;
+}
+
+const wait = (milliseconds) => new Promise((resolve) => { setTimeout(resolve, milliseconds); });
+
+// Send one file to a feed in parts, and finish the upload. The result is the
+// facts of the import, as the full upload route gave them before. An open
+// upload of the same file continues from its first missing part, also after
+// a closed page. A failed part is sent again 3 times, after 1, 2 and 4
+// seconds. `onProgress(bytes)` gets the bytes that Studio has, and
+// `onRetry(true)` and `onRetry(false)` tell that a part waits for a new try.
+export async function sendInParts(feedId, file, { replace = false, onProgress = () => {}, onRetry = () => {} } = {}) {
+  const open = await api(`/feeds/${feedId}/uploads`);
+  let upload = findUpload(open.filter((u) => u.replace === replace), file.name, file.size);
+  if (!upload) {
+    const started = await api(`/feeds/${feedId}/uploads`, { method: 'POST', body: { name: file.name, size: file.size, replace } });
+    upload = { upload: started.upload, part_size: started.part_size, received: [] };
+  }
+  let received = upload.received;
+  onProgress(receivedBytes(file.size, upload.part_size, received));
+  for (const n of missingParts(file.size, upload.part_size, received)) {
+    const range = partRange(n, file.size, upload.part_size);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const state = await api(`/uploads/${upload.upload}/parts/${n}`, { method: 'PUT', body: file.slice(range.start, range.end) });
+        received = state.received;
+        onRetry(false);
+        break;
+      } catch (error) {
+        if (!canTryAgain(error) || attempt >= RETRY_DELAYS.length) throw error;
+        onRetry(true);
+        await wait(RETRY_DELAYS[attempt]);
+      }
+    }
+    onProgress(receivedBytes(file.size, upload.part_size, received));
+  }
+  return api(`/uploads/${upload.upload}/finish`, { method: 'POST' });
 }
 
 // A request to the auth routes of a server. It sends no access token.

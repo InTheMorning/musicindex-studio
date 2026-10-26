@@ -3,7 +3,7 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
-import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
+import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
@@ -12,6 +12,7 @@ import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, remov
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
+import { progressPercent } from './upload.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -319,10 +320,7 @@ function ReplaceAudio({ feedId, item, change, draft, onOpsChanged, hadAudio = tr
   const replace = (file) => run(async () => {
     setDone(false);
     if (!(await draft.flush())) return;
-    const facts = await api(`/feeds/${feedId}/files?name=${encodeURIComponent(file.name)}&replace=true`, {
-      method: 'POST',
-      body: file,
-    });
+    const facts = await sendInParts(feedId, file, { replace: true });
     if (facts.kind !== 'audio') {
       if (!facts.on_host) {
         api(`/feeds/${feedId}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});
@@ -445,7 +443,10 @@ function importErrorText(error) {
 
 function importStateText(row, kind) {
   if (row.state === 'waiting') return 'Waiting to send…';
-  if (row.state === 'sending') return 'Sending…';
+  if (row.state === 'sending') {
+    if (row.retrying) return 'A part failed. Trying again…';
+    return row.sent ? `Sending… ${progressPercent(row.sent, row.file.size)}%` : 'Sending…';
+  }
   if (row.state === 'failed') return importErrorText(row.error);
   return kind === 'audio' ? 'Track ready' : 'Image ready';
 }
@@ -490,6 +491,8 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
       <button class="button destructive" type="button" disabled=${row.state === 'sending'}
         aria-label=${`Remove ${row.file.name}`} onClick=${() => onRemove(row)}>Remove</button>
     </div>
+    ${row.state === 'sending' && html`<progress class="import-progress" max=${row.file.size} value=${row.sent || 0}
+      aria-label=${`Progress of ${row.file.name}`}></progress>`}
     ${row.isWav && html`<div class="notice"><strong>${row.file.name}</strong>${WAV_NOTICE}</div>`}
     ${row.isFlac && html`<div class="notice"><strong>${row.file.name}</strong>${FLAC_NOTICE}</div>`}
     ${row.isGif && html`<div class="notice"><strong>${row.file.name}</strong>${GIF_NOTICE}</div>`}
@@ -564,9 +567,9 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
         const row = rowsRef.current[index];
         updateRow(row.id, { state: 'sending' });
         try {
-          const facts = await api(`/feeds/${feedId}/files?name=${encodeURIComponent(row.file.name)}`, {
-            method: 'POST',
-            body: row.file,
+          const facts = await sendInParts(feedId, row.file, {
+            onProgress: (sent) => updateRow(row.id, { sent }),
+            onRetry: (retrying) => updateRow(row.id, { retrying }),
           });
           // The first image becomes the album art when the album has no
           // image of its own yet (task architecture). "First" means no
@@ -1942,10 +1945,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   // cover image. A file that is not an image is removed again.
   const importImage = (file) => imageAction.run(async () => {
     if (!(await draft.flush())) return;
-    const facts = await api(`/feeds/${feed.id}/files?name=${encodeURIComponent(file.name)}`, {
-      method: 'POST',
-      body: file,
-    });
+    const facts = await sendInParts(feed.id, file);
     if (facts.kind !== 'image') {
       if (!facts.on_host) {
         api(`/feeds/${feed.id}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});

@@ -204,13 +204,52 @@ fn media_path(file: &str) -> std::path::PathBuf {
         .join(file)
 }
 
-/// Send one file to the upload route of a feed, with its name in the
-/// query (task 018c).
+/// Send one file to a feed in parts, and finish the upload (ADR 0059).
+/// Gives the status and the body of the first failed step, or of `finish`.
 async fn upload(app: &App, id: i64, name: &str, bytes: Vec<u8>) -> (StatusCode, Value) {
-    let uri = format!("/api/v1/feeds/{id}/files?name={}", url_encode(name));
+    upload_with(app, id, name, bytes, false).await
+}
+
+/// Like [`upload`], with the `replace` flag of the start.
+async fn upload_with(
+    app: &App,
+    id: i64,
+    name: &str,
+    bytes: Vec<u8>,
+    replace: bool,
+) -> (StatusCode, Value) {
+    let (status, started) = call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/uploads"),
+        Some(json!({ "name": name, "size": bytes.len(), "replace": replace })),
+    )
+    .await;
+    if status != StatusCode::CREATED {
+        return (status, started);
+    }
+    let upload = started["upload"].as_str().unwrap().to_owned();
+    let part_size = usize::try_from(started["part_size"].as_u64().unwrap()).unwrap();
+    for (n, part) in bytes.chunks(part_size).enumerate() {
+        let (status, body) = put_part(app, &upload, n, part.to_vec()).await;
+        if status != StatusCode::OK {
+            return (status, body);
+        }
+    }
+    call(
+        app,
+        "POST",
+        &format!("/api/v1/uploads/{upload}/finish"),
+        None,
+    )
+    .await
+}
+
+/// Send one part of an upload.
+async fn put_part(app: &App, upload: &str, n: usize, bytes: Vec<u8>) -> (StatusCode, Value) {
     let request = Request::builder()
-        .method("POST")
-        .uri(uri)
+        .method("PUT")
+        .uri(format!("/api/v1/uploads/{upload}/parts/{n}"))
         .header(header::HOST, HOST)
         .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
         .body(Body::from(bytes))
@@ -2707,15 +2746,7 @@ async fn a_replacement_gets_the_hash_name_and_deletes_the_unused_copy() {
     // The WAV file gives `tagged.mp3` with different bytes, and
     // `tagged.flac`.
     let wav = std::fs::read(media_path("tagged.wav")).unwrap();
-    let uri = format!("/api/v1/feeds/{id}/files?name=tagged.wav&replace=true");
-    let request = Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(header::HOST, HOST)
-        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-        .body(Body::from(wav))
-        .unwrap();
-    let (status, replaced, _) = send(&app, request).await;
+    let (status, replaced) = upload_with(&app, id, "tagged.wav", wav, true).await;
     assert_eq!(status, StatusCode::CREATED, "{replaced}");
     let new_path = replaced["path"].as_str().unwrap();
     let short = new_path
@@ -5938,14 +5969,7 @@ async fn an_ended_live_item_gets_the_enclosure_of_an_uploaded_recording() {
     assert!(live(&app).contains("stream.m3u8"));
 
     let mp3 = std::fs::read(media_path("tagged.mp3")).unwrap();
-    let request = Request::builder()
-        .method("POST")
-        .uri(format!("{base}/files?name=tagged.mp3&replace=true"))
-        .header(header::HOST, HOST)
-        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-        .body(Body::from(mp3))
-        .unwrap();
-    let (status, facts, _) = send(&app, request).await;
+    let (status, facts) = upload_with(&app, id, "tagged.mp3", mp3, true).await;
     assert_eq!(status, StatusCode::CREATED, "{facts}");
     assert_eq!(facts["kind"], "audio");
 
@@ -6970,4 +6994,275 @@ async fn a_nostrconnect_address_connects_a_signer_through_the_workspace() {
     }
     assert_eq!(state["state"], "connected", "{state}");
     assert_eq!(state["pubkey"], signer.public_key().to_hex());
+}
+
+/// Start an upload and give its ID.
+async fn start_upload(app: &App, id: i64, name: &str, size: usize) -> String {
+    let (status, started) = call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/uploads"),
+        Some(json!({ "name": name, "size": size })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    assert_eq!(started["part_size"], 8 * 1024 * 1024);
+    started["upload"].as_str().unwrap().to_owned()
+}
+
+/// A file of 20 MiB: a valid MP3 file with silent padding after it.
+fn big_mp3() -> Vec<u8> {
+    let mut bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    bytes.resize(20 * 1024 * 1024, 0);
+    bytes
+}
+
+#[tokio::test]
+async fn parts_in_any_sequence_with_a_part_twice_give_the_bytes_of_the_source() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = big_mp3();
+    let upload = start_upload(&app, id, "tagged.mp3", bytes.len()).await;
+    let part = |n: usize| bytes[n * (8 << 20)..bytes.len().min((n + 1) * (8 << 20))].to_vec();
+    for n in [2, 0, 1, 1] {
+        let (status, body) = put_part(&app, &upload, n, part(n)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let (status, state) = call(&app, "GET", &format!("/api/v1/uploads/{upload}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(state["received"], json!([0, 1, 2]));
+    assert_eq!(state["size"], bytes.len());
+    assert_eq!(state["feed"], id);
+    let (_, listed) = call(&app, "GET", &format!("/api/v1/feeds/{id}/uploads"), None).await;
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+
+    let (status, facts) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/uploads/{upload}/finish"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{facts}");
+    assert_eq!(facts["size"], bytes.len());
+    let stored = std::fs::read(app.data.path().join("library/album/tagged.mp3")).unwrap();
+    assert!(stored == bytes, "the stored file differs from the source");
+    assert!(incoming_is_empty(&app));
+    let (_, listed) = call(&app, "GET", &format!("/api/v1/feeds/{id}/uploads"), None).await;
+    assert_eq!(listed, json!([]));
+    let (status, _) = call(&app, "GET", &format!("/api/v1/uploads/{upload}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn finish_with_a_missing_part_gives_409_and_keeps_the_upload() {
+    let app = app();
+    let id = set_up(&app).await;
+    let upload = start_upload(&app, id, "tagged.mp3", 9 << 20).await;
+    let (status, _) = put_part(&app, &upload, 0, vec![0; 8 << 20]).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/uploads/{upload}/finish"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "upload_incomplete");
+    let (status, state) = call(&app, "GET", &format!("/api/v1/uploads/{upload}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(state["received"], json!([0]));
+}
+
+#[tokio::test]
+async fn a_part_of_the_wrong_size_or_outside_the_file_gives_422() {
+    let app = app();
+    let id = set_up(&app).await;
+    let upload = start_upload(&app, id, "tagged.mp3", 9 << 20).await;
+    for (n, size) in [
+        (0, 100),
+        (0, (8 << 20) - 1),
+        (1, 8 << 20),
+        (1, (1 << 20) - 1),
+        (2, 1 << 20),
+    ] {
+        let (status, body) = put_part(&app, &upload, n, vec![0; size]).await;
+        assert_eq!(
+            status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{n} {size} {body}"
+        );
+        assert_eq!(body["error"]["code"], "bad_part");
+    }
+    // The body limit of the route is the part size.
+    let (status, _) = put_part(&app, &upload, 0, vec![0; (8 << 20) + 1]).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let (_, state) = call(&app, "GET", &format!("/api/v1/uploads/{upload}"), None).await;
+    assert_eq!(state["received"], json!([]));
+}
+
+#[tokio::test]
+async fn a_start_checks_the_name_the_size_and_the_feed() {
+    let app = app();
+    let id = set_up(&app).await;
+    let path = format!("/api/v1/feeds/{id}/uploads");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &path,
+        Some(json!({ "name": "a.mp3", "size": (2_u64 << 30) + 1 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{body}");
+    assert_eq!(body["error"]["code"], "too_large");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &path,
+        Some(json!({ "name": "..", "size": 1 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/999/uploads",
+        Some(json!({ "name": "a.mp3", "size": 1 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn an_unknown_upload_gives_404_on_each_upload_route() {
+    let app = app();
+    let id = "00".repeat(16);
+    let (status, _) = put_part(&app, &id, 0, vec![1]).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    for (method, path) in [
+        ("GET", format!("/api/v1/uploads/{id}")),
+        ("POST", format!("/api/v1/uploads/{id}/finish")),
+        ("DELETE", format!("/api/v1/uploads/{id}")),
+    ] {
+        let (status, _) = call(&app, method, &path, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{method} {path}");
+    }
+}
+
+#[tokio::test]
+async fn a_delete_removes_the_row_and_the_file() {
+    let app = app();
+    let id = set_up(&app).await;
+    let upload = start_upload(&app, id, "tagged.mp3", 100).await;
+    assert!(!incoming_is_empty(&app));
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/uploads/{upload}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(incoming_is_empty(&app));
+    let (status, _) = call(&app, "GET", &format!("/api/v1/uploads/{upload}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn two_parts_at_the_same_time_are_both_recorded() {
+    let app = app();
+    let id = set_up(&app).await;
+    let upload = start_upload(&app, id, "tagged.mp3", 40 << 20).await;
+    let part = |n: usize| put_part(&app, &upload, n, vec![7; 8 << 20]);
+    let results = tokio::join!(part(0), part(1), part(2), part(3), part(4));
+    for (status, body) in [results.0, results.1, results.2, results.3, results.4] {
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let (_, state) = call(&app, "GET", &format!("/api/v1/uploads/{upload}"), None).await;
+    assert_eq!(state["received"], json!([0, 1, 2, 3, 4]));
+}
+
+#[tokio::test]
+async fn a_start_over_the_storage_limit_gives_507_and_open_uploads_count() {
+    let app = app_with_rules(3 << 20);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/1/uploads",
+        Some(json!({ "name": "big.mp3", "size": 4 << 20 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INSUFFICIENT_STORAGE, "{body}");
+    assert_eq!(body["error"]["code"], "storage_full");
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn uploads_that_are_open_together_cannot_go_over_the_storage_limit() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set(
+        "/d.xml",
+        200,
+        feed_with_one_enclosure(&server.url("/a.mp3"), 5000).into_bytes(),
+    );
+    let app = app_with_rules(10 << 20);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/d.xml")] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["added"][0]["id"].as_i64().unwrap();
+    let path = format!("/api/v1/feeds/{id}/uploads");
+    let mut statuses = Vec::new();
+    for _ in 0..4 {
+        let (status, _) = call(
+            &app,
+            "POST",
+            &path,
+            Some(json!({ "name": "a.mp3", "size": 4 << 20 })),
+        )
+        .await;
+        statuses.push(status);
+    }
+    assert_eq!(statuses[0], StatusCode::CREATED, "{statuses:?}");
+    assert_eq!(statuses[1], StatusCode::CREATED, "{statuses:?}");
+    assert_eq!(
+        statuses[2],
+        StatusCode::INSUFFICIENT_STORAGE,
+        "{statuses:?}"
+    );
+    assert_eq!(
+        statuses[3],
+        StatusCode::INSUFFICIENT_STORAGE,
+        "{statuses:?}"
+    );
+}
+
+/// An upload with no new part for 24 hours has no row and no file after
+/// the clean step (ADR 0059 item 4).
+#[tokio::test]
+async fn an_upload_older_than_24_hours_has_no_row_and_no_file_after_the_clean_step() {
+    let app = app();
+    let id = set_up(&app).await;
+    let old = start_upload(&app, id, "old.mp3", 100).await;
+    let fresh = start_upload(&app, id, "new.mp3", 100).await;
+    let path = app.data.path().join("collection.sqlite");
+    let collection = studio_core::collection::Collection::open(&path).unwrap();
+    let now = crate::announcer::now();
+    collection
+        .record_upload_part(&old, 0, now - 25 * 3600)
+        .unwrap();
+    collection
+        .record_upload_part(&fresh, 0, now - 23 * 3600)
+        .unwrap();
+    drop(collection);
+
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    assert_eq!(crate::uploads::clean_expired(&workspace, now).unwrap(), 1);
+    let (status, _) = call(&app, "GET", &format!("/api/v1/uploads/{old}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(&app, "GET", &format!("/api/v1/uploads/{fresh}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let incoming = app.data.path().join("incoming");
+    assert!(!incoming.join(format!("{old}.part")).exists());
+    assert!(incoming.join(format!("{fresh}.part")).exists());
 }

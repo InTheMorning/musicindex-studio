@@ -10,6 +10,7 @@ mod downloads;
 mod error;
 mod routes;
 mod ui;
+mod uploads;
 mod workspace;
 
 use std::sync::{Arc, Mutex};
@@ -22,10 +23,6 @@ pub use access::Access;
 pub use axum::Router;
 pub use error::ApiError;
 pub use workspace::{ServerRules, VaultState, Workspace, WorkspaceHandle};
-
-/// The body limit of the upload route (ADR 0026, ADR 0032). The other
-/// routes keep the default limit of 2 MiB.
-const MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
 
 /// Serve a router until the process stops.
 ///
@@ -94,6 +91,8 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
     queue.attach(&shared);
     // The announcement worker also locks it for short steps (ADR 0052).
     announcer.attach(&shared);
+    // The clean step removes the uploads that expired (ADR 0059 item 4).
+    uploads::spawn_cleaner(&shared);
     let api = Router::new()
         .route("/status", get(routes::status))
         .route("/vault", post(routes::create_vault))
@@ -163,11 +162,23 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
         .route(
             "/feeds/{id}/files",
-            get(routes::list_release_files)
-                .post(routes::upload_file)
-                .delete(routes::delete_pending_file)
-                .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES)),
+            get(routes::list_release_files).delete(routes::delete_pending_file),
         )
+        .route(
+            "/feeds/{id}/uploads",
+            get(uploads::list_uploads).post(uploads::start_upload),
+        )
+        .route(
+            "/uploads/{upload}",
+            get(uploads::get_upload).delete(uploads::delete_upload),
+        )
+        .route(
+            "/uploads/{upload}/parts/{n}",
+            put(uploads::put_part).layer(DefaultBodyLimit::max(
+                usize::try_from(uploads::PART_SIZE).unwrap_or(usize::MAX),
+            )),
+        )
+        .route("/uploads/{upload}/finish", post(uploads::finish_upload))
         .route(
             "/feeds/{id}/downloads",
             get(routes::list_downloads).post(routes::start_downloads),

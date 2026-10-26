@@ -1,14 +1,12 @@
 //! The JSON routes of the local API.
 
-use std::path::{Path as FilePath, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use axum::Json;
-use axum::RequestExt;
 use axum::extract::{Extension, Path, Query, Request, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
@@ -36,7 +34,6 @@ use studio_core::nostr_events::Signing;
 use studio_core::pipeline;
 use studio_core::playlist;
 use studio_core::publisher;
-use tokio::io::AsyncWriteExt;
 
 use crate::error::ApiError;
 use crate::workspace::Workspace;
@@ -44,10 +41,10 @@ use crate::workspace::Workspace;
 /// The shared workspace of the local API.
 pub(crate) type Shared = Arc<Mutex<Workspace>>;
 
-type ApiResult = Result<Json<Value>, ApiError>;
+pub(crate) type ApiResult = Result<Json<Value>, ApiError>;
 
 /// Run blocking core work on a blocking thread (ADR 0015).
-async fn blocking<T, F>(shared: Shared, work: F) -> Result<T, ApiError>
+pub(crate) async fn blocking<T, F>(shared: Shared, work: F) -> Result<T, ApiError>
 where
     T: Send + 'static,
     F: FnOnce(&mut Workspace) -> Result<T, ApiError> + Send + 'static,
@@ -64,7 +61,7 @@ where
 /// workspace. An MP3 encode of a WAV file or a FLAC file takes some
 /// seconds, and another request must not wait for it (ADR 0015, ADR 0033
 /// item 1).
-async fn blocking_unlocked<T, F>(work: F) -> Result<T, ApiError>
+pub(crate) async fn blocking_unlocked<T, F>(work: F) -> Result<T, ApiError>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, ApiError> + Send + 'static,
@@ -78,7 +75,7 @@ fn lock(shared: &Shared) -> Result<MutexGuard<'_, Workspace>, ApiError> {
     crate::workspace::lock_workspace(shared)
 }
 
-fn to_json(value: impl serde::Serialize) -> ApiResult {
+pub(crate) fn to_json(value: impl serde::Serialize) -> ApiResult {
     serde_json::to_value(value)
         .map(Json)
         .map_err(|e| ApiError::internal(e.to_string()))
@@ -3729,16 +3726,6 @@ pub(crate) async fn scan_host(State(shared): State<Shared>, Path(id): Path<i64>)
     .await
 }
 
-/// The name that the UI gives for the file in the upload route.
-#[derive(Deserialize)]
-pub(crate) struct UploadQuery {
-    name: String,
-    /// True for the new audio file of a track (ADR 0040 item 3). A
-    /// different file at the same name then gets the hash name, not 409.
-    #[serde(default)]
-    replace: bool,
-}
-
 /// The ID of a library file, in the query of the route that removes it.
 #[derive(Deserialize)]
 pub(crate) struct LibraryFileQuery {
@@ -3748,7 +3735,7 @@ pub(crate) struct LibraryFileQuery {
 /// Removes its file when it goes out of scope. An upload keeps no
 /// temporary file after its result, also after an error (ADR 0026 item 5,
 /// ADR 0032 item 10, ADR 0033 item 1).
-struct TempFile(PathBuf);
+pub(crate) struct TempFile(pub(crate) PathBuf);
 
 impl Drop for TempFile {
     fn drop(&mut self) {
@@ -3759,7 +3746,7 @@ impl Drop for TempFile {
 /// gives. A file goes only into the folder of its release, so a name with a
 /// folder part loses that part. An empty name, `.` and `..` give 422
 /// `invalid_name`.
-fn upload_file_name(name: &str) -> Result<String, ApiError> {
+pub(crate) fn upload_file_name(name: &str) -> Result<String, ApiError> {
     let last = name.rsplit(['/', '\\']).next().unwrap_or_default().trim();
     if last.is_empty() || last == "." || last == ".." || last.chars().any(char::is_control) {
         return Err(ApiError::new(
@@ -3771,104 +3758,26 @@ fn upload_file_name(name: &str) -> Result<String, ApiError> {
     Ok(last.to_owned())
 }
 
-/// A random name for a file of the temporary upload folder, with the
-/// extension of `name` when it has one. `media::import` finds the media
-/// type partly from the extension of its source file.
-fn temp_file_name(name: &str) -> Result<String, ApiError> {
-    let mut bytes = [0_u8; 16];
-    getrandom::fill(&mut bytes)
-        .map_err(|_| ApiError::internal("the random source is not available"))?;
-    let random = bytes.iter().fold(String::with_capacity(32), |mut text, b| {
-        use std::fmt::Write as _;
-        let _ = write!(text, "{b:02x}");
-        text
-    });
-    match FilePath::new(name).extension().and_then(|e| e.to_str()) {
-        Some(extension) => Ok(format!("{random}.{extension}")),
-        None => Ok(random),
-    }
-}
-
-/// Send one file into the release folder of a feed (ADR 0026, ADR 0032
-/// items 1 to 5 and 10, ADR 0033 items 1 to 7, ADR 0036 items 5 and 9).
-/// The body is the bytes of the file, and `name` in the query is the
-/// file name that the user selected.
+/// Import a finished upload file into the release folder of a feed (ADR
+/// 0026, ADR 0032 items 1 to 5 and 10, ADR 0033 items 1 to 7, ADR 0036
+/// items 5 and 9). The file at `temp_path` is in `incoming/` of the data
+/// folder. This function removes it, and each file that the import makes
+/// next to it, also after an error (ADR 0026 item 5).
 ///
-/// The handler writes the body to a temporary file in `incoming/` of the
-/// data folder, chunk by chunk, with no lock of the workspace. It then
-/// calls `media::import` on a blocking thread, with no lock of the
-/// workspace, because an MP3 encode takes some seconds and another
-/// request must not wait for it (ADR 0033 item 1). The import into the
-/// library then runs in `blocking`, with the workspace locked.
-pub(crate) async fn upload_file(
-    State(shared): State<Shared>,
-    Path(id): Path<i64>,
-    Query(query): Query<UploadQuery>,
-    request: Request,
+/// The import runs on a blocking thread with no lock of the workspace,
+/// because an MP3 encode takes some seconds and another request must not
+/// wait for it (ADR 0033 item 1). The import into the library then runs in
+/// `blocking`, with the workspace locked.
+pub(crate) async fn import_file(
+    shared: Shared,
+    id: i64,
+    temp_path: PathBuf,
+    file_name: String,
+    replace: bool,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
-    let file_name = upload_file_name(&query.name)?;
-    let replace = query.replace;
-    // Read the staging folder, with no lock held during the write of the
-    // body (ADR 0026 item 5, ADR 0032 item 10, ADR 0033 item 1).
-    let (incoming, rules) = {
-        let w = lock(&shared)?;
-        (w.incoming_dir.clone(), w.rules.clone())
-    };
-    // The storage limit of the server (ADR 0055 item 21). The check runs
-    // before the upload starts.
-    let rules = tokio::task::spawn_blocking(move || rules.map(|r| r.check_storage().map(|()| r)))
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))?
-        .transpose()?;
-    tokio::fs::create_dir_all(&incoming)
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
-    let temp_path = incoming.join(temp_file_name(&file_name)?);
     // The guard removes the temporary file at the end of this function,
-    // also after an error of the body, the import or the collection.
+    // also after an error of the import or the collection.
     let guard = TempFile(temp_path.clone());
-
-    let mut file = tokio::fs::File::create(&temp_path)
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
-    let mut body = request.into_limited_body().into_data_stream();
-    // The bytes of the folder at the last full count, and the bytes written
-    // since then. The folder is counted again after each 8 MiB.
-    let mut base = match &rules {
-        Some(rules) => count_folder(rules).await?,
-        None => 0,
-    };
-    let mut written = 0_u64;
-    while let Some(chunk) = body.next().await {
-        let chunk = chunk
-            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, "upload_failed", e.to_string()))?;
-        let size = chunk.len() as u64;
-        if let Some(rules) = &rules
-            && base.saturating_add(written).saturating_add(size) > rules.storage_limit
-        {
-            return Err(crate::workspace::storage_full());
-        }
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| ApiError::internal(e.to_string()))?;
-        written += size;
-        if let Some(rules) = &rules
-            && written >= crate::workspace::STORAGE_CHECK_BYTES
-        {
-            file.flush()
-                .await
-                .map_err(|e| ApiError::internal(e.to_string()))?;
-            base = count_folder(rules).await?;
-            written = 0;
-        }
-    }
-    file.flush()
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
-    drop(file);
-
-    // The import runs on a blocking thread, with no lock of the workspace
-    // (ADR 0033 item 1).
     let import_path = temp_path.clone();
     let imported =
         blocking_unlocked(move || media::import(&import_path, &file_name).map_err(ApiError::from))
@@ -3891,14 +3800,6 @@ pub(crate) async fn upload_file(
         import_upload(w, FeedId(id), imported, replace)
     })
     .await
-}
-
-/// Count the bytes of the user folder on a blocking thread.
-async fn count_folder(rules: &crate::workspace::ServerRules) -> Result<u64, ApiError> {
-    let rules = rules.clone();
-    tokio::task::spawn_blocking(move || rules.used())
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))
 }
 
 /// The blocking steps of an upload, with the workspace locked: the public

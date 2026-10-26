@@ -17,6 +17,10 @@
 // authenticator, so a flow with two passkeys needs this step. The page needs
 // a secure context, such as `http://localhost:PORT`. An IP address is not a
 // relying party ID.
+// A step {"file": [selector, path]} sets the file of a file input (an absolute
+// path on this computer) through `DOM.setFileInputFiles`, and the input then
+// fires its `change` event. Use a step for the click that opens the sheet
+// first, because the input must be in the page.
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
@@ -88,6 +92,14 @@ for (const step of steps) {
     });
     authenticatorId = added.result?.authenticatorId;
     console.log('webauthn =>', added.error ? 'ERROR ' + JSON.stringify(added.error) : 'virtual authenticator ' + authenticatorId);
+  }
+  if (step.file) {
+    const [selector, path] = step.file;
+    const { root } = (await send('DOM.getDocument', { depth: 0 })).result;
+    const found = await send('DOM.querySelector', { nodeId: root.nodeId, selector });
+    if (!found.result?.nodeId) throw new Error('no input ' + selector);
+    await send('DOM.setFileInputFiles', { nodeId: found.result.nodeId, files: [path] });
+    console.log('file =>', path);
   }
   if (step.js) { await evaluate(helpers); console.log(step.js.slice(0, 60), '=>', JSON.stringify(await evaluate(step.js))?.slice(0, 300)); }
   if (step.shot) await shot(step.shot);

@@ -1,5 +1,7 @@
 //! Connectors: read and write the files of one host type (ADR 0006, ADR 0015).
 
+mod blossom;
+mod blossom_http;
 mod local;
 #[cfg_attr(
     not(test),
@@ -19,6 +21,7 @@ use std::fmt;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
+pub use blossom::BlossomHost;
 pub use local::LocalFolder;
 pub use s3::{S3Bucket, S3Config, S3Credentials, S3UrlStyle};
 pub use sftp::{SftpConfig, SftpCredentials, SftpHost, SftpLogin};
@@ -485,6 +488,12 @@ pub fn from_row_in(
         SftpHost::KIND => Ok(Box::new(SftpHost::from_config(
             &row.config,
             secret.as_deref().map(Vec::as_slice),
+        )?)),
+        BlossomHost::KIND => Ok(Box::new(BlossomHost::from_config(
+            &row.config,
+            secret.as_deref().map(Vec::as_slice),
+            env.blobs.clone(),
+            env.signing.clone(),
         )?)),
         other => Err(ConnectorError::new(
             ConnectorErrorKind::InvalidConfig,

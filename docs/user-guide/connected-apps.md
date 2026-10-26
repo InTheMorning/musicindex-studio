@@ -48,6 +48,8 @@ With a grant, a connected app can:
 
 The grant ends 24 hours after the end time of the show.
 If the show has no end time, it ends 24 hours after the start time.
+The grant can end before this time.
+It ends when the show has the status **Ended**, leaves the feed, or you stop the grant.
 
 A granted change is refused in these cases:
 

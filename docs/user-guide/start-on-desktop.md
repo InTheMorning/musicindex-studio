@@ -38,7 +38,8 @@ After you stop and start Studio, copy the new address.
 ## Choose where Studio keeps its data
 
 The option `--data-dir` sets the folder for the vault and the collection.
-If you do not use it, Studio uses `~/.local/share/musicindex-studio`.
+If you do not use it, Studio uses `$XDG_DATA_HOME/musicindex-studio` when `XDG_DATA_HOME` is an absolute path.
+If `XDG_DATA_HOME` is unset or is not an absolute path, Studio uses `~/.local/share/musicindex-studio`.
 
 You can also use these options.
 

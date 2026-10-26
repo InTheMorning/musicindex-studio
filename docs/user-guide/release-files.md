@@ -2,7 +2,8 @@
 
 Open a release. Select **Files** in the outline.
 This page shows the files of the release and the hosts that hold them.
-Use it when you want to keep copies on more than one host, or move a release to a different host.
+Use this page to keep copies on more than one host.
+You can also move a release to a different host.
 
 <!-- PHASE-12-GAP: say which actions of this page work on the server, and how the server handles downloads and the storage limit; source: ADR 0055 item 21, ADR 0057 -->
 
@@ -57,10 +58,12 @@ These actions go into the draft. Studio does them when you write.
 
 These files are in the list **Library files**. Each one shows "Not in the library".
 The top of the list tells you the number of these files and the space that they use.
+
 Select **Download** to get it. The page shows the progress.
 Select **Stop** to stop a download.
 Select **Download all** to download each such file. Select **Stop all** to stop all downloads.
 If a download fails, select **Try again**.
+
 A copy or a move can need a download first. Studio then asks you to confirm. The write waits for the download.
 
 ## Other files on the hosts

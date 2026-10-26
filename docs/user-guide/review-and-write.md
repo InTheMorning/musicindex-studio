@@ -19,7 +19,7 @@ You can close Studio and come back. The draft stays.
 
 The diff shows the lines of the feed file that change.
 Lines that start with `+` are new. Lines that start with `-` go out.
-If the draft is the same as the hosted file, Studio says so.
+When the draft has nothing to write, Studio says that it matches the hosted file.
 
 The sheet can also list these actions before the diff:
 
@@ -32,7 +32,8 @@ The sheet can also list these actions before the diff:
 | Move | The feed XML moves to a different host. |
 | Announce | Studio tells Podcast Index about the write. See [Announcements](announcements.md). |
 
-Select **Undo** on a row to remove that action from the draft. An upload has no **Undo** button.
+Select **Undo** on a host operation row to remove it from the draft.
+Upload and Announce rows have no **Undo** button.
 Studio does not delete a file when a feed in your library refers to it. The row tells you.
 
 Select **Examine the changes** to look at the draft again.
@@ -51,8 +52,10 @@ Before each write, Studio keeps the file that the write replaces.
 
 The button **Write to the host** is not on the sheet in these cases:
 
-- The draft has no change.
+- The draft has nothing to write.
 - An address in the draft is not correct. Studio lists the fields. Correct them.
+
+Pending file operations and grants can show the button when the feed XML has no change.
 
 If an action waits for a download, the button is disabled. Studio shows "Wait for each download, then write."
 

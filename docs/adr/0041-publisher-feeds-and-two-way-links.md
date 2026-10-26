@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-25
 - Owner: operator, with the technical choices of the planning model
+- Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
 
 ## Context
 
@@ -77,6 +78,6 @@ Visual, for the operator:
 
 ## Invariants
 
-- No feed changes without a diff that the user saw ([ADR 0007](0007-draft-diff-write-and-announce.md)).
+- No feed changes without a diff that the user saw, or a change that a show grant of the user covers ([ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
 - A link has the same `rel` on its two sides.
 - A link does not change the feed GUID or an item GUID ([ADR 0008](0008-feed-types-and-feed-identity.md)).

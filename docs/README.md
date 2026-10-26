@@ -54,6 +54,8 @@
 - [ADR 0050: The nsite and Blossom signer, host environment and signing plan](adr/0050-nsite-and-blossom-signer-environment-and-plan.md)
 - [ADR 0051: The core signs Nostr events with secp256k1](adr/0051-the-core-signs-nostr-events-with-secp256k1.md)
 - [ADR 0052: Announcements through the Podcast Index hub](adr/0052-announcements-through-the-podcast-index-hub.md)
+- [ADR 0053: Playlists are musicL feeds with remote items](adr/0053-playlists-are-musicl-feeds-with-remote-items.md)
+- [ADR 0054: Live items, connected apps and show grants](adr/0054-live-items-connected-apps-and-show-grants.md)
 
 ## Plans
 
@@ -160,6 +162,17 @@
 - [Studio v1 task 031b: The announcements in the diff and the write](tasks/studio-v1-task-031b-diff-and-write.md)
 - [Studio v1 task 031c: The worker and the routes](tasks/studio-v1-task-031c-worker-and-routes.md)
 - [Studio v1 task 031d: The announcements in the UI](tasks/studio-v1-task-031d-announce-ui.md)
+- [Studio v1 task 032: Playlists](tasks/studio-v1-task-032-playlists.md)
+- [Studio v1 task 032a: The playlist feed and the track sources in the API](tasks/studio-v1-task-032a-playlist-api.md)
+- [Studio v1 task 032b: The playlist models](tasks/studio-v1-task-032b-playlist-models.md)
+- [Studio v1 task 032c: The playlist page and the picker](tasks/studio-v1-task-032c-playlist-page.md)
+- [Studio v1 task 033: Live items, connected apps and show grants](tasks/studio-v1-task-033-live-items.md)
+- [Studio v1 task 033a: The live item rules in the core](tasks/studio-v1-task-033a-live-item-rules.md)
+- [Studio v1 task 033b: The live item page](tasks/studio-v1-task-033b-live-item-page.md)
+- [Studio v1 task 033c: The recording of an ended show](tasks/studio-v1-task-033c-recording.md)
+- [Studio v1 task 033d: Connected apps](tasks/studio-v1-task-033d-connected-apps.md)
+- [Studio v1 task 033e: Show grants and granted writes](tasks/studio-v1-task-033e-show-grants.md)
+- [Studio v1 task 033f: The grants in the UI](tasks/studio-v1-task-033f-grants-ui.md)
 
 ## Reviews
 
@@ -184,6 +197,8 @@
 - [Task 029 review checklist, 2026-10-25](reviews/2026-10-25-task-029-review-checklist.md)
 - [Task 030 review checklist, 2026-10-25](reviews/2026-10-25-task-030-review-checklist.md)
 - [Task 031 review checklist, 2026-10-25](reviews/2026-10-25-task-031-review-checklist.md)
+- [Task 032 review checklist, 2026-10-26](reviews/2026-10-26-task-032-review-checklist.md)
+- [Task 033 review checklist, 2026-10-26](reviews/2026-10-26-task-033-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

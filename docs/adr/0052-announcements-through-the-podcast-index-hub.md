@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-25
 - Owner: operator
+- Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
 
 ## Context
 
@@ -101,7 +102,7 @@ Human test:
 
 ## Invariants
 
-- No announcement occurs without a diff that the user has seen ([ADR 0007](0007-draft-diff-write-and-announce.md)).
+- No announcement occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
 - An announcement never changes or stops a write.
 - No test sends a request to a host outside the computer ([ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md)).
 - An announcement uses no secret.

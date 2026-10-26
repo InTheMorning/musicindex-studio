@@ -21,7 +21,7 @@ use axum::routing::{delete, get, post, put};
 pub use access::Access;
 pub use axum::Router;
 pub use error::ApiError;
-pub use workspace::{VaultState, Workspace, WorkspaceHandle};
+pub use workspace::{ServerRules, VaultState, Workspace, WorkspaceHandle};
 
 /// The body limit of the upload route (ADR 0026, ADR 0032). The other
 /// routes keep the default limit of 2 MiB.

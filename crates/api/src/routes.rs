@@ -952,7 +952,16 @@ pub(crate) async fn add_connector(
                 name,
                 root,
                 base_url,
-            } => (name, root, base_url),
+            } => {
+                // A local folder host reads and writes folders of the server
+                // computer (ADR 0055 item 24).
+                if w.rules.is_some() {
+                    return Err(not_on_server(
+                        "a local folder host is not available on the server",
+                    ));
+                }
+                (name, root, base_url)
+            }
             NewConnector::S3(body) => return add_s3_connector(w, &body),
             NewConnector::Sftp(body) => return add_sftp_connector(w, &body),
             NewConnector::Nsite(body) => return add_nsite_connector(w, &body),
@@ -981,6 +990,11 @@ pub(crate) async fn add_connector(
         Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
     })
     .await
+}
+
+/// The refusal of a function of the desktop only (ADR 0055 items 24 and 25).
+fn not_on_server(message: &str) -> ApiError {
+    ApiError::new(StatusCode::FORBIDDEN, "not_on_server", message)
 }
 
 /// Replace a leading `~` with the home folder of the user that runs Studio.
@@ -2298,6 +2312,14 @@ pub(crate) async fn put_library(
     blocking(shared, move |w| {
         let existing = w.collection.setting("library_root")?;
         let existing_root = existing.as_ref().and_then(Value::as_str).map(str::to_owned);
+        // The server has one library folder for each user (ADR 0055 item 25).
+        if let Some(rules) = &w.rules
+            && rules.library_root.to_str() != Some(body.root.trim())
+        {
+            return Err(not_on_server(
+                "the server has one library folder for each user",
+            ));
+        }
         let root = expand_home(body.root.trim());
         if let Some(existing_root) = &existing_root
             && existing_root != &root
@@ -3665,7 +3687,16 @@ pub(crate) async fn upload_file(
     let replace = query.replace;
     // Read the staging folder, with no lock held during the write of the
     // body (ADR 0026 item 5, ADR 0032 item 10, ADR 0033 item 1).
-    let incoming = { lock(&shared)?.incoming_dir.clone() };
+    let (incoming, rules) = {
+        let w = lock(&shared)?;
+        (w.incoming_dir.clone(), w.rules.clone())
+    };
+    // The storage limit of the server (ADR 0055 item 21). The check runs
+    // before the upload starts.
+    let rules = tokio::task::spawn_blocking(move || rules.map(|r| r.check_storage().map(|()| r)))
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))?
+        .transpose()?;
     tokio::fs::create_dir_all(&incoming)
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?;
@@ -3678,12 +3709,35 @@ pub(crate) async fn upload_file(
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?;
     let mut body = request.into_limited_body().into_data_stream();
+    // The bytes of the folder at the last full count, and the bytes written
+    // since then. The folder is counted again after each 8 MiB.
+    let mut base = match &rules {
+        Some(rules) => count_folder(rules).await?,
+        None => 0,
+    };
+    let mut written = 0_u64;
     while let Some(chunk) = body.next().await {
         let chunk = chunk
             .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, "upload_failed", e.to_string()))?;
+        let size = chunk.len() as u64;
+        if let Some(rules) = &rules
+            && base.saturating_add(written).saturating_add(size) > rules.storage_limit
+        {
+            return Err(crate::workspace::storage_full());
+        }
         file.write_all(&chunk)
             .await
             .map_err(|e| ApiError::internal(e.to_string()))?;
+        written += size;
+        if let Some(rules) = &rules
+            && written >= crate::workspace::STORAGE_CHECK_BYTES
+        {
+            file.flush()
+                .await
+                .map_err(|e| ApiError::internal(e.to_string()))?;
+            base = count_folder(rules).await?;
+            written = 0;
+        }
     }
     file.flush()
         .await
@@ -3714,6 +3768,14 @@ pub(crate) async fn upload_file(
         import_upload(w, FeedId(id), imported, replace)
     })
     .await
+}
+
+/// Count the bytes of the user folder on a blocking thread.
+async fn count_folder(rules: &crate::workspace::ServerRules) -> Result<u64, ApiError> {
+    let rules = rules.clone();
+    tokio::task::spawn_blocking(move || rules.used())
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))
 }
 
 /// The blocking steps of an upload, with the workspace locked: the public

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use axum::Router;
 use axum::response::{IntoResponse, Response};
-use studio_api::{ApiError, Workspace, WorkspaceHandle, workspace_router};
+use studio_api::{ApiError, ServerRules, Workspace, WorkspaceHandle, workspace_router};
 use studio_core::collection::Collection;
 use studio_core::net::{NetPolicy, PublicRules};
 use tokio::sync::Mutex;
@@ -31,6 +31,8 @@ pub struct UserSettings {
     /// The rules of the policy `Public`. A test build adds the address of
     /// a local test server.
     pub rules: PublicRules,
+    /// The most bytes in the folder of a user (ADR 0055 item 21).
+    pub storage_limit: u64,
 }
 
 /// The open users, by account ID.
@@ -79,6 +81,31 @@ impl Users {
         Ok(user)
     }
 
+    /// The open user of an account, when the account is open. This call
+    /// never opens a workspace.
+    pub async fn peek(&self, account_id: i64) -> Option<OpenUser> {
+        self.open.lock().await.get(&account_id).cloned()
+    }
+
+    /// Each open user, with the account ID.
+    pub async fn snapshot(&self) -> Vec<(i64, OpenUser)> {
+        self.open
+            .lock()
+            .await
+            .iter()
+            .map(|(id, user)| (*id, user.clone()))
+            .collect()
+    }
+
+    /// True when the folder has a waiting announcement or a queued
+    /// download (ADR 0055 item 4).
+    pub async fn is_busy_folder(&self, folder: &str) -> bool {
+        let path = self.folder_path(folder);
+        tokio::task::spawn_blocking(move || is_busy(&path))
+            .await
+            .unwrap_or(true)
+    }
+
     /// Forget the open user of an account.
     pub async fn forget(&self, account_id: i64) {
         self.open.lock().await.remove(&account_id);
@@ -118,8 +145,13 @@ fn is_busy(folder: &std::path::Path) -> bool {
 }
 
 fn open_user(settings: &UserSettings, path: &std::path::Path) -> Result<OpenUser, ApiError> {
-    let mut workspace =
-        Workspace::open(path)?.with_net_policy(NetPolicy::Public(settings.rules.clone()));
+    let mut workspace = Workspace::open(path)?
+        .with_net_policy(NetPolicy::Public(settings.rules.clone()))
+        .with_server_rules(ServerRules {
+            storage_limit: settings.storage_limit,
+            folder: path.to_path_buf(),
+            library_root: path.join("library"),
+        });
     if let Some(base) = &settings.musicindex {
         workspace = workspace.with_musicindex(base);
     }

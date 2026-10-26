@@ -361,6 +361,59 @@ impl Accounts {
             .map_err(|e| e.to_string())
     }
 
+    /// True when the account has a session that is not over. A session is
+    /// over after `idle` seconds with no request, or `total` seconds in all.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn has_session(&self, account_id: i64, idle: i64, total: i64) -> Result<bool, String> {
+        let now = now();
+        self.db()
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM sessions
+                 WHERE account_id = ?1 AND last_seen >= ?2 AND created_at >= ?3)",
+                params![account_id, now - idle, now - total],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove each session that is over (see [`Accounts::has_session`]).
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn delete_expired_sessions(&self, idle: i64, total: i64) -> Result<(), String> {
+        let now = now();
+        self.db()
+            .execute(
+                "DELETE FROM sessions WHERE last_seen < ?1 OR created_at < ?2",
+                params![now - idle, now - total],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove an account with its sessions and its email address in one
+    /// step (ADR 0055 item 9).
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn delete_account(&self, account_id: i64) -> Result<(), String> {
+        let mut db = self.db();
+        let tx = db.transaction().map_err(|e| e.to_string())?;
+        for sql in [
+            "DELETE FROM sessions WHERE account_id = ?1",
+            "DELETE FROM account_emails WHERE account_id = ?1",
+            "DELETE FROM accounts WHERE id = ?1",
+        ] {
+            tx.execute(sql, [account_id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())
+    }
+
     /// Remove a session.
     ///
     /// # Errors

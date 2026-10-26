@@ -42,6 +42,11 @@ impl ApiError {
         }
     }
 
+    /// The code and the message as one text, for a record in a collection.
+    pub(crate) fn coded(&self) -> String {
+        format!("{}: {}", self.code, self.message)
+    }
+
     pub(crate) fn vault_locked() -> Self {
         Self::new(StatusCode::LOCKED, "vault_locked", "unlock the vault first")
     }

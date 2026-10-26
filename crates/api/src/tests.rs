@@ -65,6 +65,28 @@ fn app_with_index(index: &str) -> App {
     }
 }
 
+/// An app with the rules of the server (task 034d). The user folder is the
+/// data folder, and the library folder is `library/` in it.
+fn app_with_rules(storage_limit: u64) -> App {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_server_rules(crate::ServerRules {
+            storage_limit,
+            folder: data.path().to_path_buf(),
+            library_root: data.path().join("library"),
+        });
+    App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    }
+}
+
 async fn send(app: &App, request: Request<Body>) -> (StatusCode, Value, String) {
     let response = app.router.clone().oneshot(request).await.unwrap();
     let status = response.status();
@@ -6460,4 +6482,161 @@ async fn with_the_policy_public_an_nsite_host_and_the_fingerprint_route_on_loopb
     )
     .await;
     assert_not_public(status, &body, "127.0.0.1");
+}
+
+// ---- The rules of the server (task 034d) ----
+
+#[tokio::test]
+async fn server_rules_refuse_a_local_host_and_a_different_library_folder() {
+    let app = app_with_rules(1 << 30);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "local",
+            "name": "Folder",
+            "root": app.feeds.path().to_str().unwrap(),
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"]["code"], "not_on_server");
+    let (_, list) = call(&app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(list, json!([]));
+
+    let other = app.feeds.path().join("other");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": other.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"]["code"], "not_on_server");
+    assert!(!other.exists());
+
+    let fixed = app.data.path().join("library");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": fixed.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn the_desktop_keeps_the_local_host() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "local",
+            "name": "Folder",
+            "root": app.feeds.path().to_str().unwrap(),
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+}
+
+#[tokio::test]
+async fn an_upload_over_the_storage_limit_gives_507_and_leaves_no_partial_file() {
+    let app = app_with_rules(1024 * 1024);
+    let (status, body) = upload(&app, 1, "big.mp3", vec![7_u8; 2 * 1024 * 1024]).await;
+    assert_eq!(status, StatusCode::INSUFFICIENT_STORAGE, "{body}");
+    assert_eq!(body["error"]["code"], "storage_full");
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn an_upload_starts_only_when_the_folder_is_under_the_limit() {
+    // The collection file alone is larger than 1 byte.
+    let app = app_with_rules(1);
+    let (status, body) = upload(&app, 1, "small.mp3", vec![7_u8; 10]).await;
+    assert_eq!(status, StatusCode::INSUFFICIENT_STORAGE, "{body}");
+    assert_eq!(body["error"]["code"], "storage_full");
+    assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn a_download_over_the_storage_limit_records_storage_full() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set("/a.mp3", 200, vec![1_u8; 5000]);
+    server.set(
+        "/d.xml",
+        200,
+        feed_with_one_enclosure(&server.url("/a.mp3"), 5000).into_bytes(),
+    );
+    let app = app_with_rules(1);
+    set_library_root(&app);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/d.xml")] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["added"][0]["id"].as_i64().unwrap();
+    call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/downloads"),
+        Some(json!({ "all": true })),
+    )
+    .await;
+    for _ in 0..200 {
+        let (_, body) = call(&app, "GET", &format!("/api/v1/feeds/{id}/downloads"), None).await;
+        let list = body["downloads"].as_array().unwrap();
+        if let Some(failed) = list.iter().find(|d| d["state"] == "failed") {
+            assert!(
+                failed["message"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("storage_full"),
+                "{failed}"
+            );
+            assert!(!app.data.path().join("library/d/a.mp3").exists());
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("the download did not fail");
+}
+
+#[tokio::test]
+async fn the_handle_reports_the_storage_and_locks_an_idle_vault() {
+    let data = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_server_rules(crate::ServerRules {
+            storage_limit: 1 << 30,
+            folder: data.path().to_path_buf(),
+            library_root: data.path().join("library"),
+        });
+    let (_router, handle) = crate::workspace_router(workspace);
+    handle.create_vault(Some(PASSPHRASE), false).await.unwrap();
+    assert!(handle.storage_used().await > 0);
+    let long = std::time::Duration::from_secs(3600);
+    assert!(!handle.lock_if_idle(long).await);
+    assert_eq!(handle.vault_state().await.unwrap(), crate::VaultState::Open);
+    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    assert!(
+        handle
+            .lock_if_idle(std::time::Duration::from_millis(10))
+            .await
+    );
+    assert_eq!(
+        handle.vault_state().await.unwrap(),
+        crate::VaultState::Locked
+    );
+    assert!(!handle.lock_if_idle(std::time::Duration::ZERO).await);
+    handle.delete_folder().await.unwrap();
+    assert!(!data.path().exists());
 }

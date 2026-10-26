@@ -13,6 +13,7 @@ use studio_api::ui_router;
 use studio_core::vault::{MIN_PASSPHRASE_CHARS, passphrase_strength};
 
 use crate::accounts::{self, SignUpError};
+use crate::limits;
 use crate::session::{
     self, Resolved, Shared, cleared_cookie, csrf_of, failure, internal, read_json, session_cookie,
 };
@@ -25,6 +26,7 @@ pub fn server_router(state: &Shared) -> Router {
         .route("/auth/v1/signup/email", post(sign_up))
         .route("/auth/v1/signin/email", post(sign_in))
         .route("/auth/v1/signout", post(sign_out))
+        .route("/auth/v1/account/delete", post(delete_account))
         // A wildcard route would add a path parameter to the request, and the
         // routes of the user would then read two parameters. A fallback adds none.
         .fallback(session::dispatch)
@@ -91,7 +93,7 @@ fn start_session(
 }
 
 async fn get_session(State(state): State<Shared>, request: Request) -> Response {
-    let resolved = match session::resolve(&state, request.headers()) {
+    let resolved = match session::resolve(&state, request.headers()).await {
         Ok(resolved) => resolved,
         Err(response) => return response,
     };
@@ -183,6 +185,12 @@ async fn sign_up(State(state): State<Shared>, request: Request) -> Response {
             )
         };
     }
+    // The Argon2id derivation of the new vault needs a permit. The request
+    // waits before it uses the invite (ADR 0055 item 22).
+    let _permit = match limits::derivation_permit(&state).await {
+        Ok(permit) => permit,
+        Err(response) => return response,
+    };
     let Ok(folder) = accounts::random_hex(16) else {
         return internal("the random source is not available");
     };
@@ -253,11 +261,32 @@ struct SignIn {
 }
 
 async fn sign_in(State(state): State<Shared>, request: Request) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
     let body: SignIn = match read_json(request).await {
         Ok(body) => body,
         Err(response) => return response,
     };
-    let found = match normalize_email(&body.email) {
+    let email = normalize_email(&body.email);
+    // The counter uses the email text, also for an unknown address, so that
+    // the answer does not show which addresses have an account.
+    let account_key: String = email
+        .clone()
+        .unwrap_or_else(|| body.email.trim().to_lowercase())
+        .chars()
+        .take(254)
+        .collect();
+    if state.attempts.blocked(&account_key, &address) {
+        return limits::too_many_attempts();
+    }
+    let _permit = match limits::derivation_permit(&state).await {
+        Ok(permit) => permit,
+        Err(response) => return response,
+    };
+    let failed = || {
+        state.attempts.record_failure(&account_key, &address);
+        sign_in_failed()
+    };
+    let found = match email {
         Some(email) => match state.accounts.account_by_email(&email) {
             Ok(found) => found.map(|(id, folder)| (id, folder, email)),
             Err(_) => return internal("the account database failed"),
@@ -269,7 +298,7 @@ async fn sign_in(State(state): State<Shared>, request: Request) -> Response {
         let dummy = state.dummy_wrapper.clone();
         let passphrase = body.passphrase;
         let _ = tokio::task::spawn_blocking(move || dummy.open_with_passphrase(&passphrase)).await;
-        return sign_in_failed();
+        return failed();
     };
     let user = match state.users.get(account_id, &folder).await {
         Ok(user) => user,
@@ -279,7 +308,7 @@ async fn sign_in(State(state): State<Shared>, request: Request) -> Response {
         let response = error.into_response();
         // A wrong passphrase gives 422, and a missing vault gives 404.
         return match response.status() {
-            StatusCode::UNPROCESSABLE_ENTITY | StatusCode::NOT_FOUND => sign_in_failed(),
+            StatusCode::UNPROCESSABLE_ENTITY | StatusCode::NOT_FOUND => failed(),
             _ => internal("the vault could not be opened"),
         };
     }
@@ -296,18 +325,75 @@ async fn sign_in(State(state): State<Shared>, request: Request) -> Response {
 }
 
 async fn sign_out(State(state): State<Shared>, request: Request) -> Response {
-    if let Some(token) = request
-        .headers()
-        .get(header::COOKIE)
-        .and_then(|_| match session::resolve(&state, request.headers()) {
-            Ok(Resolved::Active(session)) => Some(session.token),
-            _ => None,
-        })
-    {
-        let _ = state.accounts.delete_session(&accounts::sha256_hex(&token));
+    if let Ok(Resolved::Active(session)) = session::resolve(&state, request.headers()).await {
+        let _ = state
+            .accounts
+            .delete_session(&accounts::sha256_hex(&session.token));
+        // The last session of the user ends here, so the vault locks
+        // (ADR 0055 item 16).
+        session::lock_if_no_session(&state, session.account_id).await;
     }
     with_cookie(
         axum::Json(json!({ "signed_in": false })).into_response(),
         &cleared_cookie(),
     )
+}
+
+#[derive(Deserialize)]
+struct DeleteAccount {
+    confirm: String,
+}
+
+/// Delete the account of the session (ADR 0055 item 9). The vault must be
+/// open, and the body repeats the email address of the account.
+async fn delete_account(State(state): State<Shared>, request: Request) -> Response {
+    let session = match session::active_session(&state, request.headers()).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if let Err(response) = session::check_csrf(&session, request.headers()) {
+        return response;
+    }
+    let body: DeleteAccount = match read_json(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    let (Ok(Some(email)), Ok(Some(folder))) = (
+        state.accounts.email_of(session.account_id),
+        state.accounts.folder_of(session.account_id),
+    ) else {
+        return failure(
+            StatusCode::UNAUTHORIZED,
+            "session_required",
+            "the account does not exist",
+        );
+    };
+    if body.confirm.trim().to_lowercase() != email {
+        return failure(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "confirm_mismatch",
+            "the confirmation is not the email address of the account",
+        );
+    }
+    let user = match state.users.get(session.account_id, &folder).await {
+        Ok(user) => user,
+        Err(error) => return error.into_response(),
+    };
+    match user.handle.vault_state().await {
+        Ok(studio_api::VaultState::Open) => {}
+        Ok(_) => {
+            return failure(StatusCode::LOCKED, "vault_locked", "unlock the vault first");
+        }
+        Err(error) => return error.into_response(),
+    }
+    if state.accounts.delete_account(session.account_id).is_err() {
+        return internal("the account database failed");
+    }
+    // The account is gone, so no request can reach the user. A folder that
+    // stays on the disk is an operator task and not an error for the user.
+    if let Err(error) = user.handle.delete_folder().await {
+        eprintln!("studio-server: a user folder was not removed: {error:?}");
+    }
+    state.users.forget(session.account_id).await;
+    with_cookie(StatusCode::NO_CONTENT.into_response(), &cleared_cookie())
 }

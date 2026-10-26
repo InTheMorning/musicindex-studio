@@ -2,6 +2,12 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
+
+/// The seconds in a day.
+const DAY: i64 = 86_400;
+/// The bytes in a GiB.
+const GIB: u64 = 1024 * 1024 * 1024;
 
 /// How a new user can sign up (ADR 0055 item 7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,12 +89,22 @@ pub struct ServeOptions {
     /// The sign-up mode.
     pub signup: Signup,
     /// The header that gives the client address behind a reverse proxy.
-    /// The limit of failed sign-ins uses it in a later packet.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the rate limit of a later packet reads it")
-    )]
+    /// The limit of failed sign-ins uses it (ADR 0055 item 23).
     pub client_address_header: Option<String>,
+    /// A session ends after this many seconds with no request (ADR 0055
+    /// item 13).
+    pub session_idle: i64,
+    /// A session ends after this many seconds in total.
+    pub session_max: i64,
+    /// The vault of a user locks after this time with no use of a secret
+    /// (ADR 0055 item 16).
+    pub vault_idle: Duration,
+    /// The most bytes in the folder of a user (ADR 0055 item 21).
+    pub storage_limit: u64,
+    /// The most Argon2id derivations at the same time (ADR 0055 item 22).
+    pub argon2_concurrency: usize,
+    /// How long a request waits for a derivation before it gets 503.
+    pub argon2_wait: Duration,
     /// A different musicindex API.
     pub musicindex: Option<String>,
     /// A different hub for the announcements.
@@ -107,6 +123,14 @@ pub enum Command {
     },
 }
 
+/// Read a whole number above zero that an option gives.
+fn number(name: &str, text: &str) -> Result<u64, String> {
+    text.parse::<u64>()
+        .ok()
+        .filter(|n| (1..=1_000_000).contains(n))
+        .ok_or_else(|| format!("{name} needs a whole number from 1 to 1000000"))
+}
+
 /// Read the command line, without the program name.
 ///
 /// # Errors
@@ -122,6 +146,11 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
     let mut client_address_header = None;
     let mut musicindex = None;
     let mut hub = None;
+    let mut session_idle_days = 7;
+    let mut session_max_days = 30;
+    let mut vault_idle_minutes = 10;
+    let mut storage_limit_gib = 10;
+    let mut argon2_concurrency = 2;
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or(format!("{name} needs a value"));
         match (command.as_str(), arg.as_str()) {
@@ -146,6 +175,23 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             ("serve", "--client-address-header") => {
                 client_address_header = Some(value("--client-address-header")?);
             }
+            ("serve", "--session-idle-days") => {
+                session_idle_days = number("--session-idle-days", &value("--session-idle-days")?)?;
+            }
+            ("serve", "--session-max-days") => {
+                session_max_days = number("--session-max-days", &value("--session-max-days")?)?;
+            }
+            ("serve", "--vault-idle-minutes") => {
+                vault_idle_minutes =
+                    number("--vault-idle-minutes", &value("--vault-idle-minutes")?)?;
+            }
+            ("serve", "--storage-limit-gib") => {
+                storage_limit_gib = number("--storage-limit-gib", &value("--storage-limit-gib")?)?;
+            }
+            ("serve", "--argon2-concurrency") => {
+                argon2_concurrency =
+                    number("--argon2-concurrency", &value("--argon2-concurrency")?)?;
+            }
             ("serve", "--musicindex") => musicindex = Some(value("--musicindex")?),
             ("serve", "--podcastindex-hub") => hub = Some(value("--podcastindex-hub")?),
             _ => return Err(format!("unknown option {arg}")),
@@ -159,6 +205,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             origin: origin.ok_or("--public-origin is required")?,
             signup,
             client_address_header,
+            session_idle: i64::try_from(session_idle_days).unwrap_or(i64::MAX) * DAY,
+            session_max: i64::try_from(session_max_days).unwrap_or(i64::MAX) * DAY,
+            vault_idle: Duration::from_secs(vault_idle_minutes * 60),
+            storage_limit: storage_limit_gib.saturating_mul(GIB),
+            argon2_concurrency: usize::try_from(argon2_concurrency).unwrap_or(usize::MAX),
+            argon2_wait: Duration::from_secs(10),
             musicindex,
             hub,
         }))),
@@ -200,6 +252,30 @@ mod tests {
         assert_eq!(options.listen.to_string(), "127.0.0.1:8080");
         assert_eq!(options.signup, Signup::Invite);
         assert!(options.client_address_header.is_none());
+        assert_eq!(options.session_idle, 7 * 86_400);
+        assert_eq!(options.session_max, 30 * 86_400);
+        assert_eq!(options.vault_idle, Duration::from_secs(600));
+        assert_eq!(options.storage_limit, 10 * 1024 * 1024 * 1024);
+        assert_eq!(options.argon2_concurrency, 2);
+        assert_eq!(options.argon2_wait, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn the_limit_options_take_whole_numbers_above_zero() {
+        let line = "serve --data-dir d --public-origin https://a.example";
+        let given = format!(
+            "{line} --session-idle-days 2 --session-max-days 3 --vault-idle-minutes 1 \
+             --storage-limit-gib 4 --argon2-concurrency 1"
+        );
+        let Ok(Command::Serve(options)) = parse(args(&given)) else {
+            panic!("expected serve");
+        };
+        assert_eq!(options.session_idle, 2 * 86_400);
+        assert_eq!(options.vault_idle, Duration::from_secs(60));
+        assert_eq!(options.storage_limit, 4 * 1024 * 1024 * 1024);
+        assert_eq!(options.argon2_concurrency, 1);
+        assert!(parse(args(&format!("{line} --argon2-concurrency 0"))).is_err());
+        assert!(parse(args(&format!("{line} --storage-limit-gib x"))).is_err());
     }
 
     #[test]

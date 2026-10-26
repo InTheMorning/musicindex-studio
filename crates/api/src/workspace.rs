@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use std::collections::{HashMap, VecDeque};
 
@@ -161,6 +162,40 @@ impl WorkspaceHandle {
         .await
     }
 
+    /// Close the vault when nothing has used a secret for `limit`. Gives
+    /// true when this call closed the vault (ADR 0055 item 16).
+    pub async fn lock_if_idle(&self, limit: Duration) -> bool {
+        matches!(self.run(move |w| Ok(w.lock_if_idle(limit))).await, Ok(true))
+    }
+
+    /// The bytes in the user folder. Gives 0 when the workspace has no
+    /// server rules.
+    pub async fn storage_used(&self) -> u64 {
+        self.run(|w| Ok(w.rules.as_ref().map_or(0, ServerRules::used)))
+            .await
+            .unwrap_or(0)
+    }
+
+    /// Close the vault and remove the user folder (ADR 0055 item 9). The
+    /// workspace must have server rules, because they name the folder.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the workspace has no server rules or the
+    /// folder cannot be removed.
+    pub async fn delete_folder(&self) -> Result<(), ApiError> {
+        self.run(|w| {
+            w.lock();
+            let rules = w
+                .rules
+                .as_ref()
+                .ok_or_else(|| ApiError::internal("the workspace has no user folder"))?;
+            std::fs::remove_dir_all(&rules.folder)
+                .map_err(|e| ApiError::internal(format!("the user folder: {e}")))
+        })
+        .await
+    }
+
     /// Give the workspace its library folder.
     ///
     /// # Errors
@@ -178,6 +213,71 @@ pub(crate) fn lock_workspace(
     shared
         .lock()
         .map_err(|_| ApiError::internal("the workspace lock is poisoned"))
+}
+
+/// The bytes that a storage check counts between two checks of a transfer
+/// (ADR 0055 item 21).
+pub(crate) const STORAGE_CHECK_BYTES: u64 = 8 * 1024 * 1024;
+
+/// The rules of the server for one workspace (ADR 0055 items 21, 24 and
+/// 25). The desktop sets none.
+#[derive(Debug, Clone)]
+pub struct ServerRules {
+    /// The most bytes that the user folder can hold.
+    pub storage_limit: u64,
+    /// The user folder. The storage limit counts the files in it.
+    pub folder: PathBuf,
+    /// The only library folder that the user can have.
+    pub library_root: PathBuf,
+}
+
+impl ServerRules {
+    /// The bytes of the files in the user folder.
+    #[must_use]
+    pub fn used(&self) -> u64 {
+        folder_bytes(&self.folder)
+    }
+
+    /// Give 507 `storage_full` when the user folder holds `limit` bytes or
+    /// more.
+    pub(crate) fn check_storage(&self) -> Result<(), ApiError> {
+        if self.used() >= self.storage_limit {
+            Err(storage_full())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// The error of a user folder that is over its limit.
+pub(crate) fn storage_full() -> ApiError {
+    ApiError::new(
+        StatusCode::INSUFFICIENT_STORAGE,
+        "storage_full",
+        "the storage limit of this account is reached",
+    )
+}
+
+/// The sum of the sizes of the files under `root`. A link is not followed.
+fn folder_bytes(root: &Path) -> u64 {
+    let mut total = 0_u64;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(folder) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&folder) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else if kind.is_file() {
+                total = total.saturating_add(entry.metadata().map_or(0, |m| m.len()));
+            }
+        }
+    }
+    total
 }
 
 /// The state of the vault.
@@ -246,6 +346,10 @@ pub struct Workspace {
     pub(crate) announce_timing: Timing,
     /// The worker of the announcement queue.
     pub(crate) announcer: Arc<Announcer>,
+    /// The rules of the server. `None` on the desktop.
+    pub(crate) rules: Option<ServerRules>,
+    /// The time of the last use of a vault secret (ADR 0055 item 16).
+    vault_used: Mutex<Instant>,
 }
 
 /// The hub of a new workspace (ADR 0052 item 1).
@@ -284,7 +388,40 @@ impl Workspace {
             hub: NEW_HUB.to_owned(),
             announce_timing: Timing::DEFAULT,
             announcer: Announcer::new(),
+            rules: None,
+            vault_used: Mutex::new(Instant::now()),
         })
+    }
+
+    /// Use the rules of the server: no local folder host, one library
+    /// folder and a storage limit (ADR 0055 items 21, 24 and 25).
+    #[must_use]
+    pub fn with_server_rules(mut self, rules: ServerRules) -> Self {
+        self.rules = Some(rules);
+        self
+    }
+
+    /// Record that a secret of the vault is in use now.
+    pub(crate) fn touch_vault(&self) {
+        *self
+            .vault_used
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Instant::now();
+    }
+
+    /// Close the vault when no secret has been in use for `limit`. Gives
+    /// true when it closed the vault.
+    pub(crate) fn lock_if_idle(&mut self, limit: Duration) -> bool {
+        let used = *self
+            .vault_used
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.vault.is_some() && used.elapsed() >= limit {
+            self.lock();
+            true
+        } else {
+            false
+        }
     }
 
     /// Use a different musicindex API, such as a test server. The
@@ -388,6 +525,7 @@ impl Workspace {
             None
         };
         self.vault = Some(vault);
+        self.touch_vault();
         self.save_vault()?;
         Ok(recovery)
     }
@@ -395,12 +533,14 @@ impl Workspace {
     pub(crate) fn unlock_with_passphrase(&mut self, passphrase: &str) -> Result<(), ApiError> {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_passphrase(passphrase)?);
+        self.touch_vault();
         Ok(())
     }
 
     pub(crate) fn unlock_with_key(&mut self, key_base64: &str) -> Result<(), ApiError> {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_key(key_base64)?);
+        self.touch_vault();
         Ok(())
     }
 
@@ -444,6 +584,9 @@ impl Workspace {
         &self,
         row: &studio_core::collection::ConnectorRow,
     ) -> Result<Box<dyn connector::Connector>, studio_core::connector::ConnectorError> {
+        if row.secret_ref.is_some() && self.vault.is_some() {
+            self.touch_vault();
+        }
         connector::from_row_in(
             row,
             &HostEnv {
@@ -470,6 +613,9 @@ impl Workspace {
             if row.secret_ref.is_some() && self.vault.is_none() {
                 hosts.insert_locked(row.id);
                 continue;
+            }
+            if row.secret_ref.is_some() && self.vault.is_some() {
+                self.touch_vault();
             }
             let env = HostEnv {
                 vault: self.vault.as_ref(),

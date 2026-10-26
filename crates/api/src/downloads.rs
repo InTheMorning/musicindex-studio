@@ -228,6 +228,26 @@ impl DownloadQueue {
         }
     }
 
+    fn progress(&self, file: LibraryFileId, done: u64, total: Option<u64>) {
+        self.update(file, |entry| {
+            entry.bytes = done;
+            entry.total = total.or(entry.total);
+        });
+    }
+
+    /// Remove the partial file, and record the same code as the upload
+    /// route gives (ADR 0055 item 21).
+    fn fail_storage_full(
+        &self,
+        workspace: &Arc<Mutex<Workspace>>,
+        file: LibraryFileId,
+        part: &std::path::Path,
+    ) {
+        let _ = std::fs::remove_file(part);
+        let message = crate::workspace::storage_full().coded();
+        self.fail(workspace, file, &message);
+    }
+
     /// Record a failure in memory and in the collection.
     fn fail(&self, workspace: &Arc<Mutex<Workspace>>, file: LibraryFileId, message: &str) {
         self.update(file, |entry| {
@@ -267,10 +287,23 @@ impl DownloadQueue {
                     .map_err(|e| e.to_string())?;
                 let max = download::max_file_bytes(&w.collection).map_err(|e| e.to_string())?;
                 let part = download::part_path(&library, &folder, &row.path);
-                Ok(Some((hosts, library, source, max, part, w.web.clone())))
+                // The storage limit of the server (ADR 0055 item 21).
+                let rules = w.rules.clone();
+                if let Some(rules) = &rules {
+                    rules.check_storage().map_err(|e| e.coded())?;
+                }
+                Ok(Some((
+                    hosts,
+                    library,
+                    source,
+                    max,
+                    part,
+                    w.web.clone(),
+                    rules,
+                )))
             })()
         };
-        let (hosts, library, source, max, part, web) = match prepared {
+        let (hosts, library, source, max, part, web, rules) = match prepared {
             Ok(Some(prepared)) => prepared,
             Ok(None) => {
                 // The bytes are in the library already.
@@ -283,7 +316,11 @@ impl DownloadQueue {
             Err(message) => return self.fail(workspace, file, &message),
         };
 
-        // Step 2: with no lock, transfer the bytes.
+        // Step 2: with no lock, transfer the bytes. On the server, the
+        // transfer stops when the user folder reaches its limit. The folder is
+        // counted after each 8 MiB (ADR 0055 item 21).
+        let full = AtomicBool::new(false);
+        let mut counted = 0_u64;
         let result = download::fetch(
             &hosts,
             &web,
@@ -291,13 +328,22 @@ impl DownloadQueue {
             &part,
             max,
             &mut |done, total| {
-                self.update(file, |entry| {
-                    entry.bytes = done;
-                    entry.total = total.or(entry.total);
-                });
+                self.progress(file, done, total);
+                if let Some(rules) = &rules
+                    && done.saturating_sub(counted) >= crate::workspace::STORAGE_CHECK_BYTES
+                {
+                    counted = done;
+                    if rules.check_storage().is_err() {
+                        full.store(true, Ordering::Relaxed);
+                        stop.store(true, Ordering::Relaxed);
+                    }
+                }
             },
             &stop,
         );
+        if full.load(Ordering::Relaxed) {
+            return self.fail_storage_full(workspace, file, &part);
+        }
         match result {
             Err(error) if error.kind() == DownloadErrorKind::Stopped => return,
             Err(error) => return self.fail(workspace, file, &error.to_string()),

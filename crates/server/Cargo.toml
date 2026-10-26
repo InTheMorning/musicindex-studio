@@ -16,7 +16,7 @@ serde_json = "1"
 sha2 = "0.11"
 studio-api.workspace = true
 studio-core.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "fs", "time"] }
 tower = { version = "0.5", features = ["util"] }
 
 [dev-dependencies]

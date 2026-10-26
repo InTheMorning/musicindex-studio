@@ -25,17 +25,28 @@ struct App {
 }
 
 fn app(signup: Signup) -> App {
+    app_with(signup, |_| {})
+}
+
+fn app_with(signup: Signup, tweak: impl FnOnce(&mut ServeOptions)) -> App {
     let data = tempfile::tempdir().unwrap();
-    let options = ServeOptions {
+    let mut options = ServeOptions {
         data_dir: data.path().to_path_buf(),
         listen: "127.0.0.1:8080".parse().unwrap(),
         origin: Origin::parse(ORIGIN).unwrap(),
         signup,
         client_address_header: None,
+        session_idle: 7 * 86_400,
+        session_max: 30 * 86_400,
+        vault_idle: std::time::Duration::from_secs(600),
+        storage_limit: 10 * 1024 * 1024 * 1024,
+        argon2_concurrency: 2,
+        argon2_wait: std::time::Duration::from_secs(10),
         // Port 9 answers nothing, so no test reaches a real host.
         musicindex: Some("http://127.0.0.1:9".to_owned()),
         hub: Some("http://127.0.0.1:9/pubnotify".to_owned()),
     };
+    tweak(&mut options);
     let state = crate::make_state(&options, PublicRules::with_test_exceptions(Vec::new())).unwrap();
     App {
         router: crate::auth::server_router(&state),
@@ -85,6 +96,10 @@ struct Call<'a> {
     token: Option<&'a str>,
     csrf: Option<&'a str>,
     content_type: &'a str,
+    /// The address of the connection.
+    addr: &'a str,
+    /// More headers.
+    extra: Vec<(&'a str, &'a str)>,
 }
 
 fn call<'a>(method: &'a str, path: &'a str, body: Option<Value>) -> Call<'a> {
@@ -97,6 +112,8 @@ fn call<'a>(method: &'a str, path: &'a str, body: Option<Value>) -> Call<'a> {
         token: None,
         csrf: None,
         content_type: "application/json",
+        addr: "10.0.0.1:4000",
+        extra: Vec::new(),
     }
 }
 
@@ -114,6 +131,9 @@ async fn send(app: &App, call: Call<'_>) -> Reply {
     if let Some(csrf) = call.csrf {
         builder = builder.header("x-studio-csrf", csrf);
     }
+    for (name, value) in &call.extra {
+        builder = builder.header(*name, *value);
+    }
     let body = match call.body {
         Some(body) => {
             builder = builder.header(header::CONTENT_TYPE, call.content_type);
@@ -121,12 +141,11 @@ async fn send(app: &App, call: Call<'_>) -> Reply {
         }
         None => Body::empty(),
     };
-    let response = app
-        .router
-        .clone()
-        .oneshot(builder.body(body).unwrap())
-        .await
-        .unwrap();
+    let mut request = builder.body(body).unwrap();
+    request.extensions_mut().insert(axum::extract::ConnectInfo(
+        call.addr.parse::<std::net::SocketAddr>().unwrap(),
+    ));
+    let response = app.router.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let headers = response.headers().clone();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
@@ -463,4 +482,323 @@ async fn the_ui_files_are_served_without_a_session() {
         .await
         .unwrap();
     assert_eq!(root.status(), StatusCode::OK);
+}
+
+// ---- The vault window, the limits and the account deletion (task 034d) ----
+
+fn s3_body() -> Value {
+    json!({
+        "kind": "s3",
+        "name": "Bucket",
+        "endpoint": "http://127.0.0.1:9",
+        "region": "us-east-1",
+        "bucket": "bk",
+        "url_style": "path",
+        "prefix": "feeds",
+        "base_url": "https://cdn.example.com/feeds",
+        "access_key_id": "KEYID",
+        "secret_access_key": "SECRET",
+    })
+}
+
+fn sign_in_call<'a>(email: &str, passphrase: &str) -> Call<'a> {
+    call(
+        "POST",
+        "/auth/v1/signin/email",
+        Some(json!({ "email": email, "passphrase": passphrase })),
+    )
+}
+
+#[tokio::test]
+async fn the_idle_task_locks_the_vault_after_the_idle_limit() {
+    let app = app_with(Signup::Invite, |o| {
+        o.vault_idle = std::time::Duration::from_secs(1);
+    });
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let status = api(&app, &who, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.json["vault"], "open");
+    crate::idle::sweep(&app.state).await;
+    assert_eq!(
+        api(&app, &who, "GET", "/api/v1/status", None).await.json["vault"],
+        "open"
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+    crate::idle::sweep(&app.state).await;
+    let reply = api(&app, &who, "POST", "/api/v1/connectors", Some(s3_body())).await;
+    assert_eq!(reply.status, StatusCode::LOCKED, "{:?}", reply.json);
+    assert_eq!(reply.code(), "vault_locked");
+    // The session stays, and the unlock opens the vault again.
+    let unlock = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASS_ONE })),
+    )
+    .await;
+    assert_eq!(unlock.status, StatusCode::OK, "{:?}", unlock.json);
+    let status = api(&app, &who, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.json["vault"], "open");
+}
+
+fn sign_out_call(who: &(String, String)) -> Call<'_> {
+    let mut c = call("POST", "/auth/v1/signout", Some(json!({})));
+    c.token = Some(&who.0);
+    c
+}
+
+#[tokio::test]
+async fn sign_out_of_the_last_session_locks_the_vault() {
+    let app = app(Signup::Invite);
+    let first = new_user(&app, "a@example.org", PASS_ONE).await;
+    let second = send(&app, sign_in_call("a@example.org", PASS_ONE)).await;
+    let second = (
+        second.token(),
+        second.json["csrf"].as_str().unwrap().to_owned(),
+    );
+    send(&app, sign_out_call(&first)).await;
+    let status = api(&app, &second, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.json["vault"], "open");
+    send(&app, sign_out_call(&second)).await;
+    let id = app.state.accounts.folders().unwrap()[0].0;
+    let user = app.state.users.peek(id).await.unwrap();
+    assert_eq!(
+        user.handle.vault_state().await.unwrap(),
+        studio_api::VaultState::Locked
+    );
+}
+
+#[tokio::test]
+async fn an_ended_last_session_locks_the_vault() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let old = accounts_now() - 8 * 86_400;
+    let db = rusqlite::Connection::open(app.data.path().join("server.sqlite")).unwrap();
+    db.execute("UPDATE sessions SET last_seen = ?1", [old])
+        .unwrap();
+    let ended = api(&app, &who, "GET", "/api/v1/status", None).await;
+    assert_eq!(ended.code(), "session_ended");
+    let id = app.state.accounts.folders().unwrap()[0].0;
+    let user = app.state.users.peek(id).await.unwrap();
+    assert_eq!(
+        user.handle.vault_state().await.unwrap(),
+        studio_api::VaultState::Locked
+    );
+}
+
+#[tokio::test]
+async fn the_idle_task_closes_a_user_with_no_session_and_no_work() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let id = app.state.accounts.folders().unwrap()[0].0;
+    crate::idle::sweep(&app.state).await;
+    assert!(app.state.users.peek(id).await.is_some());
+    let hash = crate::accounts::sha256_hex(&who.0);
+    app.state.accounts.delete_session(&hash).unwrap();
+    crate::idle::sweep(&app.state).await;
+    assert!(app.state.users.peek(id).await.is_none());
+}
+
+#[tokio::test]
+async fn the_idle_task_keeps_a_user_with_a_queued_download() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let (id, folder) = app.state.accounts.folders().unwrap().remove(0);
+    let mut collection = studio_core::collection::Collection::open(
+        &app.state
+            .users
+            .folder_path(&folder)
+            .join("collection.sqlite"),
+    )
+    .unwrap();
+    let feed = collection.add_feed(None, None).unwrap();
+    let file = collection
+        .add_library_file(
+            feed,
+            "a.mp3",
+            5,
+            None,
+            "audio/mpeg",
+            false,
+            Some("http://127.0.0.1:9/a.mp3"),
+            None,
+        )
+        .unwrap();
+    collection.queue_download(file).unwrap();
+    let hash = crate::accounts::sha256_hex(&who.0);
+    app.state.accounts.delete_session(&hash).unwrap();
+    assert!(app.state.users.is_busy_folder(&folder).await);
+    crate::idle::sweep(&app.state).await;
+    assert!(app.state.users.peek(id).await.is_some());
+    // The vault of the user is locked, also when the user stays open.
+    let user = app.state.users.peek(id).await.unwrap();
+    assert_eq!(
+        user.handle.vault_state().await.unwrap(),
+        studio_api::VaultState::Locked
+    );
+    collection.remove_download(file).unwrap();
+    crate::idle::sweep(&app.state).await;
+    assert!(app.state.users.peek(id).await.is_none());
+}
+
+#[tokio::test]
+async fn a_sign_in_gets_503_busy_when_no_permit_comes() {
+    let app = app_with(Signup::Invite, |o| {
+        o.argon2_concurrency = 1;
+        o.argon2_wait = std::time::Duration::from_millis(150);
+    });
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let permit = std::sync::Arc::clone(&app.state.argon2)
+        .acquire_owned()
+        .await
+        .unwrap();
+    let busy = send(&app, sign_in_call("a@example.org", PASS_ONE)).await;
+    assert_eq!(busy.status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(busy.code(), "busy");
+    let unknown = send(&app, sign_in_call("nobody@example.org", PASS_ONE)).await;
+    assert_eq!(unknown.code(), "busy");
+    let unlock = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASS_ONE })),
+    )
+    .await;
+    assert_eq!(unlock.status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(unlock.code(), "busy");
+    let invite = app.state.accounts.create_invite().unwrap();
+    let up = sign_up(&app, "b@example.org", PASS_TWO, Some(&invite)).await;
+    assert_eq!(up.code(), "busy");
+    // The failed sign-up did not use the invite.
+    drop(permit);
+    let up = sign_up(&app, "b@example.org", PASS_TWO, Some(&invite)).await;
+    assert_eq!(up.status, StatusCode::CREATED);
+    let good = send(&app, sign_in_call("a@example.org", PASS_ONE)).await;
+    assert_eq!(good.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn ten_failed_sign_ins_block_the_account_also_for_the_correct_passphrase() {
+    let app = app(Signup::Invite);
+    new_user(&app, "a@example.org", PASS_ONE).await;
+    for _ in 0..10 {
+        let reply = send(&app, sign_in_call("a@example.org", PASS_TWO)).await;
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(reply.code(), "sign_in_failed");
+    }
+    // A different address of the client does not help.
+    let mut eleventh = sign_in_call("a@example.org", PASS_ONE);
+    eleventh.addr = "10.0.0.99:4000";
+    let reply = send(&app, eleventh).await;
+    assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(reply.code(), "too_many_attempts");
+    // Another account is free.
+    new_user(&app, "b@example.org", PASS_TWO).await;
+    let mut other = sign_in_call("b@example.org", PASS_TWO);
+    other.addr = "10.0.0.99:4000";
+    assert_eq!(send(&app, other).await.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn thirty_failed_sign_ins_block_the_client_address() {
+    let app = app_with(Signup::Invite, |o| {
+        o.client_address_header = Some("x-real-ip".to_owned());
+    });
+    new_user(&app, "a@example.org", PASS_ONE).await;
+    for i in 0..30 {
+        let mut c = sign_in_call(&format!("nobody{i}@example.org"), PASS_ONE);
+        c.extra = vec![("x-real-ip", "203.0.113.5")];
+        assert_eq!(send(&app, c).await.code(), "sign_in_failed");
+    }
+    let mut blocked = sign_in_call("a@example.org", PASS_ONE);
+    blocked.extra = vec![("x-real-ip", "203.0.113.5")];
+    assert_eq!(send(&app, blocked).await.code(), "too_many_attempts");
+    // The header names the client, not the address of the connection.
+    let mut free = sign_in_call("a@example.org", PASS_ONE);
+    free.extra = vec![("x-real-ip", "203.0.113.6")];
+    assert_eq!(send(&app, free).await.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn account_deletion_removes_the_folder_the_rows_and_the_session() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    new_user(&app, "b@example.org", PASS_TWO).await;
+    let (id, folder) = app.state.accounts.folders().unwrap().remove(0);
+    let path = app.state.users.folder_path(&folder);
+    assert!(path.join("vault.json").exists());
+    let delete = |body: Value| {
+        let mut c = call("POST", "/auth/v1/account/delete", Some(body));
+        c.token = Some(&who.0);
+        c.csrf = Some(&who.1);
+        c
+    };
+    let wrong = send(&app, delete(json!({ "confirm": "b@example.org" }))).await;
+    assert_eq!(wrong.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(wrong.code(), "confirm_mismatch");
+    assert!(path.exists());
+    let mut no_csrf = call(
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": "a@example.org" })),
+    );
+    no_csrf.token = Some(&who.0);
+    assert_eq!(send(&app, no_csrf).await.code(), "csrf_required");
+    // A locked vault blocks the deletion.
+    api(&app, &who, "POST", "/api/v1/vault/lock", None).await;
+    let locked = send(&app, delete(json!({ "confirm": "a@example.org" }))).await;
+    assert_eq!(locked.status, StatusCode::LOCKED);
+    assert_eq!(locked.code(), "vault_locked");
+    assert!(path.exists());
+    api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASS_ONE })),
+    )
+    .await;
+    let done = send(&app, delete(json!({ "confirm": " A@Example.org " }))).await;
+    assert_eq!(done.status, StatusCode::NO_CONTENT, "{}", done.text);
+    let cookie = done
+        .headers
+        .get(header::SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(cookie.contains("Max-Age=0"));
+    assert!(!path.exists());
+    assert!(app.state.accounts.folder_of(id).unwrap().is_none());
+    assert!(app.state.accounts.email_of(id).unwrap().is_none());
+    assert!(app.state.users.peek(id).await.is_none());
+    let db = rusqlite::Connection::open(app.data.path().join("server.sqlite")).unwrap();
+    let rows: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM sessions WHERE account_id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(rows, 0);
+    let after = api(&app, &who, "GET", "/api/v1/status", None).await;
+    assert_eq!(after.status, StatusCode::UNAUTHORIZED);
+    // The email address is free again, and the other account stays.
+    assert_eq!(app.state.accounts.folders().unwrap().len(), 1);
+    let again = send(&app, sign_in_call("a@example.org", PASS_ONE)).await;
+    assert_eq!(again.code(), "sign_in_failed");
+}
+
+#[tokio::test]
+async fn a_user_folder_refuses_a_local_host_on_the_server() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let body =
+        json!({ "kind": "local", "name": "Folder", "root": app.data.path().to_str().unwrap() });
+    let reply = api(&app, &who, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN, "{:?}", reply.json);
+    assert_eq!(reply.code(), "not_on_server");
+    let other = json!({ "root": app.data.path().join("elsewhere").to_str().unwrap() });
+    let reply = api(&app, &who, "PUT", "/api/v1/library", Some(other)).await;
+    assert_eq!(reply.code(), "not_on_server");
 }

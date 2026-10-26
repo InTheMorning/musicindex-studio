@@ -9,6 +9,9 @@
 //!   options `--listen ADDR` (default `127.0.0.1:8080`), `--signup
 //!   open|invite` (default `invite`), `--client-address-header NAME`,
 //!   `--musicindex URL` and `--podcastindex-hub URL` are optional.
+//!   Limit options: `--session-idle-days` (default 7), `--session-max-days`
+//!   (default 30), `--vault-idle-minutes` (default 10), `--storage-limit-gib`
+//!   (default 10) and `--argon2-concurrency` (default 2).
 //! - `invite --data-dir PATH`: print one new single-use invite code.
 
 // The handlers give an axum response as the error. The response is large by design.
@@ -20,12 +23,15 @@
 mod accounts;
 mod auth;
 mod config;
+mod idle;
+mod limits;
 mod session;
 mod users;
 
 #[cfg(test)]
 mod tests;
 
+use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -69,6 +75,7 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         musicindex: options.musicindex.clone(),
         hub: options.hub.clone(),
         rules,
+        storage_limit: options.storage_limit,
     });
     Ok(Arc::new(ServerState {
         accounts,
@@ -76,6 +83,13 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         origin: options.origin.clone(),
         signup: options.signup,
         dummy_wrapper: dummy.file().clone(),
+        session_idle: options.session_idle,
+        session_max: options.session_max,
+        vault_idle: options.vault_idle,
+        argon2: Arc::new(tokio::sync::Semaphore::new(options.argon2_concurrency)),
+        argon2_wait: options.argon2_wait,
+        attempts: limits::Attempts::default(),
+        client_header: options.client_address_header.clone(),
     }))
 }
 
@@ -90,7 +104,11 @@ async fn serve(options: ServeOptions) -> Result<(), String> {
     println!("Data: {}", options.data_dir.display());
     println!("Listening on {}", options.listen);
     println!("Public origin: {}", options.origin.text);
-    studio_api::serve(listener, auth::server_router(&state))
+    idle::spawn(Arc::clone(&state));
+    // The connection address gives the client address when the operator
+    // names no header (ADR 0055 item 23).
+    let service = auth::server_router(&state).into_make_service_with_connect_info::<SocketAddr>();
+    axum::serve(listener, service)
         .await
         .map_err(|e| e.to_string())
 }

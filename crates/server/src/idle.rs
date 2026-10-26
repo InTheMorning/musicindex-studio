@@ -36,6 +36,7 @@ pub async fn sweep(state: &Shared) {
         eprintln!("studio-server: the session cleanup failed: {message}");
     }
     state.attempts.prune();
+    state.app_limits.prune();
     // A signer goes away with its session. A connection that nobody used
     // goes away after five minutes.
     let gone = state

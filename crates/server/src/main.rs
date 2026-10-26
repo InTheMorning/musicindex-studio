@@ -22,6 +22,7 @@
 )]
 
 mod accounts;
+mod apps;
 mod auth;
 mod config;
 mod idle;
@@ -70,7 +71,7 @@ async fn run() -> Result<(), String> {
 /// Make the state of the server. `rules` are the exceptions of the network
 /// policy `Public`. Only a test build gives exceptions.
 fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Shared, String> {
-    let accounts = accounts::Accounts::open(&options.data_dir)?;
+    let accounts = Arc::new(accounts::Accounts::open(&options.data_dir)?);
     // The passphrase is random and nobody keeps it.
     let mut dummy = OpenVault::create(&accounts::random_hex(16)?).map_err(|e| e.to_string())?;
     // A recovery sign-in with an unknown account opens this vault with the
@@ -88,7 +89,10 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         rules,
         storage_limit: options.storage_limit,
         nip46_relays: options.nip46_relays.clone(),
+        accounts: Arc::clone(&accounts),
     });
+    // A lost row must not stop an app (ADR 0058 item 16).
+    users::rebuild_app_tokens(&users, &accounts)?;
     Ok(Arc::new(ServerState {
         accounts,
         users,
@@ -103,6 +107,7 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         attempts: limits::Attempts::default(),
         client_header: options.client_address_header.clone(),
         nip46,
+        app_limits: limits::AppLimits::default(),
     }))
 }
 

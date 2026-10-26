@@ -4239,6 +4239,10 @@ pub(crate) async fn add_app(
                 ),
                 _ => ApiError::from(e),
             })?;
+        w.app_changed(&crate::workspace::AppChange::Added {
+            app_id: app.id,
+            token_hash: apps::token_hash(&token),
+        });
         // Each grant vault gets the wrapper of the new app now, or at the
         // next unlock (ADR 0058 item 8).
         w.sync_grant_vaults(None);
@@ -4262,7 +4266,14 @@ pub(crate) async fn remove_app(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
+        let token_hash = apps::token_hash_of(&w.collection, id)?;
         apps::remove_app(&w.collection, id)?;
+        if let Some(token_hash) = token_hash {
+            w.app_changed(&crate::workspace::AppChange::Removed {
+                app_id: id,
+                token_hash,
+            });
+        }
         // Each grant vault loses the wrapper of the app (ADR 0058 item 9).
         w.sync_grant_vaults(None);
         Ok(StatusCode::NO_CONTENT)

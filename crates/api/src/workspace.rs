@@ -494,6 +494,44 @@ impl std::fmt::Debug for AddressChecker {
     }
 }
 
+/// A change of the list of connected apps. The hash is the SHA-256 of the
+/// token, as the `connected_apps` table keeps it. It is never the token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AppChange {
+    /// The user added an app.
+    Added {
+        /// The ID of the app.
+        app_id: i64,
+        /// The hash of the token of the app.
+        token_hash: String,
+    },
+    /// The user removed an app.
+    Removed {
+        /// The ID of the app.
+        app_id: i64,
+        /// The hash of the token of the app.
+        token_hash: String,
+    },
+}
+
+/// A function that the workspace calls after a change of the app list. The
+/// server gives one. The desktop gives none (ADR 0058 item 16).
+#[derive(Clone)]
+pub struct AppHook(Arc<dyn Fn(&AppChange) + Send + Sync>);
+
+impl AppHook {
+    /// Make a hook from a function.
+    pub fn new(hook: impl Fn(&AppChange) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(hook))
+    }
+}
+
+impl std::fmt::Debug for AppHook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AppHook(..)")
+    }
+}
+
 /// The collection and the vault in one data folder.
 #[derive(Debug)]
 pub struct Workspace {
@@ -542,6 +580,8 @@ pub struct Workspace {
     pub(crate) announcer: Arc<Announcer>,
     /// The rules of the server. `None` on the desktop.
     pub(crate) rules: Option<ServerRules>,
+    /// The function for the changes of the app list. `None` on the desktop.
+    pub(crate) app_hook: Option<AppHook>,
     /// The time of the last use of a vault secret (ADR 0055 item 16).
     vault_used: Mutex<Instant>,
     /// The NIP-46 signer of the user, or the wait for one (ADR 0056
@@ -624,6 +664,7 @@ impl Workspace {
             announce_timing: Timing::DEFAULT,
             announcer: Announcer::new(),
             rules: None,
+            app_hook: None,
             vault_used: Mutex::new(Instant::now()),
             signer: SignerSlot::None,
             nip46_relays: vec![DEFAULT_NIP46_RELAY.to_owned()],
@@ -637,6 +678,21 @@ impl Workspace {
     pub fn with_server_rules(mut self, rules: ServerRules) -> Self {
         self.rules = Some(rules);
         self
+    }
+
+    /// Call `hook` after each add and each removal of a connected app
+    /// (ADR 0058 item 16).
+    #[must_use]
+    pub fn with_app_hook(mut self, hook: AppHook) -> Self {
+        self.app_hook = Some(hook);
+        self
+    }
+
+    /// Tell the hook about a change of the app list.
+    pub(crate) fn app_changed(&self, change: &AppChange) {
+        if let Some(hook) = &self.app_hook {
+            (hook.0)(change);
+        }
     }
 
     /// Record that a secret of the vault is in use now.
@@ -714,9 +770,9 @@ impl Workspace {
     }
 
     /// Use a different address check for the write, such as a test double.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     #[must_use]
-    pub(crate) fn with_address_check(mut self, check: Arc<dyn AddressCheck + Send + Sync>) -> Self {
+    pub fn with_address_check(mut self, check: Arc<dyn AddressCheck + Send + Sync>) -> Self {
         self.address_check = Some(AddressChecker(check));
         self
     }

@@ -2,13 +2,18 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use axum::Router;
 use axum::response::{IntoResponse, Response};
-use studio_api::{ApiError, ServerRules, Workspace, WorkspaceHandle, workspace_router};
+use studio_api::{
+    ApiError, AppChange, AppHook, ServerRules, Workspace, WorkspaceHandle, workspace_router,
+};
 use studio_core::collection::Collection;
 use studio_core::net::{NetPolicy, PublicRules};
 use tokio::sync::Mutex;
+
+use crate::accounts::Accounts;
 
 /// The router and the handle of one open user.
 #[derive(Debug, Clone)]
@@ -35,6 +40,9 @@ pub struct UserSettings {
     pub storage_limit: u64,
     /// The relays for a `nostrconnect://` address (ADR 0056 item 13).
     pub nip46_relays: Vec<String>,
+    /// The database that keeps the index of the app tokens (ADR 0058
+    /// item 16).
+    pub accounts: Arc<Accounts>,
 }
 
 /// The open users, by account ID.
@@ -42,6 +50,9 @@ pub struct UserSettings {
 pub struct Users {
     settings: UserSettings,
     open: Mutex<HashMap<i64, OpenUser>>,
+    /// A test sets this, so that a write does not request a public address.
+    #[cfg(test)]
+    pub pass_all_addresses: std::sync::atomic::AtomicBool,
 }
 
 impl Users {
@@ -51,6 +62,8 @@ impl Users {
         Self {
             settings,
             open: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            pass_all_addresses: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -75,10 +88,22 @@ impl Users {
         }
         let path = self.folder_path(folder);
         let settings = self.settings.clone();
-        let user = tokio::task::spawn_blocking(move || open_user(&settings, &path))
-            .await
-            .map_err(|_| crate::session::internal("the workspace did not open"))?
-            .map_err(IntoResponse::into_response)?;
+        #[cfg(test)]
+        let pass_all = self
+            .pass_all_addresses
+            .load(std::sync::atomic::Ordering::SeqCst);
+        let user = tokio::task::spawn_blocking(move || {
+            open_user(
+                &settings,
+                &path,
+                account_id,
+                #[cfg(test)]
+                pass_all,
+            )
+        })
+        .await
+        .map_err(|_| crate::session::internal("the workspace did not open"))?
+        .map_err(IntoResponse::into_response)?;
         open.insert(account_id, user.clone());
         Ok(user)
     }
@@ -146,14 +171,39 @@ fn is_busy(folder: &std::path::Path) -> bool {
     announcing || downloading
 }
 
-fn open_user(settings: &UserSettings, path: &std::path::Path) -> Result<OpenUser, ApiError> {
+fn open_user(
+    settings: &UserSettings,
+    path: &std::path::Path,
+    account_id: i64,
+    #[cfg(test)] pass_all: bool,
+) -> Result<OpenUser, ApiError> {
+    // The workspace tells the index when the user adds or removes an app.
+    let accounts = Arc::clone(&settings.accounts);
+    let hook = AppHook::new(move |change| {
+        let done = match change {
+            AppChange::Added { app_id, token_hash } => {
+                accounts.add_app_token(token_hash, account_id, *app_id)
+            }
+            AppChange::Removed { token_hash, .. } => accounts.remove_app_token(token_hash),
+        };
+        if done.is_err() {
+            // The start of the server makes the rows again, so the app
+            // works after a restart.
+            eprintln!("studio-server: the index of the app tokens did not change");
+        }
+    });
     let mut workspace = Workspace::open(path)?
+        .with_app_hook(hook)
         .with_net_policy(NetPolicy::Public(settings.rules.clone()))
         .with_server_rules(ServerRules {
             storage_limit: settings.storage_limit,
             folder: path.to_path_buf(),
             library_root: path.join("library"),
         });
+    #[cfg(test)]
+    if pass_all {
+        workspace = workspace.with_address_check(Arc::new(PassAll));
+    }
     workspace = workspace.with_nip46_relays(settings.nip46_relays.clone());
     if let Some(base) = &settings.musicindex {
         workspace = workspace.with_musicindex(base);
@@ -167,4 +217,36 @@ fn open_user(settings: &UserSettings, path: &std::path::Path) -> Result<OpenUser
     workspace.resume_announcements();
     let (router, handle) = workspace_router(workspace);
     Ok(OpenUser { router, handle })
+}
+
+/// Make the rows of the app tokens again from the `connected_apps` table of
+/// each user folder (ADR 0058 item 16). A folder with no collection, or
+/// one that cannot be read, keeps its rows.
+pub fn rebuild_app_tokens(users: &Users, accounts: &Accounts) -> Result<(), String> {
+    for (id, folder) in accounts.folders()? {
+        let file = users.folder_path(&folder).join("collection.sqlite");
+        if !file.exists() {
+            continue;
+        }
+        let Ok(collection) = Collection::open(&file) else {
+            continue;
+        };
+        let Ok(rows) = studio_core::apps::token_hashes(&collection) else {
+            continue;
+        };
+        accounts.replace_app_tokens(id, &rows)?;
+    }
+    Ok(())
+}
+
+/// An address check that passes each address. A test uses it, so that no
+/// test sends a request to the network.
+#[cfg(test)]
+struct PassAll;
+
+#[cfg(test)]
+impl studio_core::pipeline::AddressCheck for PassAll {
+    fn check(&self, _url: &str) -> Result<(), String> {
+        Ok(())
+    }
 }

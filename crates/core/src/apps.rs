@@ -195,7 +195,39 @@ pub fn app_for_token(
         .optional()?)
 }
 
-fn token_hash(token: &str) -> String {
+/// The hash of the token of an app, or `None` when the app does not exist.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn token_hash_of(collection: &Collection, id: i64) -> Result<Option<String>, CollectionError> {
+    Ok(collection
+        .db()
+        .query_row(
+            "SELECT token_hash FROM connected_apps WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// The ID and the token hash of each app.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn token_hashes(collection: &Collection) -> Result<Vec<(i64, String)>, CollectionError> {
+    let mut statement = collection
+        .db()
+        .prepare("SELECT id, token_hash FROM connected_apps ORDER BY id")?;
+    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// The SHA-256 of a token as hexadecimal. The table keeps this hash and
+/// never the token.
+#[must_use]
+pub fn token_hash(token: &str) -> String {
     sha256_hex(&[token.as_bytes()])
 }
 

@@ -22,6 +22,8 @@ struct App {
     router: Router,
     state: Shared,
     data: tempfile::TempDir,
+    options: ServeOptions,
+    rules: PublicRules,
 }
 
 fn app(signup: Signup) -> App {
@@ -57,11 +59,31 @@ fn app_with_rules(
         nip46_timeout: std::time::Duration::from_secs(60),
     };
     tweak(&mut options);
-    let state = crate::make_state(&options, rules).unwrap();
+    let state = crate::make_state(&options, rules.clone()).unwrap();
     App {
         router: crate::auth::server_router(&state),
         state,
         data,
+        options,
+        rules,
+    }
+}
+
+/// Start the server again on the same data folder.
+fn restart(old: App) -> App {
+    let App {
+        data,
+        options,
+        rules,
+        ..
+    } = old;
+    let state = crate::make_state(&options, rules.clone()).unwrap();
+    App {
+        router: crate::auth::server_router(&state),
+        state,
+        data,
+        options,
+        rules,
     }
 }
 
@@ -311,7 +333,8 @@ async fn the_api_layer_needs_a_session_and_the_csrf_header() {
     assert_eq!(send(&app, no_origin).await.code(), "origin_not_allowed");
     let mut app_route = call("GET", "/app/v1/whoami", None);
     app_route.token = Some(&who.0);
-    assert_eq!(send(&app, app_route).await.status, StatusCode::NOT_FOUND);
+    // The server now serves `/app/v1/`. A cookie is not an app token.
+    assert_eq!(send(&app, app_route).await.status, StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -2599,4 +2622,323 @@ async fn the_fifth_pending_connection_of_one_address_gets_429() {
     for id in ids {
         send(app, call("DELETE", &format!("/auth/v1/nip46/{id}"), None)).await;
     }
+}
+
+// ---- Connected apps on the server (task 036b) ----
+
+const SHOW_FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+    <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+    <item><guid>t-1</guid></item></channel></rss>";
+
+/// A call of an app: a bearer token, no cookie and no `Origin`.
+fn app_call<'a>(method: &'a str, path: &'a str, auth: &'a str, body: Option<Value>) -> Call<'a> {
+    let mut c = call(method, path, body);
+    c.origin = None;
+    c.extra = vec![("authorization", auth)];
+    c
+}
+
+fn bearer(token: &str) -> String {
+    format!("Bearer {token}")
+}
+
+/// An app on a server with a test SFTP host for the rules.
+fn sftp_app() -> (App, studio_core::testing::sshd::TestSshd) {
+    let sshd = studio_core::testing::sshd::TestSshd::start();
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], sshd.port()));
+    let app = app_with_rules(
+        Signup::Invite,
+        PublicRules::with_test_exceptions(vec![address]),
+        |_| {},
+    );
+    app.state
+        .users
+        .pass_all_addresses
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    (app, sshd)
+}
+
+/// A user with a feed on the SFTP host, a show with its grant and a
+/// connected app. Gives the token of the app, the ID of the grant and the
+/// folder of the host.
+async fn user_with_show(
+    app: &App,
+    who: &(String, String),
+    sshd: &mut studio_core::testing::sshd::TestSshd,
+) -> (String, i64, std::path::PathBuf) {
+    let root = std::path::PathBuf::from(sshd.root().to_str().unwrap());
+    std::fs::write(root.join("album.xml"), SHOW_FEED).unwrap();
+    let body = json!({
+        "kind": "sftp",
+        "name": "Server",
+        "host": "127.0.0.1",
+        "port": sshd.port(),
+        "user": sshd.user(),
+        "root": root.to_str().unwrap(),
+        "base_url": "https://cdn.example.com/feeds",
+        "login": "key",
+        "private_key": std::fs::read_to_string(sshd.key_path()).unwrap(),
+        "host_key": sshd.host_key_fingerprint(),
+    });
+    let connector = api(app, who, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(
+        connector.status,
+        StatusCode::CREATED,
+        "{:?}",
+        connector.json
+    );
+    let feed = api(
+        app,
+        who,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector.json["id"], "path": "album.xml" })),
+    )
+    .await;
+    assert_eq!(feed.status, StatusCode::CREATED, "{:?}", feed.json);
+    let id = feed.json["id"].as_i64().unwrap();
+    let base = format!("/api/v1/feeds/{id}");
+    let draft = api(
+        app,
+        who,
+        "POST",
+        &format!("{base}/live-items"),
+        Some(json!({ "title": "Show", "start": "2099-11-01T10:00:00Z" })),
+    )
+    .await;
+    assert_eq!(draft.status, StatusCode::OK, "{:?}", draft.json);
+    let guid = draft.json["model"]["live_items"][0]["item"]["guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut model = draft.json["model"].clone();
+    model["live_items"][0]["content_links"] =
+        json!([{ "href": "https://example.com/show", "label": "Watch" }]);
+    let put = api(
+        app,
+        who,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft.json["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(put.status, StatusCode::OK, "{:?}", put.json);
+    let diff = api(app, who, "PUT", &format!("{base}/grants/{guid}"), None).await;
+    assert_eq!(diff.status, StatusCode::OK, "{:?}", diff.json);
+    let written = api(
+        app,
+        who,
+        "POST",
+        &format!("{base}/write"),
+        Some(json!({ "diff_id": diff.json["id"] })),
+    )
+    .await;
+    assert_eq!(written.status, StatusCode::OK, "{:?}", written.json);
+    let added = api(
+        app,
+        who,
+        "POST",
+        "/api/v1/apps",
+        Some(json!({ "name": "Show tool" })),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::CREATED);
+    let token = added.json["token"].as_str().unwrap().to_owned();
+    let grants = api(app, who, "GET", &format!("{base}/grants"), None).await;
+    let grant = grants.json[0]["id"].as_i64().unwrap();
+    (token, grant, root)
+}
+
+/// A user with only an app. Gives the token of the app.
+async fn user_with_app(app: &App, who: &(String, String)) -> String {
+    let added = api(
+        app,
+        who,
+        "POST",
+        "/api/v1/apps",
+        Some(json!({ "name": "Tool" })),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::CREATED);
+    added.json["token"].as_str().unwrap().to_owned()
+}
+
+#[tokio::test]
+async fn an_app_goes_live_through_the_public_origin_after_the_user_signed_out() {
+    let (app, mut sshd) = sftp_app();
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let (token, grant, root) = user_with_show(&app, &who, &mut sshd).await;
+    let id = app.state.accounts.folders().unwrap()[0].0;
+    let lock = api(&app, &who, "POST", "/api/v1/vault/lock", None).await;
+    assert_eq!(lock.status, StatusCode::OK);
+    send(&app, sign_out_call(&who)).await;
+    // The sweep can close the workspace. The queue of announcements can
+    // keep it open, so the test closes it in that case.
+    crate::idle::sweep(&app.state).await;
+    app.state.users.forget(id).await;
+    assert!(app.state.users.peek(id).await.is_none());
+
+    let auth = bearer(&token);
+    let live = send(
+        &app,
+        app_call(
+            "POST",
+            &format!("/app/v1/shows/{grant}/status"),
+            &auth,
+            Some(json!({ "status": "live" })),
+        ),
+    )
+    .await;
+    assert_eq!(live.status, StatusCode::OK, "{:?}", live.json);
+    let xml = std::fs::read_to_string(root.join("album.xml")).unwrap();
+    assert!(xml.contains("status=\"live\""));
+}
+
+#[tokio::test]
+async fn the_app_layer_refuses_a_cookie_a_session_route_and_a_wrong_host() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let token = user_with_app(&app, &who).await;
+    let auth = bearer(&token);
+
+    let ok = send(&app, app_call("GET", "/app/v1/whoami", &auth, None)).await;
+    assert_eq!(ok.status, StatusCode::OK, "{:?}", ok.json);
+    // The session cookie is not an app token.
+    let mut cookie = call("GET", "/app/v1/whoami", None);
+    cookie.token = Some(&who.0);
+    let refused = send(&app, cookie).await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(refused.code(), "app_unauthorized");
+    // The app token does not open `/api/`, with or without a cookie.
+    let mut status = call("GET", "/api/v1/status", None);
+    status.extra = vec![("authorization", &auth)];
+    let refused = send(&app, status).await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    let mut both = call("GET", "/api/v1/status", None);
+    both.token = Some(&who.0);
+    both.csrf = Some(&who.1);
+    both.extra = vec![("authorization", &auth)];
+    let refused = send(&app, both).await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(refused.code(), "app_unauthorized");
+    // A different host gives 403.
+    let mut host = app_call("GET", "/app/v1/whoami", &auth, None);
+    host.host = "evil.example.org";
+    assert_eq!(send(&app, host).await.status, StatusCode::FORBIDDEN);
+    // A POST to `/api/` with no `Origin` is still refused.
+    let mut no_origin = call("POST", "/api/v1/vault/lock", None);
+    no_origin.origin = None;
+    no_origin.token = Some(&who.0);
+    no_origin.csrf = Some(&who.1);
+    let refused = send(&app, no_origin).await;
+    assert_eq!(refused.status, StatusCode::FORBIDDEN);
+    assert_eq!(refused.code(), "origin_not_allowed");
+}
+
+#[tokio::test]
+async fn the_61st_request_of_an_app_and_the_21st_unknown_token_give_429() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let token = user_with_app(&app, &who).await;
+    let auth = bearer(&token);
+    for _ in 0..60 {
+        let ok = send(&app, app_call("GET", "/app/v1/whoami", &auth, None)).await;
+        assert_eq!(ok.status, StatusCode::OK);
+    }
+    let over = send(&app, app_call("GET", "/app/v1/whoami", &auth, None)).await;
+    assert_eq!(over.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(over.code(), "too_many_attempts");
+    assert!(!over.text.contains(&token));
+
+    // Unknown tokens count for the client address, from another address.
+    let unknown = bearer(&"0".repeat(64));
+    for _ in 0..20 {
+        let mut c = app_call("GET", "/app/v1/whoami", &unknown, None);
+        c.addr = "10.0.0.9:4000";
+        let refused = send(&app, c).await;
+        assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(refused.code(), "app_unauthorized");
+    }
+    let mut c = app_call("GET", "/app/v1/whoami", &unknown, None);
+    c.addr = "10.0.0.9:4000";
+    assert_eq!(send(&app, c).await.status, StatusCode::TOO_MANY_REQUESTS);
+    // The count was for the address only. The accounts have no failure.
+    assert!(!app.state.attempts.blocked("a@example.org", "10.0.0.1"));
+}
+
+#[tokio::test]
+async fn the_app_of_one_user_cannot_list_the_shows_of_another_user() {
+    let (app, mut sshd) = sftp_app();
+    let one = new_user(&app, "one@example.org", PASS_ONE).await;
+    let two = new_user(&app, "two@example.org", PASS_TWO).await;
+    let (token_one, grant_one, root) = user_with_show(&app, &one, &mut sshd).await;
+    let token_two = user_with_app(&app, &two).await;
+
+    let own = send(
+        &app,
+        app_call("GET", "/app/v1/shows", &bearer(&token_one), None),
+    )
+    .await;
+    assert_eq!(own.json.as_array().unwrap().len(), 1, "{:?}", own.json);
+    let other = send(
+        &app,
+        app_call("GET", "/app/v1/shows", &bearer(&token_two), None),
+    )
+    .await;
+    assert_eq!(other.status, StatusCode::OK);
+    assert_eq!(other.json.as_array().unwrap().len(), 0);
+    let status = send(
+        &app,
+        app_call(
+            "POST",
+            &format!("/app/v1/shows/{grant_one}/status"),
+            &bearer(&token_two),
+            Some(json!({ "status": "live" })),
+        ),
+    )
+    .await;
+    assert_eq!(status.status, StatusCode::NOT_FOUND, "{:?}", status.json);
+    let xml = std::fs::read_to_string(root.join("album.xml")).unwrap();
+    assert!(!xml.contains("status=\"live\""));
+}
+
+#[tokio::test]
+async fn the_app_rows_follow_the_user_and_come_back_after_a_restart() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let token = user_with_app(&app, &who).await;
+    let hash = crate::accounts::sha256_hex(&token);
+    assert!(app.state.accounts.app_account(&hash).unwrap().is_some());
+    // Connect again: the user removes the app and adds one.
+    let list = api(&app, &who, "GET", "/api/v1/apps", None).await;
+    let old_id = list.json[0]["id"].as_i64().unwrap();
+    let again = user_with_app(&app, &who).await;
+    let removed = api(
+        &app,
+        &who,
+        "DELETE",
+        &format!("/api/v1/apps/{old_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT);
+    assert!(app.state.accounts.app_account(&hash).unwrap().is_none());
+    let gone = send(
+        &app,
+        app_call("GET", "/app/v1/whoami", &bearer(&token), None),
+    )
+    .await;
+    assert_eq!(gone.status, StatusCode::UNAUTHORIZED);
+
+    // A lost row does not stop the app after a restart.
+    let db = rusqlite::Connection::open(app.data.path().join("server.sqlite")).unwrap();
+    db.execute("DELETE FROM app_tokens", []).unwrap();
+    drop(db);
+    let app = restart(app);
+    let ok = send(
+        &app,
+        app_call("GET", "/app/v1/whoami", &bearer(&again), None),
+    )
+    .await;
+    assert_eq!(ok.status, StatusCode::OK, "{:?}", ok.json);
 }

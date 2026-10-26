@@ -80,6 +80,71 @@ fn address_key(address: &str) -> String {
     format!("address:{address}")
 }
 
+/// The requests that one app can make in one minute (ADR 0058 item 18).
+pub const APP_LIMIT: usize = 60;
+/// The unknown tokens that one client address can send in one hour.
+pub const UNKNOWN_TOKEN_LIMIT: usize = 20;
+/// The length of the window of an app.
+const APP_WINDOW: Duration = Duration::from_mins(1);
+
+/// The request counters of the `/app/v1/` layer. The counters live in
+/// memory only, so a restart clears them.
+#[derive(Debug, Default)]
+pub struct AppLimits {
+    requests: Mutex<HashMap<String, Vec<Instant>>>,
+    unknown: Mutex<HashMap<String, Vec<Instant>>>,
+}
+
+fn lock_map(
+    map: &Mutex<HashMap<String, Vec<Instant>>>,
+) -> std::sync::MutexGuard<'_, HashMap<String, Vec<Instant>>> {
+    // A poisoned lock only means that another thread failed. The map is
+    // still usable.
+    map.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+impl AppLimits {
+    /// Count one request of an app. The key is the hash of its token.
+    /// Gives false when the app is over its limit in the window.
+    pub fn allow_app(&self, key: &str) -> bool {
+        let mut map = lock_map(&self.requests);
+        let times = map.entry(key.to_owned()).or_default();
+        times.retain(|time| time.elapsed() < APP_WINDOW);
+        if times.len() >= APP_LIMIT {
+            return false;
+        }
+        times.push(Instant::now());
+        true
+    }
+
+    /// True when the address has sent too many unknown tokens.
+    pub fn unknown_blocked(&self, address: &str) -> bool {
+        let mut map = lock_map(&self.unknown);
+        Attempts::count(&mut map, address) >= UNKNOWN_TOKEN_LIMIT
+    }
+
+    /// Count one unknown token for the address only.
+    pub fn record_unknown(&self, address: &str) {
+        lock_map(&self.unknown)
+            .entry(address.to_owned())
+            .or_default()
+            .push(Instant::now());
+    }
+
+    /// Forget the entries with no request in the window.
+    pub fn prune(&self) {
+        lock_map(&self.requests).retain(|_, times| {
+            times.retain(|time| time.elapsed() < APP_WINDOW);
+            !times.is_empty()
+        });
+        lock_map(&self.unknown).retain(|_, times| {
+            times.retain(|time| time.elapsed() < WINDOW);
+            !times.is_empty()
+        });
+    }
+}
+
 /// The address of the client of a request. With a header option, the value
 /// of that header counts, and its last item is the one that the reverse
 /// proxy added. Without the option, or when the header is missing, the

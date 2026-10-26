@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Test doubles for the shells. A release build does not use it.
+testing = []
+
 [dependencies]
 axum = "0.8"
 getrandom = "0.4"

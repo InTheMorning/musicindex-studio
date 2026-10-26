@@ -31,7 +31,7 @@ const MAX_AUTH_BODY: usize = 64 * 1024;
 #[derive(Debug)]
 pub struct ServerState {
     /// `server.sqlite`.
-    pub accounts: Accounts,
+    pub accounts: Arc<Accounts>,
     /// The open users.
     pub users: Users,
     /// The public origin.
@@ -58,6 +58,8 @@ pub struct ServerState {
     pub client_header: Option<String>,
     /// The NIP-46 connections (ADR 0056 items 12 to 16).
     pub nip46: Nip46Sessions,
+    /// The request counters of the apps (ADR 0058 item 18).
+    pub app_limits: limits::AppLimits,
 }
 
 /// The shared state.
@@ -157,7 +159,10 @@ pub async fn outer(State(state): State<Shared>, request: Request, next: Next) ->
             "the host is not the host of the public origin",
         );
     }
-    if request.method() != Method::GET && request.method() != Method::HEAD {
+    // An app is not a browser and sends no `Origin`. The `/app/v1/` layer
+    // checks the token of the app (ADR 0058 item 17).
+    let is_app = request.uri().path().starts_with("/app/v1/");
+    if !is_app && request.method() != Method::GET && request.method() != Method::HEAD {
         let origin = request
             .headers()
             .get(header::ORIGIN)
@@ -425,6 +430,12 @@ pub fn same(a: &str, b: &str) -> bool {
 /// The `/api/` layer: find the session, check the CSRF header, and send
 /// the request to the router of the user (ADR 0055 item 5).
 pub async fn api(State(state): State<Shared>, request: Request) -> Response {
+    // The token of an app opens `/app/v1/` only (ADR 0058 item 19).
+    match crate::apps::is_app_token(&state, request.headers()) {
+        Ok(false) => {}
+        Ok(true) => return crate::apps::unauthorized(),
+        Err(response) => return response,
+    }
     let session = match active_session(&state, request.headers()).await {
         Ok(session) => session,
         Err(response) => return response,
@@ -493,12 +504,13 @@ fn needs_derivation(request: &Request) -> bool {
         )
 }
 
-/// The fallback of the router: `/api/` goes to the `/api/` layer, and each
-/// other path gives 404. `/app/v1/` gives 404 on the server in this packet
-/// (task 034c).
+/// The fallback of the router: `/api/` goes to the `/api/` layer, `/app/v1/`
+/// goes to the layer of the apps, and each other path gives 404.
 pub async fn dispatch(State(state): State<Shared>, request: Request) -> Response {
     if request.uri().path().starts_with("/api/") {
         api(State(state), request).await
+    } else if request.uri().path().starts_with("/app/v1/") {
+        crate::apps::app(State(state), request).await
     } else {
         failure(StatusCode::NOT_FOUND, "not_found", "no such route")
     }

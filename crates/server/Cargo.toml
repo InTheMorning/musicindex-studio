@@ -24,6 +24,7 @@ tower = { version = "0.5", features = ["util"] }
 zeroize = { version = "1.9", features = ["serde"] }
 
 [dev-dependencies]
+studio-api = { workspace = true, features = ["testing"] }
 studio-core = { workspace = true, features = ["testing"] }
 http-body-util = "0.1"
 tempfile = "3"

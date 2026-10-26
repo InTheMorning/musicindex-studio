@@ -13,6 +13,8 @@
 //! - `--port N`: the port. The default 0 lets the system select a free port.
 //! - `--musicindex URL`: the musicindex API. The default is
 //!   `https://api.musicindex.org`.
+//! - `--podcastindex-hub URL`: the hub that gets the announcements after a
+//!   write. The default is `https://hub.podcastindex.org/pubnotify`.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -24,6 +26,7 @@ struct Options {
     data_dir: PathBuf,
     port: u16,
     musicindex: Option<String>,
+    hub: Option<String>,
 }
 
 fn default_data_dir() -> Option<PathBuf> {
@@ -38,6 +41,7 @@ fn options() -> Result<Options, String> {
     let mut data_dir = None;
     let mut port = 0;
     let mut musicindex = None;
+    let mut hub = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -53,6 +57,9 @@ fn options() -> Result<Options, String> {
             "--musicindex" => {
                 musicindex = Some(args.next().ok_or("--musicindex needs an address")?);
             }
+            "--podcastindex-hub" => {
+                hub = Some(args.next().ok_or("--podcastindex-hub needs an address")?);
+            }
             other => return Err(format!("unknown option {other}")),
         }
     }
@@ -63,6 +70,7 @@ fn options() -> Result<Options, String> {
         data_dir,
         port,
         musicindex,
+        hub,
     })
 }
 
@@ -83,11 +91,16 @@ async fn run() -> Result<(), String> {
     if let Some(base) = &options.musicindex {
         workspace = workspace.with_musicindex(base);
     }
+    if let Some(url) = &options.hub {
+        workspace = workspace.with_hub(url);
+    }
     // Keep the remote file records of each feed current (ADR 0038 item 3).
     // The function does nothing when Studio has no library folder yet.
     workspace.record_all_remote_files();
     // Continue each download that was not complete (ADR 0038 item 9).
     workspace.resume_downloads();
+    // Prepare the announcement queue (ADR 0052 item 18).
+    workspace.resume_announcements();
     // ADR 0017: listen on a loopback address only.
     let listener =
         tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, options.port)))

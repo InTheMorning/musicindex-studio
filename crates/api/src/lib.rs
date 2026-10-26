@@ -5,6 +5,7 @@
 //! the UI files (ADR 0016).
 
 mod access;
+mod announcer;
 mod downloads;
 mod error;
 mod routes;
@@ -39,9 +40,12 @@ pub async fn serve(listener: tokio::net::TcpListener, router: Router) -> std::io
 #[expect(clippy::too_many_lines, reason = "the function is one list of routes")]
 pub fn local_router(workspace: Workspace, access: Access) -> Router {
     let queue = Arc::clone(&workspace.downloads);
+    let announcer = Arc::clone(&workspace.announcer);
     let shared: routes::Shared = Arc::new(Mutex::new(workspace));
     // The workers lock the workspace for short steps (ADR 0038 item 7).
     queue.attach(&shared);
+    // The announcement worker also locks it for short steps (ADR 0052).
+    announcer.attach(&shared);
     let api = Router::new()
         .route("/status", get(routes::status))
         .route("/vault", post(routes::create_vault))
@@ -134,6 +138,11 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/library/limits", put(routes::put_library_limits))
         .route("/library/scan", post(routes::scan_library))
         .route("/feeds/{id}/library-changes", post(routes::library_changes))
+        .route(
+            "/settings/announcements",
+            get(routes::get_announce_settings).put(routes::put_announce_settings),
+        )
+        .route("/feeds/{id}/announcements", get(routes::list_announcements))
         .route("/hosts/{id}/scan", post(routes::scan_host))
         .with_state(shared);
     Router::new()

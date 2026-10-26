@@ -5383,3 +5383,210 @@ async fn the_match_route_links_a_feed_to_its_file_on_an_nsite_host() {
         "{url}"
     );
 }
+
+// ---- The announcements (task 031c) ----
+
+/// An app whose hub is `hub`, with the announcement times `timing`. It also
+/// gives the worker, so that a test can wake it.
+fn announce_app(
+    hub: &studio_core::testing::TestHub,
+    timing: studio_core::announce::Timing,
+) -> (App, std::sync::Arc<crate::announcer::Announcer>) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_hub(&hub.url())
+        .with_announce_timing(timing);
+    let announcer = std::sync::Arc::clone(&workspace.announcer);
+    let app = App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    };
+    (app, announcer)
+}
+
+/// Write the feed once, with the diff of its draft.
+async fn write_once(app: &App, id: i64) {
+    call(app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    let (_, diff) = call(app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+/// Make each waiting announcement due and wake the worker.
+fn announce_now(app: &App, announcer: &crate::announcer::Announcer) {
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    studio_core::announce::make_due(&collection, crate::announcer::now()).unwrap();
+    announcer.wake();
+}
+
+/// The announcements of a feed, when `ready` accepts them. Waits for a
+/// maximum of 5 seconds.
+async fn announcements_when(app: &App, id: i64, ready: impl Fn(&[Value]) -> bool) -> Vec<Value> {
+    let mut list = Vec::new();
+    for _ in 0..100 {
+        let (status, body) = call(
+            app,
+            "GET",
+            &format!("/api/v1/feeds/{id}/announcements"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        list = body.as_array().unwrap().clone();
+        if ready(&list) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    list
+}
+
+#[tokio::test]
+async fn a_write_sends_one_announcement_to_the_hub() {
+    let hub = studio_core::testing::TestHub::start();
+    let (app, announcer) = announce_app(&hub, studio_core::announce::Timing::DEFAULT);
+    let id = set_up(&app).await;
+    write_once(&app, id).await;
+    announce_now(&app, &announcer);
+    let list = announcements_when(&app, id, |l| l.iter().any(|a| a["state"] == "sent")).await;
+    assert_eq!(list.len(), 1, "{list:?}");
+    assert_eq!(list[0]["state"], "sent");
+    let requests = hub.requests();
+    assert_eq!(requests.len(), 1, "{requests:?}");
+    assert_eq!(
+        requests[0].url.as_deref(),
+        Some("https://music.example/album.xml")
+    );
+    assert_eq!(requests[0].podping.as_deref(), Some("1"));
+}
+
+#[tokio::test]
+async fn pubnotify_off_sends_no_announcement() {
+    let hub = studio_core::testing::TestHub::start();
+    let (app, announcer) = announce_app(&hub, studio_core::announce::Timing::DEFAULT);
+    let id = set_up(&app).await;
+    let (status, body) = call(
+        &app,
+        "PUT",
+        "/api/v1/settings/announcements",
+        Some(json!({ "pubnotify": false, "podping": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    write_once(&app, id).await;
+    announce_now(&app, &announcer);
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    assert_eq!(hub.requests().len(), 0);
+    let (_, list) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/announcements"),
+        None,
+    )
+    .await;
+    assert_eq!(list, json!([]));
+}
+
+#[tokio::test]
+async fn podping_off_leaves_out_the_podping_parameter() {
+    let hub = studio_core::testing::TestHub::start();
+    let (app, announcer) = announce_app(&hub, studio_core::announce::Timing::DEFAULT);
+    let id = set_up(&app).await;
+    let (status, _) = call(
+        &app,
+        "PUT",
+        "/api/v1/settings/announcements",
+        Some(json!({ "pubnotify": true, "podping": false })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    write_once(&app, id).await;
+    announce_now(&app, &announcer);
+    announcements_when(&app, id, |l| l.iter().any(|a| a["state"] == "sent")).await;
+    let requests = hub.requests();
+    assert_eq!(requests.len(), 1, "{requests:?}");
+    assert_eq!(requests[0].podping, None);
+}
+
+#[tokio::test]
+async fn a_failed_request_waits_and_then_succeeds() {
+    let hub = studio_core::testing::TestHub::start();
+    hub.fail_next(1);
+    let timing = studio_core::announce::Timing {
+        retry_waits: [2; 4],
+        ..studio_core::announce::Timing::DEFAULT
+    };
+    let (app, announcer) = announce_app(&hub, timing);
+    let id = set_up(&app).await;
+    write_once(&app, id).await;
+    announce_now(&app, &announcer);
+    let list = announcements_when(&app, id, |l| l.iter().any(|a| a["state"] == "waiting")).await;
+    assert_eq!(list[0]["state"], "waiting", "{list:?}");
+    assert_eq!(list[0]["attempts"], 1);
+    assert!(
+        list[0]["last_error"]
+            .as_str()
+            .is_some_and(|t| !t.is_empty())
+    );
+    let list = announcements_when(&app, id, |l| l.iter().any(|a| a["state"] == "sent")).await;
+    assert_eq!(list[0]["state"], "sent", "{list:?}");
+    assert_eq!(hub.requests().len(), 2);
+}
+
+#[tokio::test]
+async fn the_announcement_settings_are_on_in_a_new_workspace() {
+    let app = app();
+    let (status, body) = call(&app, "GET", "/api/v1/settings/announcements", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "pubnotify": true, "podping": true }));
+    let (status, _) = call(
+        &app,
+        "PUT",
+        "/api/v1/settings/announcements",
+        Some(json!({ "pubnotify": false })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let (status, _) = call(&app, "GET", "/api/v1/feeds/999/announcements", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn resuming_fails_a_waiting_announcement_older_than_a_day() {
+    let app = app();
+    let id = set_up(&app).await;
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    let now = crate::announcer::now();
+    studio_core::announce::queue(
+        &workspace.collection,
+        studio_core::collection::FeedId(id),
+        &[studio_core::announce::PlannedAnnouncement {
+            url: "https://music.example/album.xml".to_owned(),
+            podping: true,
+        }],
+        &studio_core::announce::Timing::DEFAULT,
+        now - 2 * 86_400,
+    )
+    .unwrap();
+    workspace.resume_announcements();
+    let rows =
+        studio_core::announce::recent(&workspace.collection, studio_core::collection::FeedId(id))
+            .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].state.as_str(), "failed");
+}

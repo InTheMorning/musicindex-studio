@@ -12,6 +12,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
+use studio_core::announce;
 use studio_core::collection::{
     Collection, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId, DraftOperationKind,
     FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
@@ -2052,6 +2053,8 @@ pub(crate) async fn write_feed(
         if let Some((feed, _)) = written {
             w.record_remote_files(id, &feed);
         }
+        // The write put its announcements into the queue (ADR 0052).
+        w.announcer.wake();
         to_json(w.collection.feed(id)?)
     })
     .await
@@ -2090,6 +2093,49 @@ pub(crate) async fn draft_from_snapshot(
 /// The default of each download limit setting, 2 GiB (ADR 0036 item 17).
 /// Milestone 7b uses the limits.
 const DEFAULT_DOWNLOAD_LIMIT_BYTES: u64 = download::DEFAULT_LIMIT_BYTES;
+
+/// The two settings of the announcements (ADR 0052 item 5).
+pub(crate) async fn get_announce_settings(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        to_json(announce::AnnounceSettings::load(&w.collection)?)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AnnounceSettingsBody {
+    pubnotify: bool,
+    podping: bool,
+}
+
+/// Save the two settings of the announcements (ADR 0052 item 5).
+pub(crate) async fn put_announce_settings(
+    State(shared): State<Shared>,
+    Json(body): Json<AnnounceSettingsBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let settings = announce::AnnounceSettings {
+            pubnotify: body.pubnotify,
+            podping: body.podping,
+        };
+        settings.save(&w.collection)?;
+        to_json(settings)
+    })
+    .await
+}
+
+/// The recent announcements of a feed, the newest first (ADR 0052 item 19).
+pub(crate) async fn list_announcements(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        w.collection.feed(id)?;
+        to_json(announce::recent(&w.collection, id)?)
+    })
+    .await
+}
 
 /// The library setting and the download limits (ADR 0036 items 1 and 17).
 pub(crate) async fn get_library(State(shared): State<Shared>) -> ApiResult {

@@ -20,6 +20,9 @@ use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::{Web, WebImage};
 use studio_core::xml::Document;
 
+use studio_core::announce::{self, Timing};
+
+use crate::announcer::Announcer;
 use crate::downloads::DownloadQueue;
 use crate::error::ApiError;
 
@@ -122,7 +125,22 @@ pub struct Workspace {
     /// The queue of downloads (ADR 0038 items 7 and 9). A route clones the
     /// `Arc` and then unlocks the workspace.
     pub(crate) downloads: Arc<DownloadQueue>,
+    /// The hub that gets the announcements (ADR 0052 item 1).
+    pub(crate) hub: String,
+    /// The times of the announcement queue (ADR 0052 items 14 and 15).
+    pub(crate) announce_timing: Timing,
+    /// The worker of the announcement queue.
+    pub(crate) announcer: Arc<Announcer>,
 }
+
+/// The hub of a new workspace (ADR 0052 item 1).
+#[cfg(not(test))]
+const NEW_HUB: &str = announce::DEFAULT_HUB;
+
+/// The hub of a new workspace in a test build. Port 9 answers nothing, so
+/// that no test sends an announcement to the real hub (ADR 0045).
+#[cfg(test)]
+const NEW_HUB: &str = "http://127.0.0.1:9/pubnotify";
 
 impl Workspace {
     /// Open the workspace in `data_dir`, and make the folder if necessary.
@@ -146,6 +164,9 @@ impl Workspace {
             incoming_dir: data_dir.join("incoming"),
             imports_dir: data_dir.join("imports"),
             downloads: DownloadQueue::new(),
+            hub: NEW_HUB.to_owned(),
+            announce_timing: Timing::DEFAULT,
+            announcer: Announcer::new(),
         })
     }
 
@@ -153,6 +174,22 @@ impl Workspace {
     #[must_use]
     pub fn with_musicindex(mut self, base: &str) -> Self {
         self.index = MusicIndex::new(self.web.clone(), base);
+        self
+    }
+
+    /// Use a different hub for the announcements, such as a test hub.
+    #[must_use]
+    pub fn with_hub(mut self, url: &str) -> Self {
+        url.clone_into(&mut self.hub);
+        self
+    }
+
+    /// Use other times for the announcement queue, such as short retry
+    /// waits.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_announce_timing(mut self, timing: Timing) -> Self {
+        self.announce_timing = timing;
         self
     }
 
@@ -342,6 +379,23 @@ impl Workspace {
                 ),
             }
         }
+    }
+
+    /// Prepare the announcement queue at the start (ADR 0052 item 18). An
+    /// interrupted announcement waits again, and a waiting announcement
+    /// older than the maximum age fails. The worker starts when the router
+    /// is ready, and it then sends each due announcement.
+    ///
+    /// An error goes into the log and does not stop the caller.
+    pub fn resume_announcements(&self) {
+        if let Err(error) = announce::expire(
+            &self.collection,
+            &self.announce_timing,
+            crate::announcer::now(),
+        ) {
+            eprintln!("studio: the announcement queue failed to resume: {error}");
+        }
+        self.announcer.wake();
     }
 }
 

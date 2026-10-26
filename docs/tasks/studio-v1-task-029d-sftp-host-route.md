@@ -30,6 +30,7 @@ These choices are fixed. Do not change them.
   1. For the login `key` or `password`, with no open vault, it gives 409 `vault_required` or 423 `vault_locked`, as for S3. The login `agent` needs no vault.
   2. It checks the fields. An empty host, user, root or `host_key` gives 422 `invalid_config`. The login `key` with no `private_key`, or `password` with no `password`, gives 422 `invalid_config`. A `base_url` that is not an `http` or `https` address gives 422 `invalid_address`.
   3. It makes the `SftpHost` and connects, with `host_key` as the accepted fingerprint. Then `stat` of `root` must give a folder, or the route gives 422 `folder_not_found`.
+     `Connector::stat` refuses an empty path and gives `None` for a folder. Thus add the helper `pub fn check_root(&self) -> Result<(), ConnectorError>` to `SftpHost`. It connects and does `stat` of `root`. A missing root or a root that is not a folder gives `NotFound`.
   4. For `key` and `password`, it puts the secret JSON into the vault with the ID `connector-<uuid v4>`, and saves the vault.
   5. It adds the collection row. When step 4 or step 5 fails, it removes the secret from the vault again, as `add_s3_connector` does.
 - When step 3 fails, nothing goes into the vault or the collection. A different host key gives 502 `host_unauthorized`, with the new fingerprint in the message. A server with no `posix-rename` gives 422 `no_conditions`.

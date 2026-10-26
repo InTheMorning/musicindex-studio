@@ -23,6 +23,7 @@ These choices are fixed. Do not change them.
 
 - `LiveItem` gets `live_value: Option<LiveValue>`. `LiveValue` is `podcast:liveValue` with `uri` and `protocol`, both `Option<String>`, and the lossless rules of the other modeled elements ([ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md)).
 - A read and a write with no edit give the same bytes for each corpus feed.
+- `LiveItem` also gets `content_links: Vec<Entry<ContentLink>>`. `ContentLink` is `podcast:contentLink` with the attribute `href` and its text, with the same lossless rules. The core did not model `podcast:contentLink` before this packet.
 
 ### The Rules
 
@@ -82,7 +83,7 @@ cargo test --workspace
 
 ## Escalation
 
-- Stop and report when a corpus feed with a live item does not pass the new check. Name the feed and the problem. Do not change the corpus.
+- Stop and report when a corpus feed with a live item does not pass the new check, other than `behindthesch3m3s-music-pixel-palace.xml`. Name the feed and the problem. Do not change the corpus. The live item of that feed has no `podcast:contentLink`. ADR 0054 item 4 refuses a write of it, and its read and its round trip do not change.
 
 ## Prompt for lower-context coding model
 

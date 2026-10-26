@@ -165,3 +165,67 @@ fn the_jimmy_v_feed_has_alternate_enclosures_with_their_type_length_bitrate_and_
         )
     );
 }
+
+fn corpus_feed(name: &str) -> (Document, Feed) {
+    let bytes = corpus()
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .unwrap_or_else(|| panic!("{name} is not in the corpus"))
+        .1;
+    let doc = Document::parse_bytes(&bytes).unwrap();
+    let feed = Feed::read(&doc).unwrap();
+    (doc, feed)
+}
+
+/// ADR 0054 item 4: one corpus feed has a live item with no content link.
+#[test]
+fn only_the_pixel_palace_live_item_has_a_problem() {
+    for (name, bytes) in corpus() {
+        let feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
+        let found = studio_core::live::problems(&feed);
+        if name == "behindthesch3m3s-music-pixel-palace.xml" {
+            assert_eq!(found.len(), 1, "{name}: {found:?}");
+            assert_eq!(found[0].text, "This show has no content link.");
+        } else {
+            assert!(found.is_empty(), "{name}: {found:?}");
+        }
+    }
+}
+
+#[test]
+fn a_changed_live_value_changes_only_its_uri() {
+    let name = "kolomona-podcast-v4vmusic-live.xml";
+    let (mut doc, mut feed) = corpus_feed(name);
+    let before = doc.write();
+    let value = feed.live_items[0].value.live_value.as_mut().unwrap();
+    assert_eq!(
+        value.uri.as_deref(),
+        Some("https://ws.sirlibre.com/event?event_id=cmvck2ow60001o4018uz02dmv")
+    );
+    assert_eq!(value.protocol.as_deref(), Some("socket.io"));
+    value.uri = Some("https://ws.example/new".into());
+    feed.write(&mut doc).unwrap();
+    let expected = before.replace(
+        "uri=\"https://ws.sirlibre.com/event?event_id=cmvck2ow60001o4018uz02dmv\"",
+        "uri=\"https://ws.example/new\"",
+    );
+    assert_ne!(expected, before);
+    assert_eq!(doc.write(), expected);
+}
+
+#[test]
+fn a_changed_content_link_changes_only_that_element() {
+    let name = "kolomona-podcast-v4vmusic-live.xml";
+    let (mut doc, mut feed) = corpus_feed(name);
+    let before = doc.write();
+    let link = &mut feed.live_items[0].value.content_links[0].value;
+    assert_eq!(link.href.as_deref(), Some("https://v4vmusic.com/s/206"));
+    link.href = Some("https://v4vmusic.com/s/207".into());
+    feed.write(&mut doc).unwrap();
+    let expected = before.replace(
+        "<podcast:contentLink href=\"https://v4vmusic.com/s/206\">",
+        "<podcast:contentLink href=\"https://v4vmusic.com/s/207\">",
+    );
+    assert_ne!(expected, before);
+    assert_eq!(doc.write(), expected);
+}

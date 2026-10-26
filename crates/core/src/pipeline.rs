@@ -49,6 +49,9 @@ pub enum PipelineErrorKind {
     /// An address field of the draft is not a correct web address
     /// (ADR 0023).
     BadAddress,
+    /// A live item has no start, no content link, or a status that is not
+    /// `pending`, `live` or `ended` (ADR 0054 item 4).
+    BadLiveItem,
     /// The live file changed after the draft started.
     Conflict,
     /// The feed file is not a feed that Studio can read.
@@ -1985,6 +1988,19 @@ pub fn write_draft_signed(
                 "these address fields are not full http or https addresses: {}",
                 fields.join(", ")
             ),
+        ));
+    }
+    // ADR 0054 item 4: a live item with a problem stops the write before
+    // any change on a host.
+    let live_problems = crate::live::problems(&feed);
+    if !live_problems.is_empty() {
+        let texts: Vec<String> = live_problems
+            .iter()
+            .map(|p| format!("{} ({})", p.text, p.guid))
+            .collect();
+        return Err(PipelineError::new(
+            PipelineErrorKind::BadLiveItem,
+            format!("a live item is not correct: {}", texts.join(" ")),
         ));
     }
     let live = connector.read(&path)?;

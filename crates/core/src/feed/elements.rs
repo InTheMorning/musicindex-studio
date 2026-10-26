@@ -209,3 +209,26 @@ element_type! {
         media_type => "type",
     }
 }
+
+element_type! {
+    /// `podcast:contentLink`: a link to the show of a live item, such as a
+    /// page where people watch it.
+    ContentLink = (Ns::Podcast, "contentLink") {
+        @text
+        /// The text that an app shows with the link.
+        label;
+        /// `href`.
+        href => "href",
+    }
+}
+
+element_type! {
+    /// `podcast:liveValue`: the address where an app gets the live value
+    /// events of a live item (ADR 0054).
+    LiveValue = (Ns::Podcast, "liveValue") {
+        /// `uri`.
+        uri => "uri",
+        /// `protocol`, such as `socket.io`.
+        protocol => "protocol",
+    }
+}

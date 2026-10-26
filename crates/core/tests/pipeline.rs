@@ -2846,3 +2846,31 @@ fn a_write_that_stops_with_conflict_queues_nothing() {
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
     assert_eq!(queued(&s.collection, s.feed), 0);
 }
+
+#[test]
+fn a_live_item_with_no_content_link_does_not_write() {
+    let mut s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.live_items
+            .push(Entry::new(studio_core::live::new_live_item(
+                "Show",
+                "2026-11-01T10:00:00Z",
+            )));
+    })
+    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadLiveItem);
+    assert!(error.to_string().contains("This show has no content link."));
+    assert_eq!(live(&s), FEED);
+    assert_eq!(s.collection.snapshots(s.feed).unwrap(), Vec::new());
+}

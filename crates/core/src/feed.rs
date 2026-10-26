@@ -18,8 +18,8 @@ mod value;
 use std::fmt;
 
 pub use elements::{
-    AtomLink, Enclosure, Funding, Image, License, Locked, Person, Recipient, RemoteItem, Source,
-    Transcript, Txt,
+    AtomLink, ContentLink, Enclosure, Funding, Image, License, LiveValue, Locked, Person,
+    Recipient, RemoteItem, Source, Transcript, Txt,
 };
 pub use enclosures::AlternateEnclosure;
 pub use links::{BadAddress, is_web_address};
@@ -513,6 +513,10 @@ pub struct LiveItem {
     pub end: Option<String>,
     /// The elements that a live item has in common with an item.
     pub item: Item,
+    /// `podcast:liveValue`.
+    pub live_value: Option<LiveValue>,
+    /// The `podcast:contentLink` elements.
+    pub content_links: Vec<Entry<ContentLink>>,
 }
 
 impl Modeled for LiveItem {
@@ -525,6 +529,8 @@ impl Modeled for LiveItem {
             start: element.attribute("start").map(str::to_owned),
             end: element.attribute("end").map(str::to_owned),
             item: Item::read_fields(element),
+            live_value: read_one(element),
+            content_links: read_list(element),
         }
     }
 
@@ -533,10 +539,20 @@ impl Modeled for LiveItem {
         element.set_attribute("start", self.start.as_deref());
         element.set_attribute("end", self.end.as_deref());
         self.item.apply_fields(element, names);
+        // A new element goes at the end of the live item, or at its hosted
+        // position, as the elements of an item do.
+        let hosted = names.hosted_item(self.item.guid.as_deref());
+        let mut c = Children::new(element, &[], names, hosted);
+        c.one(self.live_value.as_ref());
+        c.list(&self.content_links);
     }
 
     fn adopt(&mut self, draft: Option<&Self>) -> Result<(), KeyError> {
-        self.item.adopt_fields(draft.map(|d| &d.item))
+        self.item.adopt_fields(draft.map(|d| &d.item))?;
+        adopt_list(
+            &mut self.content_links,
+            draft.map(|d| d.content_links.as_slice()),
+        )
     }
 }
 

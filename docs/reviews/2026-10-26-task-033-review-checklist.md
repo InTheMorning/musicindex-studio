@@ -36,7 +36,7 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
-| [033a](../tasks/studio-v1-task-033a-live-item-rules.md) | Open | |
+| [033a](../tasks/studio-v1-task-033a-live-item-rules.md) | Pass | The core did not model `podcast:contentLink`, so the coding model stopped. The planning model added `ContentLink` and `content_links` of a live item to the packet. The live item of the corpus feed `behindthesch3m3s-music-pixel-palace.xml` has no content link. ADR 0054 item 4 refuses a write of it, and a test records the one problem. Its read and its round trip do not change. The planning model made a blank `start` a problem, because the editor can send an empty text. In the manual checks, the corpus tests give the same bytes, and the live item check runs after the address check and before the first read of the host. |
 | [033b](../tasks/studio-v1-task-033b-live-item-page.md) | Open | |
 | [033c](../tasks/studio-v1-task-033c-recording.md) | Open | |
 | [033d](../tasks/studio-v1-task-033d-connected-apps.md) | Open | |

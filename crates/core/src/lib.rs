@@ -17,6 +17,7 @@ pub mod folder_scan;
 pub mod guid;
 pub mod inventory;
 pub mod library;
+pub mod live;
 pub mod media;
 pub mod migrate;
 pub mod msp;

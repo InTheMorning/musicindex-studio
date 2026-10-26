@@ -25,6 +25,10 @@ These choices are fixed. Do not change them.
 - `POST /api/v1/feeds/{id}/live-items/{guid}/status` with `{"status": "live"}` or `{"status": "ended"}` calls `live::set_status` on the draft model, and gives the draft. A refused change gives 409 `bad_status`. The route does not write.
 - A show feed is a new album feed. The new feed form gets the kind "Show feed". It sends `medium` `music`. The only difference in the UI is the title of the form.
 
+### The Draft Model
+
+An entry of `live_items` in the draft model has `status`, `start`, `end`, `item` (the fields of an item, such as `title`, `guid`, `description`, `image`, `enclosure` and `values`), `live_value` (`uri` and `protocol`, or `null`), `content_links` (each with `href` and `label`) and the entry key `_cid`. 033a added `live_value` and `content_links`. A new live item has no content link, so its page shows the problem until the user adds one.
+
 ### The Model Module
 
 `live.js` has no Preact and no browser state. It exports:

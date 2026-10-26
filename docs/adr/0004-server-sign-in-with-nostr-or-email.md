@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Amended: 2026-10-26 by operator decision. [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) item 1 replaces the list of item 1 with four methods, and item 27 supersedes the passkey alternative.
 
 ## Context
 

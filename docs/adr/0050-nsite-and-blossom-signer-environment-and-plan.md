@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-25
 - Owner: operator, with the technical choices of the planning model
+- Amended: 2026-10-26 by operator decision. [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) item 17 supersedes item 1: "My signer" can also sign through NIP-46.
 
 ## Context
 

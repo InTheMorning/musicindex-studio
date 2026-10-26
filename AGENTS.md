@@ -19,12 +19,13 @@ On 2026-10-26, Phase 0 to Phase 11 are complete. The human tests of Phase 9, Pha
 
 The UI starts on Releases and shows the outline of an open feed. At narrow width it is one stack.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0054`. ADR 0017 is proposed.
+- Decisions: `docs/adr/0001` to `docs/adr/0059`. ADR 0017 is proposed.
 - Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check, and task 026 built the shell of ADR 0039. Phase 9 (remaining connectors, [ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](docs/adr/0044-the-nsite-signer.md)) is complete. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
-- Phase 10 (announce, [ADR 0052](docs/adr/0052-announcements-through-the-podcast-index-hub.md)) is complete with [task 031](docs/tasks/studio-v1-task-031-announce.md), and its human test is open. After each write, Studio tells the Podcast Index hub, with a podping. Phase 11 (other feed types) is complete. Phase 12 (the server shell) is next.
+- Phase 10 (announce, [ADR 0052](docs/adr/0052-announcements-through-the-podcast-index-hub.md)) is complete with [task 031](docs/tasks/studio-v1-task-031-announce.md), and its human test is open. After each write, Studio tells the Podcast Index hub, with a podping. Phase 11 (other feed types) is complete.
 - Phase 11 has two milestones. 11a, the playlists of [ADR 0053](docs/adr/0053-playlists-are-musicl-feeds-with-remote-items.md), is [task 032](docs/tasks/studio-v1-task-032-playlists.md). 11b, the live items, connected apps and show grants of [ADR 0054](docs/adr/0054-live-items-connected-apps-and-show-grants.md), is [task 033](docs/tasks/studio-v1-task-033-live-items.md). Both milestones are complete, with their visual checks. The human test of 11b with a real host and the other app is open.
 - [Task 027](docs/tasks/studio-v1-task-027-connector-interface.md) (the connector interface change) is complete. [Task 028](docs/tasks/studio-v1-task-028-s3-connector.md) (S3 and R2, [ADR 0046](docs/adr/0046-the-s3-and-r2-connector.md)) is complete, with its human test open. [Task 029](docs/tasks/studio-v1-task-029-sftp-connector.md) (SFTP, [ADR 0047](docs/adr/0047-the-sftp-connector.md)) is complete, with its human tests open. [Task 030](docs/tasks/studio-v1-task-030-nsite-and-blossom.md) (nsite with Blossom, in eight packets) is complete, with its human tests open ([ADR 0045](docs/adr/0045-phase-9-crates-test-servers-and-host-forms.md) to [ADR 0048](docs/adr/0048-the-nsite-and-blossom-connectors.md), [ADR 0050](docs/adr/0050-nsite-and-blossom-signer-environment-and-plan.md) and [ADR 0051](docs/adr/0051-the-core-signs-nostr-events-with-secp256k1.md)).
-- Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md).
+- Phase 12 (the server shell) is planned and is next. Its goal is a change of a feed from a phone. [ADR 0055](docs/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) to [ADR 0059](docs/adr/0059-uploads-in-parts-and-the-home-screen-app.md) give the decisions. Four milestones follow: [task 034](docs/tasks/studio-v1-task-034-server-core.md) (the server core), [task 035](docs/tasks/studio-v1-task-035-phone.md) (the phone), [task 036](docs/tasks/studio-v1-task-036-grant-vaults.md) (grant vaults) and [task 037](docs/tasks/studio-v1-task-037-runbook-and-human-tests.md) (the runbook and the human tests).
+- Research: [baseline research note](docs/research/2026-10-22-studio-baseline-research.md) and [Phase 12 authentication research](docs/research/2026-10-26-phase-12-auth-research.md).
 - Open questions: the plan lists them. [ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md) has open questions about the self-hosted file host and file moves.
 
 ## Layout
@@ -67,7 +68,7 @@ Keep development and check data in `.studio-dev/` at the repository root. Git ig
 ## Design Philosophy
 
 - Studio connects to hosts. It does not host files. The user can move files between hosts at any time ([ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md)).
-- The user controls the secrets. Only the user can open the vault ([ADR 0003](docs/adr/0003-user-unlocked-secret-vault.md)).
+- The user controls the secrets. Only the user can open the vault. Under a show grant, the token of a connected app of the user opens a grant vault with one host secret ([ADR 0003](docs/adr/0003-user-unlocked-secret-vault.md), [ADR 0058](docs/adr/0058-grant-vaults-and-connected-apps-on-the-server.md)).
 - Feed identity does not change. Studio keeps the feed GUID and each item GUID ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md)).
 - No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md), [ADR 0054](docs/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - Studio uses the musicindex.org "Afterglow" visual direction ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
@@ -98,6 +99,9 @@ Situational rules:
 - No deletion on a host occurs before each new file passes the confirmation ([ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md)).
 - No test sends a request to a host outside the computer. Each connector passes the trait suite against a local test server ([ADR 0045](docs/adr/0045-phase-9-crates-test-servers-and-host-forms.md)).
 - The draft status, "Versions" and "Review" stay in the toolbar at all scroll positions and widths. The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. At 760 px or less, Studio is one stack with a root page and an outline page, and no menu button ([ADR 0039](docs/adr/0039-the-shell-releases-and-the-outline.md), musicindex ADR 0030).
+- On the server, each `/api/` request needs a session cookie and the `X-Studio-CSRF` header. The server keeps the vault key only in the vault window ([ADR 0055](docs/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+- With the network policy `Public` of the server, no outbound connection goes to a private, loopback or reserved address ([ADR 0057](docs/adr/0057-the-private-network-guard-of-the-server.md)).
+- A granted write uses only the secrets of its grant vault, in both shells ([ADR 0058](docs/adr/0058-grant-vaults-and-connected-apps-on-the-server.md)).
 - Do not copy code from `../mi-studio`. Use it as reference only ([ADR 0001](docs/adr/0001-one-core-with-desktop-and-server-shells.md)).
 
 Documentation:

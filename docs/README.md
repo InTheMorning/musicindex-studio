@@ -56,6 +56,11 @@
 - [ADR 0052: Announcements through the Podcast Index hub](adr/0052-announcements-through-the-podcast-index-hub.md)
 - [ADR 0053: Playlists are musicL feeds with remote items](adr/0053-playlists-are-musicl-feeds-with-remote-items.md)
 - [ADR 0054: Live items, connected apps and show grants](adr/0054-live-items-connected-apps-and-show-grants.md)
+- [ADR 0055: The server shell: user folders, accounts, sessions and the vault window](adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)
+- [ADR 0056: Server sign-in methods and vault wrappers](adr/0056-server-sign-in-methods-and-vault-wrappers.md)
+- [ADR 0057: The private-network guard of the server](adr/0057-the-private-network-guard-of-the-server.md)
+- [ADR 0058: Grant vaults and connected apps on the server](adr/0058-grant-vaults-and-connected-apps-on-the-server.md)
+- [ADR 0059: Uploads in parts and the home screen app](adr/0059-uploads-in-parts-and-the-home-screen-app.md)
 
 ## Plans
 
@@ -173,6 +178,24 @@
 - [Studio v1 task 033d: Connected apps](tasks/studio-v1-task-033d-connected-apps.md)
 - [Studio v1 task 033e: Show grants and granted writes](tasks/studio-v1-task-033e-show-grants.md)
 - [Studio v1 task 033f: The grants in the UI](tasks/studio-v1-task-033f-grants-ui.md)
+- [Studio v1 task 034: The server core](tasks/studio-v1-task-034-server-core.md)
+- [Studio v1 task 034a: The router of one workspace](tasks/studio-v1-task-034a-workspace-router.md)
+- [Studio v1 task 034b: The private-network guard](tasks/studio-v1-task-034b-private-network-guard.md)
+- [Studio v1 task 034c: Accounts, user folders and sessions](tasks/studio-v1-task-034c-accounts-and-sessions.md)
+- [Studio v1 task 034d: The vault window, the limits and the server rules](tasks/studio-v1-task-034d-vault-window-and-limits.md)
+- [Studio v1 task 034e: NIP-07 sign-in and the Nostr wrapper](tasks/studio-v1-task-034e-nip07-sign-in.md)
+- [Studio v1 task 034f: The sign-in pages and the account panel](tasks/studio-v1-task-034f-sign-in-ui.md)
+- [Studio v1 task 035: The phone](tasks/studio-v1-task-035-phone.md)
+- [Studio v1 task 035a: The HKDF wrappers](tasks/studio-v1-task-035a-hkdf-wrappers.md)
+- [Studio v1 task 035b: Passkeys with PRF](tasks/studio-v1-task-035b-passkeys.md)
+- [Studio v1 task 035c: The NIP-46 client and NIP-46 sign-in](tasks/studio-v1-task-035c-nip46-sign-in.md)
+- [Studio v1 task 035d: "My signer" through NIP-46](tasks/studio-v1-task-035d-nip46-signing.md)
+- [Studio v1 task 035e: Uploads in parts](tasks/studio-v1-task-035e-uploads-in-parts.md)
+- [Studio v1 task 035f: The home screen app](tasks/studio-v1-task-035f-home-screen-app.md)
+- [Studio v1 task 036: Grant vaults and connected apps on the server](tasks/studio-v1-task-036-grant-vaults.md)
+- [Studio v1 task 036a: The grant vault](tasks/studio-v1-task-036a-grant-vault.md)
+- [Studio v1 task 036b: Connected apps on the server](tasks/studio-v1-task-036b-apps-on-the-server.md)
+- [Studio v1 task 037: The server runbook and the human tests](tasks/studio-v1-task-037-runbook-and-human-tests.md)
 
 ## Reviews
 
@@ -199,9 +222,13 @@
 - [Task 031 review checklist, 2026-10-25](reviews/2026-10-25-task-031-review-checklist.md)
 - [Task 032 review checklist, 2026-10-26](reviews/2026-10-26-task-032-review-checklist.md)
 - [Task 033 review checklist, 2026-10-26](reviews/2026-10-26-task-033-review-checklist.md)
+- [Task 034 review checklist, 2026-10-26](reviews/2026-10-26-task-034-review-checklist.md)
+- [Task 035 review checklist, 2026-10-26](reviews/2026-10-26-task-035-review-checklist.md)
+- [Task 036 review checklist, 2026-10-26](reviews/2026-10-26-task-036-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 
 ## Research
 
 - [Studio baseline research, 2026-10-22](research/2026-10-22-studio-baseline-research.md)
+- [Phase 12 authentication research, 2026-10-26](research/2026-10-26-phase-12-auth-research.md)

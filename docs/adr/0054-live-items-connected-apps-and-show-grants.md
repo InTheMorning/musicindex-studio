@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-26
 - Owner: operator
+- Amended: 2026-10-26 by operator decision. [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) items 12 and 16 supersede item 16 for a locked vault and item 9 for the server. A granted write uses a grant vault.
 
 ## Context
 

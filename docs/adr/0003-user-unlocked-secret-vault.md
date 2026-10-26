@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Amended: 2026-10-26 by operator decision. [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) item 20 changes item 4: the server can also write under a show grant with the token of a connected app of the user.
 
 ## Context
 
@@ -17,7 +18,7 @@ A public Studio server holds secrets for many users. A breach of that server mus
 3. The server shell keeps one vault for each user. The key of the vault comes from the user's sign-in:
    - Email and passphrase: the key comes from the passphrase.
    - Nostr signer: the vault key is encrypted to the user's own Nostr key with NIP-44. The signer decrypts it at sign-in.
-4. The server can write to a host only while the user's session is open. The server has no key that opens a vault without the user.
+4. The server can write to a host only while the user's session is open, or under a show grant with the token of a connected app of the user. The server has no key that opens a vault without the user or that token ([ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md)).
 5. The two shells use the same vault format.
 
 ## Alternatives Considered

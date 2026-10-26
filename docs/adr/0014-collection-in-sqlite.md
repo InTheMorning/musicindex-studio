@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Amended: 2026-10-26 by operator decision. [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 2 supersedes the consequence for the server: one data folder for each user, not one database with a user ID on each row.
 
 ## Context
 

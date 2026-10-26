@@ -5692,7 +5692,12 @@ async fn a_failed_request_waits_and_then_succeeds() {
     let id = set_up(&app).await;
     write_once(&app, id).await;
     announce_now(&app, &announcer);
-    let list = announcements_when(&app, id, |l| l.iter().any(|a| a["state"] == "waiting")).await;
+    // A new announcement is also "waiting", with no attempt.
+    let list = announcements_when(&app, id, |l| {
+        l.iter()
+            .any(|a| a["state"] == "waiting" && a["attempts"] == 1)
+    })
+    .await;
     assert_eq!(list[0]["state"], "waiting", "{list:?}");
     assert_eq!(list[0]["attempts"], 1);
     assert!(

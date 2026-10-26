@@ -29,6 +29,14 @@ fn app(signup: Signup) -> App {
 }
 
 fn app_with(signup: Signup, tweak: impl FnOnce(&mut ServeOptions)) -> App {
+    app_with_rules(signup, PublicRules::with_test_exceptions(Vec::new()), tweak)
+}
+
+fn app_with_rules(
+    signup: Signup,
+    rules: PublicRules,
+    tweak: impl FnOnce(&mut ServeOptions),
+) -> App {
     let data = tempfile::tempdir().unwrap();
     let mut options = ServeOptions {
         data_dir: data.path().to_path_buf(),
@@ -45,9 +53,11 @@ fn app_with(signup: Signup, tweak: impl FnOnce(&mut ServeOptions)) -> App {
         // Port 9 answers nothing, so no test reaches a real host.
         musicindex: Some("http://127.0.0.1:9".to_owned()),
         hub: Some("http://127.0.0.1:9/pubnotify".to_owned()),
+        nip46_relays: vec!["wss://relay.nsec.app".to_owned()],
+        nip46_timeout: std::time::Duration::from_secs(60),
     };
     tweak(&mut options);
-    let state = crate::make_state(&options, PublicRules::with_test_exceptions(Vec::new())).unwrap();
+    let state = crate::make_state(&options, rules).unwrap();
     App {
         router: crate::auth::server_router(&state),
         state,
@@ -2083,4 +2093,411 @@ async fn the_options_name_the_relying_party_and_exclude_known_passkeys() {
     .await;
     assert_eq!(second.json["exclude"][0], device.credential_id().as_str());
     assert_eq!(second.json["user_handle"], first.json["user_handle"]);
+}
+
+// Tests of the NIP-46 sign-in (task 035c). The relay and the signer are test
+// servers on the computer.
+
+use studio_core::testing::relay::TestRelay;
+use studio_core::testing::signer::{Behavior, TestSigner};
+
+struct Remote {
+    app: App,
+    // The relay and the signer stop when the value goes out of scope.
+    relay: TestRelay,
+    signer: TestSigner,
+}
+
+fn remote_app(signup: Signup, timeout_ms: u64) -> Remote {
+    let relay = TestRelay::start();
+    let port: u16 = relay.url().rsplit(':').next().unwrap().parse().unwrap();
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let rules = PublicRules::with_test_exceptions(vec![address]);
+    let relay_url = relay.url();
+    let app = app_with_rules(signup, rules, |options| {
+        options.nip46_relays = vec![relay_url];
+        options.nip46_timeout = std::time::Duration::from_millis(timeout_ms);
+    });
+    let signer = TestSigner::start(&relay.url());
+    Remote { app, relay, signer }
+}
+
+async fn bunker_connect(remote: &Remote) -> String {
+    let reply = send(
+        &remote.app,
+        call(
+            "POST",
+            "/auth/v1/nip46/connect",
+            Some(json!({ "bunker": remote.signer.bunker_uri() })),
+        ),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    assert_eq!(
+        reply.json["pubkey"],
+        remote.signer.public_key().to_hex().as_str()
+    );
+    reply.json["connection"].as_str().unwrap().to_owned()
+}
+
+async fn nip46_sign_in(app: &App, connection: &str, invite: Option<&str>) -> Reply {
+    let path = format!("/auth/v1/nip46/{connection}/signin");
+    send(app, call("POST", &path, Some(json!({ "invite": invite })))).await
+}
+
+async fn session_json(app: &App, who: &(String, String)) -> Value {
+    let mut c = call("GET", "/auth/v1/session", None);
+    c.token = Some(&who.0);
+    send(app, c).await.json
+}
+
+#[tokio::test]
+async fn a_nip46_sign_up_makes_a_nostr_wrapper_and_a_later_sign_in_and_unlock_work() {
+    let remote = remote_app(Signup::Open, 10_000);
+    let app = &remote.app;
+    let pubkey = remote.signer.public_key().to_hex();
+    let connection = bunker_connect(&remote).await;
+    let state = send(
+        app,
+        call("GET", &format!("/auth/v1/nip46/{connection}"), None),
+    )
+    .await;
+    assert_eq!(state.json["state"], "connected");
+    assert_eq!(state.json["pubkey"], pubkey.as_str());
+
+    let up = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    assert_eq!(up.json["new_account"], true);
+    // The vault stays open after a sign-up.
+    assert_eq!(up.json["vault"], "open");
+    let who = who_of(&up);
+    let wrapper = api(app, &who, "GET", "/api/v1/vault/nostr-wrapper", None).await;
+    assert_eq!(wrapper.status, StatusCode::OK, "{:?}", wrapper.json);
+    assert_eq!(wrapper.json["pubkey"], pubkey.as_str());
+    let ciphertext = wrapper.json["ciphertext"].as_str().unwrap();
+    // The signer made the ciphertext, and the vault key is not in it as text.
+    let key = api(app, &who, "POST", "/api/v1/vault/signer-key", None).await;
+    let key = key.json["key"].as_str().unwrap().to_owned();
+    assert!(!ciphertext.contains(&key));
+    assert_eq!(session_json(app, &who).await["signer"], true);
+    // The connection ID works one time. The signer is now in the session.
+    let used = send(
+        app,
+        call("GET", &format!("/auth/v1/nip46/{connection}"), None),
+    )
+    .await;
+    assert_eq!(used.status, StatusCode::NOT_FOUND);
+    assert_eq!(app.state.nip46.counts(), (0, 1));
+
+    // A sign-out removes the signer from memory.
+    let out = send(app, sign_out_call(&who)).await;
+    assert_eq!(out.status, StatusCode::OK);
+    assert_eq!(app.state.nip46.counts(), (0, 0));
+
+    let connection = bunker_connect(&remote).await;
+    let again = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    assert_eq!(again.json["new_account"], false);
+    assert_eq!(again.json["vault"], "locked");
+    let who = who_of(&again);
+    let locked = api(app, &who, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(locked.status, StatusCode::LOCKED);
+    let open = api(app, &who, "POST", "/auth/v1/nip46/unlock", None).await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+    assert_eq!(open.json["vault"], "open");
+    let key_again = api(app, &who, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(key_again.json["key"], key.as_str());
+    let methods = remote.signer.methods();
+    for method in [
+        "connect",
+        "get_public_key",
+        "sign_event",
+        "nip44_encrypt",
+        "nip44_decrypt",
+    ] {
+        assert!(methods.contains(&method.to_owned()), "{method} {methods:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_nostrconnect_address_connects_a_signer_and_gives_a_qr_code() {
+    let remote = remote_app(Signup::Open, 10_000);
+    let app = &remote.app;
+    let start = send(app, call("POST", "/auth/v1/nip46/connect", Some(json!({})))).await;
+    assert_eq!(start.status, StatusCode::OK, "{:?}", start.json);
+    let uri = start.json["uri"].as_str().unwrap();
+    assert!(uri.starts_with("nostrconnect://"));
+    assert!(start.json["qr_svg"].as_str().unwrap().contains("<svg"));
+    let connection = start.json["connection"].as_str().unwrap();
+    // The signer has not answered, so the state is pending.
+    let path = format!("/auth/v1/nip46/{connection}");
+    let waiting = send(app, call("GET", &path, None)).await;
+    assert_eq!(waiting.json["state"], "pending");
+    remote.signer.connect(uri);
+    let mut state = Value::Null;
+    for _ in 0..10 {
+        state = send(app, call("GET", &path, None)).await.json;
+        if state["state"] != "pending" {
+            break;
+        }
+    }
+    assert_eq!(state["state"], "connected", "{state:?}");
+    assert_eq!(
+        state["pubkey"],
+        remote.signer.public_key().to_hex().as_str()
+    );
+    let up = nip46_sign_in(app, connection, None).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+}
+
+#[tokio::test]
+async fn a_stopped_connection_goes_away_and_an_old_one_expires() {
+    let remote = remote_app(Signup::Open, 10_000);
+    let app = &remote.app;
+    let start = send(app, call("POST", "/auth/v1/nip46/connect", Some(json!({})))).await;
+    let connection = start.json["connection"].as_str().unwrap().to_owned();
+    let path = format!("/auth/v1/nip46/{connection}");
+    assert_eq!(app.state.nip46.counts().0, 1);
+    let stop = send(app, call("DELETE", &path, None)).await;
+    assert_eq!(stop.status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        send(app, call("GET", &path, None)).await.status,
+        StatusCode::NOT_FOUND
+    );
+    // A connection with no use for five minutes goes away.
+    let connection = bunker_connect(&remote).await;
+    app.state.nip46.age_all(std::time::Duration::from_secs(301));
+    let path = format!("/auth/v1/nip46/{connection}");
+    assert_eq!(
+        send(app, call("GET", &path, None)).await.status,
+        StatusCode::NOT_FOUND
+    );
+    let gone = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(gone.status, StatusCode::NOT_FOUND);
+    assert_eq!(app.state.nip46.counts(), (0, 0));
+}
+
+#[tokio::test]
+async fn the_policy_public_refuses_a_loopback_relay_with_422() {
+    // The default test app has no exception for the relay.
+    let relay = TestRelay::start();
+    let relay_url = relay.url();
+    let app = app_with(Signup::Open, |options| {
+        options.nip46_relays = vec![relay_url];
+    });
+    let signer = TestSigner::start(&relay.url());
+    let start = send(
+        &app,
+        call("POST", "/auth/v1/nip46/connect", Some(json!({}))),
+    )
+    .await;
+    assert_eq!(
+        start.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{:?}",
+        start.json
+    );
+    assert_eq!(start.code(), "address_not_public");
+    let bunker = send(
+        &app,
+        call(
+            "POST",
+            "/auth/v1/nip46/connect",
+            Some(json!({ "bunker": signer.bunker_uri() })),
+        ),
+    )
+    .await;
+    assert_eq!(bunker.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(bunker.code(), "address_not_public");
+    assert_eq!(app.state.nip46.counts(), (0, 0));
+}
+
+#[tokio::test]
+async fn a_signer_that_does_not_answer_gives_504() {
+    let remote = remote_app(Signup::Open, 700);
+    let app = &remote.app;
+    remote.signer.set_behavior(Behavior::Silent);
+    let bunker = send(
+        app,
+        call(
+            "POST",
+            "/auth/v1/nip46/connect",
+            Some(json!({ "bunker": remote.signer.bunker_uri() })),
+        ),
+    )
+    .await;
+    assert_eq!(
+        bunker.status,
+        StatusCode::GATEWAY_TIMEOUT,
+        "{:?}",
+        bunker.json
+    );
+    assert_eq!(bunker.code(), "signer_timeout");
+    // A signer that stops later gives 504 at the sign-in, and the account
+    // is not made.
+    remote.signer.set_behavior(Behavior::Normal);
+    let connection = bunker_connect(&remote).await;
+    remote.signer.set_behavior(Behavior::Silent);
+    let timed_out = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(
+        timed_out.status,
+        StatusCode::GATEWAY_TIMEOUT,
+        "{:?}",
+        timed_out.json
+    );
+    assert_eq!(timed_out.code(), "signer_timeout");
+    assert!(
+        app.state
+            .accounts
+            .account_by_pubkey(&remote.signer.public_key().to_hex())
+            .unwrap()
+            .is_none()
+    );
+    // The connection is free again, and the next sign-in works.
+    remote.signer.set_behavior(Behavior::Normal);
+    let up = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+}
+
+#[tokio::test]
+async fn a_wrong_event_from_the_signer_gives_no_session() {
+    let remote = remote_app(Signup::Open, 5_000);
+    let app = &remote.app;
+    let connection = bunker_connect(&remote).await;
+    remote.signer.set_behavior(Behavior::BadSignature);
+    let bad = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(bad.status, StatusCode::BAD_GATEWAY, "{:?}", bad.json);
+    assert_eq!(bad.code(), "signer_invalid");
+    remote.signer.set_behavior(Behavior::SignWithOtherKey);
+    let other = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(other.code(), "signer_invalid");
+    assert!(bad.headers.get(header::SET_COOKIE).is_none());
+}
+
+#[tokio::test]
+async fn an_invite_server_asks_for_the_invite_and_the_connection_works_again() {
+    let remote = remote_app(Signup::Invite, 5_000);
+    let app = &remote.app;
+    let connection = bunker_connect(&remote).await;
+    let none = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(none.status, StatusCode::FORBIDDEN);
+    assert_eq!(none.code(), "invite_required");
+    let invite = app.state.accounts.create_invite().unwrap();
+    let up = nip46_sign_in(app, &connection, Some(&invite)).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+}
+
+#[tokio::test]
+async fn a_different_session_cannot_use_the_signer_of_a_session() {
+    let remote = remote_app(Signup::Open, 5_000);
+    let app = &remote.app;
+    let connection = bunker_connect(&remote).await;
+    let up = nip46_sign_in(app, &connection, None).await;
+    let who = who_of(&up);
+    // The lock of the first session does not matter. A second user has no signer.
+    let other = new_user_open(app, "other@example.org").await;
+    api(app, &who, "POST", "/api/v1/vault/lock", None).await;
+    let refused = api(app, &other, "POST", "/auth/v1/nip46/unlock", None).await;
+    assert_eq!(refused.status, StatusCode::CONFLICT);
+    assert_eq!(refused.code(), "signer_not_connected");
+    // The old connection ID gives nothing to a second sign-in.
+    let reuse = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(reuse.status, StatusCode::NOT_FOUND);
+    // The unlock needs a session and the CSRF header.
+    let none = send(app, call("POST", "/auth/v1/nip46/unlock", None)).await;
+    assert_eq!(none.status, StatusCode::UNAUTHORIZED);
+    let mut no_csrf = call("POST", "/auth/v1/nip46/unlock", None);
+    no_csrf.token = Some(&who.0);
+    assert_eq!(send(app, no_csrf).await.status, StatusCode::FORBIDDEN);
+}
+
+async fn new_user_open(app: &App, email: &str) -> (String, String) {
+    new_user(app, email, PASS_ONE).await
+}
+
+#[tokio::test]
+async fn an_account_deletion_removes_the_signer_and_the_sweep_removes_an_ended_session() {
+    let remote = remote_app(Signup::Open, 5_000);
+    let app = &remote.app;
+    let connection = bunker_connect(&remote).await;
+    let up = nip46_sign_in(app, &connection, None).await;
+    let who = who_of(&up);
+    assert_eq!(app.state.nip46.counts(), (0, 1));
+    // A session that the database lost loses its signer at the next sweep.
+    app.state
+        .accounts
+        .delete_session(&crate::accounts::sha256_hex(&who.0))
+        .unwrap();
+    crate::idle::sweep(&app.state).await;
+    assert_eq!(app.state.nip46.counts(), (0, 0));
+    let connection = bunker_connect(&remote).await;
+    let again = nip46_sign_in(app, &connection, None).await;
+    let who = who_of(&again);
+    let npub = {
+        use nostr::prelude::ToBech32;
+        remote.signer.public_key().to_bech32().unwrap()
+    };
+    let open = api(app, &who, "POST", "/auth/v1/nip46/unlock", None).await;
+    assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
+    let deleted = api(
+        app,
+        &who,
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": npub })),
+    )
+    .await;
+    assert_eq!(deleted.status, StatusCode::NO_CONTENT, "{:?}", deleted.json);
+    assert_eq!(app.state.nip46.counts(), (0, 0));
+    drop(remote.relay);
+}
+
+#[tokio::test]
+async fn a_wrong_decrypt_at_nip46_sign_up_leaves_no_account_and_the_invite_works_again() {
+    let remote = remote_app(Signup::Invite, 5_000);
+    let app = &remote.app;
+    let connection = bunker_connect(&remote).await;
+    let invite = app.state.accounts.create_invite().unwrap();
+    remote.signer.set_behavior(Behavior::WrongDecrypt);
+    let bad = nip46_sign_in(app, &connection, Some(&invite)).await;
+    assert_eq!(bad.status, StatusCode::BAD_GATEWAY, "{:?}", bad.json);
+    assert_eq!(bad.code(), "signer_invalid");
+    assert!(bad.headers.get(header::SET_COOKIE).is_none());
+    let pubkey = remote.signer.public_key().to_hex();
+    assert!(
+        app.state
+            .accounts
+            .account_by_pubkey(&pubkey)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(app.state.nip46.counts().1, 0);
+    // The invite is free again, and the same connection signs up.
+    remote.signer.set_behavior(Behavior::Normal);
+    let up = nip46_sign_in(app, &connection, Some(&invite)).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+}
+
+#[tokio::test]
+async fn the_fifth_pending_connection_of_one_address_gets_429() {
+    let remote = remote_app(Signup::Open, 5_000);
+    let app = &remote.app;
+    let mut ids = Vec::new();
+    for _ in 0..4 {
+        let ok = send(app, call("POST", "/auth/v1/nip46/connect", Some(json!({})))).await;
+        assert_eq!(ok.status, StatusCode::OK, "{:?}", ok.json);
+        ids.push(ok.json["connection"].as_str().unwrap().to_owned());
+    }
+    let fifth = send(app, call("POST", "/auth/v1/nip46/connect", Some(json!({})))).await;
+    assert_eq!(fifth.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(fifth.code(), "too_many_attempts");
+    let mut other = call("POST", "/auth/v1/nip46/connect", Some(json!({})));
+    other.addr = "10.0.0.2:4000";
+    let ok = send(app, other).await;
+    assert_eq!(ok.status, StatusCode::OK, "{:?}", ok.json);
+    ids.push(ok.json["connection"].as_str().unwrap().to_owned());
+    // End the waits, so that no blocking thread stays.
+    for id in ids {
+        send(app, call("DELETE", &format!("/auth/v1/nip46/{id}"), None)).await;
+    }
 }

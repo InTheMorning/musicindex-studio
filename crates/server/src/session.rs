@@ -16,6 +16,7 @@ use tower::ServiceExt;
 use crate::accounts::{self, Accounts};
 use crate::config::{Origin, Signup};
 use crate::limits::{self, Attempts};
+use crate::nip46_sessions::Nip46Sessions;
 use crate::users::Users;
 
 /// The name of the session cookie (ADR 0055 item 11).
@@ -55,6 +56,8 @@ pub struct ServerState {
     pub attempts: Attempts,
     /// The header that gives the client address, when the operator names one.
     pub client_header: Option<String>,
+    /// The NIP-46 connections (ADR 0056 items 12 to 16).
+    pub nip46: Nip46Sessions,
 }
 
 /// The shared state.
@@ -330,6 +333,7 @@ pub async fn resolve(state: &ServerState, headers: &HeaderMap) -> Result<Resolve
     let now = accounts::now();
     if now - row.last_seen > state.session_idle || now - row.created_at > state.session_max {
         state.accounts.delete_session(&hash).map_err(db_error)?;
+        state.nip46.remove_session(&hash);
         lock_if_no_session(state, row.account_id).await;
         return Ok(Resolved::Ended);
     }
@@ -398,7 +402,8 @@ pub fn check_csrf(session: &Session, headers: &HeaderMap) -> Result<(), Response
     }
 }
 
-fn same(a: &str, b: &str) -> bool {
+/// Compare two texts in constant time for equal lengths.
+pub fn same(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |d, (x, y)| d | (x ^ y)) == 0
 }
 

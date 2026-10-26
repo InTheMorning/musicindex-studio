@@ -36,6 +36,27 @@ pub async fn serve(listener: tokio::net::TcpListener, router: Router) -> std::io
     axum::serve(listener, router).await
 }
 
+/// A QR code of the text, as SVG text (ADR 0056 item 13). Both shells use
+/// it, so the UI needs no QR code. The text is empty when the QR code
+/// cannot hold the text.
+#[must_use]
+pub fn qr_svg(text: &str) -> String {
+    use qrcode::render::svg;
+    // The light color is white also in the dark theme, because a scanner
+    // needs the contrast.
+    qrcode::QrCode::new(text.as_bytes()).map_or_else(
+        |_| String::new(),
+        |code| {
+            code.render::<svg::Color>()
+                .min_dimensions(240, 240)
+                .quiet_zone(true)
+                .dark_color(svg::Color("#000000"))
+                .light_color(svg::Color("#ffffff"))
+                .build()
+        },
+    )
+}
+
 /// The UI routes: `/` and `/ui/{*path}`, with the security headers
 /// (ADR 0016).
 pub fn ui_router() -> Router {

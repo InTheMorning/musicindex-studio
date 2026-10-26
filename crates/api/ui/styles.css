@@ -389,6 +389,9 @@ code, .mono {
   line-height: 1.05;
 }
 .card p { color: var(--muted); }
+/* The QR code of a signer link. The SVG has its own white ground also in the
+   dark theme, because a scanner needs the contrast. */
+.qr { justify-self: center; width: min(240px, 100%); height: auto; border-radius: 12px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; min-height: var(--target); }
 /* The same size and filter as the musicindex.org lockup. */
 .brand img { display: block; width: 150px; height: auto; filter: var(--brand-filter); }
@@ -594,7 +597,8 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
 .icon-button { width: var(--target); padding: 0; }
 
 @media (max-width: 760px) {
-  dialog.sheet[open] {
+  dialog.sheet[open],
+  dialog.sheet.small[open] {
     margin: auto 0 0;
     width: 100vw;
     max-height: 92dvh;

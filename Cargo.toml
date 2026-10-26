@@ -17,11 +17,14 @@ rusty-s3 = { version = "0.10", default-features = false, features = ["rustcrypto
 # SSH client for the SFTP connector. The vendored OpenSSL needs no system library.
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
 # Nostr events, keys and verification for the nsite and Blossom connectors.
-nostr = "0.45"
+# The features nip44 and nip46 give the NIP-46 messages and NIP-44 (ADR 0056 item 12).
+nostr = { version = "0.45", features = ["nip44", "nip46"] }
 # Signs Nostr events (ADR 0051). The version and features follow nostr.
 secp256k1 = { version = "0.30", default-features = false, features = ["std"] }
 # ES256 check of WebAuthn responses (ADR 0056 item 26).
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+# QR code as SVG for the nostrconnect address (ADR 0056 item 13).
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 # WebSocket client for relays, and the test relay.
 tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 

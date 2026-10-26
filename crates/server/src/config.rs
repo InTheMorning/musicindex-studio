@@ -109,7 +109,15 @@ pub struct ServeOptions {
     pub musicindex: Option<String>,
     /// A different hub for the announcements.
     pub hub: Option<String>,
+    /// The relays for a `nostrconnect://` address (ADR 0056 item 13).
+    pub nip46_relays: Vec<String>,
+    /// The time for each request to a remote signer. Only a test changes
+    /// it.
+    pub nip46_timeout: Duration,
 }
+
+/// The relay of the default `nostrconnect://` address.
+pub const DEFAULT_NIP46_RELAY: &str = "wss://relay.nsec.app";
 
 /// A command of the server.
 #[derive(Debug)]
@@ -146,6 +154,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
     let mut client_address_header = None;
     let mut musicindex = None;
     let mut hub = None;
+    let mut nip46_relays: Vec<String> = Vec::new();
     let mut session_idle_days = 7;
     let mut session_max_days = 30;
     let mut vault_idle_minutes = 10;
@@ -194,6 +203,13 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             }
             ("serve", "--musicindex") => musicindex = Some(value("--musicindex")?),
             ("serve", "--podcastindex-hub") => hub = Some(value("--podcastindex-hub")?),
+            ("serve", "--nip46-relay") => {
+                let relay = value("--nip46-relay")?;
+                if !(relay.starts_with("wss://") || relay.starts_with("ws://")) {
+                    return Err("--nip46-relay needs a ws:// or wss:// address".to_owned());
+                }
+                nip46_relays.push(relay);
+            }
             _ => return Err(format!("unknown option {arg}")),
         }
     }
@@ -213,6 +229,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             argon2_wait: Duration::from_secs(10),
             musicindex,
             hub,
+            nip46_relays: if nip46_relays.is_empty() {
+                vec![DEFAULT_NIP46_RELAY.to_owned()]
+            } else {
+                nip46_relays
+            },
+            nip46_timeout: studio_core::nip46::REQUEST_TIMEOUT,
         }))),
         "invite" => Ok(Command::Invite { data_dir }),
         other => Err(format!("unknown command {other}")),
@@ -258,6 +280,22 @@ mod tests {
         assert_eq!(options.storage_limit, 10 * 1024 * 1024 * 1024);
         assert_eq!(options.argon2_concurrency, 2);
         assert_eq!(options.argon2_wait, Duration::from_secs(10));
+        assert_eq!(options.nip46_relays, ["wss://relay.nsec.app"]);
+    }
+
+    #[test]
+    fn the_nip46_relay_option_can_repeat() {
+        let line = "serve --data-dir d --public-origin https://a.example";
+        let given =
+            format!("{line} --nip46-relay wss://one.example --nip46-relay wss://two.example");
+        let Ok(Command::Serve(options)) = parse(args(&given)) else {
+            panic!("expected serve");
+        };
+        assert_eq!(
+            options.nip46_relays,
+            ["wss://one.example", "wss://two.example"]
+        );
+        assert!(parse(args(&format!("{line} --nip46-relay https://x.example"))).is_err());
     }
 
     #[test]

@@ -227,6 +227,65 @@ impl WorkspaceHandle {
         .await
     }
 
+    /// The vault key as base64, for the remote signer of the user to
+    /// encrypt with NIP-44 (ADR 0056 item 11). The text clears its memory
+    /// when it goes out of scope.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the vault is not open.
+    pub async fn signer_key(&self) -> Result<Zeroizing<String>, ApiError> {
+        self.run(|w| {
+            w.require_open_vault()?;
+            let key = w
+                .vault
+                .as_ref()
+                .ok_or_else(|| ApiError::internal("the vault closed"))?
+                .key_for_signer();
+            w.touch_vault();
+            Ok(key)
+        })
+        .await
+    }
+
+    /// Add the Nostr wrapper of a public key to the open vault, and save
+    /// the vault.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the vault is not open or cannot be saved.
+    pub async fn add_nostr_wrapper(&self, pubkey: &str, ciphertext: &str) -> Result<(), ApiError> {
+        let (pubkey, ciphertext) = (pubkey.to_owned(), ciphertext.to_owned());
+        self.run(move |w| {
+            w.require_open_vault()?;
+            let vault = w
+                .vault
+                .as_mut()
+                .ok_or_else(|| ApiError::internal("the vault closed"))?;
+            vault.add_nostr_wrapper(&pubkey, &ciphertext);
+            w.touch_vault();
+            w.save_vault()
+        })
+        .await
+    }
+
+    /// The NIP-44 ciphertext of the Nostr wrapper for a public key. The
+    /// vault can be closed. Gives `None` when the vault has no such wrapper.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when no vault file exists.
+    pub async fn nostr_ciphertext(&self, pubkey: &str) -> Result<Option<String>, ApiError> {
+        let pubkey = pubkey.to_owned();
+        self.run(move |w| {
+            if w.vault_state() == VaultState::Absent {
+                return Err(ApiError::vault_required());
+            }
+            Ok(w.vault_file()?.nostr_ciphertext(&pubkey).map(str::to_owned))
+        })
+        .await
+    }
+
     /// Close the vault.
     ///
     /// # Errors

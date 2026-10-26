@@ -63,20 +63,69 @@ const AUTH_ERRORS = {
   vault_locked: 'Unlock the vault first.',
 };
 
+const NIP46_ERRORS = {
+  address_not_public: 'The server cannot connect to this relay, because it is not a public address.',
+  signer_timeout: 'The signer gave no answer in time. Open the signer app and try again.',
+  signer_unavailable: 'Studio cannot reach the relay of the signer. Try again later.',
+  bunker_invalid: 'This is not a bunker address. It starts with bunker:// and names a relay.',
+  signer_rejected: 'The signer refused the request. Allow the request in the signer app and try again.',
+  signer_invalid: 'The signer gave an answer that Studio does not accept. Use a different signer.',
+  connection_unknown: 'The connection ended. Start a new connection.',
+  connection_not_ready: 'The signer is not connected yet.',
+  connection_busy: 'A sign-in with this signer is already in progress.',
+  signer_not_connected: 'This session has no connected signer. Sign in with the signer again.',
+  no_nostr_wrapper: 'The vault has no key for this signer.',
+};
+
+// The text for an error code of the NIP-46 routes. A code of the other auth
+// routes gives the text of `authErrorText`.
+export function nip46ErrorText(code) {
+  return Object.hasOwn(NIP46_ERRORS, code) ? NIP46_ERRORS[code] : authErrorText(code);
+}
+
+// The view of an answer of `GET /auth/v1/nip46/{connection}`. `phase` is
+// `waiting` while the signer has not answered, `connected` or `failed`. An
+// answer that Studio does not know is a failure.
+export function nip46State(answer) {
+  const state = answer && typeof answer.state === 'string' ? answer.state : '';
+  if (state === 'pending') return { phase: 'waiting', pubkey: null, npub: null, error: null };
+  if (state === 'connected') {
+    const pubkey = typeof answer.pubkey === 'string' ? answer.pubkey : null;
+    return { phase: 'connected', pubkey, npub: npubOf(pubkey), error: null };
+  }
+  const error = state === 'failed' && typeof answer.error === 'string' && answer.error
+    ? answer.error
+    : 'signer_invalid';
+  return { phase: 'failed', pubkey: null, npub: null, error };
+}
+
+// True when the text looks like a bunker address of a signer. The server
+// does the full check.
+export function isBunkerAddress(text) {
+  return /^bunker:\/\/[0-9a-f]{64}\?\S+$/i.test(String(text ?? '').trim());
+}
+
+// The `src` of an `img` for the SVG text of a QR code from the server.
+export function qrSource(svg) {
+  return svg ? `data:image/svg+xml;utf8,${encodeURIComponent(svg)}` : '';
+}
+
 // The text for an error code of the auth routes. An unknown code gives a
 // general text.
 export function authErrorText(code) {
   return Object.hasOwn(AUTH_ERRORS, code) ? AUTH_ERRORS[code] : 'Something went wrong. Try again.';
 }
 
-// The methods of the unlock sheet, in order (ADR 0056 items 7, 10 and 24).
-// `session` is the answer of `GET /auth/v1/session`. `hasNip07` is true when
-// the browser has `window.nostr`. `hasPasskeys` is true when the browser has
-// `PublicKeyCredential`.
+// The methods of the unlock sheet, in order (ADR 0056 items 7, 10, 15 and
+// 24). `session` is the answer of `GET /auth/v1/session`. `hasNip07` is true
+// when the browser has `window.nostr`. `hasPasskeys` is true when the browser
+// has `PublicKeyCredential`. The method `nip46` shows when the session has a
+// connected remote signer (`session.signer`).
 export function unlockMethods(session, hasNip07, hasPasskeys = false) {
   const methods = [];
   if (session && session.email) methods.push('passphrase');
   if (session && session.pubkey && hasNip07) methods.push('nip07');
+  if (session && session.pubkey && session.signer) methods.push('nip46');
   if (session && session.passkeys > 0 && hasPasskeys) methods.push('passkey');
   return methods;
 }

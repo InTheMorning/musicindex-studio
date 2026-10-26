@@ -42,8 +42,9 @@ impl ApiError {
         }
     }
 
-    /// The code of the error.
-    pub(crate) fn code(&self) -> &'static str {
+    /// The code of the error, such as `wrong_key`.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
         self.code
     }
 

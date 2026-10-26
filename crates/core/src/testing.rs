@@ -6,6 +6,7 @@ pub mod blossom;
 pub mod fake_s3;
 pub mod hub;
 pub mod relay;
+pub mod signer;
 pub mod sshd;
 
 pub use hub::{HubRequest, TestHub};

@@ -7,6 +7,7 @@ import {
   accountName, deleteConfirmation, recoveryAccount, addMethodChoices, recoveryErrorText,
   toBase64Url, fromBase64Url, creationOptions, requestOptions, registrationPayload,
   assertionPayload, prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
+  nip46State, nip46ErrorText, isBunkerAddress, qrSource,
 } from '../ui/account.js';
 
 const PUBKEY = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
@@ -268,4 +269,85 @@ test('unlockMethods and addMethodChoices add the passkey only with a passkey and
   assert.deepEqual(unlockMethods({ email: 'a@example.org', passkeys: 0 }, false, true), ['passphrase']);
   assert.deepEqual(addMethodChoices(email, false, true), ['passphrase', 'passkey']);
   assert.deepEqual(addMethodChoices(email, false, false), ['passphrase']);
+});
+
+// ---- NIP-46 remote signer (ADR 0056 items 12 to 16, task 035c) ----
+
+test('nip46State gives waiting while the signer has not answered', () => {
+  assert.deepEqual(nip46State({ state: 'pending', pubkey: null, error: null }), {
+    phase: 'waiting', pubkey: null, npub: null, error: null,
+  });
+});
+
+test('nip46State gives the public key and the npub of a connected signer', () => {
+  const view = nip46State({ state: 'connected', pubkey: PUBKEY, error: null });
+  assert.equal(view.phase, 'connected');
+  assert.equal(view.pubkey, PUBKEY);
+  assert.match(view.npub, /^npub1[02-9ac-hj-np-z]+$/);
+  assert.equal(view.error, null);
+});
+
+test('nip46State gives the error code of a failed connection', () => {
+  const view = nip46State({ state: 'failed', pubkey: null, error: 'signer_timeout' });
+  assert.equal(view.phase, 'failed');
+  assert.equal(view.error, 'signer_timeout');
+});
+
+test('nip46State treats an answer that it does not know as a failure', () => {
+  for (const answer of [null, undefined, {}, { state: 'other' }, { state: 'failed' }, { state: 7 }]) {
+    const view = nip46State(answer);
+    assert.equal(view.phase, 'failed');
+    assert.equal(view.error, 'signer_invalid');
+  }
+});
+
+test('nip46ErrorText has a text for each code of the NIP-46 routes', () => {
+  const codes = [
+    'address_not_public', 'signer_timeout', 'signer_unavailable', 'bunker_invalid', 'signer_rejected',
+    'signer_invalid', 'connection_unknown', 'connection_not_ready', 'connection_busy',
+    'signer_not_connected', 'no_nostr_wrapper',
+  ];
+  const general = authErrorText('no_such_code');
+  const seen = new Set();
+  for (const code of codes) {
+    const text = nip46ErrorText(code);
+    assert.ok(text.length > 10 && text !== general, code);
+    seen.add(text);
+  }
+  assert.equal(seen.size, codes.length);
+  assert.equal(nip46ErrorText('signer_timeout'), 'The signer gave no answer in time. Open the signer app and try again.');
+});
+
+test('nip46ErrorText gives the text of the other auth routes for their codes', () => {
+  assert.equal(nip46ErrorText('invite_required'), authErrorText('invite_required'));
+  assert.equal(nip46ErrorText('too_many_attempts'), authErrorText('too_many_attempts'));
+  assert.equal(nip46ErrorText('no_such_code'), authErrorText('no_such_code'));
+  assert.equal(nip46ErrorText(undefined), authErrorText(undefined));
+});
+
+test('unlockMethods adds the remote signer when the session has one', () => {
+  const nostr = { pubkey: PUBKEY, signer: true };
+  assert.deepEqual(unlockMethods(nostr, false), ['nip46']);
+  assert.deepEqual(unlockMethods(nostr, true), ['nip07', 'nip46']);
+  assert.deepEqual(unlockMethods({ pubkey: PUBKEY, signer: false }, false), []);
+  assert.deepEqual(unlockMethods({ pubkey: PUBKEY }, false), []);
+  assert.deepEqual(unlockMethods({ pubkey: PUBKEY, signer: true, passkeys: 1 }, false, true), ['nip46', 'passkey']);
+});
+
+test('isBunkerAddress accepts a bunker address and refuses other text', () => {
+  assert.equal(isBunkerAddress(`bunker://${PUBKEY}?relay=wss%3A%2F%2Frelay.example&secret=abc`), true);
+  assert.equal(isBunkerAddress(`  bunker://${PUBKEY}?relay=wss://relay.example `), true);
+  assert.equal(isBunkerAddress(`bunker://${PUBKEY}`), false);
+  assert.equal(isBunkerAddress('bunker://abc?relay=wss://relay.example'), false);
+  assert.equal(isBunkerAddress(`nostrconnect://${PUBKEY}?relay=wss://relay.example`), false);
+  assert.equal(isBunkerAddress(''), false);
+  assert.equal(isBunkerAddress(null), false);
+});
+
+test('qrSource gives a data address for SVG text and nothing for no text', () => {
+  const source = qrSource('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+  assert.ok(source.startsWith('data:image/svg+xml;utf8,'));
+  assert.ok(!source.includes('<'));
+  assert.equal(qrSource(''), '');
+  assert.equal(qrSource(undefined), '');
 });

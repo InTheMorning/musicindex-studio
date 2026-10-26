@@ -4,7 +4,7 @@ mod blossom;
 mod blossom_http;
 mod local;
 mod nsite;
-mod relay;
+pub(crate) mod relay;
 mod s3;
 mod sftp;
 mod sftp_wire;

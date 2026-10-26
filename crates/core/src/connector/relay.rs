@@ -5,10 +5,12 @@
 
 use std::io;
 use std::net::TcpStream;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use nostr::prelude::{Event, EventId, Filter, Kind, PublicKey};
+use nostr::prelude::{Event, EventId, Filter, Kind, MatchEventOptions, PublicKey};
 use serde_json::{Value, json};
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Error as WsError, Message, WebSocket};
@@ -18,6 +20,9 @@ use crate::net::{self, NetError, NetPolicy};
 
 /// The timeout for a real relay.
 pub(crate) const RELAY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How often a waiting connection looks at the stop flag.
+const STOP_POLL: Duration = Duration::from_millis(200);
 
 /// The answer of a relay to a published event.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,6 +197,45 @@ impl Connection {
         }
     }
 
+    /// Read the next JSON array message, and look at the stop flag at
+    /// short intervals. Gives `None` when the flag is set or the deadline
+    /// has passed.
+    fn receive_or_stop(&mut self, stop: &AtomicBool) -> Result<Option<Vec<Value>>, ConnectorError> {
+        loop {
+            if stop.load(Ordering::SeqCst) {
+                return Ok(None);
+            }
+            let left = self.deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                // The deadline is not an error for a wait.
+                return Ok(None);
+            }
+            self.control
+                .set_read_timeout(Some(left.min(STOP_POLL)))
+                .map_err(|_| {
+                    unavailable("Studio cannot set the timeout of the relay connection")
+                })?;
+            match self.socket.read() {
+                Ok(Message::Text(text)) => {
+                    if let Ok(Value::Array(message)) = serde_json::from_str::<Value>(text.as_str())
+                    {
+                        return Ok(Some(message));
+                    }
+                }
+                Ok(Message::Close(_)) | Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
+                    return Err(unavailable("the relay closed the connection"));
+                }
+                Ok(_) => {}
+                Err(WsError::Io(e))
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                    ) => {}
+                Err(_) => return Err(unavailable("the connection to the relay failed")),
+            }
+        }
+    }
+
     /// Close the connection. A failure here does not matter.
     fn finish(mut self) {
         let _ = self.socket.close(None);
@@ -290,6 +334,144 @@ pub(crate) fn publish(
     })();
     connection.finish();
     result
+}
+
+/// What [`exchange`] found.
+#[derive(Debug)]
+pub(crate) struct Exchange {
+    /// The first event that the check accepted.
+    pub event: Option<Event>,
+}
+
+/// Keep one subscription open on each relay until an event that matches
+/// the filter and passes `accept` comes, or until the deadline. When
+/// `send` is set, the function publishes it on the same connection after
+/// the subscription. The function drops each event with a bad ID or a bad
+/// signature. Thus a relay that does not store the event of the answer
+/// still gives the answer to the waiting client. The caller can set
+/// `stop` to end the wait early.
+///
+/// # Errors
+///
+/// Gives `NotPublic` when the policy refused each relay. Gives
+/// `Unavailable` when no relay connected, for other reasons. A deadline
+/// with no event is not an error: `event` is `None`.
+pub(crate) fn exchange(
+    relays: &[String],
+    filter: &Filter,
+    send: Option<&Event>,
+    policy: &NetPolicy,
+    deadline: Instant,
+    accept: &(dyn Fn(&Event) -> bool + Sync),
+    stop: &AtomicBool,
+) -> Result<Exchange, ConnectorError> {
+    let found: Mutex<Option<Event>> = Mutex::new(None);
+    let outcomes: Vec<Result<(), ConnectorError>> = thread::scope(|scope| {
+        let handles: Vec<_> = relays
+            .iter()
+            .map(|relay| {
+                let found = &found;
+                scope.spawn(move || {
+                    wait_on_relay(relay, filter, send, policy, deadline, accept, stop, found)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .unwrap_or_else(|_| Err(unavailable("the relay read stopped")))
+            })
+            .collect()
+    });
+    let event = found.into_inner().unwrap_or_default();
+    if event.is_none() && outcomes.iter().all(Result::is_err) {
+        let refused = outcomes
+            .into_iter()
+            .filter_map(Result::err)
+            .find(|e| e.kind() == ConnectorErrorKind::NotPublic);
+        return Err(refused.unwrap_or_else(|| unavailable("no relay answered")));
+    }
+    Ok(Exchange { event })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the thread of one relay needs the whole context of the exchange"
+)]
+fn wait_on_relay(
+    relay: &str,
+    filter: &Filter,
+    send: Option<&Event>,
+    policy: &NetPolicy,
+    deadline: Instant,
+    accept: &(dyn Fn(&Event) -> bool + Sync),
+    stop: &AtomicBool,
+    found: &Mutex<Option<Event>>,
+) -> Result<(), ConnectorError> {
+    let timeout = deadline.saturating_duration_since(Instant::now());
+    let mut connection = connect(relay, timeout, policy)?;
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let result = (|| {
+        connection.send(&json!(["REQ", id, filter]))?;
+        if let Some(event) = send {
+            connection.send(&json!(["EVENT", event]))?;
+        }
+        loop {
+            let Some(message) = connection.receive_or_stop(stop)? else {
+                return Ok(());
+            };
+            if message.first().and_then(Value::as_str) != Some("EVENT")
+                || message.get(1).and_then(Value::as_str) != Some(id.as_str())
+            {
+                continue;
+            }
+            let event = message
+                .get(2)
+                .and_then(|v| serde_json::from_value::<Event>(v.clone()).ok());
+            if let Some(event) = event
+                && event.verify().is_ok()
+                && filter.match_event(&event, MatchEventOptions::new())
+                && accept(&event)
+            {
+                if let Ok(mut slot) = found.lock()
+                    && slot.is_none()
+                {
+                    *slot = Some(event);
+                }
+                stop.store(true, Ordering::SeqCst);
+                return Ok(());
+            }
+        }
+    })();
+    let _ = connection.send(&json!(["CLOSE", id]));
+    connection.finish();
+    result
+}
+
+/// Check that the policy permits at least one of the relays.
+///
+/// # Errors
+///
+/// Gives `InvalidConfig` for an address that is not `ws://` or `wss://`.
+/// Gives `NotPublic` when the policy refuses the host of each relay.
+pub(crate) fn check_relays(relays: &[String], policy: &NetPolicy) -> Result<(), ConnectorError> {
+    let mut refused = None;
+    for relay in relays {
+        let (_, host, port) = parse_relay(relay)?;
+        match net::check_host(&host, port, policy) {
+            Ok(()) => return Ok(()),
+            Err(NetError::NotPublic { host }) => {
+                refused = Some(ConnectorError::new(
+                    ConnectorErrorKind::NotPublic,
+                    net::not_public_message(&host),
+                ));
+            }
+            Err(NetError::Io(_)) => {}
+        }
+    }
+    Err(refused.unwrap_or_else(|| unavailable("Studio cannot find the relay")))
 }
 
 /// True when `a` is newer than `b` (NIP-01): the larger `created_at`, and
@@ -412,6 +594,79 @@ mod tests {
     use std::net::TcpListener;
 
     const SHORT: Duration = Duration::from_secs(5);
+
+    #[test]
+    fn exchange_gets_an_event_that_comes_after_the_subscription() {
+        let relay = TestRelay::start();
+        let key = keys(7);
+        let filter = filter(&key);
+        let stop = AtomicBool::new(false);
+        let url = relay.url();
+        let later = event(&key, 100, "x", "late");
+        let sender = thread::spawn({
+            let relay_url = url.clone();
+            move || {
+                thread::sleep(Duration::from_millis(300));
+                let sent = publish(&relay_url, &later, SHORT, &NetPolicy::Open).expect("a send");
+                assert!(sent.accepted);
+            }
+        });
+        let found = exchange(
+            &[url],
+            &filter,
+            None,
+            &NetPolicy::Open,
+            Instant::now() + SHORT,
+            &|_| true,
+            &stop,
+        )
+        .expect("an exchange");
+        sender.join().expect("a thread");
+        assert_eq!(found.event.expect("an event").content, "late");
+    }
+
+    #[test]
+    fn exchange_gives_no_event_at_the_deadline_and_an_error_for_no_relay() {
+        let relay = TestRelay::start();
+        let stop = AtomicBool::new(false);
+        let filter = Filter::new().kind(Kind::Custom(1));
+        let found = exchange(
+            &[relay.url()],
+            &filter,
+            None,
+            &NetPolicy::Open,
+            Instant::now() + Duration::from_millis(400),
+            &|_| true,
+            &stop,
+        )
+        .expect("an exchange");
+        assert!(found.event.is_none());
+        let closed = TcpListener::bind("127.0.0.1:0").expect("a port");
+        let url = format!("ws://{}", closed.local_addr().expect("an address"));
+        drop(closed);
+        let error = exchange(
+            &[url],
+            &filter,
+            None,
+            &NetPolicy::Open,
+            Instant::now() + SHORT,
+            &|_| true,
+            &stop,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
+        let error = exchange(
+            &[relay.url()],
+            &filter,
+            None,
+            &NetPolicy::public(),
+            Instant::now() + SHORT,
+            &|_| true,
+            &stop,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::NotPublic);
+    }
 
     fn keys(byte: u8) -> Keys {
         Keys::new(SecretKey::from_slice(&[byte; 32]).expect("a secret key"))

@@ -8,7 +8,8 @@
 //! - `serve --data-dir PATH --public-origin URL`: run the server. The
 //!   options `--listen ADDR` (default `127.0.0.1:8080`), `--signup
 //!   open|invite` (default `invite`), `--client-address-header NAME`,
-//!   `--musicindex URL` and `--podcastindex-hub URL` are optional.
+//!   `--musicindex URL`, `--podcastindex-hub URL` and `--nip46-relay URL`
+//!   (more than one time, default `wss://relay.nsec.app`) are optional.
 //!   Limit options: `--session-idle-days` (default 7), `--session-max-days`
 //!   (default 30), `--vault-idle-minutes` (default 10), `--storage-limit-gib`
 //!   (default 10) and `--argon2-concurrency` (default 2).
@@ -25,6 +26,7 @@ mod auth;
 mod config;
 mod idle;
 mod limits;
+mod nip46_sessions;
 mod session;
 mod users;
 mod webauthn;
@@ -36,7 +38,7 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use studio_core::net::PublicRules;
+use studio_core::net::{NetPolicy, PublicRules};
 use studio_core::vault::OpenVault;
 
 use config::{Command, ServeOptions};
@@ -74,6 +76,11 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
     // A recovery sign-in with an unknown account opens this vault with the
     // given key. Nobody keeps the recovery key.
     drop(dummy.add_recovery_key().map_err(|e| e.to_string())?);
+    let nip46 = nip46_sessions::Nip46Sessions::new(
+        options.nip46_relays.clone(),
+        NetPolicy::Public(rules.clone()),
+        options.nip46_timeout,
+    );
     let users = Users::new(UserSettings {
         data_dir: options.data_dir.clone(),
         musicindex: options.musicindex.clone(),
@@ -94,6 +101,7 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         argon2_wait: options.argon2_wait,
         attempts: limits::Attempts::default(),
         client_header: options.client_address_header.clone(),
+        nip46,
     }))
 }
 

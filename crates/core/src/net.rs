@@ -177,6 +177,33 @@ pub fn connect(
     })
 }
 
+/// Resolve a host name and check that the policy permits at least one of its
+/// addresses. The function opens no connection.
+///
+/// # Errors
+///
+/// Gives [`NetError::NotPublic`] when the policy refuses each address.
+/// Gives [`NetError::Io`] when the name has no address.
+pub fn check_host(host: &str, port: u16, policy: &NetPolicy) -> Result<(), NetError> {
+    let resolved: Vec<SocketAddr> = (host, port)
+        .to_socket_addrs()
+        .map_err(NetError::Io)?
+        .collect();
+    if resolved.is_empty() {
+        return Err(NetError::Io(io::Error::new(
+            io::ErrorKind::NotFound,
+            "the name has no address",
+        )));
+    }
+    if resolved.iter().any(|address| policy.permits(*address)) {
+        Ok(())
+    } else {
+        Err(NetError::NotPublic {
+            host: host.to_owned(),
+        })
+    }
+}
+
 /// The same as [`connect`], with the resolution as a parameter. A test
 /// uses this to give the addresses of a name.
 pub(crate) fn connect_with(

@@ -2,7 +2,7 @@
 //! ADR 0056 items 4, 7 and 8).
 
 use axum::Router;
-use axum::extract::{Request, State};
+use axum::extract::{Path, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
@@ -14,6 +14,10 @@ use serde_json::json;
 use studio_api::ui_router;
 use studio_core::vault::{MIN_PASSPHRASE_CHARS, passphrase_strength};
 
+use std::sync::Arc;
+use std::time::Instant;
+
+use studio_core::nip46::{Nip46Error, RemoteSigner};
 use zeroize::Zeroizing;
 
 use crate::accounts::{self, PasskeyRow, SignUpError};
@@ -34,6 +38,13 @@ pub fn server_router(state: &Shared) -> Router {
         .route("/auth/v1/strength", post(strength))
         .route("/auth/v1/challenge", post(challenge))
         .route("/auth/v1/nostr", post(nostr_sign_in))
+        .route("/auth/v1/nip46/connect", post(nip46_connect))
+        .route("/auth/v1/nip46/unlock", post(nip46_unlock))
+        .route(
+            "/auth/v1/nip46/{connection}",
+            get(nip46_state).delete(nip46_stop),
+        )
+        .route("/auth/v1/nip46/{connection}/signin", post(nip46_sign_in))
         .route("/auth/v1/recovery", post(recovery_sign_in))
         .route("/auth/v1/passkey/options", post(passkey_sign_in_options))
         .route("/auth/v1/passkey", post(passkey_sign_in))
@@ -96,6 +107,13 @@ fn start_session(
     start_session_with(state, account_id, false, status, body)
 }
 
+/// A NIP-46 signer that signed the sign-in event. The new session keeps it.
+struct SignerLink {
+    /// The connection ID. The ID stops working when the session starts.
+    connection: String,
+    signer: Arc<RemoteSigner>,
+}
+
 /// Make a session with or without the limit of a recovery sign-in, and
 /// give the response with its cookie.
 fn start_session_with(
@@ -103,17 +121,36 @@ fn start_session_with(
     account_id: i64,
     restricted: bool,
     status: StatusCode,
+    body: serde_json::Value,
+) -> Response {
+    start_session_full(state, account_id, restricted, None, status, body)
+}
+
+/// The same as `start_session_with`. A signer link moves the NIP-46 signer
+/// to the new session.
+fn start_session_full(
+    state: &Shared,
+    account_id: i64,
+    restricted: bool,
+    link: Option<SignerLink>,
+    status: StatusCode,
     mut body: serde_json::Value,
 ) -> Response {
     let Ok(token) = accounts::random_hex(32) else {
         return internal("the random source is not available");
     };
+    let hash = accounts::sha256_hex(&token);
     if state
         .accounts
-        .create_session(&accounts::sha256_hex(&token), account_id, restricted)
+        .create_session(&hash, account_id, restricted)
         .is_err()
     {
         return internal("the account database failed");
+    }
+    if let Some(link) = link {
+        state
+            .nip46
+            .bind(&link.connection, &hash, account_id, link.signer);
     }
     body["csrf"] = json!(csrf_of(&token));
     with_cookie(
@@ -167,6 +204,7 @@ async fn get_session(State(state): State<Shared>, request: Request) -> Response 
         "pubkey": pubkey,
         "vault": vault,
         "recovery": session.restricted,
+        "signer": state.nip46.has_signer(&accounts::sha256_hex(&session.token)),
     }))
     .into_response()
 }
@@ -376,9 +414,9 @@ async fn sign_in(State(state): State<Shared>, request: Request) -> Response {
 
 async fn sign_out(State(state): State<Shared>, request: Request) -> Response {
     if let Ok(Resolved::Active(session)) = session::resolve(&state, request.headers()).await {
-        let _ = state
-            .accounts
-            .delete_session(&accounts::sha256_hex(&session.token));
+        let hash = accounts::sha256_hex(&session.token);
+        let _ = state.accounts.delete_session(&hash);
+        state.nip46.remove_session(&hash);
         // The last session of the user ends here, so the vault locks
         // (ADR 0055 item 16).
         session::lock_if_no_session(&state, session.account_id).await;
@@ -461,6 +499,7 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
         eprintln!("studio-server: a user folder was not removed: {error:?}");
     }
     state.users.forget(session.account_id).await;
+    state.nip46.remove_account(session.account_id);
     with_cookie(StatusCode::NO_CONTENT.into_response(), &cleared_cookie())
 }
 
@@ -562,6 +601,30 @@ async fn nostr_sign_in(State(state): State<Shared>, request: Request) -> Respons
         Err(response) => return response,
     };
     let event = serde_json::from_value::<nostr::prelude::Event>(body.event).ok();
+    complete_nostr(
+        &state,
+        &address,
+        event,
+        body.invite.as_deref(),
+        body.recovery_key,
+        None,
+    )
+    .await
+}
+
+/// The steps that both Nostr sign-ins share: the counters, the checks of
+/// the event, the challenge that works one time, and the sign-in or the
+/// sign-up of the key. A NIP-07 sign-in and a NIP-46 sign-in call it. A
+/// signer link means that the signer is a NIP-46 signer. The server then
+/// keeps it for the session, and a new account gets its Nostr wrapper from it.
+async fn complete_nostr(
+    state: &Shared,
+    address: &str,
+    event: Option<nostr::prelude::Event>,
+    invite: Option<&str>,
+    recovery_key: bool,
+    link: Option<SignerLink>,
+) -> Response {
     // The counter uses the public key only when the signature is correct.
     // Thus a person cannot block the account of a different key. An event
     // with no correct signature counts for the address only.
@@ -572,11 +635,11 @@ async fn nostr_sign_in(State(state): State<Shared>, request: Request) -> Respons
             || format!("nostr-unverified:{address}"),
             |event| event.pubkey.to_hex(),
         );
-    if state.attempts.blocked(&account_key, &address) {
+    if state.attempts.blocked(&account_key, address) {
         return limits::too_many_attempts();
     }
     let failed = |response: Response| {
-        state.attempts.record_failure(&account_key, &address);
+        state.attempts.record_failure(&account_key, address);
         response
     };
     let Some(event) = event else {
@@ -584,7 +647,7 @@ async fn nostr_sign_in(State(state): State<Shared>, request: Request) -> Respons
     };
     // The server removes the challenge after the checks, so that a wrong
     // event does not use a challenge.
-    let Some(challenge) = check_event(&state, &event) else {
+    let Some(challenge) = check_event(state, &event) else {
         return failed(event_invalid());
     };
     match state.accounts.take_challenge(challenge) {
@@ -597,14 +660,20 @@ async fn nostr_sign_in(State(state): State<Shared>, request: Request) -> Respons
         return internal("the account database failed");
     };
     if let Some((account_id, folder)) = known {
-        return nostr_known(&state, account_id, &folder).await;
+        return nostr_known(state, account_id, &folder, &pubkey, link).await;
     }
-    nostr_new(&state, &pubkey, body.invite.as_deref(), body.recovery_key).await
+    nostr_new(state, &pubkey, invite, recovery_key, link).await
 }
 
 /// A sign-in of a known key. The vault stays closed when its file exists.
 /// An account with no vault file gets a new vault with no wrapper.
-async fn nostr_known(state: &Shared, account_id: i64, folder: &str) -> Response {
+async fn nostr_known(
+    state: &Shared,
+    account_id: i64,
+    folder: &str,
+    pubkey: &str,
+    link: Option<SignerLink>,
+) -> Response {
     let user = match state.users.get(account_id, folder).await {
         Ok(user) => user,
         Err(error) => return error.into_response(),
@@ -613,19 +682,33 @@ async fn nostr_known(state: &Shared, account_id: i64, folder: &str) -> Response 
         Ok(current) => current,
         Err(error) => return error.into_response(),
     };
-    if current == studio_api::VaultState::Absent
-        && let Err(error) = user.handle.create_vault(None, false).await
-        && error.into_response().status() != StatusCode::CONFLICT
-    {
-        return internal("the vault could not be made");
+    if current == studio_api::VaultState::Absent {
+        match user.handle.create_vault(None, false).await {
+            Ok(_) => {
+                // A NIP-46 signer gives the wrapper of the new vault.
+                if let Some(link) = &link
+                    && let Err(response) =
+                        add_signer_wrapper(&user.handle, &link.signer, pubkey).await
+                {
+                    return response;
+                }
+            }
+            Err(error) => {
+                if error.into_response().status() != StatusCode::CONFLICT {
+                    return internal("the vault could not be made");
+                }
+            }
+        }
     }
     let vault = match user.handle.vault_state().await {
         Ok(vault) => vault,
         Err(error) => return error.into_response(),
     };
-    start_session(
+    start_session_full(
         state,
         account_id,
+        false,
+        link,
         StatusCode::OK,
         json!({ "new_account": false, "recovery_key": null, "vault": vault }),
     )
@@ -637,6 +720,7 @@ async fn nostr_new(
     pubkey: &str,
     invite: Option<&str>,
     recovery_key: bool,
+    link: Option<SignerLink>,
 ) -> Response {
     let invite = match state.signup {
         crate::config::Signup::Open => None,
@@ -682,16 +766,25 @@ async fn nostr_new(
             .set_library_root(&state.users.folder_path(&folder).join("library"))
             .await
             .map_err(IntoResponse::into_response)?;
-        user.handle
+        let recovery = user
+            .handle
             .create_vault(None, recovery_key)
             .await
-            .map_err(IntoResponse::into_response)
+            .map_err(IntoResponse::into_response)?;
+        // The vault stays open after a sign-up. A NIP-46 signer encrypts the
+        // vault key, and the server keeps the result as the Nostr wrapper.
+        if let Some(link) = &link {
+            add_signer_wrapper(&user.handle, &link.signer, pubkey).await?;
+        }
+        Ok(recovery)
     }
     .await;
     match made {
-        Ok(recovery) => start_session(
+        Ok(recovery) => start_session_full(
             state,
             account_id,
+            false,
+            link,
             StatusCode::CREATED,
             json!({ "new_account": true, "recovery_key": recovery, "vault": "open" }),
         ),
@@ -701,6 +794,411 @@ async fn nostr_new(
             let _ = std::fs::remove_dir_all(state.users.folder_path(&folder));
             response
         }
+    }
+}
+
+/// How long a state request waits for a change (task 035c).
+const NIP46_POLL: std::time::Duration = if cfg!(test) {
+    std::time::Duration::from_secs(1)
+} else {
+    std::time::Duration::from_secs(25)
+};
+
+/// The error code of a NIP-46 error. The text names no secret.
+fn nip46_code(error: &Nip46Error) -> &'static str {
+    match error {
+        Nip46Error::NotPublic(_) => "address_not_public",
+        Nip46Error::Timeout => "signer_timeout",
+        Nip46Error::Unavailable => "signer_unavailable",
+        Nip46Error::InvalidAddress => "bunker_invalid",
+        Nip46Error::Rejected(_) => "signer_rejected",
+        Nip46Error::Invalid(_) => "signer_invalid",
+    }
+}
+
+/// The response for a NIP-46 error (task 035c).
+fn nip46_failure(error: &Nip46Error) -> Response {
+    let (status, message) = match error {
+        Nip46Error::NotPublic(message) => (StatusCode::UNPROCESSABLE_ENTITY, message.as_str()),
+        Nip46Error::Timeout => (
+            StatusCode::GATEWAY_TIMEOUT,
+            "the signer gave no answer in time",
+        ),
+        Nip46Error::Unavailable => (
+            StatusCode::BAD_GATEWAY,
+            "Studio cannot reach the relay of the signer",
+        ),
+        Nip46Error::InvalidAddress => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "the bunker address is not correct",
+        ),
+        Nip46Error::Rejected(_) => (StatusCode::FORBIDDEN, "the signer refused the request"),
+        Nip46Error::Invalid(_) => (StatusCode::BAD_GATEWAY, "the signer gave a wrong answer"),
+    };
+    failure(status, nip46_code(error), message)
+}
+
+/// Run a blocking call to a signer on a blocking thread. No lock of the
+/// server is held during the call.
+async fn blocking_signer<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, Nip46Error> + Send + 'static,
+) -> Result<T, Response> {
+    match tokio::task::spawn_blocking(work).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(nip46_failure(&error)),
+        Err(_) => Err(internal("the signer task failed")),
+    }
+}
+
+/// Ask the signer to encrypt the vault key to the public key of the user,
+/// and keep the result as the Nostr wrapper. The vault must be open. The
+/// vault key goes to the signer only, inside the NIP-44 message.
+async fn add_signer_wrapper(
+    handle: &studio_api::WorkspaceHandle,
+    signer: &Arc<RemoteSigner>,
+    pubkey_hex: &str,
+) -> Result<(), Response> {
+    let key = handle
+        .signer_key()
+        .await
+        .map_err(IntoResponse::into_response)?;
+    let pubkey = nostr::prelude::PublicKey::from_hex(pubkey_hex)
+        .map_err(|_| internal("the public key is not correct"))?;
+    let signer = Arc::clone(signer);
+    // The signer must decrypt the ciphertext to the same vault key. Else the
+    // wrapper could lock the user out of the vault. Any failure here gives
+    // 502 `signer_invalid`, and the caller does not keep the wrapper.
+    let invalid = || {
+        nip46_failure(&Nip46Error::Invalid(
+            "the signer did not return the vault key",
+        ))
+    };
+    let (ciphertext, same) = blocking_signer(move || {
+        let ciphertext = signer.nip44_encrypt(&pubkey, &key)?;
+        let plain = signer.nip44_decrypt(&pubkey, &ciphertext)?;
+        Ok((ciphertext, session::same(&plain, &key)))
+    })
+    .await
+    .map_err(|_| invalid())?;
+    if !same {
+        return Err(invalid());
+    }
+    handle
+        .add_nostr_wrapper(pubkey_hex, &ciphertext)
+        .await
+        .map_err(IntoResponse::into_response)
+}
+
+#[derive(Deserialize)]
+struct Nip46Connect {
+    #[serde(default)]
+    bunker: Option<Zeroizing<String>>,
+}
+
+/// Start a NIP-46 connection: a `nostrconnect://` address with no body
+/// field, or a `bunker://` address (ADR 0056 item 13).
+async fn nip46_connect(State(state): State<Shared>, request: Request) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
+    let body: Nip46Connect = match read_json(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    let bunker = body
+        .bunker
+        .as_ref()
+        .map(|text| text.trim())
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned);
+    match bunker {
+        None => nip46_start_nostrconnect(&state, &address).await,
+        Some(uri) => nip46_connect_bunker(&state, Zeroizing::new(uri)).await,
+    }
+}
+
+async fn nip46_start_nostrconnect(state: &Shared, address: &str) -> Response {
+    let relays = state.nip46.relays().to_vec();
+    let policy = state.nip46.policy().clone();
+    let (pending, uri) =
+        match blocking_signer(move || RemoteSigner::nostrconnect(&relays, &policy)).await {
+            Ok(made) => made,
+            Err(response) => return response,
+        };
+    let Some(connection) = state.nip46.insert_pending(pending.canceller(), address) else {
+        return limits::too_many_attempts();
+    };
+    // The wait runs on a blocking thread, with no lock held. The user can
+    // end it, and it ends after five minutes.
+    let task_state = Arc::clone(state);
+    let task_connection = connection.clone();
+    let timeout = state.nip46.timeout();
+    tokio::task::spawn_blocking(move || {
+        let result = pending
+            .wait(Instant::now() + crate::nip46_sessions::EXPIRY)
+            .and_then(|signer| {
+                let signer = signer.with_request_timeout(timeout);
+                let pubkey = signer.get_public_key()?.to_hex();
+                Ok((Arc::new(signer), pubkey))
+            })
+            .map_err(|error| nip46_code(&error));
+        task_state.nip46.finish_pending(&task_connection, result);
+    });
+    axum::Json(json!({
+        "connection": connection,
+        "uri": uri,
+        "qr_svg": studio_api::qr_svg(&uri),
+    }))
+    .into_response()
+}
+
+async fn nip46_connect_bunker(state: &Shared, uri: Zeroizing<String>) -> Response {
+    let policy = state.nip46.policy().clone();
+    let timeout = state.nip46.timeout();
+    let connected = blocking_signer(move || {
+        let signer = RemoteSigner::bunker(&uri, &policy, Instant::now() + timeout)?
+            .with_request_timeout(timeout);
+        let pubkey = signer.get_public_key()?.to_hex();
+        Ok((Arc::new(signer), pubkey))
+    })
+    .await;
+    let (signer, pubkey) = match connected {
+        Ok(connected) => connected,
+        Err(response) => return response,
+    };
+    match state.nip46.insert_connected(signer, pubkey.clone()) {
+        Some(connection) => {
+            axum::Json(json!({ "connection": connection, "pubkey": pubkey })).into_response()
+        }
+        None => limits::too_many_attempts(),
+    }
+}
+
+fn connection_unknown() -> Response {
+    failure(
+        StatusCode::NOT_FOUND,
+        "connection_unknown",
+        "the connection does not exist or has ended",
+    )
+}
+
+/// The state of a connection. The request waits a maximum of 25 seconds for
+/// a change.
+async fn nip46_state(State(state): State<Shared>, Path(connection): Path<String>) -> Response {
+    let deadline = tokio::time::Instant::now() + NIP46_POLL;
+    loop {
+        // The future exists before the check, so that no change is missed.
+        let changed = state.nip46.changed();
+        tokio::pin!(changed);
+        changed.as_mut().enable();
+        let Some(snapshot) = state.nip46.snapshot(&connection) else {
+            return connection_unknown();
+        };
+        let answer = || {
+            axum::Json(json!({
+                "state": snapshot.state,
+                "pubkey": snapshot.pubkey,
+                "error": snapshot.error,
+            }))
+            .into_response()
+        };
+        if snapshot.state != "pending" {
+            return answer();
+        }
+        if tokio::time::timeout_at(deadline, changed).await.is_err() {
+            return answer();
+        }
+    }
+}
+
+/// End a connection that the user does not want.
+async fn nip46_stop(State(state): State<Shared>, Path(connection): Path<String>) -> Response {
+    if state.nip46.stop(&connection) {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        connection_unknown()
+    }
+}
+
+#[derive(Deserialize)]
+struct Nip46SignIn {
+    #[serde(default)]
+    invite: Option<String>,
+    #[serde(default)]
+    recovery_key: bool,
+}
+
+/// Sign up or sign in through a connected NIP-46 signer. The server makes
+/// the event of ADR 0056 item 6, and the signer signs it.
+async fn nip46_sign_in(
+    State(state): State<Shared>,
+    Path(connection): Path<String>,
+    request: Request,
+) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
+    let body: Nip46SignIn = match read_json(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    // The key of the signer is not checked yet, so only the address counts.
+    if state
+        .attempts
+        .blocked(&format!("nostr-unverified:{address}"), &address)
+    {
+        return limits::too_many_attempts();
+    }
+    let (signer, pubkey) = match state.nip46.checkout(&connection) {
+        Ok(taken) => taken,
+        Err(crate::nip46_sessions::Checkout::Unknown) => return connection_unknown(),
+        Err(crate::nip46_sessions::Checkout::NotReady) => {
+            return failure(
+                StatusCode::CONFLICT,
+                "connection_not_ready",
+                "the signer is not connected",
+            );
+        }
+        Err(crate::nip46_sessions::Checkout::Busy) => {
+            return failure(
+                StatusCode::CONFLICT,
+                "connection_busy",
+                "another sign-in uses this signer",
+            );
+        }
+    };
+    let response = nip46_sign_in_with(&state, &address, &body, &connection, &signer, &pubkey).await;
+    if !response.status().is_success() {
+        state.nip46.release(&connection);
+    }
+    response
+}
+
+async fn nip46_sign_in_with(
+    state: &Shared,
+    address: &str,
+    body: &Nip46SignIn,
+    connection: &str,
+    signer: &Arc<RemoteSigner>,
+    pubkey: &str,
+) -> Response {
+    let challenge = match state.accounts.create_challenge() {
+        Ok(Some((challenge, _))) => challenge,
+        Ok(None) => return limits::too_many_attempts(),
+        Err(_) => return internal("the account database failed"),
+    };
+    let Ok(author) = nostr::prelude::PublicKey::from_hex(pubkey) else {
+        return internal("the public key is not correct");
+    };
+    let tags = [
+        vec![
+            "u".to_owned(),
+            format!("{}/auth/v1/nostr", state.origin.text),
+        ],
+        vec!["method".to_owned(), "POST".to_owned()],
+        vec!["challenge".to_owned(), challenge],
+    ]
+    .into_iter()
+    .filter_map(|parts| nostr::prelude::Tag::parse(parts).ok())
+    .collect::<Vec<_>>();
+    let unsigned = nostr::prelude::UnsignedEvent::new(
+        author,
+        nostr::prelude::Timestamp::from(accounts::now().unsigned_abs()),
+        nostr::prelude::Kind::Custom(KIND_HTTP_AUTH),
+        tags,
+        "",
+    );
+    let for_signer = Arc::clone(signer);
+    let event = match blocking_signer(move || for_signer.sign_event(unsigned)).await {
+        Ok(event) => event,
+        Err(response) => return response,
+    };
+    let link = SignerLink {
+        connection: connection.to_owned(),
+        signer: Arc::clone(signer),
+    };
+    complete_nostr(
+        state,
+        address,
+        Some(event),
+        body.invite.as_deref(),
+        body.recovery_key,
+        Some(link),
+    )
+    .await
+}
+
+/// Open the vault through the signer of the session (ADR 0056 item 15).
+async fn nip46_unlock(State(state): State<Shared>, request: Request) -> Response {
+    let session = match session::active_session(&state, request.headers()).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if let Err(response) = session::check_csrf(&session, request.headers()) {
+        return response;
+    }
+    if let Err(response) =
+        session::check_restricted(&session, request.method(), request.uri().path())
+    {
+        return response;
+    }
+    let Some(signer) = state.nip46.signer_of(&accounts::sha256_hex(&session.token)) else {
+        return failure(
+            StatusCode::CONFLICT,
+            "signer_not_connected",
+            "this session has no connected signer",
+        );
+    };
+    let (Ok(Some(pubkey)), Ok(Some(folder))) = (
+        state.accounts.pubkey_of(session.account_id),
+        state.accounts.folder_of(session.account_id),
+    ) else {
+        return failure(
+            StatusCode::CONFLICT,
+            "signer_not_connected",
+            "the account has no Nostr public key",
+        );
+    };
+    let Ok(key) = nostr::prelude::PublicKey::from_hex(&pubkey) else {
+        return internal("the public key is not correct");
+    };
+    let user = match state.users.get(session.account_id, &folder).await {
+        Ok(user) => user,
+        Err(error) => return error.into_response(),
+    };
+    match user.handle.vault_state().await {
+        Ok(studio_api::VaultState::Open) => {
+            return axum::Json(json!({ "vault": "open" })).into_response();
+        }
+        Ok(_) => {}
+        Err(error) => return error.into_response(),
+    }
+    let ciphertext = match user.handle.nostr_ciphertext(&pubkey).await {
+        Ok(Some(ciphertext)) => ciphertext,
+        Ok(None) => {
+            return failure(
+                StatusCode::NOT_FOUND,
+                "no_nostr_wrapper",
+                "the vault has no Nostr wrapper for this key",
+            );
+        }
+        Err(error) => return error.into_response(),
+    };
+    let plain = match blocking_signer(move || {
+        if signer.get_public_key()? != key {
+            return Err(Nip46Error::Invalid("the signer has a different key"));
+        }
+        signer.nip44_decrypt(&key, &ciphertext)
+    })
+    .await
+    {
+        Ok(plain) => plain,
+        Err(response) => return response,
+    };
+    match user.handle.unlock_with_key(&plain).await {
+        Ok(()) => axum::Json(json!({ "vault": "open" })).into_response(),
+        Err(error) if error.code() == "wrong_key" => failure(
+            StatusCode::UNAUTHORIZED,
+            "wrong_key",
+            "the key does not open the vault",
+        ),
+        Err(error) => error.into_response(),
     }
 }
 

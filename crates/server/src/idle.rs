@@ -36,6 +36,11 @@ pub async fn sweep(state: &Shared) {
         eprintln!("studio-server: the session cleanup failed: {message}");
     }
     state.attempts.prune();
+    // A signer goes away with its session. A connection that nobody used
+    // goes away after five minutes.
+    state
+        .nip46
+        .sweep(|hash| matches!(state.accounts.session(hash), Ok(Some(_))));
     for (id, user) in state.users.snapshot().await {
         let active = state
             .accounts

@@ -25,6 +25,7 @@ pub mod migrate;
 pub mod msp;
 pub mod musicindex;
 pub mod net;
+pub mod nip46;
 pub mod nostr_events;
 pub mod pipeline;
 pub mod playlist;

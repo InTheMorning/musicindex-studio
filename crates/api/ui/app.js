@@ -6,6 +6,7 @@ import {
   recoveryAccount, addMethodChoices, recoveryErrorText,
   toBase64Url, creationOptions, requestOptions, registrationPayload, assertionPayload,
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
+  nip46State, nip46ErrorText, isBunkerAddress, qrSource,
 } from './account.js';
 import { isLiveItem } from './live.js';
 import { useDraft } from './draft.js';
@@ -2626,7 +2627,7 @@ function Shell({ vault, onLock }) {
 // code of the auth routes.
 function AuthNotice({ error }) {
   if (!error) return null;
-  const text = error.code === 'offline' || error.code === 'signer' ? error.message : authErrorText(error.code);
+  const text = error.code === 'offline' || error.code === 'signer' ? error.message : nip46ErrorText(error.code);
   return html`<div class="notice error" role="alert">${text}</div>`;
 }
 
@@ -2661,6 +2662,125 @@ async function signerAuth({ invite, recoveryKey }) {
   }
   csrfToken = result.csrf;
   return result;
+}
+
+// ---- A remote signer through NIP-46 (ADR 0056 items 12 to 16) ----
+
+// The wait for a signer. The server answers a request for the state after a
+// change or after 25 seconds. The UI asks again until the state changes.
+async function nip46Wait(connection, alive) {
+  while (alive()) {
+    const answer = await exchange(`/auth/v1/nip46/${connection}`, {}, { method: 'GET' });
+    const view = nip46State(answer);
+    if (view.phase !== 'waiting') return view;
+  }
+  return null;
+}
+
+// End a connection that the user does not use. A failure does not matter.
+function nip46Stop(connection) {
+  exchange(`/auth/v1/nip46/${connection}`, csrfToken ? { 'X-Studio-CSRF': csrfToken } : {}, { method: 'DELETE' }).catch(() => {});
+}
+
+// The page that connects a remote signer and then signs in with it. The page
+// starts a `nostrconnect://` connection at once, and the user can paste a
+// bunker address instead. `onDone` follows a sign-in, and `onBack` follows
+// the Stop button.
+function Nip46Page({ title, invite, recoveryKey, onDone, onBack }) {
+  const [link, setLink] = useState(null);
+  const [bunker, setBunker] = useState('');
+  const [phase, setPhase] = useState('starting');
+  const qr = useAction();
+  const paste = useAction();
+  const current = useRef(null);
+  const alive = useRef(true);
+
+  // Sign in through a connected signer. The connection ID then stops working.
+  const signIn = async (connection) => {
+    setPhase('signing');
+    try {
+      const result = await authCall(`/nip46/${connection}/signin`, { body: { invite: invite || null, recovery_key: !!recoveryKey } });
+      current.current = null;
+      csrfToken = result.csrf;
+      onDone(result.recovery_key || null);
+    } catch (e) {
+      setPhase('failed');
+      throw e;
+    }
+  };
+
+  const start = () => qr.run(async () => {
+    setPhase('starting');
+    const made = await authCall('/nip46/connect', { body: {} });
+    current.current = made.connection;
+    setLink(made);
+    setPhase('waiting');
+    const mine = () => alive.current && current.current === made.connection;
+    let view;
+    try {
+      view = await nip46Wait(made.connection, mine);
+    } catch (e) {
+      // The user ended this connection, for example with a bunker address.
+      if (!mine()) return;
+      throw e;
+    }
+    if (!view) return;
+    if (view.phase === 'failed') {
+      setPhase('failed');
+      throw new ApiError(0, view.error, nip46ErrorText(view.error));
+    }
+    await signIn(made.connection);
+  });
+
+  useEffect(() => {
+    alive.current = true;
+    start();
+    return () => {
+      alive.current = false;
+      if (current.current) nip46Stop(current.current);
+    };
+  }, []);
+
+  const connectBunker = (event) => {
+    event.preventDefault();
+    paste.run(async () => {
+      const old = current.current;
+      current.current = null;
+      if (old) nip46Stop(old);
+      setPhase('connecting');
+      let made;
+      try {
+        made = await authCall('/nip46/connect', { body: { bunker: bunker.trim() } });
+      } catch (e) {
+        setPhase('failed');
+        throw e;
+      }
+      current.current = made.connection;
+      await signIn(made.connection);
+    });
+  };
+
+  const waiting = phase === 'waiting' || phase === 'starting';
+  return html`<main class="center"><div class="card">
+    <${Brand} />
+    <div><h1>${title}</h1>
+      <p>Scan the QR code with your signer app. On a phone, open the link instead. Or paste a bunker address from your signer.</p></div>
+    ${link && html`<img class="qr" alt="QR code of the signer link" src=${qrSource(link.qr_svg)} width="240" height="240" />`}
+    ${link && html`<div class="actions"><a class="button action" href=${link.uri}>Open in the signer app</a></div>`}
+    <form class="form" onSubmit=${connectBunker}>
+      <${Field} id="nip46-bunker" label="Bunker address" autocomplete="off" spellcheck="false"
+        placeholder="bunker://…" value=${bunker} onInput=${(e) => setBunker(e.target.value)} />
+      <div class="actions"><button class="button primary" type="submit" disabled=${paste.busy || phase === 'signing' || !isBunkerAddress(bunker)}>Connect</button></div>
+    </form>
+    ${phase === 'waiting' && html`<p role="status">Waiting for the signer…</p>`}
+    ${phase === 'connecting' && html`<p role="status">Connecting to the signer…</p>`}
+    ${phase === 'signing' && html`<p role="status">Signing in. Allow the request in your signer app.</p>`}
+    <${AuthNotice} error=${paste.error || qr.error} />
+    <div class="actions">
+      ${(waiting || phase === 'failed') && html`<button class="button" type="button" onClick=${onBack}>${waiting ? 'Stop' : 'Back'}</button>`}
+      ${phase === 'failed' && html`<button class="button action" type="button" onClick=${start}>Try again</button>`}
+    </div>
+  </div></main>`;
 }
 
 // True when the browser can make and use passkeys (ADR 0056 item 20).
@@ -2720,6 +2840,7 @@ async function passkeyAuth() {
 function SignInPage({ onDone, onSignUp, onRecovery }) {
   const [email, setEmail] = useState('');
   const [passphrase, setPassphrase] = useState('');
+  const [remote, setRemote] = useState(false);
   const { busy, error, run } = useAction();
   const submit = (event) => {
     event.preventDefault();
@@ -2738,6 +2859,10 @@ function SignInPage({ onDone, onSignUp, onRecovery }) {
     csrfToken = result.csrf;
     onDone(null);
   });
+  if (remote) {
+    return html`<${Nip46Page} title="Sign in with Amber or a bunker" invite=${null} recoveryKey=${false}
+      onDone=${onDone} onBack=${() => setRemote(false)} />`;
+  }
   return html`<main class="center"><form class="card" onSubmit=${submit}>
     <${Brand} />
     <div><h1>Sign in</h1></div>
@@ -2750,6 +2875,7 @@ function SignInPage({ onDone, onSignUp, onRecovery }) {
       <button class="button primary" type="submit" disabled=${busy || !email.trim() || !passphrase}>${busy ? 'Signing in…' : 'Sign in'}</button>
       ${window.nostr && html`<button class="button action" type="button" disabled=${busy} onClick=${signer}>Sign in with a signer extension</button>`}
       ${hasPasskeys && html`<button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Sign in with a passkey</button>`}
+      <button class="button action" type="button" disabled=${busy} onClick=${() => setRemote(true)}>Sign in with Amber or a bunker</button>
     </div>
     <button class="button link" type="button" onClick=${onSignUp}>Make an account</button>
     <button class="button link" type="button" onClick=${onRecovery}>Sign in with the recovery key</button>
@@ -2864,6 +2990,7 @@ function SignUpPage({ signup, onDone, onSignIn }) {
   const [passphrase, setPassphrase] = useState('');
   const [invite, setInvite] = useState('');
   const [recovery, setRecovery] = useState(true);
+  const [remote, setRemote] = useState(false);
   const { busy, error, run } = useAction();
   const strength = useStrength(passphrase, true);
   const needInvite = signup === 'invite';
@@ -2886,6 +3013,10 @@ function SignUpPage({ signup, onDone, onSignIn }) {
     const result = await signerAuth({ invite: needInvite ? invite.trim() : null, recoveryKey: recovery });
     onDone(result.recovery_key || null);
   });
+  if (remote) {
+    return html`<${Nip46Page} title="Sign up with Amber or a bunker" invite=${needInvite ? invite.trim() : null} recoveryKey=${recovery}
+      onDone=${onDone} onBack=${() => setRemote(false)} />`;
+  }
   return html`<main class="center"><form class="card" onSubmit=${submit} noValidate>
     <${Brand} />
     <div><h1>Make an account</h1>
@@ -2905,6 +3036,8 @@ function SignUpPage({ signup, onDone, onSignIn }) {
       <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the account…' : 'Make the account'}</button>
       ${window.nostr && html`<button class="button action" type="button" disabled=${busy || (needInvite && invite.trim() === '')}
         onClick=${signer}>Sign up with a signer extension</button>`}
+      <button class="button action" type="button" disabled=${busy || (needInvite && invite.trim() === '')}
+        onClick=${() => setRemote(true)}>Sign up with Amber or a bunker</button>
     </div>
     <button class="button link" type="button" onClick=${onSignIn}>I have an account</button>
   </form></main>`;
@@ -2962,6 +3095,10 @@ function UnlockSheet({ session, onDone }) {
     await passkeyAuth();
     finish(true);
   });
+  const byRemoteSigner = () => run(async () => {
+    await authCall('/nip46/unlock', { body: {} });
+    finish(true);
+  });
   const passError = splitError(error, ['wrong_key']);
   const signerError = error && error.code === 'wrong_key' && methods.includes('nip07') && !methods.includes('passphrase') ? error : null;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="unlock-title" onClose=${() => finish(false)}>
@@ -2978,6 +3115,9 @@ function UnlockSheet({ session, onDone }) {
       </form>`}
       ${methods.includes('nip07') && html`<div class="actions">
         <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Unlock with a signer extension</button></div>`}
+      ${methods.includes('nip46') && html`<div class="actions">
+        <button class="button action" type="button" disabled=${busy} onClick=${byRemoteSigner}>Use the remote signer</button></div>
+        ${busy && html`<p class="hint" role="status">Allow the request in your signer app.</p>`}`}
       ${methods.includes('passkey') && html`<div class="actions">
         <button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Use a passkey</button></div>`}
       ${methods.length === 0 && html`<p class="hint">This account opens with a Nostr signer. Studio found no signer extension in this browser.</p>`}

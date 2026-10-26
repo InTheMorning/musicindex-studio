@@ -1,8 +1,9 @@
 //! A small Nostr relay for tests. It runs in the test process.
 //!
 //! It has the NIP-01 messages `EVENT`, `REQ` and `CLOSE`, with the storage
-//! rules of NIP-01. It has no live subscriptions: a `REQ` gets the stored
-//! events and then `EOSE`.
+//! rules of NIP-01. A `REQ` gets the stored events and then `EOSE`. The
+//! subscription stays open until a `CLOSE`, and the relay sends each new
+//! stored event that matches it.
 
 use std::io;
 use std::net::{TcpListener, TcpStream};
@@ -25,6 +26,9 @@ struct State {
     refuse: Option<String>,
     drop_events: bool,
     received: usize,
+    /// Each event that the relay stored, in the sequence of the storage.
+    /// A live subscription reads it.
+    log: Vec<Event>,
 }
 
 #[derive(Debug)]
@@ -90,7 +94,10 @@ impl TestRelay {
     /// client. The event must have a correct ID and signature.
     pub fn insert(&self, event: Event) {
         self.with(|state| {
-            store(&mut state.events, event);
+            let kept = event.clone();
+            if store(&mut state.events, event) == Stored::Kept {
+                state.log.push(kept);
+            }
         });
     }
 
@@ -172,15 +179,50 @@ fn newest_first(mut events: Vec<Event>) -> Vec<Event> {
 
 type Socket = WebSocket<TcpStream>;
 
+/// The open subscriptions of one connection.
+#[derive(Default)]
+struct Live {
+    /// The subscription ID and the filters of each subscription.
+    subscriptions: Vec<(String, Vec<Filter>)>,
+    /// The number of events of the log that the connection has seen.
+    cursor: usize,
+}
+
+/// Send each event stored after the last look to the subscriptions that
+/// match it.
+fn push_live(shared: &Shared, socket: &mut Socket, live: &mut Live) {
+    if live.subscriptions.is_empty() {
+        return;
+    }
+    let fresh: Vec<Event> = {
+        let state = shared.state.lock().expect("the state");
+        let fresh = state.log[live.cursor.min(state.log.len())..].to_vec();
+        live.cursor = state.log.len();
+        fresh
+    };
+    for event in fresh {
+        for (id, filters) in &live.subscriptions {
+            if filters
+                .iter()
+                .any(|f| f.match_event(&event, MatchEventOptions::new()))
+            {
+                reply(socket, &json!(["EVENT", id, event]));
+            }
+        }
+    }
+}
+
 /// Serve one connection until the client or the relay ends it.
 fn serve(shared: &Shared, stream: TcpStream) {
     let Ok(mut socket) = tungstenite::accept(stream) else {
         return;
     };
     let _ = socket.get_ref().set_read_timeout(Some(POLL));
+    let mut live = Live::default();
     while !shared.stop.load(Ordering::SeqCst) {
+        push_live(shared, &mut socket, &mut live);
         match socket.read() {
-            Ok(Message::Text(text)) => handle(shared, &mut socket, text.as_str()),
+            Ok(Message::Text(text)) => handle(shared, &mut socket, &mut live, text.as_str()),
             Ok(Message::Close(_)) | Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
                 break;
             }
@@ -199,16 +241,23 @@ fn reply(socket: &mut Socket, value: &Value) {
     let _ = socket.send(Message::text(value.to_string()));
 }
 
-fn handle(shared: &Shared, socket: &mut Socket, text: &str) {
+fn handle(shared: &Shared, socket: &mut Socket, live: &mut Live, text: &str) {
     let Ok(Value::Array(message)) = serde_json::from_str::<Value>(text) else {
         reply(socket, &json!(["NOTICE", "invalid: not a JSON array"]));
         return;
     };
     match message.first().and_then(Value::as_str) {
         Some("EVENT") => on_event(shared, socket, message.get(1)),
-        Some("REQ") => on_req(shared, socket, &message),
-        // The relay keeps no subscription, so a CLOSE needs no action.
-        Some("CLOSE") => {}
+        Some("REQ") => {
+            // The open subscriptions get their events before the new one.
+            push_live(shared, socket, live);
+            on_req(shared, socket, live, &message);
+        }
+        Some("CLOSE") => {
+            let id = message.get(1).and_then(Value::as_str);
+            live.subscriptions
+                .retain(|(sub, _)| Some(sub.as_str()) != id);
+        }
         _ => reply(socket, &json!(["NOTICE", "invalid: unknown message"])),
     }
 }
@@ -229,8 +278,12 @@ fn on_event(shared: &Shared, socket: &mut Socket, value: Option<&Value>) {
         } else if state.drop_events {
             (true, String::new())
         } else {
+            let kept = event.clone();
             match store(&mut state.events, event) {
-                Stored::Kept => (true, String::new()),
+                Stored::Kept => {
+                    state.log.push(kept);
+                    (true, String::new())
+                }
                 Stored::Duplicate => (true, "duplicate: the event is stored".to_owned()),
                 Stored::Older => (false, "duplicate: a newer event exists".to_owned()),
             }
@@ -239,7 +292,7 @@ fn on_event(shared: &Shared, socket: &mut Socket, value: Option<&Value>) {
     reply(socket, &json!(["OK", id, answer.0, answer.1]));
 }
 
-fn on_req(shared: &Shared, socket: &mut Socket, message: &[Value]) {
+fn on_req(shared: &Shared, socket: &mut Socket, live: &mut Live, message: &[Value]) {
     let Some(subscription) = message.get(1).and_then(Value::as_str) else {
         reply(socket, &json!(["NOTICE", "invalid: no subscription"]));
         return;
@@ -255,7 +308,15 @@ fn on_req(shared: &Shared, socket: &mut Socket, message: &[Value]) {
         );
         return;
     };
-    let stored = shared.state.lock().expect("the state").events.clone();
+    let stored = {
+        let state = shared.state.lock().expect("the state");
+        // The subscription gets the later events from the log.
+        live.cursor = live.cursor.max(state.log.len());
+        state.events.clone()
+    };
+    live.subscriptions.retain(|(sub, _)| sub != subscription);
+    live.subscriptions
+        .push((subscription.to_owned(), filters.clone()));
     let mut found: Vec<Event> = Vec::new();
     for filter in &filters {
         let mut matches = newest_first(

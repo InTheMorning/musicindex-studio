@@ -1,9 +1,96 @@
 //! Server shell of musicindex-studio.
 //!
 //! A host operator runs this binary to give a public service to web users
-//! (ADR 0001). Sign-in and the per-user vault come in the Server
-//! Shell phase.
+//! (ADR 0001, ADR 0055).
+//!
+//! Commands:
+//!
+//! - `serve --data-dir PATH --public-origin URL`: run the server. The
+//!   options `--listen ADDR` (default `127.0.0.1:8080`), `--signup
+//!   open|invite` (default `invite`), `--client-address-header NAME`,
+//!   `--musicindex URL` and `--podcastindex-hub URL` are optional.
+//! - `invite --data-dir PATH`: print one new single-use invite code.
 
-fn main() {
-    println!("studio-server {}", env!("CARGO_PKG_VERSION"));
+// The handlers give an axum response as the error. The response is large by design.
+#![expect(
+    clippy::result_large_err,
+    reason = "an axum handler gives its error as a response"
+)]
+
+mod accounts;
+mod auth;
+mod config;
+mod session;
+mod users;
+
+#[cfg(test)]
+mod tests;
+
+use std::process::ExitCode;
+use std::sync::Arc;
+
+use studio_core::net::PublicRules;
+use studio_core::vault::OpenVault;
+
+use config::{Command, ServeOptions};
+use session::ServerState;
+use users::{UserSettings, Users};
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            eprintln!("studio-server: {message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn run() -> Result<(), String> {
+    match config::parse(std::env::args().skip(1))? {
+        Command::Invite { data_dir } => {
+            let accounts = accounts::Accounts::open(&data_dir)?;
+            println!("{}", accounts.create_invite()?);
+            Ok(())
+        }
+        Command::Serve(options) => serve(*options).await,
+    }
+}
+
+/// Make the state of the server. `rules` are the exceptions of the network
+/// policy `Public`. Only a test build gives exceptions.
+fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Shared, String> {
+    let accounts = accounts::Accounts::open(&options.data_dir)?;
+    // The passphrase is random and nobody keeps it.
+    let dummy = OpenVault::create(&accounts::random_hex(16)?).map_err(|e| e.to_string())?;
+    let users = Users::new(UserSettings {
+        data_dir: options.data_dir.clone(),
+        musicindex: options.musicindex.clone(),
+        hub: options.hub.clone(),
+        rules,
+    });
+    Ok(Arc::new(ServerState {
+        accounts,
+        users,
+        origin: options.origin.clone(),
+        signup: options.signup,
+        dummy_wrapper: dummy.file().clone(),
+    }))
+}
+
+async fn serve(options: ServeOptions) -> Result<(), String> {
+    let state = make_state(&options, PublicRules::default())?;
+    // Open each user with work to do (ADR 0055 item 4).
+    state.users.open_busy(&state.accounts.folders()?).await;
+    let listener = tokio::net::TcpListener::bind(options.listen)
+        .await
+        .map_err(|e| e.to_string())?;
+    println!("Music Index Studio server {}", env!("CARGO_PKG_VERSION"));
+    println!("Data: {}", options.data_dir.display());
+    println!("Listening on {}", options.listen);
+    println!("Public origin: {}", options.origin.text);
+    studio_api::serve(listener, auth::server_router(&state))
+        .await
+        .map_err(|e| e.to_string())
 }

@@ -2069,8 +2069,18 @@ dependencies = [
 name = "studio-server"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "getrandom 0.4.3",
+ "http-body-util",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
  "studio-api",
  "studio-core",
+ "tempfile",
+ "tokio",
+ "tower",
 ]
 
 [[package]]

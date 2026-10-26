@@ -154,11 +154,19 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         )
         .route("/feeds/{id}/announcements", get(routes::list_announcements))
         .route("/hosts/{id}/scan", post(routes::scan_host))
-        .with_state(shared);
+        .route("/apps", get(routes::list_apps).post(routes::add_app))
+        .route("/apps/{id}", delete(routes::remove_app))
+        .with_state(Arc::clone(&shared));
+    // The routes for connected apps (ADR 0054 item 8). The outer layer
+    // checks the loopback `Host` only. The app layer checks the app token.
+    let app_api = Router::new()
+        .route("/whoami", get(routes::whoami))
+        .layer(middleware::from_fn_with_state(shared, routes::app_check));
     Router::new()
         .route("/", get(ui::index))
         .route("/ui/{*path}", get(ui::file))
         .nest("/api/v1", api)
+        .nest("/app/v1", app_api)
         .layer(middleware::from_fn_with_state(access, access::check))
 }
 

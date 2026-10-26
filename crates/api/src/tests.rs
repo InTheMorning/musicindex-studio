@@ -5911,3 +5911,95 @@ async fn a_live_status_cannot_go_back() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["code"], "bad_status");
 }
+
+/// A request to a route with a given bearer token and no other header.
+fn bearer_request(path: &str, token: Option<&str>, host: &str) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method("GET")
+        .uri(path)
+        .header(header::HOST, host);
+    if let Some(token) = token {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    builder.body(Body::empty()).unwrap()
+}
+
+#[tokio::test]
+async fn the_apps_routes_add_list_and_remove_an_app_and_only_the_post_gives_the_token() {
+    let app = app();
+    let (status, body) = call(&app, "POST", "/api/v1/apps", Some(json!({"name": " "}))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_name");
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/apps",
+        Some(json!({"name": "Show tool"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let token = body["token"].as_str().unwrap().to_owned();
+    assert_eq!(token.len(), 64);
+    let id = body["id"].as_i64().unwrap();
+
+    let (status, _, text) = send(&app, request("GET", "/api/v1/apps", None)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!text.contains(&token));
+    let list: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(list[0]["name"], "Show tool");
+    assert!(list[0].get("token").is_none());
+    assert!(list[0].get("token_hash").is_none());
+
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/apps/{id}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/apps/{id}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn whoami_needs_the_token_of_a_connected_app() {
+    let app = app();
+    let (_, body) = call(
+        &app,
+        "POST",
+        "/api/v1/apps",
+        Some(json!({"name": "Show tool"})),
+    )
+    .await;
+    let token = body["token"].as_str().unwrap().to_owned();
+    let id = body["id"].as_i64().unwrap();
+
+    let (status, body, text) =
+        send(&app, bearer_request("/app/v1/whoami", Some(&token), HOST)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({"id": id, "name": "Show tool"}));
+    assert!(!text.contains(&token));
+
+    // The access token of the UI, no token and a wrong token.
+    for given in [Some(TOKEN), None, Some("wrong")] {
+        let (status, body, text) = send(&app, bearer_request("/app/v1/whoami", given, HOST)).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{given:?}");
+        assert_eq!(body["error"]["code"], "app_unauthorized");
+        assert!(!text.contains(&token));
+    }
+
+    // An app token does not open an `/api/` route.
+    let (status, body, _) = send(&app, bearer_request("/api/v1/status", Some(&token), HOST)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"]["code"], "token_required");
+
+    // A host that is not loopback gets the refusal of ADR 0017.
+    let (status, body, _) = send(
+        &app,
+        bearer_request("/app/v1/whoami", Some(&token), "evil.example:4100"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["code"], "host_not_allowed");
+
+    // A removed app does not pass.
+    call(&app, "DELETE", &format!("/api/v1/apps/{id}"), None).await;
+    let (status, _, _) = send(&app, bearer_request("/app/v1/whoami", Some(&token), HOST)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}

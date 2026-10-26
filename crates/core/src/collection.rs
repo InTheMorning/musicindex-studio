@@ -247,6 +247,14 @@ CREATE TABLE announcements (
     last_error TEXT
 );
 ",
+    r"
+CREATE TABLE connected_apps (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -278,7 +286,7 @@ impl CollectionError {
         Self::with_kind(CollectionErrorKind::Database, message)
     }
 
-    fn with_kind(kind: CollectionErrorKind, message: impl Into<String>) -> Self {
+    pub(crate) fn with_kind(kind: CollectionErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             message: message.into(),
@@ -664,7 +672,7 @@ fn announcement_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Announcement> {
     })
 }
 
-fn now() -> i64 {
+pub(crate) fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
@@ -2402,7 +2410,6 @@ impl Collection {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(crate) fn db(&self) -> &Connection {
         &self.db
     }
@@ -3594,5 +3601,29 @@ mod tests {
         );
         collection.remove_signing_plan(feed).unwrap();
         assert_eq!(collection.signing_plan(feed).unwrap(), None);
+    }
+
+    #[test]
+    fn a_database_at_the_previous_schema_version_gets_the_connected_apps_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = MIGRATIONS.len() - 1;
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(crate::apps::apps(&collection).unwrap().len(), 0);
+        let (_, token) = crate::apps::add_app(&collection, "Tool").unwrap();
+        assert!(
+            crate::apps::app_for_token(&collection, &token)
+                .unwrap()
+                .is_some()
+        );
     }
 }

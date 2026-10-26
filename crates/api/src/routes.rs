@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use axum::Json;
 use axum::RequestExt;
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{Extension, Path, Query, Request, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use futures_util::StreamExt;
@@ -13,9 +13,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::address::AddressSource;
 use studio_core::announce;
+use studio_core::apps::{self, ConnectedApp};
 use studio_core::collection::{
-    Collection, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId, DraftOperationKind,
-    FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
+    Collection, CollectionErrorKind, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId,
+    DraftOperationKind, FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
 };
 use studio_core::connector::{
     self, ConnectorErrorKind, LocalFolder, S3Bucket, S3Config, S3Credentials, S3UrlStyle,
@@ -4102,4 +4103,96 @@ pub(crate) async fn index_feed_tracks(
         })))
     })
     .await
+}
+
+/// The connected apps. The list has no token (ADR 0054 item 7).
+pub(crate) async fn list_apps(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| to_json(apps::apps(&w.collection)?)).await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AppBody {
+    name: String,
+}
+
+/// Add a connected app. This response is the only one that has the token.
+pub(crate) async fn add_app(
+    State(shared): State<Shared>,
+    Json(body): Json<AppBody>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let (app, token) =
+            apps::add_app(&w.collection, &body.name).map_err(|e| match e.kind() {
+                CollectionErrorKind::Invalid => ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_name",
+                    e.to_string(),
+                ),
+                _ => ApiError::from(e),
+            })?;
+        Ok((
+            StatusCode::CREATED,
+            Json(json!({
+                "id": app.id,
+                "name": app.name,
+                "created_at": app.created_at,
+                "token": token,
+            })),
+        ))
+    })
+    .await
+}
+
+/// Remove a connected app. Its token stops working.
+pub(crate) async fn remove_app(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        apps::remove_app(&w.collection, id)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+/// The layer of the `/app/v1/` routes (ADR 0054 item 8). The layer of
+/// `/api/` has already checked the loopback `Host`. This layer needs the
+/// token of a connected app, and it puts the app into the request. The
+/// access token of the UI is not an app token, so it gives 401.
+pub(crate) async fn app_check(
+    State(shared): State<Shared>,
+    mut request: Request,
+    next: axum::middleware::Next,
+) -> Result<Response, ApiError> {
+    let given = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .unwrap_or_default()
+        .to_owned();
+    let unauthorized = || {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "app_unauthorized",
+            "ADR 0054: this route needs the token of a connected app",
+        )
+    };
+    if given.is_empty() {
+        return Err(unauthorized());
+    }
+    let app = blocking(shared, move |w| {
+        Ok(apps::app_for_token(&w.collection, &given)?)
+    })
+    .await?;
+    let Some(app) = app else {
+        return Err(unauthorized());
+    };
+    request.extensions_mut().insert(app);
+    Ok(next.run(request).await)
+}
+
+/// The app that the token names. It tests the layer of `/app/v1/`.
+pub(crate) async fn whoami(Extension(app): Extension<ConnectedApp>) -> Json<Value> {
+    Json(json!({ "id": app.id, "name": app.name }))
 }

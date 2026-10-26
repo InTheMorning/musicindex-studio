@@ -7,6 +7,7 @@
 
 pub mod address;
 pub mod announce;
+pub mod apps;
 pub mod collection;
 pub mod connector;
 mod digest;

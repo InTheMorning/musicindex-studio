@@ -1761,6 +1761,78 @@ function AnnouncePanel() {
   </article>`;
 }
 
+// The connected apps (ADR 0054 items 7 to 10). "Make the token" shows the
+// token one time. The token stays in the state of this panel only.
+function ConnectedAppsPanel() {
+  const [apps, setApps] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [made, setMade] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const { busy, error, run } = useAction();
+  const load = () => api('/apps').then(setApps);
+  useEffect(() => { load(); }, []);
+  const make = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const result = await api('/apps', { method: 'POST', body: { name: name.trim() } });
+      setMade(result);
+      setCopied(false);
+      setAdding(false);
+      setName('');
+      await load();
+    });
+  };
+  const remove = (app) => {
+    if (!confirm(`Remove the app “${app.name}”? Its token stops working.`)) return;
+    run(async () => {
+      await api(`/apps/${app.id}`, { method: 'DELETE' });
+      if (made && made.id === app.id) setMade(null);
+      await load();
+    });
+  };
+  const copy = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(made.token).then(() => setCopied(true), () => {});
+    }
+  };
+  if (!apps) return null;
+  return html`<article class="panel">
+    <h2>Connected apps</h2>
+    ${apps.length === 0 && !adding && html`<p class="hint">No app is connected.</p>`}
+    ${apps.length > 0 && html`<ul class="app-list">
+      ${apps.map((a) => html`<li>
+        <span>${a.name}</span>
+        <button class="button destructive" type="button" disabled=${busy}
+          aria-label=${`Remove the app ${a.name}`} onClick=${() => remove(a)}>Remove</button>
+      </li>`)}
+    </ul>`}
+    ${made && html`<div class="notice" role="status">
+      <strong>The token of “${made.name}”</strong>
+      <input class="mono token-field" type="text" readonly aria-label=${`Token of ${made.name}`}
+        value=${made.token} onFocus=${(e) => e.target.select()} />
+      <p class="hint">Give this token to the app now. Studio does not show it again.</p>
+      <div class="actions">
+        <button class="button" type="button" onClick=${copy}>${copied ? 'Copied' : 'Copy'}</button>
+        <button class="button" type="button" onClick=${() => setMade(null)}>Done</button>
+      </div>
+    </div>`}
+    ${adding
+      ? html`<form class="form" onSubmit=${make}>
+          <${Field} id="app-name" label="Name of the app" required autocomplete="off"
+            value=${name} onInput=${(e) => setName(e.target.value)} />
+          <div class="actions">
+            <button class="button primary" type="submit" disabled=${busy || name.trim() === ''}>
+              ${busy ? 'Making…' : 'Make the token'}</button>
+            <button class="button" type="button" disabled=${busy} onClick=${() => setAdding(false)}>Cancel</button>
+          </div>
+        </form>`
+      : html`<div class="actions"><button class="button action" type="button"
+          onClick=${() => { setMade(null); setAdding(true); }}>Connect an app</button></div>`}
+    <${ErrorNotice} error=${error} />
+  </article>`;
+}
+
 // The ID of the newest manifest among the relays of a site state.
 function newestManifest(state) {
   let newest = null;
@@ -1965,6 +2037,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     <section class="section">
       <${LibraryPanel} />
       <${AnnouncePanel} />
+      <${ConnectedAppsPanel} />
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
         : html`<${ErrorNotice} error=${error} />`}

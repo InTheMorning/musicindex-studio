@@ -1381,3 +1381,18 @@ textarea:focus { background: var(--fill); }
 
 /* The feed move (task 023h, ADR 0038 items 16 to 21). */
 .group > .field > .hint { grid-column: 1 / -1; margin: 0; }
+
+/* The list of connected apps and the one-time token field. */
+.app-list { list-style: none; display: grid; gap: 8px; }
+.app-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.token-field {
+  width: 100%;
+  min-height: var(--target);
+  margin: 8px 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--text);
+  font-size: .85rem;
+}

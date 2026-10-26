@@ -14,7 +14,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::address::{self, Address, AddressSource};
-use crate::connector::{Stamp, Version};
+use crate::connector::{KeptBlob, Stamp, Version};
 use crate::feed::{Feed, Recipient};
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
@@ -215,6 +215,15 @@ SELECT id, feed_id, kind, library_file_id, connector_id, path, added_at
 FROM draft_operations;
 DROP TABLE draft_operations;
 ALTER TABLE draft_operations_new RENAME TO draft_operations;
+",
+    r"
+CREATE TABLE kept_blobs (
+    connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    PRIMARY KEY (connector_id, path)
+);
 ",
 ];
 
@@ -1612,6 +1621,57 @@ impl Collection {
                 host_file_row,
             )
             .optional()?)
+    }
+
+    /// The blob records that a host keeps, in the sequence of the paths
+    /// (ADR 0050 item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn kept_blobs(&self, connector: ConnectorId) -> Result<Vec<KeptBlob>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT path, sha256, size FROM kept_blobs WHERE connector_id = ?1 ORDER BY path",
+        )?;
+        let rows = statement.query_map([connector.0], |row| {
+            Ok(KeptBlob {
+                path: row.get(0)?,
+                sha256: row.get(1)?,
+                size: u64::try_from(row.get::<_, i64>(2)?).unwrap_or(0),
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Replace the blob records of a host with `blobs`, in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails. The records then do
+    /// not change.
+    pub fn replace_kept_blobs(
+        &mut self,
+        connector: ConnectorId,
+        blobs: &[KeptBlob],
+    ) -> Result<(), CollectionError> {
+        let tx = self.db.transaction()?;
+        tx.execute(
+            "DELETE FROM kept_blobs WHERE connector_id = ?1",
+            [connector.0],
+        )?;
+        for blob in blobs {
+            tx.execute(
+                "INSERT INTO kept_blobs (connector_id, path, sha256, size) VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    connector.0,
+                    blob.path,
+                    blob.sha256,
+                    i64::try_from(blob.size).unwrap_or(i64::MAX)
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// Each file that Studio saw on a host, by path (ADR 0036 item 4 and
@@ -3073,5 +3133,43 @@ mod tests {
         let known = collection.known_recipients().unwrap();
         assert_eq!(known.len(), 1);
         assert_eq!(known[0].name.as_deref(), Some("New"));
+    }
+
+    #[test]
+    fn a_database_at_the_previous_schema_version_gets_the_kept_blobs_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = MIGRATIONS.len() - 1;
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        drop(db);
+
+        let mut collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        let id = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        assert_eq!(collection.kept_blobs(id).unwrap().len(), 0);
+        let blob = |path: &str| KeptBlob {
+            path: path.to_owned(),
+            sha256: "ab".repeat(32),
+            size: 5,
+        };
+        collection
+            .replace_kept_blobs(id, &[blob("b.mp3"), blob("a.mp3")])
+            .unwrap();
+        let paths: Vec<String> = collection
+            .kept_blobs(id)
+            .unwrap()
+            .into_iter()
+            .map(|b| b.path)
+            .collect();
+        assert_eq!(paths, ["a.mp3", "b.mp3"]);
+        collection.replace_kept_blobs(id, &[blob("c.mp3")]).unwrap();
+        assert_eq!(collection.kept_blobs(id).unwrap(), [blob("c.mp3")]);
     }
 }

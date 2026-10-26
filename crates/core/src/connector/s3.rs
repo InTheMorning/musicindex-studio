@@ -1501,4 +1501,9 @@ mod tests {
     fn suite_set_redirect_without_the_ability_is_unsupported() {
         suite_check(suite::set_redirect_without_the_ability_is_unsupported);
     }
+
+    #[test]
+    fn suite_finish_keeps_each_change() {
+        suite_check(suite::finish_keeps_each_change);
+    }
 }

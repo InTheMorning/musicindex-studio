@@ -29,6 +29,7 @@ pub fn run_all(make: Make<'_>) {
     a_path_out_of_the_host_is_invalid(make);
     sha256_when_given_is_the_sha256_of_the_bytes(make);
     set_redirect_without_the_ability_is_unsupported(make);
+    finish_keeps_each_change(make);
 }
 
 /// The bytes of a file, or panic when `read` fails.
@@ -347,5 +348,32 @@ pub fn set_redirect_without_the_ability_is_unsupported(make: Make<'_>) {
         error.kind(),
         ConnectorErrorKind::Unsupported,
         "set_redirect without the ability must give Unsupported"
+    );
+}
+
+/// `finish` keeps a written file, and keeps the deletion of a file.
+pub fn finish_keeps_each_change(make: Make<'_>) {
+    let connector = make();
+    connector
+        .write("a.txt", b"alpha", &Expected::Absent)
+        .expect("write must work");
+    connector.finish().expect("finish after a write must work");
+    assert_eq!(
+        bytes_of(&*connector, "a.txt").as_deref(),
+        Some(b"alpha".as_slice()),
+        "the file must stay after finish"
+    );
+    let stamp = connector
+        .stat("a.txt")
+        .expect("stat must give Ok")
+        .expect("stat must give the file")
+        .stamp;
+    connector
+        .delete("a.txt", &stamp)
+        .expect("delete with the current stamp must work");
+    connector.finish().expect("finish after a delete must work");
+    assert!(
+        bytes_of(&*connector, "a.txt").is_none(),
+        "the file must stay deleted after finish"
     );
 }

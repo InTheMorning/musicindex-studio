@@ -1582,6 +1582,11 @@ pub fn write_draft(
     };
     touched.insert(feed_move.as_ref().map_or(connector_id, |m| m.connector_id));
 
+    // Publish the changes of steps 1 and 2 on each host. A failure here
+    // leaves the feed state, the feed location and the draft as they were
+    // (ADR 0050 item 7).
+    finish_hosts(collection, hosts, &touched)?;
+
     // Step 4: the feed gets its new host and address, and the library
     // keeps the bytes of the file on the new host.
     if let Some(moved) = &feed_move {
@@ -1623,7 +1628,15 @@ pub fn write_draft(
     // (ADR 0036 item 16). `host_operations` ran again above, with the
     // current state of each feed. A blocked deletion is already out of
     // `operations` (ADR 0036 item 13).
-    delete_each_operation(collection, hosts, &operations, &mut touched)?;
+    let mut deleted_on: HashSet<ConnectorId> = HashSet::new();
+    delete_each_operation(
+        collection,
+        hosts,
+        &operations,
+        &mut touched,
+        &mut deleted_on,
+    )?;
+    finish_hosts(collection, hosts, &deleted_on)?;
 
     // Step 5: the draft, its host operations and its feed move go out.
     collection.remove_draft_operations(id)?;
@@ -1635,6 +1648,30 @@ pub fn write_draft(
     }
 
     Ok(version)
+}
+
+/// Call `finish` on each host of `ids`, in the sequence of the host IDs.
+/// After each call, the collection keeps the blob records of the host when
+/// the host gives them (ADR 0050 items 6 and 7).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when a `finish` call or the collection fails.
+fn finish_hosts(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    ids: &HashSet<ConnectorId>,
+) -> Result<(), PipelineError> {
+    let mut ordered: Vec<ConnectorId> = ids.iter().copied().collect();
+    ordered.sort_by_key(|id| id.0);
+    for id in ordered {
+        let host = hosts.get(id)?;
+        host.finish()?;
+        if let Some(blobs) = host.kept_blobs() {
+            collection.replace_kept_blobs(id, &blobs)?;
+        }
+    }
+    Ok(())
 }
 
 /// The host of a feed XML, and its path on the host.
@@ -1968,6 +2005,7 @@ fn delete_each_operation(
     hosts: &Hosts,
     operations: &[HostOperation],
     touched: &mut HashSet<ConnectorId>,
+    deleted_on: &mut HashSet<ConnectorId>,
 ) -> Result<(), PipelineError> {
     for operation in operations {
         if operation.kind != OperationKind::Delete {
@@ -1981,6 +2019,7 @@ fn delete_each_operation(
             Ok(()) => {
                 collection.remove_host_file(operation.connector_id, &operation.path)?;
                 touched.insert(operation.connector_id);
+                deleted_on.insert(operation.connector_id);
             }
             Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
                 return Err(PipelineError::new(

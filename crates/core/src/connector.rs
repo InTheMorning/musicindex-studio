@@ -24,6 +24,7 @@ pub use s3::{S3Bucket, S3Config, S3Credentials, S3UrlStyle};
 pub use sftp::{SftpConfig, SftpCredentials, SftpHost, SftpLogin};
 
 use crate::collection::ConnectorRow;
+use crate::nostr_events;
 use crate::vault::OpenVault;
 use zeroize::Zeroizing;
 
@@ -176,6 +177,66 @@ impl fmt::Display for ConnectorError {
 
 impl std::error::Error for ConnectorError {}
 
+/// One file that a write puts on a host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedWrite {
+    /// The path on the host.
+    pub path: String,
+    /// The SHA-256 of the bytes, as lowercase hexadecimal.
+    pub sha256: String,
+    /// The size of the file, in bytes.
+    pub size: u64,
+}
+
+/// One file that a write deletes from a host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedDelete {
+    /// The path on the host.
+    pub path: String,
+    /// The SHA-256 of the file, when Studio knows it.
+    pub sha256: Option<String>,
+}
+
+/// The changes of one write on one host.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct HostChanges {
+    /// The files that the write puts on the host.
+    pub writes: Vec<PlannedWrite>,
+    /// The files that the write deletes from the host.
+    pub deletes: Vec<PlannedDelete>,
+}
+
+/// An event that a write signs (ADR 0050 item 4).
+#[derive(Debug, Clone)]
+pub struct PlannedEvent {
+    /// The event, with no signature.
+    pub event: nostr::prelude::UnsignedEvent,
+    /// True for a host with "My signer": the user signs the event.
+    pub user_signs: bool,
+}
+
+/// The record of a blob that a host keeps (ADR 0050 item 6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeptBlob {
+    /// The path of the file on the host.
+    pub path: String,
+    /// The SHA-256 of the blob, as lowercase hexadecimal.
+    pub sha256: String,
+    /// The size of the blob, in bytes.
+    pub size: u64,
+}
+
+/// What a connector gets from Studio when it is made.
+#[derive(Debug, Default)]
+pub struct HostEnv<'a> {
+    /// The open vault, or `None` when the vault is locked.
+    pub vault: Option<&'a OpenVault>,
+    /// The blob records that the collection keeps for the host.
+    pub blobs: Vec<KeptBlob>,
+    /// The events that the user signed for the write.
+    pub signing: nostr_events::Signing,
+}
+
 /// Read and write the files of one host.
 ///
 /// The functions block. The server calls them from a blocking task
@@ -246,6 +307,44 @@ pub trait Connector {
 
     /// The public URL of a file, when the connector knows it.
     fn public_url(&self, path: &str) -> Option<String>;
+
+    /// Publish the changes of the write step that just ended. The default
+    /// does nothing, because most connectors publish in `write`.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`ConnectorError`] when the publication fails.
+    fn finish(&self) -> Result<(), ConnectorError> {
+        Ok(())
+    }
+
+    /// The events that a write with these changes signs. The default gives
+    /// an empty list.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`ConnectorError`] when the connector cannot plan the events.
+    fn plan_events(
+        &self,
+        changes: &HostChanges,
+        plan_time: u64,
+    ) -> Result<Vec<PlannedEvent>, ConnectorError> {
+        let _ = (changes, plan_time);
+        Ok(Vec::new())
+    }
+
+    /// The public address of a file that is not on the host yet. The
+    /// default gives [`Connector::public_url`].
+    fn planned_url(&self, path: &str, sha256: Option<&str>) -> Option<String> {
+        let _ = sha256;
+        self.public_url(path)
+    }
+
+    /// The blob records that the collection keeps for the host. The
+    /// default gives `None`: the collection keeps no record.
+    fn kept_blobs(&self) -> Option<Vec<KeptBlob>> {
+        None
+    }
 
     /// List the files of the host, with the limits [`LIST_MAX_DEPTH`] and
     /// [`LIST_MAX_FILES`]. Hidden folders are not in the list (ADR 0019).
@@ -351,8 +450,27 @@ pub fn from_row(
     row: &ConnectorRow,
     vault: Option<&OpenVault>,
 ) -> Result<Box<dyn Connector>, ConnectorError> {
+    from_row_in(
+        row,
+        &HostEnv {
+            vault,
+            blobs: Vec::new(),
+            signing: nostr_events::Signing::default(),
+        },
+    )
+}
+
+/// Make the connector of a collection row, with its host environment.
+///
+/// # Errors
+///
+/// Gives the errors of [`from_row`].
+pub fn from_row_in(
+    row: &ConnectorRow,
+    env: &HostEnv<'_>,
+) -> Result<Box<dyn Connector>, ConnectorError> {
     // The local folder kind ignores the secret. A remote kind uses it.
-    let secret = secret_of(row, vault)?;
+    let secret = secret_of(row, env.vault)?;
     match row.kind.as_str() {
         LocalFolder::KIND => Ok(Box::new(LocalFolder::from_config(&row.config)?)),
         S3Bucket::KIND => {

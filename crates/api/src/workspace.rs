@@ -7,12 +7,13 @@ use std::collections::{HashMap, VecDeque};
 
 use axum::http::StatusCode;
 use studio_core::collection::{Collection, FeedId};
-use studio_core::connector;
+use studio_core::connector::{self, HostEnv};
 use studio_core::discover::Found;
 use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
+use studio_core::nostr_events::Signing;
 use studio_core::pipeline::AddressCheck;
 use studio_core::remote;
 use studio_core::vault::{OpenVault, VaultFile};
@@ -192,13 +193,32 @@ impl Workspace {
     ///
     /// Gives an [`ApiError`] when the collection or a connector fails.
     pub(crate) fn hosts(&self) -> Result<Hosts, ApiError> {
+        self.hosts_with(Signing::default())
+    }
+
+    /// The connector of each host, like [`Workspace::hosts`], with the
+    /// events that the user signed for a write (ADR 0050 item 4).
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the collection or a connector fails.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "each host gets its own copy of the signing"
+    )]
+    pub(crate) fn hosts_with(&self, signing: Signing) -> Result<Hosts, ApiError> {
         let mut hosts = Hosts::new();
         for row in self.collection.connectors()? {
             if row.secret_ref.is_some() && self.vault.is_none() {
                 hosts.insert_locked(row.id);
                 continue;
             }
-            let made = connector::from_row(&row, self.vault.as_ref())?;
+            let env = HostEnv {
+                vault: self.vault.as_ref(),
+                blobs: self.collection.kept_blobs(row.id)?,
+                signing: signing.clone(),
+            };
+            let made = connector::from_row_in(&row, &env)?;
             hosts.insert(row.id, made);
         }
         Ok(hosts)

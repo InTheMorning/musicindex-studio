@@ -411,7 +411,7 @@ pub fn planned_path(
     // A remote file has no SHA-256. Studio reads no host file for it, and
     // it plans the clean path (ADR 0038 item 1).
     let Some(sha256) = file.sha256.as_deref() else {
-        let url = hosts.get(connector_id)?.public_url(&clean_path);
+        let url = hosts.get(connector_id)?.planned_url(&clean_path, None);
         return Ok(PlannedPath {
             connector_id,
             path: clean_path,
@@ -448,7 +448,7 @@ pub fn planned_path(
     };
 
     let connector = hosts.get(connector_id)?;
-    let url = connector.public_url(&path);
+    let url = connector.planned_url(&path, Some(sha256));
     Ok(PlannedPath {
         connector_id,
         path,

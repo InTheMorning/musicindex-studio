@@ -1,9 +1,14 @@
 //! The write pipeline over the local folder connector (ADR 0007, ADR 0015).
 
 use std::fs;
+use std::io::Read;
+use std::sync::{Arc, Mutex};
 
 use studio_core::collection::{Collection, ConnectorId, DraftOperationKind, FeedId, LibraryFileId};
-use studio_core::connector::{self, Connector, Expected, LocalFolder};
+use studio_core::connector::{
+    self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, KeptBlob,
+    ListedFile, LocalFolder, Stamp, Version,
+};
 use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::{self, Hosts};
@@ -1903,4 +1908,269 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
     )
     .unwrap();
     assert!(s.dir_a.path().join("album.xml").exists());
+}
+
+// ---- The finish step (ADR 0050 items 7 to 9) ----
+
+/// A connector that wraps a local folder and records each change call as
+/// text. It can fail its first `finish`, and it can give kept blobs.
+struct Recorder {
+    inner: LocalFolder,
+    log: Arc<Mutex<Vec<String>>>,
+    fail_first_finish: Mutex<bool>,
+    blobs: Option<Vec<KeptBlob>>,
+}
+
+impl Recorder {
+    fn note(&self, text: String) {
+        self.log.lock().unwrap().push(text);
+    }
+}
+
+impl Connector for Recorder {
+    fn read(&self, path: &str) -> Result<Option<FileRead>, ConnectorError> {
+        self.inner.read(path)
+    }
+    fn write(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        self.note(format!("write {path}"));
+        self.inner.write(path, bytes, expected)
+    }
+    fn write_from(
+        &self,
+        path: &str,
+        reader: &mut dyn Read,
+        length: u64,
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        self.note(format!("write {path}"));
+        self.inner.write_from(path, reader, length, expected)
+    }
+    fn sha256(&self, path: &str) -> Result<Option<String>, ConnectorError> {
+        self.inner.sha256(path)
+    }
+    fn public_url(&self, path: &str) -> Option<String> {
+        self.inner.public_url(path)
+    }
+    fn list(&self) -> Result<FileList, ConnectorError> {
+        self.inner.list()
+    }
+    fn stat(&self, path: &str) -> Result<Option<ListedFile>, ConnectorError> {
+        self.inner.stat(path)
+    }
+    fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
+        self.note(format!("delete {path}"));
+        self.inner.delete(path, expected)
+    }
+    fn finish(&self) -> Result<(), ConnectorError> {
+        let mut fail = self.fail_first_finish.lock().unwrap();
+        if *fail {
+            *fail = false;
+            self.note("finish failed".to_owned());
+            return Err(ConnectorError::new(
+                ConnectorErrorKind::Io,
+                "the test finish fails",
+            ));
+        }
+        self.note("finish".to_owned());
+        Ok(())
+    }
+    fn kept_blobs(&self) -> Option<Vec<KeptBlob>> {
+        self.blobs.clone()
+    }
+}
+
+/// Replace the host of `s` with a [`Recorder`] on the same folder. Gives
+/// the log of the recorder.
+fn record_host(
+    s: &mut Setup,
+    fail_first_finish: bool,
+    blobs: Option<Vec<KeptBlob>>,
+) -> Arc<Mutex<Vec<String>>> {
+    let connector_id = s.collection.connectors().unwrap()[0].id;
+    let log = Arc::new(Mutex::new(Vec::new()));
+    s.hosts.insert(
+        connector_id,
+        Box::new(Recorder {
+            inner: LocalFolder::new(s.dir.path(), Some("https://music.example".into())),
+            log: Arc::clone(&log),
+            fail_first_finish: Mutex::new(fail_first_finish),
+            blobs,
+        }),
+    );
+    log
+}
+
+/// Write a draft with one track, and then make a draft with a changed
+/// track (new upload) and a deletion of the old file. Gives the approved
+/// diff ID, the path of the new file and the path of the old file.
+fn draft_with_upload_and_deletion(s: &mut Setup) -> (DiffId, String, String) {
+    s.collection.set_feed_folder(s.feed, "album").unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let old = import_file(s, "01.mp3", b"one");
+    let planned_old = reference_planned(s, old.library_file_id);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+
+    s.collection
+        .remove_library_file(old.library_file_id)
+        .unwrap();
+    let source_dir = tempfile::tempdir().unwrap();
+    let new_source = source_dir.path().join("01-new.mp3");
+    fs::write(&new_source, b"one (re-recorded)").unwrap();
+    let (new_size, new_sha) = s.library.put_file("album", "01.mp3", &new_source).unwrap();
+    let new_id = s
+        .collection
+        .add_library_file(
+            s.feed,
+            "01.mp3",
+            new_size,
+            Some(&new_sha),
+            "audio/mpeg",
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+    let feed_row = s.collection.feed(s.feed).unwrap();
+    let new_file = s.collection.library_file(new_id).unwrap();
+    let planned_new =
+        inventory::planned_path(&s.collection, &s.hosts, &feed_row, &new_file).unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let old_url = planned_old.url.clone().unwrap();
+    let new_url = planned_new.url.clone().unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, move |f| {
+        for item in &mut f.items {
+            if let Some(enclosure) = item.value.enclosure.as_mut()
+                && enclosure.url.as_deref() == Some(old_url.as_str())
+            {
+                enclosure.url = Some(new_url.clone());
+            }
+        }
+    })
+    .unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            planned_old.connector_id,
+            &planned_old.path,
+        )
+        .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    (diff.id, planned_new.path, planned_old.path)
+}
+
+#[test]
+fn a_write_calls_finish_after_the_feed_xml_and_again_after_the_deletions() {
+    let mut s = setup();
+    let (diff_id, new_path, old_path) = draft_with_upload_and_deletion(&mut s);
+    let log = record_host(&mut s, false, None);
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff_id,
+    )
+    .unwrap();
+    assert_eq!(
+        *log.lock().unwrap(),
+        [
+            format!("write {new_path}"),
+            "write album.xml".to_owned(),
+            "finish".to_owned(),
+            format!("delete {old_path}"),
+            "finish".to_owned(),
+        ]
+    );
+}
+
+#[test]
+fn a_host_with_no_deletion_gets_one_finish_only() {
+    let mut s = setup();
+    let log = record_host(&mut s, false, None);
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("New".into())).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    assert_eq!(
+        *log.lock().unwrap(),
+        ["write album.xml".to_owned(), "finish".to_owned()]
+    );
+}
+
+#[test]
+fn a_failed_finish_gives_an_error_and_keeps_the_draft_and_the_feed_state() {
+    let mut s = setup();
+    let before = s.collection.feed(s.feed).unwrap().last_version;
+    let log = record_host(&mut s, true, None);
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("New".into())).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::Connector);
+    assert_eq!(
+        *log.lock().unwrap(),
+        ["write album.xml".to_owned(), "finish failed".to_owned()]
+    );
+    assert!(s.collection.draft(s.feed).unwrap().is_some());
+    let row = s.collection.feed(s.feed).unwrap();
+    assert_eq!(row.last_version, before);
+    assert_eq!(row.title.as_deref(), Some("Album"));
+}
+
+#[test]
+fn a_host_that_gives_kept_blobs_has_them_in_the_collection_after_the_write() {
+    let mut s = setup();
+    let blobs = vec![KeptBlob {
+        path: "album/01.mp3".to_owned(),
+        sha256: "ab".repeat(32),
+        size: 3,
+    }];
+    record_host(&mut s, false, Some(blobs.clone()));
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("New".into())).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    let connector_id = s.collection.connectors().unwrap()[0].id;
+    assert_eq!(s.collection.kept_blobs(connector_id).unwrap(), blobs);
 }

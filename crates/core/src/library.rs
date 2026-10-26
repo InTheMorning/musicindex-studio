@@ -259,11 +259,11 @@ pub fn give_published_folder(
 
 /// The default library path, `~/musicindex/studio` (ADR 0036 item 1).
 ///
-/// Gives `None` when the `HOME` variable is not set.
+/// Gives `None` when the system has no home folder for this user.
 #[must_use]
 pub fn default_root() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    Some(PathBuf::from(home).join("musicindex").join("studio"))
+    let home = directories::BaseDirs::new()?;
+    Some(home.home_dir().join("musicindex").join("studio"))
 }
 
 #[cfg(test)]

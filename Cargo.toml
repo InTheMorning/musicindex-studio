@@ -10,6 +10,7 @@ license = "AGPL-3.0-only"
 publish = false
 
 [workspace.dependencies]
+directories = "6"
 studio-core = { path = "crates/core" }
 studio-api = { path = "crates/api" }
 # Signing and the multipart upload body only. No default features.

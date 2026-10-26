@@ -1103,12 +1103,10 @@ fn not_on_server(message: &str) -> ApiError {
 
 /// Replace a leading `~` with the home folder of the user that runs Studio.
 fn expand_home(path: &str) -> String {
-    let home = std::env::var("HOME").ok().filter(|h| !h.is_empty());
+    let home = directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf());
     match (path, home) {
-        ("~", Some(home)) => home,
-        (p, Some(home)) if p.starts_with("~/") => {
-            format!("{}/{}", home.trim_end_matches('/'), &p[2..])
-        }
+        ("~", Some(home)) => home.to_string_lossy().into_owned(),
+        (p, Some(home)) if p.starts_with("~/") => home.join(&p[2..]).to_string_lossy().into_owned(),
         (p, _) => p.to_owned(),
     }
 }

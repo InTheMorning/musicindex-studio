@@ -513,6 +513,151 @@ function S3HostForm({ onAdded }) {
   </form>`;
 }
 
+// The fields of an SFTP server (ADR 0047). Step 1 asks for the server and
+// gets its host key fingerprint. Step 2 shows the fingerprint. Studio adds
+// the host only after the user accepts it. After the add, Studio does not
+// show a secret again.
+function SftpHostForm({ onAdded }) {
+  const [values, setValues] = useState({
+    name: '', host: '', port: '22', user: '', root: '', base_url: '',
+    login: 'key', private_key: '', passphrase: '', password: '',
+  });
+  const [step, setStep] = useState(1);
+  const [fingerprint, setFingerprint] = useState('');
+  const [needVault, setNeedVault] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState(null);
+  const { busy, error, run } = useAction();
+  // A functional update, so that two input events before the next render
+  // keep both values, as when a password manager fills the form.
+  const set = (key) => (e) => {
+    const { value } = e.target;
+    setValues((current) => ({ ...current, [key]: value }));
+  };
+  const hostName = values.host.trim();
+  const port = Number(values.port) || 22;
+  const connect = () => run(async () => {
+    const result = await api('/connectors/fingerprint', { method: 'POST', body: { host: hostName, port } });
+    setFingerprint(result.fingerprint);
+    setStep(2);
+  });
+  const send = () => run(async () => {
+    let connector;
+    try {
+      connector = await api('/connectors', {
+        method: 'POST',
+        // An empty name takes the host name.
+        body: {
+          kind: 'sftp',
+          name: values.name.trim() || hostName,
+          host: hostName,
+          port,
+          user: values.user.trim(),
+          root: values.root.trim(),
+          base_url: values.base_url.trim() || null,
+          login: values.login,
+          private_key: values.login === 'key' ? values.private_key : null,
+          passphrase: values.login === 'key' && values.passphrase ? values.passphrase : null,
+          password: values.login === 'password' ? values.password : null,
+          host_key: fingerprint,
+        },
+      });
+    } catch (e) {
+      if (e.code === 'vault_required') { setNeedVault(true); return; }
+      // A field error belongs to a field of step 1.
+      if (['invalid_address', 'invalid_config', 'folder_not_found'].includes(e.code)) setStep(1);
+      throw e;
+    }
+    onAdded(connector);
+  });
+  const submit = (event) => {
+    event.preventDefault();
+    if (step === 1) connect(); else send();
+  };
+  const secretReady = values.login === 'key' ? values.private_key.trim()
+    : values.login === 'password' ? values.password : true;
+  const ready = hostName && values.user.trim() && values.root.trim() && secretReady;
+  const addressError = error && error.code === 'invalid_address' ? FIELD_MESSAGES.invalid_address : null;
+  const rootError = error && error.code === 'invalid_config' ? FIELD_MESSAGES.invalid_config
+    : error && error.code === 'folder_not_found' ? 'Studio did not find this folder on the server.' : null;
+  let notice = null;
+  if (error && !addressError && !rootError) {
+    switch (error.code) {
+      case 'no_conditions':
+        notice = html`<div class="notice error" role="alert"><strong>Studio cannot write to this server safely</strong>${error.message}</div>`;
+        break;
+      case 'host_unauthorized':
+        notice = html`<div class="notice error" role="alert"><strong>The server refused the login.</strong></div>`;
+        break;
+      case 'host_unavailable':
+        notice = html`<div class="notice error" role="alert"><strong>Studio cannot connect to the server.</strong></div>`;
+        break;
+      case 'vault_locked':
+        notice = html`<div class="notice error" role="alert"><strong>Unlock the vault first.</strong></div>`;
+        break;
+      default:
+        notice = html`<${ErrorNotice} error=${error} />`;
+    }
+  }
+
+  if (recoveryKey) {
+    return html`<${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${() => { setRecoveryKey(null); send(); }} />`;
+  }
+  if (needVault) {
+    return html`<${CreateVault} onDone=${(key) => { setNeedVault(false); if (key) setRecoveryKey(key); else send(); }} />`;
+  }
+  if (step === 2) {
+    return html`<form class="form" onSubmit=${submit}>
+      <p>Studio connected to ${hostName}. Make sure that this is the fingerprint of the server:</p>
+      <p class="mono" aria-label="Host key fingerprint">${fingerprint}</p>
+      ${notice}
+      <div class="actions">
+        <button class="button primary" type="submit" disabled=${busy}>${busy ? 'Adding…' : 'Accept and add the server'}</button>
+        <button class="button" type="button" disabled=${busy} onClick=${() => setStep(1)}>Back</button>
+      </div>
+    </form>`;
+  }
+  return html`<form class="form" onSubmit=${submit}>
+    <${Field} id="sftp-name" label="Name (optional)" hint="Studio uses the host name when you leave this empty."
+      value=${values.name} onInput=${set('name')} />
+    <${Field} id="sftp-host" label="Server" required placeholder="sftp.example.com" autocomplete="off"
+      value=${values.host} onInput=${set('host')} />
+    <${Field} id="sftp-port" label="Port" type="number" min="1" max="65535"
+      value=${values.port} onInput=${set('port')} />
+    <${Field} id="sftp-user" label="User name" required autocomplete="off"
+      value=${values.user} onInput=${set('user')} />
+    <${Field} id="sftp-root" label="Folder on the server" required placeholder="/home/me/public_html/feeds"
+      hint="The folder that holds your feed files. It is often not the first folder after the login."
+      error=${rootError} value=${values.root} onInput=${set('root')} />
+    <${Field} id="sftp-url" label="Public address of the folder (optional)" type="url"
+      hint="The web address that publishes this folder."
+      error=${addressError} value=${values.base_url} onInput=${set('base_url')} />
+    <fieldset class="choices">
+      <legend>Login</legend>
+      ${[['key', 'Private key'], ['password', 'Password'], ['agent', 'ssh-agent']].map(([value, label]) => html`<label class="choice">
+        <input type="radio" name="sftp-login" value=${value} checked=${values.login === value}
+          onChange=${() => setValues((current) => ({ ...current, login: value }))} />
+        <span class="text"><span class="title">${label}</span></span>
+      </label>`)}
+    </fieldset>
+    ${values.login === 'key' && html`<div class="field">
+      <label for="sftp-key">Private key</label>
+      <div class="field-body">
+        <span class="hint" id="sftp-key-hint">Paste the text of the key file, such as id_ed25519. Studio keeps it in your vault.</span>
+        <textarea id="sftp-key" rows="6" required autocomplete="off" spellcheck="false" aria-describedby="sftp-key-hint"
+          value=${values.private_key} onInput=${set('private_key')}></textarea>
+      </div>
+    </div>`}
+    ${values.login === 'key' && html`<${Field} id="sftp-passphrase" label="Passphrase of the key (optional)" type="password"
+      autocomplete="off" value=${values.passphrase} onInput=${set('passphrase')} />`}
+    ${values.login === 'password' && html`<${Field} id="sftp-password" label="Password" type="password" required
+      autocomplete="off" hint="Studio keeps it in your vault."
+      value=${values.password} onInput=${set('password')} />`}
+    ${values.login === 'agent' && html`<p class="hint">Studio uses the keys of the ssh-agent on this computer, and keeps no secret.</p>`}
+    ${notice}
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Connecting…' : 'Connect'}</button></div>
+  </form>`;
+}
+
 // The first choice is the type of the host. The form below it follows the
 // type (ADR 0045 item 4).
 function AddHostForm({ onAdded }) {
@@ -528,10 +673,16 @@ function AddHostForm({ onAdded }) {
         <input type="radio" name="host-type" value="s3" checked=${type === 's3'} onChange=${() => setType('s3')} />
         <span class="text"><span class="title">S3 or R2 bucket</span></span>
       </label>
+      <label class="choice">
+        <input type="radio" name="host-type" value="sftp" checked=${type === 'sftp'} onChange=${() => setType('sftp')} />
+        <span class="text"><span class="title">SFTP server</span></span>
+      </label>
     </fieldset>
     ${type === 's3'
       ? html`<${S3HostForm} onAdded=${onAdded} />`
-      : html`<${LocalHostForm} onAdded=${onAdded} />`}
+      : type === 'sftp'
+        ? html`<${SftpHostForm} onAdded=${onAdded} />`
+        : html`<${LocalHostForm} onAdded=${onAdded} />`}
   </div>`;
 }
 
@@ -1283,10 +1434,36 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   };
   const addressError = splitError(error, ['invalid_address']);
   const isS3 = connector.kind === 's3';
+  const isSftp = connector.kind === 'sftp';
   const noun = isS3 ? 'bucket' : 'folder';
+  // A check of an SFTP host lists its folder. A changed host key gives
+  // host_unauthorized with the new fingerprint in the message. The card
+  // then offers to accept the new key.
+  const check = useAction();
+  const accept = useAction();
+  const [newKey, setNewKey] = useState(null);
+  const checkHost = () => {
+    setNewKey(null);
+    check.run(async () => {
+      try {
+        await api(`/connectors/${connector.id}/feeds`);
+      } catch (e) {
+        const found = e.code === 'host_unauthorized' && /host key changed/.test(e.message)
+          ? /SHA256:[A-Za-z0-9+/=]+/.exec(e.message) : null;
+        if (!found) throw e;
+        setNewKey(found[0]);
+      }
+    });
+  };
+  const acceptKey = () => accept.run(async () => {
+    await api(`/connectors/${connector.id}`, { method: 'PUT', body: { host_key: newKey } });
+    setNewKey(null);
+    onChanged();
+  });
+  const mismatch = accept.error && accept.error.code === 'host_key_mismatch';
   return html`<article class="panel host">
     <header class="host-head">
-      <span class="eyebrow"><span class="dot hosting"></span>${isS3 ? 'S3 or R2 bucket' : 'Folder on this computer'}</span>
+      <span class="eyebrow"><span class="dot hosting"></span>${isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : 'Folder on this computer'}</span>
       ${!editing && html`<div class="actions">
         <button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>
         <button class="button destructive" type="button" disabled=${removeBusy}
@@ -1312,7 +1489,12 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
               ? html`<dt>Endpoint</dt><dd class="mono">${config.endpoint}</dd>
                 <dt>Bucket</dt><dd class="mono">${config.bucket}</dd>
                 <dt>Folder in the bucket</dt><dd class="mono">${config.prefix || '—'}</dd>`
-              : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
+              : isSftp
+                ? html`<dt>Server</dt><dd class="mono">${`${config.user}@${config.host}:${config.port}`}</dd>
+                  <dt>Folder</dt><dd class="mono">${config.root}</dd>
+                  <dt>Login</dt><dd>${{ key: 'Private key', password: 'Password', agent: 'ssh-agent' }[config.login] || config.login}</dd>
+                  <dt>Host key</dt><dd class="mono">${config.host_key}</dd>`
+                : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
             <dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
@@ -1324,7 +1506,21 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
                 ${disagreeing.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>${f.title || f.path}</button>
                   <span class="mono">${f.public_url}</span></li>`)}
               </ul></dd>`}
-          </dl>`}
+          </dl>
+          ${isSftp && html`<div class="actions">
+            <button class="button" type="button" disabled=${check.busy || accept.busy} onClick=${checkHost}>
+              ${check.busy ? 'Checking…' : 'Check the connection'}</button>
+          </div>`}
+          ${isSftp && newKey && html`<div class="notice error" role="alert">
+            <strong>The server gives a new host key.</strong>
+            <p>Make sure that this is the fingerprint of the server before you accept it:</p>
+            <p class="mono">${newKey}</p>
+            <div class="actions"><button class="button action" type="button" disabled=${accept.busy} onClick=${acceptKey}>
+              ${accept.busy ? 'Accepting…' : 'Accept the new key'}</button></div>
+          </div>`}
+          ${mismatch && html`<div class="notice error" role="alert"><strong>The server gives a different key now.</strong>Connect again to see it.</div>`}
+          ${!mismatch && html`<${ErrorNotice} error=${accept.error} />`}
+          ${isSftp && html`<${ErrorNotice} error=${check.error} />`}`}
   </article>`;
 }
 

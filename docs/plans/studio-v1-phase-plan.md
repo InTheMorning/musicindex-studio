@@ -149,7 +149,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Sequence: the interface change, then S3 and R2, then SFTP, then nsite and Blossom.
 - Task: [027](../tasks/studio-v1-task-027-connector-interface.md) (the interface change), in three packets, is complete. The [review checklist](../reviews/2026-10-25-task-027-review-checklist.md) records each packet.
 - Task: [028](../tasks/studio-v1-task-028-s3-connector.md) (S3 and R2), in four packets, is complete. The [review checklist](../reviews/2026-10-25-task-028-review-checklist.md) records each packet. Its human test with a real bucket is open.
-- Task: [029](../tasks/studio-v1-task-029-sftp-connector.md) (SFTP), in five packets.
+- Task: [029](../tasks/studio-v1-task-029-sftp-connector.md) (SFTP), in five packets, is complete. The [review checklist](../reviews/2026-10-25-task-029-review-checklist.md) records each packet. Its human tests of the password login and the ssh-agent login on a real server are open.
 - Task: [030](../tasks/studio-v1-task-030-nsite-and-blossom.md) (nsite and Blossom). The planning model writes its packets after task 029.
 - Human tests against real hosts stay open until the operator can use a real host of each type ([ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) item 5).
 - Mechanical check: each connector passes the test module of the trait against a local test server.

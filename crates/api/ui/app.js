@@ -1,6 +1,9 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
-import { AlbumEditor, DraftToolbar } from './editor.js';
+import { AlbumEditor, DraftToolbar, useSheet } from './editor.js';
+import {
+  bootView, signInEvent, normalEmail, authErrorText, unlockMethods, accountName, deleteConfirmation,
+} from './account.js';
 import { isLiveItem } from './live.js';
 import { useDraft } from './draft.js';
 import {
@@ -39,18 +42,62 @@ class ApiError extends Error {
   }
 }
 
-// `raw` is true for a response that is not JSON, such as an image (ADR 0025).
-// It then gives the body as a `Blob` instead of parsed JSON.
-// A `File` or `Blob` body, such as the body of an upload (task 018d), goes to
-// the route as-is, with no JSON wrapper and no Content-Type header of this
-// function. The browser sets the Content-Type header of a `Blob` body.
-export async function api(path, { method = 'GET', body, raw = false } = {}) {
-  const headers = { Authorization: `Bearer ${token}` };
+// ---- The mode of the server (ADR 0055 items 12 and 14 to 17) ----
+// `GET /auth/v1/session` tells the UI which shell serves it. On a server,
+// `api()` sends the CSRF token of the session in `X-Studio-CSRF` and sends no
+// `Authorization` header. The CSRF token stays in memory only.
+
+let serverMode = false;
+let csrfToken = null;
+// `App` sets these two functions. `onUnlockNeeded` gives a promise that is
+// true after an unlock and false when the user closes the unlock sheet.
+let onUnlockNeeded = null;
+let onSessionLost = null;
+let unlocking = null;
+
+// Keep the mode and the CSRF token of a session response.
+function applySession(session) {
+  serverMode = session.mode === 'server';
+  csrfToken = serverMode && session.signed_in !== false ? session.csrf || null : null;
+}
+
+// Ask for an unlock. Parallel requests share one sheet.
+function askUnlock() {
+  if (!onUnlockNeeded) return Promise.resolve(false);
+  if (!unlocking) unlocking = onUnlockNeeded().finally(() => { unlocking = null; });
+  return unlocking;
+}
+
+// Run a request. On a server, the answer 423 `vault_locked` opens the unlock
+// sheet, and after an unlock the request runs one more time. If the user
+// closes the sheet, the request gives its error. The answer 401
+// `session_required` or `session_ended` shows the sign-in page.
+async function withUnlock(work) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await work();
+    } catch (error) {
+      if (serverMode && error.status === 423 && error.code === 'vault_locked' && attempt === 0 && await askUnlock()) continue;
+      if (serverMode && error.status === 401 && (error.code === 'session_required' || error.code === 'session_ended') && onSessionLost) {
+        onSessionLost();
+      }
+      throw error;
+    }
+  }
+}
+
+// One request and its answer. `raw` is true for a response that is not JSON,
+// such as an image (ADR 0025). It then gives the body as a `Blob` instead of
+// parsed JSON. A `File` or `Blob` body, such as the body of an upload (task
+// 018d), goes to the route as-is, with no JSON wrapper and no Content-Type
+// header of this function. The browser sets the Content-Type header of a
+// `Blob` body.
+async function exchange(url, headers, { method = 'GET', body, raw = false }) {
   const isBlob = body instanceof Blob;
   if (body !== undefined && !isBlob) headers['Content-Type'] = 'application/json';
   let response;
   try {
-    response = await fetch(`/api/v1${path}`, {
+    response = await fetch(url, {
       method,
       headers,
       body: body === undefined ? undefined : isBlob ? body : JSON.stringify(body),
@@ -65,6 +112,19 @@ export async function api(path, { method = 'GET', body, raw = false } = {}) {
     throw new ApiError(response.status, error.code, error.message);
   }
   return data;
+}
+
+export function api(path, options = {}) {
+  return withUnlock(() => {
+    const headers = serverMode ? { 'X-Studio-CSRF': csrfToken || '' } : { Authorization: `Bearer ${token}` };
+    return exchange(`/api/v1${path}`, headers, options);
+  });
+}
+
+// A request to the auth routes of a server. It sends no access token.
+function authCall(path, options = {}) {
+  const headers = csrfToken ? { 'X-Studio-CSRF': csrfToken } : {};
+  return exchange(`/auth/v1${path}`, headers, { method: 'POST', ...options });
 }
 
 // ---- Images, through the local API (ADR 0025, ADR 0032 items 13 and 14) ----
@@ -288,7 +348,7 @@ const MIN_CHARS = 12;
 const STRENGTH_WORDS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'];
 
 // Ask the API for the strength when the user stops typing (ADR 0018).
-function useStrength(passphrase) {
+function useStrength(passphrase, signedOut = false) {
   const [strength, setStrength] = useState(null);
   useEffect(() => {
     setStrength(null);
@@ -296,14 +356,15 @@ function useStrength(passphrase) {
     let current = true;
     const timer = setTimeout(async () => {
       try {
-        const result = await api('/vault/strength', { method: 'POST', body: { passphrase } });
+        const body = { passphrase };
+        const result = signedOut ? await authCall('/strength', { body }) : await api('/vault/strength', { method: 'POST', body });
         if (current) setStrength(result);
       } catch (_) {
         // The vault still checks the passphrase when the user submits it.
       }
     }, 300);
     return () => { current = false; clearTimeout(timer); };
-  }, [passphrase]);
+  }, [passphrase, signedOut]);
   return strength;
 }
 
@@ -917,16 +978,16 @@ function BlossomHostForm({ onAdded }) {
 }
 
 // The first choice is the type of the host. The form below it follows the
-// type (ADR 0045 item 4).
+// type (ADR 0045 item 4). A server has no folder host (ADR 0055).
 function AddHostForm({ feeds, onAdded }) {
-  const [type, setType] = useState('local');
+  const [type, setType] = useState(serverMode ? 's3' : 'local');
   return html`<div class="form">
     <fieldset class="choices">
       <legend>Type of host</legend>
-      <label class="choice">
+      ${!serverMode && html`<label class="choice">
         <input type="radio" name="host-type" value="local" checked=${type === 'local'} onChange=${() => setType('local')} />
         <span class="text"><span class="title">Folder on this computer</span></span>
-      </label>
+      </label>`}
       <label class="choice">
         <input type="radio" name="host-type" value="s3" checked=${type === 's3'} onChange=${() => setType('s3')} />
         <span class="text"><span class="title">S3 or R2 bucket</span></span>
@@ -1707,7 +1768,7 @@ function LibraryPanel() {
   const ready = Number(maxMb) > 0 && Number(minMb) > 0;
   return html`<article class="panel">
     <h2>Library</h2>
-    <dl class="facts"><dt>Folder</dt><dd class="mono">${library.root}</dd></dl>
+    ${!serverMode && html`<dl class="facts"><dt>Folder</dt><dd class="mono">${library.root}</dd></dl>`}
     <form class="form" onSubmit=${submit}>
       <div class="grid2">
         <${Field} id="limit-max" label="Largest download, in MB" inputmode="numeric" required
@@ -2037,6 +2098,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     <section class="section">
       <${LibraryPanel} />
       <${AnnouncePanel} />
+      ${serverMode && html`<${AccountPanel} />`}
       <${ConnectedAppsPanel} />
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
@@ -2549,9 +2611,250 @@ function Shell({ vault, onLock }) {
   </div><//>`;
 }
 
+// ---- Sign-in and sign-up on a server (ADR 0055, ADR 0056) ----
+
+// The text of a failed auth request. Studio shows its own text for each
+// code of the auth routes.
+function AuthNotice({ error }) {
+  if (!error) return null;
+  const text = error.code === 'offline' || error.code === 'signer' ? error.message : authErrorText(error.code);
+  return html`<div class="notice error" role="alert">${text}</div>`;
+}
+
+// Sign in or sign up with a NIP-07 signer (ADR 0056 items 5, 6, 9 and 11).
+// For a new account, the signer encrypts the vault key to its own public key,
+// and the server keeps the result as the Nostr wrapper.
+async function signerAuth({ invite, recoveryKey }) {
+  const signer = window.nostr;
+  if (!signer) throw new ApiError(0, 'no_signer', authErrorText('no_signer'));
+  if (!signer.nip44) {
+    throw new ApiError(0, 'signer', 'This signer does not support NIP-44. Studio needs NIP-44 to open the vault.');
+  }
+  const { challenge } = await authCall('/challenge');
+  let event;
+  try {
+    event = await signer.signEvent(signInEvent(location.origin, challenge, Math.floor(Date.now() / 1000)));
+  } catch (_) {
+    throw new ApiError(0, 'signer', 'The signer did not sign the sign-in request.');
+  }
+  const result = await authCall('/nostr', { body: { event, invite: invite || null, recovery_key: recoveryKey } });
+  if (result.new_account) {
+    csrfToken = result.csrf;
+    try {
+      const pubkey = await signer.getPublicKey();
+      const { key } = await api('/vault/signer-key', { method: 'POST' });
+      const ciphertext = await signer.nip44.encrypt(pubkey, key);
+      await api('/vault/nostr-wrapper', { method: 'POST', body: { pubkey, ciphertext } });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(0, 'signer', 'The signer did not encrypt the vault key.');
+    }
+  }
+  csrfToken = result.csrf;
+  return result;
+}
+
+function SignInPage({ onDone, onSignUp }) {
+  const [email, setEmail] = useState('');
+  const [passphrase, setPassphrase] = useState('');
+  const { busy, error, run } = useAction();
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      const result = await authCall('/signin/email', { body: { email: normalEmail(email), passphrase } });
+      csrfToken = result.csrf;
+      onDone(null);
+    });
+  };
+  const signer = () => run(async () => {
+    const result = await signerAuth({ invite: null, recoveryKey: false });
+    onDone(result.recovery_key || null);
+  });
+  return html`<main class="center"><form class="card" onSubmit=${submit}>
+    <${Brand} />
+    <div><h1>Sign in</h1></div>
+    <${Field} id="sign-in-email" label="Email address" type="email" autocomplete="username" required autofocus
+      value=${email} onInput=${(e) => setEmail(e.target.value)} />
+    <${Field} id="sign-in-passphrase" label="Passphrase" type="password" autocomplete="current-password" required
+      value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
+    <${AuthNotice} error=${error} />
+    <div class="actions">
+      <button class="button primary" type="submit" disabled=${busy || !email.trim() || !passphrase}>${busy ? 'Signing in…' : 'Sign in'}</button>
+      ${window.nostr && html`<button class="button action" type="button" disabled=${busy} onClick=${signer}>Sign in with a signer extension</button>`}
+    </div>
+    <button class="button link" type="button" onClick=${onSignUp}>Make an account</button>
+  </form></main>`;
+}
+
+function SignUpPage({ signup, onDone, onSignIn }) {
+  const [email, setEmail] = useState('');
+  const [passphrase, setPassphrase] = useState('');
+  const [invite, setInvite] = useState('');
+  const [recovery, setRecovery] = useState(true);
+  const { busy, error, run } = useAction();
+  const strength = useStrength(passphrase, true);
+  const needInvite = signup === 'invite';
+  const serverError = splitError(error, ['passphrase_too_short', 'passphrase_too_weak']);
+  const passError = passphraseError(passphrase, strength) || serverError.field;
+  const emailError = error && error.code === 'invalid_email' ? 'Give an email address.' : null;
+  const ready = strength && strength.acceptable && email.trim() !== '' && (!needInvite || invite.trim() !== '');
+  const submit = (event) => {
+    event.preventDefault();
+    if (!ready) return;
+    run(async () => {
+      const result = await authCall('/signup/email', {
+        body: { email: normalEmail(email), passphrase, invite: needInvite ? invite.trim() : null, recovery_key: recovery },
+      });
+      csrfToken = result.csrf;
+      onDone(result.recovery_key || null);
+    });
+  };
+  const signer = () => run(async () => {
+    const result = await signerAuth({ invite: needInvite ? invite.trim() : null, recoveryKey: recovery });
+    onDone(result.recovery_key || null);
+  });
+  return html`<main class="center"><form class="card" onSubmit=${submit} noValidate>
+    <${Brand} />
+    <div><h1>Make an account</h1>
+      <p>Your passphrase opens the vault with the keys of your hosts.</p></div>
+    <${Field} id="sign-up-email" label="Email address" type="email" autocomplete="username" required autofocus
+      error=${emailError} value=${email} onInput=${(e) => setEmail(e.target.value)} />
+    ${needInvite && html`<${Field} id="sign-up-invite" label="Invite code" autocomplete="off" required
+      value=${invite} onInput=${(e) => setInvite(e.target.value)} />`}
+    <${Field} id="sign-up-passphrase" label="Passphrase" type="password" autocomplete="new-password" required
+      value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} error=${passError}>
+      <${Meter} strength=${strength} />
+    <//>
+    <label class="check"><input type="checkbox" checked=${recovery} onChange=${(e) => setRecovery(e.target.checked)} />
+      Make a recovery key, in case I forget the passphrase</label>
+    <${AuthNotice} error=${serverError.other && error.code !== 'invalid_email' ? error : null} />
+    <div class="actions">
+      <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the account…' : 'Make the account'}</button>
+      ${window.nostr && html`<button class="button action" type="button" disabled=${busy || (needInvite && invite.trim() === '')}
+        onClick=${signer}>Sign up with a signer extension</button>`}
+    </div>
+    <button class="button link" type="button" onClick=${onSignIn}>I have an account</button>
+  </form></main>`;
+}
+
+// The pages of a user with no session. After a sign-up, the recovery key
+// shows before the shell opens.
+function SignedOut({ session, onSignedIn }) {
+  const [page, setPage] = useState('sign_in');
+  const [recoveryKey, setRecoveryKey] = useState(null);
+  const done = (key) => { if (key) setRecoveryKey(key); else onSignedIn(); };
+  if (recoveryKey) {
+    return html`<main class="center"><div class="card"><${Brand} />
+      <${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${onSignedIn} /></div></main>`;
+  }
+  return page === 'sign_in'
+    ? html`<${SignInPage} onDone=${done} onSignUp=${() => setPage('sign_up')} />`
+    : html`<${SignUpPage} signup=${session.signup} onDone=${done} onSignIn=${() => setPage('sign_in')} />`;
+}
+
+// The unlock sheet (ADR 0056 items 7 and 10). `onDone(true)` follows an
+// unlock. `onDone(false)` follows a close of the sheet.
+function UnlockSheet({ session, onDone }) {
+  const ref = useSheet(true);
+  const [passphrase, setPassphrase] = useState('');
+  const { busy, error, run } = useAction();
+  const settled = useRef(false);
+  const finish = (ok) => {
+    if (settled.current) return;
+    settled.current = true;
+    onDone(ok);
+  };
+  const methods = unlockMethods(session, !!window.nostr);
+  const byPassphrase = (event) => {
+    event.preventDefault();
+    run(async () => {
+      await api('/vault/unlock', { method: 'POST', body: { passphrase } });
+      finish(true);
+    });
+  };
+  const bySigner = () => run(async () => {
+    const wrapper = await api('/vault/nostr-wrapper');
+    let key;
+    try {
+      key = await window.nostr.nip44.decrypt(wrapper.pubkey, wrapper.ciphertext);
+    } catch (_) {
+      throw new ApiError(0, 'signer', 'The signer did not decrypt the vault key.');
+    }
+    await api('/vault/unlock-key', { method: 'POST', body: { key } });
+    finish(true);
+  });
+  const passError = splitError(error, ['wrong_key']);
+  const signerError = error && error.code === 'wrong_key' && methods.includes('nip07') && !methods.includes('passphrase') ? error : null;
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="unlock-title" onClose=${() => finish(false)}>
+    <header>
+      <h2 id="unlock-title">Unlock Studio</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <p>This step needs the vault. Your passphrase or your signer opens it.</p>
+      ${methods.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase}>
+        <${Field} id="unlock-sheet-passphrase" label="Passphrase" type="password" autocomplete="current-password" required autofocus
+          error=${passError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
+        <div class="actions"><button class="button primary" type="submit" disabled=${busy || !passphrase}>${busy ? 'Unlocking…' : 'Unlock'}</button></div>
+      </form>`}
+      ${methods.includes('nip07') && html`<div class="actions">
+        <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Unlock with a signer extension</button></div>`}
+      ${methods.length === 0 && html`<p class="hint">This account opens with a Nostr signer. Studio found no signer extension in this browser.</p>`}
+      <${AuthNotice} error=${signerError || passError.other} />
+    </div>
+    <footer><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button></footer>
+  </dialog>`;
+}
+
+// The session of the signed-in user, and the function that reloads it.
+const SessionContext = createContext(null);
+
+// The Account panel of the Hosts page, on a server only (ADR 0055 item 9).
+function AccountPanel() {
+  const { session, reload } = useContext(SessionContext);
+  const [deleting, setDeleting] = useState(false);
+  const [typed, setTyped] = useState('');
+  const { busy, error, run } = useAction();
+  const confirmation = deleteConfirmation(session, typed);
+  const byEmail = !!session.email;
+  const signOut = () => run(async () => {
+    await authCall('/signout');
+    await reload();
+  });
+  const remove = (event) => {
+    event.preventDefault();
+    if (!confirmation) return;
+    run(async () => {
+      await withUnlock(() => authCall('/account/delete', { body: { confirm: confirmation } }));
+      await reload();
+    });
+  };
+  return html`<article class="panel">
+    <h2>Account</h2>
+    <dl class="facts"><dt>${byEmail ? 'Email address' : 'Nostr key'}</dt><dd class="mono">${accountName(session)}</dd></dl>
+    ${deleting
+      ? html`<form class="form" onSubmit=${remove}>
+          <p class="hint">Studio removes your feeds, your vault and your library files from the server. This cannot be undone.</p>
+          <${Field} id="delete-confirm" label=${`Type ${byEmail ? 'your email address' : 'your npub'} to confirm`}
+            autocomplete="off" value=${typed} onInput=${(e) => setTyped(e.target.value)} />
+          <div class="actions">
+            <button class="button destructive" type="submit" disabled=${busy || !confirmation}>${busy ? 'Deleting…' : 'Yes, delete the account'}</button>
+            <button class="button" type="button" disabled=${busy} onClick=${() => { setDeleting(false); setTyped(''); }}>Cancel</button>
+          </div>
+        </form>`
+      : html`<div class="actions">
+          <button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign out</button>
+          <button class="button destructive" type="button" disabled=${busy} onClick=${() => setDeleting(true)}>Delete the account</button>
+        </div>`}
+    <${AuthNotice} error=${error} />
+  </article>`;
+}
+
 // ---- App ----
 
-function App() {
+// The studio of a user: the desktop, or a signed-in user of a server.
+// `epoch` changes after an unlock, so that the studio reads its state again.
+function Studio({ epoch }) {
   const [status, setStatus] = useState(null);
   const [library, setLibrary] = useState(null);
   const [skipped, setSkipped] = useState(false);
@@ -2566,25 +2869,81 @@ function App() {
       setError(e);
     }
   }, []);
-  useEffect(() => { if (token) load(); }, [load]);
+  useEffect(() => { if (serverMode || token) load(); }, [load, epoch]);
 
-  if (!token) return html`<${NoToken} />`;
-  if (error && error.status === 401) return html`<${NoToken} />`;
+  if (!serverMode && !token) return html`<${NoToken} />`;
+  if (error && error.status === 401) {
+    return serverMode ? html`<p class="boot" role="status">Loading Studio…</p>` : html`<${NoToken} />`;
+  }
   if (error) return html`<main class="center"><div class="card"><${Brand} /><${ErrorNotice} error=${error} />
     <div class="actions"><button class="button" type="button" onClick=${load}>Try again</button></div></div></main>`;
   if (!status || !library) return html`<p class="boot" role="status">Loading Studio…</p>`;
-  if (status.vault === 'locked') return html`<${Unlock} onUnlocked=${load} />`;
+  // On a server, a locked vault does not stop the start. A route that needs
+  // the vault opens the unlock sheet (ADR 0056 item 9).
+  if (status.vault === 'locked' && !serverMode) return html`<${Unlock} onUnlocked=${load} />`;
   // Studio needs its library folder before the editor, so that a write has
   // a release folder to keep the hosted file in (ADR 0036 items 1 and 2).
   if (library.root === null) {
     return html`<${LibrarySheet} defaultRoot=${library.default_root} onDone=${load} />`;
   }
   // The first run: an empty collection (ADR 0020). The vault comes when the
-  // user first adds a secret.
+  // user first adds a secret. On a server, the vault exists from the sign-up.
   if (status.feeds === 0 && status.connectors === 0 && !skipped) {
     return html`<${Wizard} onFinish=${() => { setSkipped(true); load(); }} />`;
   }
   return html`<${Shell} vault=${status.vault} onLock=${load} />`;
+}
+
+function App() {
+  const [session, setSession] = useState(null);
+  const [bootError, setBootError] = useState(null);
+  const [unlockAsk, setUnlockAsk] = useState(null);
+  const [epoch, setEpoch] = useState(0);
+  const reload = useCallback(async () => {
+    try {
+      const next = await authCall('/session', { method: 'GET' });
+      applySession(next);
+      setSession(next);
+      setBootError(null);
+    } catch (e) {
+      setBootError(e);
+    }
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+  // A pending unlock ends when the user is no longer signed in.
+  useEffect(() => {
+    if (unlockAsk && !(session && session.signed_in)) { unlockAsk.resolve(false); setUnlockAsk(null); }
+  }, [session, unlockAsk]);
+  useEffect(() => {
+    onUnlockNeeded = () => new Promise((resolve) => setUnlockAsk({ resolve }));
+    onSessionLost = () => {
+      csrfToken = null;
+      setSession((current) => (current && current.mode === 'server'
+        ? { mode: 'server', signup: current.signup, signed_in: false } : current));
+    };
+    return () => { onUnlockNeeded = null; onSessionLost = null; };
+  }, []);
+
+  if (bootError) {
+    return html`<main class="center"><div class="card"><${Brand} /><${ErrorNotice} error=${bootError} />
+      <div class="actions"><button class="button" type="button" onClick=${reload}>Try again</button></div></div></main>`;
+  }
+  if (!session) return html`<p class="boot" role="status">Loading Studio…</p>`;
+  const view = bootView(session, null);
+  let body;
+  if (view === 'local') {
+    body = html`<${Studio} epoch=${0} />`;
+  } else if (view === 'sign_in') {
+    body = html`<${SignedOut} session=${session} onSignedIn=${reload} />`;
+  } else {
+    body = html`<${SessionContext.Provider} value=${{ session, reload }}><${Studio} epoch=${epoch} /><//>`;
+  }
+  const closeUnlock = (ok) => {
+    unlockAsk.resolve(ok);
+    setUnlockAsk(null);
+    if (ok) setEpoch((n) => n + 1);
+  };
+  return html`${body}${unlockAsk && view === 'shell' && html`<${UnlockSheet} session=${session} onDone=${closeUnlock} />`}`;
 }
 
 render(html`<${App} />`, document.getElementById('app'));

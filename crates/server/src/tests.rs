@@ -721,6 +721,35 @@ async fn thirty_failed_sign_ins_block_the_client_address() {
 }
 
 #[tokio::test]
+async fn the_strength_route_gives_the_score_of_the_desktop_route() {
+    let app = app(Signup::Open);
+    for passphrase in ["monkeymonkey1", "Kx9#mQ2!vL7@pR4z", "short"] {
+        let body = json!({ "passphrase": passphrase });
+        let reply = send(&app, call("POST", "/auth/v1/strength", Some(body))).await;
+        assert_eq!(reply.status, StatusCode::OK);
+        let expected = serde_json::to_value(studio_core::vault::passphrase_strength(passphrase));
+        assert_eq!(reply.json, expected.unwrap());
+        assert!(!reply.text.contains(passphrase));
+    }
+}
+
+#[tokio::test]
+async fn the_strength_route_refuses_a_blocked_client_address() {
+    let app = app_with(Signup::Open, |o| {
+        o.client_address_header = Some("x-real-ip".to_owned());
+    });
+    for i in 0..30 {
+        let mut c = sign_in_call(&format!("nobody{i}@example.org"), PASS_ONE);
+        c.extra = vec![("x-real-ip", "203.0.113.9")];
+        send(&app, c).await;
+    }
+    let body = json!({ "passphrase": PASS_ONE });
+    let mut blocked = call("POST", "/auth/v1/strength", Some(body));
+    blocked.extra = vec![("x-real-ip", "203.0.113.9")];
+    assert_eq!(send(&app, blocked).await.code(), "too_many_attempts");
+}
+
+#[tokio::test]
 async fn account_deletion_removes_the_folder_the_rows_and_the_session() {
     let app = app(Signup::Invite);
     let who = new_user(&app, "a@example.org", PASS_ONE).await;
@@ -805,7 +834,7 @@ async fn a_user_folder_refuses_a_local_host_on_the_server() {
 
 // Task 034e: the NIP-07 sign-in.
 
-use nostr::prelude::{Keys, Kind, SecretKey, Tag, Timestamp, UnsignedEvent};
+use nostr::prelude::{Keys, Kind, SecretKey, Tag, Timestamp, ToBech32, UnsignedEvent};
 
 const NOSTR_URL: &str = "http://127.0.0.1:8080/auth/v1/nostr";
 
@@ -1135,7 +1164,7 @@ async fn a_nostr_account_can_delete_itself_with_its_public_key() {
         &who,
         "POST",
         "/auth/v1/account/delete",
-        Some(json!({ "confirm": keys.public_key().to_hex() })),
+        Some(json!({ "confirm": keys.public_key().to_bech32().unwrap() })),
     )
     .await;
     assert_eq!(gone.status, StatusCode::NO_CONTENT, "{:?}", gone.json);

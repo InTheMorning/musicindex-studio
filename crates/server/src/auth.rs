@@ -25,6 +25,7 @@ pub fn server_router(state: &Shared) -> Router {
         .route("/auth/v1/session", get(get_session))
         .route("/auth/v1/signup/email", post(sign_up))
         .route("/auth/v1/signin/email", post(sign_in))
+        .route("/auth/v1/strength", post(strength))
         .route("/auth/v1/challenge", post(challenge))
         .route("/auth/v1/nostr", post(nostr_sign_in))
         .route("/auth/v1/signout", post(sign_out))
@@ -386,9 +387,17 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
         );
     };
     // An email account confirms with its address. A Nostr account confirms
-    // with its public key in hexadecimal.
-    let name = email.or(pubkey).unwrap_or_default();
-    if body.confirm.trim().to_lowercase() != name {
+    // with its `npub` (task 034d).
+    let confirmed = match (email, pubkey) {
+        (Some(email), _) => body.confirm.trim().to_lowercase() == email,
+        (None, Some(pubkey)) => {
+            use nostr::prelude::FromBech32;
+            nostr::prelude::PublicKey::from_bech32(body.confirm.trim())
+                .is_ok_and(|key| key.to_hex() == pubkey)
+        }
+        (None, None) => false,
+    };
+    if !confirmed {
         return failure(
             StatusCode::UNPROCESSABLE_ENTITY,
             "confirm_mismatch",
@@ -416,6 +425,27 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
     }
     state.users.forget(session.account_id).await;
     with_cookie(StatusCode::NO_CONTENT.into_response(), &cleared_cookie())
+}
+
+#[derive(Deserialize)]
+struct Strength {
+    passphrase: String,
+}
+
+/// The strength of a passphrase for the sign-up page, before the user has a
+/// session (ADR 0018). The result is the same as the result of the vault
+/// route of the desktop. The route does no Argon2id work. It refuses a
+/// client address that has too many failed sign-ins, and it counts no failure.
+async fn strength(State(state): State<Shared>, request: Request) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
+    if state.attempts.blocked("", &address) {
+        return limits::too_many_attempts();
+    }
+    let body: Strength = match read_json(request).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    axum::Json(passphrase_strength(&body.passphrase)).into_response()
 }
 
 /// Give a challenge for a sign-in event (ADR 0056 item 5).

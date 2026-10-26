@@ -31,6 +31,7 @@ use studio_core::media;
 use studio_core::migrate;
 use studio_core::nostr_events::Signing;
 use studio_core::pipeline;
+use studio_core::playlist;
 use studio_core::publisher;
 use studio_core::vault::OpenVault;
 use tokio::io::AsyncWriteExt;
@@ -1211,7 +1212,8 @@ pub(crate) struct NewAlbumFeed {
     path: String,
     title: String,
     author: String,
-    /// `music` (the default) or `publisher` (ADR 0041 item 2).
+    /// `music` (the default), `publisher` (ADR 0041 item 2) or `musicL`
+    /// (ADR 0053 item 2).
     medium: Option<String>,
     /// `artist` or `label`. A publisher feed needs it (ADR 0041 item 1).
     role: Option<String>,
@@ -1225,14 +1227,15 @@ pub(crate) async fn new_album_feed(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     blocking(shared, move |w| {
         let medium = body.medium.as_deref().unwrap_or("music");
-        let publisher = match medium {
-            "music" => false,
-            "publisher" => true,
+        let (publisher, playlist) = match medium {
+            "music" => (false, false),
+            "publisher" => (true, false),
+            "musicL" => (false, true),
             _ => {
                 return Err(ApiError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "invalid_feed",
-                    "the medium is music or publisher",
+                    "the medium is music, publisher or musicL",
                 ));
             }
         };
@@ -1241,6 +1244,8 @@ pub(crate) async fn new_album_feed(
         if title.is_empty() || author.is_empty() {
             let message = if publisher {
                 "give the name of the publisher feed"
+            } else if playlist {
+                "give the name of the playlist"
             } else {
                 "give the album title and the artist"
             };
@@ -3982,6 +3987,37 @@ pub(crate) async fn index_track_recipients(
     blocking(shared, move |w| {
         let routes = w.index.track_routes(&guid, &track)?;
         to_json(routes.ok_or_else(|| index_not_found("track", &track))?)
+    })
+    .await
+}
+
+/// The tracks of the music feeds of the collection, for the track picker of
+/// a playlist (ADR 0053 item 5).
+pub(crate) async fn playlist_tracks(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| to_json(playlist::own_tracks(&w.collection)?)).await
+}
+
+/// The address and the tracks of a feed in musicindex, for the track picker
+/// of a playlist (ADR 0053 item 5).
+pub(crate) async fn index_feed_tracks(
+    State(shared): State<Shared>,
+    Path(guid): Path<String>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let Some(routes) = w.index.feed_routes(&guid)? else {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_in_index",
+                format!("musicindex has no feed {guid}"),
+            ));
+        };
+        let feed_url = w.index.feed_url(&guid)?;
+        Ok(Json(json!({
+            "feed_guid": guid,
+            "feed_url": feed_url,
+            "title": routes.title,
+            "tracks": routes.tracks,
+        })))
     })
     .await
 }

@@ -5590,3 +5590,148 @@ async fn resuming_fails_a_waiting_announcement_older_than_a_day() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].state.as_str(), "failed");
 }
+
+#[tokio::test]
+async fn a_playlist_is_made_with_the_musicl_medium_and_an_empty_name_gives_422() {
+    let (app, connector) = publisher_app().await;
+    let (status, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(new_feed_body(
+            connector,
+            "list.xml",
+            "Mix",
+            Some("musicL"),
+            None,
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    assert_eq!(feed["medium"], "musicL");
+    assert_eq!(
+        draft_model(&app, feed["id"].as_i64().unwrap()).await["medium"],
+        "musicL"
+    );
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(new_feed_body(
+            connector,
+            "list2.xml",
+            " ",
+            Some("musicL"),
+            None,
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["message"], "give the name of the playlist");
+}
+
+#[tokio::test]
+async fn the_playlist_tracks_route_gives_the_tracks_of_the_collection() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (status, _) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(&app, "GET", "/api/v1/playlist/tracks", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body,
+        json!([{
+            "feed_guid": "g-1",
+            "feed_url": "https://music.example/album.xml",
+            "feed_title": "Album",
+            "item_guid": "t-1",
+            "title": null,
+        }])
+    );
+}
+
+#[tokio::test]
+async fn the_musicindex_tracks_route_gives_the_address_and_the_tracks() {
+    let server = web_feeds();
+    server.set(
+        "/v1/feeds/b-1",
+        200,
+        br#"{"data":{"title":"Album B","feed_url":"https://b.example/feed.xml","payment_routes":[],"tracks":[{"track_guid":"aa11","title":"Track One"}]}}"#.to_vec(),
+    );
+    let app = app_with_index(&server.url(""));
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/feeds/b-1/tracks", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body,
+        json!({
+            "feed_guid": "b-1",
+            "feed_url": "https://b.example/feed.xml",
+            "title": "Album B",
+            "tracks": [{ "track_guid": "aa11", "title": "Track One" }],
+        })
+    );
+
+    let (status, body) = call(
+        &app,
+        "GET",
+        "/api/v1/musicindex/feeds/00000000-0000-0000-0000-000000000000/tracks",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_in_index");
+}
+
+#[tokio::test]
+async fn a_playlist_with_two_remote_items_is_written_with_no_item() {
+    let (app, connector) = publisher_app().await;
+    let feed = make_feed(
+        &app,
+        new_feed_body(connector, "list.xml", "Mix", Some("musicL"), None),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["remote_items"] = json!([
+        { "feed_guid": "f-1", "feed_url": "https://a.example/a.xml", "item_guid": "i-1",
+          "medium": "music", "title": "First" },
+        { "feed_guid": "f-2", "feed_url": "https://b.example/b.xml", "item_guid": "i-2",
+          "medium": "music", "title": "Second" },
+    ]);
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let xml = std::fs::read_to_string(app.feeds.path().join("list.xml")).unwrap();
+    assert!(!xml.contains("<item>"), "{xml}");
+    assert_eq!(xml.matches("<podcast:remoteItem").count(), 2, "{xml}");
+    let first = xml.find("itemGuid=\"i-1\"").unwrap();
+    let second = xml.find("itemGuid=\"i-2\"").unwrap();
+    assert!(first < second);
+    for needle in [
+        "feedGuid=\"f-1\"",
+        "feedUrl=\"https://a.example/a.xml\"",
+        "title=\"First\"",
+        "feedGuid=\"f-2\"",
+        "title=\"Second\"",
+    ] {
+        assert!(xml.contains(needle), "{needle} in {xml}");
+    }
+    assert_eq!(xml.matches("medium=\"music\"").count(), 2, "{xml}");
+}

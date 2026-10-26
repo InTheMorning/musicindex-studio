@@ -27,18 +27,19 @@ These choices are fixed. Do not change them.
 
 ### The Playlist Module
 
-`playlist.js` has no Preact and no browser state. It exports:
+`playlist.js` has no Preact and no browser state. A remote item of the draft model has the fields `feed_guid`, `item_guid`, `feed_url`, `medium` and `title`, and the entry key `_cid` ([ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md)). A pick has the fields `feed_guid`, `item_guid`, `feed_url` and `title`. A track of `GET /api/v1/playlist/tracks` is a pick. The module exports:
 
-- `pickKey(track)` gives `feedGuid + ' ' + itemGuid` for a remote item or a pick.
-- `remoteItemFromPick(pick)` gives `{ feedGuid, itemGuid, feedUrl, medium: 'music', title }` from a pick of the two sources. A missing `feedUrl` or `title` stays out of the object.
-- `addTrack(remoteItems, pick)` gives a new list with the new remote item last. When the list has the same `pickKey`, it gives the list with no change.
+- `pickKey(track)` gives `feed_guid + ' ' + item_guid` for a remote item or a pick.
+- `pickFromIndex(feed, track)` gives a pick from the response of `GET /api/v1/musicindex/feeds/{guid}/tracks` and one entry of its `tracks`. `item_guid` is the `track_guid` of the entry.
+- `remoteItemFromPick(pick)` gives `{ feed_guid, item_guid, feed_url, medium: 'music', title }`. A missing `feed_url` or `title` stays out of the object. It makes no entry key. The page gives the entry key with `withCids` of `draft.js`.
+- `addTrack(remoteItems, item)` gives a new list with the new remote item last. When the list has the same `pickKey`, it gives the list with no change.
 - `hasTrack(remoteItems, pick)` is true when the list has the same `pickKey`.
 - `moveTrack(remoteItems, index, delta)` gives a new list with the entry at `index` moved by `delta` (`-1` or `1`). A move out of the list gives the list with no change.
 - `removeTrack(remoteItems, index)` gives a new list without that entry.
-- `trackRow(remoteItem)` gives `{ title, sub }`. `title` is the `title` attribute, or "Untitled track". `sub` is the feed GUID and the item GUID, separated by " · ".
+- `trackRow(remoteItem)` gives `{ title, sub }`. `title` is the `title` field, or "Untitled track". `sub` is the feed GUID and the item GUID, separated by " · ".
 - `tracksSummary(remoteItems)` gives "No tracks", "1 track" or "N tracks".
 
-Each function keeps the other fields of each entry, such as the entry key of [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md).
+Each function keeps the other fields of each entry, such as the entry key `_cid`.
 
 ## Steps
 
@@ -73,7 +74,7 @@ node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-- Stop and report when a remote item of the draft model has different field names. The expected names are `feedGuid`, `itemGuid`, `feedUrl`, `medium` and `title`. Give the names that it has.
+- Stop and report when a remote item of the draft model has different field names. The expected names are `feed_guid`, `item_guid`, `feed_url`, `medium` and `title`. Give the names that it has.
 
 ## Prompt for lower-context coding model
 

@@ -82,6 +82,11 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             "/musicindex/feeds/{guid}/recipients",
             get(routes::index_feed_recipients),
         )
+        .route("/playlist/tracks", get(routes::playlist_tracks))
+        .route(
+            "/musicindex/feeds/{guid}/tracks",
+            get(routes::index_feed_tracks),
+        )
         .route(
             "/musicindex/feeds/{guid}/tracks/{track}/recipients",
             get(routes::index_track_recipients),

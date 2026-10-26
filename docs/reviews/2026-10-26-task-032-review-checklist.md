@@ -32,6 +32,6 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
-| [032a](../tasks/studio-v1-task-032a-playlist-api.md) | Open | |
+| [032a](../tasks/studio-v1-task-032a-playlist-api.md) | Pass | No correction of the code. In the manual checks, the musicindex test uses the local `TestServer`, and the written playlist has no `<item>`. The tracks route sends two requests to musicindex, one for the tracks and one for the address. The remote items of the draft model have the names `feed_guid`, `item_guid`, `feed_url`, `medium` and `title`, and the entry key `_cid`. Thus the planning model changed the names in packet 032b. A feed gets its item rows at its first read, so `own_tracks` has no tracks of a feed that Studio did not read. |
 | [032b](../tasks/studio-v1-task-032b-playlist-models.md) | Open | |
 | [032c](../tasks/studio-v1-task-032c-playlist-page.md) | Open | |

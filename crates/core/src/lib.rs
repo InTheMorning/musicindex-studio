@@ -23,6 +23,7 @@ pub mod msp;
 pub mod musicindex;
 pub mod nostr_events;
 pub mod pipeline;
+pub mod playlist;
 pub mod publisher;
 pub mod remote;
 #[cfg(any(test, feature = "testing"))]

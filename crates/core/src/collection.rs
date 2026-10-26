@@ -1004,6 +1004,22 @@ impl Collection {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// The GUID and the title of each item of a feed, in feed sequence.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn item_titles(
+        &self,
+        id: FeedId,
+    ) -> Result<Vec<(String, Option<String>)>, CollectionError> {
+        let mut statement = self
+            .db
+            .prepare("SELECT guid, title FROM feed_items WHERE feed_id = ?1 ORDER BY position")?;
+        let rows = statement.query_map([id.0], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// The draft of a feed.
     ///
     /// # Errors

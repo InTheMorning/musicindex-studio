@@ -7,7 +7,7 @@ import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from '.
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
-import { isLiveItem, liveKey, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput } from './live.js';
+import { isLiveItem, liveKey, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError } from './signing.js';
@@ -847,6 +847,26 @@ function AnnounceLines({ diff }) {
   </div>`;
 }
 
+// The grant check box of each pending show of the draft (ADR 0054 item 11).
+// The check box asks the grant route and takes the new diff from its
+// response, so the sheet needs no second request. `diff.grants` gives the
+// GUID of each show that has a grant request.
+function GrantChecks({ feedId, model, diff, apps, busy, onDiff, run }) {
+  const shows = ((model && model.live_items) || []).filter((l) => l.status === 'pending' && l.item && l.item.guid);
+  if (shows.length === 0) return null;
+  const change = (guid, on) => run(async () => {
+    onDiff(await api(`/feeds/${feedId}/grants/${encodeURIComponent(guid)}`, { method: on ? 'PUT' : 'DELETE' }));
+  });
+  return html`<div class="group grant-checks">
+    ${shows.map((l) => html`<div key=${l.item.guid}>
+      <label class="check"><input type="checkbox" disabled=${busy}
+        checked=${diff.grants.includes(l.item.guid)} onChange=${(e) => change(l.item.guid, e.target.checked)} />
+        <span>Let connected apps start and end this show, and set its live value${shows.length > 1 ? `: ${l.item.title || 'Untitled show'}` : ''}</span></label>
+    </div>`)}
+    ${apps && apps.length === 0 && html`<p class="hint">No app is connected. Connect an app in Hosts.</p>`}
+  </div>`;
+}
+
 // The name of the event that tells the feed page to load the announcements
 // again, such as after a write.
 const ANNOUNCE_RELOAD = 'studio-announce-reload';
@@ -875,6 +895,11 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
+  // The connected apps, for the hint of the grant check box.
+  const [apps, setApps] = useState(null);
+  useEffect(() => {
+    if (open) api('/apps').then(setApps, () => setApps(null));
+  }, [open]);
   // The progress of the signer while a write signs the planned events.
   const [progress, setProgress] = useState(null);
   // A diff is for one draft. After a user edit, the diff is not current.
@@ -963,7 +988,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   // skips a deletion that `diff.blocked` names, and the user sees it here.
   const addressesBlocked = draft.bad.length > 0;
   const stale = error && error.code === 'diff_not_approved';
-  const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move);
+  const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title">Review changes</h2>
@@ -992,6 +1017,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
+      ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} apps=${apps} busy=${busy} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} unified=${diff.unified} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
@@ -1646,6 +1672,27 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) 
   const next = nextAction(live.status);
   const problems = liveProblems(live);
   const start = timeText(live.start);
+  // The grant of this show and its granted writes. The list loads when the
+  // page opens and after each write.
+  const guid = live.item.guid;
+  const [grants, setGrants] = useState(null);
+  const loadGrants = () => api(`/feeds/${feed.id}/grants`).then(setGrants, () => {});
+  useEffect(() => {
+    setGrants(null);
+    loadGrants();
+    window.addEventListener(ANNOUNCE_RELOAD, loadGrants);
+    return () => window.removeEventListener(ANNOUNCE_RELOAD, loadGrants);
+  }, [feed.id, guid]);
+  const grant = (grants || []).find((g) => g.item_guid === guid) || null;
+  const nowSeconds = Date.now() / 1000;
+  const grantText = (seconds) => new Date(seconds * 1000).toLocaleString();
+  const stopGrant = () => {
+    if (!confirm('Stop the grant? Connected apps can no longer change this show.')) return;
+    action.run(async () => {
+      await api(`/feeds/${feed.id}/grants/${encodeURIComponent(guid)}/end`, { method: 'POST' });
+      await loadGrants();
+    });
+  };
   const changeStatus = (status) => action.run(async () => {
     // Send each edit first, so that the status route works on the draft that
     // the user sees.
@@ -1674,6 +1721,18 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) 
         ${next && html`<p class="hint">The button changes the draft and opens the review sheet. The host does not change until you write.</p>`}
       </div>
     </section>
+
+    ${grants && guid && html`<section class="page-section"><h2>Grant</h2>
+      <div class="group">
+        <p class="live-line">${grantSummary(grant, live, nowSeconds, grantText)}</p>
+        ${grant && grant.writes.length > 0 && html`<ul class="grant-writes">
+          ${grant.writes.map((write, index) => html`<li key=${index}>${grantWriteText(write, grantText)}</li>`)}
+        </ul>`}
+        ${grantActive(grant, live, nowSeconds) && html`<div class="actions"><button class="button destructive" type="button"
+          disabled=${action.busy} onClick=${stopGrant}>Stop the grant</button></div>`}
+        ${!grant && live.status === 'pending' && html`<p class="hint">Ask for a grant in the review sheet.</p>`}
+      </div>
+    </section>`}
 
     <section class="page-section"><h2>Show</h2>
       <div class="group">

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary, liveProblems,
-  startToIso, isoToLocalInput,
+  startToIso, isoToLocalInput, grantLimit, grantActive, grantSummary, grantWriteText,
 } from '../ui/live.js';
 
 const link = { href: 'https://example.com/show', label: 'Watch' };
@@ -74,4 +74,50 @@ test('a recording is an enclosure with an audio type', () => {
   assert.equal(hasRecording(enclosure('application/x-mpegURL')), false);
   assert.equal(hasRecording(enclosure('audio/mpeg')), true);
   assert.equal(hasRecording({ ...live, item: { ...live.item, enclosure: { url: null, length: null, media_type: 'audio/mpeg' } } }), false);
+});
+
+// ---- Show grants ----
+
+const stamp = (s) => `t${s}`;
+const day = 24 * 60 * 60;
+const startSeconds = Date.parse('2026-11-01T10:00:00Z') / 1000;
+
+test('the limit of a grant is 24 hours after the end, or after the start with no end', () => {
+  assert.equal(grantLimit(live), startSeconds + day);
+  assert.equal(grantLimit({ ...live, end: '' }), startSeconds + day);
+  assert.equal(grantLimit({ ...live, end: '2026-11-01T12:00:00Z' }), startSeconds + 2 * 3600 + day);
+  assert.equal(grantLimit({ ...live, start: '2021-09-26T07:30:00.000-0600', end: null }),
+    Date.parse('2021-09-26T13:30:00Z') / 1000 + day);
+});
+
+test('the limit of a grant is null when a time cannot be read', () => {
+  assert.equal(grantLimit({ ...live, start: null }), null);
+  assert.equal(grantLimit({ ...live, start: 'soon' }), null);
+  assert.equal(grantLimit({ ...live, start: '2026-11-01T10:00:00' }), null);
+  assert.equal(grantLimit({ ...live, end: 'later' }), null);
+});
+
+test('the summary of a grant covers each case', () => {
+  const open = { id: 1, item_guid: 'g-1', created_at: 5, ended_at: null, writes: [] };
+  const now = startSeconds;
+  assert.equal(grantSummary(null, live, now, stamp), 'No grant.');
+  assert.equal(grantSummary(open, live, now, stamp),
+    `Connected apps can start and end this show until ${stamp(startSeconds + day)}.`);
+  assert.equal(grantSummary({ ...open, ended_at: 77 }, live, now, stamp), 'The grant ended at t77.');
+  assert.equal(grantSummary(open, live, startSeconds + day + 1, stamp),
+    `The grant ended at ${stamp(startSeconds + day)}.`);
+  assert.equal(grantSummary(open, { ...live, start: null }, now, stamp),
+    'Connected apps can start and end this show.');
+  assert.equal(grantActive(open, live, now), true);
+  assert.equal(grantActive(open, live, startSeconds + day), false);
+  assert.equal(grantActive({ ...open, ended_at: 1 }, live, now), false);
+  assert.equal(grantActive(null, live, now), false);
+});
+
+test('the text of a granted write names the app, the change and the time', () => {
+  const write = (change) => ({ app_name: 'Show tool', change, written_at: 9 });
+  assert.equal(grantWriteText(write('go_live'), stamp), 'Show tool · Went live · t9');
+  assert.equal(grantWriteText(write('end'), stamp), 'Show tool · Ended the show · t9');
+  assert.equal(grantWriteText(write('set_live_value'), stamp), 'Show tool · Set the live value · t9');
+  assert.equal(grantWriteText(write('remove_live_value'), stamp), 'Show tool · Removed the live value · t9');
 });

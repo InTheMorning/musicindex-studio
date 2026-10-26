@@ -87,3 +87,66 @@ export function isoToLocalInput(text) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${time.getFullYear()}-${pad(time.getMonth() + 1)}-${pad(time.getDate())}T${pad(time.getHours())}:${pad(time.getMinutes())}`;
 }
+
+// ---- Show grants (ADR 0054 items 11 to 17) ----
+
+const DAY = 24 * 60 * 60;
+
+// The time of an ISO 8601 text in seconds since the Unix epoch, or null.
+// The text needs a zone, as in the core. A zone with no colon, such as
+// `-0600`, gets a colon first.
+function secondsOf(text) {
+  if (typeof text !== 'string') return null;
+  const value = text.trim();
+  if (!/T.*(Z|[+-]\d{2}(:?\d{2})?)$/i.test(value)) return null;
+  const fixed = value.replace(/([+-]\d{2})(\d{2})$/, '$1:$2').replace(/([+-]\d{2})$/, '$1:00');
+  const ms = Date.parse(/[+-]\d{2}:\d{2}$|Z$/i.test(fixed) ? fixed : `${fixed}:00`);
+  return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+}
+
+// The time when the grant of a live item ends: 24 hours after its `end`, or
+// after its `start` when `end` is blank. It is null when a time cannot be
+// read. The core has the same rule (ADR 0054 item 14).
+export function grantLimit(liveItem) {
+  const start = secondsOf(liveItem && liveItem.start);
+  if (start === null) return null;
+  const endText = liveItem.end && String(liveItem.end).trim();
+  if (!endText) return start + DAY;
+  const end = secondsOf(endText);
+  return end === null ? null : end + DAY;
+}
+
+// Is the grant active at `now` (seconds)? It has no `ended_at`, and its
+// limit is not past.
+export function grantActive(grant, liveItem, now) {
+  if (!grant || grant.ended_at !== null && grant.ended_at !== undefined) return false;
+  const limit = grantLimit(liveItem);
+  return limit === null || now < limit;
+}
+
+// The state of a grant in one sentence. `timeText` turns a time in seconds
+// into text in the language of the user. The caller gives it, so that this
+// module has no date formatting that depends on the browser.
+export function grantSummary(grant, liveItem, now, timeText) {
+  if (!grant) return 'No grant.';
+  if (grant.ended_at !== null && grant.ended_at !== undefined) {
+    return `The grant ended at ${timeText(grant.ended_at)}.`;
+  }
+  const limit = grantLimit(liveItem);
+  if (limit !== null && limit <= now) return `The grant ended at ${timeText(limit)}.`;
+  return limit === null
+    ? 'Connected apps can start and end this show.'
+    : `Connected apps can start and end this show until ${timeText(limit)}.`;
+}
+
+const WRITE_TEXT = {
+  go_live: 'Went live',
+  end: 'Ended the show',
+  set_live_value: 'Set the live value',
+  remove_live_value: 'Removed the live value',
+};
+
+// One granted write as a line: the app, the change and the time.
+export function grantWriteText(write, timeText) {
+  return `${write.app_name} · ${WRITE_TEXT[write.change] || write.change} · ${timeText(write.written_at)}`;
+}

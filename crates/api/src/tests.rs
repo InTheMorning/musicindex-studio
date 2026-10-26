@@ -6226,6 +6226,38 @@ async fn a_connected_app_starts_a_show_sets_its_live_value_and_ends_it() {
 }
 
 #[tokio::test]
+async fn stopping_a_grant_ends_it_for_the_connected_app() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (guid, token) = granted_show(&app, id).await;
+    let (_, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
+    let grant_id = shows[0]["grant_id"].as_i64().unwrap();
+
+    let base = format!("/api/v1/feeds/{id}/grants");
+    let (status, body) = call(&app, "POST", &format!("{base}/no-such/end"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "no_grant");
+    let (status, body) = call(&app, "POST", &format!("{base}/{guid}/end"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["item_guid"], guid.as_str());
+    assert!(body["ended_at"].is_i64());
+
+    let (status, body) = app_call(
+        &app,
+        "POST",
+        &format!("/app/v1/shows/{grant_id}/status"),
+        &token,
+        Some(json!({ "status": "live" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "grant_ended");
+    let (status, grants) = call(&app, "GET", &base, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(grants[0]["ended_at"].is_i64());
+}
+
+#[tokio::test]
 async fn a_granted_change_while_the_user_has_a_changed_draft_gives_draft_open() {
     let app = app();
     let id = set_up(&app).await;

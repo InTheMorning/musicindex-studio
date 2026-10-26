@@ -1295,6 +1295,9 @@ textarea:focus { background: var(--fill); }
 .group > .import-pick { padding: 10px 16px; }
 /* A line of text in a group, such as the status of a live show. */
 .group > .live-line { padding: 10px 16px; }
+.grant-writes { list-style: none; margin: 0; padding: 0 16px 10px; display: grid; gap: 4px; color: var(--muted); font-size: .9rem; }
+.grant-checks { padding: 10px 16px; display: grid; gap: 8px; }
+.grant-checks .hint { margin: 0; }
 /* A release row of the publisher page: the title, its state, and the
    buttons that move or remove it (task 025c, ADR 0041 item 10). */
 .release-row { display: grid; gap: 8px; padding: 10px 16px; }

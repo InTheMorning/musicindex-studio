@@ -4246,6 +4246,38 @@ pub(crate) async fn delete_draft_grant(
     blocking(shared, move |w| change_draft_grant(w, id, &guid, false)).await
 }
 
+/// End the open grant of a live item: "Stop the grant" on the live item
+/// page (ADR 0054 item 17). After it, a connected app gets 409
+/// `grant_ended` for this show. A grant that has ended stays ended.
+pub(crate) async fn end_feed_grant(
+    State(shared): State<Shared>,
+    Path((id, guid)): Path<(i64, String)>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        w.collection.feed(id)?;
+        let Some(show) = grant::grant_for(&w.collection, id, &guid)? else {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "no_grant",
+                "this show has no grant",
+            ));
+        };
+        grant::end(
+            &w.collection,
+            show.id,
+            i64::try_from(unix_now()).unwrap_or(i64::MAX),
+        )?;
+        let ended = grant::grant(&w.collection, show.id)?.unwrap_or(show);
+        Ok(Json(json!({
+            "id": ended.id,
+            "item_guid": ended.item_guid,
+            "ended_at": ended.ended_at,
+        })))
+    })
+    .await
+}
+
 /// The show grants of a feed with their granted writes, for the live item
 /// page (ADR 0054 item 17).
 pub(crate) async fn list_feed_grants(

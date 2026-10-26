@@ -139,6 +139,10 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             "/feeds/{id}/grants/{guid}",
             put(routes::put_draft_grant).delete(routes::delete_draft_grant),
         )
+        .route(
+            "/feeds/{id}/grants/{guid}/end",
+            post(routes::end_feed_grant),
+        )
         .route("/feeds/{id}/diff", get(routes::get_diff))
         .route("/feeds/{id}/write", post(routes::write_feed))
         .route("/feeds/{id}/snapshots", get(routes::list_snapshots))

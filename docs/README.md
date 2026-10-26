@@ -53,6 +53,7 @@
 - [ADR 0049: The Rust toolchain is pinned](adr/0049-the-rust-toolchain-is-pinned.md)
 - [ADR 0050: The nsite and Blossom signer, host environment and signing plan](adr/0050-nsite-and-blossom-signer-environment-and-plan.md)
 - [ADR 0051: The core signs Nostr events with secp256k1](adr/0051-the-core-signs-nostr-events-with-secp256k1.md)
+- [ADR 0052: Announcements through the Podcast Index hub](adr/0052-announcements-through-the-podcast-index-hub.md)
 
 ## Plans
 
@@ -154,6 +155,11 @@
 - [Studio v1 task 030f: The planned events in the diff, and the signed events in the write](tasks/studio-v1-task-030f-signing-plan.md)
 - [Studio v1 task 030g: The nsite and Blossom host routes](tasks/studio-v1-task-030g-host-routes.md)
 - [Studio v1 task 030h: The host forms and the signer step](tasks/studio-v1-task-030h-host-forms-and-signer-step.md)
+- [Studio v1 task 031: Announcements](tasks/studio-v1-task-031-announce.md)
+- [Studio v1 task 031a: The test hub, the queue and the sender](tasks/studio-v1-task-031a-queue-and-sender.md)
+- [Studio v1 task 031b: The announcements in the diff and the write](tasks/studio-v1-task-031b-diff-and-write.md)
+- [Studio v1 task 031c: The worker and the routes](tasks/studio-v1-task-031c-worker-and-routes.md)
+- [Studio v1 task 031d: The announcements in the UI](tasks/studio-v1-task-031d-announce-ui.md)
 
 ## Reviews
 
@@ -177,6 +183,7 @@
 - [Task 028 review checklist, 2026-10-25](reviews/2026-10-25-task-028-review-checklist.md)
 - [Task 029 review checklist, 2026-10-25](reviews/2026-10-25-task-029-review-checklist.md)
 - [Task 030 review checklist, 2026-10-25](reviews/2026-10-25-task-030-review-checklist.md)
+- [Task 031 review checklist, 2026-10-25](reviews/2026-10-25-task-031-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

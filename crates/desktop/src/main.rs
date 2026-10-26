@@ -8,14 +8,16 @@
 //! Options:
 //!
 //! - `--data-dir PATH`: the folder of the vault and the collection. The
-//!   default is `$XDG_DATA_HOME/musicindex-studio`, or
-//!   `~/.local/share/musicindex-studio`.
+//!   default is the local application data folder of the operating system.
 //! - `--port N`: the port. The default 0 lets the system select a free port.
 //! - `--musicindex URL`: the musicindex API. The default is
 //!   `https://api.musicindex.org`.
 //! - `--podcastindex-hub URL`: the hub that gets the announcements after a
 //!   write. The default is `https://hub.podcastindex.org/pubnotify`.
+//! - `--version`: print the version and stop.
+//! - `--help`: print the options and stop.
 
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -30,11 +32,22 @@ struct Options {
 }
 
 fn default_data_dir() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
-    Some(base.join("musicindex-studio"))
+    let path = directories::ProjectDirs::from("", "", "musicindex-studio")?
+        .data_local_dir()
+        .to_path_buf();
+    #[cfg(target_os = "macos")]
+    {
+        let old_path = directories::BaseDirs::new()?
+            .home_dir()
+            .join(".local/share/musicindex-studio");
+        let has_data = |folder: &std::path::Path| {
+            folder.join("collection.sqlite").exists() || folder.join("vault.json").exists()
+        };
+        if has_data(&old_path) && !has_data(&path) {
+            return Some(old_path);
+        }
+    }
+    Some(path)
 }
 
 fn options() -> Result<Options, String> {
@@ -65,7 +78,7 @@ fn options() -> Result<Options, String> {
     }
     let data_dir = data_dir
         .or_else(default_data_dir)
-        .ok_or("give --data-dir, because HOME is not set")?;
+        .ok_or("give --data-dir, because the system has no application data folder")?;
     Ok(Options {
         data_dir,
         port,
@@ -86,6 +99,18 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> Result<(), String> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args == ["--version"] {
+        println!("Music Index Studio {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args == ["--help"] {
+        println!(
+            "Usage: studio-desktop [--data-dir PATH] [--port N] [--musicindex URL] [--podcastindex-hub URL]"
+        );
+        println!("       studio-desktop --version | --help");
+        return Ok(());
+    }
     let options = options()?;
     let mut workspace = Workspace::open(&options.data_dir).map_err(|e| format!("{e:?}"))?;
     if let Some(base) = &options.musicindex {
@@ -112,6 +137,7 @@ async fn run() -> Result<(), String> {
     println!("Data: {}", options.data_dir.display());
     println!("Open this address in your browser:");
     println!("{}", access.ui_url());
+    std::io::stdout().flush().map_err(|e| e.to_string())?;
     axum_serve(listener, local_router(workspace, access)).await
 }
 

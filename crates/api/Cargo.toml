@@ -12,6 +12,7 @@ publish.workspace = true
 testing = []
 
 [dependencies]
+directories.workspace = true
 axum = "0.8"
 getrandom = "0.4"
 serde = { version = "1", features = ["derive"] }

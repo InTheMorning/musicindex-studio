@@ -65,6 +65,7 @@
 ## Plans
 
 - [Studio v1 phase plan](plans/studio-v1-phase-plan.md)
+- [Studio distribution phase plan](plans/distribution-phase-plan.md)
 - [Research request on search, shared code and PodSovereign](plans/research-search-request.md)
 - [Research request on the shell](plans/research-ui-shell-request.md)
 - [Research request on the Phase 9 connectors](plans/research-phase-9-connectors-request.md)
@@ -227,12 +228,15 @@
 - [Task 035 review checklist, 2026-10-26](reviews/2026-10-26-task-035-review-checklist.md)
 - [Task 036 review checklist, 2026-10-26](reviews/2026-10-26-task-036-review-checklist.md)
 - [Phase 12 human tests, 2026-10-26](reviews/2026-10-26-phase-12-human-tests.md)
+- [Distribution documentation review, 2026-10-26](reviews/2026-10-26-distribution-review.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 
 ## Runbooks
 
 - [studio-server](runbooks/studio-server.md)
+- [Start Music Index Studio](runbooks/install-desktop.md)
+- [Desktop release drafts](runbooks/desktop-release.md)
 
 ## Research
 

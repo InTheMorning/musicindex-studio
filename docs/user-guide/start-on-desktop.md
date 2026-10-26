@@ -9,13 +9,21 @@ See [Sign in to a Studio server](sign-in.md).
 ## Start the app
 
 The desktop app has no installer at this time.
-You start it from the source code with this command:
+A GitHub Release can give an archive for Windows, macOS or Linux.
+The archive has the file `START-HERE.md`. It gives the steps to start Studio from the archive.
+See [Start Music Index Studio](../runbooks/install-desktop.md).
+
+1. Extract the full archive into a folder that you can keep.
+2. On Windows, open `studio-desktop.exe`.
+3. On macOS or Linux, open a terminal in that folder and run `./studio-desktop`.
+
+You can also start Studio from the source code with this command:
 
 ```sh
 cargo run -p studio-desktop -- --data-dir .studio-dev/data
 ```
 
-The command prints the address of Studio. It looks like this:
+Studio prints its version, its data folder and its address. The address looks like this:
 
 ```text
 http://127.0.0.1:PORT/#token=...
@@ -39,8 +47,16 @@ After you stop and start Studio, copy the new address.
 ## Choose where Studio keeps its data
 
 The option `--data-dir` sets the folder for the vault and the collection.
-If you do not use it, Studio uses `$XDG_DATA_HOME/musicindex-studio` when `XDG_DATA_HOME` is an absolute path.
-If `XDG_DATA_HOME` is unset or is not an absolute path, Studio uses `~/.local/share/musicindex-studio`.
+If you do not use it, Studio uses the data folder of your operating system:
+
+| System | Default folder |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\musicindex-studio\data` |
+| macOS | `~/Library/Application Support/musicindex-studio` |
+| Linux | `$XDG_DATA_HOME/musicindex-studio`, or `~/.local/share/musicindex-studio` |
+
+On macOS, an earlier Studio kept its data in `~/.local/share/musicindex-studio`.
+If only that folder has data, Studio continues to use it.
 
 You can also use these options.
 
@@ -49,6 +65,8 @@ You can also use these options.
 | `--port N` | Sets the port. The default lets the system choose a free port. |
 | `--musicindex URL` | Uses a different musicindex address. The default is `https://api.musicindex.org`. |
 | `--podcastindex-hub URL` | Sets the hub that gets the announcements after a write. |
+| `--version` | Prints the version of Studio and stops. |
+| `--help` | Prints the options and stops. |
 
 ## Stop Studio
 

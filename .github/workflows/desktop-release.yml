@@ -1,0 +1,133 @@
+name: Desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Desktop ${{ matrix.slug }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            slug: windows-x86_64
+            exe: .exe
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            slug: macos-x86_64
+            exe: ''
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            slug: macos-arm64
+            exe: ''
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            slug: linux-x86_64
+            exe: ''
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            slug: linux-arm64
+            exe: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # Keep this version equal to rust-toolchain.toml (ADR 0049).
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: rustfmt, clippy
+      - name: Check version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            python tools/release_desktop.py version --tag "$GITHUB_REF_NAME"
+          else
+            python tools/release_desktop.py version
+          fi
+      - name: Install Linux test server
+        if: matrix.slug == 'linux-x86_64'
+        run: sudo apt-get update && sudo apt-get install -y openssh-server
+      - name: Run repository checks
+        if: matrix.slug == 'linux-x86_64'
+        shell: bash
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+      - uses: actions/setup-node@v4
+        if: matrix.slug == 'linux-x86_64'
+        with:
+          node-version: '22'
+      - name: Test UI models
+        if: matrix.slug == 'linux-x86_64'
+        run: node --test crates/api/ui-tests/*.test.mjs
+      - name: Build desktop
+        run: cargo build --locked --release -p studio-desktop
+      - name: Package and smoke test
+        shell: bash
+        run: |
+          archive=$(python tools/release_desktop.py package \
+            --target '${{ matrix.target }}' \
+            --binary 'target/release/studio-desktop${{ matrix.exe }}' \
+            --output .studio-dev/release)
+          python tools/release_desktop.py smoke \
+            --target '${{ matrix.target }}' --archive "$archive"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.slug }}
+          path: .studio-dev/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  draft:
+    name: Draft GitHub Release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check tag
+        run: python tools/release_desktop.py version --tag "$GITHUB_REF_NAME"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: .studio-dev/release
+          merge-multiple: true
+      - name: Check all archives and write checksums
+        run: python tools/release_desktop.py checksums --output .studio-dev/release
+      - name: Create or refresh draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" --json isDraft --jq .isDraft > .studio-dev/draft-state; then
+            if [[ "$(cat .studio-dev/draft-state)" != true ]]; then
+              echo 'A published Release already uses this tag.' >&2
+              exit 1
+            fi
+            gh release upload "$tag" .studio-dev/release/* --clobber
+          else
+            gh release create "$tag" .studio-dev/release/* \
+              --draft --verify-tag --generate-notes \
+              --title "Music Index Studio $tag" \
+              --notes 'Desktop archives only. These archives are unsigned. The server shell is not ready for public use.'
+          fi

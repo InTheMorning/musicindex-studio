@@ -7,6 +7,7 @@ import { api, Field, ErrorNotice, useAction, addressSource, ImageThumb } from '.
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher } from './shell.js';
+import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError } from './signing.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -845,6 +846,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
+  // The progress of the signer while a write signs the planned events.
+  const [progress, setProgress] = useState(null);
   // A diff is for one draft. After a user edit, the diff is not current.
   useEffect(() => { setDiff(null); }, [draft.edits]);
   const examine = () => run(async () => {
@@ -864,15 +867,28 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     setDiff(await api(`/feeds/${feedId}/feed-host`, { method: 'PUT', body: { connector_id: feedConnectorId } }));
     onOpsChanged();
   });
+  const toSign = diff ? eventsToSign(diff) : [];
   const write = () => run(async () => {
     let feed;
+    let signedEvents = [];
     try {
-      feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id } });
+      if (toSign.length > 0) {
+        // The signer of the user signs the planned events before the write.
+        // With no signer, nothing goes to the host.
+        if (!window.nostr) throw new SignError('no_signer', signErrorText('no_signer'));
+        setProgress({ done: 0, total: toSign.length });
+        signedEvents = await signAll(toSign, window.nostr, (done, total) => setProgress({ done, total }));
+      }
+      feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
     } catch (e) {
       // After a conflict, the diff is not against the hosted file. Hide it
       // and its write button.
       if (e.code === 'conflict') setDiff(null);
+      // After an expired plan, the new diff has a new plan.
+      if (e.code === 'plan_expired') setDiff(await api(`/feeds/${feedId}/diff`));
       throw e;
+    } finally {
+      setProgress(null);
     }
     setDiff(null);
     await draft.load();
@@ -935,7 +951,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
             <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startAgain}>Start again from the hosted file</button></div></div>`
         : stale
           ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
-          : html`<${ErrorNotice} error=${error} />`}
+          : signErrorText(error && error.code)
+            ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
+            : html`<${ErrorNotice} error=${error} />`}
       ${addressesBlocked && html`<div class="notice error" role="alert">
         <strong>Studio cannot write while an address is not correct.</strong>
         Correct the fields with red text. Each address starts with https:// or http://.
@@ -946,6 +964,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         ? html`<${DiffView} unified=${diff.unified} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
       ${waiting && html`<p class="hint" role="status">Wait for each download, then write.</p>`}
+      ${diff && toSign.length > 0 && html`<p class="hint" role="status">${signSummary(toSign.length)}</p>`}
       <div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the changes</button>
       </div>
@@ -953,7 +972,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
       ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy || waiting} onClick=${write}>
-        ${busy ? 'Writing…' : 'Write to the host'}</button>`}
+        ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the host'}</button>`}
     </footer>
   </dialog>`;
 }

@@ -11,9 +11,9 @@ The type choice of the Hosts page gets "nsite site" and "Blossom server". Each f
 
 Inspect: `crates/api/ui/app.js` (`AddHostForm`, `SftpHostForm`, `HostCard`, `Field`, `ErrorNotice`, `splitError`, `useAction`, `CreateVault`, `ShowRecoveryKey`), `crates/api/ui/editor.js` (`ReviewSheet`), `crates/api/ui/styles.css`, `crates/api/ui-tests/shell.test.mjs` (the form of a model test), `crates/api/src/routes.rs` (the routes of 030f and 030g).
 
-Change: `crates/api/ui/app.js`, `crates/api/ui/editor.js`. Add `crates/api/ui/signing.js` and `crates/api/ui-tests/signing.test.mjs`. Change `styles.css` only when a style is missing.
+Change: `crates/api/ui/app.js`, `crates/api/ui/editor.js`. Add `crates/api/ui/signing.js` and `crates/api/ui-tests/signing.test.mjs`. Add one entry for `signing.js` to the list of UI files in `crates/api/src/ui.rs`, because the binary embeds each UI file. Change `styles.css` only when a style is missing.
 
-Do not change: the Rust code, the other UI files.
+Do not change: the other Rust code, the other UI files.
 
 ## Architecture
 
@@ -130,7 +130,7 @@ tools/node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-Stop and report when the forms or the signer step need a change of the Rust code.
+Stop and report when the forms or the signer step need a different Rust change. The entry in `ui.rs` is permitted.
 
 ## Prompt for lower-context coding model
 
@@ -157,7 +157,7 @@ Constraints:
 - Do not run tools/drive-ui.mjs. The planning model does the visual check.
 
 Do not touch:
-- The Rust code, the other UI files.
+- The Rust code other than the one entry in `crates/api/src/ui.rs`, the other UI files.
 - Do not commit.
 
 Acceptance criteria:

@@ -8,6 +8,9 @@ import {
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
 } from './shell.js';
+import {
+  SignError, npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
+} from './signing.js';
 
 // ---- Access token (ADR 0017) ----
 // The API gives the UI address with the token in the fragment. The UI keeps
@@ -658,9 +661,263 @@ function SftpHostForm({ onAdded }) {
   </form>`;
 }
 
+// A text area with a label, a hint and a line of red text, as `Field` does
+// for an input.
+function AreaField({ id, label, hint, error, rows = 3, ...input }) {
+  const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
+  return html`<div class="field">
+    <label for=${id}>${label}</label>
+    <div class="field-body">
+      ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
+      <textarea id=${id} rows=${rows} autocomplete="off" spellcheck="false" aria-invalid=${error ? 'true' : undefined}
+        aria-describedby=${described || undefined} ...${input}></textarea>
+      ${error && html`<span class="field-error" id=${`${id}-error`}>${error}</span>`}
+    </div>
+  </div>`;
+}
+
+const noticeText = (text) => html`<div class="notice error" role="alert"><strong>${text}</strong></div>`;
+
+// The key of an nsite or Blossom host (ADR 0050 item 1). The key comes from
+// a NIP-07 signer or from a pasted private key. Studio reads the lists of the
+// key and gives them to `onLists`. The private key stays in this state only.
+// It is not in the browser storage or the address.
+function useNostrKey(onLists) {
+  const [mode, setMode] = useState('signer');
+  const [secret, setSecret] = useState('');
+  const [key, setKey] = useState(null);
+  const [noLists, setNoLists] = useState(false);
+  const signer = useAction();
+  const lists = useAction();
+  const lookup = (text) => lists.run(async () => {
+    const result = await api('/connectors/nostr-lists', { method: 'POST', body: { key: text } });
+    setKey({ public_key: result.public_key, npub: result.npub });
+    setNoLists(result.relays.length === 0 && result.servers.length === 0);
+    onLists(result);
+  });
+  const askSigner = () => signer.run(async () => {
+    if (!window.nostr) throw new SignError('no_signer', 'Studio found no NIP-07 signer in this browser. Install a signer extension, or select Key in the vault.');
+    const hex = await window.nostr.getPublicKey();
+    setKey({ public_key: hex, npub: npubOf(hex) });
+    setNoLists(false);
+    await lookup(hex);
+  });
+  const choose = (next) => {
+    setMode(next);
+    setSecret('');
+    setKey(null);
+    setNoLists(false);
+  };
+  const typeSecret = (text) => {
+    setSecret(text);
+    setKey(null);
+  };
+  const ready = mode === 'signer' ? !!key : !!secret.trim();
+  // The key fields of a new host.
+  const fields = () => ({
+    signing: mode,
+    public_key: key ? key.public_key : null,
+    secret_key: mode === 'vault' ? secret : null,
+  });
+  return { mode, secret, key, noLists, signer, lists, lookup, askSigner, choose, typeSecret, ready, fields, clear: () => setSecret('') };
+}
+
+// The "Signing" fieldset and the key of the host.
+function SigningStep({ nk, idPrefix, keyError }) {
+  return html`<fieldset class="choices">
+      <legend>Signing</legend>
+      ${[['signer', 'My signer'], ['vault', 'Key in the vault']].map(([value, label]) => html`<label class="choice">
+        <input type="radio" name=${`${idPrefix}-signing`} value=${value} checked=${nk.mode === value}
+          onChange=${() => nk.choose(value)} />
+        <span class="text"><span class="title">${label}</span></span>
+      </label>`)}
+    </fieldset>
+    ${nk.mode === 'signer' && html`<div class="actions">
+      <button class="button action" type="button" disabled=${nk.signer.busy} onClick=${nk.askSigner}>
+        ${nk.signer.busy ? 'Asking your signer…' : 'Use my signer'}</button>
+    </div>`}
+    ${nk.mode === 'signer' && nk.signer.error && (nk.signer.error.code === 'no_signer'
+      ? noticeText(nk.signer.error.message)
+      : html`<${ErrorNotice} error=${nk.signer.error} />`)}
+    ${nk.mode === 'vault' && html`<${Field} id=${`${idPrefix}-secret`} label="Private key of the site" type="password"
+      autocomplete="off" hint="Paste the nsec of the key. Studio keeps it in your vault."
+      error=${keyError} value=${nk.secret} onInput=${(e) => nk.typeSecret(e.target.value)}
+      onChange=${(e) => { if (isNsec(e.target.value)) nk.lookup(e.target.value.trim()); }} />`}
+    ${nk.key && html`<p class="mono" aria-label="Public key">${nk.key.npub}</p>`}
+    ${nk.noLists && html`<p class="hint" role="status">The key has no list. Type the addresses.</p>`}
+    <${ErrorNotice} error=${nk.lists.error} />`;
+}
+
+// The errors of an nsite or Blossom form. `shown` names the fields of the
+// form. An error of a field shows at the field, and the other errors give a
+// notice (ADR 0050 item 3).
+function nostrFormErrors(error, shown) {
+  const out = { fields: {}, notice: null };
+  if (!error) return out;
+  const at = (field, text) => {
+    if (!shown.includes(field)) return false;
+    out.fields[field] = text;
+    return true;
+  };
+  switch (error.code) {
+    case 'invalid_config': {
+      const field = invalidConfigField(error.message);
+      const text = `${error.message.charAt(0).toUpperCase()}${error.message.slice(1)}.`;
+      if (field && at(field, text)) return out;
+      break;
+    }
+    case 'invalid_address':
+      if (at('servers', FIELD_MESSAGES.invalid_address)) return out;
+      break;
+    case 'key_mismatch':
+      if (at('secret_key', 'This private key is not the key of the public key.')) return out;
+      break;
+    case 'host_unavailable':
+      out.notice = noticeText('Studio cannot connect to the relays or the servers.');
+      return out;
+    case 'vault_locked':
+      out.notice = noticeText('Unlock the vault first.');
+      return out;
+    default:
+  }
+  out.notice = html`<${ErrorNotice} error=${error} />`;
+  return out;
+}
+
+// The add step that both forms share. `makeBody` gives the request body.
+// `vault_required` opens `CreateVault`, as the S3 form does. After a
+// successful add, `nk.clear` removes the private key from the form state.
+function useNostrHostAdd(nk, makeBody, onAdded) {
+  const [needVault, setNeedVault] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState(null);
+  const { busy, error, run } = useAction();
+  const send = () => run(async () => {
+    const body = makeBody();
+    let connector;
+    try {
+      connector = await api('/connectors', { method: 'POST', body });
+    } catch (e) {
+      if (e.code === 'vault_required') { setNeedVault(true); return; }
+      throw e;
+    }
+    nk.clear();
+    onAdded(connector);
+  });
+  const gate = (form) => {
+    if (recoveryKey) {
+      return html`<${ShowRecoveryKey} recoveryKey=${recoveryKey} onDone=${() => { setRecoveryKey(null); send(); }} />`;
+    }
+    if (needVault) {
+      return html`<${CreateVault} onDone=${(key) => { setNeedVault(false); if (key) setRecoveryKey(key); else send(); }} />`;
+    }
+    return form;
+  };
+  return { busy, error, send, gate };
+}
+
+// The fields of an nsite site (ADR 0048, ADR 0050).
+function NsiteHostForm({ feeds, onAdded }) {
+  const [values, setValues] = useState({
+    name: '', feed_id: '', d: '', relays: '', servers: '', gateway: 'nsite.lol', title: '',
+  });
+  // A functional update, so that two input events before the next render
+  // keep both values.
+  const set = (key) => (e) => {
+    const { value } = e.target;
+    setValues((current) => ({ ...current, [key]: value }));
+  };
+  const nk = useNostrKey((result) => setValues((current) => ({
+    ...current, relays: linesText(result.relays), servers: linesText(result.servers),
+  })));
+  const relays = addressLines(values.relays);
+  const servers = addressLines(values.servers);
+  const add = useNostrHostAdd(nk, () => {
+    const d = values.d.trim();
+    // With no site name, the core takes the site name from the GUID of the
+    // release, as `siteNameFromGuid` does.
+    const feed = (feeds || []).find((f) => String(f.id) === values.feed_id);
+    const siteName = d || (feed && feed.podcast_guid ? siteNameFromGuid(feed.podcast_guid) : '');
+    return {
+      kind: 'nsite',
+      name: values.name.trim() || (siteName ? `nsite ${siteName}` : 'nsite'),
+      ...nk.fields(),
+      d: d || null,
+      feed_id: values.feed_id ? Number(values.feed_id) : null,
+      relays,
+      servers,
+      gateway: values.gateway.trim() || null,
+      title: values.title.trim() || null,
+    };
+  }, onAdded);
+  const submit = (event) => {
+    event.preventDefault();
+    add.send();
+  };
+  const ready = nk.ready && relays.length > 0 && servers.length > 0;
+  const errors = nostrFormErrors(add.error, ['relays', 'servers', 'gateway', 'd', 'secret_key']);
+  return add.gate(html`<form class="form" onSubmit=${submit}>
+    <${SigningStep} nk=${nk} idPrefix="nsite" keyError=${errors.fields.secret_key} />
+    <${Field} id="nsite-name" label="Name (optional)" hint="Studio uses nsite and the site name when you leave this empty."
+      value=${values.name} onInput=${set('name')} />
+    <div class="field"><label for="nsite-feed">Release (optional)</label>
+      <div class="field-body">
+        <select id="nsite-feed" class="button" value=${values.feed_id} onChange=${set('feed_id')}>
+          <option value="">No release</option>
+          ${(feeds || []).map((f) => html`<option key=${f.id} value=${String(f.id)}>${f.title || f.path}</option>`)}
+        </select>
+      </div></div>
+    <${Field} id="nsite-d" label="Site name" placeholder="From the release" autocomplete="off"
+      hint="1 to 13 characters: a to z, 0 to 9 and -. A site that exists keeps its name."
+      error=${errors.fields.d} value=${values.d} onInput=${set('d')} />
+    <${AreaField} id="nsite-relays" label="Relays" error=${errors.fields.relays}
+      value=${values.relays} onInput=${set('relays')} />
+    <${AreaField} id="nsite-servers" label="Blossom servers" error=${errors.fields.servers}
+      value=${values.servers} onInput=${set('servers')} />
+    <${Field} id="nsite-gateway" label="Gateway" autocomplete="off" error=${errors.fields.gateway}
+      value=${values.gateway} onInput=${set('gateway')} />
+    <${Field} id="nsite-title" label="Title of the site (optional)" value=${values.title} onInput=${set('title')} />
+    ${errors.notice}
+    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? 'Adding…' : 'Add the site'}</button></div>
+  </form>`);
+}
+
+// The fields of a Blossom host (ADR 0048, ADR 0050).
+function BlossomHostForm({ onAdded }) {
+  const [values, setValues] = useState({ name: '', servers: '' });
+  const set = (key) => (e) => {
+    const { value } = e.target;
+    setValues((current) => ({ ...current, [key]: value }));
+  };
+  const nk = useNostrKey((result) => setValues((current) => ({ ...current, servers: linesText(result.servers) })));
+  const servers = addressLines(values.servers);
+  const add = useNostrHostAdd(nk, () => ({
+    kind: 'blossom',
+    // An empty name takes the host name of the first server.
+    name: values.name.trim() || blossomDefaultName(servers),
+    ...nk.fields(),
+    servers,
+  }), onAdded);
+  const submit = (event) => {
+    event.preventDefault();
+    add.send();
+  };
+  const ready = nk.ready && servers.length > 0;
+  const errors = nostrFormErrors(add.error, ['servers', 'secret_key']);
+  return add.gate(html`<form class="form" onSubmit=${submit}>
+    <p class="hint">A Blossom host keeps media only. The feed XML needs a different host.</p>
+    <${SigningStep} nk=${nk} idPrefix="blossom" keyError=${errors.fields.secret_key} />
+    <${Field} id="blossom-name" label="Name (optional)" hint="Studio uses the host name of the first server when you leave this empty."
+      value=${values.name} onInput=${set('name')} />
+    <${AreaField} id="blossom-servers" label="Blossom servers" error=${errors.fields.servers}
+      value=${values.servers} onInput=${set('servers')} />
+    ${errors.notice}
+    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? 'Adding…' : 'Add the Blossom host'}</button></div>
+  </form>`);
+}
+
 // The first choice is the type of the host. The form below it follows the
 // type (ADR 0045 item 4).
-function AddHostForm({ onAdded }) {
+function AddHostForm({ feeds, onAdded }) {
   const [type, setType] = useState('local');
   return html`<div class="form">
     <fieldset class="choices">
@@ -677,12 +934,24 @@ function AddHostForm({ onAdded }) {
         <input type="radio" name="host-type" value="sftp" checked=${type === 'sftp'} onChange=${() => setType('sftp')} />
         <span class="text"><span class="title">SFTP server</span></span>
       </label>
+      <label class="choice">
+        <input type="radio" name="host-type" value="nsite" checked=${type === 'nsite'} onChange=${() => setType('nsite')} />
+        <span class="text"><span class="title">nsite site</span></span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="host-type" value="blossom" checked=${type === 'blossom'} onChange=${() => setType('blossom')} />
+        <span class="text"><span class="title">Blossom server</span></span>
+      </label>
     </fieldset>
     ${type === 's3'
       ? html`<${S3HostForm} onAdded=${onAdded} />`
       : type === 'sftp'
         ? html`<${SftpHostForm} onAdded=${onAdded} />`
-        : html`<${LocalHostForm} onAdded=${onAdded} />`}
+        : type === 'nsite'
+          ? html`<${NsiteHostForm} feeds=${feeds} onAdded=${onAdded} />`
+          : type === 'blossom'
+            ? html`<${BlossomHostForm} onAdded=${onAdded} />`
+            : html`<${LocalHostForm} onAdded=${onAdded} />`}
   </div>`;
 }
 
@@ -1408,6 +1677,15 @@ function LibraryPanel() {
   </article>`;
 }
 
+// The ID of the newest manifest among the relays of a site state.
+function newestManifest(state) {
+  let newest = null;
+  for (const r of state.relays) {
+    if (r.id && (!newest || r.created_at > newest.created_at)) newest = r;
+  }
+  return newest ? newest.id : null;
+}
+
 // One host, a local folder or an S3 or R2 bucket. "Edit" opens the name field and the public
 // address field, with "Save" and "Cancel" (task 022b, ADR 0037). "Save"
 // calls `PUT /connectors/{id}`.
@@ -1418,21 +1696,43 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(connector.name);
   const [baseUrl, setBaseUrl] = useState(config.base_url || '');
+  const isNsite = connector.kind === 'nsite';
+  const isBlossom = connector.kind === 'blossom';
+  const isNostr = isNsite || isBlossom;
+  // The fields of an nsite or Blossom host that "Edit" changes (ADR 0050).
+  const [relays, setRelays] = useState(linesText(config.relays));
+  const [servers, setServers] = useState(linesText(config.servers));
+  const [gateway, setGateway] = useState(config.gateway || 'nsite.lol');
   const { busy, error, run } = useAction();
   const startEdit = () => {
     setName(connector.name);
     setBaseUrl(config.base_url || '');
+    setRelays(linesText(config.relays));
+    setServers(linesText(config.servers));
+    setGateway(config.gateway || 'nsite.lol');
     setEditing(true);
   };
   const save = (event) => {
     event.preventDefault();
     run(async () => {
-      await api(`/connectors/${connector.id}`, { method: 'PUT', body: { name: name.trim(), base_url: baseUrl } });
+      const body = isNostr
+        ? { name: name.trim(), servers: addressLines(servers), ...(isNsite ? { relays: addressLines(relays), gateway: gateway.trim() } : {}) }
+        : { name: name.trim(), base_url: baseUrl };
+      await api(`/connectors/${connector.id}`, { method: 'PUT', body });
       setEditing(false);
       onChanged();
     });
   };
   const addressError = splitError(error, ['invalid_address']);
+  const nostrErrors = nostrFormErrors(error, ['relays', 'servers', 'gateway']);
+  // The state of the relays of an nsite site: `GET /connectors/{id}/site`.
+  const site = useAction();
+  const [siteState, setSiteState] = useState(null);
+  const checkRelays = () => {
+    setSiteState(null);
+    site.run(async () => { setSiteState(await api(`/connectors/${connector.id}/site`)); });
+  };
+  const signingText = config.signing === 'vault' ? 'Key in the vault' : 'My signer';
   const isS3 = connector.kind === 's3';
   const isSftp = connector.kind === 'sftp';
   const noun = isS3 ? 'bucket' : 'folder';
@@ -1463,7 +1763,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   const mismatch = accept.error && accept.error.code === 'host_key_mismatch';
   return html`<article class="panel host">
     <header class="host-head">
-      <span class="eyebrow"><span class="dot hosting"></span>${isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : 'Folder on this computer'}</span>
+      <span class="eyebrow"><span class="dot hosting"></span>${isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : isNsite ? 'nsite site' : isBlossom ? 'Blossom server' : 'Folder on this computer'}</span>
       ${!editing && html`<div class="actions">
         <button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>
         <button class="button destructive" type="button" disabled=${removeBusy}
@@ -1474,10 +1774,17 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
       ? html`<form class="form" onSubmit=${save}>
           <${Field} id=${`host-${connector.id}-name`} label="Name" required
             value=${name} onInput=${(e) => setName(e.target.value)} />
-          <${Field} id=${`host-${connector.id}-url`} label=${`Public address of the ${noun}`} type="url"
+          ${isNostr && html`${isNsite && html`<${AreaField} id=${`host-${connector.id}-relays`} label="Relays"
+              error=${nostrErrors.fields.relays} value=${relays} onInput=${(e) => setRelays(e.target.value)} />`}
+            <${AreaField} id=${`host-${connector.id}-servers`} label="Blossom servers"
+              error=${nostrErrors.fields.servers} value=${servers} onInput=${(e) => setServers(e.target.value)} />
+            ${isNsite && html`<${Field} id=${`host-${connector.id}-gateway`} label="Gateway" autocomplete="off"
+              error=${nostrErrors.fields.gateway} value=${gateway} onInput=${(e) => setGateway(e.target.value)} />`}
+            ${nostrErrors.notice}`}
+          ${!isNostr && html`<${Field} id=${`host-${connector.id}-url`} label=${`Public address of the ${noun}`} type="url"
             placeholder="https://music.example.com/feeds" error=${addressError.field}
-            value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
-          <${ErrorNotice} error=${addressError.other} />
+            value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />`}
+          ${!isNostr && html`<${ErrorNotice} error=${addressError.other} />`}
           <div class="actions">
             <button class="button primary" type="submit" disabled=${busy}>${busy ? 'Saving…' : 'Save'}</button>
             <button class="button" type="button" disabled=${busy} onClick=${() => setEditing(false)}>Cancel</button>
@@ -1494,9 +1801,16 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
                   <dt>Folder</dt><dd class="mono">${config.root}</dd>
                   <dt>Login</dt><dd>${{ key: 'Private key', password: 'Password', agent: 'ssh-agent' }[config.login] || config.login}</dd>
                   <dt>Host key</dt><dd class="mono">${config.host_key}</dd>`
-                : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
-            <dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
-              ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>
+                : isNostr
+                  ? html`<dt>Public key</dt><dd class="mono">${npubOf(config.public_key) || config.public_key}</dd>
+                    ${isNsite && html`<dt>Site name</dt><dd class="mono">${config.d}</dd>
+                      <dt>Address</dt><dd class="mono">${siteAddress(config) || '—'}</dd>
+                      <dt>Relays</dt><dd><ul class="address-list">${(config.relays || []).map((r) => html`<li class="mono">${r}</li>`)}</ul></dd>`}
+                    <dt>Blossom servers</dt><dd><ul class="address-list">${(config.servers || []).map((r) => html`<li class="mono">${r}</li>`)}</ul></dd>
+                    <dt>Signing</dt><dd>${signingText}</dd>`
+                  : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
+            ${!isNostr && html`<dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
+              ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>`}
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
               ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
                 <span class=${`dot ${mediumKind(f.medium).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
@@ -1507,6 +1821,19 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
                   <span class="mono">${f.public_url}</span></li>`)}
               </ul></dd>`}
           </dl>
+          ${isNsite && html`<div class="actions">
+            <button class="button" type="button" disabled=${site.busy} onClick=${checkRelays}>
+              ${site.busy ? 'Checking…' : 'Check the relays'}</button>
+          </div>`}
+          ${isNsite && siteState && (siteState.consistent
+            ? html`<p class="hint" role="status">Each relay has the newest manifest.</p>`
+            : html`<div class="notice error" role="status">
+                <strong>The relays do not agree yet. Studio shows the site as inconsistent until each relay has the newest manifest.</strong>
+                <ul class="address-list">${siteState.relays
+                  .filter((r) => r.error || r.id !== newestManifest(siteState))
+                  .map((r) => html`<li><span class="mono">${r.url}</span>: ${r.error || (r.id ? `older manifest ${r.id.slice(0, 8)}` : 'no manifest')}</li>`)}</ul>
+              </div>`)}
+          ${isNsite && html`<${ErrorNotice} error=${site.error} />`}
           ${isSftp && html`<div class="actions">
             <button class="button" type="button" disabled=${check.busy || accept.busy} onClick=${checkHost}>
               ${check.busy ? 'Checking…' : 'Check the connection'}</button>
@@ -1573,7 +1900,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
         onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}
       ${showForm
         ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first host' : 'Add a host'}</h2>
-            <${AddHostForm} onAdded=${added} />
+            <${AddHostForm} feeds=${feeds} onAdded=${added} />
             ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
         : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a host</button></div>`}
     </section>

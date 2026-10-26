@@ -16,7 +16,7 @@ The planning model uses this list after each packet, before its commit.
 
 ## Manual Checks
 
-- 030a: `cargo tree -e features -p studio-core` shows no `nip44`, `nip46`, `rand` or `os-rng` feature of `nostr`. The licenses of the new crates are MIT, Apache-2.0, ISC, BSD or CC0. No thread of a test server stays after the tests.
+- 030a: `cargo tree -e features -p studio-core` shows no `nip44`, `nip46`, `rand` or `os-rng` feature of `nostr`. `cargo tree -d -p studio-core` shows one version of `secp256k1`. `sign_with_keys` is the only code that signs with a key. The licenses of the new crates are MIT, Apache-2.0, ISC, BSD or CC0. No thread of a test server stays after the tests.
 - 030b: the relay client drops each event with a bad ID or a bad signature. No error message contains a secret key.
 - 030c: the local folder, S3 and SFTP tests pass with no change of their assertions. `finish` comes after the feed XML and before `record_state`.
 - 030d: Studio sends no `DELETE` for a blob that a different record of the host names. No temporary spool file stays after a write.
@@ -39,7 +39,7 @@ The planning model uses this list after each packet, before its commit.
 
 | Work | Result | Required corrections |
 | --- | --- | --- |
-| 030a | Open | |
+| 030a | Pass, 2026-10-25 | The unit test of `sign_with_keys` compares the event IDs (the planning model added it). |
 | 030b | Open | |
 | 030c | Open | |
 | 030d | Open | |

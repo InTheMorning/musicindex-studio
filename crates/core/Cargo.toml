@@ -20,6 +20,9 @@ ureq = "3.5"
 quick-xml = "0.42"
 rusty-s3.workspace = true
 ssh2.workspace = true
+nostr.workspace = true
+secp256k1.workspace = true
+tungstenite.workspace = true
 rusqlite = { version = "0.40", features = ["bundled"] }
 uuid = { version = "1.28", features = ["v4", "v5"] }
 zeroize = "1.9"

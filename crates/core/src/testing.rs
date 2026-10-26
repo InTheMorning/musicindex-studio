@@ -2,7 +2,9 @@
 //!
 //! The `testing` feature makes it available to the tests of other crates.
 
+pub mod blossom;
 pub mod fake_s3;
+pub mod relay;
 pub mod sshd;
 
 use std::collections::HashMap;

@@ -1,7 +1,7 @@
 # Studio v1 Task 030: The nsite And Blossom Connectors
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 9, the fourth task.
-Decisions: [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md), [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md).
+Decisions: [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md), [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0051](../adr/0051-the-core-signs-nostr-events-with-secp256k1.md) and [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md).
 
 ## Goal
 

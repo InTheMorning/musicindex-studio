@@ -16,6 +16,12 @@ studio-api = { path = "crates/api" }
 rusty-s3 = { version = "0.10", default-features = false, features = ["rustcrypto", "xml"] }
 # SSH client for the SFTP connector. The vendored OpenSSL needs no system library.
 ssh2 = { version = "0.9", features = ["vendored-openssl"] }
+# Nostr events, keys and verification for the nsite and Blossom connectors.
+nostr = "0.45"
+# Signs Nostr events (ADR 0051). The version and features follow nostr.
+secp256k1 = { version = "0.30", default-features = false, features = ["std"] }
+# WebSocket client for relays, and the test relay.
+tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

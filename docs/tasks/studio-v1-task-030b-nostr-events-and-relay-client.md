@@ -1,6 +1,6 @@
 # Studio v1 Task 030b: The Nostr Events And The Relay Client
 
-Parent: [task 030](studio-v1-task-030-nsite-and-blossom.md). Decisions: [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md) items 5, 8, 9 and 14 to 17, [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md) items 3, 12 and 13, [ADR 0044](../adr/0044-the-nsite-signer.md) items 2 and 4.
+Parent: [task 030](studio-v1-task-030-nsite-and-blossom.md). Decisions: [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md) items 5, 8, 9 and 14 to 17, [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md) items 3, 12 and 13, [ADR 0044](../adr/0044-the-nsite-signer.md) items 2 and 4, [ADR 0051](../adr/0051-the-core-signs-nostr-events-with-secp256k1.md).
 Sequence: the second packet of task 030. It depends on 030a.
 
 ## Goal
@@ -9,11 +9,11 @@ Sequence: the second packet of task 030. It depends on 030a.
 
 ## Files
 
-Inspect: `crates/core/src/lib.rs`, `crates/core/src/connector.rs` (`ConnectorError`, `ConnectorErrorKind`), `crates/core/src/testing/relay.rs`, the `nostr` 0.45 documentation (`Keys`, `SecretKey`, `PublicKey`, `UnsignedEvent`, `Event`, `Filter`, `Tag`, `nips::nip19`).
+Inspect: `crates/core/src/lib.rs`, `crates/core/src/nostr_events.rs` (`sign_with_keys`), `crates/core/src/connector.rs` (`ConnectorError`, `ConnectorErrorKind`), `crates/core/src/testing/relay.rs`, the `nostr` 0.45 documentation (`Keys`, `SecretKey`, `PublicKey`, `UnsignedEvent`, `Event`, `Filter`, `Tag`, `nips::nip19`).
 
 Reference for the protocols (read only): `../musicindex-research/sources/connectors/nostr/nips/5A.md`, `../musicindex-research/sources/connectors/nostr/blossom/buds/11.md`.
 
-Change: add `crates/core/src/nostr_events.rs` and `crates/core/src/connector/relay.rs`. Change `lib.rs` and `connector.rs` (the module lines only).
+Change: add functions to `crates/core/src/nostr_events.rs`, and add `crates/core/src/connector/relay.rs`. Change `lib.rs` and `connector.rs` (the module lines only).
 
 Do not change: the pipeline, the API, the UI, the other connectors, the test servers.
 
@@ -43,7 +43,7 @@ These choices are fixed. Do not change them.
 - `auth_header(&Event) -> String`: `Nostr ` and the Base64url text of the JSON event, with no padding.
 - `pub struct Signing { pub plan_time: Option<u64>, pub signed: Vec<Event> }`, with `Default`. It is the signing of one write ([ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md) item 4).
 - `sign(unsigned, keys: Option<&Keys>, signing: &Signing, host_key: &PublicKey) -> Result<Event, ConnectorError>`:
-  - With `keys`, the function signs the event. Keys of a different public key give `Unauthorized`.
+  - With `keys`, the function signs the event with `sign_with_keys` of packet 030a. Keys of a different public key give `Unauthorized`.
   - With no `keys`, the function finds the event in `signing.signed` with the ID of the unsigned event. It must have a correct signature and the public key of the host. A missing event gives the new error kind `SignatureMissing`. A different key or a bad signature gives `Unauthorized`.
 - `ConnectorErrorKind` gets `SignatureMissing`: "the write needs an event that the user did not sign".
 
@@ -99,7 +99,6 @@ tools/node --test crates/api/ui-tests/*.test.mjs
 Stop and report in these cases:
 
 - `nostr` 0.45 has no API to make an `UnsignedEvent` with a fixed `created_at` and custom tags.
-- `nostr` 0.45 cannot sign an `UnsignedEvent` with `Keys` and the default features.
 - The ID of an `UnsignedEvent` is not the ID of the event after the signature.
 
 ## Prompt for lower-context coding model
@@ -115,7 +114,7 @@ Read:
 - The files that the Files section names.
 
 Goal:
-- crates/core/src/nostr_events.rs makes, parses, signs and checks the nsite manifest and the Blossom authorization event. crates/core/src/connector/relay.rs reads and publishes events on a relay with tungstenite.
+- crates/core/src/nostr_events.rs (from packet 030a) makes, parses, signs and checks the nsite manifest and the Blossom authorization event. crates/core/src/connector/relay.rs reads and publishes events on a relay with tungstenite.
 
 Constraints:
 - Follow the Architecture section of the task file fully, with its test vectors.

@@ -52,6 +52,7 @@
 - [ADR 0048: The nsite and Blossom connectors](adr/0048-the-nsite-and-blossom-connectors.md)
 - [ADR 0049: The Rust toolchain is pinned](adr/0049-the-rust-toolchain-is-pinned.md)
 - [ADR 0050: The nsite and Blossom signer, host environment and signing plan](adr/0050-nsite-and-blossom-signer-environment-and-plan.md)
+- [ADR 0051: The core signs Nostr events with secp256k1](adr/0051-the-core-signs-nostr-events-with-secp256k1.md)
 
 ## Plans
 

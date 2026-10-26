@@ -145,7 +145,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ### Phase 9: Remaining Connectors
 
-- Decisions: [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0046](../adr/0046-the-s3-and-r2-connector.md), [ADR 0047](../adr/0047-the-sftp-connector.md), [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md) and [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md).
+- Decisions: [ADR 0043](../adr/0043-phase-9-connectors-and-the-interface-change.md), [ADR 0044](../adr/0044-the-nsite-signer.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0046](../adr/0046-the-s3-and-r2-connector.md), [ADR 0047](../adr/0047-the-sftp-connector.md), [ADR 0048](../adr/0048-the-nsite-and-blossom-connectors.md), [ADR 0050](../adr/0050-nsite-and-blossom-signer-environment-and-plan.md) and [ADR 0051](../adr/0051-the-core-signs-nostr-events-with-secp256k1.md).
 - Sequence: the interface change, then S3 and R2, then SFTP, then nsite and Blossom.
 - Task: [027](../tasks/studio-v1-task-027-connector-interface.md) (the interface change), in three packets, is complete. The [review checklist](../reviews/2026-10-25-task-027-review-checklist.md) records each packet.
 - Task: [028](../tasks/studio-v1-task-028-s3-connector.md) (S3 and R2), in four packets, is complete. The [review checklist](../reviews/2026-10-25-task-028-review-checklist.md) records each packet. Its human test with a real bucket is open.

@@ -20,6 +20,7 @@ pub mod media;
 pub mod migrate;
 pub mod msp;
 pub mod musicindex;
+pub mod nostr_events;
 pub mod pipeline;
 pub mod publisher;
 pub mod remote;

@@ -1,6 +1,6 @@
 # ADR 0045: The Phase 9 Crates, Test Servers And Host Forms
 
-- Status: Accepted
+- Status: Accepted. [ADR 0051](0051-the-core-signs-nostr-events-with-secp256k1.md) adds `secp256k1` to item 1 on 2026-10-25.
 - Date: 2026-10-25
 - Owner: operator
 

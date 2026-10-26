@@ -4545,3 +4545,184 @@ async fn an_sftp_host_gets_a_new_public_address_and_the_match_route_links_its_fe
         json!({ "state": "typed", "url": "https://new.example.com/m" })
     );
 }
+
+// ---- The signing plan of an nsite host with "My signer" (ADR 0050) ----
+
+/// A feed on an nsite host with "My signer", on two test relays and one
+/// test server, with a draft that changes the title.
+struct SignerSite {
+    app: App,
+    id: i64,
+    keys: nostr::prelude::Keys,
+    // The servers stop when these values drop.
+    _relays: [studio_core::testing::relay::TestRelay; 2],
+    _blossom: studio_core::testing::blossom::TestBlossom,
+}
+
+async fn signer_site() -> SignerSite {
+    use studio_core::connector::{Connector, Expected, NsiteHost};
+    use studio_core::nostr_events::Signing;
+    use studio_core::testing::{blossom::TestBlossom, relay::TestRelay};
+    let relays = [TestRelay::start(), TestRelay::start()];
+    let blossom = TestBlossom::start();
+    let secret_hex = "01".repeat(32);
+    let keys = studio_core::nostr_events::parse_secret_key(&secret_hex).unwrap();
+    let config_for = |mode: &str| {
+        json!({
+            "public_key": keys.public_key().to_hex(),
+            "d": "album",
+            "relays": relays.iter().map(studio_core::testing::relay::TestRelay::url).collect::<Vec<_>>(),
+            "servers": [blossom.url()],
+            "signing": mode,
+        })
+        .to_string()
+    };
+    let secret = json!({ "secret_key": secret_hex }).to_string().into_bytes();
+    let seed =
+        NsiteHost::from_config(&config_for("vault"), Some(&secret), Signing::default()).unwrap();
+    seed.write("album.xml", FEED.as_bytes(), &Expected::Absent)
+        .unwrap();
+    seed.finish().unwrap();
+
+    let app = app();
+    let mut collection = collection_of(&app);
+    let connector = collection
+        .add_connector(NsiteHost::KIND, "Site", &config_for("signer"), None)
+        .unwrap();
+    let feed = collection
+        .add_feed(
+            seed.public_url("album.xml").as_deref(),
+            Some((connector, "album.xml")),
+        )
+        .unwrap();
+    set_library_root(&app);
+    let id = feed.0;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (status, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    let mut model = draft["model"].clone();
+    model["title"] = json!("Album (remaster)");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    SignerSite {
+        app,
+        id,
+        keys,
+        _relays: relays,
+        _blossom: blossom,
+    }
+}
+
+/// Sign the events of a diff with the key of the site, as JSON.
+fn sign_diff_events(keys: &nostr::prelude::Keys, diff: &Value) -> Vec<Value> {
+    diff["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            let event = &entry["event"];
+            let tags: Vec<nostr::prelude::Tag> = event["tags"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|tag| {
+                    let parts: Vec<String> = tag
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|part| part.as_str().unwrap().to_owned())
+                        .collect();
+                    nostr::prelude::Tag::parse(parts).unwrap()
+                })
+                .collect();
+            let unsigned = nostr::prelude::UnsignedEvent::new(
+                keys.public_key(),
+                nostr::prelude::Timestamp::from_secs(event["created_at"].as_u64().unwrap()),
+                nostr::prelude::Kind::from_u16(
+                    u16::try_from(event["kind"].as_u64().unwrap()).unwrap(),
+                ),
+                tags,
+                event["content"].as_str().unwrap(),
+            );
+            let signed = studio_core::nostr_events::sign_with_keys(unsigned, keys).unwrap();
+            assert_eq!(signed.id.to_hex(), event["id"].as_str().unwrap());
+            serde_json::from_str(&signed.as_json()).unwrap()
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn the_diff_of_an_nsite_host_with_a_signer_gives_the_events_to_sign() {
+    let site = signer_site().await;
+    let (status, diff) = call(
+        &site.app,
+        "GET",
+        &format!("/api/v1/feeds/{}/diff", site.id),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let events = diff["events"].as_array().unwrap();
+    assert_ne!(events.len(), 0);
+    for entry in events {
+        assert_eq!(entry["user_signs"], true);
+        assert!(entry["connector_id"].is_i64());
+        let event = &entry["event"];
+        assert_eq!(event["pubkey"], site.keys.public_key().to_hex());
+        assert!(event["created_at"].is_u64());
+        assert!(event["kind"].is_u64());
+        assert!(event["tags"].is_array());
+        assert!(event["content"].is_string());
+        assert_eq!(event["id"].as_str().unwrap().len(), 64);
+    }
+}
+
+#[tokio::test]
+async fn a_write_with_the_signed_events_works_and_a_write_with_none_gives_409() {
+    let site = signer_site().await;
+    let id = site.id;
+    let (_, diff) = call(&site.app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let write_path = format!("/api/v1/feeds/{id}/write");
+    let (status, body) = call(
+        &site.app,
+        "POST",
+        &write_path,
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "signature_required");
+
+    let signed = sign_diff_events(&site.keys, &diff);
+    let (status, body) = call(
+        &site.app,
+        "POST",
+        &write_path,
+        Some(json!({ "diff_id": diff["id"], "signed_events": signed })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["title"], "Album (remaster)");
+}
+
+#[tokio::test]
+async fn a_signed_event_that_does_not_parse_gives_422_invalid_event() {
+    let site = signer_site().await;
+    let id = site.id;
+    let (_, diff) = call(&site.app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &site.app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"], "signed_events": [{ "id": "abc" }] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_event");
+}

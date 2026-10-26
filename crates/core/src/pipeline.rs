@@ -3,7 +3,7 @@
 //! A write to a host occurs only through [`write_draft`], and only with the
 //! ID of the diff that the user approved.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::path::Path;
 
@@ -14,7 +14,10 @@ use crate::collection::{
     Collection, CollectionError, ConnectorId, DraftFeedMove, DraftOperationKind, DraftRow, FeedId,
     FeedRow, LibraryFile, LibraryFileId, SnapshotId,
 };
-use crate::connector::{Connector, ConnectorError, ConnectorErrorKind, Expected, Version};
+use crate::connector::{
+    Connector, ConnectorError, ConnectorErrorKind, Expected, HostChanges, PlannedDelete,
+    PlannedWrite, Version,
+};
 use crate::digest::sha256_hex;
 use crate::feed::{Feed, FeedError};
 use crate::guid::podcast_guid_for_url;
@@ -74,6 +77,15 @@ pub enum PipelineErrorKind {
     /// A host needs a secret from the vault, and the vault is locked
     /// (ADR 0017).
     VaultLocked,
+    /// A host with "My signer" has a planned event that the user did not
+    /// sign (ADR 0050 item 12).
+    SignatureMissing,
+    /// A signed event has a bad signature or a different public key
+    /// (ADR 0050 item 12).
+    SignatureInvalid,
+    /// The signing plan of the feed is missing, or it expired. The user
+    /// must review the diff again (ADR 0050 item 12).
+    PlanExpired,
 }
 
 /// An error from the write pipeline.
@@ -114,10 +126,10 @@ impl From<CollectionError> for PipelineError {
 
 impl From<ConnectorError> for PipelineError {
     fn from(error: ConnectorError) -> Self {
-        let kind = if error.kind() == ConnectorErrorKind::Conflict {
-            PipelineErrorKind::Conflict
-        } else {
-            PipelineErrorKind::Connector
+        let kind = match error.kind() {
+            ConnectorErrorKind::Conflict => PipelineErrorKind::Conflict,
+            ConnectorErrorKind::SignatureMissing => PipelineErrorKind::SignatureMissing,
+            _ => PipelineErrorKind::Connector,
         };
         Self::new(kind, error.to_string())
     }
@@ -181,8 +193,59 @@ pub struct DiffFile {
     pub media_type: String,
 }
 
+/// A Nostr event that the write signs, with no signature (ADR 0050
+/// item 11).
+#[derive(Debug, Clone)]
+pub struct DiffEvent {
+    /// The host that publishes the event.
+    pub connector_id: ConnectorId,
+    /// True for a host with "My signer": the user signs the event.
+    pub user_signs: bool,
+    /// The event, with no signature.
+    pub event: nostr::prelude::UnsignedEvent,
+}
+
+impl DiffEvent {
+    /// The event as a JSON object that a NIP-07 `signEvent` accepts, with
+    /// its ID.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "pubkey": self.event.pubkey.to_hex(),
+            "created_at": self.event.created_at.as_secs(),
+            "kind": self.event.kind.as_u16(),
+            "tags": self
+                .event
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect::<Vec<_>>(),
+            "content": self.event.content,
+            "id": self.event.compute_id().to_hex(),
+        })
+    }
+}
+
+/// Read an event that the user signed, from its JSON text.
+///
+/// # Errors
+///
+/// Gives the reason as text when the text is not a correct Nostr event.
+pub fn signed_event_from_json(json: &str) -> Result<nostr::prelude::Event, String> {
+    nostr::prelude::Event::from_json(json).map_err(|error| error.to_string())
+}
+
+/// How long a signing plan lasts, in seconds. An authorization event of
+/// a plan expires one hour after the plan time (ADR 0050 item 13).
+const PLAN_LIFETIME: u64 = 3600;
+/// A diff reuses its plan time while this many seconds or more remain
+/// (ADR 0050 item 10).
+const PLAN_REUSE_MARGIN: u64 = 600;
+/// A write stops when fewer seconds than this remain in the plan.
+const PLAN_WRITE_MARGIN: u64 = 60;
+
 /// A line diff between the live file and the draft.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Diff {
     /// The ID that the user approves.
     pub id: DiffId,
@@ -206,6 +269,9 @@ pub struct Diff {
     /// Always `false`: Studio does not tell the musicindex API and
     /// Podcast Index about a new address yet (ADR 0038 items 18 and 21).
     pub announce: bool,
+    /// Each Nostr event that the write signs, with no signature
+    /// (ADR 0050 item 11).
+    pub events: Vec<DiffEvent>,
 }
 
 /// How the host from before points to the new address of the feed XML
@@ -783,6 +849,32 @@ pub fn diff(
     library: &Library,
     id: FeedId,
 ) -> Result<Diff, PipelineError> {
+    diff_at(collection, hosts, library, id, unix_now())
+}
+
+/// The time of the computer, in seconds after the Unix epoch.
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// The same as [`diff`], with the time `now` in seconds after the Unix
+/// epoch. The diff gives the planned Nostr events of each host. The
+/// collection keeps the plan time, so that a later diff of the same ID
+/// gives the same events (ADR 0050 item 10).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft, or a host cannot
+/// plan its events.
+pub fn diff_at(
+    collection: &Collection,
+    hosts: &Hosts,
+    library: &Library,
+    id: FeedId,
+    now: u64,
+) -> Result<Diff, PipelineError> {
     let feed_row = collection.feed(id)?;
     let draft = current_draft(collection, id)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
@@ -791,6 +883,40 @@ pub fn diff(
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let files = upload_files(collection, &operations)?;
+    let diff_id = diff_id(&draft, &extra);
+    let changes = host_changes(
+        collection,
+        library,
+        &feed_row,
+        &draft,
+        &operations,
+        feed_move.as_ref(),
+    )?;
+    let plan_time = match collection.signing_plan(id)? {
+        Some((kept_id, plan_time))
+            if kept_id == diff_id.as_str()
+                && plan_time + PLAN_LIFETIME - PLAN_REUSE_MARGIN > now =>
+        {
+            plan_time
+        }
+        _ => {
+            collection.put_signing_plan(id, diff_id.as_str(), now)?;
+            now
+        }
+    };
+    let mut events = Vec::new();
+    for (connector_id, host_changes) in &changes {
+        for planned in hosts
+            .get(*connector_id)?
+            .plan_events(host_changes, plan_time)?
+        {
+            events.push(DiffEvent {
+                connector_id: *connector_id,
+                user_signs: planned.user_signs,
+                event: planned.event,
+            });
+        }
+    }
     let base = String::from_utf8_lossy(&draft.base_xml);
     let new = String::from_utf8_lossy(&draft.draft_xml);
     let unified = TextDiff::from_lines(base.as_ref(), new.as_ref())
@@ -799,7 +925,7 @@ pub fn diff(
         .header("live", "draft")
         .to_string();
     Ok(Diff {
-        id: diff_id(&draft, &extra),
+        id: diff_id,
         unified,
         changed: draft.base_xml != draft.draft_xml,
         files,
@@ -807,7 +933,115 @@ pub fn diff(
         blocked,
         feed_move,
         announce: false,
+        events,
     })
+}
+
+/// The changes of a write on each host, in the sequence of the host IDs
+/// (ADR 0050 item 11). A confirmation gives no change.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails, or a library file
+/// has no SHA-256 and Studio cannot read it.
+fn host_changes(
+    collection: &Collection,
+    library: &Library,
+    row: &FeedRow,
+    draft: &DraftRow,
+    operations: &[HostOperation],
+    feed_move: Option<&FeedMove>,
+) -> Result<BTreeMap<ConnectorId, HostChanges>, PipelineError> {
+    let mut changes: BTreeMap<ConnectorId, HostChanges> = BTreeMap::new();
+    for operation in operations {
+        match operation.kind {
+            OperationKind::Upload | OperationKind::Copy => {
+                let library_file_id = operation
+                    .library_file_id
+                    .expect("an upload or a copy names its library file");
+                let file = collection.library_file(LibraryFileId(library_file_id))?;
+                let sha256 = match file.sha256 {
+                    Some(sha256) => sha256,
+                    // A remote file has no bytes yet. The write refuses it.
+                    None if !file.local => continue,
+                    None => {
+                        let folder = row.folder.as_deref().ok_or_else(|| {
+                            PipelineError::new(
+                                PipelineErrorKind::NoFolder,
+                                format!("feed {} has no release folder yet", row.id.0),
+                            )
+                        })?;
+                        crate::digest::sha256_file(&library.path(folder, &file.path)).map_err(
+                            |error| {
+                                PipelineError::new(
+                                    PipelineErrorKind::Connector,
+                                    format!("{}: cannot read the library file: {error}", file.path),
+                                )
+                            },
+                        )?
+                    }
+                };
+                changes
+                    .entry(operation.connector_id)
+                    .or_default()
+                    .writes
+                    .push(PlannedWrite {
+                        path: operation.path.clone(),
+                        sha256,
+                        size: file.size,
+                    });
+            }
+            OperationKind::Delete => {
+                let sha256 = collection
+                    .host_file(operation.connector_id, &operation.path)?
+                    .and_then(|file| file.sha256);
+                changes
+                    .entry(operation.connector_id)
+                    .or_default()
+                    .deletes
+                    .push(PlannedDelete {
+                        path: operation.path.clone(),
+                        sha256,
+                    });
+            }
+            OperationKind::Confirm => {}
+        }
+    }
+    // A feed with no host has no feed XML write.
+    let Ok((from_id, from_path)) = writable(row) else {
+        return Ok(changes);
+    };
+    // The feed XML goes to the host of the feed, or to the new host of a
+    // feed move.
+    let (feed_host, feed_path) =
+        feed_move.map_or((from_id, from_path), |m| (m.connector_id, m.path.as_str()));
+    changes
+        .entry(feed_host)
+        .or_default()
+        .writes
+        .push(planned_write(feed_path, &draft.draft_xml));
+    // The pointer file stays on the host from before.
+    if let Some(moved) = feed_move
+        && moved.method == FeedMoveMethod::Pointer
+        && let Some(new_url) = moved.url.as_deref()
+    {
+        let pointer = pointer_bytes(draft, new_url)?;
+        changes
+            .entry(from_id)
+            .or_default()
+            .writes
+            .push(planned_write(from_path, &pointer));
+    }
+    Ok(changes)
+}
+
+/// A planned write of `bytes` to `path`.
+fn planned_write(path: &str, bytes: &[u8]) -> PlannedWrite {
+    PlannedWrite {
+        path: path.to_owned(),
+        sha256: sha256_hex(&[bytes]),
+        size: bytes.len() as u64,
+    }
 }
 
 /// The move of the feed XML in the draft of a feed, with its new address
@@ -1489,10 +1723,6 @@ pub fn library_file_in_use(
 ///
 /// Gives [`PipelineErrorKind::Conflict`] when a host file changed after
 /// the scan, before its deletion. The feed file stays written.
-#[expect(
-    clippy::too_many_lines,
-    reason = "the write is one sequence of steps, and it reads best in one function"
-)]
 pub fn write_draft(
     collection: &mut Collection,
     hosts: &Hosts,
@@ -1500,6 +1730,144 @@ pub fn write_draft(
     addresses: &dyn AddressCheck,
     id: FeedId,
     approved: &DiffId,
+) -> Result<Version, PipelineError> {
+    write_draft_signed(
+        collection,
+        hosts,
+        library,
+        addresses,
+        id,
+        approved,
+        &[],
+        unix_now(),
+    )
+}
+
+/// The plan time for a write: the plan time of the feed when the plan has
+/// the diff ID `approved` and has not expired at `now` (ADR 0050 item 12).
+/// The write route makes the hosts with this time.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+pub fn plan_time_for_write(
+    collection: &Collection,
+    id: FeedId,
+    approved: &DiffId,
+    now: u64,
+) -> Result<Option<u64>, PipelineError> {
+    Ok(collection
+        .signing_plan(id)?
+        .filter(|(kept_id, plan_time)| {
+            kept_id == approved.as_str() && now < plan_time + PLAN_LIFETIME - PLAN_WRITE_MARGIN
+        })
+        .map(|(_, plan_time)| plan_time))
+}
+
+/// Make the planned events of each host again, and check them before the
+/// first change on a host (ADR 0050 item 12).
+///
+/// Each connector keeps the plan that it gets here for the steps of the
+/// write.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::PlanExpired`] when a host has events and the
+/// feed has no plan for `approved`, or the plan expired. Gives
+/// [`PipelineErrorKind::SignatureMissing`] when `signed` has no event for
+/// a planned event of the user, and [`PipelineErrorKind::SignatureInvalid`]
+/// when its signature or its public key is not correct.
+fn check_signing_plan(
+    collection: &Collection,
+    hosts: &Hosts,
+    changes: &BTreeMap<ConnectorId, HostChanges>,
+    id: FeedId,
+    approved: &DiffId,
+    signed: &[nostr::prelude::Event],
+    now: u64,
+) -> Result<(), PipelineError> {
+    let kept = plan_time_for_write(collection, id, approved, now)?;
+    let mut events = Vec::new();
+    for (connector_id, host_changes) in changes {
+        let planned = hosts
+            .get(*connector_id)?
+            .plan_events(host_changes, kept.unwrap_or(now))?;
+        events.extend(planned);
+    }
+    if events.is_empty() {
+        return Ok(());
+    }
+    if kept.is_none() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::PlanExpired,
+            "the signing plan is missing or expired: review the diff again",
+        ));
+    }
+    for planned in events.iter().filter(|planned| planned.user_signs) {
+        let planned_id = planned.event.compute_id();
+        let Some(event) = signed.iter().find(|event| event.id == planned_id) else {
+            // The same event with a different public key has a different ID.
+            let other_key = signed.iter().any(|event| {
+                event.kind == planned.event.kind
+                    && event.created_at == planned.event.created_at
+                    && event.tags == planned.event.tags
+                    && event.content == planned.event.content
+            });
+            return Err(if other_key {
+                invalid_signature("a signed event has a different public key")
+            } else {
+                PipelineError::new(
+                    PipelineErrorKind::SignatureMissing,
+                    "the write needs an event that the user did not sign",
+                )
+            });
+        };
+        if event.pubkey != planned.event.pubkey {
+            return Err(invalid_signature(
+                "a signed event has a different public key",
+            ));
+        }
+        if event.verify().is_err() {
+            return Err(invalid_signature(
+                "the signature of an event is not correct",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn invalid_signature(message: &str) -> PipelineError {
+    PipelineError::new(PipelineErrorKind::SignatureInvalid, message)
+}
+
+/// The same as [`write_draft`], with the events that the user signed and
+/// the time `now` in seconds after the Unix epoch (ADR 0050 item 12).
+/// After the check of the diff ID, and before the first change on a host,
+/// the function makes the planned events again and checks each event.
+///
+/// # Errors
+///
+/// Gives the errors of [`write_draft`]. It also gives
+/// [`PipelineErrorKind::PlanExpired`], [`PipelineErrorKind::SignatureMissing`]
+/// and [`PipelineErrorKind::SignatureInvalid`] before any file changes on
+/// a host.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "write_draft gives its arguments and the two new values"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the write is one sequence of steps, and it reads best in one function"
+)]
+pub fn write_draft_signed(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    id: FeedId,
+    approved: &DiffId,
+    signed: &[nostr::prelude::Event],
+    now: u64,
 ) -> Result<Version, PipelineError> {
     let row = collection.feed(id)?;
     let (connector_id, path) = writable(&row)?;
@@ -1549,6 +1917,17 @@ pub fn write_draft(
             format!("{path} changed on the host after the draft started"),
         ));
     }
+    // ADR 0050 item 12: the planned events are correct before the first
+    // change on a host.
+    let changes = host_changes(
+        collection,
+        library,
+        &row,
+        &draft,
+        &operations,
+        feed_move.as_ref(),
+    )?;
+    check_signing_plan(collection, hosts, &changes, id, approved, signed, now)?;
 
     // Each host that the write puts a file on, deletes a file from, or
     // writes the feed file to. Studio scans each one after the write
@@ -1641,6 +2020,7 @@ pub fn write_draft(
     // Step 5: the draft, its host operations and its feed move go out.
     collection.remove_draft_operations(id)?;
     collection.remove_draft_feed_move(id)?;
+    collection.remove_signing_plan(id)?;
     collection.delete_draft(id)?;
 
     for connector_id in touched {
@@ -2047,6 +2427,7 @@ fn delete_each_operation(
 pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), PipelineError> {
     collection.remove_draft_operations(id)?;
     collection.remove_draft_feed_move(id)?;
+    collection.remove_signing_plan(id)?;
     Ok(())
 }
 

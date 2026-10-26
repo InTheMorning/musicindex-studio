@@ -225,6 +225,13 @@ CREATE TABLE kept_blobs (
     PRIMARY KEY (connector_id, path)
 );
 ",
+    r"
+CREATE TABLE signing_plans (
+    feed_id INTEGER PRIMARY KEY REFERENCES feeds(id) ON DELETE CASCADE,
+    diff_id TEXT NOT NULL,
+    plan_time INTEGER NOT NULL
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -285,7 +292,7 @@ impl From<rusqlite::Error> for CollectionError {
 }
 
 /// The ID of a connector in the collection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct ConnectorId(pub i64);
 
@@ -1007,6 +1014,62 @@ impl Collection {
     pub fn remove_draft_feed_move(&self, feed: FeedId) -> Result<(), CollectionError> {
         self.db
             .execute("DELETE FROM draft_feed_moves WHERE feed_id = ?1", [feed.0])?;
+        Ok(())
+    }
+
+    /// The signing plan of a feed: the diff ID and the plan time, in
+    /// seconds after the Unix epoch (ADR 0050 item 10).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn signing_plan(&self, feed: FeedId) -> Result<Option<(String, u64)>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT diff_id, plan_time FROM signing_plans WHERE feed_id = ?1",
+                [feed.0],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
+                    ))
+                },
+            )
+            .optional()?)
+    }
+
+    /// Keep the signing plan of a feed. A new plan replaces the old plan.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn put_signing_plan(
+        &self,
+        feed: FeedId,
+        diff_id: &str,
+        plan_time: u64,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO signing_plans (feed_id, diff_id, plan_time) VALUES (?1, ?2, ?3)
+             ON CONFLICT(feed_id) DO UPDATE SET diff_id = ?2, plan_time = ?3",
+            params![
+                feed.0,
+                diff_id,
+                i64::try_from(plan_time).unwrap_or(i64::MAX)
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Remove the signing plan of a feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_signing_plan(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db
+            .execute("DELETE FROM signing_plans WHERE feed_id = ?1", [feed.0])?;
         Ok(())
     }
 
@@ -3171,5 +3234,36 @@ mod tests {
         assert_eq!(paths, ["a.mp3", "b.mp3"]);
         collection.replace_kept_blobs(id, &[blob("c.mp3")]).unwrap();
         assert_eq!(collection.kept_blobs(id).unwrap(), [blob("c.mp3")]);
+    }
+
+    #[test]
+    fn a_database_at_the_previous_schema_version_gets_the_signing_plans_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = MIGRATIONS.len() - 1;
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        drop(db);
+
+        let mut collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        let feed = collection.add_feed(None, None).unwrap();
+        assert_eq!(collection.signing_plan(feed).unwrap(), None);
+        collection.put_signing_plan(feed, "one", 100).unwrap();
+        assert_eq!(
+            collection.signing_plan(feed).unwrap(),
+            Some(("one".to_owned(), 100))
+        );
+        collection.put_signing_plan(feed, "two", 200).unwrap();
+        assert_eq!(
+            collection.signing_plan(feed).unwrap(),
+            Some(("two".to_owned(), 200))
+        );
+        collection.remove_signing_plan(feed).unwrap();
+        assert_eq!(collection.signing_plan(feed).unwrap(), None);
     }
 }

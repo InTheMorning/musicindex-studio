@@ -102,6 +102,8 @@ impl From<ConnectorError> for ApiError {
             }
             // ADR 0046 item 5: the provider test refused the host.
             ConnectorErrorKind::NoConditions => (StatusCode::UNPROCESSABLE_ENTITY, "no_conditions"),
+            // ADR 0050 item 12: the user did not sign a planned event.
+            ConnectorErrorKind::SignatureMissing => (StatusCode::CONFLICT, "signature_required"),
             _ => (StatusCode::BAD_GATEWAY, "connector"),
         };
         Self::new(status, code, error.to_string())
@@ -153,6 +155,12 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::VaultLocked => (StatusCode::LOCKED, "vault_locked"),
             // ADR 0038 item 12: a copy waits for the download of its file.
             PipelineErrorKind::WaitingForDownload => (StatusCode::CONFLICT, "waiting_for_download"),
+            // ADR 0050 item 12: the signed events for the planned events.
+            PipelineErrorKind::SignatureMissing => (StatusCode::CONFLICT, "signature_required"),
+            PipelineErrorKind::SignatureInvalid => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "signature_invalid")
+            }
+            PipelineErrorKind::PlanExpired => (StatusCode::CONFLICT, "plan_expired"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())

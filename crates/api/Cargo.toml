@@ -19,6 +19,7 @@ uuid = { version = "1.28", features = ["v4"] }
 
 [dev-dependencies]
 studio-core = { workspace = true, features = ["testing"] }
+nostr.workspace = true
 http-body-util = "0.1"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }

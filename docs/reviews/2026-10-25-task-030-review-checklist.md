@@ -44,6 +44,6 @@ The planning model uses this list after each packet, before its commit.
 | 030c | Pass, 2026-10-25 | None. When a first `finish` fails on one host, a host before it in the sequence keeps its new blob records, because its `finish` published them. |
 | 030d | Pass, 2026-10-25 | `finish` removed the planned events before the deletions. The coding model removed that `finish` and added a test. Open: a write over an existing path does not delete the old blob from the servers. |
 | 030e | Pass, 2026-10-25 | The planning model removed a second `Expected` check from `write`. A plan with deletions and no writes has only the manifest after the deletions. Open: one path with no blob on a server makes `list` fail. A `HEAD` answer with no `Content-Length` looks like a missing blob. |
-| 030f | Open | |
+| 030f | Pass, 2026-10-25 | The planning model removed a semicolon from the `PlanExpired` message. A refused write reads the relays in `plan_events`, but it sends no event and no blob. The API crate gets `nostr` as a dev dependency for its tests. |
 | 030g | Open | |
 | 030h | Open | |

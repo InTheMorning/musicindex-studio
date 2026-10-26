@@ -28,6 +28,7 @@ use studio_core::inventory::{self, Hosts};
 use studio_core::library::{self, Library};
 use studio_core::media;
 use studio_core::migrate;
+use studio_core::nostr_events::Signing;
 use studio_core::pipeline;
 use studio_core::publisher;
 use studio_core::vault::OpenVault;
@@ -1492,6 +1493,15 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
         "blocked": diff.blocked,
         "feed_move": diff.feed_move,
         "announce": diff.announce,
+        "events": diff
+            .events
+            .iter()
+            .map(|event| json!({
+                "connector_id": event.connector_id,
+                "user_signs": event.user_signs,
+                "event": event.to_json(),
+            }))
+            .collect::<Vec<_>>(),
     })))
 }
 
@@ -1507,6 +1517,10 @@ pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) 
 #[derive(Deserialize)]
 pub(crate) struct Write {
     diff_id: String,
+    /// The events that the user signed for the planned events of the
+    /// diff (ADR 0050 item 12).
+    #[serde(default)]
+    signed_events: Vec<Value>,
 }
 
 /// Write the draft with the ID of the diff that the user approved. The
@@ -1514,7 +1528,8 @@ pub(crate) struct Write {
 /// ADR 0036 items 14 and 15).
 ///
 /// This route needs the library. It gives 409 `no_library` when Studio has
-/// no library folder yet.
+/// no library folder yet. An event in `signed_events` that is not a
+/// Nostr event gives 422 `invalid_event`.
 pub(crate) async fn write_feed(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -1522,7 +1537,28 @@ pub(crate) async fn write_feed(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        let hosts = w.hosts()?;
+        let signed = body
+            .signed_events
+            .iter()
+            .map(|event| {
+                pipeline::signed_event_from_json(&event.to_string()).map_err(|reason| {
+                    ApiError::new(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "invalid_event",
+                        format!("a signed event is not a Nostr event: {reason}"),
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let approved = pipeline::DiffId::new(body.diff_id);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let plan_time = pipeline::plan_time_for_write(&w.collection, id, &approved, now)?;
+        let hosts = w.hosts_with(Signing {
+            plan_time,
+            signed: signed.clone(),
+        })?;
         let library = w.library()?;
         // The write deletes the draft. Keep the feed that the write puts
         // on the host, for the remote file records.
@@ -1531,13 +1567,15 @@ pub(crate) async fn write_feed(
             Some(check) => check.0.as_ref(),
             None => &w.web,
         };
-        pipeline::write_draft(
+        pipeline::write_draft_signed(
             &mut w.collection,
             &hosts,
             &library,
             addresses,
             id,
-            &pipeline::DiffId::new(body.diff_id),
+            &approved,
+            &signed,
+            now,
         )?;
         if let Some((feed, _)) = written {
             w.record_remote_files(id, &feed);

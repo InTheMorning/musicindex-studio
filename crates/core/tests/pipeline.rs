@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 
 use studio_core::collection::{Collection, ConnectorId, DraftOperationKind, FeedId, LibraryFileId};
 use studio_core::connector::{
-    self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, KeptBlob,
-    ListedFile, LocalFolder, NsiteHost, Stamp, Version,
+    self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, HostChanges,
+    KeptBlob, ListedFile, LocalFolder, NsiteHost, PlannedEvent, Stamp, Version,
 };
 use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
@@ -2210,6 +2210,16 @@ impl Connector for SharedHost {
     fn public_url(&self, path: &str) -> Option<String> {
         self.0.public_url(path)
     }
+    fn planned_url(&self, path: &str, sha256: Option<&str>) -> Option<String> {
+        self.0.planned_url(path, sha256)
+    }
+    fn plan_events(
+        &self,
+        changes: &HostChanges,
+        plan_time: u64,
+    ) -> Result<Vec<PlannedEvent>, ConnectorError> {
+        self.0.plan_events(changes, plan_time)
+    }
     fn finish(&self) -> Result<(), ConnectorError> {
         self.0.finish()
     }
@@ -2300,4 +2310,357 @@ fn a_feed_on_an_nsite_host_writes_an_upload_and_a_deletion_with_two_manifests() 
             .unwrap()
             .contains(&new_path)
     );
+}
+
+// ---- The signing plan (ADR 0050 items 10 to 13) ----
+
+/// An nsite site on two test relays and two test servers, with a feed that
+/// has a draft.
+struct SigningSite {
+    relays: [TestRelay; 2],
+    blossoms: [TestBlossom; 2],
+    config: String,
+    secret: Vec<u8>,
+    keys: nostr::prelude::Keys,
+    // The folder stays while the site exists.
+    _dir: tempfile::TempDir,
+    collection: Collection,
+    library: Library,
+    feed: FeedId,
+    vault: bool,
+}
+
+impl SigningSite {
+    /// A host of the site with the events that the user signed.
+    fn host(&self, signing: Signing) -> Arc<NsiteHost> {
+        let secret = self.vault.then_some(self.secret.as_slice());
+        Arc::new(NsiteHost::from_config(&self.config, secret, signing).unwrap())
+    }
+
+    /// A host set that has the site as the only host.
+    fn hosts(&self, signing: Signing) -> Hosts {
+        let mut hosts = Hosts::new();
+        hosts.insert(
+            self.collection.connectors().unwrap()[0].id,
+            Box::new(SharedHost(self.host(signing))),
+        );
+        hosts
+    }
+
+    /// The number of events that the relays got.
+    fn received(&self) -> Vec<usize> {
+        self.relays.iter().map(TestRelay::received).collect()
+    }
+
+    fn write(
+        &mut self,
+        diff_id: &DiffId,
+        plan_time: Option<u64>,
+        signed: &[nostr::prelude::Event],
+        now: u64,
+    ) -> Result<Version, pipeline::PipelineError> {
+        let hosts = self.hosts(Signing {
+            plan_time,
+            signed: signed.to_owned(),
+        });
+        pipeline::write_draft_signed(
+            &mut self.collection,
+            &hosts,
+            &self.library,
+            &PassAll,
+            self.feed,
+            diff_id,
+            signed,
+            now,
+        )
+    }
+
+    /// The events of a diff, signed with the key of the site.
+    fn sign_all(&self, diff: &pipeline::Diff) -> Vec<nostr::prelude::Event> {
+        diff.events
+            .iter()
+            .map(|e| {
+                studio_core::nostr_events::sign_with_keys(e.event.clone(), &self.keys).unwrap()
+            })
+            .collect()
+    }
+
+    fn diff_at(&self, now: u64) -> pipeline::Diff {
+        let hosts = self.hosts(Signing::default());
+        pipeline::diff_at(&self.collection, &hosts, &self.library, self.feed, now).unwrap()
+    }
+
+    /// The IDs of the events that the first relay keeps.
+    fn manifests(&self) -> Vec<nostr::prelude::EventId> {
+        self.relays[0].events().iter().map(|e| e.id).collect()
+    }
+
+    /// The number of blobs on each server.
+    fn blob_counts(&self) -> Vec<usize> {
+        self.blossoms.iter().map(|b| b.blobs().len()).collect()
+    }
+}
+
+fn time_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+fn signing_site(mode: &str) -> SigningSite {
+    let relays = [TestRelay::start(), TestRelay::start()];
+    let blossoms = [TestBlossom::start(), TestBlossom::start()];
+    let secret_hex = "01".repeat(32);
+    let keys = studio_core::nostr_events::parse_secret_key(&secret_hex).unwrap();
+    let config_for = |mode: &str| {
+        serde_json::json!({
+            "public_key": keys.public_key().to_hex(),
+            "d": "album",
+            "relays": relays.iter().map(TestRelay::url).collect::<Vec<_>>(),
+            "servers": blossoms.iter().map(TestBlossom::url).collect::<Vec<_>>(),
+            "signing": mode,
+        })
+        .to_string()
+    };
+    let secret = serde_json::json!({ "secret_key": secret_hex })
+        .to_string()
+        .into_bytes();
+    // The seed host has the key, so that it can write the first feed XML.
+    let seed =
+        NsiteHost::from_config(&config_for("vault"), Some(&secret), Signing::default()).unwrap();
+    seed.write("album.xml", FEED.as_bytes(), &Expected::Absent)
+        .unwrap();
+    seed.finish().unwrap();
+
+    let config = config_for(mode);
+    let dir = tempfile::tempdir().unwrap();
+    let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let connector_id = collection
+        .add_connector(NsiteHost::KIND, "Site", &config, None)
+        .unwrap();
+    let library = Library::open(dir.path().join("library")).unwrap();
+    let feed = collection
+        .add_feed(
+            seed.public_url("album.xml").as_deref(),
+            Some((connector_id, "album.xml")),
+        )
+        .unwrap();
+    let site = SigningSite {
+        relays,
+        blossoms,
+        config,
+        secret,
+        keys,
+        _dir: dir,
+        collection,
+        library,
+        feed,
+        vault: mode == "vault",
+    };
+    let connector = SharedHost(site.host(Signing::default()));
+    let mut site = site;
+    pipeline::refresh(&mut site.collection, &connector, feed).unwrap();
+    pipeline::start_draft(&site.collection, &connector, feed).unwrap();
+    pipeline::edit_draft(&site.collection, feed, |f| {
+        f.title = Some("Album (Deluxe)".into());
+    })
+    .unwrap();
+    site
+}
+
+fn event_ids(diff: &pipeline::Diff) -> Vec<String> {
+    diff.events
+        .iter()
+        .map(|e| e.event.compute_id().to_hex())
+        .collect()
+}
+
+#[test]
+fn a_signer_diff_gives_planned_events_with_the_same_ids_each_time() {
+    let site = signing_site("signer");
+    let now = time_now();
+    let first = site.diff_at(now);
+    assert!(!first.events.is_empty());
+    assert!(first.events.iter().all(|e| e.user_signs));
+    let second = site.diff_at(now + 5);
+    assert_eq!(first.id, second.id);
+    assert_eq!(event_ids(&first), event_ids(&second));
+}
+
+#[test]
+fn a_signer_write_with_no_signed_events_changes_nothing_on_a_host() {
+    let mut site = signing_site("signer");
+    let now = time_now();
+    let diff = site.diff_at(now);
+    let plan_time = site
+        .collection
+        .signing_plan(site.feed)
+        .unwrap()
+        .map(|p| p.1);
+    let before = (site.received(), site.blob_counts());
+    let error = site.write(&diff.id, plan_time, &[], now).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::SignatureMissing);
+    assert_eq!((site.received(), site.blob_counts()), before);
+}
+
+#[test]
+fn a_signer_write_with_the_signed_events_publishes_the_manifest() {
+    let mut site = signing_site("signer");
+    let now = time_now();
+    let diff = site.diff_at(now);
+    let signed = site.sign_all(&diff);
+    let plan_time = site
+        .collection
+        .signing_plan(site.feed)
+        .unwrap()
+        .map(|p| p.1);
+    let manifests = site.manifests();
+    let blobs = site.blob_counts();
+    site.write(&diff.id, plan_time, &signed, now).unwrap();
+    assert_ne!(site.manifests(), manifests);
+    assert!(site.blob_counts().iter().zip(blobs).all(|(a, b)| *a > b));
+    assert_eq!(site.collection.signing_plan(site.feed).unwrap(), None);
+}
+
+#[test]
+fn a_planned_event_signed_by_a_different_key_gives_signature_invalid() {
+    let mut site = signing_site("signer");
+    let now = time_now();
+    let diff = site.diff_at(now);
+    let other =
+        nostr::prelude::Keys::new(nostr::prelude::SecretKey::from_hex(&"02".repeat(32)).unwrap());
+    let signed: Vec<_> = diff
+        .events
+        .iter()
+        .map(|e| {
+            let unsigned = nostr::prelude::UnsignedEvent::new(
+                other.public_key(),
+                e.event.created_at,
+                e.event.kind,
+                e.event.tags.clone(),
+                e.event.content.clone(),
+            );
+            studio_core::nostr_events::sign_with_keys(unsigned, &other).unwrap()
+        })
+        .collect();
+    let plan_time = site
+        .collection
+        .signing_plan(site.feed)
+        .unwrap()
+        .map(|p| p.1);
+    let before = (site.received(), site.blob_counts());
+    let error = site.write(&diff.id, plan_time, &signed, now).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::SignatureInvalid);
+    assert_eq!((site.received(), site.blob_counts()), before);
+}
+
+#[test]
+fn a_signed_event_with_a_wrong_signature_gives_signature_invalid() {
+    let mut site = signing_site("signer");
+    let now = time_now();
+    let diff = site.diff_at(now);
+    let mut signed = site.sign_all(&diff);
+    // The first event gets the signature of the second event.
+    let wrong = signed[1].sig;
+    let first = &signed[0];
+    signed[0] = nostr::prelude::Event::new(
+        first.id,
+        first.pubkey,
+        first.created_at,
+        first.kind,
+        first.tags.clone(),
+        first.content.clone(),
+        wrong,
+    );
+    let plan_time = site
+        .collection
+        .signing_plan(site.feed)
+        .unwrap()
+        .map(|p| p.1);
+    let before = (site.received(), site.blob_counts());
+    let error = site.write(&diff.id, plan_time, &signed, now).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::SignatureInvalid);
+    assert_eq!((site.received(), site.blob_counts()), before);
+}
+
+#[test]
+fn a_write_at_the_end_of_the_plan_gives_plan_expired() {
+    let mut site = signing_site("signer");
+    let now = time_now();
+    let diff = site.diff_at(now);
+    let signed = site.sign_all(&diff);
+    let plan_time = site
+        .collection
+        .signing_plan(site.feed)
+        .unwrap()
+        .map(|p| p.1)
+        .unwrap();
+    let before = (site.received(), site.blob_counts());
+    let error = site
+        .write(&diff.id, None, &signed, plan_time + 3600)
+        .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::PlanExpired);
+    assert_eq!((site.received(), site.blob_counts()), before);
+}
+
+#[test]
+fn a_diff_55_minutes_after_the_first_diff_gives_a_new_plan_time() {
+    let site = signing_site("signer");
+    let now = time_now();
+    let first = site.diff_at(now);
+    assert_eq!(
+        site.collection.signing_plan(site.feed).unwrap(),
+        Some((first.id.as_str().to_owned(), now))
+    );
+    let same = site.diff_at(now + 40 * 60);
+    assert_eq!(event_ids(&first), event_ids(&same));
+    let later = site.diff_at(now + 55 * 60);
+    assert_eq!(first.id, later.id);
+    assert_eq!(
+        site.collection.signing_plan(site.feed).unwrap(),
+        Some((first.id.as_str().to_owned(), now + 55 * 60))
+    );
+    assert_ne!(event_ids(&first), event_ids(&later));
+}
+
+#[test]
+fn a_vault_write_needs_no_signed_events() {
+    let mut site = signing_site("vault");
+    let now = time_now();
+    let diff = site.diff_at(now);
+    assert!(diff.events.iter().all(|e| !e.user_signs));
+    let plan_time = site
+        .collection
+        .signing_plan(site.feed)
+        .unwrap()
+        .map(|p| p.1);
+    let manifests = site.manifests();
+    site.write(&diff.id, plan_time, &[], now).unwrap();
+    assert_ne!(site.manifests(), manifests);
+}
+
+#[test]
+fn a_write_to_a_local_folder_host_needs_no_plan() {
+    let mut s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.title = Some("Album (Deluxe)".into());
+    })
+    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(diff.events.is_empty());
+    s.collection.remove_signing_plan(s.feed).unwrap();
+    pipeline::write_draft_signed(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+        &[],
+        time_now(),
+    )
+    .unwrap();
+    assert!(live(&s).contains("Album (Deluxe)"));
 }

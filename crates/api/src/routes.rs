@@ -202,7 +202,47 @@ pub(crate) enum NewConnector {
     },
     S3(NewS3),
     Sftp(NewSftp),
+    Nsite(NewNsite),
+    Blossom(NewBlossom),
 }
+
+/// Who signs the events of a new nsite or Blossom host (ADR 0044 item 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum NewSigning {
+    /// "Key in the vault".
+    Vault,
+    /// "My signer".
+    Signer,
+}
+
+/// The fields of a new nsite site (ADR 0048).
+#[derive(Deserialize)]
+pub(crate) struct NewNsite {
+    name: String,
+    public_key: Option<String>,
+    d: Option<String>,
+    feed_id: Option<i64>,
+    relays: Vec<String>,
+    servers: Vec<String>,
+    gateway: Option<String>,
+    title: Option<String>,
+    signing: NewSigning,
+    secret_key: Option<String>,
+}
+
+/// The fields of a new Blossom host (ADR 0048).
+#[derive(Deserialize)]
+pub(crate) struct NewBlossom {
+    name: String,
+    public_key: Option<String>,
+    servers: Vec<String>,
+    signing: NewSigning,
+    secret_key: Option<String>,
+}
+
+/// The gateway of an nsite host that has none in its fields.
+const DEFAULT_GATEWAY: &str = "nsite.lol";
 
 /// The fields of a new S3 host (ADR 0046).
 #[derive(Deserialize)]
@@ -490,6 +530,416 @@ fn add_s3_connector(
     Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
 }
 
+fn invalid_config(message: &str) -> ApiError {
+    ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_config", message)
+}
+
+/// The fields of the request of `POST /api/v1/connectors/nostr-lists`.
+#[derive(Deserialize)]
+pub(crate) struct NostrListsRequest {
+    key: String,
+}
+
+/// Give the relay list and the server list of a key (ADR 0048 item 3).
+/// The route needs no vault. The key is an `npub`, an `nsec` or 64
+/// hexadecimal characters. With an `nsec`, the route keeps only the public
+/// key.
+pub(crate) async fn nostr_lists(
+    State(shared): State<Shared>,
+    Json(body): Json<NostrListsRequest>,
+) -> ApiResult {
+    let lookup_relays = lock(&shared)?.lookup_relays.clone();
+    blocking_unlocked(move || {
+        let text = body.key.trim();
+        let public_key = if text.starts_with("nsec1") {
+            studio_core::nostr_events::secret_key_parts(text)?.public_key
+        } else {
+            text.to_owned()
+        };
+        let ids = studio_core::nostr_events::key_ids(&public_key)?;
+        let key = studio_core::nostr_events::parse_public_key(&ids.public_key)?;
+        let lists = connector::key_lists(&key, &lookup_relays)?;
+        Ok(Json(json!({
+            "public_key": ids.public_key,
+            "npub": ids.npub,
+            "relays": lists.relays,
+            "servers": lists.servers,
+        })))
+    })
+    .await
+}
+
+/// The servers of a request, as http or https addresses with no `/` at the
+/// end. An empty list gives 422 `invalid_config`. An address with another
+/// scheme gives 422 `invalid_address`.
+fn clean_servers(servers: &[String]) -> Result<Vec<String>, ApiError> {
+    if servers.is_empty() {
+        return Err(invalid_config("the host needs one server"));
+    }
+    servers
+        .iter()
+        .map(|server| {
+            let server = server.trim().trim_end_matches('/');
+            check_http_address(server, "a server address")?;
+            Ok(server.to_owned())
+        })
+        .collect()
+}
+
+/// The relays of a request, as ws or wss addresses. An empty list or an
+/// address with another scheme gives 422 `invalid_config`.
+fn clean_relays(relays: &[String]) -> Result<Vec<String>, ApiError> {
+    if relays.is_empty() {
+        return Err(invalid_config("the site needs one relay"));
+    }
+    relays
+        .iter()
+        .map(|relay| {
+            let relay = relay.trim();
+            let lower = relay.to_ascii_lowercase();
+            if lower.starts_with("ws://") || lower.starts_with("wss://") {
+                Ok(relay.to_owned())
+            } else {
+                Err(invalid_config(
+                    "a relay address must start with ws:// or wss://",
+                ))
+            }
+        })
+        .collect()
+}
+
+/// The gateway of a request, as a host name in lowercase.
+fn clean_gateway(gateway: &str) -> Result<String, ApiError> {
+    let gateway = gateway.trim().to_ascii_lowercase();
+    let ok = !gateway.is_empty()
+        && !gateway.starts_with(['.', '-'])
+        && !gateway.ends_with(['.', '-'])
+        && gateway
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.');
+    if ok {
+        Ok(gateway)
+    } else {
+        Err(invalid_config("the gateway must be a host name"))
+    }
+}
+
+/// The fields that nsite and Blossom hosts share.
+struct NostrHost<'a> {
+    name: &'a str,
+    public_key: Option<&'a str>,
+    signing: NewSigning,
+    secret_key: Option<&'a str>,
+    servers: Vec<String>,
+}
+
+/// The key of a new nsite or Blossom host, after the field checks.
+struct HostKey {
+    /// The public key as hexadecimal text.
+    public_key: String,
+    /// The secret key, with the signing `vault` only.
+    parts: Option<studio_core::nostr_events::SecretKeyParts>,
+}
+
+/// Check the key fields of a new nsite or Blossom host (step 2 of ADR 0048).
+///
+/// With `vault`, `secret_key` must parse. A `public_key` that is not its
+/// key gives 422 `key_mismatch`. With `signer`, `public_key` must parse
+/// and `secret_key` must be absent.
+fn check_host_key(host: &NostrHost<'_>) -> Result<HostKey, ApiError> {
+    use studio_core::nostr_events::{key_ids, secret_key_parts};
+    let given = match host.public_key.map(str::trim).filter(|k| !k.is_empty()) {
+        Some(text) => Some(key_ids(text)?.public_key),
+        None => None,
+    };
+    match host.signing {
+        NewSigning::Vault => {
+            let text = host
+                .secret_key
+                .filter(|k| !k.trim().is_empty())
+                .ok_or_else(|| invalid_config("the secret key must not be empty"))?;
+            let parts = secret_key_parts(text)?;
+            if given.is_some_and(|key| key != parts.public_key) {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "key_mismatch",
+                    "the secret key is not the key of the public key",
+                ));
+            }
+            Ok(HostKey {
+                public_key: parts.public_key.clone(),
+                parts: Some(parts),
+            })
+        }
+        NewSigning::Signer => {
+            if host.secret_key.is_some() {
+                return Err(invalid_config("a signer host takes no secret key"));
+            }
+            let public_key =
+                given.ok_or_else(|| invalid_config("the public key must not be empty"))?;
+            Ok(HostKey {
+                public_key,
+                parts: None,
+            })
+        }
+    }
+}
+
+/// Add an nsite site (ADR 0048, ADR 0044). The steps are in this sequence:
+/// the vault, the field checks, the connection, the secret in the vault,
+/// and the collection row. When one step fails, the next steps do not
+/// occur.
+fn add_nsite_connector(
+    w: &mut Workspace,
+    body: &NewNsite,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    require_vault_for(w, body.signing)?;
+    let host = NostrHost {
+        name: &body.name,
+        public_key: body.public_key.as_deref(),
+        signing: body.signing,
+        secret_key: body.secret_key.as_deref(),
+        servers: clean_servers(&body.servers)?,
+    };
+    let key = check_host_key(&host)?;
+    let relays = clean_relays(&body.relays)?;
+    let d = match (body.d.as_deref().map(str::trim), body.feed_id) {
+        (Some(d), _) if !d.is_empty() => d.to_owned(),
+        (_, Some(feed_id)) => {
+            let guid = w.collection.feed(FeedId(feed_id))?.podcast_guid;
+            let guid = guid.ok_or_else(|| invalid_config("the feed has no GUID"))?;
+            studio_core::nostr_events::site_name_from_guid(&guid)
+        }
+        _ => return Err(invalid_config("give a site name or a feed")),
+    };
+    if !studio_core::nostr_events::valid_site_name(&d) {
+        return Err(invalid_config("the site name is not valid"));
+    }
+    let gateway = clean_gateway(body.gateway.as_deref().unwrap_or(DEFAULT_GATEWAY))?;
+    let title = body
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    let config = json!({
+        "public_key": key.public_key,
+        "d": d,
+        "relays": relays,
+        "servers": host.servers,
+        "gateway": gateway,
+        "signing": signing_text(body.signing),
+        "title": title,
+    })
+    .to_string();
+    // The host checks the configuration, and then it reads the manifest.
+    let secret = key
+        .parts
+        .as_ref()
+        .map(studio_core::nostr_events::SecretKeyParts::vault_json);
+    let made = studio_core::connector::NsiteHost::from_config(
+        &config,
+        secret.as_deref().map(String::as_bytes),
+        Signing::default(),
+    )?;
+    let state = made.site_state()?;
+    if state.relays.iter().all(|r| r.newest.is_err()) {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "host_unavailable",
+            "no relay answered",
+        ));
+    }
+    connector::check_blossom_servers(&host.servers)?;
+    add_nostr_row(
+        w,
+        studio_core::connector::NsiteHost::KIND,
+        host.name,
+        &config,
+        secret.as_deref().map(String::as_bytes),
+    )
+}
+
+/// Add a Blossom host (ADR 0048, ADR 0044). The steps are the steps of
+/// [`add_nsite_connector`], with no relays and no manifest.
+fn add_blossom_connector(
+    w: &mut Workspace,
+    body: &NewBlossom,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    require_vault_for(w, body.signing)?;
+    let host = NostrHost {
+        name: &body.name,
+        public_key: body.public_key.as_deref(),
+        signing: body.signing,
+        secret_key: body.secret_key.as_deref(),
+        servers: clean_servers(&body.servers)?,
+    };
+    let key = check_host_key(&host)?;
+    let config = json!({
+        "public_key": key.public_key,
+        "servers": host.servers,
+        "signing": signing_text(body.signing),
+    })
+    .to_string();
+    let secret = key
+        .parts
+        .as_ref()
+        .map(studio_core::nostr_events::SecretKeyParts::vault_json);
+    studio_core::connector::BlossomHost::from_config(
+        &config,
+        secret.as_deref().map(String::as_bytes),
+        Vec::new(),
+        Signing::default(),
+    )?;
+    connector::check_blossom_servers(&host.servers)?;
+    add_nostr_row(
+        w,
+        studio_core::connector::BlossomHost::KIND,
+        host.name,
+        &config,
+        secret.as_deref().map(String::as_bytes),
+    )
+}
+
+fn signing_text(signing: NewSigning) -> &'static str {
+    match signing {
+        NewSigning::Vault => "vault",
+        NewSigning::Signer => "signer",
+    }
+}
+
+/// Step 1 of the add routes of nsite and Blossom: the signing `vault`
+/// needs the open vault.
+fn require_vault_for(w: &Workspace, signing: NewSigning) -> Result<(), ApiError> {
+    if signing == NewSigning::Vault && w.vault.is_none() {
+        return Err(match w.vault_state() {
+            crate::workspace::VaultState::Absent => ApiError::vault_required(),
+            _ => ApiError::vault_locked(),
+        });
+    }
+    Ok(())
+}
+
+/// Steps 4 and 5 of the add routes of nsite and Blossom: the secret goes
+/// into the vault, and then the row goes into the collection. When a step
+/// fails, the secret does not stay in the vault.
+fn add_nostr_row(
+    w: &mut Workspace,
+    kind: &str,
+    name: &str,
+    config: &str,
+    secret: Option<&[u8]>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let secret_ref = secret.map(|_| format!("connector-{}", uuid::Uuid::new_v4()));
+    if let (Some(secret), Some(secret_ref)) = (secret, &secret_ref) {
+        let vault = w
+            .vault
+            .as_mut()
+            .ok_or_else(|| ApiError::internal("the vault closed"))?;
+        vault.put(secret_ref, secret)?;
+    }
+    let added = w.save_vault().and_then(|()| {
+        w.collection
+            .add_connector(kind, name, config, secret_ref.as_deref())
+            .map_err(ApiError::from)
+    });
+    let id = match added {
+        Ok(id) => id,
+        Err(error) => {
+            // The secret does not stay in the vault without a row.
+            if let (Some(vault), Some(secret_ref)) = (w.vault.as_mut(), &secret_ref) {
+                vault.remove(secret_ref);
+                let _ = w.save_vault();
+            }
+            return Err(error);
+        }
+    };
+    Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
+}
+
+/// Give the state of each relay of an nsite site (ADR 0044 item 6). The
+/// answer has `consistent` and one entry for each relay.
+pub(crate) async fn connector_site(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let row = w.collection.connector(ConnectorId(id))?;
+        if row.kind != studio_core::connector::NsiteHost::KIND {
+            return Err(invalid_config("only an nsite host has a site state"));
+        }
+        if row.secret_ref.is_some() && w.vault.is_none() {
+            return Err(ApiError::vault_locked());
+        }
+        let state = connector::nsite_site_state(&row, w.vault.as_ref())?;
+        let relays: Vec<Value> = state
+            .relays
+            .iter()
+            .map(|relay| match &relay.newest {
+                Ok(manifest) => json!({
+                    "url": relay.address,
+                    "id": manifest.as_ref().map(|m| m.id.clone()),
+                    "created_at": manifest.as_ref().map(|m| m.created_at),
+                    "error": Value::Null,
+                }),
+                Err(error) => json!({
+                    "url": relay.address,
+                    "id": Value::Null,
+                    "created_at": Value::Null,
+                    "error": error.to_string(),
+                }),
+            })
+            .collect();
+        Ok(Json(
+            json!({ "consistent": state.consistent, "relays": relays }),
+        ))
+    })
+    .await
+}
+
+/// The configuration of an nsite or Blossom row with the new relays,
+/// servers and gateway of a change (ADR 0048 item 3). Each field is
+/// checked before the row changes. A field for a different kind gives 422
+/// `invalid_config`.
+fn changed_nostr_config(
+    row: &ConnectorRow,
+    body: &UpdateConnector,
+) -> Result<Option<String>, ApiError> {
+    use studio_core::connector::{BlossomHost, NsiteHost};
+    let is_nsite = row.kind == NsiteHost::KIND;
+    let is_blossom = row.kind == BlossomHost::KIND;
+    if body.relays.is_some() && !is_nsite {
+        return Err(invalid_config("only an nsite host has relays"));
+    }
+    if body.gateway.is_some() && !is_nsite {
+        return Err(invalid_config("only an nsite host has a gateway"));
+    }
+    if body.servers.is_some() && !(is_nsite || is_blossom) {
+        return Err(invalid_config("only an nsite or Blossom host has servers"));
+    }
+    if body.relays.is_none() && body.gateway.is_none() && body.servers.is_none() {
+        return Ok(None);
+    }
+    let mut config: Value =
+        serde_json::from_str(&row.config).map_err(|e| ApiError::internal(e.to_string()))?;
+    if let Some(relays) = &body.relays {
+        config["relays"] = json!(clean_relays(relays)?);
+    }
+    if let Some(servers) = &body.servers {
+        config["servers"] = json!(clean_servers(servers)?);
+    }
+    if let Some(gateway) = &body.gateway {
+        config["gateway"] = json!(clean_gateway(gateway)?);
+    }
+    // The host checks the new configuration. The check needs no secret, so
+    // it uses the signing `signer`.
+    let mut probe = config.clone();
+    probe["signing"] = json!("signer");
+    let probe = probe.to_string();
+    if is_nsite {
+        NsiteHost::from_config(&probe, None, Signing::default())?;
+    } else {
+        BlossomHost::from_config(&probe, None, Vec::new(), Signing::default())?;
+    }
+    Ok(Some(config.to_string()))
+}
+
 pub(crate) async fn add_connector(
     State(shared): State<Shared>,
     Json(body): Json<NewConnector>,
@@ -503,6 +953,8 @@ pub(crate) async fn add_connector(
             } => (name, root, base_url),
             NewConnector::S3(body) => return add_s3_connector(w, &body),
             NewConnector::Sftp(body) => return add_sftp_connector(w, &body),
+            NewConnector::Nsite(body) => return add_nsite_connector(w, &body),
+            NewConnector::Blossom(body) => return add_blossom_connector(w, &body),
         };
         let root = expand_home(root.trim());
         if !std::path::Path::new(&root).is_absolute() {
@@ -546,6 +998,9 @@ pub(crate) struct UpdateConnector {
     name: Option<String>,
     base_url: Option<String>,
     host_key: Option<String>,
+    relays: Option<Vec<String>>,
+    servers: Option<Vec<String>>,
+    gateway: Option<String>,
 }
 
 /// Change the name or the public address of a connector (ADR 0021,
@@ -567,11 +1022,27 @@ pub(crate) async fn update_connector(
             accept_host_key(w, &row, host_key)?;
         }
         let row = w.collection.connector(id)?;
+        // The new relays, servers and gateway are checked before a change.
+        let new_config = changed_nostr_config(&row, &body)?;
+        if body.gateway.is_some() && row.secret_ref.is_some() && w.vault.is_none() {
+            return Err(ApiError::vault_locked());
+        }
         if let Some(name) = &body.name {
             w.collection.set_connector_name(id, name)?;
         }
         if let Some(base_url) = &body.base_url {
             set_connector_base_url(w, &row, base_url)?;
+        }
+        if let Some(config) = &new_config {
+            w.collection.set_connector_config(id, config)?;
+            if body.gateway.is_some() {
+                // A new gateway changes the address of each linked feed.
+                studio_core::address::apply_folder_address(
+                    &mut w.collection,
+                    id,
+                    w.vault.as_ref(),
+                )?;
+            }
         }
         to_json(w.collection.connector(id)?)
     })

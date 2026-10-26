@@ -10,8 +10,9 @@ use serde::Serialize;
 
 use crate::collection::{Collection, CollectionError, ConnectorId, ConnectorRow, FeedId, FeedRow};
 use crate::connector::{
-    self, ConnectorError, LocalFolder, S3Bucket, S3Config, SftpConfig, SftpHost,
+    self, ConnectorError, LocalFolder, NsiteHost, S3Bucket, S3Config, SftpConfig, SftpHost,
 };
+use crate::nostr_events;
 use crate::vault::OpenVault;
 
 /// A source of a feed address (ADR 0021 item 1).
@@ -222,9 +223,10 @@ pub fn apply_folder_address(
     Ok(outcome)
 }
 
-/// The public address of a folder connector, typed or inferred, or the
-/// public address of an S3 or SFTP connector. Other connector kinds give
-/// `None`.
+/// The public address of a folder connector, typed or inferred, the
+/// public address of an S3 or SFTP connector, or the gateway address of an
+/// nsite site (ADR 0048 item 5). A Blossom host and other connector kinds
+/// give `None`.
 #[must_use]
 pub fn folder_url(row: &ConnectorRow) -> Option<String> {
     match row.kind.as_str() {
@@ -237,8 +239,25 @@ pub fn folder_url(row: &ConnectorRow) -> Option<String> {
         SftpHost::KIND => serde_json::from_str::<SftpConfig>(&row.config)
             .ok()
             .and_then(|c| c.base_url),
+        NsiteHost::KIND => nsite_url(&row.config),
         _ => None,
     }
+}
+
+/// The gateway address of the site in an nsite configuration, with no path.
+fn nsite_url(config: &str) -> Option<String> {
+    let config: serde_json::Value = serde_json::from_str(config).ok()?;
+    let key = nostr_events::parse_public_key(config.get("public_key")?.as_str()?).ok()?;
+    let d = config.get("d")?.as_str()?;
+    let gateway = config
+        .get("gateway")
+        .and_then(serde_json::Value::as_str)
+        .filter(|g| !g.is_empty())
+        .unwrap_or("nsite.lol");
+    Some(format!(
+        "https://{}{d}.{gateway}",
+        nostr_events::base36_public_key(&key)
+    ))
 }
 
 /// The linked feeds of a folder with an address that does not agree with
@@ -387,6 +406,42 @@ mod tests {
             Some("https://cdn.example")
         );
         assert_eq!(folder_url(&collection.connector(without).unwrap()), None);
+    }
+
+    #[test]
+    fn an_nsite_host_gives_its_gateway_address_and_a_blossom_host_gives_none() {
+        let collection = Collection::open_in_memory().unwrap();
+        let key = "01".repeat(32);
+        let config = |gateway: Option<&str>| {
+            serde_json::json!({
+                "public_key": nostr_events::secret_key_parts(&key).unwrap().public_key,
+                "d": "album",
+                "relays": ["wss://relay.example"],
+                "servers": ["https://blob.example"],
+                "gateway": gateway,
+                "signing": "signer",
+            })
+            .to_string()
+        };
+        let id = collection
+            .add_connector(NsiteHost::KIND, "Site", &config(Some("gw.example")), None)
+            .unwrap();
+        let url = folder_url(&collection.connector(id).unwrap()).unwrap();
+        assert!(url.starts_with("https://") && url.ends_with("album.gw.example"));
+        let default = collection
+            .add_connector(NsiteHost::KIND, "Site b", &config(None), None)
+            .unwrap();
+        let url = folder_url(&collection.connector(default).unwrap()).unwrap();
+        assert!(url.ends_with("album.nsite.lol"));
+        let blossom = collection
+            .add_connector(
+                crate::connector::BlossomHost::KIND,
+                "Media",
+                &config(None),
+                None,
+            )
+            .unwrap();
+        assert_eq!(folder_url(&collection.connector(blossom).unwrap()), None);
     }
 
     #[test]

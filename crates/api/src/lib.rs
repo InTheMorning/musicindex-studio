@@ -36,6 +36,7 @@ pub async fn serve(listener: tokio::net::TcpListener, router: Router) -> std::io
 }
 
 /// The router of the local API and the UI.
+#[expect(clippy::too_many_lines, reason = "the function is one list of routes")]
 pub fn local_router(workspace: Workspace, access: Access) -> Router {
     let queue = Arc::clone(&workspace.downloads);
     let shared: routes::Shared = Arc::new(Mutex::new(workspace));
@@ -55,11 +56,13 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             "/connectors/fingerprint",
             post(routes::connector_fingerprint),
         )
+        .route("/connectors/nostr-lists", post(routes::nostr_lists))
         .route(
             "/connectors/{id}",
             put(routes::update_connector).delete(routes::delete_connector),
         )
         .route("/connectors/{id}/feeds", get(routes::connector_feeds))
+        .route("/connectors/{id}/site", get(routes::connector_site))
         .route("/connectors/{id}/match", post(routes::match_connector))
         .route("/discover", post(routes::discover))
         .route("/images", get(routes::get_image))

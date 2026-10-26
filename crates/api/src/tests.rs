@@ -34,6 +34,10 @@ impl studio_core::pipeline::AddressCheck for PassAll {
     }
 }
 
+/// The lookup relay of a test that does not read a key list. Port 9
+/// answers nothing. No test uses the default lookup relays.
+const UNUSED_RELAY: &str = "ws://127.0.0.1:9";
+
 struct App {
     router: Router,
     data: tempfile::TempDir,
@@ -52,6 +56,7 @@ fn app_with_index(index: &str) -> App {
     let workspace = Workspace::open(data.path())
         .unwrap()
         .with_musicindex(index)
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_address_check(std::sync::Arc::new(PassAll));
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
@@ -3915,6 +3920,7 @@ async fn a_download_row_from_before_a_restart_is_in_the_queue_again() {
     };
     let workspace = Workspace::open(data.path())
         .unwrap()
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_address_check(std::sync::Arc::new(PassAll));
     workspace.resume_downloads();
     let app = App {
@@ -4725,4 +4731,651 @@ async fn a_signed_event_that_does_not_parse_gives_422_invalid_event() {
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["error"]["code"], "invalid_event");
+}
+
+// ---- The nsite and Blossom host routes (ADR 0048, ADR 0044) ----
+
+/// An app whose lookup relays are `relays`.
+fn app_with_lookup(relays: Vec<String>) -> App {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_lookup_relays(relays)
+        .with_address_check(std::sync::Arc::new(PassAll));
+    App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    }
+}
+
+/// The address of a relay that no server answers.
+fn dead_relay() -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    format!("ws://127.0.0.1:{port}")
+}
+
+const NOSTR_SECRET_HEX: &str = "0101010101010101010101010101010101010101010101010101010101010101";
+
+fn nostr_public_hex() -> String {
+    studio_core::nostr_events::parse_secret_key(NOSTR_SECRET_HEX)
+        .unwrap()
+        .public_key()
+        .to_hex()
+}
+
+/// The servers of one nsite host test: two relays and one Blossom server.
+struct NsiteServers {
+    relays: [studio_core::testing::relay::TestRelay; 2],
+    blossom: studio_core::testing::blossom::TestBlossom,
+}
+
+fn nsite_servers() -> NsiteServers {
+    use studio_core::testing::{blossom::TestBlossom, relay::TestRelay};
+    NsiteServers {
+        relays: [TestRelay::start(), TestRelay::start()],
+        blossom: TestBlossom::start(),
+    }
+}
+
+impl NsiteServers {
+    fn relay_urls(&self) -> Vec<String> {
+        self.relays
+            .iter()
+            .map(studio_core::testing::relay::TestRelay::url)
+            .collect()
+    }
+
+    /// The body of a new nsite host.
+    fn body(&self, signing: &str) -> Value {
+        let mut body = json!({
+            "kind": "nsite",
+            "name": "Site",
+            "d": "album",
+            "relays": self.relay_urls(),
+            "servers": [self.blossom.url()],
+            "signing": signing,
+        });
+        if signing == "vault" {
+            body["secret_key"] = json!(NOSTR_SECRET_HEX);
+        } else {
+            body["public_key"] = json!(nostr_public_hex());
+        }
+        body
+    }
+}
+
+async fn assert_no_host(app: &App, vault_before: Option<&str>) {
+    let (_, connectors) = call(app, "GET", "/api/v1/connectors", None).await;
+    assert_eq!(connectors, json!([]));
+    if let Some(before) = vault_before {
+        let after = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+        assert_eq!(before, after);
+    }
+}
+
+#[tokio::test]
+async fn the_lookup_route_gives_the_relays_and_the_servers_of_a_key() {
+    use nostr::prelude::{Kind, Tag, Timestamp, UnsignedEvent};
+    let relay = studio_core::testing::relay::TestRelay::start();
+    let keys = studio_core::nostr_events::parse_secret_key(NOSTR_SECRET_HEX).unwrap();
+    let event = |kind: u16, tag: Vec<&str>| {
+        let unsigned = UnsignedEvent::new(
+            keys.public_key(),
+            Timestamp::from_secs(100),
+            Kind::Custom(kind),
+            [Tag::parse(tag).unwrap()],
+            "",
+        );
+        studio_core::nostr_events::sign_with_keys(unsigned, &keys).unwrap()
+    };
+    relay.insert(event(10002, vec!["r", "wss://relay.example"]));
+    relay.insert(event(10063, vec!["server", "https://blob.example"]));
+    let app = app_with_lookup(vec![relay.url()]);
+    let public = nostr_public_hex();
+    let npub = nostr::nips::nip19::ToBech32::to_bech32(&keys.public_key()).unwrap();
+    let nsec = nostr::nips::nip19::ToBech32::to_bech32(keys.secret_key()).unwrap();
+    for key in [public.clone(), npub.clone(), nsec.clone()] {
+        let (status, _, text) = send(
+            &app,
+            request(
+                "POST",
+                "/api/v1/connectors/nostr-lists",
+                Some(json!({ "key": key })),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{text}");
+        assert!(!text.contains(NOSTR_SECRET_HEX) && !text.contains(&nsec));
+        let body: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(body["public_key"], public);
+        assert_eq!(body["npub"], npub);
+        assert_eq!(body["relays"], json!(["wss://relay.example"]));
+        assert_eq!(body["servers"], json!(["https://blob.example"]));
+    }
+
+    let other = studio_core::nostr_events::parse_secret_key(&"02".repeat(32))
+        .unwrap()
+        .public_key()
+        .to_hex();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors/nostr-lists",
+        Some(json!({ "key": other })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["relays"], json!([]));
+    assert_eq!(body["servers"], json!([]));
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors/nostr-lists",
+        Some(json!({ "key": "not a key" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_config");
+}
+
+#[tokio::test]
+async fn the_lookup_route_gives_503_when_no_lookup_relay_answers() {
+    let app = app_with_lookup(vec![dead_relay()]);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors/nostr-lists",
+        Some(json!({ "key": nostr_public_hex() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
+    assert_eq!(body["error"]["code"], "host_unavailable");
+}
+
+#[tokio::test]
+async fn an_nsite_host_with_a_vault_key_keeps_the_key_in_the_vault_only() {
+    let servers = nsite_servers();
+    let app = app();
+    make_vault(&app).await;
+    let (status, _, text) = send(
+        &app,
+        request("POST", "/api/v1/connectors", Some(servers.body("vault"))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+    assert!(!text.contains(NOSTR_SECRET_HEX));
+    let row: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(row["kind"], "nsite");
+    let secret_ref = row["secret_ref"].as_str().unwrap();
+    assert!(secret_ref.starts_with("connector-"), "{secret_ref}");
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert_eq!(config["public_key"], nostr_public_hex());
+    assert_eq!(config["d"], "album");
+    assert_eq!(config["gateway"], "nsite.lol");
+    assert_eq!(config["signing"], "vault");
+
+    let (_, _, list) = send(&app, request("GET", "/api/v1/connectors", None)).await;
+    assert!(!list.contains(NOSTR_SECRET_HEX));
+    assert!(!data_files_text(&app).contains(NOSTR_SECRET_HEX));
+    let vault_file = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    assert!(!vault_file.contains(NOSTR_SECRET_HEX));
+    let vault = studio_core::vault::VaultFile::from_json(&vault_file)
+        .unwrap()
+        .open_with_passphrase(PASSPHRASE)
+        .unwrap();
+    let secret: Value = serde_json::from_slice(&vault.get(secret_ref).unwrap().unwrap()).unwrap();
+    assert_eq!(secret, json!({ "secret_key": NOSTR_SECRET_HEX }));
+}
+
+#[tokio::test]
+async fn an_nsite_host_and_a_blossom_host_with_a_signer_need_no_vault() {
+    let servers = nsite_servers();
+    let app = app();
+    let (status, row) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(servers.body("signer")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{row}");
+    assert_eq!(row["secret_ref"], Value::Null);
+    let (status, row) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "blossom",
+            "name": "Media",
+            "public_key": nostr_public_hex(),
+            "servers": [servers.blossom.url()],
+            "signing": "signer",
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{row}");
+    assert_eq!(row["kind"], "blossom");
+    assert_eq!(row["secret_ref"], Value::Null);
+}
+
+#[tokio::test]
+async fn a_blossom_host_with_a_vault_key_keeps_the_key_in_the_vault_only() {
+    let servers = nsite_servers();
+    let app = app();
+    make_vault(&app).await;
+    let (status, _, text) = send(
+        &app,
+        request(
+            "POST",
+            "/api/v1/connectors",
+            Some(json!({
+                "kind": "blossom",
+                "name": "Media",
+                "servers": [servers.blossom.url()],
+                "signing": "vault",
+                "secret_key": NOSTR_SECRET_HEX,
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+    assert!(!text.contains(NOSTR_SECRET_HEX));
+    let row: Value = serde_json::from_str(&text).unwrap();
+    assert!(row["secret_ref"].is_string());
+    assert!(!data_files_text(&app).contains(NOSTR_SECRET_HEX));
+}
+
+#[tokio::test]
+async fn an_nsite_host_with_a_vault_key_needs_the_vault() {
+    let servers = nsite_servers();
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(servers.body("vault")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "vault_required");
+    make_vault(&app).await;
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(servers.body("vault")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::LOCKED);
+    assert_eq!(body["error"]["code"], "vault_locked");
+    assert_no_host(&app, None).await;
+}
+
+#[tokio::test]
+async fn a_secret_key_of_another_public_key_gives_422_key_mismatch_and_changes_nothing() {
+    let servers = nsite_servers();
+    let app = app();
+    make_vault(&app).await;
+    let before = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    let mut body = servers.body("vault");
+    body["public_key"] = json!(
+        studio_core::nostr_events::parse_secret_key(&"02".repeat(32))
+            .unwrap()
+            .public_key()
+            .to_hex()
+    );
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{answer}");
+    assert_eq!(answer["error"]["code"], "key_mismatch");
+    assert!(!answer.to_string().contains(NOSTR_SECRET_HEX));
+    assert_no_host(&app, Some(&before)).await;
+}
+
+#[tokio::test]
+async fn an_nsite_host_with_a_relay_that_has_no_server_gives_503_and_changes_nothing() {
+    let servers = nsite_servers();
+    let app = app();
+    make_vault(&app).await;
+    let before = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    let mut body = servers.body("vault");
+    body["relays"] = json!([dead_relay()]);
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{answer}");
+    assert_eq!(answer["error"]["code"], "host_unavailable");
+    assert_no_host(&app, Some(&before)).await;
+
+    // A Blossom server with no answer gives the same result.
+    let mut body = servers.body("vault");
+    let dead = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    body["servers"] = json!([format!("http://{}", dead.local_addr().unwrap())]);
+    drop(dead);
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{answer}");
+    assert_eq!(answer["error"]["code"], "host_unavailable");
+    assert_no_host(&app, Some(&before)).await;
+}
+
+#[tokio::test]
+async fn a_new_nsite_host_with_a_bad_field_gives_422_and_changes_nothing() {
+    let servers = nsite_servers();
+    let app = app();
+    make_vault(&app).await;
+    let before = std::fs::read_to_string(app.data.path().join("vault.json")).unwrap();
+    let cases = [
+        ("secret_key", json!("not a key"), "invalid_config"),
+        ("secret_key", json!(null), "invalid_config"),
+        ("servers", json!([]), "invalid_config"),
+        ("servers", json!(["ftp://blob.example"]), "invalid_address"),
+        ("relays", json!([]), "invalid_config"),
+        ("relays", json!(["https://relay.example"]), "invalid_config"),
+        ("d", json!("Not Valid"), "invalid_config"),
+        ("d", json!(null), "invalid_config"),
+        ("gateway", json!("not a host"), "invalid_config"),
+        ("public_key", json!("xyz"), "invalid_config"),
+    ];
+    for (field, value, code) in cases {
+        let mut body = servers.body("vault");
+        body[field] = value;
+        let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{field} {answer}");
+        assert_eq!(answer["error"]["code"], code, "{field}");
+    }
+    // A signer host needs a public key and takes no secret key.
+    let mut body = servers.body("signer");
+    body["secret_key"] = json!(NOSTR_SECRET_HEX);
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{answer}");
+    assert_eq!(answer["error"]["code"], "invalid_config");
+    let mut body = servers.body("signer");
+    body["public_key"] = Value::Null;
+    let (status, answer) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{answer}");
+    assert_eq!(answer["error"]["code"], "invalid_config");
+    assert_no_host(&app, Some(&before)).await;
+}
+
+#[tokio::test]
+async fn an_nsite_host_with_no_d_and_a_feed_gets_the_d_of_the_feed_guid() {
+    let web = web_feeds();
+    web.set("/album.xml", 200, FEED.as_bytes().to_vec());
+    let servers = nsite_servers();
+    let app = app_with_index(&web.url(""));
+    call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [web.url("/album.xml")] })),
+    )
+    .await;
+    let (_, feeds) = call(&app, "GET", "/api/v1/feeds", None).await;
+    let feed_id = feeds[0]["id"].as_i64().unwrap();
+    let guid = feeds[0]["podcast_guid"].as_str().unwrap().to_owned();
+    let mut body = servers.body("signer");
+    body.as_object_mut().unwrap().remove("d");
+    body["feed_id"] = json!(feed_id);
+    let (status, row) = call(&app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::CREATED, "{row}");
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        config["d"],
+        studio_core::nostr_events::site_name_from_guid(&guid)
+    );
+}
+
+/// An nsite host with "My signer" on the test servers, and the connector ID.
+async fn added_nsite(app: &App, servers: &NsiteServers) -> i64 {
+    let (status, row) = call(
+        app,
+        "POST",
+        "/api/v1/connectors",
+        Some(servers.body("signer")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{row}");
+    row["id"].as_i64().unwrap()
+}
+
+#[tokio::test]
+async fn the_site_route_gives_consistent_false_for_a_relay_that_dropped_the_manifest() {
+    use studio_core::connector::{Connector, Expected, NsiteHost};
+    let servers = nsite_servers();
+    let app = app();
+    let id = added_nsite(&app, &servers).await;
+    let path = format!("/api/v1/connectors/{id}/site");
+    let (status, body) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["consistent"], true);
+    assert_eq!(body["relays"].as_array().unwrap().len(), 2);
+    assert_eq!(body["relays"][0]["id"], Value::Null);
+    assert_eq!(body["relays"][0]["error"], Value::Null);
+
+    // The second relay does not keep the manifest of the write.
+    servers.relays[1].drop_events(true);
+    let config = json!({
+        "public_key": nostr_public_hex(),
+        "d": "album",
+        "relays": servers.relay_urls(),
+        "servers": [servers.blossom.url()],
+        "signing": "vault",
+    })
+    .to_string();
+    let secret = json!({ "secret_key": NOSTR_SECRET_HEX })
+        .to_string()
+        .into_bytes();
+    let seed = NsiteHost::from_config(
+        &config,
+        Some(&secret),
+        studio_core::nostr_events::Signing::default(),
+    )
+    .unwrap();
+    seed.write("album.xml", FEED.as_bytes(), &Expected::Absent)
+        .unwrap();
+    // The check after the publication finds the difference. The manifest
+    // stays on the first relay.
+    let _ = seed.finish();
+    let (status, body) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["consistent"], false, "{body}");
+    assert!(body["relays"][0]["id"].is_string());
+    assert!(body["relays"][0]["created_at"].is_u64());
+    assert_eq!(body["relays"][1]["id"], Value::Null);
+}
+
+#[tokio::test]
+async fn the_site_route_refuses_another_kind_and_a_locked_vault() {
+    let servers = nsite_servers();
+    let app = app();
+    let (_, local) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(
+            json!({ "kind": "local", "name": "Home", "root": app.feeds.path().to_str().unwrap() }),
+        ),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/connectors/{}/site", local["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_config");
+
+    make_vault(&app).await;
+    let (_, row) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(servers.body("vault")),
+    )
+    .await;
+    let path = format!("/api/v1/connectors/{}/site", row["id"]);
+    let (status, _) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+    let (status, body) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::LOCKED, "{body}");
+    assert_eq!(body["error"]["code"], "vault_locked");
+}
+
+#[tokio::test]
+async fn a_put_with_new_servers_relays_and_gateway_changes_the_row() {
+    let servers = nsite_servers();
+    let other = studio_core::testing::blossom::TestBlossom::start();
+    let app = app();
+    let id = added_nsite(&app, &servers).await;
+    let path = format!("/api/v1/connectors/{id}");
+    let (status, row) = call(
+        &app,
+        "PUT",
+        &path,
+        Some(json!({
+            "servers": [servers.blossom.url(), other.url()],
+            "relays": [servers.relays[0].url()],
+            "gateway": "Gateway.Example",
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{row}");
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        config["servers"],
+        json!([servers.blossom.url(), other.url()])
+    );
+    assert_eq!(config["relays"], json!([servers.relays[0].url()]));
+    assert_eq!(config["gateway"], "gateway.example");
+    assert_eq!(config["d"], "album");
+
+    // A bad field changes nothing.
+    for body in [
+        json!({ "servers": [] }),
+        json!({ "servers": ["ftp://x.example"] }),
+        json!({ "relays": ["https://x.example"] }),
+        json!({ "gateway": "not a host" }),
+    ] {
+        let (status, _) = call(&app, "PUT", &path, Some(body)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let (_, list) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let kept: Value = serde_json::from_str(list[0]["config"].as_str().unwrap()).unwrap();
+    assert_eq!(kept, config);
+}
+
+#[tokio::test]
+async fn a_put_field_for_another_kind_gives_422() {
+    let servers = nsite_servers();
+    let app = app();
+    let (_, blossom) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "blossom",
+            "name": "Media",
+            "public_key": nostr_public_hex(),
+            "servers": [servers.blossom.url()],
+            "signing": "signer",
+        })),
+    )
+    .await;
+    let path = format!("/api/v1/connectors/{}", blossom["id"]);
+    for body in [
+        json!({ "relays": [servers.relays[0].url()] }),
+        json!({ "gateway": "gateway.example" }),
+    ] {
+        let (status, answer) = call(&app, "PUT", &path, Some(body)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{answer}");
+        assert_eq!(answer["error"]["code"], "invalid_config");
+    }
+    let (status, row) = call(
+        &app,
+        "PUT",
+        &path,
+        Some(json!({ "servers": [servers.blossom.url()] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{row}");
+
+    let (_, local) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(
+            json!({ "kind": "local", "name": "Home", "root": app.feeds.path().to_str().unwrap() }),
+        ),
+    )
+    .await;
+    let (status, answer) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{}", local["id"]),
+        Some(json!({ "servers": [servers.blossom.url()] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{answer}");
+}
+
+#[tokio::test]
+async fn the_match_route_links_a_feed_to_its_file_on_an_nsite_host() {
+    use studio_core::connector::{Connector, Expected, NsiteHost};
+    let web = web_feeds();
+    web.set("/album.xml", 200, FEED.as_bytes().to_vec());
+    let servers = nsite_servers();
+    let app = app_with_index(&web.url(""));
+    call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [web.url("/album.xml")] })),
+    )
+    .await;
+    let id = added_nsite(&app, &servers).await;
+
+    // The site has the feed XML at the path album.xml.
+    let config = json!({
+        "public_key": nostr_public_hex(),
+        "d": "album",
+        "relays": servers.relay_urls(),
+        "servers": [servers.blossom.url()],
+        "signing": "vault",
+    })
+    .to_string();
+    let secret = json!({ "secret_key": NOSTR_SECRET_HEX })
+        .to_string()
+        .into_bytes();
+    let seed = NsiteHost::from_config(
+        &config,
+        Some(&secret),
+        studio_core::nostr_events::Signing::default(),
+    )
+    .unwrap();
+    seed.write("album.xml", FEED.as_bytes(), &Expected::Absent)
+        .unwrap();
+    seed.finish().unwrap();
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{id}/match"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["linked"][0]["path"], "album.xml");
+    assert_eq!(body["linked"][0]["connector_id"], id);
+    assert_eq!(body["folder_address"]["state"], "typed");
+    let url = body["folder_address"]["url"].as_str().unwrap();
+    assert!(
+        url.starts_with("https://") && url.ends_with("album.nsite.lol"),
+        "{url}"
+    );
 }

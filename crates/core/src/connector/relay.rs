@@ -8,7 +8,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use nostr::prelude::{Event, EventId, Filter};
+use nostr::prelude::{Event, EventId, Filter, Kind, PublicKey};
 use serde_json::{Value, json};
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Error as WsError, Message, WebSocket};
@@ -329,6 +329,60 @@ pub(crate) fn newest(relays: &[String], filter: &Filter, timeout: Duration) -> R
     Reads { results, newest }
 }
 
+/// The relay list and the server list of a key.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct KeyLists {
+    /// The relays of the key that accept a write (NIP-65, kind 10002).
+    pub relays: Vec<String>,
+    /// The Blossom servers of the key (BUD-03, kind 10063).
+    pub servers: Vec<String>,
+}
+
+/// The values of the tags with a name, in the sequence of the event.
+fn tag_values(event: Option<&Event>, name: &str, write_only: bool) -> Vec<String> {
+    let mut values: Vec<String> = Vec::new();
+    for tag in event.iter().flat_map(|e| e.tags.iter()) {
+        let parts = tag.as_slice();
+        if parts.first().map(String::as_str) != Some(name) {
+            continue;
+        }
+        let Some(value) = parts.get(1).filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        // A marker `read` means that the relay is not for a write.
+        let marker = parts.get(2).map(String::as_str);
+        if write_only && !matches!(marker, None | Some("" | "write")) {
+            continue;
+        }
+        if !values.contains(value) {
+            values.push(value.clone());
+        }
+    }
+    values
+}
+
+/// Read the newest relay list (kind 10002) and the newest server list
+/// (kind 10063) of a key from the lookup relays.
+///
+/// `relays` has each `r` tag with no marker or with the marker `write`.
+/// A key with no event has empty lists.
+///
+/// # Errors
+///
+/// Gives `Unavailable` when no lookup relay answered.
+pub fn key_lists(
+    public_key: &PublicKey,
+    lookup_relays: &[String],
+) -> Result<KeyLists, ConnectorError> {
+    let filter = |kind: u16| Filter::new().author(*public_key).kind(Kind::Custom(kind));
+    let relay_list = newest(lookup_relays, &filter(10002), RELAY_TIMEOUT).into_newest()?;
+    let server_list = newest(lookup_relays, &filter(10063), RELAY_TIMEOUT).into_newest()?;
+    Ok(KeyLists {
+        relays: tag_values(relay_list.as_ref(), "r", true),
+        servers: tag_values(server_list.as_ref(), "server", false),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,6 +542,65 @@ mod tests {
     fn newest_gives_unavailable_when_no_relay_answers() {
         let reads = newest(&[dead_address()], &Filter::new(), SHORT);
         let error = reads.into_newest().expect_err("no answer");
+        assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
+    }
+
+    fn list_event(keys: &Keys, time: u64, kind: u16, tags: Vec<Tag>) -> Event {
+        let unsigned = UnsignedEvent::new(
+            keys.public_key(),
+            Timestamp::from(time),
+            Kind::Custom(kind),
+            tags,
+            "",
+        );
+        sign_with_keys(unsigned, keys).expect("a signed event")
+    }
+
+    fn tag(parts: &[&str]) -> Tag {
+        Tag::parse(parts.iter().map(|p| (*p).to_owned()).collect::<Vec<_>>()).expect("a tag")
+    }
+
+    #[test]
+    fn key_lists_gives_the_newest_relays_and_servers_of_a_key() {
+        let relay = TestRelay::start();
+        let a = keys(1);
+        relay.insert(list_event(
+            &a,
+            100,
+            10002,
+            vec![tag(&["r", "wss://old.example"])],
+        ));
+        relay.insert(list_event(
+            &a,
+            200,
+            10002,
+            vec![
+                tag(&["r", "wss://one.example"]),
+                tag(&["r", "wss://two.example", "write"]),
+                tag(&["r", "wss://three.example", "read"]),
+            ],
+        ));
+        relay.insert(list_event(
+            &a,
+            150,
+            10063,
+            vec![tag(&["server", "https://blob.example"])],
+        ));
+        let lists = key_lists(&a.public_key(), &[relay.url()]).expect("lists");
+        assert_eq!(lists.relays, ["wss://one.example", "wss://two.example"]);
+        assert_eq!(lists.servers, ["https://blob.example"]);
+    }
+
+    #[test]
+    fn key_lists_gives_empty_lists_for_a_key_with_no_events() {
+        let relay = TestRelay::start();
+        let lists = key_lists(&keys(1).public_key(), &[relay.url()]).expect("lists");
+        assert_eq!(lists, KeyLists::default());
+    }
+
+    #[test]
+    fn key_lists_gives_unavailable_when_no_relay_answers() {
+        let error = key_lists(&keys(1).public_key(), &[dead_address()]).expect_err("no answer");
         assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
     }
 

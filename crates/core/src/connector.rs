@@ -18,6 +18,7 @@ use std::path::{Component, Path, PathBuf};
 pub use blossom::BlossomHost;
 pub use local::LocalFolder;
 pub use nsite::{ManifestRef, NsiteHost, RelayState, SiteState};
+pub use relay::{KeyLists, key_lists};
 pub use s3::{S3Bucket, S3Config, S3Credentials, S3UrlStyle};
 pub use sftp::{SftpConfig, SftpCredentials, SftpHost, SftpLogin};
 
@@ -435,6 +436,50 @@ fn secret_of(
     }
 }
 
+/// The newest manifest of the site of an nsite row on each relay of the
+/// row.
+///
+/// # Errors
+///
+/// Gives `InvalidConfig` when the row is not an nsite row or its
+/// configuration is not valid. Gives the errors of [`from_row`] for the
+/// secret. A relay that does not answer has its error in its
+/// [`RelayState`].
+pub fn nsite_site_state(
+    row: &ConnectorRow,
+    vault: Option<&OpenVault>,
+) -> Result<SiteState, ConnectorError> {
+    if row.kind != NsiteHost::KIND {
+        return Err(ConnectorError::new(
+            ConnectorErrorKind::InvalidConfig,
+            "only an nsite host has a site state",
+        ));
+    }
+    let secret = secret_of(row, vault)?;
+    NsiteHost::from_config(
+        &row.config,
+        secret.as_deref().map(Vec::as_slice),
+        nostr_events::Signing::default(),
+    )?
+    .site_state()
+}
+
+/// Send `HEAD /<64 zeros>` to each Blossom server (ADR 0048 item 10). A
+/// server that answers has the correct address. A `404` is a correct
+/// answer.
+///
+/// # Errors
+///
+/// Gives `Unavailable` when a server does not connect. Gives the error of
+/// a server that answers with an error status.
+pub fn check_blossom_servers(servers: &[String]) -> Result<(), ConnectorError> {
+    let zeros = "0".repeat(64);
+    for server in servers {
+        blossom_http::head(server.trim().trim_end_matches('/'), &zeros)?;
+    }
+    Ok(())
+}
+
 /// Make the connector of a collection row.
 ///
 /// The vault gives the secret of a connector that needs one.
@@ -559,6 +604,53 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(secret.as_slice(), b"s3cret");
+    }
+
+    fn nsite_row(relays: &[String]) -> ConnectorRow {
+        let keys = nostr_events::parse_secret_key(&"01".repeat(32)).unwrap();
+        ConnectorRow {
+            id: crate::collection::ConnectorId(1),
+            kind: NsiteHost::KIND.to_owned(),
+            name: "Site".to_owned(),
+            config: serde_json::json!({
+                "public_key": keys.public_key().to_hex(),
+                "d": "album",
+                "relays": relays,
+                "servers": ["http://127.0.0.1:1"],
+                "signing": "signer",
+            })
+            .to_string(),
+            secret_ref: None,
+        }
+    }
+
+    #[test]
+    fn nsite_site_state_gives_the_state_of_each_relay() {
+        use crate::testing::relay::TestRelay;
+        let (one, two) = (TestRelay::start(), TestRelay::start());
+        let state = nsite_site_state(&nsite_row(&[one.url(), two.url()]), None).unwrap();
+        assert_eq!(state.relays.len(), 2);
+        assert!(state.consistent);
+        assert_eq!(state.relays[0].address, one.url());
+        assert_eq!(state.relays[0].newest, Ok(None));
+    }
+
+    #[test]
+    fn nsite_site_state_refuses_a_row_of_another_kind() {
+        let error = nsite_site_state(&row(None), None).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::InvalidConfig);
+    }
+
+    #[test]
+    fn check_blossom_servers_accepts_a_404_and_refuses_a_missing_server() {
+        use crate::testing::blossom::TestBlossom;
+        let server = TestBlossom::start();
+        check_blossom_servers(&[server.url()]).unwrap();
+        let dead = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("http://{}", dead.local_addr().unwrap());
+        drop(dead);
+        let error = check_blossom_servers(&[address]).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
     }
 
     #[test]

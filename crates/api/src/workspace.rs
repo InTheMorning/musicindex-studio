@@ -13,7 +13,7 @@ use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
-use studio_core::nostr_events::Signing;
+use studio_core::nostr_events::{LOOKUP_RELAYS, Signing};
 use studio_core::pipeline::AddressCheck;
 use studio_core::remote;
 use studio_core::vault::{OpenVault, VaultFile};
@@ -101,6 +101,9 @@ pub struct Workspace {
     /// `web`.
     pub(crate) address_check: Option<AddressChecker>,
     pub(crate) index: MusicIndex,
+    /// The relays that give the relay list and the server list of a key
+    /// (ADR 0048 item 3). A test sets the address of a test relay.
+    pub(crate) lookup_relays: Vec<String>,
     /// The feeds of the last discovery, by address, so that an import does
     /// not read them again.
     pub(crate) discovered: HashMap<String, Found>,
@@ -137,6 +140,7 @@ impl Workspace {
             web: Web::new(),
             address_check: None,
             index: MusicIndex::new(Web::new(), DEFAULT_API),
+            lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
             discovered: HashMap::new(),
             images: ImageCache::default(),
             incoming_dir: data_dir.join("incoming"),
@@ -149,6 +153,14 @@ impl Workspace {
     #[must_use]
     pub fn with_musicindex(mut self, base: &str) -> Self {
         self.index = MusicIndex::new(self.web.clone(), base);
+        self
+    }
+
+    /// Use other lookup relays, such as test relays.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_lookup_relays(mut self, relays: Vec<String>) -> Self {
+        self.lookup_relays = relays;
         self
     }
 

@@ -7,9 +7,10 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use nostr::nips::nip19::FromBech32;
+use nostr::nips::nip19::{FromBech32, ToBech32};
 use nostr::prelude::{Event, Keys, Kind, PublicKey, SecretKey, Tag, Timestamp, UnsignedEvent};
 use secp256k1::Secp256k1;
+use zeroize::Zeroizing;
 
 use crate::connector::{ConnectorError, ConnectorErrorKind};
 use crate::digest::sha256_hex;
@@ -20,6 +21,95 @@ const KIND_MANIFEST: u16 = 35128;
 const KIND_AUTH: u16 = 24242;
 /// How long a Blossom authorization event is valid, in seconds.
 const AUTH_LIFETIME: u64 = 3600;
+
+/// The relays that Studio asks for the relay list and the server list of a
+/// key (ADR 0048 item 3).
+pub const LOOKUP_RELAYS: [&str; 2] = ["wss://purplepag.es", "wss://user.kindpag.es"];
+
+/// The `d` tag of a new site from the GUID of a feed (ADR 0048 item 4).
+///
+/// The text is the part of the GUID before the first `-`, in lowercase,
+/// with a maximum of 8 characters.
+#[must_use]
+pub fn site_name_from_guid(guid: &str) -> String {
+    guid.trim()
+        .split('-')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .chars()
+        .take(8)
+        .collect()
+}
+
+/// The two forms of a public key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyIds {
+    /// The public key as 64 hexadecimal characters.
+    pub public_key: String,
+    /// The public key as an `npub`.
+    pub npub: String,
+}
+
+/// The two forms of a public key from an `npub` or from 64 hexadecimal
+/// characters.
+///
+/// # Errors
+///
+/// Gives `InvalidConfig` for other text.
+pub fn key_ids(text: &str) -> Result<KeyIds, ConnectorError> {
+    let key = parse_public_key(text)?;
+    let npub = key.to_bech32().map_err(|_| bad_public())?;
+    Ok(KeyIds {
+        public_key: key.to_hex(),
+        npub,
+    })
+}
+
+/// A secret key as hexadecimal text, and its public key.
+pub struct SecretKeyParts {
+    /// The secret key as 64 hexadecimal characters. The text is cleared
+    /// when it drops.
+    pub secret_hex: Zeroizing<String>,
+    /// The public key as 64 hexadecimal characters.
+    pub public_key: String,
+}
+
+impl std::fmt::Debug for SecretKeyParts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The text shows no secret key.
+        f.debug_struct("SecretKeyParts")
+            .field("public_key", &self.public_key)
+            .finish_non_exhaustive()
+    }
+}
+
+impl SecretKeyParts {
+    /// The vault record of the key: the JSON `{"secret_key": "<hex>"}`.
+    /// The text is cleared when it drops.
+    #[must_use]
+    pub fn vault_json(&self) -> Zeroizing<String> {
+        Zeroizing::new(format!(
+            r#"{{"secret_key":"{}"}}"#,
+            self.secret_hex.as_str()
+        ))
+    }
+}
+
+/// The hexadecimal form and the public key of a secret key from an `nsec`
+/// or from 64 hexadecimal characters.
+///
+/// # Errors
+///
+/// Gives `InvalidConfig` for other text. The message holds no part of the
+/// text.
+pub fn secret_key_parts(text: &str) -> Result<SecretKeyParts, ConnectorError> {
+    let keys = parse_secret_key(text)?;
+    Ok(SecretKeyParts {
+        secret_hex: Zeroizing::new(keys.secret_key().to_secret_hex()),
+        public_key: keys.public_key().to_hex(),
+    })
+}
 
 /// Sign an event with a key.
 ///
@@ -452,6 +542,32 @@ mod tests {
             parse_public_key(&keys().public_key().to_hex()).expect("hex"),
             keys().public_key()
         );
+    }
+
+    #[test]
+    fn a_site_name_comes_from_the_start_of_a_guid() {
+        assert_eq!(
+            site_name_from_guid("ABCDEF12-3456-7890-abcd-ef1234567890"),
+            "abcdef12"
+        );
+        assert_eq!(site_name_from_guid("abcdefghijkl-x"), "abcdefgh");
+        assert_eq!(site_name_from_guid("short"), "short");
+    }
+
+    #[test]
+    fn key_ids_and_secret_key_parts_give_the_forms_of_a_key() {
+        let hex = keys().public_key().to_hex();
+        let ids = key_ids(&hex).expect("ids");
+        assert_eq!(ids.public_key, hex);
+        assert_eq!(key_ids(&ids.npub).expect("ids"), ids);
+        assert!(key_ids("nsec1abc").is_err());
+        let secret = "01".repeat(32);
+        let parts = secret_key_parts(&secret).expect("parts");
+        assert_eq!(parts.public_key, hex);
+        assert_eq!(parts.secret_hex.as_str(), secret);
+        assert!(!format!("{parts:?}").contains(&secret));
+        let json: serde_json::Value = serde_json::from_str(&parts.vault_json()).expect("JSON");
+        assert_eq!(json["secret_key"], secret);
     }
 
     #[test]

@@ -10,7 +10,7 @@ An artist can download Studio, start it, and keep its data through an update.
 A server operator can later install a supported server package without a Rust toolchain.
 The release process must test each artifact on its target operating system.
 
-## Current state
+## State before milestone 1
 
 The desktop binary runs the local API and prints a browser address.
 It has no native window or installer. [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md) assigns the native window to Tauri.
@@ -25,6 +25,13 @@ The Ubuntu 22.04 runner sets the Linux compatibility floor for the first archive
 
 Phase 12 is in progress. The server has a working core, but its phone, grant vault, runbook, and human tests remain open.
 No server artifact is a production release in this plan until those gates pass.
+
+## Milestone 1 local status
+
+The release workflow and five native build jobs are committed on `distribution-release`.
+The local Linux x86-64 archive passed its packaged startup, UI, token, and Host smoke tests.
+The four repository checks pass. No GitHub job or draft Release has run.
+Windows, macOS, and Linux ARM64 artifacts need native runner results before they are verified.
 
 ## Platform order
 

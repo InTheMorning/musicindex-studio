@@ -226,8 +226,13 @@
 - [Task 034 review checklist, 2026-10-26](reviews/2026-10-26-task-034-review-checklist.md)
 - [Task 035 review checklist, 2026-10-26](reviews/2026-10-26-task-035-review-checklist.md)
 - [Task 036 review checklist, 2026-10-26](reviews/2026-10-26-task-036-review-checklist.md)
+- [Phase 12 human tests, 2026-10-26](reviews/2026-10-26-phase-12-human-tests.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
+
+## Runbooks
+
+- [studio-server](runbooks/studio-server.md)
 
 ## Research
 

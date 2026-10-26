@@ -227,6 +227,7 @@
 - [Task 034 review checklist, 2026-10-26](reviews/2026-10-26-task-034-review-checklist.md)
 - [Task 035 review checklist, 2026-10-26](reviews/2026-10-26-task-035-review-checklist.md)
 - [Task 036 review checklist, 2026-10-26](reviews/2026-10-26-task-036-review-checklist.md)
+- [Distribution documentation review, 2026-10-26](reviews/2026-10-26-distribution-review.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

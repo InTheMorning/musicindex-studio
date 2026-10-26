@@ -290,6 +290,70 @@ impl From<ScanError> for ApiError {
     }
 }
 
+/// The codes and statuses are the same as the codes of the NIP-46 routes
+/// of the server (ADR 0056 items 13 to 16).
+impl From<studio_core::nip46::Nip46Error> for ApiError {
+    fn from(error: studio_core::nip46::Nip46Error) -> Self {
+        use studio_core::nip46::Nip46Error;
+        match &error {
+            Nip46Error::NotPublic(message) => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "address_not_public",
+                message.as_str(),
+            ),
+            Nip46Error::Timeout => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                "signer_timeout",
+                "the signer gave no answer in time",
+            ),
+            Nip46Error::Unavailable => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "signer_unavailable",
+                "Studio cannot reach the relay of the signer",
+            ),
+            Nip46Error::InvalidAddress => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "bunker_invalid",
+                "the bunker address is not correct",
+            ),
+            Nip46Error::Rejected(_) => Self::new(
+                StatusCode::FORBIDDEN,
+                "signer_rejected",
+                "the signer refused the request",
+            ),
+            Nip46Error::Invalid(_) => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "signer_invalid",
+                "the signer gave a wrong answer",
+            ),
+        }
+    }
+}
+
+impl From<studio_core::nip46::PlannedError> for ApiError {
+    fn from(error: studio_core::nip46::PlannedError) -> Self {
+        use studio_core::nip46::PlannedError;
+        match error {
+            PlannedError::Invalid => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_event",
+                "the event is not an unsigned Nostr event",
+            ),
+            PlannedError::KindNotPermitted => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "kind_not_permitted",
+                "the signer signs only the events of a write: kind 35128 and kind 24242",
+            ),
+            PlannedError::KeyDiffers => Self::new(
+                StatusCode::CONFLICT,
+                "signer_key_differs",
+                "the key of the signer is not the key of the host",
+            ),
+            PlannedError::Signer(error) => error.into(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

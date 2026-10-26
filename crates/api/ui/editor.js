@@ -10,7 +10,8 @@ import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
 import { isLiveItem, liveKey, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
-import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError } from './signing.js';
+import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
+import { SignerConnect } from './signer.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -922,6 +923,16 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     onOpsChanged();
   });
   const toSign = diff ? eventsToSign(diff) : [];
+  // The signer of the write: the NIP-07 signer of the browser, or else the
+  // NIP-46 signer of the workspace (ADR 0056 items 17 and 18).
+  const [remote, setRemote] = useState(null);
+  const [connecting, setConnecting] = useState(false);
+  const hasNip07 = !!window.nostr;
+  const loadRemote = () => api('/signer').then(setRemote, () => setRemote({ state: 'none', pubkey: null }));
+  useEffect(() => { if (open && !hasNip07) loadRemote(); }, [open]);
+  const choice = signerChoice({ hasNip07, remote, events: toSign });
+  const needsSigner = choice.kind === 'connect' || choice.kind === 'differs' || choice.kind === 'loading';
+  const connected = () => { setConnecting(false); loadRemote(); };
   const write = () => run(async () => {
     let feed;
     let signedEvents = [];
@@ -929,9 +940,13 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       if (toSign.length > 0) {
         // The signer of the user signs the planned events before the write.
         // With no signer, nothing goes to the host.
-        if (!window.nostr) throw new SignError('no_signer', signErrorText('no_signer'));
+        let signer = window.nostr;
+        if (!signer && choice.kind === 'remote') {
+          signer = remoteSigner((event) => api('/signer/sign', { method: 'POST', body: { event } }));
+        }
+        if (!signer) throw new SignError('no_signer', signErrorText('no_signer'));
         setProgress({ done: 0, total: toSign.length });
-        signedEvents = await signAll(toSign, window.nostr, (done, total) => setProgress({ done, total }));
+        signedEvents = await signAll(toSign, signer, (done, total) => setProgress({ done, total }));
       }
       feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
     } catch (e) {
@@ -940,6 +955,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       if (e.code === 'conflict') setDiff(null);
       // After an expired plan, the new diff has a new plan.
       if (e.code === 'plan_expired') setDiff(await api(`/feeds/${feedId}/diff`));
+      // A signer that fails may be gone. Ask for its state again.
+      if (!hasNip07 && e.code === 'signer_refused') loadRemote();
       throw e;
     } finally {
       setProgress(null);
@@ -1023,13 +1040,19 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
       ${waiting && html`<p class="hint" role="status">Wait for each download, then write.</p>`}
       ${diff && toSign.length > 0 && html`<p class="hint" role="status">${signSummary(toSign.length)}</p>`}
+      ${diff && choice.kind === 'differs' && html`<div class="notice error" role="alert"><strong>${signErrorText('signer_key_differs')}</strong></div>`}
+      ${diff && needsSigner && choice.kind !== 'loading' && !connecting && html`<div class="actions">
+        <button class="button action" type="button" disabled=${busy} onClick=${() => setConnecting(true)}>
+          ${choice.kind === 'differs' ? 'Connect a different signer' : 'Connect a signer'}</button>
+      </div>`}
+      ${diff && connecting && html`<${SignerConnect} onConnected=${connected} onCancel=${() => setConnecting(false)} />`}
       <div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the changes</button>
       </div>
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
-      ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy || waiting} onClick=${write}>
+      ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the host'}</button>`}
     </footer>
   </dialog>`;

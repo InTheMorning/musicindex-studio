@@ -86,6 +86,39 @@ impl From<ConnectorError> for Nip46Error {
     }
 }
 
+/// The kinds of the planned events of a write: the nsite manifest and the
+/// Blossom authorization (ADR 0050).
+const PLANNED_KINDS: [u16; 2] = [35128, 24242];
+
+/// Why a planned event cannot go to the signer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlannedError {
+    /// The text is not an unsigned Nostr event.
+    Invalid,
+    /// The kind is not 35128 or 24242.
+    KindNotPermitted,
+    /// The public key of the event is not the public key of the signer.
+    KeyDiffers,
+    /// The signer failed.
+    Signer(Nip46Error),
+}
+
+/// Read a planned event from JSON.
+///
+/// # Errors
+///
+/// Gives [`PlannedError::Invalid`] for text that is not an event, and
+/// [`PlannedError::KindNotPermitted`] for a kind that a write does not use.
+pub fn parse_planned(text: &str) -> Result<UnsignedEvent, PlannedError> {
+    let mut unsigned: UnsignedEvent =
+        serde_json::from_str(text).map_err(|_| PlannedError::Invalid)?;
+    if !PLANNED_KINDS.contains(&unsigned.kind.as_u16()) {
+        return Err(PlannedError::KindNotPermitted);
+    }
+    unsigned.ensure_id();
+    Ok(unsigned)
+}
+
 /// A NIP-44 encryption with a new random nonce.
 pub(crate) fn encrypt_text(
     secret: &SecretKey,
@@ -478,6 +511,26 @@ impl RemoteSigner {
             return Err(Nip46Error::Invalid("the signer changed the event"));
         }
         Ok(event)
+    }
+
+    /// Ask the signer to sign a planned event of a write (ADR 0056 item 17).
+    /// The event must have a permitted kind and the public key of the
+    /// signer. Studio checks both before the request goes to the signer.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`PlannedError::KindNotPermitted`] or [`PlannedError::KeyDiffers`]
+    /// before any request. Gives [`PlannedError::Signer`] when the signer
+    /// fails.
+    pub fn sign_planned(&self, unsigned: UnsignedEvent) -> Result<Event, PlannedError> {
+        if !PLANNED_KINDS.contains(&unsigned.kind.as_u16()) {
+            return Err(PlannedError::KindNotPermitted);
+        }
+        let user = self.get_public_key().map_err(PlannedError::Signer)?;
+        if unsigned.pubkey != user {
+            return Err(PlannedError::KeyDiffers);
+        }
+        self.sign_event(unsigned).map_err(PlannedError::Signer)
     }
 
     /// Ask the signer to encrypt a text to a public key with NIP-44.

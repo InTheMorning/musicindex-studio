@@ -4652,18 +4652,22 @@ struct SignerSite {
     id: i64,
     keys: nostr::prelude::Keys,
     // The servers stop when these values drop.
-    _relays: [studio_core::testing::relay::TestRelay; 2],
+    relays: [studio_core::testing::relay::TestRelay; 2],
     _blossom: studio_core::testing::blossom::TestBlossom,
 }
 
 async fn signer_site() -> SignerSite {
+    signer_site_for(&"01".repeat(32)).await
+}
+
+/// The same as `signer_site`, for the key with this secret.
+async fn signer_site_for(secret_hex: &str) -> SignerSite {
     use studio_core::connector::{Connector, Expected, NsiteHost};
     use studio_core::nostr_events::Signing;
     use studio_core::testing::{blossom::TestBlossom, relay::TestRelay};
     let relays = [TestRelay::start(), TestRelay::start()];
     let blossom = TestBlossom::start();
-    let secret_hex = "01".repeat(32);
-    let keys = studio_core::nostr_events::parse_secret_key(&secret_hex).unwrap();
+    let keys = studio_core::nostr_events::parse_secret_key(secret_hex).unwrap();
     let config_for = |mode: &str| {
         json!({
             "public_key": keys.public_key().to_hex(),
@@ -4711,7 +4715,7 @@ async fn signer_site() -> SignerSite {
         app,
         id,
         keys,
-        _relays: relays,
+        relays,
         _blossom: blossom,
     }
 }
@@ -6800,4 +6804,170 @@ async fn unlock_key_with_an_incorrect_key_gives_401_and_the_vault_stays_closed()
     }
     let (_, body) = call(&app, "GET", "/api/v1/status", None).await;
     assert_eq!(body["vault"], "locked");
+}
+
+// ---- The NIP-46 signer signs the planned events (task 035d) ----
+
+/// A test signer on its own relay, with the key `0x31` repeated.
+fn test_signer() -> (
+    studio_core::testing::relay::TestRelay,
+    studio_core::testing::signer::TestSigner,
+) {
+    let relay = studio_core::testing::relay::TestRelay::start();
+    let signer = studio_core::testing::signer::TestSigner::start(&relay.url());
+    (relay, signer)
+}
+
+#[tokio::test]
+async fn a_nip46_signer_signs_the_planned_events_of_an_nsite_write() {
+    let (_signer_relay, signer) = test_signer();
+    let site = signer_site_for(&"31".repeat(32)).await;
+    let (status, state) = call(&site.app, "GET", "/api/v1/signer", None).await;
+    assert_eq!(status, StatusCode::OK, "{state}");
+    assert_eq!(state["state"], "none");
+
+    let (status, state) = call(
+        &site.app,
+        "POST",
+        "/api/v1/signer/connect",
+        Some(json!({ "bunker": signer.bunker_uri() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{state}");
+    assert_eq!(state["state"], "connected");
+    assert_eq!(state["pubkey"], signer.public_key().to_hex());
+    let (_, state) = call(&site.app, "GET", "/api/v1/signer", None).await;
+    assert_eq!(state["state"], "connected");
+
+    let id = site.id;
+    let (_, diff) = call(&site.app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let mut events_out = Vec::new();
+    for entry in diff["events"].as_array().unwrap() {
+        let (status, event) = call(
+            &site.app,
+            "POST",
+            "/api/v1/signer/sign",
+            Some(json!({ "event": entry["event"] })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{event}");
+        assert_eq!(event["id"], entry["event"]["id"]);
+        assert_eq!(event["pubkey"], signer.public_key().to_hex());
+        events_out.push(event);
+    }
+    assert_ne!(events_out.len(), 0);
+    let (status, body) = call(
+        &site.app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"], "signed_events": events_out })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["title"], "Album (remaster)");
+    // The manifest is a replaceable event, so the relay keeps the new one.
+    let manifests: Vec<String> = site.relays[0]
+        .events()
+        .iter()
+        .filter(|event| event.kind.as_u16() == 35128)
+        .map(|event| event.id.to_hex())
+        .collect();
+    assert_eq!(manifests.len(), 1);
+    assert!(
+        events_out
+            .iter()
+            .any(|event| event["id"].as_str() == Some(manifests[0].as_str()))
+    );
+
+    let (status, state) = call(&site.app, "DELETE", "/api/v1/signer", None).await;
+    assert_eq!(status, StatusCode::OK, "{state}");
+    assert_eq!(state["state"], "none");
+}
+
+#[tokio::test]
+async fn the_sign_route_refuses_a_wrong_kind_a_different_key_and_no_signer() {
+    let (_signer_relay, signer) = test_signer();
+    let site = signer_site_for(&"31".repeat(32)).await;
+    let key = signer.public_key().to_hex();
+    let event = |kind: u64, pubkey: &str| {
+        json!({
+            "pubkey": pubkey,
+            "created_at": 1_700_000_000,
+            "kind": kind,
+            "tags": [],
+            "content": "",
+        })
+    };
+    let sign = |event: Value| {
+        call(
+            &site.app,
+            "POST",
+            "/api/v1/signer/sign",
+            Some(json!({ "event": event })),
+        )
+    };
+    let (status, body) = sign(event(35128, &key)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "signer_not_connected");
+
+    let (status, body) = call(
+        &site.app,
+        "POST",
+        "/api/v1/signer/connect",
+        Some(json!({ "bunker": signer.bunker_uri() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let requests = signer.methods().len();
+
+    let (status, body) = sign(event(1, &key)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "kind_not_permitted");
+    let other = studio_core::nostr_events::parse_secret_key(&"02".repeat(32))
+        .unwrap()
+        .public_key()
+        .to_hex();
+    let (status, body) = sign(event(35128, &other)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "signer_key_differs");
+    let (status, body) = sign(json!({ "kind": 35128 })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_event");
+    // No refused event went to the signer.
+    assert_eq!(signer.methods().len(), requests);
+}
+
+#[tokio::test]
+async fn a_nostrconnect_address_connects_a_signer_through_the_workspace() {
+    let relay = studio_core::testing::relay::TestRelay::start();
+    let signer = studio_core::testing::signer::TestSigner::start(&relay.url());
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_nip46_relays(vec![relay.url()]);
+    let app = App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    };
+    let (status, started) = call(&app, "POST", "/api/v1/signer/connect", Some(json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["state"], "pending");
+    let uri = started["uri"].as_str().unwrap().to_owned();
+    assert!(uri.starts_with("nostrconnect://"));
+    assert!(started["qr_svg"].as_str().unwrap().contains("<svg"));
+    let (_, state) = call(&app, "GET", "/api/v1/signer", None).await;
+    assert_eq!(state["state"], "pending");
+    signer.connect(&uri);
+    let mut state = Value::Null;
+    for _ in 0..100 {
+        (_, state) = call(&app, "GET", "/api/v1/signer", None).await;
+        if state["state"] == "connected" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(state["state"], "connected", "{state}");
+    assert_eq!(state["pubkey"], signer.public_key().to_hex());
 }

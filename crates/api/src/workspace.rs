@@ -1,6 +1,7 @@
 //! The state of one local user: the collection and the vault.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -16,6 +17,7 @@ use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
 use studio_core::net::NetPolicy;
+use studio_core::nip46::RemoteSigner;
 use studio_core::nostr_events::{LOOKUP_RELAYS, Signing};
 use studio_core::pipeline::AddressCheck;
 use studio_core::remote;
@@ -286,6 +288,38 @@ impl WorkspaceHandle {
         .await
     }
 
+    /// Keep a connected NIP-46 signer for the signing of a write (ADR 0056
+    /// item 17). A pending connection ends.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the workspace lock is poisoned.
+    pub async fn set_remote_signer(&self, signer: Arc<RemoteSigner>) -> Result<(), ApiError> {
+        self.run(move |w| {
+            w.signer.clear();
+            w.signer = SignerSlot::Connected(signer);
+            Ok(())
+        })
+        .await
+    }
+
+    /// Remove the NIP-46 signer when it is `signer`. A different signer
+    /// stays, because another session of the user may have connected it.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the workspace lock is poisoned.
+    pub async fn clear_remote_signer(&self, signer: &Arc<RemoteSigner>) -> Result<(), ApiError> {
+        let signer = Arc::clone(signer);
+        self.run(move |w| {
+            if matches!(&w.signer, SignerSlot::Connected(own) if Arc::ptr_eq(own, &signer)) {
+                w.signer = SignerSlot::None;
+            }
+            Ok(())
+        })
+        .await
+    }
+
     /// Close the vault.
     ///
     /// # Errors
@@ -487,6 +521,46 @@ pub struct Workspace {
     pub(crate) rules: Option<ServerRules>,
     /// The time of the last use of a vault secret (ADR 0055 item 16).
     vault_used: Mutex<Instant>,
+    /// The NIP-46 signer of the user, or the wait for one (ADR 0056
+    /// item 17). A route clones the `Arc` and then unlocks the workspace.
+    pub(crate) signer: SignerSlot,
+    /// The relays for a `nostrconnect://` address (ADR 0056 item 13).
+    pub(crate) nip46_relays: Vec<String>,
+    /// Counts the connections, so that a late answer of an old connection
+    /// changes nothing.
+    pub(crate) signer_generation: u64,
+}
+
+/// The default relay for a `nostrconnect://` address.
+pub(crate) const DEFAULT_NIP46_RELAY: &str = "wss://relay.nsec.app";
+
+/// What the workspace has for a NIP-46 signer.
+#[derive(Debug, Default)]
+pub(crate) enum SignerSlot {
+    /// No signer.
+    #[default]
+    None,
+    /// The signer has not answered the `nostrconnect://` address.
+    Pending {
+        /// Ends the wait for the signer.
+        cancel: Arc<AtomicBool>,
+        /// The connection that the wait belongs to.
+        generation: u64,
+    },
+    /// The signer answered.
+    Connected(Arc<RemoteSigner>),
+    /// The last connection failed. The text is the error code.
+    Failed(&'static str),
+}
+
+impl SignerSlot {
+    /// Stop a pending wait. The slot is empty after the call.
+    pub(crate) fn clear(&mut self) {
+        if let Self::Pending { cancel, .. } = self {
+            cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        *self = Self::None;
+    }
 }
 
 /// The hub of a new workspace (ADR 0052 item 1).
@@ -527,6 +601,9 @@ impl Workspace {
             announcer: Announcer::new(),
             rules: None,
             vault_used: Mutex::new(Instant::now()),
+            signer: SignerSlot::None,
+            nip46_relays: vec![DEFAULT_NIP46_RELAY.to_owned()],
+            signer_generation: 0,
         })
     }
 
@@ -577,6 +654,14 @@ impl Workspace {
     pub fn with_net_policy(mut self, policy: NetPolicy) -> Self {
         self.web = Web::with_policy(&policy);
         self.net_policy = policy;
+        self
+    }
+
+    /// Use these relays for a `nostrconnect://` address. Each relay goes
+    /// through the network policy of the workspace.
+    #[must_use]
+    pub fn with_nip46_relays(mut self, relays: Vec<String>) -> Self {
+        self.nip46_relays = relays;
         self
     }
 

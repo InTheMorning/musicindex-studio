@@ -9,6 +9,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource,
 } from './account.js';
 import { isLiveItem } from './live.js';
+import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import {
   mediumKind, isEditable, isPublisher, trackKey, isTrack,
@@ -17,7 +18,7 @@ import {
   isFeedView, openFeedView, navAtWidth,
 } from './shell.js';
 import {
-  SignError, npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
+  npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
 } from './signing.js';
 
 // ---- Access token (ADR 0017) ----
@@ -761,18 +762,37 @@ function useNostrKey(onLists) {
     setNoLists(result.relays.length === 0 && result.servers.length === 0);
     onLists(result);
   });
-  const askSigner = () => signer.run(async () => {
-    if (!window.nostr) throw new SignError('no_signer', 'Studio found no NIP-07 signer in this browser. Install a signer extension, or select Key in the vault.');
-    const hex = await window.nostr.getPublicKey();
+  // The key of a signer, from a NIP-07 signer or a NIP-46 signer.
+  const takeSignerKey = async (hex) => {
     setKey({ public_key: hex, npub: npubOf(hex) });
     setNoLists(false);
     await lookup(hex);
+  };
+  // With no NIP-07 signer, the form uses the NIP-46 signer of the
+  // workspace, or it opens the connection of one (ADR 0056 item 17).
+  const [connecting, setConnecting] = useState(false);
+  const askSigner = () => signer.run(async () => {
+    if (window.nostr) {
+      await takeSignerKey(await window.nostr.getPublicKey());
+      return;
+    }
+    const remote = await api('/signer');
+    if (remote.state === 'connected' && remote.pubkey) {
+      await takeSignerKey(remote.pubkey);
+      return;
+    }
+    setConnecting(true);
   });
+  const connected = (hex) => {
+    setConnecting(false);
+    signer.run(() => takeSignerKey(hex));
+  };
   const choose = (next) => {
     setMode(next);
     setSecret('');
     setKey(null);
     setNoLists(false);
+    setConnecting(false);
   };
   const typeSecret = (text) => {
     setSecret(text);
@@ -785,7 +805,7 @@ function useNostrKey(onLists) {
     public_key: key ? key.public_key : null,
     secret_key: mode === 'vault' ? secret : null,
   });
-  return { mode, secret, key, noLists, signer, lists, lookup, askSigner, choose, typeSecret, ready, fields, clear: () => setSecret('') };
+  return { mode, secret, key, noLists, signer, lists, lookup, askSigner, connecting, connected, cancelConnect: () => setConnecting(false), choose, typeSecret, ready, fields, clear: () => setSecret('') };
 }
 
 // The "Signing" fieldset and the key of the host.
@@ -802,6 +822,7 @@ function SigningStep({ nk, idPrefix, keyError }) {
       <button class="button action" type="button" disabled=${nk.signer.busy} onClick=${nk.askSigner}>
         ${nk.signer.busy ? 'Asking your signer…' : 'Use my signer'}</button>
     </div>`}
+    ${nk.mode === 'signer' && nk.connecting && html`<${SignerConnect} onConnected=${nk.connected} onCancel=${nk.cancelConnect} />`}
     ${nk.mode === 'signer' && nk.signer.error && (nk.signer.error.code === 'no_signer'
       ? noticeText(nk.signer.error.message)
       : html`<${ErrorNotice} error=${nk.signer.error} />`)}

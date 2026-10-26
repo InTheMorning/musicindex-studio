@@ -2151,6 +2151,73 @@ async fn session_json(app: &App, who: &(String, String)) -> Value {
     send(app, c).await.json
 }
 
+/// The state of the NIP-46 signer in the workspace of an account, asked
+/// through the router of the workspace and not through a session.
+async fn open_user_of(app: &App, pubkey: &str) -> crate::users::OpenUser {
+    let (id, _) = app
+        .state
+        .accounts
+        .account_by_pubkey(pubkey)
+        .unwrap()
+        .unwrap();
+    app.state.users.peek(id).await.expect("an open user")
+}
+
+async fn workspace_signer_state(user: &crate::users::OpenUser) -> Value {
+    let request = Request::builder()
+        .uri("/api/v1/signer")
+        .body(Body::empty())
+        .unwrap();
+    let response = user.router.clone().oneshot(request).await.unwrap();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[tokio::test]
+async fn the_signer_of_a_nip46_sign_in_is_ready_for_signing_and_goes_with_the_session() {
+    let remote = remote_app(Signup::Open, 10_000);
+    let app = &remote.app;
+    let pubkey = remote.signer.public_key().to_hex();
+    let connection = bunker_connect(&remote).await;
+    let up = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let who = who_of(&up);
+    let connects = || {
+        remote
+            .signer
+            .methods()
+            .iter()
+            .filter(|m| *m == "connect")
+            .count()
+    };
+    let user = open_user_of(app, &pubkey).await;
+    let before = connects();
+    let state = api(app, &who, "GET", "/api/v1/signer", None).await;
+    assert_eq!(state.status, StatusCode::OK, "{:?}", state.json);
+    assert_eq!(state.json["state"], "connected");
+    assert_eq!(state.json["pubkey"], pubkey.as_str());
+    // The signer connected one time only.
+    assert_eq!(connects(), before);
+
+    // A sign-out removes the signer from the session map and the workspace.
+    let out = send(app, sign_out_call(&who)).await;
+    assert_eq!(out.status, StatusCode::OK);
+    assert_eq!(app.state.nip46.counts(), (0, 0));
+    assert_eq!(workspace_signer_state(&user).await["state"], "none");
+
+    // The sweep of an ended session removes it, too.
+    let connection = bunker_connect(&remote).await;
+    let again = nip46_sign_in(app, &connection, None).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    assert_eq!(workspace_signer_state(&user).await["state"], "connected");
+    let who = who_of(&again);
+    let hash = crate::accounts::sha256_hex(&who.0);
+    app.state.accounts.delete_session(&hash).unwrap();
+    crate::idle::sweep(&app.state).await;
+    assert_eq!(app.state.nip46.counts(), (0, 0));
+    assert_eq!(workspace_signer_state(&user).await["state"], "none");
+}
+
 #[tokio::test]
 async fn a_nip46_sign_up_makes_a_nostr_wrapper_and_a_later_sign_in_and_unlock_work() {
     let remote = remote_app(Signup::Open, 10_000);

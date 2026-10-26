@@ -333,29 +333,41 @@ impl Nip46Sessions {
         self.lock().bound.contains_key(token_hash)
     }
 
-    /// Remove the signer of a session.
-    pub fn remove_session(&self, token_hash: &str) {
-        self.lock().bound.remove(token_hash);
+    /// Remove the signer of a session. Gives the account and the signer, so
+    /// that the caller can remove the signer from the workspace.
+    pub fn remove_session(&self, token_hash: &str) -> Option<(i64, Arc<RemoteSigner>)> {
+        let bound = self.lock().bound.remove(token_hash)?;
+        Some((bound.account_id, bound.signer))
     }
 
-    /// Remove each signer of an account.
-    pub fn remove_account(&self, account_id: i64) {
-        self.lock()
+    /// Remove each signer of an account. Gives the signers.
+    pub fn remove_account(&self, account_id: i64) -> Vec<(i64, Arc<RemoteSigner>)> {
+        let mut inner = self.lock();
+        let hashes: Vec<String> = inner
             .bound
-            .retain(|_, bound| bound.account_id != account_id);
+            .iter()
+            .filter(|(_, bound)| bound.account_id == account_id)
+            .map(|(hash, _)| hash.clone())
+            .collect();
+        hashes
+            .into_iter()
+            .filter_map(|hash| inner.bound.remove(&hash))
+            .map(|bound| (bound.account_id, bound.signer))
+            .collect()
     }
 
     /// Remove the expired connections, and the signers of the sessions
-    /// that `exists` does not know.
-    pub fn sweep(&self, exists: impl Fn(&str) -> bool) {
+    /// that `exists` does not know. Gives the removed signers.
+    pub fn sweep(&self, exists: impl Fn(&str) -> bool) -> Vec<(i64, Arc<RemoteSigner>)> {
         let hashes: Vec<String> = self.lock().bound.keys().cloned().collect();
         // The check of a session reads the database, so the lock is free.
         let gone: Vec<String> = hashes.into_iter().filter(|hash| !exists(hash)).collect();
         let mut inner = self.lock();
         Self::expire(&mut inner);
-        for hash in gone {
-            inner.bound.remove(&hash);
-        }
+        gone.into_iter()
+            .filter_map(|hash| inner.bound.remove(&hash))
+            .map(|bound| (bound.account_id, bound.signer))
+            .collect()
     }
 
     /// The number of connections and of bound signers, for tests.

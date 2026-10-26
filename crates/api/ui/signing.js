@@ -45,13 +45,59 @@ export async function signAll(events, signer, onProgress) {
   return signed;
 }
 
+// A signer that works through the API: the NIP-46 signer of the workspace.
+// `sign(event)` sends one unsigned event to `POST /api/v1/signer/sign` and
+// gives the signed event. The object has the same `signEvent` as a NIP-07
+// signer, so `signAll` uses either one (ADR 0056 item 17).
+export function remoteSigner(sign) {
+  return { signEvent: (event) => sign(event) };
+}
+
+// Which signer signs the events of a write (ADR 0056 items 17 and 18).
+// `remote` is the answer of `GET /api/v1/signer`, or null while it loads.
+// The result `kind` is:
+// - `none`: no event needs a signature.
+// - `nip07`: the browser has a NIP-07 signer.
+// - `loading`: the answer of the API is not here yet.
+// - `remote`: a NIP-46 signer is connected and has the key of the events.
+// - `differs`: a NIP-46 signer is connected with a different key.
+// - `connect`: no signer is connected.
+export function signerChoice({ hasNip07, remote, events }) {
+  if (!events || events.length === 0) return { kind: 'none' };
+  if (hasNip07) return { kind: 'nip07' };
+  if (!remote) return { kind: 'loading' };
+  if (remote.state !== 'connected' || !remote.pubkey) return { kind: 'connect' };
+  const same = events.every((event) => event.pubkey === remote.pubkey);
+  return { kind: same ? 'remote' : 'differs', pubkey: remote.pubkey };
+}
+
+// The view of an answer of `GET /api/v1/signer` while the UI connects a
+// signer. `phase` is `idle`, `waiting`, `connected` or `failed`.
+export function signerView(answer) {
+  const state = answer && typeof answer.state === 'string' ? answer.state : '';
+  if (state === 'pending') return { phase: 'waiting', pubkey: null, error: null };
+  if (state === 'connected' && typeof answer.pubkey === 'string') {
+    return { phase: 'connected', pubkey: answer.pubkey, error: null };
+  }
+  if (typeof answer?.error === 'string' && answer.error) {
+    return { phase: 'failed', pubkey: null, error: answer.error };
+  }
+  return { phase: 'idle', pubkey: null, error: null };
+}
+
 // The text for each error code of the signer step. A code with no entry
 // shows in the general error notice.
 const SIGN_MESSAGES = {
-  no_signer: 'Studio found no NIP-07 signer in this browser. This write needs your signer.',
+  no_signer: 'Studio found no signer. This write needs your signer. Connect a signer first.',
   changed_event: 'Your signer changed an event. Studio wrote nothing.',
   signer_refused: 'Your signer did not sign. Studio wrote nothing.',
   plan_expired: 'The plan of this write expired. Examine the changes again, then write.',
+  signer_key_differs: 'The connected signer has a different key than this host. Studio asked for no signature. Connect the signer of the host.',
+  signer_not_connected: 'No signer is connected. Connect a signer, then write.',
+  signer_timeout: 'The signer gave no answer in time. Open the signer app and try again.',
+  signer_unavailable: 'Studio cannot reach the relay of the signer. Try again later.',
+  signer_rejected: 'The signer refused the request. Allow the request in the signer app and try again.',
+  signer_invalid: 'The signer gave an answer that Studio does not accept. Use a different signer.',
 };
 
 export function signErrorText(code) {

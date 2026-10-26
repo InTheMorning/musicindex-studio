@@ -360,6 +360,21 @@ pub async fn lock_if_no_session(state: &ServerState, account_id: i64) {
     }
 }
 
+/// Remove NIP-46 signers from the workspaces of their accounts. A
+/// workspace keeps a different signer, because another session of the
+/// user may have connected it. The call does nothing for an account that is
+/// not open.
+pub async fn forget_signers(
+    state: &ServerState,
+    gone: impl IntoIterator<Item = (i64, Arc<studio_core::nip46::RemoteSigner>)>,
+) {
+    for (account_id, signer) in gone {
+        if let Some(user) = state.users.peek(account_id).await {
+            let _ = user.handle.clear_remote_signer(&signer).await;
+        }
+    }
+}
+
 /// The active session of a request, or the response to send.
 ///
 /// # Errors

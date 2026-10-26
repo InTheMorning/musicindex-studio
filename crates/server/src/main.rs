@@ -87,6 +87,7 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         hub: options.hub.clone(),
         rules,
         storage_limit: options.storage_limit,
+        nip46_relays: options.nip46_relays.clone(),
     });
     Ok(Arc::new(ServerState {
         accounts,

@@ -4688,3 +4688,172 @@ pub(crate) async fn delete_show_live_value(
     })
     .await
 }
+
+// ---- The NIP-46 signer of the user (ADR 0056 items 12 to 19) ----
+
+use studio_core::nip46::RemoteSigner;
+
+use crate::workspace::SignerSlot;
+
+/// How long a `nostrconnect://` address waits for the signer.
+const SIGNER_WAIT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// The state of the signer slot, as JSON.
+fn signer_state(slot: &SignerSlot) -> Value {
+    match slot {
+        SignerSlot::None => json!({ "state": "none", "pubkey": null }),
+        SignerSlot::Pending { .. } => json!({ "state": "pending", "pubkey": null }),
+        SignerSlot::Connected(signer) => json!({
+            "state": "connected",
+            "pubkey": signer.get_public_key().ok().map(|key| key.to_hex()),
+        }),
+        SignerSlot::Failed(code) => json!({ "state": "none", "pubkey": null, "error": code }),
+    }
+}
+
+/// The state of the NIP-46 signer: `none`, `pending` or `connected`. The
+/// last failed connection gives its error code in `error`.
+pub(crate) async fn get_signer(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| Ok(Json(signer_state(&w.signer)))).await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SignerConnect {
+    #[serde(default)]
+    bunker: Option<String>,
+}
+
+/// Connect a NIP-46 signer. A body with no `bunker` starts a
+/// `nostrconnect://` address and gives its `uri` and QR code. A `bunker`
+/// address connects at once.
+pub(crate) async fn connect_signer(
+    State(shared): State<Shared>,
+    Json(body): Json<SignerConnect>,
+) -> ApiResult {
+    // The bunker address holds a secret. It clears its memory after use.
+    let bunker = body.bunker.map(zeroize::Zeroizing::new);
+    let bunker = bunker
+        .as_ref()
+        .map(|text| text.trim())
+        .filter(|text| !text.is_empty())
+        .map(|text| zeroize::Zeroizing::new(text.to_owned()));
+    let (policy, relays) = blocking(Arc::clone(&shared), |w| {
+        Ok((w.net_policy.clone(), w.nip46_relays.clone()))
+    })
+    .await?;
+    if let Some(uri) = bunker {
+        connect_bunker(shared, policy, uri).await
+    } else {
+        start_nostrconnect(shared, policy, relays).await
+    }
+}
+
+/// Connect with a `bunker://` address at once.
+async fn connect_bunker(
+    shared: Shared,
+    policy: studio_core::net::NetPolicy,
+    uri: zeroize::Zeroizing<String>,
+) -> ApiResult {
+    let connected = blocking_unlocked(move || {
+        let made = RemoteSigner::bunker(
+            &uri,
+            &policy,
+            std::time::Instant::now() + studio_core::nip46::REQUEST_TIMEOUT,
+        )?;
+        made.get_public_key()?;
+        Ok(made)
+    })
+    .await?;
+    let connected = Arc::new(connected);
+    blocking(shared, move |w| {
+        w.signer.clear();
+        w.signer = SignerSlot::Connected(connected);
+        Ok(Json(signer_state(&w.signer)))
+    })
+    .await
+}
+
+/// Start a `nostrconnect://` address, and wait for the signer on a
+/// blocking thread.
+async fn start_nostrconnect(
+    shared: Shared,
+    policy: studio_core::net::NetPolicy,
+    relays: Vec<String>,
+) -> ApiResult {
+    let (pending, uri) =
+        blocking_unlocked(move || Ok(RemoteSigner::nostrconnect(&relays, &policy)?)).await?;
+    let cancel = pending.canceller();
+    let generation = blocking(Arc::clone(&shared), move |w| {
+        w.signer.clear();
+        w.signer_generation += 1;
+        w.signer = SignerSlot::Pending {
+            cancel,
+            generation: w.signer_generation,
+        };
+        Ok(w.signer_generation)
+    })
+    .await?;
+    // The wait holds no lock of the workspace.
+    tokio::task::spawn_blocking(move || {
+        let result = pending
+            .wait(std::time::Instant::now() + SIGNER_WAIT)
+            .and_then(|made| {
+                made.get_public_key()?;
+                Ok(Arc::new(made))
+            });
+        let Ok(mut w) = lock(&shared) else { return };
+        let own = matches!(
+            &w.signer,
+            SignerSlot::Pending { generation: g, .. } if *g == generation
+        );
+        if own {
+            w.signer = match result {
+                Ok(made) => SignerSlot::Connected(made),
+                Err(error) => SignerSlot::Failed(ApiError::from(error).code()),
+            };
+        }
+    });
+    Ok(Json(json!({
+        "state": "pending",
+        "uri": uri,
+        "qr_svg": crate::qr_svg(&uri),
+    })))
+}
+
+/// Remove the NIP-46 signer, or stop the wait for one.
+pub(crate) async fn delete_signer(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        w.signer.clear();
+        Ok(Json(signer_state(&w.signer)))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SignerSign {
+    event: Value,
+}
+
+/// Ask the NIP-46 signer to sign one planned event of a write. The route
+/// takes the signer under the lock and then releases the lock. The wait for
+/// the signer holds no lock of the workspace.
+pub(crate) async fn sign_with_signer(
+    State(shared): State<Shared>,
+    Json(body): Json<SignerSign>,
+) -> ApiResult {
+    // The kind check comes first, before any other state.
+    let unsigned = studio_core::nip46::parse_planned(&body.event.to_string())?;
+    let signer = blocking(shared, |w| match &w.signer {
+        SignerSlot::Connected(signer) => Ok(Arc::clone(signer)),
+        _ => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "signer_not_connected",
+            "connect a signer first",
+        )),
+    })
+    .await?;
+    let event = blocking_unlocked(move || Ok(signer.sign_planned(unsigned)?)).await?;
+    serde_json::from_str::<Value>(&event.as_json())
+        .map(Json)
+        .map_err(|e| ApiError::internal(e.to_string()))
+}

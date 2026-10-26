@@ -100,3 +100,51 @@ test('isNsec is true only for an nsec', () => {
   assert.equal(isNsec('01'.repeat(32)), false);
   assert.equal(isNsec('npub1rwzv24nmzfjypx2a8m264ws9vht3uxp5vpypnluuzl67n4waq78suk0wul'), false);
 });
+
+// ---- The NIP-46 signer of the workspace (task 035d) ----
+
+import { remoteSigner, signerChoice, signerView } from '../ui/signing.js';
+
+test('remoteSigner works with signAll and calls the API function for each event', async () => {
+  const sent = [];
+  const signer = remoteSigner(async (event) => { sent.push(event.id); return { ...event, sig: 's' }; });
+  const progress = [];
+  const signed = await signAll(eventsToSign(diff), signer, (done, total) => progress.push([done, total]));
+  assert.deepEqual(sent, ['e1', 'e3']);
+  assert.deepEqual(signed.map((e) => e.sig), ['s', 's']);
+  assert.deepEqual(progress, [[1, 2], [2, 2]]);
+});
+
+test('remoteSigner keeps the checks of signAll', async () => {
+  const changed = remoteSigner(async (event) => ({ ...event, id: 'other' }));
+  await assert.rejects(signAll([ev('e1')], changed), (error) => error.code === 'changed_event');
+  const refused = remoteSigner(async () => { throw new Error('409'); });
+  await assert.rejects(signAll([ev('e1')], refused), (error) => error.code === 'signer_refused');
+});
+
+test('signerChoice picks the signer of a write', () => {
+  const events = [ev('e1')];
+  const key = events[0].pubkey;
+  const connected = { state: 'connected', pubkey: key };
+  assert.equal(signerChoice({ hasNip07: true, remote: null, events }).kind, 'nip07');
+  assert.equal(signerChoice({ hasNip07: false, remote: connected, events: [] }).kind, 'none');
+  assert.equal(signerChoice({ hasNip07: false, remote: null, events }).kind, 'loading');
+  assert.equal(signerChoice({ hasNip07: false, remote: { state: 'none', pubkey: null }, events }).kind, 'connect');
+  assert.equal(signerChoice({ hasNip07: false, remote: { state: 'pending', pubkey: null }, events }).kind, 'connect');
+  assert.equal(signerChoice({ hasNip07: false, remote: connected, events }).kind, 'remote');
+  const other = { state: 'connected', pubkey: 'b'.repeat(64) };
+  assert.equal(signerChoice({ hasNip07: false, remote: other, events }).kind, 'differs');
+});
+
+test('signerView reads the answer of the signer route', () => {
+  assert.equal(signerView({ state: 'pending', pubkey: null }).phase, 'waiting');
+  assert.deepEqual(signerView({ state: 'connected', pubkey: 'k' }), { phase: 'connected', pubkey: 'k', error: null });
+  assert.deepEqual(signerView({ state: 'none', error: 'signer_timeout' }), { phase: 'failed', pubkey: null, error: 'signer_timeout' });
+  assert.equal(signerView({ state: 'none', pubkey: null }).phase, 'idle');
+  assert.equal(signerView(null).phase, 'idle');
+});
+
+test('the texts of the NIP-46 signer step', () => {
+  assert.match(signErrorText('signer_key_differs'), /different key/);
+  assert.notEqual(signErrorText('signer_timeout'), null);
+});

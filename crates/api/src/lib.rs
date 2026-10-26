@@ -108,6 +108,12 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         )
         .route("/vault/signer-key", post(routes::signer_key))
         .route(
+            "/signer",
+            get(routes::get_signer).delete(routes::delete_signer),
+        )
+        .route("/signer/connect", post(routes::connect_signer))
+        .route("/signer/sign", post(routes::sign_with_signer))
+        .route(
             "/connectors",
             get(routes::list_connectors).post(routes::add_connector),
         )

@@ -33,6 +33,8 @@ pub struct UserSettings {
     pub rules: PublicRules,
     /// The most bytes in the folder of a user (ADR 0055 item 21).
     pub storage_limit: u64,
+    /// The relays for a `nostrconnect://` address (ADR 0056 item 13).
+    pub nip46_relays: Vec<String>,
 }
 
 /// The open users, by account ID.
@@ -152,6 +154,7 @@ fn open_user(settings: &UserSettings, path: &std::path::Path) -> Result<OpenUser
             folder: path.to_path_buf(),
             library_root: path.join("library"),
         });
+    workspace = workspace.with_nip46_relays(settings.nip46_relays.clone());
     if let Some(base) = &settings.musicindex {
         workspace = workspace.with_musicindex(base);
     }

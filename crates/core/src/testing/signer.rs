@@ -82,7 +82,18 @@ impl TestSigner {
     /// Panics when the signer cannot connect to the relay.
     #[must_use]
     pub fn start(relay_url: &str) -> Self {
-        let keys = keys_from(0x31);
+        Self::start_with_key(relay_url, 0x31)
+    }
+
+    /// Start a signer whose secret key is `byte` repeated 32 times. A test
+    /// uses it for a signer with a different key.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the signer cannot connect to the relay.
+    #[must_use]
+    pub fn start_with_key(relay_url: &str, byte: u8) -> Self {
+        let keys = keys_from(byte);
         let shared = Arc::new(Shared {
             state: Mutex::new(State::default()),
             stop: AtomicBool::new(false),

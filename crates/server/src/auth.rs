@@ -416,7 +416,8 @@ async fn sign_out(State(state): State<Shared>, request: Request) -> Response {
     if let Ok(Resolved::Active(session)) = session::resolve(&state, request.headers()).await {
         let hash = accounts::sha256_hex(&session.token);
         let _ = state.accounts.delete_session(&hash);
-        state.nip46.remove_session(&hash);
+        let gone = state.nip46.remove_session(&hash);
+        crate::session::forget_signers(&state, gone).await;
         // The last session of the user ends here, so the vault locks
         // (ADR 0055 item 16).
         session::lock_if_no_session(&state, session.account_id).await;
@@ -499,7 +500,8 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
         eprintln!("studio-server: a user folder was not removed: {error:?}");
     }
     state.users.forget(session.account_id).await;
-    state.nip46.remove_account(session.account_id);
+    let gone = state.nip46.remove_account(session.account_id);
+    crate::session::forget_signers(&state, gone).await;
     with_cookie(StatusCode::NO_CONTENT.into_response(), &cleared_cookie())
 }
 
@@ -704,6 +706,14 @@ async fn nostr_known(
         Ok(vault) => vault,
         Err(error) => return error.into_response(),
     };
+    if let Some(link) = &link
+        && let Err(error) = user
+            .handle
+            .set_remote_signer(Arc::clone(&link.signer))
+            .await
+    {
+        return error.into_response();
+    }
     start_session_full(
         state,
         account_id,
@@ -775,6 +785,12 @@ async fn nostr_new(
         // vault key, and the server keeps the result as the Nostr wrapper.
         if let Some(link) = &link {
             add_signer_wrapper(&user.handle, &link.signer, pubkey).await?;
+            // The review sheet signs a write with this signer (ADR 0056
+            // item 17).
+            user.handle
+                .set_remote_signer(Arc::clone(&link.signer))
+                .await
+                .map_err(IntoResponse::into_response)?;
         }
         Ok(recovery)
     }

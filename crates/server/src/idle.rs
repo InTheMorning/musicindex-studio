@@ -38,9 +38,10 @@ pub async fn sweep(state: &Shared) {
     state.attempts.prune();
     // A signer goes away with its session. A connection that nobody used
     // goes away after five minutes.
-    state
+    let gone = state
         .nip46
         .sweep(|hash| matches!(state.accounts.session(hash), Ok(Some(_))));
+    crate::session::forget_signers(state, gone).await;
     for (id, user) in state.users.snapshot().await {
         let active = state
             .accounts

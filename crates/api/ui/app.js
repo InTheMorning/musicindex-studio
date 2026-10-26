@@ -2234,11 +2234,14 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
 }
 
 // The footer of the left panel and of the root page: Hosts, and Lock Studio
-// when the vault is open.
+// when the vault is open. On a server with a locked vault, Unlock Studio
+// opens the unlock sheet.
 function LeftPanelFooter({ panel, go, onLock }) {
   return html`<footer>
     ${panel.bottom.map((item) => (item.id === 'lock'
       ? html`<button class="row" type="button" onClick=${onLock}>Lock Studio</button>`
+      : item.id === 'unlock'
+      ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}>Unlock Studio</button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
           onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}><span class="dot hosting"></span>${item.label}</button>`))}
   </footer>`;
@@ -2559,7 +2562,10 @@ function Shell({ vault, onLock }) {
   // A different feed closes the Add a track sheet and the import sheet of
   // the feed before it.
   useEffect(() => { setAdding(false); setImporting(false); }, [draftFeedId]);
-  const panel = leftPanel({ view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open', narrow });
+  const panel = leftPanel({
+    view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open',
+    vaultLocked: serverMode && vault === 'locked', narrow,
+  });
 
   let main;
   // A screen with no bar of its own gets one.

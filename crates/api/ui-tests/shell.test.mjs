@@ -54,6 +54,11 @@ test('with no open feed, the left panel gives the four destinations', () => {
   assert.equal(JSON.stringify(panel).includes('Select a feed'), false);
 });
 
+test('Unlock Studio takes the place of Lock Studio on a server with a locked vault', () => {
+  const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: false, vaultLocked: true });
+  assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['hosts', 'Hosts'], ['unlock', 'Unlock Studio']]);
+});
+
 test('Lock Studio shows only when the vault is open', () => {
   const panel = leftPanel({ view: { name: 'hosts' }, feeds: [], model: null, vaultOpen: false });
   assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts']);

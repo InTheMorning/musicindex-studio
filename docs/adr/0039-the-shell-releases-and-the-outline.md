@@ -9,6 +9,7 @@
 - Amended: 2026-10-25 by operator decision. Item 2a gives the sort and the view of Releases, as musicindex ADR 0027 R-LIST-1 item 6 asks. [ADR 0042](0042-ui-models-with-node-tests.md) gives the method of the mechanical criteria.
 - Amended: 2026-10-25 by operator decision, after the check of the touch back control in Firefox. Item 10a gives the bar of a feed two rows at narrow width.
 - Amended: 2026-10-25 by operator decision. musicindex ADR 0030 replaces the menu button and the drawer. Items 10, 10a, 11 and 11a now make Studio one stack at narrow width, with the root page and the outline page.
+- Amended: 2026-10-26 by operator decision, after the visual check of task 034f. On a server with a locked vault, "Unlock Studio" takes the place of "Lock Studio" in item 1. It opens the unlock sheet of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
 - Amended: 2026-10-25 by operator decision. musicindex ADR 0031 makes the Touch back control of item 9 a circular icon button with no word.
 - Amended: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
 
@@ -28,7 +29,7 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### The Destinations
 
-1. With no feed open, the left panel holds the destinations. Releases and Add a feed are at the top. Hosts and Lock Studio are at the bottom of the panel, and stay there at each height of the window.
+1. With no feed open, the left panel holds the destinations. Releases and Add a feed are at the top. Hosts and Lock Studio are at the bottom of the panel, and stay there at each height of the window. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio".
 2. Releases is a list page at the full width of the content area. Each row shows the cover, the type label, the host and the draft state, for example "Saved, not written".
 2a. Releases has the sort and the view of musicindex ADR 0027 R-LIST-1:
    - The sorts are "Newest", the default, and "A to Z" with a letter bar. "Newest" gives the feed that joined the collection last first.
@@ -97,4 +98,4 @@ Visual, for the operator:
 
 Situational, until a decision replaces this layout:
 
-- The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. At 760 px or less, the root page and the outline page hold the same content.
+- The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio". At 760 px or less, the root page and the outline page hold the same content.

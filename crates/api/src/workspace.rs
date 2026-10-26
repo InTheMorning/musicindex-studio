@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 
 use axum::http::StatusCode;
 use serde_json::json;
@@ -27,10 +27,20 @@ use studio_core::xml::Document;
 use zeroize::Zeroizing;
 
 use studio_core::announce::{self, Timing};
+use studio_core::apps;
+use studio_core::grant::{self, ShowGrant};
+use studio_core::grant_vault;
 
 use crate::announcer::Announcer;
 use crate::downloads::DownloadQueue;
 use crate::error::ApiError;
+
+/// The prefix of the record in the user vault that keeps the key of a grant
+/// vault (ADR 0058 item 3).
+const GRANT_RECORD_PREFIX: &str = "grant-vault/";
+
+/// How often the sync of the grant vaults runs (ADR 0058 item 10).
+const GRANT_SYNC_INTERVAL: Duration = Duration::from_hours(1);
 
 /// The number of images that [`ImageCache`] keeps (ADR 0032 item 13).
 const MAX_IMAGES: usize = 64;
@@ -101,6 +111,16 @@ impl WorkspaceHandle {
         })
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?
+    }
+
+    /// Run a function on the workspace. Only a test uses it.
+    #[cfg(test)]
+    pub(crate) async fn with_workspace<T, F>(&self, work: F) -> T
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Workspace) -> T + Send + 'static,
+    {
+        self.run(move |w| Ok(work(w))).await.unwrap()
     }
 
     /// The state of the vault.
@@ -478,6 +498,9 @@ impl std::fmt::Debug for AddressChecker {
 #[derive(Debug)]
 pub struct Workspace {
     vault_path: PathBuf,
+    /// The folder of the grant vaults: `grants/` in the data folder
+    /// (ADR 0058 item 1).
+    grants_dir: PathBuf,
     pub(crate) collection: Collection,
     pub(crate) vault: Option<OpenVault>,
     pub(crate) web: Web,
@@ -583,6 +606,7 @@ impl Workspace {
             .map_err(|e| ApiError::internal(format!("{}: {e}", data_dir.display())))?;
         Ok(Self {
             vault_path: data_dir.join("vault.json"),
+            grants_dir: data_dir.join("grants"),
             collection: Collection::open(&data_dir.join("collection.sqlite"))?,
             vault: None,
             web: Web::new(),
@@ -756,6 +780,7 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_passphrase(passphrase)?);
         self.touch_vault();
+        self.sync_grant_vaults(None);
         Ok(())
     }
 
@@ -763,6 +788,7 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_key(key_base64)?);
         self.touch_vault();
+        self.sync_grant_vaults(None);
         Ok(())
     }
 
@@ -774,6 +800,7 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_passkey(credential_id, prf_output)?);
         self.touch_vault();
+        self.sync_grant_vaults(None);
         Ok(())
     }
 
@@ -792,6 +819,7 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_recovery_key(recovery_key)?);
         self.touch_vault();
+        self.sync_grant_vaults(None);
         Ok(())
     }
 
@@ -897,6 +925,281 @@ impl Workspace {
         Ok(hosts)
     }
 
+    /// The connector of each host for a granted write (ADR 0058 item 11).
+    /// The connectors get their secrets from `vault`, which is the grant
+    /// vault. This function never reads the user vault, also when it is
+    /// open. A host whose secret `vault` does not hold is marked as locked.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the collection or a connector fails.
+    pub(crate) fn hosts_with_grant_vault(
+        &self,
+        vault: Option<&OpenVault>,
+        signing: &Signing,
+    ) -> Result<Hosts, ApiError> {
+        let mut hosts = Hosts::new();
+        for row in self.collection.connectors()? {
+            if let Some(secret_ref) = row.secret_ref.as_deref() {
+                let held = vault.is_some_and(|v| matches!(v.get(secret_ref), Ok(Some(_))));
+                if !held {
+                    hosts.insert_locked(row.id);
+                    continue;
+                }
+            }
+            let env = HostEnv {
+                vault,
+                blobs: self.collection.kept_blobs(row.id)?,
+                signing: signing.clone(),
+                policy: self.net_policy.clone(),
+            };
+            hosts.insert(row.id, connector::from_row_in(&row, &env)?);
+        }
+        Ok(hosts)
+    }
+
+    /// The secret IDs of a grant: the `secret_ref` of the connector of the
+    /// feed XML. A host with no secret gives an empty list (ADR 0058
+    /// item 2).
+    fn grant_secret_ids(&self, feed_id: FeedId) -> Result<Vec<String>, ApiError> {
+        let Some(connector_id) = self.collection.feed(feed_id)?.connector_id else {
+            return Ok(Vec::new());
+        };
+        Ok(self
+            .collection
+            .connector(connector_id)?
+            .secret_ref
+            .into_iter()
+            .collect())
+    }
+
+    fn grant_path(&self, grant_id: i64) -> PathBuf {
+        self.grants_dir.join(format!("{grant_id}.json"))
+    }
+
+    /// Open the grant vault of a show with the token of a connected app.
+    /// Gives `None` when the host of the feed XML needs no secret.
+    ///
+    /// # Errors
+    ///
+    /// Gives 423 `vault_locked` when the host needs a secret and the grant
+    /// vault is not there, when the app has no wrapper in it, when the
+    /// token is not the token of the app, or when the grant vault does not
+    /// hold the secret (ADR 0058 item 13).
+    pub(crate) fn open_grant_vault(
+        &self,
+        show: &ShowGrant,
+        app_id: i64,
+        token: &str,
+    ) -> Result<Option<OpenVault>, ApiError> {
+        let secret_ids = self.grant_secret_ids(show.feed_id)?;
+        if secret_ids.is_empty() {
+            return Ok(None);
+        }
+        let file =
+            VaultFile::load(&self.grant_path(show.id)).map_err(|_| ApiError::vault_locked())?;
+        let vault = grant_vault::open(file, app_id, token).map_err(|_| ApiError::vault_locked())?;
+        for id in &secret_ids {
+            if !matches!(vault.get(id), Ok(Some(_))) {
+                return Err(ApiError::vault_locked());
+            }
+        }
+        Ok(Some(vault))
+    }
+
+    /// Keep the grant vaults current (ADR 0058 items 6 to 10). The function
+    /// does each step that is possible now, and nothing else:
+    ///
+    /// - With the user vault open, it makes each missing grant vault of an
+    ///   active grant, makes again the grant vaults of the `refresh` feed,
+    ///   and adds each missing wrapper of an app that has a key.
+    /// - Always, it removes the wrapper of each removed app, and it removes
+    ///   the grant vault and the record of each grant that is not active.
+    ///
+    /// An error goes into the log with no secret, and the next grant still
+    /// runs. The function never fails its caller.
+    pub(crate) fn sync_grant_vaults(&mut self, refresh: Option<FeedId>) {
+        let apps = match apps::apps(&self.collection) {
+            Ok(apps) => apps,
+            Err(error) => {
+                eprintln!("studio: the grant vaults cannot read the apps: {error}");
+                return;
+            }
+        };
+        let open = match grant::open_grants(&self.collection) {
+            Ok(open) => open,
+            Err(error) => {
+                eprintln!("studio: the grant vaults cannot read the grants: {error}");
+                return;
+            }
+        };
+        let now = crate::announcer::now();
+        let shows: Vec<ShowGrant> = open
+            .into_iter()
+            .filter(|show| !self.grant_is_over(show, now))
+            .collect();
+        let keep: BTreeSet<i64> = shows.iter().map(|show| show.id).collect();
+        self.remove_stale_grant_vaults(&keep);
+        for show in &shows {
+            if let Err(message) = self.sync_one_grant(show, &apps, refresh) {
+                eprintln!(
+                    "studio: the grant vault of grant {} failed: {message}",
+                    show.id
+                );
+            }
+        }
+    }
+
+    /// True when the grant is over for certain. The check reads the feed XML
+    /// in the release folder, so that it needs no host and no secret. When
+    /// the function cannot tell, it gives `false`, and the grant stays.
+    fn grant_is_over(&self, show: &ShowGrant, now: u64) -> bool {
+        if show.ended_at.is_some() {
+            return true;
+        }
+        let Ok(row) = self.collection.feed(show.feed_id) else {
+            return false;
+        };
+        let Ok(library) = self.library() else {
+            return false;
+        };
+        let Ok(feed) = library_feed(&library, &row) else {
+            return false;
+        };
+        if grant::live_item(&feed, &show.item_guid).is_none() {
+            return false;
+        }
+        grant::active(&self.collection, show.feed_id, &show.item_guid, &feed, now)
+            .is_ok_and(|active| active.is_none())
+    }
+
+    /// Remove each grant vault file and each user vault record of a grant
+    /// that is not in `keep`. The record goes only while the user vault is
+    /// open.
+    fn remove_stale_grant_vaults(&mut self, keep: &BTreeSet<i64>) {
+        if let Ok(entries) = std::fs::read_dir(&self.grants_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let stale = match name.strip_suffix(".json") {
+                    Some(id) => id.parse::<i64>().map_or(true, |id| !keep.contains(&id)),
+                    // A temporary file of an interrupted save.
+                    None => name.ends_with(".json.tmp"),
+                };
+                if stale && let Err(error) = std::fs::remove_file(entry.path()) {
+                    eprintln!("studio: a grant vault file cannot be removed: {error}");
+                }
+            }
+        }
+        let Some(vault) = self.vault.as_mut() else {
+            return;
+        };
+        let stale: Vec<String> = vault
+            .ids()
+            .filter(|id| {
+                id.strip_prefix(GRANT_RECORD_PREFIX)
+                    .is_some_and(|n| n.parse::<i64>().map_or(true, |n| !keep.contains(&n)))
+            })
+            .map(str::to_owned)
+            .collect();
+        if stale.is_empty() {
+            return;
+        }
+        for id in &stale {
+            vault.remove(id);
+        }
+        if let Err(error) = self.save_vault() {
+            eprintln!("studio: the vault cannot be saved after a grant ended: {error:?}");
+        }
+    }
+
+    /// The steps of [`Workspace::sync_grant_vaults`] for one active grant.
+    fn sync_one_grant(
+        &mut self,
+        show: &ShowGrant,
+        apps: &[apps::ConnectedApp],
+        refresh: Option<FeedId>,
+    ) -> Result<(), String> {
+        let secret_ids = self.grant_secret_ids(show.feed_id).map_err(|e| e.code())?;
+        let path = self.grant_path(show.id);
+        let record = format!("{GRANT_RECORD_PREFIX}{}", show.id);
+        if secret_ids.is_empty() {
+            // A host with no secret needs no grant vault.
+            let _ = std::fs::remove_file(&path);
+            if let Some(vault) = self.vault.as_mut()
+                && vault.remove(&record)
+            {
+                self.save_vault().map_err(|e| e.code())?;
+            }
+            return Ok(());
+        }
+        // The key of the grant vault, while the user vault is open.
+        let key: Option<Zeroizing<String>> = match &self.vault {
+            Some(vault) => vault
+                .get(&record)
+                .map_err(|e| e.to_string())?
+                .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok())
+                .map(Zeroizing::new),
+            None => None,
+        };
+        let mut file = VaultFile::load(&path).ok();
+        if self.vault.is_some() {
+            let usable = match (&file, &key) {
+                (Some(file), Some(key)) => file.clone().open_with_key(key).is_ok(),
+                _ => false,
+            };
+            if refresh == Some(show.feed_id) || !usable {
+                return self.make_grant_vault(&secret_ids, apps, &path, &record);
+            }
+        }
+        let Some(file) = file.as_mut() else {
+            return Ok(());
+        };
+        let mut changed = false;
+        for id in file.app_ids() {
+            if !apps.iter().any(|app| app.id == id && app.has_key) {
+                changed |= grant_vault::remove_wrapper(file, id);
+            }
+        }
+        if let Some(key) = &key {
+            for app in apps.iter().filter(|app| app.has_key) {
+                if file.app_wrapper(app.id).is_none() {
+                    grant_vault::add_wrapper(file, key, app).map_err(|e| e.to_string())?;
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            file.save(&path).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// Make the grant vault of a grant from the open user vault, and keep
+    /// its key in the user vault.
+    fn make_grant_vault(
+        &mut self,
+        secret_ids: &[String],
+        apps: &[apps::ConnectedApp],
+        path: &Path,
+        record: &str,
+    ) -> Result<(), String> {
+        let vault = self
+            .vault
+            .as_mut()
+            .ok_or_else(|| "the user vault is closed".to_owned())?;
+        let ids: Vec<&str> = secret_ids.iter().map(String::as_str).collect();
+        let (file, key) = grant_vault::make(vault, &ids, apps).map_err(|e| e.to_string())?;
+        // The key goes into the user vault first. A file that this key does
+        // not open is made again at the next sync.
+        vault
+            .put(record, key.as_bytes())
+            .map_err(|e| e.to_string())?;
+        self.save_vault().map_err(|e| e.code())?;
+        std::fs::create_dir_all(&self.grants_dir).map_err(|e| e.to_string())?;
+        file.save(path).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     /// The library folder, from the `library_root` setting (ADR 0036
     /// item 1).
     ///
@@ -926,12 +1229,23 @@ impl Workspace {
     /// An error goes into the log and does not stop the caller. The
     /// function never writes to a host.
     pub(crate) fn record_remote_files(&self, id: FeedId, feed: &Feed) {
+        self.record_remote_files_with(id, feed, || self.hosts());
+    }
+
+    /// Like [`Workspace::record_remote_files`], with the hosts that `hosts`
+    /// makes. A granted write gives the hosts of its grant vault.
+    pub(crate) fn record_remote_files_with(
+        &self,
+        id: FeedId,
+        feed: &Feed,
+        hosts: impl FnOnce() -> Result<Hosts, ApiError>,
+    ) {
         let result = (|| -> Result<(), String> {
             let row = self.collection.feed(id).map_err(|e| e.to_string())?;
             if row.folder.is_none() {
                 return Ok(());
             }
-            let hosts = self.hosts().map_err(|e| format!("{e:?}"))?;
+            let hosts = hosts().map_err(|e| format!("{e:?}"))?;
             remote::record_remote_files(&self.collection, &hosts, id, feed)
                 .map_err(|e| e.to_string())?;
             Ok(())
@@ -1050,4 +1364,23 @@ pub(crate) fn library_feed(
         .ok_or_else(|| "the release folder has no feed XML".to_owned())?;
     let doc = Document::parse_bytes(&bytes).map_err(|e| e.to_string())?;
     Feed::read(&doc).map_err(|e| format!("the feed XML is not a feed: {e}"))
+}
+
+/// Start the thread that keeps the grant vaults current at the start and
+/// each hour (ADR 0058 item 10). The thread holds a weak link, and it ends
+/// when the workspace is gone.
+pub(crate) fn spawn_grant_sync(shared: &Arc<Mutex<Workspace>>) {
+    let weak = Arc::downgrade(shared);
+    std::thread::spawn(move || {
+        loop {
+            let Some(shared) = weak.upgrade() else {
+                return;
+            };
+            if let Ok(mut w) = lock_workspace(&shared) {
+                w.sync_grant_vaults(None);
+            }
+            drop(shared);
+            std::thread::sleep(GRANT_SYNC_INTERVAL);
+        }
+    });
 }

@@ -14,7 +14,7 @@
 //! [`VaultFile`] is the stored form. [`OpenVault`] is a vault with its key,
 //! and it reads and writes secrets.
 
-mod crypto;
+pub(crate) mod crypto;
 mod file;
 
 use std::fmt;

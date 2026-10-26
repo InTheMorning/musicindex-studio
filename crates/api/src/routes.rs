@@ -34,6 +34,7 @@ use studio_core::nostr_events::Signing;
 use studio_core::pipeline;
 use studio_core::playlist;
 use studio_core::publisher;
+use zeroize::Zeroizing;
 
 use crate::error::ApiError;
 use crate::workspace::Workspace;
@@ -1180,6 +1181,13 @@ pub(crate) async fn update_connector(
                 )?;
             }
         }
+        // A change of the host can change a secret. The grant vaults of the
+        // feeds that use the host are made again (ADR 0058 item 7).
+        for feed in w.collection.feeds()? {
+            if feed.connector_id == Some(id) {
+                w.sync_grant_vaults(Some(feed.id));
+            }
+        }
         to_json(w.collection.connector(id)?)
     })
     .await
@@ -2287,6 +2295,10 @@ pub(crate) async fn write_feed(
         }
         // The write put its announcements into the queue (ADR 0052).
         w.announcer.wake();
+        // The write can record a grant, change the secret of the host or move
+        // the feed XML. The grant vaults of the feed are made again (ADR 0058
+        // items 6 and 7).
+        w.sync_grant_vaults(Some(id));
         to_json(w.collection.feed(id)?)
     })
     .await
@@ -2848,6 +2860,7 @@ pub(crate) async fn set_feed_host(
         writer(w, id)?;
         let hosts = w.hosts()?;
         pipeline::set_feed_host(&w.collection, &hosts, id, ConnectorId(body.connector_id))?;
+        w.sync_grant_vaults(Some(id));
         diff_json(w, id)
     })
     .await
@@ -4226,12 +4239,16 @@ pub(crate) async fn add_app(
                 ),
                 _ => ApiError::from(e),
             })?;
+        // Each grant vault gets the wrapper of the new app now, or at the
+        // next unlock (ADR 0058 item 8).
+        w.sync_grant_vaults(None);
         Ok((
             StatusCode::CREATED,
             Json(json!({
                 "id": app.id,
                 "name": app.name,
                 "created_at": app.created_at,
+                "has_key": app.has_key,
                 "token": token,
             })),
         ))
@@ -4246,6 +4263,8 @@ pub(crate) async fn remove_app(
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
         apps::remove_app(&w.collection, id)?;
+        // Each grant vault loses the wrapper of the app (ADR 0058 item 9).
+        w.sync_grant_vaults(None);
         Ok(StatusCode::NO_CONTENT)
     })
     .await
@@ -4260,13 +4279,15 @@ pub(crate) async fn app_check(
     mut request: Request,
     next: axum::middleware::Next,
 ) -> Result<Response, ApiError> {
-    let given = request
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.strip_prefix("Bearer "))
-        .unwrap_or_default()
-        .to_owned();
+    let given = Zeroizing::new(
+        request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok())
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .unwrap_or_default()
+            .to_owned(),
+    );
     let unauthorized = || {
         ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -4277,15 +4298,39 @@ pub(crate) async fn app_check(
     if given.is_empty() {
         return Err(unauthorized());
     }
+    let token = AppToken(given);
+    let checked = token.clone();
     let app = blocking(shared, move |w| {
-        Ok(apps::app_for_token(&w.collection, &given)?)
+        Ok(apps::app_for_token(&w.collection, checked.as_str())?)
     })
     .await?;
     let Some(app) = app else {
         return Err(unauthorized());
     };
+    // No later layer needs the header. The token stays in the extension,
+    // which clears its memory (ADR 0058 item 11).
+    request.headers_mut().remove(header::AUTHORIZATION);
     request.extensions_mut().insert(app);
+    request.extensions_mut().insert(token);
     Ok(next.run(request).await)
+}
+
+/// The token of the connected app that made the request. A granted write
+/// uses it to open the grant vault. The type clears its memory when it is
+/// dropped, and it shows no text in debug output.
+#[derive(Clone)]
+pub(crate) struct AppToken(Zeroizing<String>);
+
+impl AppToken {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for AppToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AppToken(..)")
+    }
 }
 
 /// The app that the token names. It tests the layer of `/app/v1/`.
@@ -4363,6 +4408,8 @@ pub(crate) async fn end_feed_grant(
             i64::try_from(unix_now()).unwrap_or(i64::MAX),
         )?;
         let ended = grant::grant(&w.collection, show.id)?.unwrap_or(show);
+        // The grant vault of the grant goes (ADR 0058 item 10).
+        w.sync_grant_vaults(None);
         Ok(Json(json!({
             "id": ended.id,
             "item_guid": ended.item_guid,
@@ -4421,18 +4468,54 @@ fn hosted_feed(w: &Workspace, hosts: &Hosts, id: FeedId) -> Result<Option<Feed>,
     Ok(Some(feed))
 }
 
+/// The hosts for a granted read or write of one grant (ADR 0058 items 11
+/// and 13). The secrets come from the grant vault, which the token of the
+/// app opens. The user vault is never read, also when it is open. A grant on
+/// a host with no secret needs no grant vault.
+///
+/// # Errors
+///
+/// Gives 423 `vault_locked` when the grant vault does not open with the
+/// token, and an [`ApiError`] when a connector fails.
+fn grant_hosts(
+    w: &Workspace,
+    show: &grant::ShowGrant,
+    app: &ConnectedApp,
+    token: &AppToken,
+    signing: &Signing,
+) -> Result<Hosts, ApiError> {
+    // An ended grant needs no grant vault. The write then gives
+    // `grant_ended` first.
+    let vault = if show.ended_at.is_some() {
+        None
+    } else {
+        w.open_grant_vault(show, app.id, token.as_str())?
+    };
+    w.hosts_with_grant_vault(vault.as_ref(), signing)
+}
+
 /// Each active show grant, for a connected app (ADR 0054 item 8). The route
-/// reads the hosted file of each feed with a grant, so a host that needs
-/// the locked vault gives 423 `vault_locked`.
-pub(crate) async fn list_shows(State(shared): State<Shared>) -> ApiResult {
-    blocking(shared, |w| {
-        let hosts = w.hosts()?;
+/// reads the hosted file of each feed with a grant, with the hosts of the
+/// grant vault. A grant whose vault the token does not open is not in the
+/// list, and it gives no error for the full list.
+pub(crate) async fn list_shows(
+    State(shared): State<Shared>,
+    Extension(app): Extension<ConnectedApp>,
+    Extension(token): Extension<AppToken>,
+) -> ApiResult {
+    blocking(shared, move |w| {
         let now = unix_now();
+        let signing = Signing::default();
         let mut read: std::collections::HashMap<FeedId, Option<Feed>> =
             std::collections::HashMap::new();
         let mut shows = Vec::new();
         for show in grant::open_grants(&w.collection)? {
             if let std::collections::hash_map::Entry::Vacant(entry) = read.entry(show.feed_id) {
+                let hosts = match grant_hosts(w, &show, &app, &token, &signing) {
+                    Ok(hosts) => hosts,
+                    Err(error) if error.code() == "vault_locked" => continue,
+                    Err(error) => return Err(error),
+                };
                 entry.insert(hosted_feed(w, &hosts, show.feed_id)?);
             }
             let Some(Some(hosted)) = read.get(&show.feed_id) else {
@@ -4462,14 +4545,29 @@ pub(crate) async fn list_shows(State(shared): State<Shared>) -> ApiResult {
     .await
 }
 
-/// Write one granted change for a connected app (ADR 0054 items 15 and
-/// 16). Give the version, the status and the live value after the write.
-/// The app never gets a secret: the connectors get their secrets from the
-/// open vault only.
+/// Write one granted change for a connected app (ADR 0054 item 15, ADR
+/// 0058 items 11 to 13). Give the version, the status and the live value
+/// after the write. The app never gets a secret. The connectors get their
+/// secrets from the grant vault, which the token of the app opens. The user
+/// vault can be locked, and the write never reads it.
 fn granted_change(
     w: &mut Workspace,
     grant_id: i64,
     app: &ConnectedApp,
+    token: &AppToken,
+    change: &grant::GrantChange,
+) -> ApiResult {
+    let result = granted_write(w, grant_id, app, token, change);
+    // A write can end the grant, and then the grant vault goes.
+    w.sync_grant_vaults(None);
+    result
+}
+
+fn granted_write(
+    w: &mut Workspace,
+    grant_id: i64,
+    app: &ConnectedApp,
+    token: &AppToken,
     change: &grant::GrantChange,
 ) -> ApiResult {
     let show = grant::grant(&w.collection, grant_id)?.ok_or_else(|| {
@@ -4481,10 +4579,11 @@ fn granted_change(
     })?;
     let now = unix_now();
     // The diff of the granted write makes its signing plan at `now`.
-    let hosts = w.hosts_with(Signing {
+    let signing = Signing {
         plan_time: Some(now),
         signed: Vec::new(),
-    })?;
+    };
+    let hosts = grant_hosts(w, &show, app, token, &signing)?;
     let library = w.library()?;
     let addresses: &dyn pipeline::AddressCheck = match &w.address_check {
         Some(check) => check.0.as_ref(),
@@ -4505,7 +4604,7 @@ fn granted_change(
     w.announcer.wake();
     let hosted = hosted_feed(w, &hosts, show.feed_id)?;
     if let Some(feed) = &hosted {
-        w.record_remote_files(show.feed_id, feed);
+        w.record_remote_files_with(show.feed_id, feed, || Ok(hosts));
     }
     let live = hosted
         .as_ref()
@@ -4526,6 +4625,7 @@ pub(crate) struct ShowStatus {
 pub(crate) async fn set_show_status(
     State(shared): State<Shared>,
     Extension(app): Extension<ConnectedApp>,
+    Extension(token): Extension<AppToken>,
     Path(grant_id): Path<i64>,
     Json(body): Json<ShowStatus>,
 ) -> ApiResult {
@@ -4541,7 +4641,7 @@ pub(crate) async fn set_show_status(
                 ));
             }
         };
-        granted_change(w, grant_id, &app, &change)
+        granted_change(w, grant_id, &app, &token, &change)
     })
     .await
 }
@@ -4556,6 +4656,7 @@ pub(crate) struct ShowLiveValue {
 pub(crate) async fn put_show_live_value(
     State(shared): State<Shared>,
     Extension(app): Extension<ConnectedApp>,
+    Extension(token): Extension<AppToken>,
     Path(grant_id): Path<i64>,
     Json(body): Json<ShowLiveValue>,
 ) -> ApiResult {
@@ -4573,7 +4674,7 @@ pub(crate) async fn put_show_live_value(
             uri: uri.to_owned(),
             protocol: protocol.to_owned(),
         };
-        granted_change(w, grant_id, &app, &change)
+        granted_change(w, grant_id, &app, &token, &change)
     })
     .await
 }
@@ -4582,10 +4683,17 @@ pub(crate) async fn put_show_live_value(
 pub(crate) async fn delete_show_live_value(
     State(shared): State<Shared>,
     Extension(app): Extension<ConnectedApp>,
+    Extension(token): Extension<AppToken>,
     Path(grant_id): Path<i64>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        granted_change(w, grant_id, &app, &grant::GrantChange::RemoveLiveValue)
+        granted_change(
+            w,
+            grant_id,
+            &app,
+            &token,
+            &grant::GrantChange::RemoveLiveValue,
+        )
     })
     .await
 }

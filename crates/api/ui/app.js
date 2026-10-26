@@ -1922,6 +1922,18 @@ function ConnectedAppsPanel() {
       await load();
     });
   };
+  // An app from before the app key has no key. "Connect again" removes it
+  // and makes a new app with the same name and a new token (ADR 0058 item 15).
+  const connectAgain = (app) => {
+    if (!confirm(`Connect the app “${app.name}” again? Its old token stops working.`)) return;
+    run(async () => {
+      await api(`/apps/${app.id}`, { method: 'DELETE' });
+      const result = await api('/apps', { method: 'POST', body: { name: app.name } });
+      setMade(result);
+      setCopied(false);
+      await load();
+    });
+  };
   const copy = () => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(made.token).then(() => setCopied(true), () => {});
@@ -1932,10 +1944,15 @@ function ConnectedAppsPanel() {
     <h2>Connected apps</h2>
     ${apps.length === 0 && !adding && html`<p class="hint">No app is connected.</p>`}
     ${apps.length > 0 && html`<ul class="app-list">
-      ${apps.map((a) => html`<li>
-        <span>${a.name}</span>
-        <button class="button destructive" type="button" disabled=${busy}
-          aria-label=${`Remove the app ${a.name}`} onClick=${() => remove(a)}>Remove</button>
+      ${apps.map((a) => html`<li key=${a.id}>
+        <span class="app-name">${a.name}
+          ${!a.has_key && html`<span class="hint">This app has no key, so it cannot use a grant.</span>`}</span>
+        <span class="app-buttons">
+          ${!a.has_key && html`<button class="button action" type="button" disabled=${busy}
+            aria-label=${`Connect the app ${a.name} again`} onClick=${() => connectAgain(a)}>Connect again</button>`}
+          <button class="button destructive" type="button" disabled=${busy}
+            aria-label=${`Remove the app ${a.name}`} onClick=${() => remove(a)}>Remove</button>
+        </span>
       </li>`)}
     </ul>`}
     ${made && html`<div class="notice" role="status">

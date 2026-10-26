@@ -6181,6 +6181,11 @@ async fn app_call(
 /// Write a pending show with its draft grant, and add a connected app.
 /// Gives the `guid` of the show and the token of the app.
 async fn granted_show(app: &App, id: i64) -> (String, String) {
+    granted_show_in(app, id, &|| live(app)).await
+}
+
+/// Like [`granted_show`], for a feed whose XML `live_xml` reads from the host.
+async fn granted_show_in(app: &App, id: i64, live_xml: &dyn Fn() -> String) -> (String, String) {
     let base = format!("/api/v1/feeds/{id}");
     // The start is far in the future, so that the grant is active at the
     // time of the test.
@@ -6225,7 +6230,7 @@ async fn granted_show(app: &App, id: i64) -> (String, String) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(live(app).contains("status=\"pending\""));
+    assert!(live_xml().contains("status=\"pending\""));
 
     let (status, body) = call(
         app,
@@ -7300,4 +7305,398 @@ async fn an_upload_older_than_24_hours_has_no_row_and_no_file_after_the_clean_st
     let incoming = app.data.path().join("incoming");
     assert!(!incoming.join(format!("{old}.part")).exists());
     assert!(incoming.join(format!("{fresh}.part")).exists());
+}
+
+// ---- Grant vaults (task 036a) ----
+
+/// An app whose workspace the test can reach through a handle.
+fn app_with_handle() -> (App, crate::WorkspaceHandle) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_address_check(std::sync::Arc::new(PassAll));
+    let (workspace_routes, handle) = crate::workspace_router(workspace);
+    let router =
+        crate::ui_router()
+            .merge(workspace_routes)
+            .layer(axum::middleware::from_fn_with_state(
+                Access::with_token(TOKEN, 4100),
+                crate::access::check,
+            ));
+    (
+        App {
+            router,
+            data,
+            feeds,
+        },
+        handle,
+    )
+}
+
+/// A feed on an SFTP host of a test server, with a show and its grant. The
+/// user vault is open. Gives the feed, the connector, the token of the app
+/// and the grant ID. The feed XML is in the folder `root`.
+struct SftpShow {
+    root: std::path::PathBuf,
+    connector: i64,
+    token: String,
+    grant: i64,
+}
+
+async fn sftp_show(
+    app: &App,
+    server: &mut studio_core::testing::sshd::TestSshd,
+) -> (i64, SftpShow) {
+    make_vault(app).await;
+    let mut body = sftp_body(server);
+    let root = std::path::PathBuf::from(body["root"].as_str().unwrap());
+    std::fs::write(root.join("album.xml"), FEED).unwrap();
+    body["base_url"] = json!("https://cdn.example.com/feeds");
+    let (status, connector) = call(app, "POST", "/api/v1/connectors", Some(body)).await;
+    assert_eq!(status, StatusCode::CREATED, "{connector}");
+    let (status, feed) = call(
+        app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    set_library_root(app);
+    let id = feed["id"].as_i64().unwrap();
+    let read = root.clone();
+    let (_, token) = granted_show_in(app, id, &move || {
+        std::fs::read_to_string(read.join("album.xml")).unwrap()
+    })
+    .await;
+    let (status, grants) = call(app, "GET", &format!("/api/v1/feeds/{id}/grants"), None).await;
+    assert_eq!(status, StatusCode::OK, "{grants}");
+    let grant = grants[0]["id"].as_i64().unwrap();
+    (
+        id,
+        SftpShow {
+            root,
+            connector: connector["id"].as_i64().unwrap(),
+            token,
+            grant,
+        },
+    )
+}
+
+async fn set_status(app: &App, show: &SftpShow, token: &str, status: &str) -> (StatusCode, Value) {
+    app_call(
+        app,
+        "POST",
+        &format!("/app/v1/shows/{}/status", show.grant),
+        token,
+        Some(json!({ "status": status })),
+    )
+    .await
+}
+
+fn grant_files(app: &App) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(app.data.path().join("grants"))
+        .map(|dir| {
+            dir.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+async fn lock(app: &App) {
+    let (status, _) = call(app, "POST", "/api/v1/vault/lock", None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+async fn unlock(app: &App) {
+    let (status, body) = call(
+        app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+/// The IDs of the records of the user vault that keep a grant vault key.
+async fn grant_records(handle: &crate::WorkspaceHandle) -> Vec<String> {
+    handle
+        .with_workspace(|w| {
+            w.vault
+                .as_ref()
+                .map(|v| {
+                    v.ids()
+                        .filter(|id| id.starts_with("grant-vault/"))
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .await
+}
+
+#[tokio::test]
+async fn a_connected_app_writes_through_the_grant_vault_while_the_user_vault_is_locked() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let (app, handle) = app_with_handle();
+    let (_, show) = sftp_show(&app, &mut server).await;
+    assert_eq!(grant_files(&app), [format!("{}.json", show.grant)]);
+    assert_eq!(
+        grant_records(&handle).await,
+        [format!("grant-vault/{}", show.grant)]
+    );
+    lock(&app).await;
+
+    let path = format!("/app/v1/shows/{}", show.grant);
+    let host_xml = || std::fs::read_to_string(show.root.join("album.xml")).unwrap();
+    let (status, body) = set_status(&app, &show, &show.token, "live").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(host_xml().contains("status=\"live\""));
+    let value = json!({ "uri": "wss://example.com/value", "protocol": "socket.io" });
+    let (status, body) = app_call(
+        &app,
+        "PUT",
+        &format!("{path}/live-value"),
+        &show.token,
+        Some(value),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(host_xml().contains("uri=\"wss://example.com/value\""));
+    // The grant vault stays while the show runs.
+    assert_eq!(grant_files(&app), [format!("{}.json", show.grant)]);
+    let (status, body) = set_status(&app, &show, &show.token, "ended").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(host_xml().contains("status=\"ended\""));
+
+    // After the end, the grant vault file is gone at once. The record goes
+    // at the next unlock.
+    assert_eq!(grant_files(&app), Vec::<String>::new());
+    unlock(&app).await;
+    assert_eq!(grant_records(&handle).await, Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn a_granted_write_does_not_use_the_open_user_vault() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let (app, handle) = app_with_handle();
+    let (id, show) = sftp_show(&app, &mut server).await;
+    // The user vault is open but has lost the secret of the host. In memory
+    // only: the saved vault is not changed.
+    let connector = show.connector;
+    handle
+        .with_workspace(move |w| {
+            let secret_ref = w
+                .collection
+                .connector(studio_core::collection::ConnectorId(connector))
+                .unwrap()
+                .secret_ref
+                .unwrap();
+            assert!(w.vault.as_mut().unwrap().remove(&secret_ref));
+        })
+        .await;
+    let (status, body) = set_status(&app, &show, &show.token, "live").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        std::fs::read_to_string(show.root.join("album.xml"))
+            .unwrap()
+            .contains("status=\"live\"")
+    );
+    // The user needs the secret for a write of their own.
+    let (status, _) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_ne!(status, StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn an_app_that_the_user_adds_during_a_grant_writes_after_the_next_unlock() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let (app, _handle) = app_with_handle();
+    let (_, show) = sftp_show(&app, &mut server).await;
+    lock(&app).await;
+    let (status, added) = call(&app, "POST", "/api/v1/apps", Some(json!({"name": "Two"}))).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let second = added["token"].as_str().unwrap().to_owned();
+    let second_id = added["id"].as_i64().unwrap();
+    assert_eq!(added["has_key"], true);
+
+    let (status, body) = set_status(&app, &show, &second, "live").await;
+    assert_eq!(status, StatusCode::LOCKED, "{body}");
+    assert_eq!(body["error"]["code"], "vault_locked");
+    // The first app still writes.
+    let (status, body) = set_status(&app, &show, &show.token, "live").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    unlock(&app).await;
+    let file = studio_core::vault::VaultFile::load(
+        &app.data
+            .path()
+            .join("grants")
+            .join(format!("{}.json", show.grant)),
+    )
+    .unwrap();
+    assert!(file.app_wrapper(second_id).is_some());
+    let value = json!({ "uri": "wss://example.com/value", "protocol": "socket.io" });
+    let (status, body) = app_call(
+        &app,
+        "PUT",
+        &format!("/app/v1/shows/{}/live-value", show.grant),
+        &second,
+        Some(value),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    // The user removes the second app, with the vault locked. Its wrapper
+    // goes at once.
+    lock(&app).await;
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/apps/{second_id}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let file = studio_core::vault::VaultFile::load(
+        &app.data
+            .path()
+            .join("grants")
+            .join(format!("{}.json", show.grant)),
+    )
+    .unwrap();
+    assert!(file.app_wrapper(second_id).is_none());
+    let (status, _) = set_status(&app, &show, &second, "ended").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn a_new_secret_of_the_host_reaches_the_grant_vault_after_update_connector() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let (app, handle) = app_with_handle();
+    let (_, show) = sftp_show(&app, &mut server).await;
+    let connector = show.connector;
+    // Change the secret in the user vault, as a new password does. Then call
+    // `update_connector`, which makes the grant vault again.
+    let set_secret = |secret: Option<String>| {
+        let handle = handle.clone();
+        async move {
+            handle
+                .with_workspace(move |w| {
+                    let secret_ref = w
+                        .collection
+                        .connector(studio_core::collection::ConnectorId(connector))
+                        .unwrap()
+                        .secret_ref
+                        .unwrap();
+                    let vault = w.vault.as_mut().unwrap();
+                    match secret {
+                        Some(new) => {
+                            vault.put(&secret_ref, new.as_bytes()).unwrap();
+                            None
+                        }
+                        None => Some(
+                            String::from_utf8(vault.get(&secret_ref).unwrap().unwrap().to_vec())
+                                .unwrap(),
+                        ),
+                    }
+                })
+                .await
+        }
+    };
+    let good = set_secret(None).await.unwrap();
+    set_secret(Some(
+        json!({ "private_key": "not a key", "passphrase": null }).to_string(),
+    ))
+    .await;
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{connector}"),
+        Some(json!({ "name": "Server 2" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = set_status(&app, &show, &show.token, "live").await;
+    assert_ne!(status, StatusCode::OK);
+
+    set_secret(Some(good)).await;
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{connector}"),
+        Some(json!({ "name": "Server 3" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    lock(&app).await;
+    let (status, body) = set_status(&app, &show, &show.token, "live").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn no_file_and_no_row_has_an_app_token_or_a_grant_vault_key() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let (app, handle) = app_with_handle();
+    let (_, show) = sftp_show(&app, &mut server).await;
+    let key = handle
+        .with_workspace(move |w| {
+            let record = format!("grant-vault/{}", show.grant);
+            let bytes = w.vault.as_ref().unwrap().get(&record).unwrap().unwrap();
+            String::from_utf8(bytes.to_vec()).unwrap()
+        })
+        .await;
+    let key_bytes = key.as_bytes();
+    let token = show.token.clone();
+    let (status, _) = set_status(&app, &show, &token, "live").await;
+    assert_eq!(status, StatusCode::OK);
+    let mut files = 0;
+    let mut pending = vec![app.data.path().to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            let bytes = std::fs::read(&path).unwrap();
+            let has = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+            assert!(!has(token.as_bytes()), "{}", path.display());
+            assert!(!has(key_bytes), "{}", path.display());
+            files += 1;
+        }
+    }
+    assert!(files >= 3, "the scan found {files} files");
+    assert!(data_files_text(&app).find(&token).is_none());
+}
+
+#[tokio::test]
+async fn an_app_lists_the_shows_of_its_grants_while_the_user_vault_is_locked() {
+    let mut server = studio_core::testing::sshd::TestSshd::start();
+    let (app, _handle) = app_with_handle();
+    let (_, show) = sftp_show(&app, &mut server).await;
+    lock(&app).await;
+    let (status, added) = call(&app, "POST", "/api/v1/apps", Some(json!({"name": "Two"}))).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let second = added["token"].as_str().unwrap().to_owned();
+
+    // The first app lists its show and goes live.
+    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &show.token, None).await;
+    assert_eq!(status, StatusCode::OK, "{shows}");
+    assert_eq!(shows.as_array().unwrap().len(), 1);
+    assert_eq!(shows[0]["grant_id"], show.grant);
+    assert_eq!(shows[0]["status"], "pending");
+    let (status, body) = set_status(&app, &show, &show.token, "live").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    // The second app has no wrapper yet. Its list is empty, with no error.
+    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &second, None).await;
+    assert_eq!(status, StatusCode::OK, "{shows}");
+    assert_eq!(shows, json!([]));
+
+    unlock(&app).await;
+    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &second, None).await;
+    assert_eq!(status, StatusCode::OK, "{shows}");
+    assert_eq!(shows.as_array().unwrap().len(), 1);
+    assert_eq!(shows[0]["status"], "live");
 }

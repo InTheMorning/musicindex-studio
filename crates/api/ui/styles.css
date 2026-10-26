@@ -1396,7 +1396,10 @@ textarea:focus { background: var(--fill); }
 
 /* The list of connected apps and the one-time token field. */
 .app-list { list-style: none; display: grid; gap: 8px; }
-.app-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.app-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.app-list .app-name { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.app-list .app-name .hint { margin: 0; }
+.app-list .app-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .token-field {
   width: 100%;
   min-height: var(--target);

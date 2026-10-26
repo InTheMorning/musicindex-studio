@@ -16,6 +16,7 @@ pub mod download;
 pub mod feed;
 pub mod folder_scan;
 pub mod grant;
+pub mod grant_vault;
 pub mod guid;
 pub mod inventory;
 pub mod library;

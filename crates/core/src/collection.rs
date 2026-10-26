@@ -288,6 +288,9 @@ CREATE TABLE uploads (
     updated_at INTEGER NOT NULL
 );
 ",
+    r"
+ALTER TABLE connected_apps ADD COLUMN app_pubkey TEXT;
+",
 ];
 
 /// An upload in parts that is not finished (ADR 0059 item 1).

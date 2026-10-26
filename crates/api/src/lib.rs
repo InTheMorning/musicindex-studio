@@ -94,6 +94,8 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
     announcer.attach(&shared);
     // The clean step removes the uploads that expired (ADR 0059 item 4).
     uploads::spawn_cleaner(&shared);
+    // The sync removes the grant vaults of grants that ended (ADR 0058).
+    workspace::spawn_grant_sync(&shared);
     let api = Router::new()
         .route("/status", get(routes::status))
         .route("/vault", post(routes::create_vault))

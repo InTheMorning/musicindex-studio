@@ -150,3 +150,31 @@ const WRITE_TEXT = {
 export function grantWriteText(write, timeText) {
   return `${write.app_name} · ${WRITE_TEXT[write.change] || write.change} · ${timeText(write.written_at)}`;
 }
+
+// ---- The grant check box and the host (ADR 0058 items 14 and 15) ----
+
+// Does the host use "My signer"? An nsite or Blossom host signs with the
+// signer of the user, or with a key in the vault. `connector` is a row of
+// `/connectors`, and its `config` is JSON text. A host of another kind, a
+// host without a row and a text that is not JSON give false.
+export function hostUsesSigner(connector) {
+  if (!connector || !['nsite', 'blossom'].includes(connector.kind)) return false;
+  let config = connector.config;
+  if (typeof config === 'string') {
+    try { config = JSON.parse(config); } catch { return false; }
+  }
+  return Boolean(config) && config.signing !== 'vault';
+}
+
+// The state of the grant check box. A host with "My signer" cannot do a
+// granted write, because no person is present to sign. The box is then
+// disabled, and `note` gives the reason.
+export function grantBoxState(feedHostSigner) {
+  if (feedHostSigner) {
+    return {
+      disabled: true,
+      note: 'Connected apps cannot write to a host with My signer, because no person is present to sign.',
+    };
+  }
+  return { disabled: false, note: null };
+}

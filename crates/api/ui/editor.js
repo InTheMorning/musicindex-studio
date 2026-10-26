@@ -7,7 +7,7 @@ import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageTh
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
-import { isLiveItem, liveKey, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText } from './live.js';
+import { isLiveItem, liveKey, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
@@ -855,7 +855,11 @@ function AnnounceLines({ diff }) {
 // The check box asks the grant route and takes the new diff from its
 // response, so the sheet needs no second request. `diff.grants` gives the
 // GUID of each show that has a grant request.
-function GrantChecks({ feedId, model, diff, apps, busy, onDiff, run }) {
+// A host with "My signer" cannot do a granted write (ADR 0058 item 14).
+// `signerHost` is true for that host. The box is then disabled, with the
+// reason, unless the draft already has the grant. The user can remove it.
+function GrantChecks({ feedId, model, diff, apps, busy, signerHost, onDiff, run }) {
+  const box = grantBoxState(signerHost);
   const shows = ((model && model.live_items) || []).filter((l) => l.status === 'pending' && l.item && l.item.guid);
   if (shows.length === 0) return null;
   const change = (guid, on) => run(async () => {
@@ -863,10 +867,11 @@ function GrantChecks({ feedId, model, diff, apps, busy, onDiff, run }) {
   });
   return html`<div class="group grant-checks">
     ${shows.map((l) => html`<div key=${l.item.guid}>
-      <label class="check"><input type="checkbox" disabled=${busy}
+      <label class="check"><input type="checkbox" disabled=${busy || (box.disabled && !diff.grants.includes(l.item.guid))}
         checked=${diff.grants.includes(l.item.guid)} onChange=${(e) => change(l.item.guid, e.target.checked)} />
         <span>Let connected apps start and end this show, and set its live value${shows.length > 1 ? `: ${l.item.title || 'Untitled show'}` : ''}</span></label>
     </div>`)}
+    ${box.note && html`<p class="hint">${box.note}</p>`}
     ${apps && apps.length === 0 && html`<p class="hint">No app is connected. Connect an app in Hosts.</p>`}
   </div>`;
 }
@@ -926,6 +931,10 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     onOpsChanged();
   });
   const toSign = diff ? eventsToSign(diff) : [];
+  // The host of the feed XML after the write: the target of a move, or the
+  // host of the feed now.
+  const hostId = diff && diff.feed_move ? diff.feed_move.connector_id : feedConnectorId;
+  const signerHost = hostUsesSigner((connectors || []).find((c) => c.id === hostId));
   // The signer of the write: the NIP-07 signer of the browser, or else the
   // NIP-46 signer of the workspace (ADR 0056 items 17 and 18).
   const [remote, setRemote] = useState(null);
@@ -1037,7 +1046,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
-      ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} apps=${apps} busy=${busy} onDiff=${setDiff} run=${run} />`}
+      ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} apps=${apps} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} unified=${diff.unified} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}

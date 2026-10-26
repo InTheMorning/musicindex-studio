@@ -48,6 +48,14 @@ pub(crate) enum Wrapper {
     /// The user's signer encrypted the vault key to the user's own public key
     /// with NIP-44.
     Nostr { pubkey: String, ciphertext: String },
+    /// A connected app. The vault key as base64, encrypted with NIP-44
+    /// from a random key to the public key of the app. `sender` is the
+    /// public key of the random key (ADR 0058 item 5).
+    App {
+        app_id: i64,
+        sender: String,
+        ciphertext: String,
+    },
 }
 
 /// A wrapper whose key comes from Argon2id.
@@ -128,22 +136,70 @@ impl VaultFile {
     }
 
     /// The unlock methods of the vault. The result has no salt and no
-    /// ciphertext.
+    /// ciphertext. A wrapper of a connected app is not a method of the
+    /// user.
     #[must_use]
     pub fn methods(&self) -> Vec<VaultMethod> {
         self.wrappers
             .iter()
-            .map(|w| match w {
-                Wrapper::Passphrase(_) => VaultMethod::Passphrase,
-                Wrapper::Recovery(_) | Wrapper::RecoveryHkdf(_) => VaultMethod::Recovery,
-                Wrapper::Nostr { pubkey, .. } => VaultMethod::Nostr {
+            .filter_map(|w| match w {
+                Wrapper::Passphrase(_) => Some(VaultMethod::Passphrase),
+                Wrapper::Recovery(_) | Wrapper::RecoveryHkdf(_) => Some(VaultMethod::Recovery),
+                Wrapper::Nostr { pubkey, .. } => Some(VaultMethod::Nostr {
                     pubkey: pubkey.clone(),
-                },
-                Wrapper::Passkey { credential_id, .. } => VaultMethod::Passkey {
+                }),
+                Wrapper::Passkey { credential_id, .. } => Some(VaultMethod::Passkey {
                     credential_id: credential_id.clone(),
-                },
+                }),
+                Wrapper::App { .. } => None,
             })
             .collect()
+    }
+
+    /// The public key of the random key and the NIP-44 ciphertext of the
+    /// wrapper for a connected app.
+    #[must_use]
+    pub fn app_wrapper(&self, app_id: i64) -> Option<(&str, &str)> {
+        self.wrappers.iter().find_map(|w| match w {
+            Wrapper::App {
+                app_id: id,
+                sender,
+                ciphertext,
+            } if *id == app_id => Some((sender.as_str(), ciphertext.as_str())),
+            _ => None,
+        })
+    }
+
+    /// The IDs of the connected apps that have a wrapper.
+    #[must_use]
+    pub fn app_ids(&self) -> Vec<i64> {
+        self.wrappers
+            .iter()
+            .filter_map(|w| match w {
+                Wrapper::App { app_id, .. } => Some(*app_id),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Keep the wrapper of a connected app. It replaces an older wrapper
+    /// of the same app.
+    pub fn set_app_wrapper(&mut self, app_id: i64, sender: &str, ciphertext: &str) {
+        self.remove_app_wrapper(app_id);
+        self.wrappers.push(Wrapper::App {
+            app_id,
+            sender: sender.to_owned(),
+            ciphertext: ciphertext.to_owned(),
+        });
+    }
+
+    /// Remove the wrapper of a connected app. Gives `true` when the vault
+    /// had it.
+    pub fn remove_app_wrapper(&mut self, app_id: i64) -> bool {
+        let before = self.wrappers.len();
+        self.wrappers
+            .retain(|w| !matches!(w, Wrapper::App { app_id: id, .. } if *id == app_id));
+        before != self.wrappers.len()
     }
 
     /// Read a vault from JSON.

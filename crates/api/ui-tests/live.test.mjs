@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary, liveProblems,
   startToIso, isoToLocalInput, grantLimit, grantActive, grantSummary, grantWriteText,
+  hostUsesSigner, grantBoxState,
 } from '../ui/live.js';
 
 const link = { href: 'https://example.com/show', label: 'Watch' };
@@ -120,4 +121,25 @@ test('the text of a granted write names the app, the change and the time', () =>
   assert.equal(grantWriteText(write('end'), stamp), 'Show tool · Ended the show · t9');
   assert.equal(grantWriteText(write('set_live_value'), stamp), 'Show tool · Set the live value · t9');
   assert.equal(grantWriteText(write('remove_live_value'), stamp), 'Show tool · Removed the live value · t9');
+});
+
+test('the grant box is disabled for a host with My signer, with the reason', () => {
+  const state = grantBoxState(true);
+  assert.equal(state.disabled, true);
+  assert.equal(
+    state.note,
+    'Connected apps cannot write to a host with My signer, because no person is present to sign.',
+  );
+  assert.deepEqual(grantBoxState(false), { disabled: false, note: null });
+});
+
+test('an nsite or Blossom host uses My signer unless its key is in the vault', () => {
+  const row = (kind, config) => ({ id: 1, kind, config: JSON.stringify(config) });
+  assert.equal(hostUsesSigner(row('nsite', { signing: 'signer' })), true);
+  assert.equal(hostUsesSigner(row('blossom', { signing: 'signer' })), true);
+  assert.equal(hostUsesSigner(row('nsite', { signing: 'vault' })), false);
+  assert.equal(hostUsesSigner(row('sftp', { signing: 'signer' })), false);
+  assert.equal(hostUsesSigner(row('s3', {})), false);
+  assert.equal(hostUsesSigner({ kind: 'nsite', config: 'not json' }), false);
+  assert.equal(hostUsesSigner(undefined), false);
 });

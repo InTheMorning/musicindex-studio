@@ -255,6 +255,28 @@ CREATE TABLE connected_apps (
     created_at INTEGER NOT NULL
 );
 ",
+    r"
+CREATE TABLE draft_grants (
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    item_guid TEXT NOT NULL,
+    PRIMARY KEY (feed_id, item_guid)
+);
+CREATE TABLE show_grants (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    item_guid TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    UNIQUE (feed_id, item_guid)
+);
+CREATE TABLE grant_writes (
+    id INTEGER PRIMARY KEY,
+    grant_id INTEGER NOT NULL REFERENCES show_grants(id) ON DELETE CASCADE,
+    app_name TEXT NOT NULL,
+    change TEXT NOT NULL,
+    written_at INTEGER NOT NULL
+);
+",
 ];
 
 /// The schema version that this code writes.
@@ -1652,8 +1674,64 @@ impl Collection {
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn delete_draft(&self, id: FeedId) -> Result<(), CollectionError> {
+        // The grants that the draft asks for go out with the draft
+        // (ADR 0054 item 12).
+        self.remove_draft_grants(id)?;
         self.db
             .execute("DELETE FROM drafts WHERE feed_id = ?1", [id.0])?;
+        Ok(())
+    }
+
+    /// Keep a show grant that the draft of a feed asks for (ADR 0054
+    /// item 11). A grant that is there already does not change.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_draft_grant(&self, feed: FeedId, item_guid: &str) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT OR IGNORE INTO draft_grants (feed_id, item_guid) VALUES (?1, ?2)",
+            params![feed.0, item_guid],
+        )?;
+        Ok(())
+    }
+
+    /// Remove a show grant from the draft of a feed. A grant that is not
+    /// there gives no error.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_grant(&self, feed: FeedId, item_guid: &str) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM draft_grants WHERE feed_id = ?1 AND item_guid = ?2",
+            params![feed.0, item_guid],
+        )?;
+        Ok(())
+    }
+
+    /// The item GUID of each show grant that the draft of a feed asks for,
+    /// in the sequence of the GUIDs.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn draft_grants(&self, feed: FeedId) -> Result<Vec<String>, CollectionError> {
+        let mut statement = self
+            .db
+            .prepare("SELECT item_guid FROM draft_grants WHERE feed_id = ?1 ORDER BY item_guid")?;
+        let rows = statement.query_map([feed.0], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Remove each show grant that the draft of a feed asks for.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_grants(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db
+            .execute("DELETE FROM draft_grants WHERE feed_id = ?1", [feed.0])?;
         Ok(())
     }
 
@@ -3624,6 +3702,51 @@ mod tests {
             crate::apps::app_for_token(&collection, &token)
                 .unwrap()
                 .is_some()
+        );
+    }
+    #[test]
+    fn a_database_at_the_previous_schema_version_gets_the_grant_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = MIGRATIONS.len() - 1;
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        drop(db);
+
+        let mut collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        let feed = collection.add_feed(None, None).unwrap();
+        collection.add_draft_grant(feed, "b").unwrap();
+        collection.add_draft_grant(feed, "a").unwrap();
+        collection.add_draft_grant(feed, "a").unwrap();
+        assert_eq!(collection.draft_grants(feed).unwrap(), ["a", "b"]);
+        collection.remove_draft_grant(feed, "b").unwrap();
+        assert_eq!(collection.draft_grants(feed).unwrap(), ["a"]);
+        // The grants of the draft go out with the draft.
+        collection.delete_draft(feed).unwrap();
+        assert_eq!(collection.draft_grants(feed).unwrap(), Vec::<String>::new());
+
+        crate::grant::record(&collection, feed, "a", 1).unwrap();
+        let grant = crate::grant::grant_for(&collection, feed, "a")
+            .unwrap()
+            .unwrap();
+        crate::grant::add_write(
+            &collection,
+            grant.id,
+            "Tool",
+            &crate::grant::GrantChange::GoLive,
+            2,
+        )
+        .unwrap();
+        collection.delete_feed(feed).unwrap();
+        assert_eq!(crate::grant::grant(&collection, grant.id).unwrap(), None);
+        assert_eq!(
+            crate::grant::writes(&collection, grant.id).unwrap(),
+            Vec::new()
         );
     }
 }

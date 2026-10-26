@@ -134,6 +134,11 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
             "/feeds/{id}/live-items/{guid}/status",
             post(routes::set_live_status),
         )
+        .route("/feeds/{id}/grants", get(routes::list_feed_grants))
+        .route(
+            "/feeds/{id}/grants/{guid}",
+            put(routes::put_draft_grant).delete(routes::delete_draft_grant),
+        )
         .route("/feeds/{id}/diff", get(routes::get_diff))
         .route("/feeds/{id}/write", post(routes::write_feed))
         .route("/feeds/{id}/snapshots", get(routes::list_snapshots))
@@ -157,10 +162,17 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         .route("/apps", get(routes::list_apps).post(routes::add_app))
         .route("/apps/{id}", delete(routes::remove_app))
         .with_state(Arc::clone(&shared));
-    // The routes for connected apps (ADR 0054 item 8). The outer layer
+    // The routes for connected apps (ADR 0054 items 8 and 15). The outer layer
     // checks the loopback `Host` only. The app layer checks the app token.
     let app_api = Router::new()
         .route("/whoami", get(routes::whoami))
+        .route("/shows", get(routes::list_shows))
+        .route("/shows/{grant_id}/status", post(routes::set_show_status))
+        .route(
+            "/shows/{grant_id}/live-value",
+            put(routes::put_show_live_value).delete(routes::delete_show_live_value),
+        )
+        .with_state(Arc::clone(&shared))
         .layer(middleware::from_fn_with_state(shared, routes::app_check));
     Router::new()
         .route("/", get(ui::index))

@@ -26,6 +26,7 @@ use studio_core::discover::PublicFeed;
 use studio_core::download;
 use studio_core::feed::{Entry, Feed, Recipient};
 use studio_core::folder_scan;
+use studio_core::grant;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::{self, Library};
 use studio_core::live::{self, LiveStatus};
@@ -2054,6 +2055,7 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
         "feed_move": diff.feed_move,
         "announcements": diff.announcements,
         "announce_skip": diff.announce_skip,
+        "grants": diff.grants,
         "events": diff
             .events
             .iter()
@@ -4195,4 +4197,269 @@ pub(crate) async fn app_check(
 /// The app that the token names. It tests the layer of `/app/v1/`.
 pub(crate) async fn whoami(Extension(app): Extension<ConnectedApp>) -> Json<Value> {
     Json(json!({ "id": app.id, "name": app.name }))
+}
+
+// ---- Show grants (ADR 0054 items 11 to 17) ----
+
+/// The time of the computer, in seconds since the Unix epoch.
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Add a show grant to the draft or remove it, and give the new diff, so
+/// that the review sheet needs no second request. The guid must be a
+/// `pending` live item of the draft. The route never writes to a host.
+fn change_draft_grant(w: &Workspace, id: i64, guid: &str, add: bool) -> ApiResult {
+    let id = FeedId(id);
+    ensure_draft(w, id)?;
+    let (model, _) = pipeline::draft_model(&w.collection, id)?;
+    if !grant::is_pending_live_item(&model, guid) {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_grant",
+            "only a pending live show of the draft can get a grant",
+        ));
+    }
+    if add {
+        w.collection.add_draft_grant(id, guid)?;
+    } else {
+        w.collection.remove_draft_grant(id, guid)?;
+    }
+    diff_json(w, id)
+}
+
+/// Ask for a show grant in the draft (ADR 0054 item 11).
+pub(crate) async fn put_draft_grant(
+    State(shared): State<Shared>,
+    Path((id, guid)): Path<(i64, String)>,
+) -> ApiResult {
+    blocking(shared, move |w| change_draft_grant(w, id, &guid, true)).await
+}
+
+/// Remove a show grant from the draft (ADR 0054 item 11).
+pub(crate) async fn delete_draft_grant(
+    State(shared): State<Shared>,
+    Path((id, guid)): Path<(i64, String)>,
+) -> ApiResult {
+    blocking(shared, move |w| change_draft_grant(w, id, &guid, false)).await
+}
+
+/// The show grants of a feed with their granted writes, for the live item
+/// page (ADR 0054 item 17).
+pub(crate) async fn list_feed_grants(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        w.collection.feed(id)?;
+        let mut list = Vec::new();
+        for show in grant::grants(&w.collection, id)? {
+            let writes = grant::writes(&w.collection, show.id)?;
+            list.push(json!({
+                "id": show.id,
+                "item_guid": show.item_guid,
+                "created_at": show.created_at,
+                "ended_at": show.ended_at,
+                "writes": writes
+                    .iter()
+                    .map(|write| json!({
+                        "app_name": write.app_name,
+                        "change": write.change,
+                        "written_at": write.written_at,
+                    }))
+                    .collect::<Vec<_>>(),
+            }));
+        }
+        Ok(Json(Value::Array(list)))
+    })
+    .await
+}
+
+/// The feed that the host of a feed gives now, or `None` when the feed has
+/// no host or no file. A host that needs the locked vault gives 423
+/// `vault_locked`.
+fn hosted_feed(w: &Workspace, hosts: &Hosts, id: FeedId) -> Result<Option<Feed>, ApiError> {
+    let row = w.collection.feed(id)?;
+    let (Some(connector_id), Some(path)) = (row.connector_id, row.path.as_deref()) else {
+        return Ok(None);
+    };
+    let Some(file) = hosts.get(connector_id)?.read(path)? else {
+        return Ok(None);
+    };
+    let doc = studio_core::xml::Document::parse_bytes(&file.bytes)
+        .map_err(|e| ApiError::from(pipeline::PipelineError::from(e)))?;
+    let feed = Feed::read(&doc).map_err(|e| ApiError::from(pipeline::PipelineError::from(e)))?;
+    Ok(Some(feed))
+}
+
+/// Each active show grant, for a connected app (ADR 0054 item 8). The route
+/// reads the hosted file of each feed with a grant, so a host that needs
+/// the locked vault gives 423 `vault_locked`.
+pub(crate) async fn list_shows(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        let hosts = w.hosts()?;
+        let now = unix_now();
+        let mut read: std::collections::HashMap<FeedId, Option<Feed>> =
+            std::collections::HashMap::new();
+        let mut shows = Vec::new();
+        for show in grant::open_grants(&w.collection)? {
+            if let std::collections::hash_map::Entry::Vacant(entry) = read.entry(show.feed_id) {
+                entry.insert(hosted_feed(w, &hosts, show.feed_id)?);
+            }
+            let Some(Some(hosted)) = read.get(&show.feed_id) else {
+                continue;
+            };
+            if grant::active(&w.collection, show.feed_id, &show.item_guid, hosted, now)?.is_none() {
+                continue;
+            }
+            let Some(live) = grant::live_item(hosted, &show.item_guid) else {
+                continue;
+            };
+            let row = w.collection.feed(show.feed_id)?;
+            shows.push(json!({
+                "grant_id": show.id,
+                "feed_id": show.feed_id,
+                "feed_title": row.title,
+                "item_guid": show.item_guid,
+                "title": live.item.title,
+                "status": live.status,
+                "start": live.start,
+                "end": live.end,
+                "live_value": live.live_value,
+            }));
+        }
+        Ok(Json(Value::Array(shows)))
+    })
+    .await
+}
+
+/// Write one granted change for a connected app (ADR 0054 items 15 and
+/// 16). Give the version, the status and the live value after the write.
+/// The app never gets a secret: the connectors get their secrets from the
+/// open vault only.
+fn granted_change(
+    w: &mut Workspace,
+    grant_id: i64,
+    app: &ConnectedApp,
+    change: &grant::GrantChange,
+) -> ApiResult {
+    let show = grant::grant(&w.collection, grant_id)?.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            "no_grant",
+            format!("show grant {grant_id} does not exist"),
+        )
+    })?;
+    let now = unix_now();
+    // The diff of the granted write makes its signing plan at `now`.
+    let hosts = w.hosts_with(Signing {
+        plan_time: Some(now),
+        signed: Vec::new(),
+    })?;
+    let library = w.library()?;
+    let addresses: &dyn pipeline::AddressCheck = match &w.address_check {
+        Some(check) => check.0.as_ref(),
+        None => &w.web,
+    };
+    let version = pipeline::write_granted(
+        &mut w.collection,
+        &hosts,
+        &library,
+        addresses,
+        show.feed_id,
+        &show.item_guid,
+        change,
+        &app.name,
+        now,
+    )?;
+    // The write put its announcements into the queue (ADR 0052).
+    w.announcer.wake();
+    let hosted = hosted_feed(w, &hosts, show.feed_id)?;
+    if let Some(feed) = &hosted {
+        w.record_remote_files(show.feed_id, feed);
+    }
+    let live = hosted
+        .as_ref()
+        .and_then(|feed| grant::live_item(feed, &show.item_guid));
+    Ok(Json(json!({
+        "version": version.as_str(),
+        "status": live.and_then(|l| l.status.clone()),
+        "live_value": live.and_then(|l| l.live_value.clone()),
+    })))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ShowStatus {
+    status: String,
+}
+
+/// Start or end a show through its grant: `live` or `ended`.
+pub(crate) async fn set_show_status(
+    State(shared): State<Shared>,
+    Extension(app): Extension<ConnectedApp>,
+    Path(grant_id): Path<i64>,
+    Json(body): Json<ShowStatus>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let change = match body.status.as_str() {
+            "live" => grant::GrantChange::GoLive,
+            "ended" => grant::GrantChange::End,
+            _ => {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "bad_status",
+                    "the status is live or ended",
+                ));
+            }
+        };
+        granted_change(w, grant_id, &app, &change)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ShowLiveValue {
+    uri: String,
+    protocol: String,
+}
+
+/// Set or change the `podcast:liveValue` of a show through its grant.
+pub(crate) async fn put_show_live_value(
+    State(shared): State<Shared>,
+    Extension(app): Extension<ConnectedApp>,
+    Path(grant_id): Path<i64>,
+    Json(body): Json<ShowLiveValue>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let uri = body.uri.trim();
+        let protocol = body.protocol.trim();
+        if uri.is_empty() || protocol.is_empty() {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_live_value",
+                "give the uri and the protocol of the live value",
+            ));
+        }
+        let change = grant::GrantChange::SetLiveValue {
+            uri: uri.to_owned(),
+            protocol: protocol.to_owned(),
+        };
+        granted_change(w, grant_id, &app, &change)
+    })
+    .await
+}
+
+/// Remove the `podcast:liveValue` of a show through its grant.
+pub(crate) async fn delete_show_live_value(
+    State(shared): State<Shared>,
+    Extension(app): Extension<ConnectedApp>,
+    Path(grant_id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        granted_change(w, grant_id, &app, &grant::GrantChange::RemoveLiveValue)
+    })
+    .await
 }

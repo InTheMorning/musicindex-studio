@@ -6003,3 +6003,259 @@ async fn whoami_needs_the_token_of_a_connected_app() {
     let (status, _, _) = send(&app, bearer_request("/app/v1/whoami", Some(&token), HOST)).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+/// A request of a connected app, with its token and a JSON body.
+async fn app_call(
+    app: &App,
+    method: &str,
+    path: &str,
+    token: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::HOST, HOST)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"));
+    let request = match body {
+        Some(body) => builder
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap(),
+        None => builder.body(Body::empty()).unwrap(),
+    };
+    let (status, value, _) = send(app, request).await;
+    (status, value)
+}
+
+/// Write a pending show with its draft grant, and add a connected app.
+/// Gives the `guid` of the show and the token of the app.
+async fn granted_show(app: &App, id: i64) -> (String, String) {
+    let base = format!("/api/v1/feeds/{id}");
+    // The start is far in the future, so that the grant is active at the
+    // time of the test.
+    let (status, draft) = call(
+        app,
+        "POST",
+        &format!("{base}/live-items"),
+        Some(json!({ "title": "Show", "start": "2099-11-01T10:00:00Z" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    let guid = draft["model"]["live_items"][0]["item"]["guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["content_links"] =
+        json!([{ "href": "https://example.com/show", "label": "Watch" }]);
+    let (status, _) = call(
+        app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = call(app, "PUT", &format!("{base}/grants/t-1"), None).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_grant");
+    let (status, diff) = call(app, "DELETE", &format!("{base}/grants/{guid}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["grants"], json!([]));
+    let (status, diff) = call(app, "PUT", &format!("{base}/grants/{guid}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["grants"], json!([guid]));
+    let (status, body) = call(
+        app,
+        "POST",
+        &format!("{base}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(live(app).contains("status=\"pending\""));
+
+    let (status, body) = call(
+        app,
+        "POST",
+        "/api/v1/apps",
+        Some(json!({"name": "Show tool"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    (guid, body["token"].as_str().unwrap().to_owned())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the test is one sequence of app requests"
+)]
+async fn a_connected_app_starts_a_show_sets_its_live_value_and_ends_it() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (guid, token) = granted_show(&app, id).await;
+
+    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
+    assert_eq!(status, StatusCode::OK, "{shows}");
+    assert_eq!(shows.as_array().unwrap().len(), 1);
+    let show = &shows[0];
+    assert_eq!(show["feed_id"], id);
+    assert_eq!(show["feed_title"], "Album");
+    assert_eq!(show["item_guid"], guid.as_str());
+    assert_eq!(show["title"], "Show");
+    assert_eq!(show["status"], "pending");
+    assert_eq!(show["start"], "2099-11-01T10:00:00Z");
+    assert_eq!(show["end"], Value::Null);
+    assert_eq!(show["live_value"], Value::Null);
+    let grant_id = show["grant_id"].as_i64().unwrap();
+    let path = format!("/app/v1/shows/{grant_id}");
+
+    // The access token of the UI does not open an app route.
+    let (status, _) = app_call(&app, "GET", "/app/v1/shows", TOKEN, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, body) = app_call(
+        &app,
+        "POST",
+        &format!("/app/v1/shows/{}/status", grant_id + 100),
+        &token,
+        Some(json!({ "status": "live" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "no_grant");
+    let (status, body) = app_call(
+        &app,
+        "POST",
+        &format!("{path}/status"),
+        &token,
+        Some(json!({ "status": "pending" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "bad_status");
+    let (status, body) = app_call(
+        &app,
+        "POST",
+        &format!("{path}/status"),
+        &token,
+        Some(json!({ "status": "ended" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "bad_status");
+
+    let (status, body) = app_call(
+        &app,
+        "POST",
+        &format!("{path}/status"),
+        &token,
+        Some(json!({ "status": "live" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "live");
+    assert_eq!(body["live_value"], Value::Null);
+    assert!(body["version"].is_string());
+    assert!(live(&app).contains("status=\"live\""));
+
+    let value = json!({ "uri": "wss://example.com/value", "protocol": "socket.io" });
+    let (status, body) = app_call(
+        &app,
+        "PUT",
+        &format!("{path}/live-value"),
+        &token,
+        Some(value),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["live_value"]["uri"], "wss://example.com/value");
+    assert_eq!(body["live_value"]["protocol"], "socket.io");
+    let xml = live(&app);
+    assert!(xml.contains("uri=\"wss://example.com/value\""), "{xml}");
+    assert!(xml.contains("protocol=\"socket.io\""), "{xml}");
+
+    let (status, body) =
+        app_call(&app, "DELETE", &format!("{path}/live-value"), &token, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["live_value"], Value::Null);
+    assert!(!live(&app).contains("liveValue"));
+
+    let (status, body) = app_call(
+        &app,
+        "POST",
+        &format!("{path}/status"),
+        &token,
+        Some(json!({ "status": "ended" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "ended");
+    let xml = live(&app);
+    assert!(xml.contains("status=\"ended\""), "{xml}");
+    assert!(xml.contains(&guid), "{xml}");
+
+    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(shows, json!([]));
+    let (status, body) =
+        app_call(&app, "DELETE", &format!("{path}/live-value"), &token, None).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "grant_ended");
+
+    let (status, grants) = call(&app, "GET", &format!("/api/v1/feeds/{id}/grants"), None).await;
+    assert_eq!(status, StatusCode::OK, "{grants}");
+    assert_eq!(grants[0]["id"], grant_id);
+    assert_eq!(grants[0]["item_guid"], guid.as_str());
+    assert!(grants[0]["ended_at"].is_i64());
+    let changes: Vec<&str> = grants[0]["writes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| {
+            assert_eq!(w["app_name"], "Show tool");
+            w["change"].as_str().unwrap()
+        })
+        .collect();
+    assert_eq!(
+        changes,
+        ["go_live", "set_live_value", "remove_live_value", "end"]
+    );
+}
+
+#[tokio::test]
+async fn a_granted_change_while_the_user_has_a_changed_draft_gives_draft_open() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (_, token) = granted_show(&app, id).await;
+    let (_, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
+    let grant_id = shows[0]["grant_id"].as_i64().unwrap();
+    let draft = draft_model(&app, id).await;
+    let (status, edited) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let mut model = draft.clone();
+    model["title"] = json!("Album (Deluxe)");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/draft"),
+        Some(json!({ "revision": edited["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let before = live(&app);
+    let (status, body) = app_call(
+        &app,
+        "POST",
+        &format!("/app/v1/shows/{grant_id}/status"),
+        &token,
+        Some(json!({ "status": "live" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["code"], "draft_open");
+    assert_eq!(live(&app), before);
+    assert_eq!(draft_model(&app, id).await["title"], "Album (Deluxe)");
+}

@@ -162,6 +162,11 @@ impl From<PipelineError> for ApiError {
                 (StatusCode::UNPROCESSABLE_ENTITY, "signature_invalid")
             }
             PipelineErrorKind::PlanExpired => (StatusCode::CONFLICT, "plan_expired"),
+            // ADR 0054 items 13 to 16: the refusals of a granted write.
+            PipelineErrorKind::GrantNotActive => (StatusCode::CONFLICT, "grant_ended"),
+            PipelineErrorKind::DraftOpen => (StatusCode::CONFLICT, "draft_open"),
+            PipelineErrorKind::BadStatus => (StatusCode::CONFLICT, "bad_status"),
+            PipelineErrorKind::NotCovered => (StatusCode::UNPROCESSABLE_ENTITY, "not_covered"),
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())

@@ -21,9 +21,11 @@ use crate::connector::{
 };
 use crate::digest::sha256_hex;
 use crate::feed::{Feed, FeedError};
+use crate::grant::{self, GrantChange};
 use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::{Library, file_stamp};
+use crate::live::{self, LiveStatus};
 use crate::xml::{Document, ParseError};
 
 /// The kind of a [`PipelineError`].
@@ -90,6 +92,18 @@ pub enum PipelineErrorKind {
     /// The signing plan of the feed is missing, or it expired. The user
     /// must review the diff again (ADR 0050 item 12).
     PlanExpired,
+    /// The live item has no show grant, or its grant ended (ADR 0054
+    /// item 14).
+    GrantNotActive,
+    /// The feed has a draft with a change that the user can approve, so a
+    /// granted write cannot occur (ADR 0054 item 16).
+    DraftOpen,
+    /// The granted change makes a change that the grant does not cover
+    /// (ADR 0054 item 13).
+    NotCovered,
+    /// The status of the live item cannot change to the requested status
+    /// (ADR 0054 item 5).
+    BadStatus,
 }
 
 /// An error from the write pipeline.
@@ -279,6 +293,10 @@ pub struct Diff {
     /// Each Nostr event that the write signs, with no signature
     /// (ADR 0050 item 11).
     pub events: Vec<DiffEvent>,
+    /// The `guid` of each live item that the write gives a show grant: each
+    /// grant of the draft for a `pending` live item of the draft
+    /// (ADR 0054 item 11).
+    pub grants: Vec<String>,
 }
 
 /// How the host from before points to the new address of the feed XML
@@ -895,6 +913,8 @@ pub fn diff_at(
     let (announcements, announce_skip) =
         plan_announcements(collection, hosts, &feed_row, feed_move.as_ref())?;
     extra.extend(announce_bytes(&announcements, announce_skip));
+    let grants = draft_grant_list(collection, id, &feed)?;
+    extra.extend(grant_bytes(&grants));
     let files = upload_files(collection, &operations)?;
     let diff_id = diff_id(&draft, &extra);
     let changes = host_changes(
@@ -948,6 +968,7 @@ pub fn diff_at(
         announcements,
         announce_skip,
         events,
+        grants,
     })
 }
 
@@ -1175,6 +1196,49 @@ fn announce_bytes(planned: &[PlannedAnnouncement], skip: Option<AnnounceSkip>) -
     if let Some(skip) = skip {
         bytes.push(0);
         bytes.extend_from_slice(skip.as_str().as_bytes());
+    }
+    bytes
+}
+
+/// The `guid` of each live item of `feed` that gets a show grant at the
+/// write: each grant of the draft for a `pending` live item of `feed`, in
+/// the sequence of the live items (ADR 0054 item 11). [`diff_at`] and
+/// [`write_draft_signed`] both call this function.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn draft_grant_list(
+    collection: &Collection,
+    id: FeedId,
+    feed: &Feed,
+) -> Result<Vec<String>, PipelineError> {
+    let asked: HashSet<String> = collection.draft_grants(id)?.into_iter().collect();
+    let mut grants: Vec<String> = Vec::new();
+    for entry in &feed.live_items {
+        let Some(guid) = entry.value.item.guid.as_deref() else {
+            continue;
+        };
+        if asked.contains(guid)
+            && grant::is_pending_live_item(feed, guid)
+            && !grants.iter().any(|g| g == guid)
+        {
+            grants.push(guid.to_owned());
+        }
+    }
+    Ok(grants)
+}
+
+/// The bytes that [`diff_id`] adds for the show grants, in the form of
+/// [`announce_bytes`]. A change of a grant of the draft after the diff
+/// changes the ID (ADR 0054 item 11).
+fn grant_bytes(grants: &[String]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.push(0);
+    bytes.extend_from_slice(b"grants");
+    for guid in grants {
+        bytes.push(0);
+        bytes.extend_from_slice(guid.as_bytes());
     }
     bytes
 }
@@ -1963,6 +2027,8 @@ pub fn write_draft_signed(
     let (announcements, announce_skip) =
         plan_announcements(collection, hosts, &row, feed_move.as_ref())?;
     extra.extend(announce_bytes(&announcements, announce_skip));
+    let grants = draft_grant_list(collection, id, &feed)?;
+    extra.extend(grant_bytes(&grants));
     if &diff_id(&draft, &extra) != approved {
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
@@ -2114,11 +2180,18 @@ pub fn write_draft_signed(
     )?;
     finish_hosts(collection, hosts, &deleted_on)?;
 
-    // Step 5: the draft, its host operations and its feed move go out.
+    // Step 5: the draft, its host operations, its feed move and its
+    // grants go out.
     collection.remove_draft_operations(id)?;
     collection.remove_draft_feed_move(id)?;
     collection.remove_signing_plan(id)?;
     collection.delete_draft(id)?;
+
+    // The write records the grants of the diff (ADR 0054 item 12). It ends
+    // each grant whose live item is not in the written feed, or has the
+    // status `ended` (ADR 0054 item 14). This occurs before the scans, so
+    // that a failed scan does not lose the record.
+    record_grants(collection, id, &feed, &grants, now)?;
 
     // Step 6: the feed is written, and each step on a host passed. The
     // announcements go into the queue before the scans, so that a failed
@@ -2130,6 +2203,307 @@ pub fn write_draft_signed(
     }
 
     Ok(version)
+}
+
+/// Write one change that a show grant covers, with no diff that the user
+/// examines (ADR 0054 items 15 and 16). `now` is the time in seconds since
+/// the Unix epoch.
+///
+/// The steps are:
+///
+/// 1. The grant of the live item must be active at `now`, with the feed
+///    that the host gives now.
+/// 2. A draft of the user with no change goes out. A draft with a change
+///    stops the write, and it does not change.
+/// 3. Studio makes a draft from the hosted file, and applies `change` to
+///    it.
+/// 4. The draft must change only what the grant covers
+///    ([`grant::covered`]). The write must also have no host operation and
+///    no feed move.
+/// 5. Studio makes the diff and writes it through [`write_draft_signed`],
+///    with the ID of that diff. The snapshot, the conflict check and the
+///    announcements are the same as for each write.
+/// 6. Studio records the granted write. After [`GrantChange::End`], the
+///    grant ends.
+///
+/// After step 3, each error removes the draft of step 3 and its signing
+/// plan. Thus the feed keeps no draft that the user did not make.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::GrantNotActive`] when the grant is not
+/// active. Gives [`PipelineErrorKind::DraftOpen`] when the feed has a draft
+/// with a change. Gives [`PipelineErrorKind::BadStatus`] when the status
+/// cannot change to the requested status. Gives
+/// [`PipelineErrorKind::NotCovered`] when the draft changes more than the
+/// grant covers. Also gives the errors of [`write_draft_signed`], such as
+/// [`PipelineErrorKind::VaultLocked`] and [`PipelineErrorKind::Conflict`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the write needs the arguments of write_draft and the grant"
+)]
+pub fn write_granted(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    feed_id: FeedId,
+    item_guid: &str,
+    change: &GrantChange,
+    app_name: &str,
+    now: u64,
+) -> Result<Version, PipelineError> {
+    let apply = |feed: &mut Feed| apply_grant_change(feed, item_guid, change);
+    let version = write_granted_with(
+        collection, hosts, library, addresses, feed_id, item_guid, apply, now,
+    )?;
+    let grant = grant::grant_for(collection, feed_id, item_guid)?.ok_or_else(|| {
+        PipelineError::new(PipelineErrorKind::GrantNotActive, "the grant is not there")
+    })?;
+    let written_at = i64::try_from(now).unwrap_or(i64::MAX);
+    // Step 6: the record of the granted write (ADR 0054 item 17).
+    grant::add_write(collection, grant.id, app_name, change, written_at)?;
+    if *change == GrantChange::End {
+        grant::end(collection, grant.id, written_at)?;
+    }
+    Ok(version)
+}
+
+/// The same as the steps 1 to 5 of [`write_granted`], with a change of the
+/// typed model in place of a [`GrantChange`]. A test uses it to make a
+/// change that the grant does not cover. Step 4 still refuses that change.
+///
+/// # Errors
+///
+/// Gives the errors of [`write_granted`].
+#[cfg(any(test, feature = "testing"))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the function has the arguments of write_granted"
+)]
+pub fn write_granted_edit(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    feed_id: FeedId,
+    item_guid: &str,
+    edit: impl FnOnce(&mut Feed) -> Result<(), PipelineError>,
+    now: u64,
+) -> Result<Version, PipelineError> {
+    write_granted_with(
+        collection, hosts, library, addresses, feed_id, item_guid, edit, now,
+    )
+}
+
+/// Apply a granted change to the live item with this `guid`.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::GrantNotActive`] when the feed has no such
+/// live item, and [`PipelineErrorKind::BadStatus`] when the status cannot
+/// change to the requested status.
+fn apply_grant_change(
+    feed: &mut Feed,
+    item_guid: &str,
+    change: &GrantChange,
+) -> Result<(), PipelineError> {
+    let live_item = feed
+        .live_items
+        .iter_mut()
+        .map(|entry| &mut entry.value)
+        .find(|live| live.item.guid.as_deref() == Some(item_guid))
+        .ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::GrantNotActive,
+                format!("the hosted feed has no live item {item_guid}"),
+            )
+        })?;
+    let bad_status = |error: live::LiveError| {
+        PipelineError::new(PipelineErrorKind::BadStatus, error.to_string())
+    };
+    match change {
+        GrantChange::GoLive => live::set_status(live_item, LiveStatus::Live).map_err(bad_status),
+        GrantChange::End => live::set_status(live_item, LiveStatus::Ended).map_err(bad_status),
+        GrantChange::SetLiveValue { uri, protocol } => {
+            live_item.live_value = Some(crate::feed::LiveValue {
+                uri: Some(uri.clone()),
+                protocol: Some(protocol.clone()),
+            });
+            Ok(())
+        }
+        GrantChange::RemoveLiveValue => {
+            live_item.live_value = None;
+            Ok(())
+        }
+    }
+}
+
+/// The steps 1 to 5 of [`write_granted`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the function has the arguments of write_granted"
+)]
+fn write_granted_with(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    feed_id: FeedId,
+    item_guid: &str,
+    edit: impl FnOnce(&mut Feed) -> Result<(), PipelineError>,
+    now: u64,
+) -> Result<Version, PipelineError> {
+    let not_active = || {
+        PipelineError::new(
+            PipelineErrorKind::GrantNotActive,
+            format!("the show {item_guid} has no active grant"),
+        )
+    };
+    // Step 1: the grant must be active. A grant that ended needs no read
+    // of the host.
+    if grant::grant_for(collection, feed_id, item_guid)?
+        .is_none_or(|grant| grant.ended_at.is_some())
+    {
+        return Err(not_active());
+    }
+    let row = collection.feed(feed_id)?;
+    let (connector_id, path) = writable(&row)?;
+    let hosted = hosts
+        .get(connector_id)?
+        .read(path)?
+        .ok_or_else(not_active)?;
+    let hosted_doc = Document::parse_bytes(&hosted.bytes)?;
+    let hosted_feed = Feed::read(&hosted_doc)?;
+    if grant::active(collection, feed_id, item_guid, &hosted_feed, now)?.is_none() {
+        return Err(not_active());
+    }
+
+    // Step 2: a draft of the user never goes to a host through a grant.
+    if let Some(draft) = collection.draft(feed_id)? {
+        if user_draft_has_change(collection, feed_id, &draft, &hosted.bytes)? {
+            return Err(PipelineError::new(
+                PipelineErrorKind::DraftOpen,
+                "the feed has a draft with changes; write or discard the draft first",
+            ));
+        }
+        discard_draft(collection, feed_id)?;
+        collection.delete_draft(feed_id)?;
+    }
+
+    // Step 3: the draft of the grant, from the hosted file.
+    let draft = DraftRow {
+        base_version: Some(hosted.version.clone()),
+        base_xml: hosted.bytes.clone(),
+        draft_xml: hosted.bytes.clone(),
+    };
+    collection.save_draft(feed_id, &draft)?;
+    let result = (|| {
+        let mut doc = hosted_doc.clone();
+        let mut changed = hosted_feed.clone();
+        edit(&mut changed)?;
+        changed.write_hosted(&mut doc, Some(&hosted_doc))?;
+        let draft_xml = doc.write().into_bytes();
+        collection.save_draft(
+            feed_id,
+            &DraftRow {
+                draft_xml: draft_xml.clone(),
+                ..draft.clone()
+            },
+        )?;
+
+        // Step 4: the change must be one that the grant covers. The compare
+        // uses the model that Studio reads from the new draft bytes.
+        let after = Feed::read(&Document::parse_bytes(&draft_xml)?)?;
+        let not_covered = || {
+            PipelineError::new(
+                PipelineErrorKind::NotCovered,
+                "the change is not one that the show grant covers",
+            )
+        };
+        if !grant::covered(&hosted_feed, &after, item_guid) {
+            return Err(not_covered());
+        }
+
+        // Step 5: the diff and the write. A plan of an earlier diff does
+        // not apply to this draft.
+        collection.remove_signing_plan(feed_id)?;
+        let diff = diff_at(collection, hosts, library, feed_id, now)?;
+        if !diff.operations.is_empty() || !diff.blocked.is_empty() || diff.feed_move.is_some() {
+            return Err(not_covered());
+        }
+        write_draft_signed(
+            collection,
+            hosts,
+            library,
+            addresses,
+            feed_id,
+            &diff.id,
+            &[],
+            now,
+        )
+    })();
+    if result.is_err() {
+        // The feed keeps no draft that the user did not make.
+        discard_draft(collection, feed_id)?;
+        collection.delete_draft(feed_id)?;
+    }
+    result
+}
+
+/// True when the draft of the user has a change that the user can
+/// approve: different bytes than the hosted file, a host operation, a feed
+/// move, or a show grant for a `pending` live item of the draft.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn user_draft_has_change(
+    collection: &Collection,
+    id: FeedId,
+    draft: &DraftRow,
+    hosted: &[u8],
+) -> Result<bool, PipelineError> {
+    if draft.draft_xml != hosted
+        || !collection.draft_operations(id)?.is_empty()
+        || collection.draft_feed_move(id)?.is_some()
+    {
+        return Ok(true);
+    }
+    // The bytes are the bytes of the hosted file, so they are a feed.
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    Ok(!draft_grant_list(collection, id, &feed)?.is_empty())
+}
+
+/// Record the grants of a write, and end each grant that the written feed
+/// ends (ADR 0054 items 12 and 14).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn record_grants(
+    collection: &Collection,
+    id: FeedId,
+    written: &Feed,
+    grants: &[String],
+    now: u64,
+) -> Result<(), PipelineError> {
+    let now = i64::try_from(now).unwrap_or(i64::MAX);
+    for guid in grants {
+        grant::record(collection, id, guid, now)?;
+    }
+    for open in grant::grants(collection, id)? {
+        if open.ended_at.is_some() {
+            continue;
+        }
+        let ended = grant::live_item(written, &open.item_guid).is_none_or(|live| {
+            live.status.as_deref().and_then(LiveStatus::parse) == Some(LiveStatus::Ended)
+        });
+        if ended {
+            grant::end(collection, open.id, now)?;
+        }
+    }
+    Ok(())
 }
 
 /// Call `finish` on each host of `ids`, in the sequence of the host IDs.
@@ -2516,7 +2890,8 @@ fn delete_each_operation(
 }
 
 /// Remove the host operations that the user started in the draft of a
-/// feed (ADR 0036 item 12).
+/// feed (ADR 0036 item 12), and the show grants that the draft asks for
+/// (ADR 0054 item 11).
 ///
 /// A route calls this before it discards a draft, before it puts a new
 /// draft from a snapshot, and before it deletes a feed. Task 021e removes
@@ -2530,6 +2905,7 @@ pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), Pipeline
     collection.remove_draft_operations(id)?;
     collection.remove_draft_feed_move(id)?;
     collection.remove_signing_plan(id)?;
+    collection.remove_draft_grants(id)?;
     Ok(())
 }
 

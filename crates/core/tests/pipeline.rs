@@ -10,7 +10,8 @@ use studio_core::connector::{
     self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, HostChanges,
     KeptBlob, ListedFile, LocalFolder, NsiteHost, PlannedEvent, Stamp, Version,
 };
-use studio_core::feed::{Enclosure, Entry, Feed, Item};
+use studio_core::feed::{ContentLink, Enclosure, Entry, Feed, Item};
+use studio_core::grant::{self, GrantChange};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
@@ -2873,4 +2874,362 @@ fn a_live_item_with_no_content_link_does_not_write() {
     assert!(error.to_string().contains("This show has no content link."));
     assert_eq!(live(&s), FEED);
     assert_eq!(s.collection.snapshots(s.feed).unwrap(), Vec::new());
+}
+
+// ---- Show grants (task 033e, ADR 0054 items 11 to 17) ----
+
+/// The start and the end of the show of the grant tests.
+const SHOW_START: &str = "2026-11-01T10:00:00Z";
+const SHOW_END: &str = "2026-11-01T12:00:00Z";
+
+/// A time during the show, in seconds since the Unix epoch.
+fn during_show() -> u64 {
+    u64::try_from(grant::parse_time(SHOW_START).unwrap()).unwrap() + 60
+}
+
+/// A draft with a pending live item with a content link.
+fn draft_with_show(s: &Setup) -> String {
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let mut show = studio_core::live::new_live_item("Show", SHOW_START);
+    show.end = Some(SHOW_END.into());
+    show.content_links.push(Entry::new(ContentLink {
+        href: Some("https://example.com/show".into()),
+        label: "Watch".into(),
+    }));
+    let guid = show.item.guid.clone().unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.live_items.push(Entry::new(show));
+    })
+    .unwrap();
+    guid
+}
+
+/// Write a draft with a pending live item and its draft grant. Gives the
+/// `guid` of the live item.
+fn write_granted_show(s: &mut Setup) -> String {
+    let guid = draft_with_show(s);
+    s.collection.add_draft_grant(s.feed, &guid).unwrap();
+    let diff =
+        pipeline::diff_at(&s.collection, &s.hosts, &s.library, s.feed, during_show()).unwrap();
+    assert_eq!(diff.grants, std::slice::from_ref(&guid));
+    pipeline::write_draft_signed(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+        &[],
+        during_show(),
+    )
+    .unwrap();
+    guid
+}
+
+fn hosted_feed(s: &Setup) -> Feed {
+    Feed::read(&Document::parse(&live(s)).unwrap()).unwrap()
+}
+
+fn granted(
+    s: &mut Setup,
+    guid: &str,
+    change: &GrantChange,
+    now: u64,
+) -> Result<Version, pipeline::PipelineError> {
+    pipeline::write_granted(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        guid,
+        change,
+        "Show tool",
+        now,
+    )
+}
+
+#[test]
+fn a_written_draft_grant_becomes_an_active_grant_and_the_draft_grants_go_out() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    assert!(live(&s).contains("status=\"pending\""));
+    let hosted = hosted_feed(&s);
+    let active = grant::active(&s.collection, s.feed, &guid, &hosted, during_show())
+        .unwrap()
+        .unwrap();
+    assert_eq!(active.item_guid, guid);
+    assert_eq!(active.ended_at, None);
+    assert_eq!(
+        s.collection.draft_grants(s.feed).unwrap(),
+        Vec::<String>::new()
+    );
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+}
+
+#[test]
+fn a_draft_grant_for_an_item_that_is_not_pending_is_not_in_the_diff() {
+    let s = setup();
+    let guid = draft_with_show(&s);
+    s.collection
+        .add_draft_grant(s.feed, "no-such-item")
+        .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.grants, Vec::<String>::new());
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.live_items[0].value.status = Some("live".into());
+    })
+    .unwrap();
+    s.collection.add_draft_grant(s.feed, &guid).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.grants, Vec::<String>::new());
+}
+
+#[test]
+fn a_change_of_the_draft_grant_after_the_diff_gives_diff_not_approved() {
+    let mut s = setup();
+    let guid = draft_with_show(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.grants, Vec::<String>::new());
+    s.collection.add_draft_grant(s.feed, &guid).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DiffNotApproved);
+
+    // The removal of the grant after the diff also changes the ID.
+    let with_grant = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_ne!(with_grant.id, diff.id);
+    s.collection.remove_draft_grant(s.feed, &guid).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &with_grant.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DiffNotApproved);
+    assert_eq!(live(&s), FEED);
+    assert!(
+        grant::grant_for(&s.collection, s.feed, &guid)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn granted_writes_go_live_set_the_live_value_and_end_the_show() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let now = during_show();
+    granted(&mut s, &guid, &GrantChange::GoLive, now).unwrap();
+    assert!(live(&s).contains("status=\"live\""));
+    let set = GrantChange::SetLiveValue {
+        uri: "wss://example.com/value".into(),
+        protocol: "socket.io".into(),
+    };
+    granted(&mut s, &guid, &set, now + 1).unwrap();
+    assert!(live(&s).contains("wss://example.com/value"));
+    granted(&mut s, &guid, &GrantChange::RemoveLiveValue, now + 2).unwrap();
+    assert!(!live(&s).contains("liveValue"));
+    granted(&mut s, &guid, &set, now + 3).unwrap();
+    granted(&mut s, &guid, &GrantChange::End, now + 4).unwrap();
+    let xml = live(&s);
+    assert!(xml.contains("status=\"ended\""), "{xml}");
+    assert!(xml.contains(&guid));
+    assert!(xml.contains("wss://example.com/value"));
+    // Each granted write keeps a snapshot and leaves no draft.
+    assert_eq!(s.collection.snapshots(s.feed).unwrap().len(), 6);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+
+    let record = grant::grant_for(&s.collection, s.feed, &guid)
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.ended_at, Some(i64::try_from(now + 4).unwrap()));
+    let changes: Vec<String> = grant::writes(&s.collection, record.id)
+        .unwrap()
+        .into_iter()
+        .map(|w| {
+            assert_eq!(w.app_name, "Show tool");
+            w.change
+        })
+        .collect();
+    assert_eq!(
+        changes,
+        [
+            "go_live",
+            "set_live_value",
+            "remove_live_value",
+            "set_live_value",
+            "end"
+        ]
+    );
+    let error = granted(&mut s, &guid, &GrantChange::RemoveLiveValue, now + 5).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::GrantNotActive);
+}
+
+#[test]
+fn a_change_of_the_title_with_a_granted_write_gives_not_covered() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = live(&s);
+    let snapshots = s.collection.snapshots(s.feed).unwrap().len();
+    let error = pipeline::write_granted_edit(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &guid,
+        |feed| {
+            feed.live_items[0].value.status = Some("live".into());
+            feed.title = Some("Album (Live)".into());
+            Ok(())
+        },
+        during_show(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::NotCovered);
+    assert_eq!(live(&s), before);
+    assert_eq!(s.collection.snapshots(s.feed).unwrap().len(), snapshots);
+    // The draft of the grant goes out.
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    assert_eq!(s.collection.signing_plan(s.feed).unwrap(), None);
+}
+
+#[test]
+fn a_granted_write_while_the_user_has_a_changed_draft_gives_draft_open() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = live(&s);
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.title = Some("Album (Deluxe)".into());
+    })
+    .unwrap();
+    let draft = s.collection.draft(s.feed).unwrap();
+    let error = granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DraftOpen);
+    assert_eq!(s.collection.draft(s.feed).unwrap(), draft);
+    assert_eq!(live(&s), before);
+}
+
+#[test]
+fn a_draft_with_only_a_grant_or_a_host_operation_is_a_change_and_an_empty_draft_goes_out() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+
+    // A draft with the bytes of the hosted file and nothing else goes out.
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap();
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+
+    // A draft grant is a change that the user can approve. The live item
+    // is live now, so the grant of the draft must be for a new show.
+    let other = draft_with_show(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    s.collection.add_draft_grant(s.feed, &other).unwrap();
+    let error = granted(&mut s, &guid, &GrantChange::End, during_show()).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DraftOpen);
+    assert_eq!(s.collection.draft_grants(s.feed).unwrap(), [other]);
+    assert!(s.collection.draft(s.feed).unwrap().is_some());
+
+    // A host operation is also a change.
+    s.collection.remove_draft_grants(s.feed).unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            s.collection.feed(s.feed).unwrap().connector_id.unwrap(),
+            "old.mp3",
+        )
+        .unwrap();
+    let error = granted(&mut s, &guid, &GrantChange::End, during_show()).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DraftOpen);
+    assert_eq!(s.collection.draft_operations(s.feed).unwrap().len(), 1);
+}
+
+#[test]
+fn a_granted_write_24_hours_and_1_second_after_the_end_gives_grant_not_active() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let end = u64::try_from(grant::parse_time(SHOW_END).unwrap()).unwrap();
+    let before = live(&s);
+    let error = granted(&mut s, &guid, &GrantChange::GoLive, end + 24 * 3600 + 1).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::GrantNotActive);
+    assert_eq!(live(&s), before);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    // One second before the limit, the grant is still active.
+    granted(&mut s, &guid, &GrantChange::GoLive, end + 24 * 3600 - 1).unwrap();
+}
+
+#[test]
+fn a_bad_status_change_and_a_locked_vault_leave_no_draft() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let error = granted(&mut s, &guid, &GrantChange::End, during_show()).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadStatus);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    let mut locked = Hosts::new();
+    locked.insert_locked(connector_id);
+    let error = pipeline::write_granted(
+        &mut s.collection,
+        &locked,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &guid,
+        &GrantChange::GoLive,
+        "Show tool",
+        during_show(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::VaultLocked);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    assert!(live(&s).contains("status=\"pending\""));
+}
+
+#[test]
+fn a_user_write_that_ends_the_show_or_removes_it_ends_the_grant() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.live_items.clear()).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    let record = grant::grant_for(&s.collection, s.feed, &guid)
+        .unwrap()
+        .unwrap();
+    assert!(record.ended_at.is_some());
+    let error = granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::GrantNotActive);
 }

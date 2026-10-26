@@ -11,7 +11,7 @@ The review sheet has the grant check box for a pending show. The live item page 
 
 Inspect: `crates/api/ui/editor.js` (`ReviewSheet`, `AnnounceLines`, the live item page), `crates/api/ui/live.js`, `crates/api/ui-tests/live.test.mjs`, `crates/api/src/routes.rs` (the grant routes of 033e), `tools/drive-ui.mjs`.
 
-Change: `crates/api/ui/editor.js`, `crates/api/ui/live.js`, `crates/api/ui-tests/live.test.mjs`, `crates/api/ui/styles.css` (only when a class is necessary). `crates/api/src/routes.rs` and `crates/api/src/tests.rs` only for `DELETE /api/v1/feeds/{id}/grants/{grant_id}`, which sets `ended_at`.
+Change: `crates/api/ui/editor.js`, `crates/api/ui/live.js`, `crates/api/ui-tests/live.test.mjs`, `crates/api/ui/styles.css` (only when a class is necessary). `crates/api/src/routes.rs`, `crates/api/src/lib.rs` and `crates/api/src/tests.rs` only for `POST /api/v1/feeds/{id}/grants/{guid}/end`, which sets `ended_at` of the open grant of that live item. 033e uses `DELETE /api/v1/feeds/{id}/grants/{guid}` for the grant of the draft, so this route has a different path.
 
 Do not change: the core, the app routes.
 
@@ -22,9 +22,13 @@ These choices are fixed. Do not change them.
 - The review sheet shows, for each `pending` live item of the draft, a check box "Let connected apps start and end this show, and set its live value". It calls `PUT` or `DELETE /feeds/{id}/grants/{guid}` and examines the diff again. The `grants` of the diff give its state.
 - When the collection has no connected app, the check box has the hint "No app is connected. Connect an app in Hosts."
 - The live item page shows the grant state with `grantSummary` and lists each granted write with `grantWriteText`. "Stop the grant" with the destructive role ends an active grant.
+- `GET /api/v1/feeds/{id}/grants` gives each grant with `id`, `item_guid`, `created_at`, `ended_at` and `writes` (each with `app_name`, `change` and `written_at`). The values of `change` are `go_live`, `end`, `set_live_value` and `remove_live_value`. The times are seconds after the Unix epoch.
+- A grant with no `ended_at` ends 24 hours after the `end` of the live item, or after its `start` when it has no `end` ([ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) item 14). The API does not give this limit. `live.js` calculates it.
 - `live.js` gets:
-  - `grantSummary(grant, timeText)`: "Connected apps can start and end this show until <time>.", "The grant ended at <time>." or "No grant."
+  - `grantLimit(liveItem)`: the time in seconds 24 hours after `end`, or after `start` when `end` is blank, or `null` when the time cannot be read.
+  - `grantSummary(grant, liveItem, now, timeText)`: "Connected apps can start and end this show until <time>.", "The grant ended at <time>." or "No grant.". A grant with no `ended_at` and a limit before `now` gives "The grant ended at <limit>.".
   - `grantWriteText(write, timeText)`: "<app name> · <change> · <time>", with the change texts "Went live", "Ended the show", "Set the live value" and "Removed the live value".
+- A diff with only a grant changes no byte, and the draft status says "No changes". The review sheet can still write a diff that has `grants`.
 
 ## Steps
 
@@ -44,7 +48,7 @@ These choices are fixed. Do not change them.
 Mechanical:
 
 - The Node tests examine `grantSummary` and `grantWriteText` for each case.
-- An API test of `DELETE /feeds/{id}/grants/{grant_id}`: after it, the app route gives 409 `grant_ended`.
+- An API test of `POST /feeds/{id}/grants/{guid}/end`: after it, the app route gives 409 `grant_ended`.
 - The four commit checks pass.
 
 Visual:

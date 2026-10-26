@@ -12,8 +12,9 @@ These methods are easy on a phone:
 
 ## One page at a time
 
-On a phone, Studio shows one page at a time.
-The first page lists **Releases**, **Add a feed** and **Hosts**.
+On a phone, Studio shows one page at a time. It opens on **Releases**.
+Select the back button to go to the first page.
+The first page lists **Releases**, **Add a feed**, **Hosts**, and **Lock Studio** or **Unlock Studio**.
 When you open a release, you see its outline first. Select a page in the outline to open it.
 Use the back button to go back.
 See [Find and open a release](find-your-way.md).

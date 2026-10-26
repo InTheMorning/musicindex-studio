@@ -23,6 +23,8 @@ You can also make an account with a Nostr signer:
 - Select **Sign up with a signer extension**. This button shows only when your browser has a NIP-07 signer extension.
 - Select **Sign up with Amber or a bunker**. See [Connect a remote signer](#connect-a-remote-signer).
 
+If the server asks for an invite code, type it first. The two buttons are disabled until you type it.
+
 If you chose a recovery key, Studio shows it one time only.
 Write it down and keep it in a safe location. Then select the check box "I wrote down the recovery key in a safe place" and select **Continue**.
 

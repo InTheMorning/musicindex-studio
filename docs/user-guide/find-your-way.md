@@ -78,8 +78,9 @@ They move through the pages that you opened.
 
 ## A narrow window
 
-When the window is 760 pixels wide or less, Studio shows one page at a time.
-The first page lists **Releases**, **Add a feed**, **Hosts** and **Lock Studio**.
+When the window is 760 pixels wide or less, Studio shows one page at a time. It opens on **Releases**.
+Select the back button to go to the first page.
+The first page lists **Releases**, **Add a feed**, **Hosts** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
 When you open a release, you see its outline first. Select a page in the outline to open it.
 Use the back button to go back.
 

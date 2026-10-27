@@ -111,8 +111,8 @@ Situational rules:
 
 Documentation:
 
-- Put no Markdown file in the repository root other than `AGENTS.md` and a future `README.md`. The global repository-docs rules own this.
-- Add each new document to [docs/README.md](docs/README.md) in the same change.
+- Put no Markdown file in the repository root other than `AGENTS.md` and `README.md`. `README.md` is the short user guide: it holds only links to `docs/user-guide/`. The global repository-docs rules own this.
+- Add each new document to [docs/README.md](docs/README.md) in the same change. Add each new user guide page to `README.md`.
 - Write prose in ASD-STE100 Simplified Technical English. Check it with `~/.agents/skills/asd-ste100/scripts/ste_lint.py`. The operator's global instructions own this rule.
 - A change of a decision changes the ADR, `docs/README.md`, the tests and this file in the same commit.
 

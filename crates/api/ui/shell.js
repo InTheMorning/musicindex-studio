@@ -89,6 +89,7 @@ function outlineItems(feed, view, model, narrow) {
   if (isPublisher(feed)) {
     // A publisher feed has two pages and no tracks (ADR 0041 item 3).
     items.push(page('publisher', mediumKind(feed.medium, feed.publisher_role).label, 'album'));
+    items.push(page('settings', 'Feed settings', 'settings'));
     items.push(page('files', 'Files', 'files'));
     return items;
   }
@@ -97,6 +98,7 @@ function outlineItems(feed, view, model, narrow) {
     items.push(page('playlist', 'Playlist', 'album'));
     items.push(page('tracks', 'Tracks', 'tracks'));
     items.push(page('recipients', 'Value routes', 'recipients'));
+    items.push(page('settings', 'Feed settings', 'settings'));
     items.push(page('files', 'Files', 'files'));
     return items;
   }
@@ -137,6 +139,7 @@ function outlineItems(feed, view, model, narrow) {
     items.push({ id: 'add-live', label: 'Add a live show', action: 'add-live' });
     items.push(page('recipients', 'Value routes', 'recipients'));
     items.push(page('credits', 'Credits and links', 'credits'));
+    items.push(page('settings', 'Feed settings', 'settings'));
   }
   items.push(page('files', 'Files', 'files'));
   return items;

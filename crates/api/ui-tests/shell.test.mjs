@@ -72,7 +72,7 @@ test('an open album gives the outline in the sequence of ADR 0039 item 6', () =>
   assert.deepEqual(panel.items[0], { id: 'releases', label: 'Releases' });
   assert.deepEqual(labels(panel.items), [
     'Releases', 'Album', 'First', 'Untitled track', 'Add a track', 'Import files',
-    'Live shows', 'Add a live show', 'Value routes', 'Credits and links', 'Files',
+    'Live shows', 'Add a live show', 'Value routes', 'Credits and links', 'Feed settings', 'Files',
   ]);
   assert.equal(panel.items[2].number, 1);
   assert.equal(panel.items[2].current, true);
@@ -128,9 +128,9 @@ test('a publisher feed gives its role and Files, and a read-only feed gives Feed
   // musicindex ADR 0033 R-WORD-3: the page has the role word.
   const label = { ...publisher, publisher_role: 'label' };
   const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [label], model: null, vaultOpen: false });
-  assert.deepEqual(labels(pub.items), ['Releases', 'Label', 'Files']);
+  assert.deepEqual(labels(pub.items), ['Releases', 'Label', 'Feed settings', 'Files']);
   const noRole = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: null, vaultOpen: false });
-  assert.deepEqual(labels(noRole.items), ['Releases', 'Feed', 'Files']);
+  assert.deepEqual(labels(noRole.items), ['Releases', 'Feed', 'Feed settings', 'Files']);
   const read = leftPanel({ view: { name: 'feed', id: 3 }, feeds: [readOnly], model: null, vaultOpen: false });
   assert.deepEqual(labels(read.items), ['Releases', 'Feed']);
   assert.equal(read.items[1].current, true);
@@ -275,7 +275,7 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
   assert.equal(narrow.items.some((item) => item.id === 'releases'), false);
   assert.deepEqual(labels(narrow.items), [
     'Album', 'First', 'Untitled track', 'Add a track', 'Import files', 'Live shows', 'Add a live show',
-    'Value routes', 'Credits and links', 'Files',
+    'Value routes', 'Credits and links', 'Feed settings', 'Files',
   ]);
   assert.equal(narrow.items.some((item) => item.current), false);
   const wide = leftPanel({ view: { name: 'feed', id: 1 }, feeds: [album], model, vaultOpen: true });
@@ -327,7 +327,7 @@ test('a musicL feed is a playlist, with no regard to case', () => {
 test('a playlist gives Playlist, Tracks, Value routes and Files, with no add or import entry', () => {
   const playlist = { ...album, id: 4, medium: 'musicL' };
   const panel = leftPanel({ view: { name: 'feed', id: 4, page: 'tracks' }, feeds: [playlist], model, vaultOpen: false });
-  assert.deepEqual(labels(panel.items), ['Releases', 'Playlist', 'Tracks', 'Value routes', 'Files']);
+  assert.deepEqual(labels(panel.items), ['Releases', 'Playlist', 'Tracks', 'Value routes', 'Feed settings', 'Files']);
   assert.equal(panel.items.find((item) => item.label === 'Tracks').current, true);
   assert.equal(panel.items.some((item) => item.action), false);
 });

@@ -3,7 +3,7 @@
 Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 3 to 7, [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md) and [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md) item 3.
 Sequence: the second packet of task 041. It depends on 041a.
 
-Status: Not started.
+Status: Complete on 2026-10-27. The visual check is open.
 
 ## Goal
 
@@ -36,7 +36,13 @@ These choices are fixed. Do not change them.
 
 ### The Page "Feed Settings"
 
-- The page has the name `settings`. The album page, the playlist page and the publisher page each get the row "Feed settings" in their details section, as the row "Credits and links" opens `credits`. The outline of `shell.js` lists the page after "Credits and links" for an album, and in the same position for a playlist and a publisher feed.
+- The page has the name `settings`. The album page, the playlist page and the publisher page each get the row "Feed settings" in their details section, as the row "Credits and links" opens `credits`.
+- The publisher page has no details section. It gets a new section directly after its first section. The heading is the role label and the word "details", such as "Artist details" or "Label details". The section has only the row "Feed settings".
+- The outline of `shell.js` lists the page in these positions:
+  - For an album, after "Credits and links".
+  - For a playlist, after "Value routes" and before "Files".
+  - For a publisher feed, after the entry of the feed and before "Files".
+- In `AlbumEditor`, the publisher branch and the playlist branch catch most pages. The page `settings` gets its own branch before these branches.
 - The summary line of the row gives the set values in short form, such as "Owner set · Locked". With no value, it says "No settings".
 - The page has these groups, in this sequence:
   - "Owner": "Owner name" and "Owner email", for `owner.name` and `owner.email`. When both fields are empty, `owner` becomes `null`.
@@ -72,7 +78,7 @@ These choices are fixed. Do not change them.
 Mechanical:
 
 - A Node test: `isExplicit` gives true for `true`, `Yes` and ` yes `, and false for `false`, `no`, `clean` and `null`.
-- A Node test of `shell.js`: the outline of an album lists "Feed settings" after "Credits and links".
+- A Node test of `shell.js`: the outline of an album lists "Feed settings" after "Credits and links". The outline of a playlist and of a publisher feed lists it before "Files".
 - The four commit checks pass.
 
 Visual, with screenshots, in the dark theme, in the light theme and at 390 px:
@@ -91,7 +97,6 @@ node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-- Stop and report when the publisher page has no details section for the row "Feed settings".
 - Stop and report when the outline of `shell.js` gives no page entries for a playlist or a publisher feed.
 
 ## Prompt for lower-context coding model

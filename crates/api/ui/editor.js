@@ -15,6 +15,7 @@ import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
+import { isExplicit } from './explicit.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -1510,7 +1511,98 @@ function ChannelFields({ feedId, draft, model, update, bad, artistLabel }) {
         <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
         <${ListingField} id="ch-listing" feedId=${feedId} draft=${draft} model=${model} />
+        <${ExplicitField} id="ch-explicit" model=${model} update=${update} />
 `;
+}
+
+// The explicit switch of a channel (ADR 0064 item 4, ADR 0065). The switch
+// shows off when the feed has no `itunes:explicit`, and Studio sets no value
+// until the user changes it. A change sends `true` or `false`. The core
+// keeps the form of the feed at the draft save.
+function ExplicitField({ id, model, update }) {
+  const explicit = isExplicit(model.explicit);
+  return html`<div class="field">
+      <label for=${id}>Explicit</label>
+      <div class="field-body">
+        <label class="check"><input id=${id} type="checkbox" checked=${explicit}
+          onChange=${(e) => update((m) => set(m, 'explicit', e.target.checked ? 'true' : 'false'))} />
+          <span>${explicit ? 'Explicit' : 'Clean'}</span></label>
+        <span class="hint">Apple asks for this tag. Studio adds it only when you set the switch.</span>
+      </div>
+    </div>`;
+}
+
+// Does the channel lock say "yes"? This is a display value only.
+const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase() === 'yes';
+
+// The summary line of the page "Feed settings": the values that are set.
+function settingsSummary(model) {
+  const owner = model.owner && (model.owner.name || model.owner.email);
+  const parts = [
+    owner && 'Owner set',
+    model.keywords && 'Keywords set',
+    isLocked(model.locked) && 'Locked',
+    model.managing_editor && 'Editor set',
+    model.web_master && 'Webmaster set',
+  ].filter(Boolean);
+  return parts.length === 0 ? 'No settings' : parts.join(' · ');
+}
+
+// The row of a details section that opens the page "Feed settings".
+function SettingsRow({ model, onOpen }) {
+  return html`<button class="link-row" type="button" onClick=${onOpen}>
+      <span class="label">Feed settings</span><span class="summary">${settingsSummary(model)}</span>
+      <span class="go" aria-hidden="true">›</span>
+    </button>`;
+}
+
+// The page "Feed settings": the owner, the keywords, the lock and the two
+// editor fields (ADR 0064 items 3 to 7). An empty field gives `null`, so that
+// Studio writes no empty element. No field refuses a value that is not an
+// email address. The core removes the space at the ends of each text.
+function SettingsPage({ model, update }) {
+  const field = (name) => (value) => update((m) => set(m, name, value));
+  const owner = model.owner || { name: null, email: null };
+  const setOwner = (name, value) => update((m) => {
+    const next = { ...(m.owner || { name: null, email: null }), [name]: value };
+    return set(m, 'owner', next.name === null && next.email === null ? null : next);
+  });
+  const locked = model.locked;
+  const setLocked = (on) => update((m) => set(m, 'locked', on
+    ? { ...(m.locked || { owner: null }), value: 'yes' }
+    : { ...m.locked, value: 'no' }));
+  const setLockOwner = (value) => update((m) => set(m, 'locked', { ...m.locked, owner: value }));
+  return html`<section class="page-section"><h2>Owner</h2>
+      <div class="group">
+        <${TextField} id="set-owner-name" label="Owner name" value=${owner.name} onChange=${(v) => setOwner('name', v)} />
+        <${TextField} id="set-owner-email" label="Owner email" value=${owner.email} onChange=${(v) => setOwner('email', v)} />
+      </div>
+    </section>
+    <section class="page-section"><h2>Keywords</h2>
+      <div class="group">
+        <${TextField} id="set-keywords" label="Keywords" hint="Words that apps can search for, with a comma between them."
+          value=${model.keywords} onChange=${field('keywords')} />
+      </div>
+    </section>
+    <section class="page-section"><h2>Lock against import</h2>
+      <div class="group">
+        <div class="field">
+          <label for="set-locked">Lock against import</label>
+          <div class="field-body">
+            <label class="check"><input id="set-locked" type="checkbox" checked=${isLocked(locked)}
+              onChange=${(e) => setLocked(e.target.checked)} />
+              <span>${isLocked(locked) ? 'Locked' : 'Not locked'}</span></label>
+          </div>
+        </div>
+        ${locked && html`<${TextField} id="set-lock-owner" label="Lock owner email" value=${locked.owner} onChange=${setLockOwner} />`}
+      </div>
+    </section>
+    <section class="page-section"><h2>Editors</h2>
+      <div class="group">
+        <${TextField} id="set-managing-editor" label="Managing editor" value=${model.managing_editor} onChange=${field('managing_editor')} />
+        <${TextField} id="set-web-master" label="Webmaster" value=${model.web_master} onChange=${field('web_master')} />
+      </div>
+    </section>`;
 }
 
 // The listing control of a channel (ADR 0063, ADR 0065). One switch hides the
@@ -1599,6 +1691,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
           <span class="label">Credits and links</span><span class="summary">${creditSummary(model)}</span>
           <span class="go" aria-hidden="true">›</span>
         </button>
+        <${SettingsRow} model=${model} onOpen=${() => openPage({ page: 'settings' })} />
         <button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
           <span class="label">Value routes</span><span class="summary">${recipientSummary(model.values)}</span>
           ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} focusable=${false} />`}
@@ -1664,14 +1757,17 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
 }
 
 // The playlist page (ADR 0053 item 4): the channel fields and the feed facts.
-function PlaylistPage({ feed, draft, model, update, bad, onRemoved }) {
+function PlaylistPage({ feed, draft, model, update, bad, go, onRemoved }) {
   return html`<section class="page-section"><h2>Playlist</h2>
       <div class="group">
         <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Author" />
       </div>
     </section>
     <section class="page-section"><h2>Playlist details</h2>
-      <div class="group"><${FeedFacts} feed=${feed} onRemoved=${onRemoved} /></div>
+      <div class="group">
+        <${SettingsRow} model=${model} onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} />
+        <${FeedFacts} feed=${feed} onRemoved=${onRemoved} />
+      </div>
     </section>`;
 }
 
@@ -2291,7 +2387,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         <${CoverField} id="pub-image" model=${model} update=${update} bad=${bad} />
         <${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${ListingField} id="pub-listing" feedId=${feed.id} draft=${draft} model=${model} />
+        <${ExplicitField} id="pub-explicit" model=${model} update=${update} />
       </div>
+    </section>
+
+    <section class="page-section"><h2>${mediumKind(feed.medium, feed.publisher_role).label} details</h2>
+      <div class="group"><${SettingsRow} model=${model}
+        onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} /></div>
     </section>
 
     <section class="page-section"><h2>Role</h2>
@@ -2854,13 +2956,15 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   // When the track key of the view is not in the model, for example after a
   // write that gave each item a new client ID, the editor shows the album
   // page (task 014c, Architecture).
-  if (publisher && page !== 'files') {
+  if (page === 'settings') {
+    body = html`<${SettingsPage} model=${model} update=${update} />`;
+  } else if (publisher && page !== 'files') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
       draft=${draft} go=${go} onListChanged=${onListChanged} />`;
   } else if (playlist && page === 'tracks') {
     body = html`<${PlaylistTracksPage} feed=${feed} model=${model} update=${update} />`;
   } else if (playlist && page !== 'recipients' && page !== 'files') {
-    body = html`<${PlaylistPage} feed=${feed} draft=${draft} model=${model} update=${update} bad=${draft.bad} onRemoved=${onRemoved} />`;
+    body = html`<${PlaylistPage} feed=${feed} draft=${draft} model=${model} update=${update} bad=${draft.bad} go=${go} onRemoved=${onRemoved} />`;
   } else if (page === 'track' && trackIndex !== -1) {
     // A key for each entry, so that one track or show does not keep the
     // state of the one before it, for example an open "Properties".

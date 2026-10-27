@@ -19,7 +19,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | Packet | Status | Review |
 |---|---|---|
 | 041a | Complete | Pass on 2026-10-27. The four checks pass. The planning model removed one wrong code comment about the write sequence. |
-| 041b | Not started | |
+| 041b | Complete | Pass on 2026-10-27. The four checks pass. The UI has no feed rule. The visual check is open. |
 | 041c | Not started | |
 | 041d | Not started | |
 | 041e | Not started | |
@@ -41,3 +41,7 @@ A coding model implements each packet. The planning model examines the diff and 
 
 - Packet 041a first said that the sequence of the write calls gives the position of a new element with no hosted position. `Children` has no such function. ADR 0031 does not use a fixed sequence of elements. The coding model stopped on the escalation condition. The planning model removed the rule on 2026-10-27. A new element with no hosted position goes before the first element of a type that must come after it (ADR 0031 item 3).
 - The operator decided on 2026-10-27 that the planning model commits each packet after its review passes.
+
+### Packet 041b
+
+- The publisher page has no details section. The coding model stopped on the escalation condition. The operator decided on 2026-10-27 that the publisher page gets a new section directly after its first section. The heading is the role label and the word "details". The section has the row "Feed settings".

@@ -18,6 +18,12 @@ export function isLiveItem(live, key) {
   return liveKey(live) === key || `cid-${live._cid}` === key;
 }
 
+// The class of the type dot of a live item. Red is only for live now. A
+// show that is not live now uses the feed color (musicindex ADR 0012 item 3).
+export function liveDot(status) {
+  return status === 'live' ? 'live' : 'feed';
+}
+
 // The label of a status in the UI.
 export function statusLabel(status) {
   switch (status) {

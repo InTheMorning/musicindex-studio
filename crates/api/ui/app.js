@@ -1704,7 +1704,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       <header class="head">
         <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always />
         <div class="text">
-          <span class="eyebrow">${kind.label}</span>
+          <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>
           <p class="sub mono">${feed.public_url || 'This feed has no public address yet.'}</p>
         </div>

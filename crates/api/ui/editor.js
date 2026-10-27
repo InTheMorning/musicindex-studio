@@ -7,7 +7,7 @@ import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageTh
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
-import { isLiveItem, liveKey, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
+import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
@@ -1892,7 +1892,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
   // the gap of .page between them (review of task 014c, defect 2).
   return html`<header class="head">
       <${ImageThumb} url=${item.image || coverOf(model)} glow="var(--c-track)" className="cover" always />
-      <div class="text"><span class="eyebrow">Track ${trackIndex + 1} of ${items.length}</span>
+      <div class="text"><span class="eyebrow"><span class="dot track"></span>Track ${trackIndex + 1} of ${items.length}</span>
         <h1>${item.title || 'Untitled track'}</h1></div>
       <div class="pager">
         <button class="button icon-button" type="button" aria-label="The track before this one"
@@ -2097,7 +2097,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
   });
   return html`<header class="head">
       <${ImageThumb} url=${live.item.image || coverOf(model)} glow="var(--c-track)" className="cover" always />
-      <div class="text"><span class="eyebrow">Live show</span>
+      <div class="text"><span class="eyebrow"><span class=${`dot ${liveDot(live.status)}`}></span>Live show</span>
         <h1>${live.item.title || 'Untitled show'}</h1>
         <p class="sub">${showSummary(live, start)}</p></div>
     </header>

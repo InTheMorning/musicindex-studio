@@ -1654,7 +1654,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
 }
 
 // The names of the pages that are not the album page or a track.
-const PAGE_NAMES = { credits: 'Credits and links', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
+const PAGE_NAMES = { credits: 'Credits and links', settings: 'Feed settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
 
 // The toolbar title: the feed title on the album page, or the feed title in
 // the muted color, then the name of the open page (review of task 014c,

@@ -3,7 +3,7 @@
 Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 10 to 12, [ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0025](../adr/0025-studio-serves-cover-art.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md).
 Sequence: the last packet of task 041. It depends on 041d.
 
-Status: Complete on 2026-10-27. The visual check is open.
+Status: Complete on 2026-10-27. The [visual check](../reviews/2026-10-27-task-041-visual-check.md) passed.
 
 ## Goal
 

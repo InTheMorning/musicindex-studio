@@ -2029,7 +2029,7 @@ function ArtworkEntry({ id, list, index, onChange, edit, bad, address }) {
     <div class="grid2">
       <${TextField} id=${`${id}-width`} label="Width" inputmode="numeric" value=${t.width} onChange=${change('width')} />
       <${TextField} id=${`${id}-height`} label="Height" inputmode="numeric" value=${t.height} onChange=${change('height')} />
-      <${TextField} id=${`${id}-ratio`} label="Ratio" hint="For example 16/9." value=${t.aspect_ratio} onChange=${change('aspect_ratio')} />
+      <${TextField} id=${`${id}-ratio`} label="Ratio" value=${t.aspect_ratio} onChange=${change('aspect_ratio')} />
       <${TextField} id=${`${id}-type`} label="Type" hint="For example image/png." value=${t.media_type} onChange=${change('media_type')} />
     </div>
     <${EntryActions} list=${list} index=${index} name="this image" onChange=${onChange} />

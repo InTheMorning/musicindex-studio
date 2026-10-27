@@ -12,7 +12,7 @@ The packets run one at a time, because packets 041b to 041e all change `crates/a
 4. Task 041d.
 5. Task 041e.
 
-A coding model implements each packet. The planning model examines the diff and runs the four commit checks before the next packet starts. No packet is committed until the operator says so. The visual checks of all packets come at the end.
+A coding model implements each packet. The [visual check](2026-10-27-task-041-visual-check.md) of all packets passed on 2026-10-27. The planning model examines the diff and runs the four commit checks before the next packet starts. No packet is committed until the operator says so. The visual checks of all packets come at the end.
 
 ## Packets
 

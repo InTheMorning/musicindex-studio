@@ -2,7 +2,7 @@
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 12. Decision: [ADR 0066](../adr/0066-the-server-ships-as-a-container-image.md).
 
-Status: Not started. The operator accepted ADR 0066 on 2026-10-27. The [review checklist](../reviews/2026-10-27-task-043-review-checklist.md) records each packet.
+Status: Complete on 2026-10-27. The first candidate tag and the first deployment are open. The operator accepted ADR 0066 on 2026-10-27. The [review checklist](../reviews/2026-10-27-task-043-review-checklist.md) records each packet.
 
 ## Goal
 

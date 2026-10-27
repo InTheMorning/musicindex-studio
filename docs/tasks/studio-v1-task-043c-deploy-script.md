@@ -2,7 +2,7 @@
 
 Parent: [task 043](studio-v1-task-043-server-image.md). Decision: [ADR 0066](../adr/0066-the-server-ships-as-a-container-image.md) items 10 to 13.
 
-Status: Not started.
+Status: Complete on 2026-10-27. The first deployment is open.
 
 ## Goal
 

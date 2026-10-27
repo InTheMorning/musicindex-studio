@@ -16,7 +16,27 @@ There are two uses:
 - A public service, such as `studio.musicindex.org`. Use `--signup invite` and give an invite code to each new user.
 - A personal server for one artist. Use `--signup invite`, make one invite code, and sign up. Then make no more invite codes.
 
-## 2. Build, Install And Run
+## 2. Install And Run
+
+### With Docker
+
+The image is `ghcr.io/inthemorning/studio-server:VERSION`. The compose file is `deploy/compose.yml` ([ADR 0066](../adr/0066-the-server-ships-as-a-container-image.md)). The container listens on port 8080. The host publishes it only on `127.0.0.1:8080`, so each request goes through nginx.
+
+GHCR makes a new package private. After the first push of the image, the operator sets the package `studio-server` to public. Or the operator logs in on the VPS with `docker login ghcr.io`.
+
+1. On the VPS, make the folder of the deployment, and copy `deploy/env.example` to `.env` in it. Set `STUDIO_PUBLIC_ORIGIN` in `.env`.
+2. On this computer, run `tools/deploy-server.sh --release VERSION`. VERSION has a hyphen, for example `0.1.0-rc.1`, and the local tag `vVERSION` is required. The script copies `compose.yml`, pulls the image, pins it in `.env` and starts the container. Then it waits at most 60 seconds for two facts. The revision label of the container is the commit of the tag, and the log has the line `Music Index Studio server VERSION`.
+3. On the VPS, in the folder of the deployment, make the first invite code:
+
+```sh
+docker compose exec studio studio-server invite --data-dir /data
+```
+
+The script makes no account and no invite code. Its options `--host` and `--dir` give a different VPS and a different folder.
+
+To read the log, run `docker compose logs -f studio` on the VPS.
+
+### Without Docker
 
 Build the binary on a computer with the Rust version of `rust-toolchain.toml`:
 
@@ -132,6 +152,8 @@ The counters are in memory. A restart clears them.
 
 ## 6. Backup And Restore
 
+With Docker, the data folder is the volume `studio-data`, which the container mounts at `/data`. The commands below use the path of the folder. Run them on a copy of the volume, or on its path on the host. Compose puts the project name `studio` before the volume name, so the command is `docker volume inspect studio_studio-data`.
+
 The data folder has this content:
 
 - `server.sqlite`: the accounts, the sessions, the invite codes, the challenges, the passkeys and the index of the app tokens. It holds only the SHA-256 of each token and of each code.
@@ -173,7 +195,9 @@ The musicindex API, the Podcast Index hub and the lookup relays are given by the
 
 ## 9. Update And Restart
 
-To update, build the new binary, install it, and restart the unit:
+With Docker, run `tools/deploy-server.sh --release VERSION` on the computer that has the tag. The script replaces the container. The volume `studio-data` stays.
+
+Without Docker, build the new binary, install it, and restart the unit:
 
 ```sh
 cargo build --release -p studio-server

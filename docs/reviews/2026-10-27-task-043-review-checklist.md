@@ -10,7 +10,7 @@ A coding model implements each packet. The planning model examines the diff and 
 |---|---|---|
 | 043a | Complete | Pass on 2026-10-27. The operator built the image on musl. `--version` gave the version, and the manifest gave 200. The image is 17 MB of content. |
 | 043b | Complete | Pass on 2026-10-27. The build job runs the image with `--version` before the push. `actionlint` is not installed, so only a YAML parse examined the files. The first run on a candidate tag is open. |
-| 043c | Not started | |
+| 043c | Complete | Pass on 2026-10-27. The two refusals work with no connection. `shellcheck` is not installed. The first deployment is open. |
 
 ## Decisions
 
@@ -27,3 +27,9 @@ A coding model implements each packet. The planning model examines the diff and 
 
 - The build job runs `--version` in place of `--help`, and compares the output with the version of the tag.
 - GHCR makes a new package private. If the VPS pulls with no login, the operator sets the package `studio-server` to public after the first push.
+
+### Packet 043c
+
+- The log check used `docker logs | grep -q` with `pipefail`. When `grep` stops at the first match, `docker logs` can fail, and the check then reports a missing line. The planning model put the log in a variable first.
+- The runbook gave `docker volume inspect studio-data`. Compose puts the project name before the volume name, so the planning model changed it to `studio_studio-data`.
+- The nginx block of `studio.musicindex.org` got `client_max_body_size 9m` in commit `3af81a2` of `musicindex`.

@@ -6,10 +6,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { mediumKind, releasesList } from '../ui/shell.js';
 
 const MESSAGE = `musicindex ADR 0033 R-WORD-4: most artists do not know the RSS word
-"publisher". Show the role of a publisher feed: "Artist" or "Label".
-Use "Publisher" only for a feed that is definitely not an artist and
-that states no role. Use "Feed" when the role is not known. A technical
-view can show the RSS name, for example \`podcast:publisher\`.
+"publisher". Show the role of a publisher feed: "Artist", "Label" or
+the word of its one role. Use "Publisher" only for a feed with two or
+more roles and no artist role, or for a feed that is definitely not an
+artist and that states no role. Use "Feed" when the role is not known.
+A technical view can show the RSS name, for example \`podcast:publisher\`.
 Studio cannot make the test of R-WORD-3 item 3, so it does not use "Publisher".`;
 
 const uiDir = new URL('../ui/', import.meta.url);

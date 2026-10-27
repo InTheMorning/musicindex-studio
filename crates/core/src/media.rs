@@ -77,6 +77,8 @@ pub enum ImportedKind {
     },
     /// An image file.
     Image,
+    /// A lyrics file. Studio reads no tags from it.
+    Lyrics,
 }
 
 /// The facts of a file that the user selected for import (ADR 0026,
@@ -118,18 +120,18 @@ pub struct ImportedFile {
     pub size: u64,
 }
 
-/// Read the facts of an audio file or an image file. Give a WAV file or
-/// a FLAC file an MP3 enclosure, with its tags (ADR 0026 items 1 to 4,
-/// ADR 0032 items 1 to 5, ADR 0033 items 1 to 4, 10 and 11).
+/// Read the facts of an audio file, an image file or a lyrics file. Give a
+/// WAV file or a FLAC file an MP3 enclosure, with its tags (ADR 0026 items
+/// 1 to 4, ADR 0032 items 1 to 5, ADR 0033 items 1 to 4, 10 and 11).
 ///
 /// `name` is the file name that the user selected.
 ///
 /// # Errors
 ///
 /// Gives [`MediaErrorKind::Unsupported`] when the content is not one of
-/// the accepted media types, when a WAV file or a FLAC file does not
-/// have 16-bit or 24-bit integer samples, or when it has more than two
-/// channels. Gives [`MediaErrorKind::Io`] when a file operation or a
+/// the accepted media types, or when a lyrics file is not valid UTF-8.
+/// Gives it also when a WAV file or a FLAC file does not have 16-bit or
+/// 24-bit integer samples, or when it has more than two channels. Gives [`MediaErrorKind::Io`] when a file operation or a
 /// tag operation fails.
 pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
     if let Some(media_type) = sniff_image(source, name)? {
@@ -150,6 +152,12 @@ pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
         .guess_file_type()
         .map_err(|e| io_error(name, e))?;
     let Some(file_type) = probe.file_type() else {
+        // An audio file or an image file has its result before this
+        // point. A file with a lyrics extension is a lyrics file when its
+        // content is valid UTF-8 (ADR 0064 item 9).
+        if kind_of_path(name) == Some(FileKind::Lyrics) {
+            return import_lyrics(source, name);
+        }
         return Err(unsupported(name));
     };
 
@@ -181,6 +189,24 @@ pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
             track_number,
             duration: Some(duration),
         },
+        converted_from_wav: false,
+        lossless: None,
+    })
+}
+
+/// Read the facts of a lyrics file. The content must be valid UTF-8.
+fn import_lyrics(source: &Path, name: &str) -> Result<Imported, MediaError> {
+    let bytes = fs::read(source).map_err(|e| io_error(name, e))?;
+    if std::str::from_utf8(&bytes).is_err() {
+        return Err(unsupported(name));
+    }
+    let media_type = crate::remote::media_type_of_name(name).ok_or_else(|| unsupported(name))?;
+    Ok(Imported {
+        file_name: name.to_owned(),
+        path: source.to_owned(),
+        media_type,
+        size: bytes.len() as u64,
+        kind: ImportedKind::Lyrics,
         converted_from_wav: false,
         lossless: None,
     })
@@ -641,15 +667,19 @@ pub enum FileKind {
     Image,
     /// An audio file of the formats of ADR 0032 item 1.
     Audio,
+    /// A lyrics file: `.srt`, `.vtt`, `.txt`, `.json` or `.html`
+    /// (ADR 0064 item 9).
+    Lyrics,
 }
 
 impl FileKind {
-    /// Read the name that the API uses: `image` or `audio`.
+    /// Read the name that the API uses: `image`, `audio` or `lyrics`.
     #[must_use]
     pub fn parse(name: &str) -> Option<Self> {
         match name {
             "image" => Some(Self::Image),
             "audio" => Some(Self::Audio),
+            "lyrics" => Some(Self::Lyrics),
             _ => None,
         }
     }
@@ -657,13 +687,14 @@ impl FileKind {
 
 /// The kind of the file at `path`, from its extension. The comparison
 /// ignores case. The result is `None` for any other extension (ADR 0032
-/// item 1, ADR 0062 item 3).
+/// item 1, ADR 0062 item 3, ADR 0064 item 9).
 #[must_use]
 pub fn kind_of_path(path: &str) -> Option<FileKind> {
     let (_, extension) = path.rsplit_once('.')?;
     match extension.to_ascii_lowercase().as_str() {
         "jpg" | "jpeg" | "png" | "webp" | "gif" => Some(FileKind::Image),
         "mp3" | "m4a" | "flac" | "ogg" | "opus" => Some(FileKind::Audio),
+        "srt" | "vtt" | "txt" | "json" | "html" => Some(FileKind::Lyrics),
         _ => None,
     }
 }
@@ -686,8 +717,19 @@ mod tests {
     }
 
     #[test]
+    fn kind_of_path_gives_lyrics_for_each_lyrics_extension() {
+        for name in [
+            "a.srt", "a.vtt", "a.txt", "a.json", "a.html", "A.SRT", "x/y.VtT", "a.TXT", "a.Json",
+            "a.HTML",
+        ] {
+            assert_eq!(kind_of_path(name), Some(FileKind::Lyrics), "{name}");
+        }
+        assert_eq!(FileKind::parse("lyrics"), Some(FileKind::Lyrics));
+    }
+
+    #[test]
     fn kind_of_path_gives_no_kind_for_other_files() {
-        for name in ["a.xml", "a.txt", "a.wav", "noextension", "mp3"] {
+        for name in ["a.xml", "a.wav", "a.srtx", "noextension", "mp3"] {
             assert_eq!(kind_of_path(name), None, "{name}");
         }
     }
@@ -752,6 +794,28 @@ mod tests {
         writer.finalize().expect("finalize wav");
 
         let error = convert_wav(&path, "float.wav").unwrap_err();
+        assert_eq!(error.kind(), MediaErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn a_srt_file_with_utf8_text_imports_as_lyrics() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("a.srt");
+        let text = "1\n00:00:01,000 --> 00:00:02,000\nHello \u{e9}\n";
+        fs::write(&path, text).expect("write");
+        let imported = import(&path, "a.srt").expect("import");
+        assert_eq!(imported.kind, ImportedKind::Lyrics);
+        assert_eq!(imported.media_type, "application/srt");
+        assert_eq!(imported.size, text.len() as u64);
+        assert_eq!(imported.file_name, "a.srt");
+    }
+
+    #[test]
+    fn a_txt_file_that_is_not_utf8_is_unsupported() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("a.txt");
+        fs::write(&path, [0xc3_u8, 0x28, 0xa0, 0xa1]).expect("write");
+        let error = import(&path, "a.txt").unwrap_err();
         assert_eq!(error.kind(), MediaErrorKind::Unsupported);
     }
 }

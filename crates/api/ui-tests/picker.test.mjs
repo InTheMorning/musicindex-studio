@@ -16,6 +16,7 @@ test('fieldKind gives the kind of each file field', () => {
   assert.equal(fieldKind('live-image'), 'image');
   assert.equal(fieldKind('track-audio'), 'audio');
   assert.equal(fieldKind('recording'), 'audio');
+  assert.equal(fieldKind('lyrics'), 'lyrics');
   assert.equal(fieldKind('title'), null);
 });
 
@@ -87,6 +88,17 @@ test('dropResult refuses two files and a file of the wrong kind', () => {
   assert.equal(dropResult('track-audio', [image]).text, 'Select an audio file');
   assert.equal(dropResult('cover', [{ name: 'notes.txt', type: 'text/plain' }]).code, 'wrong_kind');
   assert.equal(dropResult('cover', []).action, 'none');
+});
+
+test('dropResult accepts a lyrics file on a lyrics field and refuses an image', () => {
+  const lyrics = { name: 'words.SRT', type: '' };
+  assert.deepEqual(dropResult('lyrics', [lyrics]), { action: 'upload', file: lyrics });
+  for (const name of ['a.vtt', 'a.txt', 'a.json', 'a.html']) {
+    assert.equal(dropResult('lyrics', [{ name, type: '' }]).action, 'upload', name);
+  }
+  const wrong = dropResult('lyrics', [{ name: 'a.png', type: 'image/png' }]);
+  assert.equal(wrong.code, 'wrong_kind');
+  assert.equal(wrong.text, 'Select a lyrics file');
 });
 
 test('kindOfFile reads the extension first, then the media type', () => {

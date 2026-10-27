@@ -3,7 +3,7 @@
 Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 9, [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 1 to 3, 11, 13 and 20, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the third packet of task 041. It depends on 041b. Packet 041d uses the new kind.
 
-Status: Not started.
+Status: Complete on 2026-10-27.
 
 ## Goal
 
@@ -42,7 +42,7 @@ These choices are fixed. Do not change them.
 ### The UI
 
 - `picker.js`: the field `lyrics` has the kind `lyrics`. `EXTENSIONS.lyrics` holds the five extensions. `ACCEPT.lyrics` is `.srt,.vtt,.txt,.json,.html`. `WRONG_KIND_TEXT.lyrics` is "Select a lyrics file".
-- `editor.js`: `FIELD_NOUN` gets the noun of the field `lyrics`: "lyrics file". The sheet title for this kind is "Choose a lyrics file".
+- `editor.js`: `FIELD_NOUN` gets the noun of the field `lyrics`: "the lyrics file". The sheet title for this kind is "Choose a lyrics file".
 - The import sheet of the album accepts audio files and image files only, as now. A lyrics file there shows the error of an unsupported file, and no track changes.
 
 ## Steps

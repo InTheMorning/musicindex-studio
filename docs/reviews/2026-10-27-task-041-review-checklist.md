@@ -20,7 +20,7 @@ A coding model implements each packet. The planning model examines the diff and 
 |---|---|---|
 | 041a | Complete | Pass on 2026-10-27. The four checks pass. The planning model removed one wrong code comment about the write sequence. |
 | 041b | Complete | Pass on 2026-10-27. The four checks pass. The UI has no feed rule. The visual check is open. |
-| 041c | Not started | |
+| 041c | Complete | Pass on 2026-10-27. The four checks pass. The planning model changed the noun of the field to "the lyrics file", as the other nouns are. |
 | 041d | Not started | |
 | 041e | Not started | |
 
@@ -45,3 +45,9 @@ A coding model implements each packet. The planning model examines the diff and 
 ### Packet 041b
 
 - The publisher page has no details section. The coding model stopped on the escalation condition. The operator decided on 2026-10-27 that the publisher page gets a new section directly after its first section. The heading is the role label and the word "details". The section has the row "Feed settings".
+
+### Packet 041c
+
+- The upload route accepts a lyrics file, so the import sheet of the album refuses a lyrics file in the UI. It removes the uploaded file and shows the error of an unsupported file.
+- Two tests used a `.txt` file as a file that is not media. They now use a `.bin` file, because a `.txt` file is a lyrics file (ADR 0064 item 9).
+- The coding model saw two failures of `testing::sshd::tests` in parallel runs, each in a different test. A second run passed each time. The two runs of the planning model passed. The cause is not known.

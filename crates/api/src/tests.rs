@@ -3082,7 +3082,7 @@ async fn a_text_file_gives_415_and_a_repeated_name_reuses_the_same_library_file(
     let id = set_up(&app).await;
     let text = std::fs::read(media_path("not-media.txt")).unwrap();
 
-    let (status, body) = upload(&app, id, "not-media.txt", text).await;
+    let (status, body) = upload(&app, id, "not-media.bin", text).await;
     assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
     assert_eq!(body["error"]["code"], "unsupported_media");
     assert!(incoming_is_empty(&app));
@@ -8120,6 +8120,73 @@ async fn the_release_picker_lists_only_the_files_of_this_feed_of_the_asked_kind(
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+}
+
+#[tokio::test]
+async fn the_release_picker_lists_only_the_lyrics_files_for_lyrics() {
+    let app = app();
+    set_library(&app).await;
+    let id = set_up(&app).await;
+    let png = std::fs::read(media_path("image.png")).unwrap();
+    let (status, body) = upload(&app, id, "image.png", png).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let (status, body) = upload(
+        &app,
+        id,
+        "words.srt",
+        b"1\n00:00:01,000 --> 00:00:02,000\nHi\n".to_vec(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let (status, lyrics) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/picker/release?kind=lyrics"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{lyrics}");
+    assert_eq!(names(&lyrics, "name"), vec!["words.srt"], "{lyrics}");
+    assert_eq!(lyrics["files"][0]["media_type"], "application/srt");
+}
+
+#[tokio::test]
+async fn an_upload_of_a_vtt_file_gives_the_lyrics_kind_and_its_media_type() {
+    let app = app();
+    set_library(&app).await;
+    let id = set_up(&app).await;
+    let (status, body) = upload(&app, id, "words.vtt", b"WEBVTT\n".to_vec()).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["kind"], "lyrics", "{body}");
+    assert_eq!(body["media_type"], "text/vtt", "{body}");
+    assert_eq!(body["title"], Value::Null);
+    assert_eq!(body["track_number"], Value::Null);
+    assert_eq!(body["duration"], Value::Null);
+}
+
+#[tokio::test]
+async fn the_host_picker_lists_only_the_lyrics_files_for_lyrics() {
+    let app = app();
+    let host = tempfile::tempdir().unwrap();
+    fill_host(host.path());
+    std::fs::write(host.path().join("words.vtt"), b"WEBVTT\n").unwrap();
+    let id = add_host(&app, "Files", host.path(), "https://files.example").await;
+    let (status, lyrics) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/connectors/{id}/picker?kind=lyrics"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{lyrics}");
+    assert_eq!(names(&lyrics, "path"), vec!["notes.txt", "words.vtt"]);
+    let vtt = lyrics["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "words.vtt")
+        .unwrap();
+    assert_eq!(vtt["media_type"], "text/vtt");
 }
 
 #[tokio::test]

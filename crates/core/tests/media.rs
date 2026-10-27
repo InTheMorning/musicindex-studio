@@ -56,7 +56,7 @@ fn a_png_file_gives_its_media_type() {
 
 #[test]
 fn a_text_file_gives_unsupported() {
-    let error = import(&media_path("not-media.txt"), "not-media.txt").unwrap_err();
+    let error = import(&media_path("not-media.txt"), "not-media.bin").unwrap_err();
     assert_eq!(error.kind(), MediaErrorKind::Unsupported);
 }
 

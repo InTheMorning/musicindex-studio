@@ -11,9 +11,10 @@ const KINDS = {
   'live-image': 'image',
   'track-audio': 'audio',
   recording: 'audio',
+  lyrics: 'lyrics',
 };
 
-// The kind of file that a field accepts: `image` or `audio`. An unknown
+// The kind of file that a field accepts: `image`, `audio` or `lyrics`. An unknown
 // field gives `null`.
 export function fieldKind(field) {
   return KINDS[field] || null;
@@ -25,18 +26,21 @@ export function fieldKind(field) {
 const EXTENSIONS = {
   image: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
   audio: ['mp3', 'm4a', 'flac', 'ogg', 'opus', 'wav'],
+  lyrics: ['srt', 'vtt', 'txt', 'json', 'html'],
 };
 
 // The accept list of the file input for each kind.
 const ACCEPT = {
   image: 'image/*,.jpg,.jpeg,.png,.webp,.gif',
   audio: 'audio/*,.wav,.flac,.m4a,.ogg,.opus',
+  lyrics: '.srt,.vtt,.txt,.json,.html',
 };
 
 // The text that an upload of the wrong kind shows (ADR 0062 item 13).
 const WRONG_KIND_TEXT = {
   image: 'Select an image file',
   audio: 'Select an audio file',
+  lyrics: 'Select a lyrics file',
 };
 
 // The text of each drop error (ADR 0062 item 20).

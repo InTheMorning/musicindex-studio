@@ -2807,7 +2807,7 @@ impl PickerQuery {
             ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "invalid_kind",
-                "the kind of a file is image or audio",
+                "the kind of a file is image, audio or lyrics",
             )
         })
     }
@@ -4124,6 +4124,7 @@ fn import_upload(
             duration,
         } => ("audio", title, track_number, duration),
         media::ImportedKind::Image => ("image", None, None, None),
+        media::ImportedKind::Lyrics => ("lyrics", None, None, None),
     };
     // The core makes the alternative enclosures of a lossless file
     // (ADR 0065 item 10).

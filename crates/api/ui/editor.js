@@ -419,6 +419,13 @@ function withNewAudio(item, facts, readsMetadata) {
 
 const PickerContext = createContext(null);
 
+// The title of the sheet for each kind of file.
+const PICKER_TITLE = {
+  image: 'Choose an image',
+  audio: 'Choose an audio file',
+  lyrics: 'Choose a lyrics file',
+};
+
 // The name of the thing in each file field, for the label of its button.
 const FIELD_NOUN = {
   cover: 'the cover image',
@@ -426,6 +433,7 @@ const FIELD_NOUN = {
   'live-image': 'the image of the show',
   'track-audio': 'the audio file',
   recording: 'the recording',
+  lyrics: 'the lyrics file',
 };
 
 // Does the drag carry a file?
@@ -584,7 +592,7 @@ function FilePicker({ pick }) {
   const host = hosts.find((h) => h.connectorId === hostId) || hosts[0] || null;
   useEffect(() => { if (pick.open) setSource('release'); }, [pick.open]);
   const inputId = `pick-input-${pick.field}`;
-  const title = pick.kind === 'image' ? 'Choose an image' : 'Choose an audio file';
+  const title = PICKER_TITLE[pick.kind] || 'Choose a file';
   let path = null;
   if (pick.open && source === 'release') path = `/feeds/${feedId}/picker/release?kind=${pick.kind}`;
   if (pick.open && source === 'hosts' && host) path = `/connectors/${host.connectorId}/picker?kind=${pick.kind}`;
@@ -835,6 +843,13 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
             onProgress: (sent) => updateRow(row.id, { sent }),
             onRetry: (retrying) => updateRow(row.id, { retrying }),
           });
+          // The import sheet takes audio files and image files only. The
+          // upload route also accepts a lyrics file, so remove it and show
+          // the error of an unsupported file (ADR 0064 item 9).
+          if (facts.kind !== 'audio' && facts.kind !== 'image') {
+            removeFiles(facts);
+            throw { code: 'unsupported_media' };
+          }
           // The first image becomes the album art when the album has no
           // image of its own yet (task architecture). "First" means no
           // earlier-selected row is a ready image already.

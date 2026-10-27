@@ -223,6 +223,12 @@ pub fn media_type_of_name(name: &str) -> Option<String> {
         "jpg" | "jpeg" => "image/jpeg",
         "webp" => "image/webp",
         "gif" => "image/gif",
+        // The types of the `podcast:transcript` specification.
+        "srt" => "application/srt",
+        "vtt" => "text/vtt",
+        "txt" => "text/plain",
+        "json" => "application/json",
+        "html" => "text/html",
         _ => return None,
     };
     Some(media_type.to_owned())
@@ -278,6 +284,24 @@ mod tests {
 
     fn parse(xml: &str) -> Feed {
         Feed::read(&Document::parse_bytes(xml.as_bytes()).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn media_type_of_name_gives_the_transcript_types_of_the_lyrics_extensions() {
+        for (name, media_type) in [
+            ("a.srt", "application/srt"),
+            ("a.vtt", "text/vtt"),
+            ("a.txt", "text/plain"),
+            ("a.json", "application/json"),
+            ("a.html", "text/html"),
+            ("A.SRT", "application/srt"),
+        ] {
+            assert_eq!(
+                media_type_of_name(name).as_deref(),
+                Some(media_type),
+                "{name}"
+            );
+        }
     }
 
     const FEED: &str = r#"<?xml version="1.0"?>

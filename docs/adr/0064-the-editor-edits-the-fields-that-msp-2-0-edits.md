@@ -1,6 +1,6 @@
 # ADR 0064: The Editor Edits The Fields That MSP 2.0 Edits
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
 

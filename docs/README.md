@@ -67,7 +67,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0061: A text value has no space at its ends](adr/0061-a-text-value-has-no-space-at-its-ends.md)
 - [ADR 0062: A file picker for each file field](adr/0062-a-file-picker-for-each-file-field.md)
 - [ADR 0063: One switch hides a feed from apps](adr/0063-one-switch-hides-a-feed-from-apps.md)
-- [ADR 0064: The editor edits the fields that MSP 2.0 edits](adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) (proposed)
+- [ADR 0064: The editor edits the fields that MSP 2.0 edits](adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md)
 - [ADR 0065: The core applies each feed rule](adr/0065-the-core-applies-each-feed-rule.md)
 
 ## Plans

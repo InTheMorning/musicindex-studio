@@ -10,7 +10,7 @@ To make a new feed, see [Make a new release](new-release.md).
 Use the panel **Find feeds by address or name**.
 Feeds that you add this way are read-only until you connect the host that holds them.
 
-1. Type one feed address on each line in **Feed addresses**. A publisher feed brings all of its releases.
+1. Type one feed address on each line in **Feed addresses**. An artist feed or a label feed brings all of its releases.
 2. Or type an artist name or a feed name in **Or search musicindex by name** and select **Search**.
 3. In the results, select the feeds that are yours.
 4. Select **Find my feeds**. The button shows the number of addresses and feeds.

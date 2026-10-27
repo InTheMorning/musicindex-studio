@@ -21,7 +21,7 @@ const model = {
 const labels = (items) => items.map((item) => item.label);
 
 test('the medium kind gives the dot and the label', () => {
-  assert.deepEqual(mediumKind('publisher'), { dot: 'publisher', label: 'Publisher' });
+  assert.deepEqual(mediumKind('publisher', 'label'), { dot: 'label', label: 'Label' });
   assert.deepEqual(mediumKind('MUSIC'), { dot: 'feed', label: 'Album' });
   assert.deepEqual(mediumKind('musicL'), { dot: 'playlist', label: 'Playlist' });
   assert.deepEqual(mediumKind(undefined), { dot: 'feed', label: 'Feed' });
@@ -68,7 +68,7 @@ test('Lock Studio shows only when the vault is open', () => {
 test('an open album gives the outline in the sequence of ADR 0039 item 6', () => {
   const panel = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [album], model, vaultOpen: true });
   assert.equal(panel.kind, 'outline');
-  assert.deepEqual(panel.feed, { id: 1, title: 'Night Songs', image: null, typeLabel: 'Album' });
+  assert.deepEqual(panel.feed, { id: 1, title: 'Night Songs', image: null, glow: 'var(--c-feed)', typeLabel: 'Album' });
   assert.deepEqual(panel.items[0], { id: 'releases', label: 'Releases' });
   assert.deepEqual(labels(panel.items), [
     'Releases', 'Album', 'First', 'Untitled track', 'Add a track', 'Import files',
@@ -124,9 +124,13 @@ test('an open album before its draft loads gives the Releases link, Album and Fi
   assert.deepEqual(labels(panel.items), ['Releases', 'Album', 'Files']);
 });
 
-test('a publisher feed gives Publisher and Files, and a read-only feed gives Feed', () => {
-  const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: null, vaultOpen: false });
-  assert.deepEqual(labels(pub.items), ['Releases', 'Publisher', 'Files']);
+test('a publisher feed gives its role and Files, and a read-only feed gives Feed', () => {
+  // musicindex ADR 0033 R-WORD-3: the page has the role word.
+  const label = { ...publisher, publisher_role: 'label' };
+  const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [label], model: null, vaultOpen: false });
+  assert.deepEqual(labels(pub.items), ['Releases', 'Label', 'Files']);
+  const noRole = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: null, vaultOpen: false });
+  assert.deepEqual(labels(noRole.items), ['Releases', 'Feed', 'Files']);
   const read = leftPanel({ view: { name: 'feed', id: 3 }, feeds: [readOnly], model: null, vaultOpen: false });
   assert.deepEqual(labels(read.items), ['Releases', 'Feed']);
   assert.equal(read.items[1].current, true);

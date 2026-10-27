@@ -11,7 +11,7 @@ Studio edits the feed file and keeps the feed GUID and each track GUID the same.
 Studio opens these feed types for editing:
 
 - Albums
-- Publisher feeds
+- Artist feeds and label feeds
 - Playlists
 
 Studio can read other feeds, but it cannot edit them.

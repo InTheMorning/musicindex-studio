@@ -29,7 +29,7 @@ Most steps are the same in the two. A page tells you when a step is different.
 
 - [Add feeds that you already have](add-feeds.md)
 - [Make a new release](new-release.md)
-- [Publisher feeds](publisher-feeds.md)
+- [Artist and label feeds](artist-and-label-feeds.md)
 - [Playlists](playlists.md)
 
 ## Edit a release

@@ -52,7 +52,7 @@ For an album, the outline has these entries:
 - **Credits and links**
 - **Files**
 
-A publisher feed has **Publisher** and **Files**.
+An artist feed has **Artist** and **Files**. A label feed has **Label** and **Files**.
 A playlist has **Playlist**, **Tracks**, **Value routes** and **Files**.
 A read-only feed has one page, **Feed**.
 

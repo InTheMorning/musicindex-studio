@@ -6,14 +6,28 @@
 import { liveKey, isLiveItem, statusLabel } from './live.js';
 import { coverOf } from './cover.js';
 
-// The kind of a medium: its dot class and its label.
-export function mediumKind(medium) {
+// The kind of a medium: its dot class and its label. A publisher feed shows
+// its role, and "Feed" with a hollow dot when the collection has no role
+// (musicindex ADR 0033 R-WORD-3). Studio cannot make the test of R-WORD-3
+// item 3, so it does not use the label of that item.
+export function mediumKind(medium, role) {
   switch ((medium || '').toLowerCase()) {
-    case 'publisher': return { dot: 'publisher', label: 'Publisher' };
+    case 'publisher':
+      if (role === 'artist') return { dot: 'artist', label: 'Artist' };
+      if (role === 'label') return { dot: 'label', label: 'Label' };
+      return { dot: 'feed hollow', label: 'Feed' };
     case 'musicl': return { dot: 'playlist', label: 'Playlist' };
     case 'music': return { dot: 'feed', label: 'Album' };
     default: return { dot: 'feed', label: 'Feed' };
   }
+}
+
+// The color of the logo shape of a feed with no cover: the entity color of
+// its kind (musicindex ADR 0021 R-ART-2). A feed with no role uses the feed
+// color.
+export function kindGlow(kind) {
+  const dot = kind.dot.split(' ')[0];
+  return `var(--c-${['playlist', 'artist', 'label'].includes(dot) ? dot : 'feed'})`;
 }
 
 // Is this feed a publisher feed (ADR 0041 item 1)?
@@ -74,7 +88,7 @@ function outlineItems(feed, view, model, narrow) {
   });
   if (isPublisher(feed)) {
     // A publisher feed has two pages and no tracks (ADR 0041 item 3).
-    items.push(page('publisher', 'Publisher', 'album'));
+    items.push(page('publisher', mediumKind(feed.medium, feed.publisher_role).label, 'album'));
     items.push(page('files', 'Files', 'files'));
     return items;
   }
@@ -162,7 +176,8 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       id: feed.id,
       title: displayTitle(feed),
       image: feedCover(feed),
-      typeLabel: mediumKind(feed.medium).label,
+      glow: kindGlow(mediumKind(feed.medium, feed.publisher_role)),
+      typeLabel: mediumKind(feed.medium, feed.publisher_role).label,
     },
     items: outlineItems(feed, view, model, narrow),
     bottom,
@@ -235,7 +250,8 @@ export function releasesList({ feeds, connectors, sort, view, marked }) {
   const rows = sorted.map((feed) => ({
     id: feed.id,
     title: displayTitle(feed),
-    typeLabel: mediumKind(feed.medium).label,
+    typeLabel: mediumKind(feed.medium, feed.publisher_role).label,
+    glow: kindGlow(mediumKind(feed.medium, feed.publisher_role)),
     host: hostOf(feed, connectors),
     image: feedCover(feed),
     draftLabel: DRAFT_LABELS[feed.draft_state] || 'No changes',

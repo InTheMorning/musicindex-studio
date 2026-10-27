@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
-import { trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
+import { mediumKind, trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
@@ -1629,38 +1629,38 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
       </div>
     </section>
 
-    <section class="page-section"><h2>Publisher feeds</h2>
+    <section class="page-section"><h2>Artists and labels</h2>
       <div class="group">
         <${ChangedNotices} changed=${changed} go=${go} />
-        ${rows.length === 0 && html`<p class="hint">No publisher feeds yet.</p>`}
+        ${rows.length === 0 && html`<p class="hint">No artist or label yet.</p>`}
         ${rows.map((row) => html`<div class="release-row" key=${row.entry._cid}>
           <span class="title">${row.entry.title || row.entry.feed_url}</span>
           <span class="sub">${publisherLine(row.entry, row.match, row.index)}</span>
           <div class="actions">
             <button class="button" type="button" disabled=${row.index === 0 || linkAction.busy}
-              aria-label=${`Move ${row.entry.title || 'this publisher feed'} up`}
+              aria-label=${`Move ${row.entry.title || 'this feed'} up`}
               onClick=${() => movePublisher(row.index, -1)}>Move up</button>
             <button class="button" type="button" disabled=${row.index === rows.length - 1 || linkAction.busy}
-              aria-label=${`Move ${row.entry.title || 'this publisher feed'} down`}
+              aria-label=${`Move ${row.entry.title || 'this feed'} down`}
               onClick=${() => movePublisher(row.index, 1)}>Move down</button>
             <button class="button destructive" type="button" disabled=${linkAction.busy}
-              aria-label=${`Remove ${row.entry.title || 'this publisher feed'}`}
+              aria-label=${`Remove ${row.entry.title || 'this feed'}`}
               onClick=${() => removeRow(row)}>Remove</button>
           </div>
         </div>`)}
         ${candidates.length > 0 && html`<div class="field">
-          <label for="album-publisher">Publisher feed</label>
+          <label for="album-publisher">Artist or label</label>
           <div class="field-body">
             <select id="album-publisher" value=${chosen} onChange=${(e) => setChosen(e.target.value)}>
-              <option value="">Select a publisher feed</option>
+              <option value="">Select an artist or a label</option>
               ${candidates.map((f) => html`<option value=${f.id}>${f.title || f.path || 'Untitled feed'}</option>`)}
             </select>
           </div>
         </div>
         <div class="actions"><button class="button action" type="button" disabled=${!chosen || linkAction.busy}
-          onClick=${addPublisher}>Add the Publisher Feed</button></div>`}
-        ${candidates.length === 0 && html`<p class="hint">Studio has no other publisher feed in the collection to add.</p>`}
-        <${ErrorNotice} error=${publisherError(linkAction.error, 'Open the publisher feed and select its role first.')} />
+          onClick=${addPublisher}>Add the Feed</button></div>`}
+        ${candidates.length === 0 && html`<p class="hint">Studio has no other artist feed or label feed in the collection to add.</p>`}
+        <${ErrorNotice} error=${publisherError(linkAction.error, 'Open that feed and select its role first.')} />
       </div>
     </section>
 
@@ -2246,7 +2246,7 @@ function ChangedNotices({ changed, go }) {
     </div>`);
 }
 
-const PUBLISHER_ROLE_TEXT = 'Select the role of this publisher feed first.';
+const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 
 // The publisher page: the fields, the role and the releases (ADR 0041 item
 // 3). Each link changes the draft of this feed and the draft of the release,
@@ -2304,7 +2304,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     })));
   };
   return html`<${ChangedNotices} changed=${changed} go=${go} />
-    <section class="page-section"><h2>Publisher</h2>
+    <section class="page-section"><h2>${mediumKind(feed.medium, feed.publisher_role).label}</h2>
       <div class="group">
         <${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />
         <${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />

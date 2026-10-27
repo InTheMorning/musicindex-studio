@@ -80,10 +80,10 @@ This section has three rows.
 - **Value routes**. Opens the page for payment recipients. See [Value routes](value-routes.md).
 - **Feed facts**. Shows the address source, the feed GUID, the file, the version and the last announcement. It also has the button **Remove from collection**.
 
-### Publisher feeds
+### Artists and labels
 
-This section shows the publisher feeds that link to this album.
-See [Publisher feeds](publisher-feeds.md).
+This section shows the artist feeds and the label feeds that link to this album.
+See [Artist and label feeds](artist-and-label-feeds.md).
 
 ### Tracks
 

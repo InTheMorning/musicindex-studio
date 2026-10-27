@@ -50,6 +50,6 @@ Studio now makes the feed file on the host. See [Review and write your changes](
 
 The page **Add feeds** also has these panels:
 
-- **Make a publisher feed**. See [Publisher feeds](publisher-feeds.md).
+- **Make an artist feed or a label feed**. See [Artist and label feeds](artist-and-label-feeds.md).
 - **Make a show feed**. See [Live shows](live-shows.md).
 - **Make a playlist**. See [Playlists](playlists.md).

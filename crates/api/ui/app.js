@@ -14,7 +14,7 @@ import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
 import {
-  mediumKind, isEditable, isPublisher, trackKey, isTrack,
+  mediumKind, kindGlow, isEditable, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
@@ -1152,7 +1152,7 @@ function NewPublisherForm({ connectors, onAdded }) {
       options=${[['artist', 'Artist'], ['label', 'Label']]} onChange=${(value) => setRole(value || null)} />
     <${ErrorNotice} error=${formError.other} />
     <div class="actions"><button class="button action" type="submit" disabled=${busy || !ready}>
-      ${busy ? 'Making the publisher feed…' : 'Make the Publisher Feed'}</button></div>
+      ${busy ? 'Making the feed…' : role === 'label' ? 'Make the Label Feed' : role === 'artist' ? 'Make the Artist Feed' : 'Make the Feed'}</button></div>
   </form>`;
 }
 
@@ -1255,7 +1255,7 @@ function AddFeedForm({ connectors, onAdded }) {
           onChange=${(e) => setSelected(e.target.value)}>
           <option value="">Choose a feed file</option>
           ${found.feeds.map((f) => html`<option value=${f.path} disabled=${f.in_collection}>
-            ${f.title || f.path} · ${mediumKind(f.medium).label}${f.blocked ? ' · blocked' : ''} · ${f.path}${f.in_collection ? ' · in your collection' : ''}</option>`)}
+            ${f.title || f.path} · ${mediumKind(f.medium, f.publisher_role).label}${f.blocked ? ' · blocked' : ''} · ${f.path}${f.in_collection ? ' · in your collection' : ''}</option>`)}
         </select>`}
         ${found && found.truncated && html`<p class="hint">The folder has more files than Studio lists. Type the path of a feed that is not in the list.</p>`}
         ${feedError.field && html`<span class="field-error" id="feed-choice-error">${feedError.field}</span>`}
@@ -1296,7 +1296,7 @@ function FindFeeds({ onFound }) {
   return html`<div class="form">
     <div class="field">
       <label for="addresses">Feed addresses</label>
-      <span class="hint" id="addresses-hint">One on each line. A publisher feed brings all of its releases.</span>
+      <span class="hint" id="addresses-hint">One on each line. An artist feed or a label feed brings all of its releases.</span>
       <textarea id="addresses" rows="3" aria-describedby="addresses-hint" placeholder="https://music.example/feed.xml"
         value=${addresses} onInput=${(e) => setAddresses(e.target.value)}></textarea>
     </div>
@@ -1348,7 +1348,7 @@ function FoundFeeds({ found, onAdded, onNothingToAdd }) {
       <legend>${g.host}</legend>
       <p class="hint">${hostLabel(g)}</p>
       ${g.feeds.map((f) => {
-        const kind = mediumKind(f.medium);
+        const kind = mediumKind(f.medium, f.publisher_role);
         return html`<label class=${`choice${f.in_collection ? ' taken' : ''}`}>
           <input type="checkbox" disabled=${f.in_collection} checked=${f.in_collection || chosen.includes(f.url)}
             onChange=${() => toggle(f.url)} />
@@ -1612,7 +1612,7 @@ function Bar({ back = true, children }) {
 // before ADR 0029.
 function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
-  const kind = mediumKind(feed.medium);
+  const kind = mediumKind(feed.medium, feed.publisher_role);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const remove = () => {
     const name = feed.title || feed.path || 'this feed';
@@ -1622,7 +1622,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
       onRemoved();
     });
   };
-  const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
+  const glow = kindGlow(kind);
   return html`<div>
     <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span><//>
     <section class="hero" style=${{ '--glow': glow }}>
@@ -1679,9 +1679,9 @@ function Crumb({ feed, view, draft }) {
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
-  const kind = mediumKind(feed.medium);
+  const kind = mediumKind(feed.medium, feed.publisher_role);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
-  const glow = `var(--c-${kind.dot === 'playlist' ? 'playlist' : kind.dot === 'publisher' ? 'publisher' : 'feed'})`;
+  const glow = kindGlow(kind);
   // A host operation can change the draft XML, and `draft.changed` from
   // the server counts each pending operation (ADR 0036 item 14). After
   // each change of the operations, the shell saves the edits of the user
@@ -1713,7 +1713,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       </header>
       <${ErrorNotice} error=${error} />
       ${feed.last_version === null && html`<div class="notice" role="status">
-        <strong>The host has no file for this ${feed.medium === 'publisher' ? 'publisher feed' : 'release'} yet.</strong>
+        <strong>The host has no file for this ${feed.medium === 'publisher' ? 'feed' : 'release'} yet.</strong>
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
@@ -1771,7 +1771,7 @@ function FolderFeeds({ connector, onAdded }) {
     <h2>Studio also found these feeds in this folder</h2>
     <fieldset class="choices"><legend class="visually-hidden">Feeds to add</legend>
       ${found.map((f) => {
-        const kind = mediumKind(f.medium);
+        const kind = mediumKind(f.medium, f.publisher_role);
         return html`<label class="choice">
           <input type="checkbox" checked=${chosen.includes(f.path)} onChange=${() => toggle(f.path)} />
           <span class=${`dot ${kind.dot}`}></span>
@@ -2097,7 +2097,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>`}
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
               ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
-                <span class=${`dot ${mediumKind(f.medium).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
+                <span class=${`dot ${mediumKind(f.medium, f.publisher_role).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
             ${disagreeing.length > 0 && html`<dt>Different addresses</dt><dd>
               These feeds have an address that does not agree with the folder.
               <ul class="address-list">
@@ -2203,7 +2203,7 @@ function AddFeeds({ connectors, onAdded, go }) {
         : html`<p class="hint">Studio puts the files of a release on a host. Connect a host first.</p>
           <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a Host</button></div>`}
     </div>
-    ${connectors.length > 0 && html`<div class="panel"><h2>Make a publisher feed</h2>
+    ${connectors.length > 0 && html`<div class="panel"><h2>Make an artist feed or a label feed</h2>
       <${NewPublisherForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
     ${connectors.length > 0 && html`<div class="panel"><h2>Make a show feed</h2>
       <p class="hint">A show feed holds live shows. It is a music feed.</p>
@@ -2265,7 +2265,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   const hasBadAddress = (number) => draft.bad.some((b) => b.field.startsWith(`items/${number - 1}/`));
   return html`${releases && html`<button class="row" type="button" onClick=${() => showReleases(feed.id)}>${releases.label}</button>`}
     <div class="outline-feed">
-      <${ImageThumb} url=${feed.image} className="outline-cover" always />
+      <${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always />
       <div class="text">
         <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
         <span class="sub">${feed.typeLabel}</span>
@@ -2405,7 +2405,7 @@ function ReleasesPage({ feeds, connectors, marked, list, changedFeeds, onQuery, 
         ? html`<ul class=${`releases-list ${releases.view}`}>
             ${releases.rows.map((row) => html`<li id=${`release-${row.id}`} data-marked=${row.marked ? 'true' : 'false'}>
               <button class=${releases.view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" onClick=${() => onOpen(row.id)}>
-                <${ImageThumb} url=${row.image} className="releases-cover" always />
+                <${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always />
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
                   <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>

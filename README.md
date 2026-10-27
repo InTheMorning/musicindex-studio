@@ -12,7 +12,7 @@ Music Index Studio edits hosted Podcasting 2.0 music feeds. An artist keeps each
 - [Connect a host](docs/user-guide/hosts.md)
 - [Add feeds that you already have](docs/user-guide/add-feeds.md)
 - [Make a new release](docs/user-guide/new-release.md)
-- [Publisher feeds](docs/user-guide/publisher-feeds.md)
+- [Artist and label feeds](docs/user-guide/artist-and-label-feeds.md)
 - [Playlists](docs/user-guide/playlists.md)
 - [Find and open a release](docs/user-guide/find-your-way.md)
 - [Edit the album details](docs/user-guide/edit-album.md)

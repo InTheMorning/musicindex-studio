@@ -747,14 +747,9 @@ function SftpHostForm({ onAdded }) {
     <${Field} id="sftp-url" label="Public address of the folder (optional)" type="url"
       hint="The web address that publishes this folder."
       error=${addressError} value=${values.base_url} onInput=${set('base_url')} />
-    <fieldset class="choices">
-      <legend>Login</legend>
-      ${[['key', 'Private key'], ['password', 'Password'], ['agent', 'ssh-agent']].map(([value, label]) => html`<label class="choice">
-        <input type="radio" name="sftp-login" value=${value} checked=${values.login === value}
-          onChange=${() => setValues((current) => ({ ...current, login: value }))} />
-        <span class="text"><span class="title">${label}</span></span>
-      </label>`)}
-    </fieldset>
+    <${ChoiceSelect} id="sftp-login" label="Login" value=${values.login}
+      options=${[['key', 'Private key'], ['password', 'Password'], ['agent', 'ssh-agent']]}
+      onChange=${(login) => setValues((current) => ({ ...current, login }))} />
     ${values.login === 'key' && html`<div class="field">
       <label for="sftp-key">Private key</label>
       <div class="field-body">
@@ -856,14 +851,8 @@ function useNostrKey(onLists) {
 
 // The "Signing" fieldset and the key of the host.
 function SigningStep({ nk, idPrefix, keyError }) {
-  return html`<fieldset class="choices">
-      <legend>Signing</legend>
-      ${[['signer', 'My signer'], ['vault', 'Key in the vault']].map(([value, label]) => html`<label class="choice">
-        <input type="radio" name=${`${idPrefix}-signing`} value=${value} checked=${nk.mode === value}
-          onChange=${() => nk.choose(value)} />
-        <span class="text"><span class="title">${label}</span></span>
-      </label>`)}
-    </fieldset>
+  return html`<${ChoiceSelect} id=${`${idPrefix}-signing`} label="Signing" value=${nk.mode}
+      options=${[['signer', 'My signer'], ['vault', 'Key in the vault']]} onChange=${nk.choose} />
     ${nk.mode === 'signer' && html`<div class="actions">
       <button class="button action" type="button" disabled=${nk.signer.busy} onClick=${nk.askSigner}>
         ${nk.signer.busy ? 'Asking your signer…' : 'Use my signer'}</button>
@@ -1048,34 +1037,34 @@ function BlossomHostForm({ onAdded }) {
   </form>`);
 }
 
+// One setting with a small number of values, as a select menu in one row.
+// `options` is a list of [value, label] pairs.
+// A `placeholder` adds a first entry with an empty value, for a setting that
+// has no value yet.
+function ChoiceSelect({ id, label, value, options, placeholder, onChange }) {
+  return html`<div class="field">
+    <label for=${id}>${label}</label>
+    <div class="field-body">
+      <select id=${id} value=${value} onChange=${(e) => onChange(e.target.value)}>
+        ${placeholder && html`<option value="">${placeholder}</option>`}
+        ${options.map(([option, text]) => html`<option value=${option}>${text}</option>`)}
+      </select>
+    </div>
+  </div>`;
+}
+
 // The first choice is the type of the host. The form below it follows the
 // type (ADR 0045 item 4). A server has no folder host (ADR 0055).
 function AddHostForm({ feeds, onAdded }) {
   const [type, setType] = useState(serverMode ? 's3' : 'local');
   return html`<div class="form">
-    <fieldset class="choices">
-      <legend>Type of host</legend>
-      ${!serverMode && html`<label class="choice">
-        <input type="radio" name="host-type" value="local" checked=${type === 'local'} onChange=${() => setType('local')} />
-        <span class="text"><span class="title">Folder on this computer</span></span>
-      </label>`}
-      <label class="choice">
-        <input type="radio" name="host-type" value="s3" checked=${type === 's3'} onChange=${() => setType('s3')} />
-        <span class="text"><span class="title">S3 or R2 bucket</span></span>
-      </label>
-      <label class="choice">
-        <input type="radio" name="host-type" value="sftp" checked=${type === 'sftp'} onChange=${() => setType('sftp')} />
-        <span class="text"><span class="title">SFTP server</span></span>
-      </label>
-      <label class="choice">
-        <input type="radio" name="host-type" value="nsite" checked=${type === 'nsite'} onChange=${() => setType('nsite')} />
-        <span class="text"><span class="title">nsite site</span></span>
-      </label>
-      <label class="choice">
-        <input type="radio" name="host-type" value="blossom" checked=${type === 'blossom'} onChange=${() => setType('blossom')} />
-        <span class="text"><span class="title">Blossom server</span></span>
-      </label>
-    </fieldset>
+    <${ChoiceSelect} id="host-type" label="Type of host" value=${type} onChange=${setType} options=${[
+      ...(serverMode ? [] : [['local', 'Folder on this computer']]),
+      ['s3', 'S3 or R2 bucket'],
+      ['sftp', 'SFTP server'],
+      ['nsite', 'nsite site'],
+      ['blossom', 'Blossom server'],
+    ]} />
     ${type === 's3'
       ? html`<${S3HostForm} onAdded=${onAdded} />`
       : type === 'sftp'
@@ -1159,17 +1148,8 @@ function NewPublisherForm({ connectors, onAdded }) {
       error=${formError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
     <${Field} id="publisher-name" label="Name" required
       value=${name} onInput=${(e) => setName(e.target.value)} />
-    <fieldset class="choices">
-      <legend>Role</legend>
-      <label class="choice">
-        <input type="radio" name="publisher-role" value="artist" checked=${role === 'artist'} onChange=${() => setRole('artist')} />
-        <span class="text"><span class="title">Artist</span></span>
-      </label>
-      <label class="choice">
-        <input type="radio" name="publisher-role" value="label" checked=${role === 'label'} onChange=${() => setRole('label')} />
-        <span class="text"><span class="title">Label</span></span>
-      </label>
-    </fieldset>
+    <${ChoiceSelect} id="publisher-role" label="Role" value=${role ?? ''} placeholder="Select a role"
+      options=${[['artist', 'Artist'], ['label', 'Label']]} onChange=${(value) => setRole(value || null)} />
     <${ErrorNotice} error=${formError.other} />
     <div class="actions"><button class="button action" type="submit" disabled=${busy || !ready}>
       ${busy ? 'Making the publisher feed…' : 'Make the Publisher Feed'}</button></div>
@@ -1264,24 +1244,23 @@ function AddFeedForm({ connectors, onAdded }) {
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
       </select></div>`}
-    ${!typing && html`<fieldset class="choices" aria-describedby=${feedError.field ? 'feed-choice-error' : undefined}>
-      <legend>Feeds in this folder</legend>
-      ${listError && html`<${ErrorNotice} error=${listError} />`}
-      ${!found && !listError && html`<p class="empty" role="status">Looking for feed files…</p>`}
-      ${found && found.feeds.length === 0 && html`<p class="empty">Studio found no feed files in this folder.</p>`}
-      ${found && found.feeds.map((f) => {
-        const kind = mediumKind(f.medium);
-        return html`<label class=${`choice${f.in_collection ? ' taken' : ''}`}>
-          <input type="radio" name="feed" value=${f.path} disabled=${f.in_collection}
-            checked=${selected === f.path} onChange=${() => setSelected(f.path)} />
-          <span class=${`dot ${kind.dot}`}></span>
-          <span class="text"><span class="title">${f.title || f.path}</span>
-            <span class="sub">${kind.label}${f.blocked ? ' · blocked' : ''} · <span class="mono">${f.path}</span>${f.in_collection ? ' · in your collection' : ''}</span></span>
-        </label>`;
-      })}
-      ${found && found.truncated && html`<p class="hint">The folder has more files than Studio lists. Type the path of a feed that is not in the list.</p>`}
-      ${feedError.field && html`<span class="field-error" id="feed-choice-error">${feedError.field}</span>`}
-    </fieldset>`}
+    ${!typing && html`<div class="field">
+      <label for="feed-choice">Feeds in this folder</label>
+      <div class="field-body">
+        ${listError && html`<${ErrorNotice} error=${listError} />`}
+        ${!found && !listError && html`<p class="empty" role="status">Looking for feed files…</p>`}
+        ${found && found.feeds.length === 0 && html`<p class="empty">Studio found no feed files in this folder.</p>`}
+        ${found && found.feeds.length > 0 && html`<select id="feed-choice" value=${selected}
+          aria-describedby=${feedError.field ? 'feed-choice-error' : undefined}
+          onChange=${(e) => setSelected(e.target.value)}>
+          <option value="">Choose a feed file</option>
+          ${found.feeds.map((f) => html`<option value=${f.path} disabled=${f.in_collection}>
+            ${f.title || f.path} · ${mediumKind(f.medium).label}${f.blocked ? ' · blocked' : ''} · ${f.path}${f.in_collection ? ' · in your collection' : ''}</option>`)}
+        </select>`}
+        ${found && found.truncated && html`<p class="hint">The folder has more files than Studio lists. Type the path of a feed that is not in the list.</p>`}
+        ${feedError.field && html`<span class="field-error" id="feed-choice-error">${feedError.field}</span>`}
+      </div>
+    </div>`}
     ${typing
       ? html`<${Field} id="feed-path" label="Feed file" required placeholder="album/feed.xml"
           hint="The path of the feed file in the folder of the host."

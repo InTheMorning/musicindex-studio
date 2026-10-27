@@ -720,7 +720,9 @@ textarea:focus { background: var(--fill); }
 .failed { padding-left: 18px; color: var(--muted); font-size: .9rem; }
 .choices .hint { margin-bottom: 4px; }
 
-.visually-hidden {
+/* The second selector is more specific than `.field input`, so that a
+   hidden input in a field keeps the width of 1 px. */
+.visually-hidden, .field input.visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -785,7 +787,9 @@ textarea:focus { background: var(--fill); }
 /* The value editor (task 012). */
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: end; }
 .grid2 > .field { align-content: end; }
+/* A percentage width lets a select with long entries shrink to its field. */
 .field select {
+  width: 100%;
   min-height: var(--target);
   padding: 0 10px;
   border: 0;

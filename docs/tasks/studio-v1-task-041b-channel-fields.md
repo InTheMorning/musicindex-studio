@@ -24,10 +24,8 @@ These choices are fixed. Do not change them.
 ### The Model Module `explicit.js`
 
 - `isExplicit(text)` gives true when the trimmed text is `true` or `yes`, in any letter case. It gives false for each other text and for `null`.
-- `explicitText(current, on)` gives the new text for a change of the switch (ADR 0064 item 4):
-  - When the trimmed `current` is `yes` or `no` in any letter case, the result is `yes` or `no`. When the first letter of `current` is a capital letter, the first letter of the result is a capital letter.
-  - In each other case, the result is `true` or `false`.
-- The module has no Preact and no browser state. Packet 041c uses the same module for the track switch.
+- The module has no form rule. A change of the switch sends `true` or `false`. The core keeps the form of the feed at the draft save (ADR 0064 item 4, packet 041a).
+- The module has no Preact and no browser state. Packet 041d uses the same module for the track switch.
 
 ### "Explicit"
 
@@ -66,15 +64,12 @@ These choices are fixed. Do not change them.
 - Each code comment is in ASD-STE100 Simplified Technical English, as the files are.
 - Each control follows the durable rules of `AGENTS.md`: the button roles, the target sizes, the three background levels and the keyboard.
 - A setting with a few values is a select menu, not a radio group.
-- No logic in two places: one form rule of the explicit switch.
+- No logic in two places: the form rule of the explicit value is in the core only.
 
 ## Acceptance Criteria
 
 Mechanical:
 
-- A Node test: `explicitText` gives `no` for `no` and off, `No` for `Yes` and off, and `yes` for `no` and on.
-- A Node test: `explicitText` gives `false` for `true` and off, and `true` for `null` and on.
-- A Node test: `explicitText` gives `false` for ` FALSE ` and off, and `true` for an unknown text such as `clean` and on.
 - A Node test: `isExplicit` gives true for `true`, `Yes` and ` yes `, and false for `false`, `no`, `clean` and `null`.
 - A Node test of `shell.js`: the outline of an album lists "Feed settings" after "Credits and links".
 - The four commit checks pass.
@@ -116,7 +111,7 @@ Goal:
 
 Constraints:
 - Follow the Architecture section of the task file fully.
-- The form rule of the switch is in `explicit.js` only, with Node tests.
+- A change of the switch sends `true` or `false`. The core keeps the form of the feed.
 - Studio writes no field that the user did not set. No field refuses a value that is not an email address.
 - Write each code comment in ASD-STE100 Simplified Technical English, as the files do.
 

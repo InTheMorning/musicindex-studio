@@ -1,7 +1,7 @@
-# Studio v1 Task 041d: The Artwork List
+# Studio v1 Task 041e: The Artwork List
 
-Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 9 to 11, [ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0025](../adr/0025-studio-serves-cover-art.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md).
-Sequence: the last packet of task 041. It depends on 041c.
+Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 10 to 12, [ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0025](../adr/0025-studio-serves-cover-art.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md).
+Sequence: the last packet of task 041. It depends on 041d.
 
 Status: Not started.
 
@@ -25,7 +25,7 @@ These choices are fixed. Do not change them.
 
 - `PURPOSES` is the list of the tokens of the specification: `artwork`, `social`, `canvas`, `banner`, `publisher`, `circular` and `poster`.
 - `purposeTokens(text)` gives the tokens of a `purpose` value. The separator is one or more spaces. `null` gives an empty list.
-- `withPurpose(text, token, on)` gives the new `purpose` value. It adds the token at the end, or removes it. Each other token stays in its position, also a token that is not in `PURPOSES` (ADR 0064 item 11). An empty result is `null`.
+- `withPurpose(text, token, on)` gives the new `purpose` value. It adds the token at the end, or removes it. Each other token stays in its position, also a token that is not in `PURPOSES` (ADR 0064 item 12). An empty result is `null`.
 - `nearRatio(width, height)` gives the ratio as text, such as `16/9`:
   - The near ratios are `1/1`, `5/4`, `4/5`, `4/3`, `3/4`, `3/2`, `2/3`, `16/10`, `10/16`, `16/9`, `9/16`, `21/9`, `9/21`, `2/1`, `1/2`, `3/1`, `1/3`, `4/1` and `1/4`.
   - When the ratio of the image is within 2 % of a ratio of the list, the result is the nearest ratio of the list. The difference is relative to the ratio of the list.
@@ -114,7 +114,7 @@ Implement only this task. Do not redesign the architecture.
 
 Read:
 - AGENTS.md
-- docs/tasks/studio-v1-task-041d-artwork-list.md
+- docs/tasks/studio-v1-task-041e-artwork-list.md
 - docs/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md
 - The files that the Files section names.
 

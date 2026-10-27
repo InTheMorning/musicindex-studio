@@ -8,7 +8,7 @@
 
 Studio replaces MSP 2.0. On 2026-10-27, Claude compared MSP 2.0 (`../MSP-2.0`, branch `publisher-parties`, commit `09f3cf9`) with Studio. MSP 2.0 edits some fields that the Studio editor does not show. The tree keeps each of these fields with no change ([ADR 0012](0012-lossless-tree-with-a-typed-model.md) item 4), but the user cannot change them.
 
-The operator decided on 2026-10-27 that `itunes:category` waits for a subsequent decision.
+The operator decided on 2026-10-27 that `itunes:category` waits for a subsequent decision. The operator also made three decisions on that date. The core keeps the form of the explicit value (item 4). A lyrics file has its own kind in the picker (item 9). The page of item 7 has the name "Feed settings".
 
 ### The Fields
 
@@ -44,7 +44,7 @@ The corpus is `crates/core/tests/corpus`. A count gives the number of feeds with
 1. The core models these elements: `itunes:explicit` of the channel and of each item, `itunes:owner` with `itunes:name` and `itunes:email`, `itunes:keywords`, `managingEditor`, `webMaster`, and `podcast:season` with its `name`. A read and a write with no edit give the same bytes.
 2. Each new element takes its hosted position ([ADR 0031](0031-a-new-element-takes-its-hosted-position.md)).
 3. Studio writes no field that the user did not set. A feed with no `itunes:explicit` gets none from Studio. A new track gets no `podcast:season`.
-4. A switch keeps the form of the feed. When the feed has `yes` or `no`, a change writes `yes` or `no`, with the same capital letter. When the tag has no value, a change writes `true` or `false`, as Apple specifies.
+4. A switch keeps the form of the feed. The UI sends `true` or `false`. At the draft save, the core compares the sent value with the draft value. It does the same for the GUIDs and the track numbers. When the draft has `yes` or `no`, the core writes `yes` or `no`, with the same capital letter. In each other case, the core writes `true` or `false`, as Apple specifies.
 5. Studio keeps a text value as the user types it, with no space at its ends ([ADR 0061](0061-a-text-value-has-no-space-at-its-ends.md)). Studio does not refuse a `managingEditor`, a `webMaster` or an owner email that is not an email address.
 
 ### The Channel Fields
@@ -55,7 +55,7 @@ The corpus is `crates/core/tests/corpus`. A count gives the number of feeds with
    - "Keywords": one text field.
    - "Lock against import": one switch for `podcast:locked`, and the owner email of the lock.
    - "Managing editor" and "Webmaster": one text field each.
-7. "Explicit" is in the first section of the page, after "Hide from apps". Apple requires this tag. The other fields of item 6 are on one page that a row of the details section opens. The user does not change them in each visit ([ADR 0028](0028-summary-lines-and-one-open-entry.md)).
+7. "Explicit" is in the first section of the page, after "Hide from apps". Apple requires this tag. The other fields of item 6 are on the page "Feed settings". A row of the details section opens it. The user does not change them in each visit ([ADR 0028](0028-summary-lines-and-one-open-entry.md)).
 
 ### The Track Fields
 
@@ -64,17 +64,18 @@ The corpus is `crates/core/tests/corpus`. A count gives the number of feeds with
    - "Credits": a selection between "Use the album credits" and "Credits for this track". The second selection shows the People control of the album. When the user selects it, the list starts with a copy of the album credits, because the item list replaces the channel list. A change back to "Use the album credits" removes each item `podcast:person`, after a confirmation.
    - "Lyrics": a list of `podcast:transcript` entries. Each entry has the address, the type, the language and a "Captions" check box for `rel="captions"`. The address field uses the file picker ([ADR 0062](0062-a-file-picker-for-each-file-field.md)).
    - "Season": a number field and a name field, in the "Identity" row.
+9. The file picker gets a third kind of file: a lyrics file. The extensions are `.srt`, `.vtt`, `.txt`, `.json` and `.html`. The three sources of ADR 0062 item 2 and the drop of ADR 0062 item 20 accept this kind in the lyrics field. An upload of a lyrics file goes to the release folder, as an image does. This extends ADR 0062 items 1 and 3.
 
 ### More Artwork
 
-9. The album page and the track page get a list of `podcast:image` entries. Each entry has the address, the description for accessibility (`alt`), the `purpose` tokens and the dimensions. The address field uses the file picker.
-10. When the user selects an image, Studio reads its width, its height and its type from the file. Studio gives the ratio, and selects a near ratio from a list, such as `16/9`. The user can change each value.
-11. The `purpose` field offers the tokens of the specification as check boxes: `artwork`, `social`, `canvas`, `banner`, `publisher`, `circular` and `poster`. Studio keeps each other token of the feed.
+10. The album page and the track page get a list of `podcast:image` entries. Each entry has the address, the description for accessibility (`alt`), the `purpose` tokens and the dimensions. The address field uses the file picker.
+11. When the user selects an image, Studio reads its width, its height and its type from the file. Studio gives the ratio, and selects a near ratio from a list, such as `16/9`. The user can change each value.
+12. The `purpose` field offers the tokens of the specification as check boxes: `artwork`, `social`, `canvas`, `banner`, `publisher`, `circular` and `poster`. Studio keeps each other token of the feed.
 
 ### Not In This Decision
 
-12. `itunes:category`: deferred by the operator on 2026-10-27.
-13. The fields of a live item.
+13. `itunes:category`: deferred by the operator on 2026-10-27.
+14. The fields of a live item.
 
 ## Alternatives Considered
 
@@ -83,12 +84,16 @@ The corpus is `crates/core/tests/corpus`. A count gives the number of feeds with
 - Refuse a `managingEditor` that is not an email address. Rejected: the corpus has such values, and the RSS readers accept them.
 - Put all the channel fields in the first section. Not chosen: the first section then gets fields that the user sets one time.
 - Edit one lyrics file for each track, as MSP 2.0 does. Rejected: the specification permits more than one, and Studio keeps more than one.
+- Apply the form rule of item 4 in the UI, as ADR 0063 does for its switch. Rejected: another client of the API can then write `true` into a feed that uses `yes` and `no`. Each feed rule is in the core ([ADR 0002](0002-rust-core-json-api-browser-ui.md)).
+- Send a flag for the switch through the API. Rejected: the model then has two ways to change one value.
+- A text field with no picker for the lyrics address. Not chosen: each other file field has the picker.
 
 ## Consequences
 
 - An MSP 2.0 user can change each field that MSP 2.0 edits. The categories are the only field that stays with no control.
 - A feed with no `itunes:explicit` stays with no tag until the user sets the switch. Apple requires the tag, but this decision does not add it without the user.
-- Three tasks can do this work: the channel fields, the track fields and the artwork list.
+- [Task 041](../tasks/studio-v1-task-041-msp-fields.md) does this work in five packets: the core elements, the channel fields, the lyrics kind, the track fields and the artwork list.
+- When the operator accepts this decision, ADR 0062 gets an amendment for item 9.
 
 ## Verification
 
@@ -96,7 +101,9 @@ Mechanical:
 
 - The corpus tests: each feed gives the same bytes after a read and a write with no edit.
 - A core test for each new element: an edit changes only that element, and a new element takes its hosted position.
-- A core test changes `itunes:explicit` in a feed with `no` and in a feed with `false`. The value keeps its form.
+- A core test saves a sent `true` over a draft `no`, and over a draft `false`. The draft then holds `yes` and `true`. A sent `false` over a draft `Yes` gives `No`.
+- A core test gives the kind of each lyrics extension, in lower case and in upper case.
+- An API test lists the lyrics files of a release and of a test host. Each list holds only lyrics files.
 - A core test sets "Credits for this track", then sets "Use the album credits" again. The item has no `podcast:person`.
 - A core test keeps an unknown `purpose` token after an edit of the image.
 - The Node tests examine the model module of the credits selection, the `purpose` tokens and the near ratio.

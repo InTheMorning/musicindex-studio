@@ -1,7 +1,7 @@
-# Studio v1 Task 041c: The Track Fields
+# Studio v1 Task 041d: The Track Fields
 
 Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 3, 4 and 8, [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md).
-Sequence: the third packet of task 041. It depends on 041b.
+Sequence: the fourth packet of task 041. It depends on 041c.
 
 Status: Not started.
 
@@ -23,7 +23,7 @@ These choices are fixed. Do not change them.
 
 ### "Explicit"
 
-- The section "Track" gets `ExplicitField` of packet 041b, for `item.explicit`, after "Duration". It uses `explicitText` of `explicit.js`. A track with no `itunes:explicit` shows the switch in the off position, and Studio sets no value until the user changes it.
+- The section "Track" gets `ExplicitField` of packet 041b, for `item.explicit`, after "Duration". It uses `isExplicit` of `explicit.js` for its state. A track with no `itunes:explicit` shows the switch in the off position, and Studio sets no value until the user changes it. A change sends `true` or `false`. The core keeps the form of the feed (packet 041a).
 
 ### The Model Module `credits.js`
 
@@ -45,7 +45,7 @@ These choices are fixed. Do not change them.
 - The track page gets a section "Lyrics" after "Credits". It lists the `podcast:transcript` entries of the item, with `EntryRow`, `EntryActions` and `addOpen`, as `Persons` does. One entry is open at a time (ADR 0028).
 - The summary line of an entry gives the file name of the address, the type and the language, such as "song.srt · application/srt · en".
 - An entry has these fields:
-  - "Lyrics file address", for `url`. It uses `PickedImageField` with the kind of the picker for a text file, or a `TextField` with the button "Choose…" of `ChooseFile`. When the picker has no kind for a text file, use a `TextField` with no picker, and report it.
+  - "Lyrics file address", for `url`. It uses the picker field of the field `lyrics` of packet 041c, as `PickedImageField` does for an image. When the user selects a file, `media_type` gets the media type of the file.
   - "Type", for `media_type`: a select menu with `text/plain`, `text/html`, `text/vtt`, `application/json` and `application/srt`. When the feed has a different value, the menu also offers that value.
   - "Language", for `language`. The hint says: "For example en or de-AT."
   - "Captions", a check box for `rel`. On gives `captions`. Off gives `null`.
@@ -77,7 +77,7 @@ These choices are fixed. Do not change them.
 - Each code comment is in ASD-STE100 Simplified Technical English, as the files are.
 - Each control follows the durable rules of `AGENTS.md`.
 - A setting with a few values is a select menu, not a radio group.
-- No logic in two places: the explicit form rule stays in `explicit.js`, and the credits rule is in `credits.js`.
+- No logic in two places: the explicit form rule stays in the core, and the credits rule is in `credits.js`.
 
 ## Acceptance Criteria
 
@@ -105,7 +105,7 @@ node --test crates/api/ui-tests/*.test.mjs
 ## Escalation
 
 - Stop and report when `Persons` cannot take an address path for the persons of an item.
-- Stop and report when the picker has no kind for a lyrics file.
+- Stop and report when `PickedImageField` cannot take the field `lyrics` with no change to its structure.
 
 ## Prompt for lower-context coding model
 
@@ -115,7 +115,7 @@ Implement only this task. Do not redesign the architecture.
 
 Read:
 - AGENTS.md
-- docs/tasks/studio-v1-task-041c-track-fields.md
+- docs/tasks/studio-v1-task-041d-track-fields.md
 - docs/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md
 - The files that the Files section names.
 
@@ -124,7 +124,7 @@ Goal:
 
 Constraints:
 - Follow the Architecture section of the task file fully.
-- The credits rule is in `credits.js` only, with Node tests. Use `explicit.js` for the switch.
+- The credits rule is in `credits.js` only, with Node tests. The switch sends `true` or `false`.
 - A change back to the album credits asks for a confirmation.
 - Write each code comment in ASD-STE100 Simplified Technical English, as the files do.
 

@@ -1,19 +1,19 @@
 # Studio v1 Task 041a: The New Elements In The Core
 
-Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 1 to 5, [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0031](../adr/0031-a-new-element-takes-its-hosted-position.md).
+Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 1 to 5, [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0031](../adr/0031-a-new-element-takes-its-hosted-position.md).
 Sequence: the first packet of task 041. It depends on task 040.
 
 Status: Not started.
 
 ## Goal
 
-The core models `itunes:explicit` of the channel and of each item, `itunes:owner`, `itunes:keywords`, `managingEditor`, `webMaster` and `podcast:season`. A read and a write with no edit give the same bytes.
+The core models `itunes:explicit` of the channel and of each item, `itunes:owner`, `itunes:keywords`, `managingEditor`, `webMaster` and `podcast:season`. A read and a write with no edit give the same bytes. At the draft save, the core keeps the form of the explicit value.
 
 ## Files
 
-Inspect: `crates/core/src/feed.rs` (`Feed`, `Feed::read`, `Feed::write_hosted`, `Item`, `Item::read_fields`, `Item::apply_children`), `crates/core/src/feed/elements.rs` (`element_type!`, `Locked`, `RssImage`), `crates/core/src/feed/sync.rs` (`Children::text`, `Children::one`), `crates/core/tests/edits.rs` (the tests of `podcast:block` of task 040), `crates/core/tests/corpus.rs`.
+Inspect: `crates/core/src/feed.rs` (`Feed`, `Feed::read`, `Feed::write_hosted`, `Item`, `Item::read_fields`, `Item::apply_children`), `crates/core/src/feed/elements.rs` (`element_type!`, `Locked`, `RssImage`), `crates/core/src/feed/sync.rs` (`Children::text`, `Children::one`), `crates/core/src/pipeline.rs` (`replace_model`, `keep_identity`, `number_tracks`), `crates/core/tests/edits.rs` (the tests of `podcast:block` of task 040), `crates/core/tests/pipeline.rs`, `crates/core/tests/corpus.rs`.
 
-Change: `crates/core/src/feed.rs`, `crates/core/src/feed/elements.rs`, `crates/core/tests/edits.rs`.
+Change: `crates/core/src/feed.rs`, `crates/core/src/feed/elements.rs`, `crates/core/src/pipeline.rs`, `crates/core/tests/edits.rs`, `crates/core/tests/pipeline.rs`.
 
 Do not change: `crates/core/src/feed/sync.rs`, `crates/core/src/xml.rs`, the corpus files, the API, the UI.
 
@@ -46,17 +46,23 @@ These choices are fixed. Do not change them.
 - In `Item::apply_children`, add `podcast:season` directly before `podcast:episode`, and `itunes:explicit` directly after `itunes:duration`.
 - A new element with a hosted position takes that position (ADR 0031). Do not add a special case for it.
 
-### No Rule In The Core
+### The Form Rule At The Draft Save
 
-- The core does not change a value. It does not convert `yes` to `true`, and it does not refuse a text that is not an email address (ADR 0064 items 4 and 5).
-- The core adds no element that the model does not give (ADR 0064 item 3).
+- `pipeline::replace_model` gets a third step after `number_tracks`. The step is `keep_explicit_form(&current, &mut sent)`. It applies ADR 0064 item 4 to the channel `explicit` and to the `explicit` of each item.
+- The UI sends `true` or `false`. The step changes a sent value only when it differs from the draft value:
+  - The draft value can be `yes` or `no` in any letter case, after a trim. Then the step writes `yes` for a sent `true` and `no` for a sent `false`. When the first letter of the draft value is a capital letter, the first letter of the result is a capital letter.
+  - In each other case, the step keeps the sent value.
+- An item of the sent model finds its draft item by its entry key, as `number_tracks` does. A new item has no draft item, so the step keeps its sent value.
+- A sent `null` stays `null`. The step adds no element (ADR 0064 item 3).
+- The core does not refuse a text that is not an email address (ADR 0064 item 5).
 
 ## Steps
 
 1. Add `Season` and `Owner` with the `read` and `apply` functions.
 2. Add the fields to `Feed` and `Item`, with the read calls and the write calls.
-3. Add the core tests.
-4. Run the four checks.
+3. Add `keep_explicit_form` to `replace_model`.
+4. Add the core tests.
+5. Run the four checks.
 
 ## Constraints
 
@@ -76,6 +82,10 @@ Mechanical:
 - A core test writes the text `No` into a channel `itunes:explicit` that holds `no`, and the text `true` into one that holds `false`. Each feed holds the text that the model gives, and no other byte changes.
 - A core test changes `itunes:email` of an owner that also has an unknown child. The unknown child stays.
 - A core test reads a model JSON with no new field. Each new field is empty.
+- A core test of `replace_model`: a sent `true` over a draft `no` gives `yes`, and a sent `false` over a draft `Yes` gives `No`.
+- A core test of `replace_model`: a sent `true` over a draft `false` gives `true`, and a sent `true` over no draft value gives `true`.
+- A core test of `replace_model`: the same rules apply to the `explicit` of an item, and a new item keeps its sent value.
+- A core test of `replace_model`: a sent `null` over a draft `no` removes the element, and adds none.
 - The four commit checks pass.
 
 ## Test Commands
@@ -107,11 +117,12 @@ Read:
 Goal:
 - Model `itunes:explicit`, `itunes:owner`, `itunes:keywords`, `managingEditor`, `webMaster` and `podcast:season` in the core.
 - Keep the bytes of each feed after a read and a write with no edit.
+- Keep the form of the explicit value at the draft save.
 
 Constraints:
 - Follow the Architecture section of the task file fully.
 - No new crate. No change to `sync.rs` or `xml.rs`.
-- The core does not change or refuse a value.
+- The form rule is in `keep_explicit_form` only. The core does not refuse a text that is not an email address.
 - Write each code comment in ASD-STE100 Simplified Technical English, as the files do.
 
 Do not touch:

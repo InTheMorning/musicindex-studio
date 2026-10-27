@@ -2058,6 +2058,56 @@ async fn a_draft_is_edited_examined_written_and_rolled_back() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+/// ADR 0064 item 8: a track that uses the album credits has no persons. A
+/// save with an empty list removes each item `podcast:person` and keeps the
+/// channel persons.
+#[tokio::test]
+async fn an_empty_persons_list_of_a_track_removes_its_persons_and_keeps_the_channel_persons() {
+    let app = app();
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+        <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+        <podcast:person>Chan</podcast:person>\
+        <item><guid>t-1</guid><podcast:person>Bob</podcast:person>\
+        <podcast:person>Cy</podcast:person></item></channel></rss>",
+    )
+    .unwrap();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    assert_eq!(model["items"][0]["persons"].as_array().unwrap().len(), 2);
+    model["items"][0]["persons"] = json!([]);
+    let (status, draft) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(draft["model"]["items"][0]["persons"], json!([]));
+    assert_eq!(draft["model"]["persons"].as_array().unwrap().len(), 1);
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let unified = diff["unified"].as_str().unwrap();
+    let removed = unified
+        .lines()
+        .filter(|l| l.starts_with('-') && !l.starts_with("---"))
+        .collect::<String>();
+    let added = unified
+        .lines()
+        .filter(|l| l.starts_with('+') && !l.starts_with("+++"))
+        .collect::<String>();
+    assert!(
+        removed.contains("Bob") && removed.contains("Cy"),
+        "{unified}"
+    );
+    assert!(!added.contains("Bob") && !added.contains("Cy"), "{unified}");
+    assert!(added.contains("Chan"), "{unified}");
+}
+
 #[tokio::test]
 async fn a_stale_or_invalid_model_and_a_changed_file_give_errors() {
     let app = app();

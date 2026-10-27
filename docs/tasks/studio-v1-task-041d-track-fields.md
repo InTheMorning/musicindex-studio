@@ -3,7 +3,7 @@
 Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 3, 4 and 8, [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md).
 Sequence: the fourth packet of task 041. It depends on 041c.
 
-Status: Not started.
+Status: Complete on 2026-10-27. The visual check is open.
 
 ## Goal
 
@@ -13,7 +13,7 @@ The track page gets "Explicit", the credits selection, the lyrics list and the s
 
 Inspect: `crates/api/ui/editor.js` (`TrackPage`, `Persons`, `EntryRow`, `EntryActions`, `addOpen`, `PickedImageField`, `useFilePick`, `ChooseFile`, `FIELD_NOUN`), `crates/api/ui/explicit.js`, `crates/api/ui/values.js` (the confirmation of the track recipients, line 520), `crates/api/ui/draft.js` (`withCids`), `crates/api/ui/picker.js`, `crates/api/src/ui.rs`.
 
-Change: a new file `crates/api/ui/credits.js`, a new file `crates/api/ui-tests/credits.test.mjs`, `crates/api/ui/editor.js`, `crates/api/src/ui.rs`.
+Change: a new file `crates/api/ui/credits.js`, a new file `crates/api/ui-tests/credits.test.mjs`, `crates/api/ui/editor.js`, `crates/api/src/ui.rs`, `crates/api/src/tests.rs`.
 
 Do not change: the core, the API routes, `crates/api/ui/explicit.js`, `crates/api/ui/picker.js`.
 
@@ -37,6 +37,7 @@ These choices are fixed. Do not change them.
 - The track page gets a section "Credits" after the section "Audio file".
 - A select menu "Credits" has two values: "Use the album credits" and "Credits for this track". Its value comes from `usesAlbumCredits`.
 - A change to "Credits for this track" applies `withTrackCredits` with `model.persons`, then gives each new entry its client ID with `withCids`. The section then shows `Persons` with the prefix `track-${cid}`, the list of the item and the address path `items/${index}/persons/…`.
+- `Persons` gets an optional property `path`, with the default `persons`. Its address fields use `${path}/${i}/img` and `${path}/${i}/href`. The album page does not set `path`, so its behavior does not change.
 - A change to "Use the album credits" asks for a confirmation first: "Remove the credits of this track? The track then uses the album credits." When the user confirms, the change applies `withAlbumCredits`. When the user cancels, the select keeps "Credits for this track".
 - When the user removes the last person with "Remove", the track uses the album credits again. No confirmation is necessary, because the list is already empty.
 
@@ -45,7 +46,7 @@ These choices are fixed. Do not change them.
 - The track page gets a section "Lyrics" after "Credits". It lists the `podcast:transcript` entries of the item, with `EntryRow`, `EntryActions` and `addOpen`, as `Persons` does. One entry is open at a time (ADR 0028).
 - The summary line of an entry gives the file name of the address, the type and the language, such as "song.srt · application/srt · en".
 - An entry has these fields:
-  - "Lyrics file address", for `url`. It uses the picker field of the field `lyrics` of packet 041c, as `PickedImageField` does for an image. When the user selects a file, `media_type` gets the media type of the file.
+  - "Lyrics file address", for `url`. A new component `PickedFileField` uses the picker field of the field `lyrics` of packet 041c. It is the same as `PickedImageField`, but it shows no image. Do not change `PickedImageField`. When the user selects a file, `media_type` gets the media type of the file.
   - "Type", for `media_type`: a select menu with `text/plain`, `text/html`, `text/vtt`, `application/json` and `application/srt`. When the feed has a different value, the menu also offers that value.
   - "Language", for `language`. The hint says: "For example en or de-AT."
   - "Captions", a check box for `rel`. On gives `captions`. Off gives `null`.
@@ -105,8 +106,7 @@ node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-- Stop and report when `Persons` cannot take an address path for the persons of an item.
-- Stop and report when `PickedImageField` cannot take the field `lyrics` with no change to its structure.
+- Stop and report when `useFilePick` cannot give the media type of the selected file to the lyrics entry.
 
 ## Prompt for lower-context coding model
 

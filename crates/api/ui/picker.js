@@ -169,7 +169,8 @@ export function audioAddresses(item) {
 }
 
 // The addresses of a field before the change, for `delete_unused` (ADR 0062
-// item 17). `subject` is the channel model for a cover field, else the item.
+// item 17). `subject` is the channel model for a cover field, the transcript
+// entry for a lyrics field, else the item.
 // The new address is not in the list, and no address is in it twice.
 export function replacedAddresses(field, subject, newAddress) {
   let found;
@@ -177,6 +178,8 @@ export function replacedAddresses(field, subject, newAddress) {
     found = [subject.image, subject.rss_image && subject.rss_image.url];
   } else if (fieldKind(field) === 'audio') {
     found = audioAddresses(subject);
+  } else if (fieldKind(field) === 'lyrics') {
+    found = [subject.url];
   } else {
     found = [subject.image];
   }

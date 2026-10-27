@@ -120,6 +120,11 @@ test('replacedAddresses gives the image of a track and of a live show', () => {
   assert.deepEqual(replacedAddresses('live-image', { image: null }, B), []);
 });
 
+test('replacedAddresses gives the address of a lyrics entry and not the track image', () => {
+  assert.deepEqual(replacedAddresses('lyrics', { url: A, image: B }, 'https://m.example/new.srt'), [A]);
+  assert.deepEqual(replacedAddresses('lyrics', { url: '' }, B), []);
+});
+
 test('replacedAddresses gives the enclosure and the audio sources of an audio field', () => {
   const item = {
     enclosure: { url: 'https://m.example/a.mp3' },

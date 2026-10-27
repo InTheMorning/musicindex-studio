@@ -21,7 +21,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | 041a | Complete | Pass on 2026-10-27. The four checks pass. The planning model removed one wrong code comment about the write sequence. |
 | 041b | Complete | Pass on 2026-10-27. The four checks pass. The UI has no feed rule. The visual check is open. |
 | 041c | Complete | Pass on 2026-10-27. The four checks pass. The planning model changed the noun of the field to "the lyrics file", as the other nouns are. |
-| 041d | Not started | |
+| 041d | Complete | Pass on 2026-10-27. The four checks pass. The planning model corrected the lyrics subject and the season number. The visual check is open. |
 | 041e | Not started | |
 
 ## Decisions
@@ -49,5 +49,12 @@ A coding model implements each packet. The planning model examines the diff and 
 ### Packet 041c
 
 - The upload route accepts a lyrics file, so the import sheet of the album refuses a lyrics file in the UI. It removes the uploaded file and shows the error of an unsupported file.
-- Two tests used a `.txt` file as a file that is not media. They now use a `.bin` file, because a `.txt` file is a lyrics file (ADR 0064 item 9).
+- Two tests used a `.txt` file as a file that is not media. They use a `.bin` file after this packet, because a `.txt` file is a lyrics file (ADR 0064 item 9).
 - The coding model saw two failures of `testing::sshd::tests` in parallel runs, each in a different test. A second run passed each time. The two runs of the planning model passed. The cause is not known.
+
+### Packet 041d
+
+- Before the packet started, the planning model found two problems in the packet. `Persons` writes the fixed address path `persons`, and `PickedImageField` always shows an image. `Persons` gets an optional property `path`. The lyrics entry uses a new component `PickedFileField` with no image. The packet also lists `crates/api/src/tests.rs` for its API test.
+- `replacedAddresses` of `picker.js` gave the track image for a lyrics field. The coding model gave the picker a subject with no image, so an old lyrics file stayed on the host. The planning model added a `lyrics` branch that gives the address of the transcript entry, with a Node test. The picker gets the entry as its subject.
+- The season number is a text in the core model, not an optional text. A season with only a name sent `null` for the number, and the draft save failed. The UI sends an empty text for an empty number. No test covers this function, because it is in `editor.js`. The visual check examines it.
+- When the album has no persons, "Credits for this track" adds one blank person. Without it, the empty list selects "Use the album credits" again.

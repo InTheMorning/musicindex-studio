@@ -16,6 +16,7 @@ import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { isExplicit } from './explicit.js';
+import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -114,8 +115,12 @@ export function addOpen(list, blank) {
 // Persons and Fundings return their rows with no wrapper div, so that each
 // entry and the add row sit as direct rows of the group, each with the
 // group's own inset separator (review of task 014c, defect 3).
-function Persons({ prefix, persons, onChange, bad }) {
-  const blank = { name: '', role: null, group: null, img: null, href: null };
+// `path` is the model path of the list, for the address fields. A track gives
+// `items/${index}/persons`.
+const BLANK_PERSON = { name: '', role: null, group: null, img: null, href: null };
+
+function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
+  const blank = BLANK_PERSON;
   return html`${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
     ${persons.map((p, i) => {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
@@ -128,8 +133,8 @@ function Persons({ prefix, persons, onChange, bad }) {
           <${TextField} id=${`${id}-role`} label="Role" hint="For example vocalist. Empty means host." value=${p.role} onChange=${change('role')} />
           <${TextField} id=${`${id}-group`} label="Group" hint="For example music. Empty means cast." value=${p.group} onChange=${change('group')} />
         </div>
-        <${TextField} id=${`${id}-img`} label="Picture address" type="url" address=${`persons/${i}/img`} bad=${bad} value=${p.img} onChange=${change('img')} />
-        <${TextField} id=${`${id}-href`} label="Information address" type="url" address=${`persons/${i}/href`} bad=${bad} value=${p.href} onChange=${change('href')} />
+        <${TextField} id=${`${id}-img`} label="Picture address" type="url" address=${`${path}/${i}/img`} bad=${bad} value=${p.img} onChange=${change('img')} />
+        <${TextField} id=${`${id}-href`} label="Information address" type="url" address=${`${path}/${i}/href`} bad=${bad} value=${p.href} onChange=${change('href')} />
         <${EntryActions} list=${persons} index=${i} name=${p.name || 'this person'} onChange=${onChange} />
       <//>`;
     })}
@@ -655,6 +660,14 @@ function PickedImageField({ field, subject, apply, id, label, address, bad, valu
     <${ChooseFile} pick=${pick}><${ImageThumb} url=${value} glow=${glow} className="field-cover" /><//>
     ${children}
   <//>`;
+}
+
+// A file address field with "Choose…" and the drop, and no image. The lyrics
+// address uses it.
+function PickedFileField({ field, subject, apply, id, label, address, bad, value, onChange }) {
+  const pick = useFilePick(field, subject, apply);
+  return html`<${TextField} id=${id} label=${label} type="url" address=${address} bad=${bad} value=${value} onChange=${onChange}
+      rootProps=${pick.rootProps}><${ChooseFile} pick=${pick} /><//>`;
 }
 
 // ---- The import sheet (task 018d, ADR 0026, ADR 0032) ----
@@ -1955,9 +1968,47 @@ function RecipientsPage({ model, update }) {
   return html`<div class="value-routes"><${AlbumPayments} model=${model} update=${update} /></div>`;
 }
 
+// The media types of a lyrics file. A feed can have another value, and the
+// menu then offers it too.
+const LYRICS_TYPES = ['text/plain', 'text/html', 'text/vtt', 'application/json', 'application/srt'];
+
+// The file name of an address, for the summary line. This is a display value.
+const addressName = (url) => (url || '').split(/[?#]/)[0].split('/').filter(Boolean).pop() || '';
+
+// One lyrics file of a track. `onChange` sets the list. `edit(change)` changes the transcript list of
+// the item, also after a long upload. `address` is the model path of the entry.
+function LyricsEntry({ id, list, index, onChange, edit, bad, address }) {
+  const t = list[index];
+  const same = (x) => x._cid === t._cid;
+  const change = (name) => (value) => edit((list) => list.map((x) => (same(x) ? set(x, name, value) : x)));
+  const apply = (url, facts) => edit((list) => list.map((x) => (same(x) ? { ...x, url, media_type: (facts && facts.media_type) || x.media_type } : x)));
+  const types = LYRICS_TYPES.includes(t.media_type) || !t.media_type ? LYRICS_TYPES : [...LYRICS_TYPES, t.media_type];
+  const summary = html`<span class="title">${addressName(t.url) || 'New lyrics file'}</span>
+    <span class="sub">${[t.media_type, t.language].filter(Boolean).join(' · ')}</span>`;
+  return html`<${EntryRow} group=${`${id}-lyrics`} cid=${t._cid} summary=${summary}>
+    <${PickedFileField} field="lyrics" subject=${t} apply=${apply} id=${`${id}-url`} label="Lyrics file address"
+      address=${`${address}/url`} bad=${bad} value=${t.url} onChange=${change('url')} />
+    <div class="field">
+      <label for=${`${id}-type`}>Type</label>
+      <div class="field-body"><select id=${`${id}-type`} value=${t.media_type || 'text/plain'}
+        onChange=${(e) => change('media_type')(e.target.value)}>
+        ${types.map((type) => html`<option value=${type}>${type}</option>`)}
+      </select></div>
+    </div>
+    <${TextField} id=${`${id}-language`} label="Language" hint="For example en or de-AT." value=${t.language} onChange=${change('language')} />
+    <div class="field">
+      <label for=${`${id}-captions`}>Captions</label>
+      <div class="field-body"><label class="check"><input id=${`${id}-captions`} type="checkbox" checked=${t.rel === 'captions'}
+        onChange=${(e) => change('rel')(e.target.checked ? 'captions' : null)} />
+        <span>These are captions</span></label></div>
+    </div>
+    <${EntryActions} list=${list} index=${index} name=${addressName(t.url) || 'this lyrics file'} onChange=${onChange} />
+  <//>`;
+}
+
 // The track page: the track before it and the track after it, then its
 // fields, its audio file, its recipients and its other facts (task 014c
-// step 3). The current editor has no credits for a track.
+// step 3).
 function TrackPage({ feed, model, update, bad, trackIndex, go }) {
   const items = model.items;
   const item = items[trackIndex];
@@ -1973,6 +2024,31 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
     (_address, facts, source) => editItem((i) => withNewAudio(i, facts, needsMetadataRead(source))),
     (duration) => editItem((i) => set(i, 'duration', duration)),
   );
+  // The season is `null` when both fields are empty.
+  // The season number is a text in the model, so an empty number is an
+  // empty text. The season is `null` when both fields are empty.
+  const changeSeason = (name) => (value) => {
+    const next = { value: '', name: null, ...item.season, [name]: value };
+    const empty = !next.value && next.name === null;
+    change('season')(empty ? null : { ...next, value: next.value || '' });
+  };
+  const editTranscripts = (edit) => editItem((i) => set(i, 'transcripts', edit(i.transcripts)));
+  const blankLyrics = { url: '', media_type: 'text/plain', language: null, rel: null };
+  const ownCredits = !usesAlbumCredits(item);
+  // A change to the credits. The copy gets its client IDs here. An album
+  // with no persons gives one empty person as a start value.
+  const useTrackCredits = () => editItem((i) => {
+    const next = withTrackCredits(i, model.persons);
+    return set(next, 'persons', next.persons.length > 0 ? withCids(next.persons) : addOpen([], BLANK_PERSON));
+  });
+  const changeCredits = (e) => {
+    if (e.target.value === 'track') { useTrackCredits(); return; }
+    if (confirm('Remove the credits of this track? The track then uses the album credits.')) {
+      editItem(withAlbumCredits);
+    } else {
+      e.target.value = 'track';
+    }
+  };
   const openTrack = (i) => go({ name: 'feed', id: feed.id, page: 'track', track: trackKey(items[i]) });
   const removeTrack = () => {
     changeItems(items.filter((_, i) => i !== trackIndex));
@@ -2001,6 +2077,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
           value=${item.pub_date} onChange=${change('pub_date')} />
         <${TextField} id=${`${id}-duration`} label="Duration" hint=${pickAudio.metadataFailed && !item.duration ? DURATION_NOTICE : 'Seconds, or HH:MM:SS.'}
           value=${item.duration} onChange=${change('duration')} />
+        <${ExplicitField} id=${`${id}-explicit`} model=${item} update=${editItem} />
       </div>
     </section>
 
@@ -2008,6 +2085,33 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
       <div class="group">
         <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio} />
         <${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Credits</h2>
+      <div class="group">
+        <div class="field">
+          <label for=${`${id}-credits`}>Credits</label>
+          <div class="field-body"><select id=${`${id}-credits`} value=${ownCredits ? 'track' : 'album'} onChange=${changeCredits}>
+            <option value="album">Use the album credits</option>
+            <option value="track">Credits for this track</option>
+          </select></div>
+        </div>
+        ${ownCredits
+          ? html`<${Persons} prefix=${id} persons=${item.persons} bad=${bad} path=${`${path}persons`}
+              onChange=${(persons) => editItem((i) => set(i, 'persons', persons))} />`
+          : html`<p class="hint">This track uses the album credits.</p>`}
+      </div>
+    </section>
+
+    <section class="page-section"><h2>Lyrics</h2>
+      <div class="group">
+        ${item.transcripts.length === 0 && html`<p class="hint">No lyrics files yet.</p>`}
+        ${item.transcripts.map((t, i) => html`<${LyricsEntry} key=${t._cid} id=${`${id}-lyrics-${t._cid}`} list=${item.transcripts} index=${i}
+          onChange=${(list) => editTranscripts(() => list)} edit=${editTranscripts} bad=${bad} address=${`${path}transcripts/${i}`} />`)}
+        <button class="link-row add" type="button" onClick=${() => editTranscripts((list) => addOpen(list, blankLyrics))}>
+          <span class="num">＋</span><span class="title">Add a lyrics file</span>
+        </button>
       </div>
     </section>
 
@@ -2024,8 +2128,12 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
         </details>
         <details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>
-            <span class="summary">Number ${item.episode || '—'}</span></summary>
+            <span class="summary">Number ${item.episode || '—'}${item.season ? ` · Season ${item.season.value || item.season.name}` : ''}</span></summary>
           <div class="form">
+            <div class="grid2">
+              <${TextField} id=${`${id}-season-number`} label="Season number" inputmode="numeric" value=${item.season && item.season.value} onChange=${changeSeason('value')} />
+              <${TextField} id=${`${id}-season-name`} label="Season name" value=${item.season && item.season.name} onChange=${changeSeason('name')} />
+            </div>
             <dl class="facts">
               <dt>Track number</dt><dd>${item.episode || '—'}</dd>
               <dt>Track GUID</dt><dd class="mono">${item.guid || 'Studio gives one when it saves'}</dd>

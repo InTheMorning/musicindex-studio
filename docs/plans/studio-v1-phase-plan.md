@@ -197,6 +197,14 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Visual check: the visual criteria of tasks 034, 035 and 036.
 - Human test: the tests of task 037.
 
+### The Editor Files And Covers
+
+- The operator found three defects on 2026-10-27. A feed in the DeMu form showed no cover. A description showed blank space. No field could take an image or an audio file from the computer, the release or a host.
+- Decisions: [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md) (the cover keeps the form of its feed), [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md) (no space at the ends of a text value) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) (a file picker for each file field, and the audio player).
+- [Task 038](../tasks/studio-v1-task-038-cover-and-text-space.md), one packet, is Ready. [Task 039](../tasks/studio-v1-task-039-file-picker.md), three packets, is Ready and starts after task 038.
+- Mechanical check: the mechanical criteria of tasks 038 and 039.
+- Visual check: the visual criteria of tasks 038 and 039.
+
 ### Phase 13: Desktop Shell
 
 - Package the Tauri app for Linux, macOS and Windows.

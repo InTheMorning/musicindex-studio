@@ -68,7 +68,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0062: A file picker for each file field](adr/0062-a-file-picker-for-each-file-field.md)
 - [ADR 0063: One switch hides a feed from apps](adr/0063-one-switch-hides-a-feed-from-apps.md)
 - [ADR 0064: The editor edits the fields that MSP 2.0 edits](adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) (proposed)
-- [ADR 0065: The core applies each feed rule](adr/0065-the-core-applies-each-feed-rule.md) (proposed)
+- [ADR 0065: The core applies each feed rule](adr/0065-the-core-applies-each-feed-rule.md)
 
 ## Plans
 
@@ -218,6 +218,10 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 041c: The lyrics kind of the picker](tasks/studio-v1-task-041c-lyrics-kind.md)
 - [Studio v1 task 041d: The track fields](tasks/studio-v1-task-041d-track-fields.md)
 - [Studio v1 task 041e: The artwork list](tasks/studio-v1-task-041e-artwork-list.md)
+- [Studio v1 task 042: The core applies each feed rule](tasks/studio-v1-task-042-core-feed-rules.md)
+- [Studio v1 task 042a: The cover step](tasks/studio-v1-task-042a-cover-step.md)
+- [Studio v1 task 042b: The listing routes](tasks/studio-v1-task-042b-listing-routes.md)
+- [Studio v1 task 042c: The lossless enclosures and the guard](tasks/studio-v1-task-042c-lossless-and-guard.md)
 
 ## Reviews
 
@@ -251,6 +255,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Distribution documentation review, 2026-10-26](reviews/2026-10-26-distribution-review.md)
 - [Tasks 038 and 039 review checklist, 2026-10-27](reviews/2026-10-27-tasks-038-039-review-checklist.md)
 - [Task 041 review checklist, 2026-10-27](reviews/2026-10-27-task-041-review-checklist.md)
+- [Task 042 review checklist, 2026-10-27](reviews/2026-10-27-task-042-review-checklist.md)
 - [UI feed rule audit, 2026-10-27](reviews/2026-10-27-ui-feed-rule-audit.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)

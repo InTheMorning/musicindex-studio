@@ -61,6 +61,7 @@ These choices are fixed. Do not change them.
 
 ## Constraints
 
+- No feed rule in the UI (ADR 0065). A UI function that changes the model gives only a start value or a display value. The core applies each feed rule.
 - Each code comment is in ASD-STE100 Simplified Technical English, as the files are.
 - Each control follows the durable rules of `AGENTS.md`: the button roles, the target sizes, the three background levels and the keyboard.
 - A setting with a few values is a select menu, not a radio group.
@@ -111,6 +112,7 @@ Goal:
 
 Constraints:
 - Follow the Architecture section of the task file fully.
+- No feed rule in the UI (ADR 0065).
 - A change of the switch sends `true` or `false`. The core keeps the form of the feed.
 - Studio writes no field that the user did not set. No field refuses a value that is not an email address.
 - Write each code comment in ASD-STE100 Simplified Technical English, as the files do.

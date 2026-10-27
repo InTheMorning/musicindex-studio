@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
+- Amended: 2026-10-27 by operator decision. [ADR 0065](0065-the-core-applies-each-feed-rule.md) items 7 to 9 put items 2 to 5 in the core. The switch and "Advanced" call core routes, and the draft response gives `hidden`.
 
 ## Context
 
@@ -53,7 +54,8 @@ Mechanical:
 - A core test writes `no` into both tags where they are, and keeps the block for one platform.
 - A core test hides a feed with no block tag. The feed gets both tags.
 - A core test examines a hidden feed with capital letters and small letters, with a block for one platform, and with the value `no`.
-- The Node tests examine `listing.js`: a hidden feed, a hide, a show, and the change of a block for one platform.
+- The API tests of the listing routes of ADR 0065 item 7: a hidden feed, a hide, a show, and the change of a block for one platform.
+- The Node tests examine `platformBlocks` in `listing.js`.
 - A Node test examines the mark of a hidden feed in the release list.
 
 Visual:

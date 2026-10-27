@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
+- Amended: 2026-10-27 by operator decision. [ADR 0065](0065-the-core-applies-each-feed-rule.md) item 6 makes items 3 to 5 a step of the draft save in the core. The UI sends the new address in `image`, or an empty text to clear the cover.
 
 ## Context
 
@@ -69,6 +70,7 @@ Mechanical:
 - A core test writes an item with no `itunes:image`. The item has no `itunes:image` after the write.
 - A core pipeline test makes a draft with two different cover addresses. The draft keeps both addresses. The diff and the written file give `<image><url>` the address of `itunes:image`.
 - The Node tests examine the UI model: the field value for each of the four forms of item 3, and the action "Use this address" only when the two addresses are different.
+- A core test of the save step for each case of ADR 0065 item 6.
 
 Visual:
 

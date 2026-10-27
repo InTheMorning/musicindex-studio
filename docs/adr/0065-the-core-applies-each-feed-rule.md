@@ -1,8 +1,9 @@
 # ADR 0065: The Core Applies Each Feed Rule
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
+- Accepted: 2026-10-27 by the operator. Item 4 got its last sentence, and items 6 and 7 got their details, at the acceptance.
 
 ## Context
 
@@ -33,21 +34,22 @@ The core already changes a sent model at the draft save. `pipeline::replace_mode
 
 ### Two Ways To Apply A Rule
 
-4. A rule that gives one sent field the form of the feed is a step of `pipeline::replace_model`, after `number_tracks`. The UI sends the plain value. The step compares it with the draft. The explicit form of ADR 0064 item 4 and the cover form of item 6 use this way.
+4. A rule that gives one sent field the form of the feed is a step of `pipeline::replace_model`, after `number_tracks`. The UI sends the plain value. The step compares it with the draft. The explicit form of ADR 0064 item 4 and the cover form of item 6 use this way. After a save, the UI shows the value that the step gave for each such field. When the user changed the field during the save, the UI keeps the value of the user.
 5. A rule where one user action changes more than one element is a core route for that action. The route changes the draft and gives the new model, as the live status route does. The listing rule of items 7 and 8 uses this way.
 
 ### The Cover
 
-6. The UI sends the new cover address in `image`. A step `keep_cover_form` applies ADR 0060 items 3 to 5:
-   - When the draft has only the RSS `<image>`, the address goes to `rss_image.url`, and `image` stays empty.
-   - When the draft has both tags and the sent `image` is different from the draft `image`, `rss_image.url` gets the same address.
-   - When the draft has both tags with different addresses and the sent `image` is the same as the draft `image`, nothing changes (ADR 0060 item 4).
+6. The UI sends the new cover address in `image`. To clear the cover, the UI sends an empty text in `image`. A step `keep_cover_form` applies ADR 0060 items 3 to 5. The step does nothing when the sent `image` is the same as the draft `image`. Else:
    - A sent empty `image` removes `image` and the full `rss_image`.
+   - When the draft has only the RSS `<image>`, the address goes to `rss_image.url`, and `image` stays empty.
+   - When the draft has both tags, `rss_image.url` gets the same address as `image`.
+   - When the draft has only `itunes:image` or no cover tag, `image` gets the address, and the step adds no `rss_image`.
+   - The first case keeps ADR 0060 item 4: when the two addresses are different and the user does not edit the field, nothing changes.
    - The display functions `coverOf`, `coverForm` and `coverConflict` stay in `cover.js` as edit aids. `withCover` goes.
 
 ### The Listing
 
-7. `POST /feeds/{id}/listing` with `{"hidden": true}` or `{"hidden": false}` applies ADR 0063 items 3 and 4 in the core, and gives the new model. `POST /feeds/{id}/listing/{platform}` with `{"hidden": …}` applies ADR 0063 item 5 to the block for that platform.
+7. `POST /feeds/{id}/listing` with `{"hidden": true}` or `{"hidden": false}` applies ADR 0063 items 3 and 4 in the core, and gives the new model. `POST /feeds/{id}/listing/{platform}` with `{"hidden": …}` applies ADR 0063 item 5 to each block with that `id`. When the draft has no such block, the route gives `404`.
 8. The UI sends each pending edit before it calls a listing route, as the live status does. `withHidden` and `withPlatformBlock` go from `listing.js`.
 9. The model response of a draft gives `hidden` from `Feed::hidden`. `isHidden` goes from `listing.js`. The UI uses the value of the API.
 
@@ -75,11 +77,11 @@ The core already changes a sent model at the draft save. `pipeline::replace_mode
 ## Consequences
 
 - Each client of the API gets the same feed after the same user action.
-- ADR 0063 gets an amendment: its verification names the core and the routes of item 7, not `listing.js`.
-- ADR 0060 gets an amendment: items 3 to 5 are a step of the draft save.
+- ADR 0063 is amended: its verification names the core and the routes of item 7, not `listing.js`.
+- ADR 0060 is amended: items 3 to 5 are a step of the draft save.
 - Task 038 and the doc comment on `rss_image` in `crates/core/src/feed.rs` say "The core has no cover rule". The implementation task removes the comment. The task file stays as the record of its work.
-- The packet template of the project gets the constraint of item 11.
-- A task with three packets can do this work: the cover step, the listing routes, and the lossless enclosures with the guard. It comes before [task 041](../tasks/studio-v1-task-041-msp-fields.md). Packets 041b, 041d and 041e get the constraint of item 11.
+- The project has no file for a packet template. `AGENTS.md` gives the constraint of item 11, and each new packet that changes the UI has it.
+- [Task 042](../tasks/studio-v1-task-042-core-feed-rules.md) does this work in three packets: the cover step, the listing routes, and the lossless enclosures with the guard. It comes before [task 041](../tasks/studio-v1-task-041-msp-fields.md). Packets 041b, 041d and 041e have the constraint of item 11.
 
 ## Verification
 
@@ -87,6 +89,7 @@ Mechanical:
 
 - The corpus tests: each feed gives the same bytes after a read and a write with no edit.
 - A core test of `keep_cover_form` for each case of item 6, with a draft in each of the four forms of ADR 0060 item 3.
+- A Node test: after a save, the UI model has the cover of the saved model, and keeps a cover that the user changed during the save.
 - An API test of `POST /feeds/{id}/listing`: a hide of a feed with no block tag adds both tags. A show writes `No` and `no`, and adds no tag. A block for one platform does not change.
 - An API test of `POST /feeds/{id}/listing/{platform}`: only the block of that platform changes.
 - An API test: the model response of a hidden draft gives `"hidden": true`.

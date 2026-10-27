@@ -69,6 +69,7 @@ These choices are fixed. Do not change them.
 
 ## Constraints
 
+- No feed rule in the UI (ADR 0065). A UI function that changes the model gives only a start value or a display value. The core applies each feed rule.
 - Each code comment is in ASD-STE100 Simplified Technical English, as the files are.
 - Each control follows the durable rules of `AGENTS.md`.
 - No logic in two places: the ratio rule and the purpose rule are in `artwork.js` only.
@@ -124,6 +125,7 @@ Goal:
 
 Constraints:
 - Follow the Architecture section of the task file fully.
+- No feed rule in the UI (ADR 0065).
 - The ratio rule and the purpose rule are in `artwork.js` only, with Node tests.
 - Keep each `purpose` token that the list does not offer.
 - The UI loads the image through `/images` only.

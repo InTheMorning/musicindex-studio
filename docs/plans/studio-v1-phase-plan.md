@@ -204,7 +204,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - [Task 038](../tasks/studio-v1-task-038-cover-and-text-space.md), one packet, and [task 039](../tasks/studio-v1-task-039-file-picker.md), three packets, are complete. Their screenshot visual checks and their human tests passed. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records each packet.
 - The test feed of the operator was hidden from apps, and Studio did not show it. [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md) gives one switch for it. [Task 040](../tasks/studio-v1-task-040-hide-from-apps.md) is implemented. Its screenshot visual check passed, and its human test is open.
 - The editor does not show some fields that MSP 2.0 edits. [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) (proposed) adds them. [Task 041](../tasks/studio-v1-task-041-msp-fields.md) has five packets. They start after the operator accepts ADR 0064.
-- The [UI feed rule audit](../reviews/2026-10-27-ui-feed-rule-audit.md) found four feed rules in the UI. [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) (proposed) moves them to the core. Its task comes before task 041.
+- The [UI feed rule audit](../reviews/2026-10-27-ui-feed-rule-audit.md) found four feed rules in the UI. [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) moves them to the core. [Task 042](../tasks/studio-v1-task-042-core-feed-rules.md) does this work in three packets, before task 041.
 - Mechanical check: the mechanical criteria of tasks 038 to 041.
 - Visual check: the visual criteria of tasks 038 to 041.
 

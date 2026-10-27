@@ -1,6 +1,6 @@
 # UI Feed Rule Audit, 2026-10-27
 
-This record gives the result of an audit of the UI modules in `crates/api/ui/`. It states no rule. [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md) owns the rule "Each feed rule is in the core". [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) (proposed) owns the corrections.
+This record gives the result of an audit of the UI modules in `crates/api/ui/`. It states no rule. [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md) owns the rule "Each feed rule is in the core". [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) owns the corrections. [Task 042](../tasks/studio-v1-task-042-core-feed-rules.md) does them.
 
 ## Why
 

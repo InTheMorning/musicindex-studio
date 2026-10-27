@@ -74,6 +74,7 @@ These choices are fixed. Do not change them.
 
 ## Constraints
 
+- No feed rule in the UI (ADR 0065). A UI function that changes the model gives only a start value or a display value. The core applies each feed rule.
 - Each code comment is in ASD-STE100 Simplified Technical English, as the files are.
 - Each control follows the durable rules of `AGENTS.md`.
 - A setting with a few values is a select menu, not a radio group.
@@ -124,6 +125,7 @@ Goal:
 
 Constraints:
 - Follow the Architecture section of the task file fully.
+- No feed rule in the UI (ADR 0065).
 - The credits rule is in `credits.js` only, with Node tests. The switch sends `true` or `false`.
 - A change back to the album credits asks for a confirmation.
 - Write each code comment in ASD-STE100 Simplified Technical English, as the files do.

@@ -7,9 +7,11 @@ export function usesAlbumCredits(item) {
 }
 
 // The item with its own credits. They start as a copy of the album persons.
-// Each copy has no `_cid`, so that the editor gives it a new key.
+// Each copy has no `_cid` and no `key`, so that the editor gives it a new
+// client ID and the core takes it as a new entry (ADR 0022). A copy with the
+// key of an album person names an item person that does not exist.
 export function withTrackCredits(item, albumPersons) {
-  const persons = albumPersons.map(({ _cid, ...person }) => ({ ...person }));
+  const persons = albumPersons.map(({ _cid, key, ...person }) => ({ ...person }));
   return { ...item, persons };
 }
 

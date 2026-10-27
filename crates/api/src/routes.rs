@@ -1291,6 +1291,8 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             value["draft_state"] = json!(state);
             value["image"] = json!(image);
             value["rss_image_url"] = json!(rss_image_url);
+            // The release list marks a feed that apps do not list (ADR 0063).
+            value["hidden"] = json!(feed.as_ref().is_some_and(Feed::hidden));
             rows.push(value);
         }
         to_json(rows)

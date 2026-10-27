@@ -14,6 +14,7 @@ import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, S
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
 import { coverOf, coverConflict, withCover } from './cover.js';
+import { isHidden, withHidden, platformBlocks, withPlatformBlock } from './listing.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -1335,6 +1336,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
+      ${hasWork && draft.model && isHidden(draft.model) && html`<div class="notice" role="status">
+        <strong>This feed is hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} apps=${apps} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
@@ -1534,7 +1537,37 @@ function ChannelFields({ model, update, bad, artistLabel }) {
         <${CoverField} id="ch-image" model=${model} update=${update} bad=${bad} />
         <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
+        <${ListingField} id="ch-listing" model=${model} update=${update} />
 `;
+}
+
+// The listing control of a channel (ADR 0063). One switch hides the feed from
+// apps, or shows it again. A block for one platform is in "Advanced", which
+// shows only when the feed has such a block.
+function ListingField({ id, model, update }) {
+  const hidden = isHidden(model);
+  const platforms = platformBlocks(model);
+  // A new block entry gets its client ID here, as each new entry does.
+  const keyed = (m) => ({ ...m, blocks: m.blocks.map((block) => (block._cid ? block : withCids([block])[0])) });
+  return html`<div class="field">
+      <label for=${`${id}-hidden`}>Hide from apps</label>
+      <div class="field-body">
+        <label class="check"><input id=${`${id}-hidden`} type="checkbox" checked=${hidden}
+          onChange=${(e) => update((m) => keyed(withHidden(m, e.target.checked)))} />
+          <span>${hidden ? 'Hidden' : 'Listed'}</span></label>
+        <span class="hint">Apps and directories do not list a hidden feed. The feed stays at its address.</span>
+      </div>
+    </div>
+    ${platforms.length > 0 && html`<details class="disclosure">
+      <summary class="link-row"><span class="label">Advanced</span>
+        <span class="summary">Rules for one platform: ${platforms.map((row) => row.id).join(', ')}</span></summary>
+      <div class="form">
+        ${platforms.map((row) => html`<label class="check" key=${row.block._cid}>
+          <input type="checkbox" checked=${row.hidden}
+            onChange=${(e) => update((m) => withPlatformBlock(m, row.index, e.target.checked))} />
+          <span>Hide from <span class="mono">${row.id}</span></span></label>`)}
+      </div>
+    </details>`}`;
 }
 
 function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged }) {
@@ -2278,6 +2311,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         <${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />
         <${CoverField} id="pub-image" model=${model} update=${update} bad=${bad} />
         <${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
+        <${ListingField} id="pub-listing" model=${model} update=${update} />
       </div>
     </section>
 

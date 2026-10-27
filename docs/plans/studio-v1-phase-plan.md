@@ -202,8 +202,9 @@ A phase gets task files in `docs/tasks/` before work starts.
 - The operator found three defects on 2026-10-27. A feed in the DeMu form showed no cover. A description showed blank space. No field could take an image or an audio file from the computer, the release or a host.
 - Decisions: [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md) (the cover keeps the form of its feed), [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md) (no space at the ends of a text value) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) (a file picker for each file field, and the audio player).
 - [Task 038](../tasks/studio-v1-task-038-cover-and-text-space.md), one packet, and [task 039](../tasks/studio-v1-task-039-file-picker.md), three packets, are complete. Their screenshot visual checks and their human tests passed. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records each packet.
-- Mechanical check: the mechanical criteria of tasks 038 and 039.
-- Visual check: the visual criteria of tasks 038 and 039.
+- The test feed of the operator was hidden from apps, and Studio did not show it. [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md) gives one switch for it. [Task 040](../tasks/studio-v1-task-040-hide-from-apps.md) is implemented. Its screenshot visual check passed, and its human test is open.
+- Mechanical check: the mechanical criteria of tasks 038, 039 and 040.
+- Visual check: the visual criteria of tasks 038, 039 and 040.
 
 ### Phase 13: Desktop Shell
 

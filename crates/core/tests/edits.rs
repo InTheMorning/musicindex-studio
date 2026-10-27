@@ -1,6 +1,6 @@
 //! Edits through the typed model change only the edited elements (ADR 0012).
 
-use studio_core::feed::{Entry, Feed, Item, License, Person, Recipient, Transcript};
+use studio_core::feed::{Block, Entry, Feed, Item, License, Person, Recipient, Transcript};
 use studio_core::xml::Document;
 
 /// The remote item example from the namespace document for
@@ -471,4 +471,84 @@ fn edit_feed(source: &str, change: impl FnOnce(&mut Feed)) -> Feed {
     let mut feed = Feed::read(&Document::parse(source).unwrap()).unwrap();
     change(&mut feed);
     feed
+}
+
+const BLOCKED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\">\n  <channel>\n    <podcast:block>yes</podcast:block>\n    <itunes:block>yes</itunes:block>\n    <title>T</title>\n    <podcast:block id=\"spotify\">no</podcast:block>\n  </channel>\n</rss>\n";
+
+#[test]
+fn the_model_reads_each_block_tag_and_a_read_with_no_edit_keeps_the_bytes() {
+    let feed = Feed::read(&Document::parse(BLOCKED).unwrap()).unwrap();
+    assert_eq!(feed.itunes_block.as_deref(), Some("yes"));
+    let blocks: Vec<_> = feed
+        .blocks
+        .iter()
+        .map(|b| (b.id.as_deref(), b.value.value.as_str()))
+        .collect();
+    assert_eq!(blocks, [(None, "yes"), (Some("spotify"), "no")]);
+    assert!(feed.hidden());
+    assert_eq!(edit(BLOCKED, |_| {}), BLOCKED);
+}
+
+#[test]
+fn an_unblock_writes_no_in_place_and_keeps_the_platform_block() {
+    let after = edit(BLOCKED, |f| {
+        f.itunes_block = Some("No".into());
+        f.blocks[0].value.value = "no".into();
+    });
+    assert_eq!(
+        after,
+        BLOCKED
+            .replace(
+                "<podcast:block>yes</podcast:block>",
+                "<podcast:block>no</podcast:block>"
+            )
+            .replace(
+                "<itunes:block>yes</itunes:block>",
+                "<itunes:block>No</itunes:block>"
+            )
+    );
+    let feed = Feed::read(&Document::parse(&after).unwrap()).unwrap();
+    assert!(!feed.hidden());
+}
+
+#[test]
+fn a_block_of_a_feed_with_no_block_tag_adds_both_tags() {
+    let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\">\n  <channel>\n    <title>T</title>\n  </channel>\n</rss>\n";
+    assert!(
+        !Feed::read(&Document::parse(source).unwrap())
+            .unwrap()
+            .hidden()
+    );
+    let after = edit(source, |f| {
+        f.itunes_block = Some("Yes".into());
+        f.blocks.push(Entry::new(Block {
+            value: "yes".into(),
+            id: None,
+        }));
+    });
+    assert!(
+        after.contains("<itunes:block>Yes</itunes:block>"),
+        "{after}"
+    );
+    assert!(
+        after.contains("<podcast:block>yes</podcast:block>"),
+        "{after}"
+    );
+    assert!(
+        Feed::read(&Document::parse(&after).unwrap())
+            .unwrap()
+            .hidden()
+    );
+}
+
+#[test]
+fn only_a_block_for_each_app_hides_the_feed() {
+    let feed = |channel: &str| {
+        Feed::read(&Document::parse(&format!("<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\"><channel>{channel}</channel></rss>")).unwrap()).unwrap()
+    };
+    assert!(feed("<itunes:block>YES</itunes:block>").hidden());
+    assert!(feed("<podcast:block> yes </podcast:block>").hidden());
+    assert!(!feed("<podcast:block id=\"spotify\">yes</podcast:block>").hidden());
+    assert!(!feed("<itunes:block>No</itunes:block><podcast:block>no</podcast:block>").hidden());
+    assert!(!feed("").hidden());
 }

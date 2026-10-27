@@ -18,7 +18,7 @@ mod value;
 use std::fmt;
 
 pub use elements::{
-    AtomLink, ContentLink, Enclosure, Funding, Image, License, LiveValue, Locked, Person,
+    AtomLink, Block, ContentLink, Enclosure, Funding, Image, License, LiveValue, Locked, Person,
     Recipient, RemoteItem, RssImage, Source, Transcript, Txt,
 };
 pub use enclosures::AlternateEnclosure;
@@ -76,6 +76,10 @@ pub struct Feed {
     pub image: Option<String>,
     /// `itunes:new-feed-url`: the new URL after a host move.
     pub new_feed_url: Option<String>,
+    /// `itunes:block`, such as `Yes` (ADR 0063).
+    pub itunes_block: Option<String>,
+    /// The `podcast:block` elements (ADR 0063).
+    pub blocks: Vec<Entry<Block>>,
     /// The `atom:link` elements. See [`Feed::self_url`].
     pub atom_links: Vec<Entry<AtomLink>>,
     /// The `podcast:image` elements.
@@ -123,6 +127,8 @@ impl Feed {
             author: read_text(channel, Ns::Itunes, "author"),
             image: read_href(channel, Ns::Itunes, "image"),
             new_feed_url: read_text(channel, Ns::Itunes, "new-feed-url"),
+            itunes_block: read_text(channel, Ns::Itunes, "block"),
+            blocks: read_list(channel),
             atom_links: read_list(channel),
             images: read_list(channel),
             persons: read_list(channel),
@@ -176,6 +182,8 @@ impl Feed {
         c.text(Ns::Itunes, "author", self.author.as_ref());
         c.href(Ns::Itunes, "image", self.image.as_ref());
         c.text(Ns::Itunes, "new-feed-url", self.new_feed_url.as_ref());
+        c.text(Ns::Itunes, "block", self.itunes_block.as_ref());
+        c.list(&self.blocks);
         c.list(&self.atom_links);
         c.list(&self.images);
         c.list(&self.persons);
@@ -206,12 +214,26 @@ impl Feed {
         adopt_list(&mut self.persons, Some(&draft.persons))?;
         adopt_list(&mut self.fundings, Some(&draft.fundings))?;
         adopt_list(&mut self.txts, Some(&draft.txts))?;
+        adopt_list(&mut self.blocks, Some(&draft.blocks))?;
         adopt_one(self.publisher.as_mut(), draft.publisher.as_ref())?;
         adopt_one(self.podroll.as_mut(), draft.podroll.as_ref())?;
         adopt_list(&mut self.remote_items, Some(&draft.remote_items))?;
         adopt_list(&mut self.values, Some(&draft.values))?;
         adopt_list(&mut self.items, Some(&draft.items))?;
         adopt_list(&mut self.live_items, Some(&draft.live_items))
+    }
+
+    /// True when the feed asks apps not to list it: an `itunes:block` or a
+    /// `podcast:block` with no `id` says `yes`, in any letter case
+    /// (ADR 0063 item 2). A block for one platform does not count.
+    #[must_use]
+    pub fn hidden(&self) -> bool {
+        let says_yes = |text: &str| text.trim().eq_ignore_ascii_case("yes");
+        self.itunes_block.as_deref().is_some_and(says_yes)
+            || self
+                .blocks
+                .iter()
+                .any(|entry| entry.value.id.is_none() && says_yes(&entry.value.value))
     }
 
     /// The feed URL that the feed gives for itself: the `href` of the first

@@ -952,6 +952,7 @@ textarea:focus { background: var(--fill); }
    of the group. */
 .group > .disclosure > .form { gap: 0; }
 .group > .disclosure > .form > .field { padding: 10px 16px; }
+.group > .disclosure > .form > .check { padding: 0 16px; }
 .group > .field, .group > .disclosure > .form > .field { min-height: 52px; }
 /* At more than 760 px, a field in a group puts its label at the left, in a
    column of 170 px (task 014c step 8). */

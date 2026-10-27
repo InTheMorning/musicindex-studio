@@ -2429,7 +2429,7 @@ function ReleasesPage({ feeds, connectors, marked, list, changedFeeds, onQuery, 
                 <${ImageThumb} url=${row.image} className="releases-cover" always />
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
-                  <span class="sub">${row.typeLabel}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
+                  <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
               </button>

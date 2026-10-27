@@ -66,6 +66,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0060: The album cover keeps the form of its feed](adr/0060-the-album-cover-keeps-the-form-of-its-feed.md)
 - [ADR 0061: A text value has no space at its ends](adr/0061-a-text-value-has-no-space-at-its-ends.md)
 - [ADR 0062: A file picker for each file field](adr/0062-a-file-picker-for-each-file-field.md)
+- [ADR 0063: One switch hides a feed from apps](adr/0063-one-switch-hides-a-feed-from-apps.md)
 
 ## Plans
 
@@ -208,6 +209,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 039a: The file sources in the API](tasks/studio-v1-task-039a-file-sources.md)
 - [Studio v1 task 039b: The picker sheet and the drop](tasks/studio-v1-task-039b-picker-sheet.md)
 - [Studio v1 task 039c: The audio player and "Properties"](tasks/studio-v1-task-039c-audio-player.md)
+- [Studio v1 task 040: Hide a feed from apps](tasks/studio-v1-task-040-hide-from-apps.md)
 
 ## Reviews
 

@@ -67,6 +67,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/cover.js"),
     ),
     (
+        "listing.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/listing.js"),
+    ),
+    (
         "picker.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/picker.js"),

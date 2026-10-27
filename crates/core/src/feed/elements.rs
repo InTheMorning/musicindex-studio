@@ -168,6 +168,19 @@ element_type! {
 }
 
 element_type! {
+    /// `podcast:block`: a request to apps not to list the feed (ADR 0063).
+    /// With no `id`, it applies to each app. With an `id`, it applies to one
+    /// platform.
+    Block = (Ns::Podcast, "block") {
+        @text
+        /// The text, such as `yes` or `no`.
+        value;
+        /// `id`: the platform, such as `spotify`.
+        id => "id",
+    }
+}
+
+element_type! {
     /// `podcast:license`.
     License = (Ns::Podcast, "license") {
         @text

@@ -151,6 +151,14 @@ test('the Releases list gives the draft label of each draft state', () => {
   assert.equal(byId[4], 'No changes');
 });
 
+test('the Releases list marks a feed that apps do not list (ADR 0063)', () => {
+  const feeds = [{ ...album, id: 1, hidden: true }, { ...album, id: 2 }];
+  const list = releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows' });
+  const byId = Object.fromEntries(list.rows.map((r) => [r.id, r.hidden]));
+  assert.equal(byId[1], true);
+  assert.equal(byId[2], false);
+});
+
 test('the A to Z sort gives the letter groups, with "#" after Z', () => {
   const feeds = [
     { id: 1, title: 'beta', medium: 'music' },

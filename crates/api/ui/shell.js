@@ -239,6 +239,8 @@ export function releasesList({ feeds, connectors, sort, view, marked }) {
     host: hostOf(feed, connectors),
     image: feedCover(feed),
     draftLabel: DRAFT_LABELS[feed.draft_state] || 'No changes',
+    // A feed that apps do not list (ADR 0063).
+    hidden: feed.hidden === true,
     marked: feed.id === marked,
   }));
   return {

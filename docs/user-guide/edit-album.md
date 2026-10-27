@@ -59,6 +59,19 @@ The review shows this change before the write.
 Studio does not write two different cover addresses.
 If you clear the field, Studio removes the cover from the feed.
 
+### Hide from apps
+
+Set **Hide from apps** to hide the album from apps and directories.
+The feed stays at its address.
+Studio writes `<itunes:block>Yes</itunes:block>` and `<podcast:block>yes</podcast:block>`.
+Clear **Hide from apps** to show the album again.
+Studio then writes `No` and `no` in these tags.
+The release list shows **Hidden from apps** for a hidden feed.
+
+Some feeds also have a block for one platform, such as `spotify`.
+Then **Advanced** shows below the switch, with one check box for each platform.
+The switch does not change these blocks.
+
 ### Album details
 
 This section has three rows.

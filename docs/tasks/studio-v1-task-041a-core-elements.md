@@ -3,7 +3,7 @@
 Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 1 to 5, [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0031](../adr/0031-a-new-element-takes-its-hosted-position.md).
 Sequence: the first packet of task 041. It depends on task 040.
 
-Status: Not started.
+Status: Complete on 2026-10-27.
 
 ## Goal
 
@@ -40,11 +40,13 @@ These choices are fixed. Do not change them.
 
 ### The Write Sequence
 
-- The sequence of the calls in `write_hosted` gives the position of a new element with no hosted position. Add the calls at these positions:
+- `Children` gives the position of a new element. The sequence of the calls does not give it.
+- A new element with a hosted position takes that position (ADR 0031 item 1). Do not add a special condition for it.
+- A new element with no hosted position goes before the first element of a type that must come after it (ADR 0031 item 3). In the channel, that is the first `item` or `podcast:liveItem`. In an item, the element goes at the end. ADR 0031 does not use a fixed sequence of elements.
+- Put the read calls and the write calls in this sequence, for a clear code:
   - `managingEditor` and `webMaster` directly after `language`.
   - `itunes:explicit`, `itunes:owner` and `itunes:keywords` directly after `itunes:author`.
-- In `Item::apply_children`, add `podcast:season` directly before `podcast:episode`, and `itunes:explicit` directly after `itunes:duration`.
-- A new element with a hosted position takes that position (ADR 0031). Do not add a special case for it.
+  - In `Item::apply_children`, `podcast:season` directly before `podcast:episode`, and `itunes:explicit` directly after `itunes:duration`.
 
 ### The Form Rule At The Draft Save
 
@@ -68,7 +70,7 @@ These choices are fixed. Do not change them.
 
 - Each code comment is in ASD-STE100 Simplified Technical English, as the files are.
 - No new crate.
-- No change to `sync.rs`. When `Children` cannot write a new element at the position above, stop and report.
+- No change to `sync.rs`.
 
 ## Acceptance Criteria
 
@@ -77,7 +79,7 @@ Mechanical:
 - The corpus tests pass: each feed gives the same bytes after a read and a write with no edit.
 - A core test reads each new element from a feed that has all of them. It gives the text and the attributes as the source wrote them.
 - A core test changes each new element, one at a time. The diff of the document changes only that element.
-- A core test sets each new element in a feed that does not have it, and with no hosted file. The element goes to the position of the Write Sequence section.
+- A core test sets each new element in a feed that does not have it, and with no hosted file. A new channel element goes directly before the first `item`. A new item element goes at the end of the item (ADR 0031 item 3).
 - A core test sets `itunes:explicit` in a feed whose hosted file has it in a different position. The new element takes the hosted position.
 - A core test writes the text `No` into a channel `itunes:explicit` that holds `no`, and the text `true` into one that holds `false`. Each feed holds the text that the model gives, and no other byte changes.
 - A core test changes `itunes:email` of an owner that also has an unknown child. The unknown child stays.
@@ -100,7 +102,6 @@ node --test crates/api/ui-tests/*.test.mjs
 ## Escalation
 
 - Stop and report when a corpus feed does not give the same bytes after the change.
-- Stop and report when `Children` cannot put a new element at the position of the Write Sequence section.
 
 ## Prompt for lower-context coding model
 

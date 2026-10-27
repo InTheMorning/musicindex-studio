@@ -18,7 +18,7 @@ A coding model implements each packet. The planning model examines the diff and 
 
 | Packet | Status | Review |
 |---|---|---|
-| 041a | Not started | |
+| 041a | Complete | Pass on 2026-10-27. The four checks pass. The planning model removed one wrong code comment about the write sequence. |
 | 041b | Not started | |
 | 041c | Not started | |
 | 041d | Not started | |
@@ -36,3 +36,8 @@ A coding model implements each packet. The planning model examines the diff and 
 - The operator decided on 2026-10-27 that the work of ADR 0065 comes before task 041. ADR 0065 moves the feed rules of the UI to the core. The operator accepted ADR 0065 on 2026-10-27. Task 042 does its work.
 - Packets 041b, 041d and 041e have the constraint "No feed rule in the UI (ADR 0065)". The review of each one examines each new UI function that changes the model.
 - The near ratio uses a list of 19 ratios and a tolerance of 2 %. The behavior agrees with MSP 2.0. No code comes from MSP 2.0.
+
+### Packet 041a
+
+- Packet 041a first said that the sequence of the write calls gives the position of a new element with no hosted position. `Children` has no such function. ADR 0031 does not use a fixed sequence of elements. The coding model stopped on the escalation condition. The planning model removed the rule on 2026-10-27. A new element with no hosted position goes before the first element of a type that must come after it (ADR 0031 item 3).
+- The operator decided on 2026-10-27 that the planning model commits each packet after its review passes.

@@ -1,6 +1,8 @@
 //! Edits through the typed model change only the edited elements (ADR 0012).
 
-use studio_core::feed::{Block, Entry, Feed, Item, License, Person, Recipient, Transcript};
+use studio_core::feed::{
+    Block, Entry, Feed, Item, License, Owner, Person, Recipient, Season, Transcript,
+};
 use studio_core::xml::Document;
 
 /// The remote item example from the namespace document for
@@ -631,4 +633,177 @@ fn set_platform_hidden_gives_false_for_an_unknown_id() {
     assert!(!feed.set_platform_hidden("apple", true));
     assert_eq!(feed.blocks[0].value.value, "yes");
     assert_eq!(feed.blocks[1].value.value, "no");
+}
+
+const ALL_NEW: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\">\n<channel>\n  <title>T</title>\n  <language>en</language>\n  <managingEditor>ed@example.com (Ed)</managingEditor>\n  <webMaster>web@example.com (Web)</webMaster>\n  <itunes:author>A</itunes:author>\n  <itunes:explicit>no</itunes:explicit>\n  <itunes:owner>\n    <itunes:name>Owner</itunes:name>\n    <itunes:email>owner@example.com</itunes:email>\n    <itunes:phone>123</itunes:phone>\n  </itunes:owner>\n  <itunes:keywords>a, b</itunes:keywords>\n  <item>\n    <title>One</title>\n    <guid>g1</guid>\n    <itunes:duration>60</itunes:duration>\n    <itunes:explicit>Yes</itunes:explicit>\n    <podcast:season name=\"First\">2</podcast:season>\n    <podcast:episode>3</podcast:episode>\n  </item>\n</channel>\n</rss>\n";
+
+#[test]
+fn the_model_reads_each_new_element_as_the_source_wrote_it() {
+    let feed = Feed::read(&Document::parse(ALL_NEW).unwrap()).unwrap();
+    assert_eq!(feed.managing_editor.as_deref(), Some("ed@example.com (Ed)"));
+    assert_eq!(feed.web_master.as_deref(), Some("web@example.com (Web)"));
+    assert_eq!(feed.explicit.as_deref(), Some("no"));
+    assert_eq!(
+        feed.owner,
+        Some(Owner {
+            name: Some("Owner".into()),
+            email: Some("owner@example.com".into()),
+        })
+    );
+    assert_eq!(feed.keywords.as_deref(), Some("a, b"));
+    let item = &feed.items[0];
+    assert_eq!(item.explicit.as_deref(), Some("Yes"));
+    assert_eq!(
+        item.season,
+        Some(Season {
+            value: "2".into(),
+            name: Some("First".into()),
+        })
+    );
+    assert_eq!(edit(ALL_NEW, |_| {}), ALL_NEW);
+}
+
+#[test]
+fn a_change_of_each_new_element_changes_only_that_element() {
+    type Change = fn(&mut Feed);
+    let cases: [(Change, &str); 7] = [
+        (
+            |f| f.managing_editor = Some("new@example.com".into()),
+            "managingEditor",
+        ),
+        (
+            |f| f.web_master = Some("new@example.com".into()),
+            "webMaster",
+        ),
+        (|f| f.explicit = Some("yes".into()), "itunes:explicit>yes"),
+        (|f| f.keywords = Some("c".into()), "itunes:keywords"),
+        (
+            |f| f.owner.as_mut().unwrap().name = Some("New".into()),
+            "itunes:name",
+        ),
+        (
+            |f| f.items[0].explicit = Some("No".into()),
+            "itunes:explicit>No",
+        ),
+        (
+            |f| f.items[0].season.as_mut().unwrap().value = "5".into(),
+            "podcast:season",
+        ),
+    ];
+    for (change, marker) in cases {
+        let after = edit(ALL_NEW, change);
+        let changed = changed_lines(ALL_NEW, &after);
+        assert_eq!(changed.len(), 1, "{marker}: {changed:?}");
+        assert!(changed[0].contains(marker), "{marker}: {changed:?}");
+    }
+}
+
+const BARE: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\">\n<channel>\n  <title>T</title>\n  <language>en</language>\n  <itunes:author>A</itunes:author>\n  <link>https://example.com</link>\n  <item>\n    <guid>g1</guid>\n    <itunes:duration>60</itunes:duration>\n    <podcast:episode>1</podcast:episode>\n  </item>\n</channel>\n</rss>\n";
+
+#[test]
+fn a_new_element_with_no_hosted_file_goes_before_the_first_item_or_to_the_item_end() {
+    let after = edit(BARE, |f| {
+        f.managing_editor = Some("m".into());
+        f.web_master = Some("w".into());
+        f.explicit = Some("no".into());
+        f.owner = Some(Owner {
+            name: Some("N".into()),
+            email: None,
+        });
+        f.keywords = Some("k".into());
+        f.items[0].explicit = Some("yes".into());
+        f.items[0].season = Some(Season {
+            value: "1".into(),
+            name: None,
+        });
+    });
+    let order = |text: &str, names: &[&str]| {
+        let at: Vec<usize> = names.iter().map(|n| text.find(n).unwrap()).collect();
+        assert!(at.windows(2).all(|w| w[0] < w[1]), "{names:?}\n{text}");
+    };
+    // ADR 0031 item 3: a new channel element goes directly before the
+    // first `item`. A new item element goes at the end of the item.
+    order(
+        &after,
+        &[
+            "<link>",
+            "<managingEditor>",
+            "<webMaster>",
+            "<itunes:explicit>no",
+            "<itunes:owner>",
+            "<itunes:keywords>",
+            "<item>",
+        ],
+    );
+    order(
+        &after,
+        &[
+            "<podcast:episode>",
+            "<itunes:explicit>yes",
+            "<podcast:season>",
+            "</item>",
+        ],
+    );
+}
+
+#[test]
+fn a_new_explicit_takes_the_position_of_the_hosted_file() {
+    let hosted_text = "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">\n<channel>\n  <title>T</title>\n  <itunes:explicit>no</itunes:explicit>\n  <language>en</language>\n  <itunes:author>A</itunes:author>\n  <link>https://example.com</link>\n</channel>\n</rss>";
+    let hosted = Document::parse(hosted_text).unwrap();
+    let mut doc = Document::parse(BARE).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.explicit = Some("no".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let after = doc.write();
+    let title = after.find("<title>").unwrap();
+    let explicit = after.find("<itunes:explicit>").unwrap();
+    let language = after.find("<language>").unwrap();
+    assert!(title < explicit && explicit < language, "{after}");
+}
+
+#[test]
+fn an_explicit_text_is_written_as_the_model_gives_it() {
+    let source = "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">\n<channel>\n  <itunes:explicit>no</itunes:explicit>\n  <itunes:keywords>x</itunes:keywords>\n  <item><itunes:explicit>false</itunes:explicit></item>\n</channel>\n</rss>\n";
+    let after = edit(source, |f| f.explicit = Some("No".into()));
+    assert_eq!(after, source.replace(">no<", ">No<"));
+    let after = edit(source, |f| f.items[0].explicit = Some("true".into()));
+    assert_eq!(after, source.replace(">false<", ">true<"));
+}
+
+#[test]
+fn a_changed_owner_email_keeps_an_unknown_child() {
+    let after = edit(ALL_NEW, |f| {
+        f.owner.as_mut().unwrap().email = Some("new@example.com".into());
+    });
+    let changed = changed_lines(ALL_NEW, &after);
+    assert_eq!(changed.len(), 1, "{changed:?}");
+    assert!(changed[0].contains("new@example.com"));
+    assert!(after.contains("<itunes:phone>123</itunes:phone>"));
+}
+
+#[test]
+fn a_model_json_with_no_new_field_reads_with_each_new_field_empty() {
+    let feed = Feed::read(&Document::parse(ALL_NEW).unwrap()).unwrap();
+    let mut json = serde_json::to_value(&feed).unwrap();
+    let channel = json.as_object_mut().unwrap();
+    for key in [
+        "managing_editor",
+        "web_master",
+        "explicit",
+        "owner",
+        "keywords",
+    ] {
+        channel.remove(key).unwrap();
+    }
+    let item = channel["items"][0].as_object_mut().unwrap();
+    item.remove("explicit").unwrap();
+    item.remove("season").unwrap();
+    let back: Feed = serde_json::from_value(json).unwrap();
+    assert_eq!(back.managing_editor, None);
+    assert_eq!(back.web_master, None);
+    assert_eq!(back.explicit, None);
+    assert_eq!(back.owner, None);
+    assert_eq!(back.keywords, None);
+    assert_eq!(back.items[0].explicit, None);
+    assert_eq!(back.items[0].season, None);
 }

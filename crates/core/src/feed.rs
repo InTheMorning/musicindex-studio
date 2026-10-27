@@ -18,8 +18,8 @@ mod value;
 use std::fmt;
 
 pub use elements::{
-    AtomLink, Block, ContentLink, Enclosure, Funding, Image, License, LiveValue, Locked, Person,
-    Recipient, RemoteItem, RssImage, Source, Transcript, Txt,
+    AtomLink, Block, ContentLink, Enclosure, Funding, Image, License, LiveValue, Locked, Owner,
+    Person, Recipient, RemoteItem, RssImage, Season, Source, Transcript, Txt,
 };
 pub use enclosures::{AlternateEnclosure, lossless_pair};
 pub use links::{BadAddress, is_web_address};
@@ -61,6 +61,12 @@ pub struct Feed {
     pub link: Option<String>,
     /// `language`.
     pub language: Option<String>,
+    /// `managingEditor`, as the source wrote it (ADR 0064).
+    #[serde(default)]
+    pub managing_editor: Option<String>,
+    /// `webMaster`, as the source wrote it (ADR 0064).
+    #[serde(default)]
+    pub web_master: Option<String>,
     /// The channel `image` of RSS 2.0 (ADR 0060). The model has this tag and
     /// `itunes:image` as two fields. The pipeline keeps the form of the
     /// cover at the draft save (ADR 0065 item 6).
@@ -73,6 +79,15 @@ pub struct Feed {
     pub locked: Option<Locked>,
     /// `itunes:author`.
     pub author: Option<String>,
+    /// `itunes:explicit`, as the source wrote it (ADR 0064).
+    #[serde(default)]
+    pub explicit: Option<String>,
+    /// `itunes:owner` (ADR 0064).
+    #[serde(default)]
+    pub owner: Option<Owner>,
+    /// `itunes:keywords`, as the source wrote it (ADR 0064).
+    #[serde(default)]
+    pub keywords: Option<String>,
     /// The `href` of `itunes:image`.
     pub image: Option<String>,
     /// `itunes:new-feed-url`: the new URL after a host move.
@@ -121,11 +136,16 @@ impl Feed {
             description: read_text(channel, Ns::None, "description"),
             link: read_text(channel, Ns::None, "link"),
             language: read_text(channel, Ns::None, "language"),
+            managing_editor: read_text(channel, Ns::None, "managingEditor"),
+            web_master: read_text(channel, Ns::None, "webMaster"),
             rss_image: read_one(channel),
             podcast_guid: read_text(channel, Ns::Podcast, "guid"),
             medium: read_text(channel, Ns::Podcast, "medium"),
             locked: read_one(channel),
             author: read_text(channel, Ns::Itunes, "author"),
+            explicit: read_text(channel, Ns::Itunes, "explicit"),
+            owner: read_one(channel),
+            keywords: read_text(channel, Ns::Itunes, "keywords"),
             image: read_href(channel, Ns::Itunes, "image"),
             new_feed_url: read_text(channel, Ns::Itunes, "new-feed-url"),
             itunes_block: read_text(channel, Ns::Itunes, "block"),
@@ -176,11 +196,16 @@ impl Feed {
         c.text(Ns::None, "description", self.description.as_ref());
         c.text(Ns::None, "link", self.link.as_ref());
         c.text(Ns::None, "language", self.language.as_ref());
+        c.text(Ns::None, "managingEditor", self.managing_editor.as_ref());
+        c.text(Ns::None, "webMaster", self.web_master.as_ref());
         c.one(self.rss_image.as_ref());
         c.text(Ns::Podcast, "guid", self.podcast_guid.as_ref());
         c.text(Ns::Podcast, "medium", self.medium.as_ref());
         c.one(self.locked.as_ref());
         c.text(Ns::Itunes, "author", self.author.as_ref());
+        c.text(Ns::Itunes, "explicit", self.explicit.as_ref());
+        c.one(self.owner.as_ref());
+        c.text(Ns::Itunes, "keywords", self.keywords.as_ref());
         c.href(Ns::Itunes, "image", self.image.as_ref());
         c.text(Ns::Itunes, "new-feed-url", self.new_feed_url.as_ref());
         c.text(Ns::Itunes, "block", self.itunes_block.as_ref());
@@ -455,6 +480,12 @@ pub struct Item {
     pub pub_date: Option<String>,
     /// `itunes:duration`, as the source wrote it.
     pub duration: Option<String>,
+    /// `itunes:explicit`, as the source wrote it (ADR 0064).
+    #[serde(default)]
+    pub explicit: Option<String>,
+    /// `podcast:season` (ADR 0064).
+    #[serde(default)]
+    pub season: Option<Season>,
     /// The text of `podcast:episode`: the track number of an album track.
     /// The core sets it from the track sequence (ADR 0024).
     pub episode: Option<String>,
@@ -488,6 +519,8 @@ impl Item {
             alternate_enclosures: read_list(element),
             pub_date: read_text(element, Ns::None, "pubDate"),
             duration: read_text(element, Ns::Itunes, "duration"),
+            explicit: read_text(element, Ns::Itunes, "explicit"),
+            season: read_one(element),
             episode: read_text(element, Ns::Podcast, "episode"),
             image: read_href(element, Ns::Itunes, "image"),
             images: read_list(element),
@@ -528,6 +561,8 @@ impl Item {
         c.one(self.enclosure.as_ref());
         c.text(Ns::None, "pubDate", self.pub_date.as_ref());
         c.text(Ns::Itunes, "duration", self.duration.as_ref());
+        c.text(Ns::Itunes, "explicit", self.explicit.as_ref());
+        c.one(self.season.as_ref());
         c.text(Ns::Podcast, "episode", self.episode.as_ref());
         c.href(Ns::Itunes, "image", self.image.as_ref());
         c.list(&self.images);

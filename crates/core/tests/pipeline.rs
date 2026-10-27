@@ -3377,3 +3377,89 @@ fn a_demu_draft_with_no_image_does_not_change() {
     assert_eq!(saved.image, None);
     assert_eq!(saved.rss_image, Some(rss_image(OLD)));
 }
+
+/// Give the draft the explicit texts, send the model changed by `change`,
+/// and give the model that the draft has afterwards.
+fn save_explicit(
+    channel: Option<&str>,
+    item: Option<&str>,
+    change: impl FnOnce(&mut Feed),
+) -> Feed {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.explicit = channel.map(str::to_owned);
+        f.items[0].explicit = item.map(str::to_owned);
+    })
+    .unwrap();
+    let (mut sent, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    change(&mut sent);
+    pipeline::replace_model(&s.collection, s.feed, &revision, sent).unwrap();
+    pipeline::draft_model(&s.collection, s.feed).unwrap().0
+}
+
+fn send_channel(value: &str) -> impl FnOnce(&mut Feed) {
+    let value = value.to_owned();
+    move |f| f.explicit = Some(value)
+}
+
+#[test]
+fn a_sent_boolean_over_a_yes_or_no_draft_keeps_the_form_of_the_draft() {
+    let saved = save_explicit(Some("no"), None, send_channel("true"));
+    assert_eq!(saved.explicit.as_deref(), Some("yes"));
+    let saved = save_explicit(Some("Yes"), None, send_channel("false"));
+    assert_eq!(saved.explicit.as_deref(), Some("No"));
+    let saved = save_explicit(Some(" YES "), None, send_channel("false"));
+    assert_eq!(saved.explicit.as_deref(), Some("No"));
+    let saved = save_explicit(Some("nO"), None, send_channel("true"));
+    assert_eq!(saved.explicit.as_deref(), Some("yes"));
+}
+
+#[test]
+fn a_sent_boolean_keeps_its_value_over_another_form_or_no_draft_value() {
+    let saved = save_explicit(Some("false"), None, send_channel("true"));
+    assert_eq!(saved.explicit.as_deref(), Some("true"));
+    let saved = save_explicit(None, None, send_channel("true"));
+    assert_eq!(saved.explicit.as_deref(), Some("true"));
+}
+
+#[test]
+fn the_explicit_of_an_item_follows_the_same_rules() {
+    let saved = save_explicit(None, Some("no"), |f| {
+        f.items[0].explicit = Some("true".into());
+    });
+    assert_eq!(saved.items[0].explicit.as_deref(), Some("yes"));
+    let saved = save_explicit(None, Some("Yes"), |f| {
+        f.items[0].explicit = Some("false".into());
+    });
+    assert_eq!(saved.items[0].explicit.as_deref(), Some("No"));
+    let saved = save_explicit(None, Some("false"), |f| {
+        f.items[0].explicit = Some("true".into());
+    });
+    assert_eq!(saved.items[0].explicit.as_deref(), Some("true"));
+}
+
+#[test]
+fn a_new_item_keeps_its_sent_explicit() {
+    let saved = save_explicit(None, Some("no"), |f| {
+        f.items.push(Entry::new(Item {
+            explicit: Some("true".into()),
+            ..Item::default()
+        }));
+    });
+    assert_eq!(saved.items[1].explicit.as_deref(), Some("true"));
+    assert_eq!(saved.items[0].explicit.as_deref(), Some("no"));
+}
+
+#[test]
+fn a_sent_null_removes_the_explicit_and_adds_none() {
+    let saved = save_explicit(Some("no"), Some("no"), |f| {
+        f.explicit = None;
+        f.items[0].explicit = None;
+    });
+    assert_eq!(saved.explicit, None);
+    assert_eq!(saved.items[0].explicit, None);
+    let saved = save_explicit(None, None, |_| {});
+    assert_eq!(saved.explicit, None);
+    assert_eq!(saved.items[0].explicit, None);
+}

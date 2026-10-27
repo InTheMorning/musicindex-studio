@@ -104,6 +104,18 @@ element_type! {
 }
 
 element_type! {
+    /// `podcast:season`: the season number of an item. `name` is the title
+    /// of the season.
+    Season = (Ns::Podcast, "season") {
+        @text
+        /// The season number.
+        value;
+        /// `name`.
+        name => "name",
+    }
+}
+
+element_type! {
     /// `podcast:person`: a person who made the feed or the item.
     Person = (Ns::Podcast, "person") {
         @text
@@ -281,5 +293,34 @@ impl Modeled for RssImage {
         c.text(Ns::None, "title", self.title.as_ref());
         c.text(Ns::None, "link", self.link.as_ref());
         c.text(Ns::None, "description", self.description.as_ref());
+    }
+}
+
+/// `itunes:owner`: the name and the email address of the owner of the feed.
+/// A child that this type does not model stays in the tree. The core does
+/// not check the email address (ADR 0064 item 5).
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct Owner {
+    /// `itunes:name`.
+    pub name: Option<String>,
+    /// `itunes:email`.
+    pub email: Option<String>,
+}
+
+impl Modeled for Owner {
+    const NS: Ns = Ns::Itunes;
+    const NAME: &'static str = "owner";
+
+    fn read(element: &Element) -> Self {
+        Self {
+            name: read_text(element, Ns::Itunes, "name"),
+            email: read_text(element, Ns::Itunes, "email"),
+        }
+    }
+
+    fn apply(&self, element: &mut Element, names: &mut Names) {
+        let mut c = Children::new(element, &[], names, None);
+        c.text(Ns::Itunes, "name", self.name.as_ref());
+        c.text(Ns::Itunes, "email", self.email.as_ref());
     }
 }

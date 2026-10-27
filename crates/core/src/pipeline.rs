@@ -716,6 +716,7 @@ pub fn replace_model(
     keep_identity(&current, &mut sent).map_err(invalid)?;
     number_tracks(&current, &mut sent);
     keep_cover_form(&current, &mut sent);
+    keep_explicit_form(&current, &mut sent);
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
@@ -752,6 +753,45 @@ fn keep_cover_form(current: &Feed, sent: &mut Feed) {
     if current.image.is_none() {
         sent.image = None;
     }
+}
+
+/// Keep the form of each `itunes:explicit` text (ADR 0064 item 4). The UI
+/// sends `true` or `false`. A sent value that differs from the draft value
+/// becomes `yes` or `no` when the draft value is `yes` or `no` in any letter
+/// case, after a trim. A capital first letter of the draft value stays a
+/// capital letter. In each other case the sent value stays. A new item has
+/// no draft item, so it keeps its sent value.
+fn keep_explicit_form(current: &Feed, sent: &mut Feed) {
+    keep_form(current.explicit.as_deref(), &mut sent.explicit);
+    for entry in &mut sent.items {
+        let before = entry.key().and_then(|k| current.items.get(k));
+        keep_form(
+            before.and_then(|c| c.explicit.as_deref()),
+            &mut entry.value.explicit,
+        );
+    }
+}
+
+fn keep_form(draft: Option<&str>, sent: &mut Option<String>) {
+    let Some(draft) = draft else { return };
+    let Some(value) = sent.as_deref() else { return };
+    if value == draft {
+        return;
+    }
+    let word = match value {
+        "true" => "yes",
+        "false" => "no",
+        _ => return,
+    };
+    let trimmed = draft.trim();
+    if !trimmed.eq_ignore_ascii_case("yes") && !trimmed.eq_ignore_ascii_case("no") {
+        return;
+    }
+    let mut word = word.to_owned();
+    if trimmed.starts_with(|c: char| c.is_ascii_uppercase()) {
+        word[..1].make_ascii_uppercase();
+    }
+    *sent = Some(word);
 }
 
 /// Give each track its position as its `podcast:episode` when the sent model

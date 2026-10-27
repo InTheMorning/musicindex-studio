@@ -3,7 +3,7 @@
 Parent: [task 042](studio-v1-task-042-core-feed-rules.md). Decisions: [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) items 4 and 6, [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md) items 3 to 5 and 8, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the first packet of task 042. It depends on task 040.
 
-Status: Not started.
+Status: Complete - 2026-10-27.
 
 ## Goal
 

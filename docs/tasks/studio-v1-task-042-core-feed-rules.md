@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor File
 Decisions: [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md), [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md), [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md) and [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md).
 Audit: [UI feed rule audit](../reviews/2026-10-27-ui-feed-rule-audit.md).
 
-Status: Not started.
+Status: Complete - 2026-10-27. The four commit checks pass. The screenshot visual checks passed, and the [review checklist](../reviews/2026-10-27-task-042-review-checklist.md) records them.
 
 ## Goal
 

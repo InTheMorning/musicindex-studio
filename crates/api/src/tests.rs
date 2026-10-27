@@ -1918,24 +1918,8 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     assert_eq!(status, StatusCode::OK);
     // The route starts a draft when the feed has none after the write.
     let draft_path = format!("/api/v1/feeds/{id}/draft");
-    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let _ = call(&app, "GET", &draft_path, None).await;
     assert_eq!(listed(&app, id).await["draft_state"], "unchanged");
-
-    // An edit of the cover address changes the draft and its image.
-    let mut model = draft["model"].clone();
-    model["image"] = json!("https://music.example/cover.jpg");
-    let (status, _) = call(
-        &app,
-        "PUT",
-        &draft_path,
-        Some(json!({ "revision": draft["revision"], "model": model })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let row = listed(&app, id).await;
-    assert_eq!(row["draft_state"], "changed");
-    assert_eq!(row["image"], "https://music.example/cover.jpg");
-    assert_eq!(row["rss_image_url"], Value::Null);
 
     // A feed in the DeMu form gives the address of its RSS image (ADR 0060).
     let (_, draft) = call(&app, "GET", &draft_path, None).await;
@@ -1953,6 +1937,39 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     let row = listed(&app, id).await;
     assert_eq!(row["image"], Value::Null);
     assert_eq!(row["rss_image_url"], "https://music.example/demu.png");
+
+    // An empty address removes both cover tags (ADR 0060, ADR 0065 item 6).
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["image"] = json!("");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let row = listed(&app, id).await;
+    assert_eq!(row["image"], Value::Null);
+    assert_eq!(row["rss_image_url"], Value::Null);
+
+    // An edit of the cover address changes the draft and its image.
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["image"] = json!("https://music.example/cover.jpg");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let row = listed(&app, id).await;
+    assert_eq!(row["draft_state"], "changed");
+    assert_eq!(row["image"], "https://music.example/cover.jpg");
+    assert_eq!(row["rss_image_url"], Value::Null);
 }
 
 /// The live file of the feed that `set_up` adds.
@@ -2725,6 +2742,7 @@ async fn an_upload_of_an_mp3_gives_its_release_address_and_facts_with_no_change_
     assert!(body["size"].as_u64().unwrap() > 0);
     // An MP3 import gives no lossless file (ADR 0033 item 4).
     assert_eq!(body["lossless"], Value::Null);
+    assert_eq!(body["alternate_enclosures"], json!([]));
     assert!(incoming_is_empty(&app));
 
     // The route does not change the model of the draft, so the diff lists
@@ -2773,6 +2791,15 @@ async fn an_upload_of_a_wav_file_gives_an_mp3_file_and_a_lossless_flac_file() {
     assert_eq!(body["file_name"], "tagged.mp3");
     assert!(body["size"].as_u64().unwrap() > 0);
     assert_eq!(body["lossless"]["path"], "album/tagged.flac");
+    // The core gives the two alternative enclosures (ADR 0065 item 10).
+    let alternates = body["alternate_enclosures"].as_array().unwrap();
+    assert_eq!(alternates.len(), 2);
+    assert_eq!(alternates[0]["media_type"], "audio/mpeg");
+    assert_eq!(alternates[0]["default"], "true");
+    assert_eq!(alternates[0]["sources"][0]["uri"], body["url"]);
+    assert_eq!(alternates[1]["media_type"], "audio/flac");
+    assert_eq!(alternates[1]["default"], Value::Null);
+    assert_eq!(alternates[1]["sources"][0]["uri"], body["lossless"]["url"]);
     assert_eq!(
         body["lossless"]["url"],
         "https://music.example/album/tagged.flac"
@@ -6285,6 +6312,106 @@ async fn a_live_status_cannot_go_back() {
     let (status, body) = call(&app, "POST", &path, Some(json!({ "status": "live" }))).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["code"], "bad_status");
+}
+
+#[tokio::test]
+async fn the_listing_route_hides_and_shows_the_draft_and_writes_nothing() {
+    let app = app();
+    let id = set_up(&app).await;
+    let base = format!("/api/v1/feeds/{id}");
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/listing"),
+        Some(json!({ "hidden": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(draft["hidden"], true);
+    assert_eq!(draft["model"]["itunes_block"], "Yes");
+    assert_eq!(live(&app), FEED);
+    let (_, diff) = call(&app, "GET", &format!("{base}/diff"), None).await;
+    let unified = diff["unified"].as_str().unwrap();
+    assert!(
+        unified.contains("<itunes:block>Yes</itunes:block>"),
+        "{unified}"
+    );
+    assert!(
+        unified.contains("<podcast:block>yes</podcast:block>"),
+        "{unified}"
+    );
+
+    let (_, again) = call(&app, "GET", &format!("{base}/draft"), None).await;
+    assert_eq!(again["hidden"], true);
+
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/listing"),
+        Some(json!({ "hidden": false })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(draft["hidden"], false);
+    let (_, diff) = call(&app, "GET", &format!("{base}/diff"), None).await;
+    let unified = diff["unified"].as_str().unwrap();
+    assert!(
+        unified.contains("<itunes:block>No</itunes:block>"),
+        "{unified}"
+    );
+    assert!(
+        unified.contains("<podcast:block>no</podcast:block>"),
+        "{unified}"
+    );
+}
+
+#[tokio::test]
+async fn the_platform_listing_route_changes_only_the_block_of_that_platform() {
+    let app = app();
+    let id = set_up(&app).await;
+    let base = format!("/api/v1/feeds/{id}");
+    let (_, draft) = call(&app, "GET", &format!("{base}/draft"), None).await;
+    let mut model = draft["model"].clone();
+    model["blocks"] = json!([
+        { "value": "no", "id": null },
+        { "value": "no", "id": "spotify" },
+        { "value": "no", "id": "apple" },
+    ]);
+    let (status, draft) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/listing/spotify"),
+        Some(json!({ "hidden": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    let values: Vec<_> = draft["model"]["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["value"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(values, ["no", "yes", "no"]);
+    assert_eq!(draft["hidden"], false);
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{base}/listing/tidal"),
+        Some(json!({ "hidden": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["error"]["code"], "not_found");
 }
 
 /// A request to a route with a given bearer token and no other header.

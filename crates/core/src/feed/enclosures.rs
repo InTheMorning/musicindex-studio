@@ -56,3 +56,78 @@ impl Modeled for AlternateEnclosure {
         adopt_list(&mut self.sources, draft.map(|d| d.sources.as_slice()))
     }
 }
+
+/// The two alternative enclosures of a lossless import (ADR 0033 item 6).
+/// The first is the MP3 file, which an app plays first. The second is the
+/// lossless FLAC file. `bitrate`, `rel` and each `contentType` are empty.
+#[must_use]
+pub fn lossless_pair(
+    mp3_url: &str,
+    mp3_size: u64,
+    flac_url: &str,
+    flac_size: u64,
+) -> Vec<Entry<AlternateEnclosure>> {
+    let source = |uri: &str| {
+        Entry::new(Source {
+            uri: Some(uri.to_owned()),
+            content_type: None,
+        })
+    };
+    vec![
+        Entry::new(AlternateEnclosure {
+            media_type: Some("audio/mpeg".to_owned()),
+            length: Some(mp3_size.to_string()),
+            title: Some("Standard (MP3)".to_owned()),
+            default: Some("true".to_owned()),
+            sources: vec![source(mp3_url)],
+            ..AlternateEnclosure::default()
+        }),
+        Entry::new(AlternateEnclosure {
+            media_type: Some("audio/flac".to_owned()),
+            length: Some(flac_size.to_string()),
+            title: Some("Maximum fidelity (lossless)".to_owned()),
+            sources: vec![source(flac_url)],
+            ..AlternateEnclosure::default()
+        }),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ADR 0033 item 6: the pair has the MP3 file first, with `default`.
+    #[test]
+    fn lossless_pair_gives_the_mp3_entry_and_the_flac_entry() {
+        let pair = lossless_pair(
+            "https://h.example/a.mp3",
+            10,
+            "https://h.example/a.flac",
+            99,
+        );
+        assert_eq!(pair.len(), 2);
+        let mp3 = &pair[0].value;
+        assert_eq!(mp3.media_type.as_deref(), Some("audio/mpeg"));
+        assert_eq!(mp3.length.as_deref(), Some("10"));
+        assert_eq!(mp3.title.as_deref(), Some("Standard (MP3)"));
+        assert_eq!(mp3.default.as_deref(), Some("true"));
+        assert_eq!(mp3.sources.len(), 1);
+        assert_eq!(
+            mp3.sources[0].value.uri.as_deref(),
+            Some("https://h.example/a.mp3")
+        );
+        let flac = &pair[1].value;
+        assert_eq!(flac.media_type.as_deref(), Some("audio/flac"));
+        assert_eq!(flac.length.as_deref(), Some("99"));
+        assert_eq!(flac.title.as_deref(), Some("Maximum fidelity (lossless)"));
+        assert_eq!(flac.default, None);
+        assert_eq!(
+            flac.sources[0].value.uri.as_deref(),
+            Some("https://h.example/a.flac")
+        );
+        for enc in [mp3, flac] {
+            assert_eq!((&enc.bitrate, &enc.rel), (&None, &None));
+            assert_eq!(enc.sources[0].value.content_type, None);
+        }
+    }
+}

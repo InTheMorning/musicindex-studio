@@ -3,6 +3,7 @@
 // change. Each list entry carries a client ID for the life of the page.
 import { useState, useEffect, useRef, useCallback } from './vendor/htm-preact-standalone.module.js';
 import { api } from './app.js';
+import { withSavedCover } from './cover.js';
 
 // ---- Client IDs and keys ----
 // Each list entry gets a client ID (`_cid`) for the life of the page. After a
@@ -97,6 +98,8 @@ export const STATUS = {
 export function useDraft(feedId) {
   const [model, setModel] = useState(null);
   const [changed, setChanged] = useState(false);
+  // Whether the core says that the feed is hidden from apps (ADR 0065 item 9).
+  const [hidden, setHidden] = useState(false);
   // Each address field that is not correct, by its model path (ADR 0023).
   const [bad, setBad] = useState([]);
   const [status, setStatus] = useState(feedId === null ? 'idle' : 'loading');
@@ -120,6 +123,7 @@ export function useDraft(feedId) {
     dirty.current = false;
     setModel(current.current);
     setChanged(draft.changed);
+    setHidden(draft.hidden);
     setBad(draft.bad_addresses);
     setStatus('saved');
     setError(null);
@@ -151,6 +155,7 @@ export function useDraft(feedId) {
     dirty.current = false;
     setModel(null);
     setChanged(false);
+    setHidden(false);
     setBad([]);
     setError(null);
     setEdits(0);
@@ -171,9 +176,11 @@ export function useDraft(feedId) {
     if (active.current !== feedId) return;
     const found = positions(sent);
     revision.current = saved.revision;
-    current.current = copyServerFields(rekey(current.current, found), saved.model, found);
+    const copied = copyServerFields(rekey(current.current, found), saved.model, found);
+    current.current = withSavedCover(copied, sent, saved.model);
     setModel(current.current);
     setChanged(saved.changed);
+    setHidden(saved.hidden);
     setBad(saved.bad_addresses);
   };
 
@@ -212,5 +219,5 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush]);
 
-  return { model, changed, bad, status, error, edits, update, flush, load, show };
+  return { model, changed, hidden, bad, status, error, edits, update, flush, load, show };
 }

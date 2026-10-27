@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
 Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0031](../adr/0031-a-new-element-takes-its-hosted-position.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md), [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) and [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md).
 
-Status: Not started. ADR 0064 is proposed. The packets start after the operator accepts it, and after [task 042](studio-v1-task-042-core-feed-rules.md) of [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
+Status: Not started. ADR 0064 is proposed. The packets start after the operator accepts it. [Task 042](studio-v1-task-042-core-feed-rules.md) of [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) is complete.
 
 ## Goal
 

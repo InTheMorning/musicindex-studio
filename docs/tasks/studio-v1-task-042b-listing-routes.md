@@ -3,7 +3,7 @@
 Parent: [task 042](studio-v1-task-042-core-feed-rules.md). Decisions: [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) items 5, 7, 8 and 9, [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md) items 2 to 6, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the second packet of task 042. It depends on 042a.
 
-Status: Not started.
+Status: Complete - 2026-10-27.
 
 ## Goal
 
@@ -28,7 +28,7 @@ These choices are fixed. Do not change them.
 ### The Rule In The Core
 
 - Add `Feed::set_hidden(&mut self, hidden: bool)` in `feed.rs`, after `Feed::hidden`. It applies ADR 0063 items 3 and 4:
-  - With `true`: `itunes_block` gets `Yes`. Each block with no `id` gets `yes`. When the feed has no block with no `id`, a new entry with `yes` and no `id` goes first in `blocks`.
+  - With `true`: `itunes_block` gets `Yes`. Each block with no `id` gets `yes`. When the feed has no block with no `id`, a new entry with `yes` and no `id` goes last in `blocks`. Then each block with an `id` keeps its position in the document (ADR 0012).
   - With `false`: an `itunes_block` that the feed has gets `No`. Each block with no `id` gets `no`. The function adds no tag and removes no tag.
   - A block with an `id` does not change.
 - Add `Feed::set_platform_hidden(&mut self, platform: &str, hidden: bool) -> bool`. Each block with that `id` gets `yes` or `no`. It gives `false`, and changes nothing, when the feed has no block with that `id`.
@@ -69,7 +69,8 @@ These choices are fixed. Do not change them.
 
 Mechanical:
 
-- A core test: `set_hidden(true)` on a feed with no block tag gives `itunes_block` `Yes` and one block `yes` with no `id`, first in `blocks`.
+- A core test: `set_hidden(true)` on a feed with no block tag gives `itunes_block` `Yes` and one block `yes` with no `id`.
+- A core test: `set_hidden(true)` on a feed with a block for one platform keeps the bytes of the document from the start to the end of that block.
 - A core test: `set_hidden(false)` on a hidden feed with a block for one platform gives `No` and `no`. The block for the platform does not change. No tag is added.
 - A core test: `set_hidden(false)` on a feed with no block tag adds no tag.
 - A core test: `set_platform_hidden` changes only the blocks with that `id`, and gives `false` for an unknown `id`.

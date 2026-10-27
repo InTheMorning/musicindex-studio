@@ -715,12 +715,43 @@ pub fn replace_model(
     sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
     keep_identity(&current, &mut sent).map_err(invalid)?;
     number_tracks(&current, &mut sent);
+    keep_cover_form(&current, &mut sent);
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
     collection.save_draft(id, &draft)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     Ok((feed, revision(&draft)))
+}
+
+/// Keep the form of the cover when the sent `image` is a new address
+/// (ADR 0060 items 3 to 5, ADR 0065 item 6). The step does nothing when
+/// `image` does not change. An empty `image` removes `image` and
+/// `rss_image`. A feed with only the RSS image keeps only that tag. A feed
+/// with both tags gets the address in both tags. Else the address stays in
+/// `image`. The step compares the texts as they are.
+fn keep_cover_form(current: &Feed, sent: &mut Feed) {
+    if sent.image == current.image {
+        return;
+    }
+    let Some(address) = sent.image.clone().filter(|a| !a.is_empty()) else {
+        sent.image = None;
+        sent.rss_image = None;
+        return;
+    };
+    if current.rss_image.is_none() {
+        return;
+    }
+    let mut rss = sent
+        .rss_image
+        .take()
+        .or_else(|| current.rss_image.clone())
+        .unwrap_or_default();
+    rss.url = Some(address);
+    sent.rss_image = Some(rss);
+    if current.image.is_none() {
+        sent.image = None;
+    }
 }
 
 /// Give each track its position as its `podcast:episode` when the sent model

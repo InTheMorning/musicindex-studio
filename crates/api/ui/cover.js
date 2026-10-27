@@ -31,18 +31,17 @@ export function coverConflict(model) {
   return model.image === rss ? null : rss;
 }
 
-// A new model with `address` in each cover tag that the model has. With
-// neither tag, the address goes to `image`. An empty address removes
-// `image` and the full `rss_image`.
-export function withCover(model, address) {
-  const next = { ...model };
-  if (address == null || address === '') {
-    next.image = null;
-    next.rss_image = null;
-    return next;
-  }
-  const form = coverForm(model);
-  if (form === 'none' || form === 'itunes-only' || form === 'both') next.image = address;
-  if (form === 'rss-only' || form === 'both') next.rss_image = { ...model.rss_image, url: address };
-  return next;
+// The cover of a model as a pair: `image` and the RSS `image` address, with
+// `null` for a missing tag.
+const coverPair = (model) => [model.image ?? null, (model.rss_image && model.rss_image.url) ?? null];
+
+// A new model with the cover tags of `saved`, the model that the core gave
+// back, when the cover of `local` is the same as the cover of `sent`. Else
+// the user changed the cover during the save, and the model stays as it is.
+// The core keeps the form of the cover (ADR 0065 item 6).
+export function withSavedCover(local, sent, saved) {
+  const [a, b] = coverPair(local);
+  const [c, d] = coverPair(sent);
+  if (a !== c || b !== d) return local;
+  return { ...local, image: saved.image ?? null, rss_image: saved.rss_image ?? null };
 }

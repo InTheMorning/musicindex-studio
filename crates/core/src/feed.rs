@@ -21,7 +21,7 @@ pub use elements::{
     AtomLink, Block, ContentLink, Enclosure, Funding, Image, License, LiveValue, Locked, Person,
     Recipient, RemoteItem, RssImage, Source, Transcript, Txt,
 };
-pub use enclosures::AlternateEnclosure;
+pub use enclosures::{AlternateEnclosure, lossless_pair};
 pub use links::{BadAddress, is_web_address};
 use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
 pub use sync::{Entry, KeyError};
@@ -61,8 +61,9 @@ pub struct Feed {
     pub link: Option<String>,
     /// `language`.
     pub language: Option<String>,
-    /// The channel `image` of RSS 2.0 (ADR 0060). The core has no cover
-    /// rule: it models this tag and `itunes:image` as two fields.
+    /// The channel `image` of RSS 2.0 (ADR 0060). The model has this tag and
+    /// `itunes:image` as two fields. The pipeline keeps the form of the
+    /// cover at the draft save (ADR 0065 item 6).
     pub rss_image: Option<RssImage>,
     /// `podcast:guid`. It does not change after the feed has one (ADR 0008).
     pub podcast_guid: Option<String>,
@@ -234,6 +235,55 @@ impl Feed {
                 .blocks
                 .iter()
                 .any(|entry| entry.value.id.is_none() && says_yes(&entry.value.value))
+    }
+
+    /// Hide the feed from apps, or show it again (ADR 0063 items 3 and 4).
+    /// To hide, `itunes:block` gets `Yes` and each `podcast:block` with no
+    /// `id` gets `yes`. A feed with no such block gets a new one, last in
+    /// the list, so that each block with an `id` keeps its position in the
+    /// document (ADR 0012). To show, each of these tags that the feed has
+    /// gets `No` or `no`, and no tag is added. A block with an `id` does not
+    /// change.
+    pub fn set_hidden(&mut self, hidden: bool) {
+        if hidden {
+            self.itunes_block = Some("Yes".to_owned());
+            let mut found = false;
+            for entry in &mut self.blocks {
+                if entry.value.id.is_none() {
+                    "yes".clone_into(&mut entry.value.value);
+                    found = true;
+                }
+            }
+            if !found {
+                self.blocks.push(Entry::new(Block {
+                    value: "yes".to_owned(),
+                    id: None,
+                }));
+            }
+        } else {
+            if self.itunes_block.is_some() {
+                self.itunes_block = Some("No".to_owned());
+            }
+            for entry in &mut self.blocks {
+                if entry.value.id.is_none() {
+                    "no".clone_into(&mut entry.value.value);
+                }
+            }
+        }
+    }
+
+    /// Hide the feed from one platform, or show it again (ADR 0063 item 5).
+    /// Each `podcast:block` with this `id` gets `yes` or `no`. Gives `false`,
+    /// and changes nothing, when the feed has no block with this `id`.
+    pub fn set_platform_hidden(&mut self, platform: &str, hidden: bool) -> bool {
+        let mut found = false;
+        for entry in &mut self.blocks {
+            if entry.value.id.as_deref() == Some(platform) {
+                (if hidden { "yes" } else { "no" }).clone_into(&mut entry.value.value);
+                found = true;
+            }
+        }
+        found
     }
 
     /// The feed URL that the feed gives for itself: the `href` of the first

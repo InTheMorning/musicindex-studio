@@ -213,6 +213,11 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/feeds/{id}/live-items/{guid}/status",
             post(routes::set_live_status),
         )
+        .route("/feeds/{id}/listing", post(routes::set_listing))
+        .route(
+            "/feeds/{id}/listing/{platform}",
+            post(routes::set_platform_listing),
+        )
         .route("/feeds/{id}/grants", get(routes::list_feed_grants))
         .route(
             "/feeds/{id}/grants/{guid}",

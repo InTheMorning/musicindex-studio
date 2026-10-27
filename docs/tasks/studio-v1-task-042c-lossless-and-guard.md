@@ -3,7 +3,7 @@
 Parent: [task 042](studio-v1-task-042-core-feed-rules.md). Decisions: [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) items 10 to 12, [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md) item 6, [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md) items 4 and 5, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the third packet of task 042. It depends on 042b.
 
-Status: Not started.
+Status: Complete - 2026-10-27.
 
 ## Goal
 

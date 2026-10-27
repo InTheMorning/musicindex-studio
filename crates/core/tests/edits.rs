@@ -552,3 +552,83 @@ fn only_a_block_for_each_app_hides_the_feed() {
     assert!(!feed("<itunes:block>No</itunes:block><podcast:block>no</podcast:block>").hidden());
     assert!(!feed("").hidden());
 }
+
+const LISTED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\">\n  <channel>\n    <title>T</title>\n  </channel>\n</rss>\n";
+
+fn read_feed(source: &str) -> Feed {
+    Feed::read(&Document::parse(source).unwrap()).unwrap()
+}
+
+#[test]
+fn set_hidden_true_adds_both_tags() {
+    let mut feed = read_feed(LISTED);
+    feed.set_hidden(true);
+    assert_eq!(feed.itunes_block.as_deref(), Some("Yes"));
+    assert_eq!(feed.blocks.len(), 1);
+    assert_eq!(feed.blocks[0].value.value, "yes");
+    assert_eq!(feed.blocks[0].value.id, None);
+    assert!(feed.hidden());
+}
+
+#[test]
+fn set_hidden_true_keeps_a_platform_block_in_its_place() {
+    let line = "<podcast:block id=\"spotify\">no</podcast:block>";
+    let source = LISTED.replace("<title>T</title>", &format!("<title>T</title>\n    {line}"));
+    let mut feed = read_feed(&source);
+    feed.set_hidden(true);
+    assert_eq!(feed.blocks.len(), 2);
+    assert_eq!(feed.blocks[0].value.id.as_deref(), Some("spotify"));
+    assert_eq!(feed.blocks[1].value.id, None);
+    assert_eq!(feed.blocks[1].value.value, "yes");
+    // The document up to the platform block keeps its bytes (ADR 0012).
+    let after = edit(&source, |f| f.set_hidden(true));
+    let kept = &source[..source.find(line).unwrap() + line.len()];
+    assert!(after.starts_with(kept), "{after}");
+    assert!(
+        after.contains("<podcast:block>yes</podcast:block>"),
+        "{after}"
+    );
+}
+
+#[test]
+fn set_hidden_false_writes_no_and_keeps_the_platform_block() {
+    let mut feed = read_feed(&BLOCKED.replace(
+        "<podcast:block id=\"spotify\">no</podcast:block>",
+        "<podcast:block id=\"spotify\">yes</podcast:block>",
+    ));
+    feed.set_hidden(false);
+    assert_eq!(feed.itunes_block.as_deref(), Some("No"));
+    assert_eq!(feed.blocks.len(), 2);
+    assert_eq!(feed.blocks[0].value.value, "no");
+    assert_eq!(feed.blocks[1].value.id.as_deref(), Some("spotify"));
+    assert_eq!(feed.blocks[1].value.value, "yes");
+    assert!(!feed.hidden());
+}
+
+#[test]
+fn set_hidden_false_adds_no_tag() {
+    let mut feed = read_feed(LISTED);
+    feed.set_hidden(false);
+    assert_eq!(feed.itunes_block, None);
+    assert_eq!(feed.blocks.len(), 0);
+}
+
+#[test]
+fn set_platform_hidden_changes_only_the_blocks_with_that_id() {
+    let mut feed = read_feed(BLOCKED);
+    assert!(feed.set_platform_hidden("spotify", true));
+    assert_eq!(feed.blocks[0].value.value, "yes");
+    assert_eq!(feed.blocks[1].value.value, "yes");
+    assert_eq!(feed.itunes_block.as_deref(), Some("yes"));
+    assert!(feed.set_platform_hidden("spotify", false));
+    assert_eq!(feed.blocks[1].value.value, "no");
+    assert_eq!(feed.blocks[0].value.value, "yes");
+}
+
+#[test]
+fn set_platform_hidden_gives_false_for_an_unknown_id() {
+    let mut feed = read_feed(BLOCKED);
+    assert!(!feed.set_platform_hidden("apple", true));
+    assert_eq!(feed.blocks[0].value.value, "yes");
+    assert_eq!(feed.blocks[1].value.value, "no");
+}

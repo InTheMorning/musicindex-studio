@@ -3278,3 +3278,102 @@ fn a_user_write_that_ends_the_show_or_removes_it_ends_the_grant() {
     let error = granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::GrantNotActive);
 }
+
+const OLD: &str = "https://music.example/old.png";
+const OTHER: &str = "https://music.example/other.png";
+const NEW: &str = "https://music.example/new.png";
+
+fn rss_image(url: &str) -> RssImage {
+    RssImage {
+        url: Some(url.into()),
+        title: Some("Cover title".into()),
+        ..RssImage::default()
+    }
+}
+
+/// Give the draft the cover tags, send the model with `image` changed by
+/// `change`, and give the model that the draft has afterwards.
+fn save_cover(rss: Option<RssImage>, image: Option<&str>, change: impl FnOnce(&mut Feed)) -> Feed {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.rss_image = rss;
+        f.image = image.map(str::to_owned);
+    })
+    .unwrap();
+    let (mut sent, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    change(&mut sent);
+    pipeline::replace_model(&s.collection, s.feed, &revision, sent).unwrap();
+    pipeline::draft_model(&s.collection, s.feed).unwrap().0
+}
+
+#[test]
+fn a_demu_draft_keeps_only_the_rss_image_for_a_new_cover() {
+    let saved = save_cover(Some(rss_image(OLD)), None, |f| f.image = Some(NEW.into()));
+    assert_eq!(saved.image, None);
+    assert_eq!(saved.rss_image, Some(rss_image(NEW)));
+}
+
+#[test]
+fn a_draft_with_only_itunes_image_gets_the_new_address_there() {
+    let saved = save_cover(None, Some(OLD), |f| f.image = Some(NEW.into()));
+    assert_eq!(saved.image.as_deref(), Some(NEW));
+    assert_eq!(saved.rss_image, None);
+}
+
+#[test]
+fn a_draft_with_both_tags_gets_the_new_address_in_both() {
+    let saved = save_cover(Some(rss_image(OLD)), Some(OLD), |f| {
+        f.image = Some(NEW.into());
+    });
+    assert_eq!(saved.image.as_deref(), Some(NEW));
+    assert_eq!(saved.rss_image, Some(rss_image(NEW)));
+}
+
+#[test]
+fn a_draft_with_two_addresses_keeps_both_when_image_does_not_change() {
+    let saved = save_cover(Some(rss_image(OTHER)), Some(OLD), |_| {});
+    assert_eq!(saved.image.as_deref(), Some(OLD));
+    assert_eq!(saved.rss_image, Some(rss_image(OTHER)));
+}
+
+#[test]
+fn the_rss_address_in_image_gives_both_tags_that_address() {
+    let saved = save_cover(Some(rss_image(OTHER)), Some(OLD), |f| {
+        f.image = Some(OTHER.into());
+    });
+    assert_eq!(saved.image.as_deref(), Some(OTHER));
+    assert_eq!(saved.rss_image, Some(rss_image(OTHER)));
+}
+
+#[test]
+fn a_draft_with_no_cover_tag_gets_itunes_image_for_a_new_cover() {
+    let saved = save_cover(None, None, |f| f.image = Some(NEW.into()));
+    assert_eq!(saved.image.as_deref(), Some(NEW));
+    assert_eq!(saved.rss_image, None);
+}
+
+#[test]
+fn an_empty_image_removes_both_cover_tags() {
+    let saved = save_cover(Some(rss_image(OLD)), Some(OLD), |f| {
+        f.image = Some(String::new());
+    });
+    assert_eq!(saved.image, None);
+    assert_eq!(saved.rss_image, None);
+}
+
+#[test]
+fn an_empty_image_removes_the_rss_image_of_a_demu_draft() {
+    let saved = save_cover(Some(rss_image(OLD)), None, |f| {
+        f.image = Some(String::new());
+    });
+    assert_eq!(saved.image, None);
+    assert_eq!(saved.rss_image, None);
+}
+
+#[test]
+fn a_demu_draft_with_no_image_does_not_change() {
+    let saved = save_cover(Some(rss_image(OLD)), None, |f| f.image = None);
+    assert_eq!(saved.image, None);
+    assert_eq!(saved.rss_image, Some(rss_image(OLD)));
+}

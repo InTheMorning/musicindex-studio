@@ -2,7 +2,7 @@
 // rule of the channel cover.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { coverOf, coverForm, coverConflict, withCover } from '../ui/cover.js';
+import { coverOf, coverForm, coverConflict, withSavedCover } from '../ui/cover.js';
 
 const A = 'https://m.example/a.jpg';
 const B = 'https://m.example/b.jpg';
@@ -38,40 +38,18 @@ test('coverConflict gives the RSS address only when the two addresses are differ
   assert.equal(coverConflict(CONFLICT), B);
 });
 
-test('withCover keeps the form of a feed with only the RSS image', () => {
-  const next = withCover(RSS_ONLY, B);
+test('withSavedCover gives the saved cover when the local cover is the sent cover', () => {
+  const sent = { title: 'T', image: B, rss_image: rss(A) };
+  const saved = { title: 'T', image: null, rss_image: rss(B) };
+  const next = withSavedCover({ ...sent, title: 'Changed' }, sent, saved);
   assert.equal(next.image, null);
   assert.deepEqual(next.rss_image, rss(B));
-  assert.equal(RSS_ONLY.rss_image.url, A);
+  assert.equal(next.title, 'Changed');
 });
 
-test('withCover keeps the form of a feed with only itunes:image', () => {
-  const next = withCover(ITUNES_ONLY, B);
-  assert.equal(next.image, B);
-  assert.equal(next.rss_image, null);
-});
-
-test('withCover puts the address in both tags of a feed with both', () => {
-  const next = withCover(CONFLICT, B);
-  assert.equal(next.image, B);
-  assert.equal(next.rss_image.url, B);
-  assert.equal(next.rss_image.title, 'T');
-  assert.equal(coverConflict(next), null);
-});
-
-test('withCover sets itunes:image in a feed with neither tag', () => {
-  const next = withCover(NONE, A);
-  assert.equal(next.image, A);
-  assert.equal(next.rss_image, null);
-});
-
-test('withCover with an empty address removes image and the full rss_image', () => {
-  for (const model of [NONE, RSS_ONLY, ITUNES_ONLY, BOTH, CONFLICT]) {
-    for (const empty of ['', null]) {
-      const next = withCover(model, empty);
-      assert.equal(next.image, null);
-      assert.equal(next.rss_image, null);
-      assert.equal(next.title, 'T');
-    }
-  }
+test('withSavedCover keeps the local cover when the user changed it during the save', () => {
+  const sent = { title: 'T', image: B, rss_image: null };
+  const local = { title: 'T', image: A, rss_image: null };
+  const saved = { title: 'T', image: B, rss_image: null };
+  assert.equal(withSavedCover(local, sent, saved), local);
 });

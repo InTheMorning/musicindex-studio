@@ -2023,20 +2023,23 @@ pub(crate) async fn set_publisher_role(
     .await
 }
 
-/// The draft as the UI edits it: the model, its revision, `changed` and
-/// `bad_addresses`. The value of `changed` is true when the draft is
-/// different from the live file. Each bad address stops a write (ADR 0023).
+/// The draft as the UI edits it: the model, its revision, `changed`,
+/// `bad_addresses` and `hidden` (ADR 0065 item 9). The value of `changed` is
+/// true when the draft is different from the live file. Each bad address
+/// stops a write (ADR 0023).
 ///
 /// This route needs no host and no library: it only shows the draft.
 fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
     let changed = pipeline::draft_changed(&w.collection, id)?;
     let bad_addresses = model.bad_addresses();
+    let hidden = model.hidden();
     Ok(Json(json!({
         "revision": revision,
         "model": model,
         "changed": changed,
         "bad_addresses": bad_addresses,
+        "hidden": hidden,
     })))
 }
 
@@ -2151,6 +2154,53 @@ pub(crate) async fn set_live_status(
             ));
         };
         live::set_status(&mut entry.value, next).map_err(|e| bad(e.to_string()))?;
+        pipeline::replace_model(&w.collection, id, &revision, model)?;
+        draft_json(w, id)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SentListing {
+    hidden: bool,
+}
+
+/// Hide the draft from apps, or show it again (ADR 0063 items 3 and 4, ADR
+/// 0065 item 7). The route changes the draft only. It never writes to a host.
+pub(crate) async fn set_listing(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SentListing>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        ensure_draft(w, id)?;
+        let (mut model, revision) = pipeline::draft_model(&w.collection, id)?;
+        model.set_hidden(body.hidden);
+        pipeline::replace_model(&w.collection, id, &revision, model)?;
+        draft_json(w, id)
+    })
+    .await
+}
+
+/// Hide the draft from one platform, or show it again (ADR 0063 item 5, ADR
+/// 0065 item 7). The route changes the draft only. It never writes to a host.
+pub(crate) async fn set_platform_listing(
+    State(shared): State<Shared>,
+    Path((id, platform)): Path<(i64, String)>,
+    Json(body): Json<SentListing>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        ensure_draft(w, id)?;
+        let (mut model, revision) = pipeline::draft_model(&w.collection, id)?;
+        if !model.set_platform_hidden(&platform, body.hidden) {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "the draft has no block for this platform",
+            ));
+        }
         pipeline::replace_model(&w.collection, id, &revision, model)?;
         draft_json(w, id)
     })
@@ -4075,6 +4125,20 @@ fn import_upload(
         } => ("audio", title, track_number, duration),
         media::ImportedKind::Image => ("image", None, None, None),
     };
+    // The core makes the alternative enclosures of a lossless file
+    // (ADR 0065 item 10).
+    // A file with no address gives no alternative enclosures.
+    let alternate_enclosures = match (imported.lossless.as_ref(), &main.planned.url) {
+        (Some(file), Some(mp3_url)) => {
+            let flac_url = lossless.as_ref().and_then(|facts| facts["url"].as_str());
+            flac_url
+                .map(|flac_url| {
+                    studio_core::feed::lossless_pair(mp3_url, imported.size, flac_url, file.size)
+                })
+                .unwrap_or_default()
+        }
+        _ => Vec::new(),
+    };
     Ok((
         StatusCode::CREATED,
         to_json(json!({
@@ -4091,6 +4155,7 @@ fn import_upload(
             "on_host": main.planned.on_host,
             "library_file_id": main.library_file_id.0,
             "lossless": lossless,
+            "alternate_enclosures": alternate_enclosures,
         }))?,
     ))
 }

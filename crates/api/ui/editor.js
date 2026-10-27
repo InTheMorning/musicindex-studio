@@ -13,8 +13,8 @@ import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
-import { coverOf, coverConflict, withCover } from './cover.js';
-import { isHidden, withHidden, platformBlocks, withPlatformBlock } from './listing.js';
+import { coverOf, coverConflict } from './cover.js';
+import { platformBlocks } from './listing.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -403,7 +403,7 @@ function withNewAudio(item, facts, readsMetadata) {
     enclosure: { url: facts.url, length: facts.size == null ? '' : String(facts.size), media_type: facts.media_type },
     alternate_enclosures: [
       ...item.alternate_enclosures.filter((enc) => !isAudio(enc)),
-      ...withCids(alternateEnclosures(facts)),
+      ...withCids(facts.alternate_enclosures || []),
     ],
     // A file that only the host holds has no duration yet. The player reads
     // it from the metadata (ADR 0062 item 16), so the old duration goes.
@@ -697,34 +697,6 @@ function fileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// The `alternate_enclosures` of a new track, from the facts of its sent
-// file. A track with no lossless file gets an empty list. A lossless track
-// gets the MP3 file and the FLAC file, in that sequence, with each other
-// attribute null (ADR 0033 items 5 and 6).
-function alternateEnclosures(facts) {
-  if (!facts.lossless) return [];
-  return [
-    {
-      media_type: 'audio/mpeg',
-      length: String(facts.size),
-      bitrate: null,
-      title: 'Standard (MP3)',
-      rel: null,
-      default: 'true',
-      sources: [{ uri: facts.url, content_type: null }],
-    },
-    {
-      media_type: 'audio/flac',
-      length: String(facts.lossless.size),
-      bitrate: null,
-      title: 'Maximum fidelity (lossless)',
-      rel: null,
-      default: null,
-      sources: [{ uri: facts.lossless.url, content_type: null }],
-    },
-  ];
-}
-
 const IMPORT_ERRORS = {
   unsupported_media: 'Studio does not read this kind of file.',
   file_pending: 'A track or an image of this draft uses a file with this name. Remove it from the draft first.',
@@ -962,7 +934,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
       description: null,
       guid: null,
       enclosure: { url: row.facts.url, length: String(row.facts.size), media_type: row.facts.media_type },
-      alternate_enclosures: alternateEnclosures(row.facts),
+      alternate_enclosures: row.facts.alternate_enclosures || [],
       pub_date: null,
       duration: row.facts.duration || null,
       episode: null,
@@ -1336,7 +1308,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
-      ${hasWork && draft.model && isHidden(draft.model) && html`<div class="notice" role="status">
+      ${hasWork && draft.model && draft.hidden && html`<div class="notice" role="status">
         <strong>This feed is hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} apps=${apps} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
@@ -1517,7 +1489,7 @@ function publisherLine(entry, match, index) {
 // (ADR 0060 item 8).
 function CoverField({ id, model, update, bad }) {
   const conflict = coverConflict(model);
-  const change = (address) => update((m) => withCover(m, address));
+  const change = (address) => update((m) => ({ ...m, image: address ?? '' }));
   return html`<${PickedImageField} field="cover" subject=${model} apply=${change} id=${id} label="Cover image address"
           address=${['image', 'rss_image/url']} bad=${bad} value=${coverOf(model)} onChange=${change}>
           ${conflict && html`<div class="field-note">
@@ -1529,7 +1501,7 @@ function CoverField({ id, model, update, bad }) {
 
 // The channel fields that the album page and the playlist page share: the
 // title, the author, the description, the image, the link and the language.
-function ChannelFields({ model, update, bad, artistLabel }) {
+function ChannelFields({ feedId, draft, model, update, bad, artistLabel }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   return html`        <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
         <${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
@@ -1537,25 +1509,32 @@ function ChannelFields({ model, update, bad, artistLabel }) {
         <${CoverField} id="ch-image" model=${model} update=${update} bad=${bad} />
         <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
-        <${ListingField} id="ch-listing" model=${model} update=${update} />
+        <${ListingField} id="ch-listing" feedId=${feedId} draft=${draft} model=${model} />
 `;
 }
 
-// The listing control of a channel (ADR 0063). One switch hides the feed from
-// apps, or shows it again. A block for one platform is in "Advanced", which
-// shows only when the feed has such a block.
-function ListingField({ id, model, update }) {
-  const hidden = isHidden(model);
+// The listing control of a channel (ADR 0063, ADR 0065). One switch hides the
+// feed from apps, or shows it again. A block for one platform is in
+// "Advanced", which shows only when the feed has such a block. The core
+// applies the rule: each change calls a core route and shows the new draft.
+function ListingField({ id, feedId, draft, model }) {
+  const action = useAction();
+  const hidden = draft.hidden;
   const platforms = platformBlocks(model);
-  // A new block entry gets its client ID here, as each new entry does.
-  const keyed = (m) => ({ ...m, blocks: m.blocks.map((block) => (block._cid ? block : withCids([block])[0])) });
+  const change = (path, value) => action.run(async () => {
+    // Send each edit first, so that the route works on the draft that the
+    // user sees.
+    if (!(await draft.flush())) return;
+    draft.show(await api(`/feeds/${feedId}/listing${path}`, { method: 'POST', body: { hidden: value } }));
+  });
   return html`<div class="field">
       <label for=${`${id}-hidden`}>Hide from apps</label>
       <div class="field-body">
-        <label class="check"><input id=${`${id}-hidden`} type="checkbox" checked=${hidden}
-          onChange=${(e) => update((m) => keyed(withHidden(m, e.target.checked)))} />
+        <label class="check"><input id=${`${id}-hidden`} type="checkbox" checked=${hidden} disabled=${action.busy}
+          onChange=${(e) => change('', e.target.checked)} />
           <span>${hidden ? 'Hidden' : 'Listed'}</span></label>
         <span class="hint">Apps and directories do not list a hidden feed. The feed stays at its address.</span>
+        ${action.error && html`<${ErrorNotice} error=${action.error} />`}
       </div>
     </div>
     ${platforms.length > 0 && html`<details class="disclosure">
@@ -1563,8 +1542,8 @@ function ListingField({ id, model, update }) {
         <span class="summary">Rules for one platform: ${platforms.map((row) => row.id).join(', ')}</span></summary>
       <div class="form">
         ${platforms.map((row) => html`<label class="check" key=${row.block._cid}>
-          <input type="checkbox" checked=${row.hidden}
-            onChange=${(e) => update((m) => withPlatformBlock(m, row.index, e.target.checked))} />
+          <input type="checkbox" checked=${row.hidden} disabled=${action.busy}
+            onChange=${(e) => change(`/${encodeURIComponent(row.id)}`, e.target.checked)} />
           <span>Hide from <span class="mono">${row.id}</span></span></label>`)}
       </div>
     </details>`}`;
@@ -1610,7 +1589,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
   // .page between sections (review of task 014c, defect 2).
   return html`<section class="page-section"><h2>Album</h2>
       <div class="group">
-        <${ChannelFields} model=${model} update=${update} bad=${bad} artistLabel="Artist" />
+        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" />
       </div>
     </section>
 
@@ -1685,10 +1664,10 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
 }
 
 // The playlist page (ADR 0053 item 4): the channel fields and the feed facts.
-function PlaylistPage({ feed, model, update, bad, onRemoved }) {
+function PlaylistPage({ feed, draft, model, update, bad, onRemoved }) {
   return html`<section class="page-section"><h2>Playlist</h2>
       <div class="group">
-        <${ChannelFields} model=${model} update=${update} bad=${bad} artistLabel="Author" />
+        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Author" />
       </div>
     </section>
     <section class="page-section"><h2>Playlist details</h2>
@@ -2311,7 +2290,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         <${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />
         <${CoverField} id="pub-image" model=${model} update=${update} bad=${bad} />
         <${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
-        <${ListingField} id="pub-listing" model=${model} update=${update} />
+        <${ListingField} id="pub-listing" feedId=${feed.id} draft=${draft} model=${model} />
       </div>
     </section>
 
@@ -2881,7 +2860,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   } else if (playlist && page === 'tracks') {
     body = html`<${PlaylistTracksPage} feed=${feed} model=${model} update=${update} />`;
   } else if (playlist && page !== 'recipients' && page !== 'files') {
-    body = html`<${PlaylistPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} onRemoved=${onRemoved} />`;
+    body = html`<${PlaylistPage} feed=${feed} draft=${draft} model=${model} update=${update} bad=${draft.bad} onRemoved=${onRemoved} />`;
   } else if (page === 'track' && trackIndex !== -1) {
     // A key for each entry, so that one track or show does not keep the
     // state of the one before it, for example an open "Properties".
@@ -2921,7 +2900,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   const onImport = (tracks, albumImageUrl) => {
     const added = withCids(tracks);
     update((m) => {
-      const withImage = albumImageUrl ? withCover(m, albumImageUrl) : m;
+      const withImage = albumImageUrl ? { ...m, image: albumImageUrl } : m;
       return set(withImage, 'items', [...withImage.items, ...added]);
     });
     onImporting(false);

@@ -9,7 +9,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | Packet | Status | Review |
 |---|---|---|
 | 043a | Complete | Pass on 2026-10-27. The operator built the image on musl. `--version` gave the version, and the manifest gave 200. The image is 17 MB of content. |
-| 043b | Not started | |
+| 043b | Complete | Pass on 2026-10-27. The build job runs the image with `--version` before the push. `actionlint` is not installed, so only a YAML parse examined the files. The first run on a candidate tag is open. |
 | 043c | Not started | |
 
 ## Decisions
@@ -22,3 +22,8 @@ A coding model implements each packet. The planning model examines the diff and 
 - The packet said that Docker works on the computer of the planning model. Only the Docker client is in its sandbox, with no daemon. The coding model wrote the four files and stopped before the build. The operator runs the build in the terminal of the operator.
 - `studio-server` had no `--help` and no `--version`, so the smoke test of ADR 0066 could not pass. The planning model added both options, as `studio-desktop` has them. `--version` prints the start line of the server.
 - The first manifest request came directly after the start, and it got no connection. At start, the server makes its state with an Argon2 derivation, and that takes several seconds. After a wait of 10 seconds, the log gave the start lines and the manifest gave 200. The deploy script of packet 043c waits a maximum of 60 seconds.
+
+### Packet 043b
+
+- The build job runs `--version` in place of `--help`, and compares the output with the version of the tag.
+- GHCR makes a new package private. If the VPS pulls with no login, the operator sets the package `studio-server` to public after the first push.

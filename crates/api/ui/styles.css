@@ -967,12 +967,24 @@ textarea:focus { background: var(--fill); }
   border-top: 1px solid var(--sep);
 }
 .group > .field, .group > .hint, .group > .notice, .group > .actions { padding: 10px 16px; }
-/* A field in the open form of a disclosure row has the layout of a field
-   of the group. */
-.group > .disclosure > .form { gap: 0; }
-.group > .disclosure > .form > .field { padding: 10px 16px; }
+/* The open form of a disclosure row holds rows of the group (ADR 0029
+   items 11 and 12). Each child is a row with the inner space of a row, and a
+   thin separator above it. An entry row and a link row have their own inner
+   space. This rule covers each kind of child, so that a new kind does not
+   touch the edge of the group. `tools/drive-ui.mjs` gives `$edges()` to
+   find such a child. */
+.group > .disclosure[open] > .form { gap: 0; margin-top: 0; }
+.group > .disclosure > .form > * { position: relative; }
+.group > .disclosure > .form > *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 0;
+  border-top: 1px solid var(--sep);
+}
+.group > .disclosure > .form > :where(:not(.entry-row, .link-row)) { padding: 10px 16px; }
 .group > .disclosure > .form > .check { padding: 0 16px; }
-.group > .disclosure > .form > .facts, .group > .disclosure > .form > .grid2 { padding: 10px 16px; }
 .group > .field, .group > .disclosure > .form > .field { min-height: 52px; }
 /* At more than 760 px, a field in a group puts its label at the left, in a
    column of 170 px (task 014c step 8). */

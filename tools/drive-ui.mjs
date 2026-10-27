@@ -30,6 +30,10 @@
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
+// $edges() opens each disclosure in a group, and gives each text and each
+// control that is nearer than 12 px to the left edge or the right edge of
+// its group (ADR 0029 items 11 and 12: a group holds rows, and a row has
+// inner space). An empty list means that no content touches an edge.
 // The script prints each result and each console error.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -74,6 +78,42 @@ const helpers = `
   window.$set = (sel, v) => { const e = document.querySelector(sel); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
   window.$click = (text) => { const e = [...document.querySelectorAll('button, label')].find((b) => b.textContent.trim().startsWith(text)); if (!e) throw new Error('no ' + text); e.click(); };
   window.$text = () => document.body.innerText;
+  window.$edges = () => {
+    document.querySelectorAll('.group details').forEach((d) => { d.open = true; });
+    const near = [];
+    for (const group of document.querySelectorAll('.group')) {
+      if (!(group.checkVisibility ? group.checkVisibility() : group.offsetParent)) continue;
+      const g = group.getBoundingClientRect();
+      // The visible part of the box r: an ancestor that hides its overflow, such as
+      // a summary with an ellipsis, cuts the box.
+      const visible = (node, r) => {
+        let left = r.left;
+        let right = r.right;
+        for (let e = node.parentElement; e && e !== group; e = e.parentElement) {
+          if (getComputedStyle(e).overflowX === 'visible') continue;
+          const b = e.getBoundingClientRect();
+          left = Math.max(left, b.left);
+          right = Math.min(right, b.right);
+        }
+        return { left, right, width: Math.max(0, right - left), height: r.height };
+      };
+      const test = (r, what) => {
+        if (r.width === 0 || r.height === 0) return;
+        if (r.left - g.left < 12 || g.right - r.right < 12) near.push(what.slice(0, 60) + ' @ ' + Math.round(r.left - g.left) + '/' + Math.round(g.right - r.right));
+      };
+      const walker = document.createTreeWalker(group, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!n.textContent.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        for (const r of range.getClientRects()) test(visible(n, r), n.textContent.trim());
+      }
+      for (const c of group.querySelectorAll('input, select, textarea')) {
+        if (c.checkVisibility ? c.checkVisibility() : c.offsetParent) test(visible(c, c.getBoundingClientRect()), c.outerHTML);
+      }
+    }
+    return near;
+  };
   window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
 let authenticatorId;

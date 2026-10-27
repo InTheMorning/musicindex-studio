@@ -100,7 +100,7 @@ Durable rules:
 - A publisher feed shows its role, "Artist" or "Label", and the interface shows the word "publisher" only as an RSS name (musicindex ADR 0033 R-WORD-3 and R-WORD-4). A Node test examines the UI text.
 - Each labeled button has a role: primary, action, normal or destructive. A button with a text label is not a `button quiet` ([ADR 0037](docs/adr/0037-button-roles.md)).
 - Each entry of a list shows as one summary line, and one entry of a list is open at a time. A section that the user does not change in each visit starts collapsed, with a summary line ([ADR 0028](docs/adr/0028-summary-lines-and-one-open-entry.md)). A test enforces the `details` elements.
-- The editor uses a maximum of three background levels: the page, a group and an open entry. A level changes the fill only, and a border does not identify a level ([ADR 0029](docs/adr/0029-editor-pages-toolbar-and-three-levels.md)).
+- The editor uses a maximum of three background levels: the page, a group and an open entry. A level changes the fill only, and a border does not identify a level. A group holds rows, and thin separators divide them ([ADR 0029](docs/adr/0029-editor-pages-toolbar-and-three-levels.md)). Before each commit of a UI packet, the visual check runs `$edges()` of `tools/drive-ui.mjs` to find content at the edge of a group. CI has no browser, so no commit check runs it.
 
 Situational rules:
 

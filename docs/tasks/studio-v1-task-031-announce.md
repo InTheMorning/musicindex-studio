@@ -33,6 +33,7 @@ Visual:
 
 - The review sheet, the feed page and the Hosts page show the announcements and the settings, in the dark theme and in the light theme. The planning model checks them with `tools/drive-ui.mjs` against a local test hub.
 
-Human test, open until the operator writes a real feed:
+Human test, passed on 2026-10-27:
 
 - The hub accepts the request. A podping with the feed address appears. Stophammer crawls the feed, and musicindex.org shows the change.
+- Result: the operator wrote `test.xml` in the human test of task 041. The feed facts showed "Sent at 10/27/2026, 6:48:17 PM.", and musicindex.org then showed the change. musicindex.org updates a feed only after a podping.

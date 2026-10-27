@@ -203,8 +203,9 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Decisions: [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md) (the cover keeps the form of its feed), [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md) (no space at the ends of a text value) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) (a file picker for each file field, and the audio player).
 - [Task 038](../tasks/studio-v1-task-038-cover-and-text-space.md), one packet, and [task 039](../tasks/studio-v1-task-039-file-picker.md), three packets, are complete. Their screenshot visual checks and their human tests passed. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records each packet.
 - The test feed of the operator was hidden from apps, and Studio did not show it. [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md) gives one switch for it. [Task 040](../tasks/studio-v1-task-040-hide-from-apps.md) is implemented. Its screenshot visual check passed, and its human test is open.
-- Mechanical check: the mechanical criteria of tasks 038, 039 and 040.
-- Visual check: the visual criteria of tasks 038, 039 and 040.
+- The editor does not show some fields that MSP 2.0 edits. [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) (proposed) adds them. [Task 041](../tasks/studio-v1-task-041-msp-fields.md) has four packets. They start after the operator accepts ADR 0064.
+- Mechanical check: the mechanical criteria of tasks 038 to 041.
+- Visual check: the visual criteria of tasks 038 to 041.
 
 ### Phase 13: Desktop Shell
 

@@ -211,6 +211,11 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 039b: The picker sheet and the drop](tasks/studio-v1-task-039b-picker-sheet.md)
 - [Studio v1 task 039c: The audio player and "Properties"](tasks/studio-v1-task-039c-audio-player.md)
 - [Studio v1 task 040: Hide a feed from apps](tasks/studio-v1-task-040-hide-from-apps.md)
+- [Studio v1 task 041: The fields that MSP 2.0 edits](tasks/studio-v1-task-041-msp-fields.md)
+- [Studio v1 task 041a: The new elements in the core](tasks/studio-v1-task-041a-core-elements.md)
+- [Studio v1 task 041b: The channel fields](tasks/studio-v1-task-041b-channel-fields.md)
+- [Studio v1 task 041c: The track fields](tasks/studio-v1-task-041c-track-fields.md)
+- [Studio v1 task 041d: The artwork list](tasks/studio-v1-task-041d-artwork-list.md)
 
 ## Reviews
 
@@ -243,6 +248,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Phase 12 human tests, 2026-10-26](reviews/2026-10-26-phase-12-human-tests.md)
 - [Distribution documentation review, 2026-10-26](reviews/2026-10-26-distribution-review.md)
 - [Tasks 038 and 039 review checklist, 2026-10-27](reviews/2026-10-27-tasks-038-039-review-checklist.md)
+- [Task 041 review checklist, 2026-10-27](reviews/2026-10-27-task-041-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

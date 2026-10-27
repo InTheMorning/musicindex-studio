@@ -20,7 +20,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0014: The collection is in SQLite](adr/0014-collection-in-sqlite.md)
 - [ADR 0015: The connector interface and the write pipeline](adr/0015-connector-interface-and-write-pipeline.md)
 - [ADR 0016: The UI has no build step](adr/0016-ui-without-a-build-step.md)
-- [ADR 0017: Access to the local API](adr/0017-local-api-access.md) (proposed)
+- [ADR 0017: Access to the local API](adr/0017-local-api-access.md)
 - [ADR 0018: Passphrase strength and the error color](adr/0018-passphrase-strength-and-error-color.md)
 - [ADR 0019: Select a feed from the files of a host](adr/0019-select-a-feed-from-the-host.md)
 - [ADR 0020: The first run asks one question](adr/0020-first-run-asks-one-question.md)

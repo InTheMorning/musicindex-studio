@@ -2,7 +2,7 @@
 
 Parent: [task 043](studio-v1-task-043-server-image.md). Decision: [ADR 0066](../adr/0066-the-server-ships-as-a-container-image.md) items 1 to 5 and 10.
 
-Status: Not started.
+Status: Complete on 2026-10-27.
 
 ## Goal
 
@@ -14,7 +14,7 @@ Inspect: `rust-toolchain.toml`, `Cargo.toml`, `crates/server/src/main.rs`, `crat
 
 Change: a new `Dockerfile`, a new `.dockerignore`, a new `deploy/compose.yml`, a new `deploy/env.example`.
 
-Do not change: the crates, the workflows, the runbook, `AGENTS.md`.
+Do not change: the crates, the workflows, the runbook, `AGENTS.md`. The planning model gave `studio-server` the options `--version` and `--help` in `crates/server/src/main.rs`, as `studio-desktop` has them, for the smoke test.
 
 ## Architecture
 

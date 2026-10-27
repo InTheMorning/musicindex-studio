@@ -1,0 +1,37 @@
+name: studio
+
+services:
+  studio:
+    image: ${STUDIO_SERVER_IMAGE:-ghcr.io/inthemorning/studio-server:latest}
+    # The image command gives the data folder and the listen address. This
+    # command gives the options of the runbook. nginx sends X-Real-IP.
+    command:
+      - serve
+      - --data-dir
+      - /data
+      - --listen
+      - 0.0.0.0:8080
+      - --public-origin
+      - ${STUDIO_PUBLIC_ORIGIN}
+      - --client-address-header
+      - X-Real-IP
+    restart: unless-stopped
+    # The service writes only to its volume at /data and to /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - studio-data:/data
+    ports:
+      # Host loopback only: nginx sends each request here. Publishing on all
+      # interfaces would let a client skip nginx, its TLS and X-Real-IP.
+      - "127.0.0.1:8080:8080"
+    # There is no health check. The server refuses a Host header that is not
+    # the public origin, so a check must send that header.
+
+volumes:
+  studio-data:

@@ -58,7 +58,21 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> Result<(), String> {
-    match config::parse(std::env::args().skip(1))? {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // The same two options as `studio-desktop`. The image smoke test of
+    // ADR 0066 runs them.
+    if args == ["--version"] {
+        println!("Music Index Studio server {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args == ["--help"] {
+        println!("Usage: studio-server serve --data-dir PATH --public-origin URL [OPTIONS]");
+        println!("       studio-server invite --data-dir PATH");
+        println!("       studio-server --version | --help");
+        println!("The runbook docs/runbooks/studio-server.md gives each option.");
+        return Ok(());
+    }
+    match config::parse(args)? {
         Command::Invite { data_dir } => {
             let accounts = accounts::Accounts::open(&data_dir)?;
             println!("{}", accounts.create_invite()?);

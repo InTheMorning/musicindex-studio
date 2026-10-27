@@ -7995,6 +7995,40 @@ async fn the_release_picker_lists_only_the_files_of_this_feed_of_the_asked_kind(
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
 }
 
+#[tokio::test]
+async fn the_release_picker_gives_a_remote_file_its_source_address() {
+    let app = app();
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" \
+         xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel>\
+         <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+         <itunes:image href=\"https://music.example/cover.png\"/>\
+         <item><guid>t-1</guid></item></channel></rss>",
+    )
+    .unwrap();
+    set_library(&app).await;
+    let id = set_up(&app).await;
+    let (status, _) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, images) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/picker/release?kind=image"),
+        None,
+    )
+    .await;
+    // The file is beside the feed on the host, not in the planned folder
+    // of the release. The library holds no bytes of it, so the write
+    // cannot put it in that folder (ADR 0062 item 7).
+    let image = &images["files"][0];
+    assert_eq!(image["local"], false, "{images}");
+    assert_eq!(
+        image["address"], "https://music.example/cover.png",
+        "{images}"
+    );
+}
+
 /// Fill a host folder: images, audio files, an XML file and a hidden
 /// folder.
 fn fill_host(root: &std::path::Path) {

@@ -3,7 +3,7 @@
 Parent: [task 039](studio-v1-task-039-file-picker.md). Decisions: [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 1 to 5, 7, 9 to 13, 17, 20 to 22, [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md), [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md), [ADR 0037](../adr/0037-button-roles.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md).
 Sequence: the second packet of task 039. It depends on 039a.
 
-Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
+Status: Complete - 2026-10-27. The four commit checks are Green. The screenshot visual check and the human tests passed. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 

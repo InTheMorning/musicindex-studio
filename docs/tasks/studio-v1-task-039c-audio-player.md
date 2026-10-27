@@ -3,7 +3,7 @@
 Parent: [task 039](studio-v1-task-039-file-picker.md). Decisions: [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 16 and 23 to 29, [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) items 4 and 5, [ADR 0025](../adr/0025-studio-serves-cover-art.md) item 2, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0017](../adr/0017-local-api-access.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the third packet of task 039. It depends on 039a. It can go before or after 039b.
 
-Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
+Status: Complete - 2026-10-27. The four commit checks are Green. The screenshot visual check and the human tests passed. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 

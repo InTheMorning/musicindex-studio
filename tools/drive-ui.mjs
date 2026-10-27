@@ -21,6 +21,9 @@
 // path on this computer) through `DOM.setFileInputFiles`, and the input then
 // fires its `change` event. Use a step for the click that opens the sheet
 // first, because the input must be in the page.
+// A step {"press": selector} clicks the center of the first element that the
+// selector finds, through `Input.dispatchMouseEvent`. The page gets a real
+// user gesture, which an audio element needs before it plays.
 // A step {"manifest": true} sends `Page.getAppManifest`. It prints the
 // manifest `url`, the `errors` and the parsed `name` and `display`. An empty
 // `errors` list means that Chromium found no manifest error.
@@ -103,6 +106,15 @@ for (const step of steps) {
     if (!found.result?.nodeId) throw new Error('no input ' + selector);
     await send('DOM.setFileInputFiles', { nodeId: found.result.nodeId, files: [path] });
     console.log('file =>', path);
+  }
+  if (step.press) {
+    const box = await evaluate(`(() => { const e = document.querySelector(${JSON.stringify(step.press)}); if (!e) return null;
+      e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+    if (!box) throw new Error('no element ' + step.press);
+    const [x, y] = box;
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    console.log('press =>', step.press);
   }
   if (step.manifest) {
     const m = (await send('Page.getAppManifest')).result;

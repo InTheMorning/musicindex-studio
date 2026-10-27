@@ -53,7 +53,10 @@ A feed that has both gets the new address in both.
 Sometimes the two tags have different addresses.
 Then the field shows the second address below it.
 Select **Use this address** to put that address in both tags.
-Studio changes no tag until you change the field or select **Use this address**.
+
+If you do not select it, the next write puts the address of the field in both tags.
+The review shows this change before the write.
+Studio does not write two different cover addresses.
 If you clear the field, Studio removes the cover from the feed.
 
 ### Album details

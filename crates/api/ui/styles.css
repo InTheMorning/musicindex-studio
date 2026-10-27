@@ -948,12 +948,16 @@ textarea:focus { background: var(--fill); }
   border-top: 1px solid var(--sep);
 }
 .group > .field, .group > .hint, .group > .notice, .group > .actions { padding: 10px 16px; }
-.group > .field { min-height: 52px; }
+/* A field in the open form of a disclosure row has the layout of a field
+   of the group. */
+.group > .disclosure > .form { gap: 0; }
+.group > .disclosure > .form > .field { padding: 10px 16px; }
+.group > .field, .group > .disclosure > .form > .field { min-height: 52px; }
 /* At more than 760 px, a field in a group puts its label at the left, in a
    column of 170 px (task 014c step 8). */
 @media (min-width: 761px) {
-  .group > .field { display: grid; grid-template-columns: 170px 1fr; align-items: start; gap: 4px 16px; }
-  .group > .field > label { padding-top: 12px; }
+  .group > .field, .group > .disclosure > .form > .field { display: grid; grid-template-columns: 170px 1fr; align-items: start; gap: 4px 16px; }
+  .group > .field > label, .group > .disclosure > .form > .field > label { padding-top: 12px; }
 }
 
 /* A row of a group that goes to a page, or opens a disclosure. */

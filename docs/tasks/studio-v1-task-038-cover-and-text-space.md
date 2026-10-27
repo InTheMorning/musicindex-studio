@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor File
 Decisions: [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md), [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md), [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: one packet. It comes before [task 039](studio-v1-task-039-file-picker.md), because task 039 item 22 uses the cover rule.
 
-Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
+Status: Complete - 2026-10-27. The four commit checks are Green. The screenshot visual check and the human tests passed. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 

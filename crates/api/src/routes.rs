@@ -2783,10 +2783,15 @@ pub(crate) async fn picker_release(
                 continue;
             }
             let planned = planned_or_none(&w.collection, &hosts, &feed_row, &file)?;
-            let address = planned
-                .as_ref()
-                .and_then(|p| p.url.clone())
-                .or_else(|| file.source_url.clone());
+            let planned_url = planned.as_ref().and_then(|p| p.url.clone());
+            // The write puts only a file with bytes in the library at its
+            // planned address. A remote file stays at its source address
+            // (ADR 0062 item 7).
+            let address = if file.local {
+                planned_url.or_else(|| file.source_url.clone())
+            } else {
+                file.source_url.clone().or(planned_url)
+            };
             let in_use = file_in_use(&w.collection, &hosts, &file, planned.is_some(), &addresses)?;
             files.push(json!({
                 "name": file.path,

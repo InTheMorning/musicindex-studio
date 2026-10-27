@@ -906,7 +906,7 @@ pub fn diff_at(
     now: u64,
 ) -> Result<Diff, PipelineError> {
     let feed_row = collection.feed(id)?;
-    let draft = current_draft(collection, id)?;
+    let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let (operations, blocked) = host_operations(collection, library, hosts, &feed_row, &feed)?;
     let feed_move = feed_move(collection, hosts, &feed_row)?;
@@ -2020,7 +2020,7 @@ pub fn write_draft_signed(
     let (connector_id, path) = writable(&row)?;
     let path = path.to_owned();
     let connector = hosts.get(connector_id)?;
-    let draft = current_draft(collection, id)?;
+    let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
     let feed_move = feed_move(collection, hosts, &row)?;
@@ -2928,6 +2928,26 @@ pub fn draft_from_snapshot(
     let mut draft = start_draft(collection, connector, id)?;
     draft.draft_xml = xml;
     collection.save_draft(id, &draft)?;
+    Ok(draft)
+}
+
+/// The draft with one channel cover (ADR 0060 item 8). When the channel
+/// `itunes:image` and the `url` of the RSS `<image>` are two different
+/// addresses, the `url` gets the address of `itunes:image`. The diff and
+/// the write both use these bytes, so the diff shows the change.
+fn one_cover(mut draft: DraftRow) -> Result<DraftRow, PipelineError> {
+    let mut doc = Document::parse_bytes(&draft.draft_xml)?;
+    let mut feed = Feed::read(&doc)?;
+    let present = |text: &Option<String>| text.as_deref().is_some_and(|t| !t.is_empty());
+    let Some(rss) = feed.rss_image.as_mut() else {
+        return Ok(draft);
+    };
+    if !present(&feed.image) || !present(&rss.url) || rss.url == feed.image {
+        return Ok(draft);
+    }
+    rss.url.clone_from(&feed.image);
+    feed.write(&mut doc)?;
+    draft.draft_xml = doc.write().into_bytes();
     Ok(draft)
 }
 

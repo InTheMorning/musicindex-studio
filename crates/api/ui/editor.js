@@ -638,11 +638,12 @@ function ChooseFile({ pick, children }) {
 }
 
 // An image address field with its preview, "Choose…" and the drop.
-function PickedImageField({ field, subject, apply, id, label, address, bad, value, onChange, glow }) {
+function PickedImageField({ field, subject, apply, id, label, address, bad, value, onChange, glow, children }) {
   const pick = useFilePick(field, subject, apply);
   return html`<${TextField} id=${id} label=${label} type="url" address=${address} bad=${bad} value=${value} onChange=${onChange}
       rootProps=${pick.rootProps}>
     <${ChooseFile} pick=${pick}><${ImageThumb} url=${value} glow=${glow} className="field-cover" /><//>
+    ${children}
   <//>`;
 }
 
@@ -1509,16 +1510,18 @@ function publisherLine(entry, match, index) {
 // The cover field of a channel (ADR 0060). It shows the cover of the model
 // and keeps the form of the feed on a change. When the two cover tags have
 // different addresses, it shows the second address with an action that
-// puts one address in both.
+// puts one address in both. A write puts the field address in both
+// (ADR 0060 item 8).
 function CoverField({ id, model, update, bad }) {
   const conflict = coverConflict(model);
   const change = (address) => update((m) => withCover(m, address));
   return html`<${PickedImageField} field="cover" subject=${model} apply=${change} id=${id} label="Cover image address"
-          address=${['image', 'rss_image/url']} bad=${bad} value=${coverOf(model)} onChange=${change} />
-        ${conflict && html`<div class="field-note">
-          <span>The RSS image tag has a different address: <span class="mono">${conflict}</span></span>
-          <button class="button action" type="button" onClick=${() => change(conflict)}>Use this address</button>
-        </div>`}`;
+          address=${['image', 'rss_image/url']} bad=${bad} value=${coverOf(model)} onChange=${change}>
+          ${conflict && html`<div class="field-note">
+            <span>The RSS image tag has a different address: <span class="mono">${conflict}</span>. A write gives it the address of this field.</span>
+            <button class="button action" type="button" onClick=${() => change(conflict)}>Use this address</button>
+          </div>`}
+        <//>`;
 }
 
 // The channel fields that the album page and the playlist page share: the
@@ -2846,9 +2849,11 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   } else if (playlist && page !== 'recipients' && page !== 'files') {
     body = html`<${PlaylistPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} onRemoved=${onRemoved} />`;
   } else if (page === 'track' && trackIndex !== -1) {
-    body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} />`;
+    // A key for each entry, so that one track or show does not keep the
+    // state of the one before it, for example an open "Properties".
+    body = html`<${TrackPage} key=${model.items[trackIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} />`;
   } else if (page === 'live' && liveIndex !== -1 && !publisher && !playlist) {
-    body = html`<${LivePage} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
+    body = html`<${LivePage} key=${model.live_items[liveIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
   } else if (page === 'credits') {
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {

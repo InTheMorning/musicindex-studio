@@ -3,7 +3,7 @@
 Parent: [task 039](studio-v1-task-039-file-picker.md). Decisions: [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 3, 6 to 10 and 14 to 18, [ADR 0019](../adr/0019-select-a-feed-from-the-host.md) items 2 and 3, [ADR 0032](../adr/0032-new-releases-formats-paths-and-new-feeds.md) item 1, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) item 7, [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 1 and [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md) item 6.
 Sequence: the first packet of task 039. It depends on task 038.
 
-Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
+Status: Complete - 2026-10-27. The four commit checks are Green. The screenshot visual check and the human tests passed. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 

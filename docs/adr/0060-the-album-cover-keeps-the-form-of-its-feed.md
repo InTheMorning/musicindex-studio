@@ -16,6 +16,8 @@ MSP 2.0 follows the DeMu template (`src/utils/xmlParser.ts` and `src/utils/xmlGe
 
 The two tags have different sources. RSS 2.0 defines `<image>` as a small channel logo of at most 144 × 400 px. Apple defines `itunes:image` as square cover art of 1400 to 3000 px. Only `itunes:image` can be on an item. Most podcast apps show `itunes:image` first. Many music feeds put the full cover in `<image><url>`.
 
+On 2026-10-27, a human test of task 039 found a draft from before task 038. It had a new channel `itunes:image` in a feed in the DeMu form, so a write would give the feed two different covers. The operator then added item 8.
+
 ## Decision
 
 ### The Cover Of A Channel
@@ -27,7 +29,7 @@ The two tags have different sources. RSS 2.0 defines `<image>` as a small channe
    - A feed with only `itunes:image` keeps only `itunes:image`. The writer adds no `<image>`.
    - A feed with both tags gets the new address in both.
    - A feed with neither tag gets an `itunes:image`, as before this ADR.
-4. When both tags exist and their addresses are different, the editor shows the address of `<image><url>` below the field, with the action "Use this address". The writer changes no tag until the user edits the field or uses the action. After an edit or the action, both tags have the same address.
+4. When both tags exist and their addresses are different, the editor shows the address of `<image><url>` below the field, with the action "Use this address". The draft changes no tag until the user edits the field or uses the action. After an edit or the action, both tags have the same address. A write without an edit or the action follows item 8.
 5. When the user clears the field, the writer removes each cover tag of the channel. It removes the full `<image>` element, because RSS 2.0 requires `url` in `<image>`.
 6. A publisher feed and a playlist feed follow items 1 to 5 for their channel.
 
@@ -35,11 +37,17 @@ The two tags have different sources. RSS 2.0 defines `<image>` as a small channe
 
 7. The writer never writes the album cover into an item. An item with no `itunes:image` shows the album cover of item 2 in the editor. This replaces "the album image" in ADR 0025 item 1.
 
+### A Write Has One Cover
+
+8. Studio writes no feed with two different channel cover addresses. When the channel `itunes:image` and `<image><url>` have two different addresses, the diff and the write put the address of `itunes:image` in `<image><url>`. This is the address that the cover field shows (item 2). The draft keeps the two addresses, so that the editor can show the note of item 4. The diff shows the change before the write. The rule applies to each write, also a granted write of [ADR 0054](0054-live-items-connected-apps-and-show-grants.md).
+
 ## Alternatives Considered
 
 - Add a channel `itunes:image` when a feed has only `<image>`. Rejected by the operator on 2026-10-27: the feed then leaves the DeMu form.
 - Read `<image><url>` first, as MSP 2.0 does. Rejected: most apps show `itunes:image`, so the field would then show a cover that most apps do not show.
-- Write the same address to both tags on each save, as MSP 2.0 does. Rejected: a save with no edit then changes a feed with two different covers. ADR 0012 forbids a change to an element that the user did not change.
+- Write the same address to both tags on each save, as MSP 2.0 does. Rejected: a save with no edit then changes a feed with two different covers. ADR 0012 forbids a change to an element that the user did not change. Item 8 changes the addresses only at a write, and the diff shows that change.
+- Refuse a write with two different cover addresses, until the user selects one address. Rejected by the operator on 2026-10-27, in favor of item 8.
+- Refuse only a draft that makes the two addresses different. Rejected: a feed with two covers on the host then goes out again with two covers.
 - Write the album cover into each item with no art, as MSP 2.0 does. Rejected: the feed then holds a value that its author did not write. The DeMu template says that an app shows the channel image for such an item.
 
 ## Consequences
@@ -59,6 +67,7 @@ Mechanical:
 - A core test reads a channel with both tags and different addresses. The model gives both addresses. A write with no edit gives the same bytes.
 - A core test clears the cover of a channel with both tags. The document has no `<image>` and no `itunes:image`.
 - A core test writes an item with no `itunes:image`. The item has no `itunes:image` after the write.
+- A core pipeline test makes a draft with two different cover addresses. The draft keeps both addresses. The diff and the written file give `<image><url>` the address of `itunes:image`.
 - The Node tests examine the UI model: the field value for each of the four forms of item 3, and the action "Use this address" only when the two addresses are different.
 
 Visual:
@@ -68,5 +77,6 @@ Visual:
 
 ## Invariants
 
+- Studio writes no feed with two different channel cover addresses.
 - The writer adds no cover tag that the feed did not have, apart from `itunes:image` in a feed with neither tag.
 - The writer does not write a cover into an item.

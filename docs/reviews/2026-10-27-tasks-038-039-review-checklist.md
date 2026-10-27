@@ -66,4 +66,36 @@ A coding model implements each packet. The planning model examines the diff and 
 ## Visual Checks
 
 - 2026-10-27, the planning model: `studio-desktop` with an empty data folder served `cover.js`, `picker.js`, `audio.js` and `editor.js` with status 200. `tools/drive-ui.mjs` loaded the first-run page in headless Chromium with no console error. This check covers no editor page.
-- The visual checks of tasks 038 and 039 are open. The operator walks them.
+- 2026-10-27, the planning model, with `tools/drive-ui.mjs` screenshots. `studio-desktop` used a local folder host on a loopback HTTP server and two copies of the DeMu `test.xml`. It also had a read-only import of the published address. Each check below passed in the dark theme, in the light theme and at 390 px:
+  - Task 038: the cover address, the cover image and the description "testing…". The two-cover feed shows the RSS image address and "Use this address" below the field. A track with no image shows the DeMu cover.
+  - Task 039, the images: the sheet shows its three sources. A track image from "This computer" by the button and by a drop: the review lists the upload.
+  - Task 039, the track images: a track image from "Hosts" gives no upload in the review. A replaced track image: the review lists the deletion. After "Undo" and a write, the host keeps the file.
+  - Task 039, the audio: a file from "This release" or from "Hosts" changes the duration with no press of play. The player plays and the position moves. "Properties" is closed with its summary, and open with an empty media type.
+  - The drop was a synthetic `drop` event. The new `press` step of `drive-ui.mjs` gave the user gesture that the player needs.
+- The check found four defects. Each fix is in the same change:
+  - The note of two different cover addresses was a row of the group, not a part of the field. `CoverField` puts it in the field body.
+  - A field in the open form of a disclosure row had no padding and no label column. This also affected "Track image" before task 039. `styles.css` gives it the layout of a field of the group.
+  - "This release" gave a remote file its planned address, which is not on the host. The write cannot put a file with no bytes at that address. A remote file keeps its source address (ADR 0062 item 7). The test `the_release_picker_gives_a_remote_file_its_source_address` enforces it.
+  - A track page kept "Properties" open from the track before it. The track page and the live page have a key for each entry.
+- Found, not changed, because the behavior is older than tasks 038 and 039:
+  - "Read again" does not change a stored draft with no changes. The editor shows the content from before until "Start again from the hosted file" or a discard.
+  - The read-only feed page shows the Studio logo, not the cover of the feed.
+  - At 390 px, the text of a host operation row in the review wraps into a narrow column.
+- The published `test.xml` gives the enclosure `length` 12159847. `TestTickles.mp3` has 3508162 bytes.
+
+## Human Tests
+
+On 2026-10-27, the operator did four human tests with the code of this change. Each test passed:
+
+1. A drop of a PNG file from the file manager on the field "Track image address". The setup was the Loopback host of the screenshot check. The field showed the new address and the image, and the review listed the upload.
+2. The speed of "Hosts" with 500 images of 137 KB and 250 KB on the Loopback host. The small images came in a short time, and the scroll stayed smooth. This host was on the computer, so the result does not include the network time of a remote host.
+3. The sound, and a change of the position. A Python file server on the Loopback host served byte ranges and gave status 206. The sound played, and each click on the position bar moved the sound to the new position.
+4. The editor with the SFTP host `files.heycitizen.xyz` and the data folder of the operator:
+   - For track 1 of the test album, the operator selected an image and an MP3 from "Hosts". Each got its host address.
+   - The MP3 got the length from the host list and the duration `00:05:16`.
+   - The player played the MP3 and moved the position.
+   - The review showed no upload for these two files. The operator did not write the draft.
+
+Found in test 4, not a defect of tasks 038 and 039: the stored draft of the test album was from 00:41. Task 038 was not in Studio at that time. That draft added a new track and a channel `itunes:image`, but the live feed has the DeMu cover `<image><url>`. A write of that draft gives the feed two different covers. With task 038, the editor shows the note about the two addresses and "Use this address".
+
+After test 4, the operator decided that Studio writes no feed with two different cover addresses. ADR 0060 item 8 gives the rule: the diff and the write put the address of `itunes:image` in `<image><url>`. The editor note says this. The test `a_write_gives_the_rss_image_the_address_of_itunes_image` enforces it.

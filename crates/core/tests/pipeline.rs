@@ -10,7 +10,7 @@ use studio_core::connector::{
     self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, HostChanges,
     KeptBlob, ListedFile, LocalFolder, NsiteHost, PlannedEvent, Stamp, Version,
 };
-use studio_core::feed::{ContentLink, Enclosure, Entry, Feed, Item};
+use studio_core::feed::{ContentLink, Enclosure, Entry, Feed, Item, RssImage};
 use studio_core::grant::{self, GrantChange};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::{self, Hosts};
@@ -128,6 +128,51 @@ fn an_approved_draft_writes_the_file_and_keeps_a_snapshot() {
     assert_eq!(
         s.collection.snapshot_xml(s.feed, snapshots[0].id).unwrap(),
         FEED.as_bytes()
+    );
+}
+
+#[test]
+fn a_write_gives_the_rss_image_the_address_of_itunes_image() {
+    let mut s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.rss_image = Some(RssImage {
+            url: Some("https://music.example/logo.png".into()),
+            ..RssImage::default()
+        });
+        f.image = Some("https://music.example/cover.png".into());
+    })
+    .unwrap();
+    // The draft keeps the two addresses, so the editor can show both.
+    let (draft, _) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(
+        draft.rss_image.unwrap().url.as_deref(),
+        Some("https://music.example/logo.png")
+    );
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(
+        diff.unified
+            .contains("+      <url>https://music.example/cover.png</url>")
+    );
+    assert!(!diff.unified.contains("logo.png"));
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    let written = Feed::read(&Document::parse(&live(&s)).unwrap()).unwrap();
+    assert_eq!(
+        written.rss_image.unwrap().url.as_deref(),
+        Some("https://music.example/cover.png")
+    );
+    assert_eq!(
+        written.image.as_deref(),
+        Some("https://music.example/cover.png")
     );
 }
 

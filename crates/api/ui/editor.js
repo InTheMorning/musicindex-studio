@@ -1555,9 +1555,8 @@ function ExplicitField({ id, model, update }) {
       <label for=${id}>Explicit</label>
       <div class="field-body">
         <label class="check"><input id=${id} type="checkbox" checked=${explicit}
-          onChange=${(e) => update((m) => set(m, 'explicit', e.target.checked ? 'true' : 'false'))} />
-          <span>${explicit ? 'Explicit' : 'Clean'}</span></label>
-        <span class="hint">Apple asks for this tag. Studio adds it only when you set the switch.</span>
+          onChange=${(e) => update((m) => set(m, 'explicit', e.target.checked ? 'true' : 'false'))} /></label>
+        <span class="hint">Apple asks for this tag. Off means clean. Studio adds the tag only when you set the switch.</span>
       </div>
     </div>`;
 }
@@ -1620,8 +1619,7 @@ function SettingsPage({ model, update }) {
           <label for="set-locked">Lock against import</label>
           <div class="field-body">
             <label class="check"><input id="set-locked" type="checkbox" checked=${isLocked(locked)}
-              onChange=${(e) => setLocked(e.target.checked)} />
-              <span>${isLocked(locked) ? 'Locked' : 'Not locked'}</span></label>
+              onChange=${(e) => setLocked(e.target.checked)} /></label>
           </div>
         </div>
         ${locked && html`<${TextField} id="set-lock-owner" label="Lock owner email" value=${locked.owner} onChange=${setLockOwner} />`}
@@ -1653,8 +1651,7 @@ function ListingField({ id, feedId, draft, model }) {
       <label for=${`${id}-hidden`}>Hide from apps</label>
       <div class="field-body">
         <label class="check"><input id=${`${id}-hidden`} type="checkbox" checked=${hidden} disabled=${action.busy}
-          onChange=${(e) => change('', e.target.checked)} />
-          <span>${hidden ? 'Hidden' : 'Listed'}</span></label>
+          onChange=${(e) => change('', e.target.checked)} /></label>
         <span class="hint">Apps and directories do not list a hidden feed. The feed stays at its address.</span>
         ${action.error && html`<${ErrorNotice} error=${action.error} />`}
       </div>
@@ -2111,7 +2108,8 @@ function LyricsEntry({ id, list, index, onChange, edit, bad, address }) {
       <label for=${`${id}-captions`}>Captions</label>
       <div class="field-body"><label class="check"><input id=${`${id}-captions`} type="checkbox" checked=${t.rel === 'captions'}
         onChange=${(e) => change('rel')(e.target.checked ? 'captions' : null)} />
-        <span>These are captions</span></label></div>
+        <span>These are captions</span></label>
+        <span class="hint">Apps show the lines at their times while the track plays. Use this for a timed file: .srt or .vtt.</span></div>
     </div>
     <${EntryActions} list=${list} index=${index} name=${addressName(t.url) || 'this lyrics file'} onChange=${onChange} />
   <//>`;

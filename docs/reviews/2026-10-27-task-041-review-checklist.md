@@ -65,3 +65,11 @@ A coding model implements each packet. The [visual check](2026-10-27-task-041-vi
 - The purpose check boxes showed the token `publisher` as a plain label. musicindex ADR 0033 R-WORD-4 item 1 does not let interface text use that word. The operator decided on 2026-10-27 that the check boxes are a technical view (R-WORD-4 item 2). Each token shows as an RSS token in code form, also in the summary line. The name of the remove action is "this image".
 - A loaded fact with no value wrote `null` over a value that the user typed. The planning model changed the fill, so a fact with no value does not change the entry.
 - `readImageFacts` loads an image through `/images`, as `useImage` of `app.js` does. `useImage` can give the result of the address before the change for one render, so the entry does not use it.
+
+### The Human Test
+
+- The copied credits of a track kept the entry key of each album person. The save failed with "the draft has no person with key 0". `withTrackCredits` now removes `key` and `_cid`, and its Node test examines both.
+- The operator clicked "Hide from apps" when the text next to it said "Listed", and the feed became hidden. The operator decided on 2026-10-27 that a check box has no text that changes with its state. "Hide from apps", "Explicit" and "Lock against import" lost their state text. The hint of "Explicit" says that off means clean.
+- The "Captions" check box needs a hint. The operator asked what it means. It got the hint "Apps show the lines at their times while the track plays. Use this for a timed file: .srt or .vtt."
+- The screenshots and `$edges()` of the album page, "Feed settings" and a track passed after the two changes, at 1100 px and at 390 px.
+- The human test passed. The operator wrote `test.xml` with the explicit value, the managing editor and the lock. Track 1 got the season name, six persons, a lyrics file with captions and an image. The public file held each written line, and no other line changed. The test also wrote the feed as listed, which is the human test of task 040.

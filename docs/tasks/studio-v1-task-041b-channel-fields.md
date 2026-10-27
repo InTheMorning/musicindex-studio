@@ -29,7 +29,7 @@ These choices are fixed. Do not change them.
 
 ### "Explicit"
 
-- `ExplicitField` is a check box with the label "Explicit" and the state text "Explicit" or "Clean", as `ListingField` does.
+- `ExplicitField` is a check box with the label "Explicit". The operator decided on 2026-10-27, in the human test, that a check box has no text that changes with its state. The hint says that off means clean.
 - `ChannelFields` shows it directly after `ListingField`. `PublisherPage` shows it directly after its `ListingField`.
 - A feed with no `itunes:explicit` shows the switch in the off position. Studio sets no value until the user changes the switch (ADR 0064 item 3).
 - The hint says: "Apple asks for this tag. Studio adds it only when you set the switch."

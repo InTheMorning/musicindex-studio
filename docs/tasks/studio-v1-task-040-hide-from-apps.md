@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor File
 Decisions: [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0022](../adr/0022-the-editor-sends-the-model-with-entry-keys.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: one packet, after task 039.
 
-Status: Implemented - 2026-10-27. The four commit checks are Green. The screenshot visual check passed. The human test is open.
+Status: Complete - 2026-10-27. The four commit checks are Green. The screenshot visual check and the human test passed.
 
 ## Goal
 
@@ -35,6 +35,6 @@ Visual:
 - The release list shows "Hidden from apps". Passed on 2026-10-27 in a screenshot check.
 - The review sheet of a hidden feed with a change shows the notice. Passed on 2026-10-27 in a screenshot check.
 
-Human test, open:
+Human test, passed on 2026-10-27 with `test.xml` of the operator:
 
 - With the feed of the operator, set the switch to off, examine the diff, and write. The two tags get `no`.

@@ -35,5 +35,5 @@ With the `styles.css` before correction 2, it gave five hits on the track page: 
 
 ## Open Items
 
-- The purpose tokens show in a bold sans font in these screenshots, not in the code font. The label of a check box is bold. In this headless Chromium, a bold monospace font falls back to a sans font, because fontconfig has no default configuration. The binary holds the `<code>` element. The operator examines the code font in a desktop browser.
-- The human test of task 041 with a published feed of the operator is open.
+- Closed on 2026-10-27: the purpose tokens show in a bold sans font in these screenshots, not in the code font. In this headless Chromium, a bold monospace font falls back to a sans font, because fontconfig has no default configuration. In the human test, the browser of the operator showed the tokens in a monospace font.
+- Closed on 2026-10-27: the human test of task 041 passed.

@@ -8560,3 +8560,51 @@ async fn a_replaced_track_image_that_a_second_feed_uses_in_its_live_file_gets_no
 async fn a_replaced_track_image_that_a_second_feed_uses_in_its_draft_gets_no_deletion() {
     assert_eq!(replace_image_and_delete_unused(true, true).await, 0);
 }
+
+/// A feed with a channel image whose `purpose` has a token that the UI does
+/// not offer, for the test of the artwork list.
+const FEED_WITH_ARTWORK: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+    <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+    <podcast:image href=\"https://music.example/banner.png\" alt=\"Old text\" purpose=\"artwork hero banner\" width=\"3000\" height=\"1000\"/>\
+    <item><guid>t-1</guid></item></channel></rss>";
+
+#[tokio::test]
+async fn a_change_of_the_alt_of_an_image_with_an_unknown_purpose_token_changes_only_the_alt() {
+    let app = app();
+    std::fs::write(
+        app.feeds.path().join("album.xml"),
+        FEED_WITH_ARTWORK.as_bytes(),
+    )
+    .unwrap();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (status, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        draft["model"]["images"][0]["purpose"],
+        "artwork hero banner"
+    );
+    let mut model = draft["model"].clone();
+    model["images"][0]["alt"] = json!("New text");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        live(&app),
+        FEED_WITH_ARTWORK.replace("alt=\"Old text\"", "alt=\"New text\"")
+    );
+}

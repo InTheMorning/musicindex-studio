@@ -18,6 +18,7 @@ import { platformBlocks } from './listing.js';
 import { isExplicit } from './explicit.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
+import { PURPOSES, purposeTokens, withPurpose, imageFacts } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
@@ -436,6 +437,7 @@ const FIELD_NOUN = {
   cover: 'the cover image',
   'track-image': 'the track image',
   'live-image': 'the image of the show',
+  artwork: 'the image',
   'track-audio': 'the audio file',
   recording: 'the recording',
   lyrics: 'the lyrics file',
@@ -1943,6 +1945,111 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
   </dialog>`;
 }
 
+// ---- The artwork list (ADR 0064 items 10 to 12) ----
+
+const BLANK_IMAGE = { href: '', alt: null, aspect_ratio: null, width: null, height: null, media_type: null, purpose: null };
+
+// The image at an address, read through `/images` (ADR 0025). It gives the
+// size of the image and the type of the response. A failure gives `null`.
+async function readImageFacts(url) {
+  try {
+    const blob = await api(`/images?url=${encodeURIComponent(url)}`, { raw: true });
+    const src = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    const size = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = reject;
+      image.src = src;
+    });
+    if (!(size.width > 0 && size.height > 0)) return null;
+    return imageFacts(size.width, size.height, blob.type);
+  } catch (_) {
+    return null;
+  }
+}
+
+// One image of an artwork list. `edit(change)` changes the image list of the
+// parent, also after a long load. `address` is the model path of the entry.
+function ArtworkEntry({ id, list, index, onChange, edit, bad, address }) {
+  const t = list[index];
+  const same = (x) => x._cid === t._cid;
+  const change = (name) => (value) => edit((all) => all.map((x) => (same(x) ? set(x, name, value) : x)));
+  const apply = (href) => change('href')(href);
+  // The facts fill only after a new address. An entry that Studio read from
+  // the feed keeps its values.
+  const handled = useRef(t.href);
+  const [unreadable, setUnreadable] = useState(false);
+  useEffect(() => {
+    const href = t.href;
+    if (href === handled.current) return undefined;
+    if (!href) {
+      handled.current = href;
+      setUnreadable(false);
+      return undefined;
+    }
+    let current = true;
+    // The wait lets the user finish a typed address.
+    const timer = setTimeout(async () => {
+      handled.current = href;
+      const facts = await readImageFacts(href);
+      if (!current) return;
+      setUnreadable(facts === null);
+      // A fact with no value does not change the value of the entry.
+      const found = facts && Object.fromEntries(Object.entries(facts).filter(([, v]) => v !== null));
+      if (found) edit((all) => all.map((x) => (same(x) && x.href === href ? { ...x, ...found } : x)));
+    }, 400);
+    return () => { current = false; clearTimeout(timer); };
+  }, [t.href]);
+  // The purpose shows as RSS tokens in code form, also in the summary line
+  // (musicindex ADR 0033 R-WORD-4 item 2).
+  const tokens = purposeTokens(t.purpose);
+  const unknown = tokens.filter((token) => !PURPOSES.includes(token));
+  const size = t.width && t.height ? `${t.width} × ${t.height}` : '';
+  const summary = html`<span class="title">${tokens.length > 0 ? html`<code>${tokens.join(' ')}</code>` : 'No purpose'}</span>
+    <span class="sub">${size}</span>`;
+  return html`<${EntryRow} group=${`${id}-images`} cid=${t._cid} summary=${summary}>
+    <${PickedImageField} field="artwork" subject=${t} apply=${apply} id=${`${id}-href`} label="Image address"
+      address=${`${address}/href`} bad=${bad} value=${t.href} onChange=${change('href')} glow="var(--c-feed)">
+      ${unreadable && html`<span class="hint">Studio cannot read this image. Type the dimensions.</span>`}
+    <//>
+    <${TextField} id=${`${id}-alt`} label="Description" hint="A short text for people who cannot see the image." value=${t.alt} onChange=${change('alt')} />
+    <div class="field">
+      <label for=${`${id}-purpose-${PURPOSES[0]}`}>Purpose</label>
+      <div class="field-body">
+        ${PURPOSES.map((token) => html`<label class="check"><input id=${`${id}-purpose-${token}`} type="checkbox" checked=${tokens.includes(token)}
+          onChange=${(e) => change('purpose')(withPurpose(t.purpose, token, e.target.checked))} /><code>${token}</code></label>`)}
+        ${unknown.length > 0 && html`<p class="hint">Other purpose in the feed: <code>${unknown.join(' ')}</code>. Studio keeps it.</p>`}
+      </div>
+    </div>
+    <div class="grid2">
+      <${TextField} id=${`${id}-width`} label="Width" inputmode="numeric" value=${t.width} onChange=${change('width')} />
+      <${TextField} id=${`${id}-height`} label="Height" inputmode="numeric" value=${t.height} onChange=${change('height')} />
+      <${TextField} id=${`${id}-ratio`} label="Ratio" hint="For example 16/9." value=${t.aspect_ratio} onChange=${change('aspect_ratio')} />
+      <${TextField} id=${`${id}-type`} label="Type" hint="For example image/png." value=${t.media_type} onChange=${change('media_type')} />
+    </div>
+    <${EntryActions} list=${list} index=${index} name="this image" onChange=${onChange} />
+  <//>`;
+}
+
+// The `podcast:image` entries of one parent, the album or a track. `edit`
+// changes the image list of the parent. `path` is the model path of the list.
+function ArtworkList({ id, images, edit, bad, path }) {
+  return html`${images.length === 0 && html`<p class="hint">No more images yet.</p>`}
+    ${images.map((t, i) => html`<${ArtworkEntry} key=${t._cid} id=${`${id}-image-${t._cid}`} list=${images} index=${i}
+      onChange=${(list) => edit(() => list)} edit=${edit} bad=${bad} address=${`${path}/${i}`} />`)}
+    <button class="link-row add" type="button" onClick=${() => edit((list) => addOpen(list, BLANK_IMAGE))}>
+      <span class="num">＋</span><span class="title">Add an image</span>
+    </button>`;
+}
+
+// The count of the images of a track, for its summary line.
+const imagesSummary = (images) => (images.length === 0 ? 'None' : images.length === 1 ? '1 image' : `${images.length} images`);
+
 // The credits and links page: people, support links and the license, each
 // as a section (task 014c step 3). No wrapper: each section is a direct row
 // of .page (review of task 014c, defect 2).
@@ -1958,6 +2065,10 @@ function CreditsPage({ model, update, bad }) {
     <section class="page-section"><h2>License</h2>
       <div class="group"><${LicenseFields} license=${model.license} bad=${bad}
         onChange=${(license) => update((m) => set(m, 'license', license))} /></div>
+    </section>
+    <section class="page-section"><h2>More artwork</h2>
+      <div class="group"><${ArtworkList} id="ch" images=${model.images} bad=${bad} path="images"
+        edit=${(change) => update((m) => set(m, 'images', change(m.images)))} /></div>
     </section>`;
 }
 
@@ -2125,6 +2236,12 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
           <div class="form"><${PickedImageField} field="track-image" subject=${item} apply=${(address) => editItem((i) => set(i, 'image', address))}
             id=${`${id}-image`} label="Track image address" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')}
             glow="var(--c-track)" /></div>
+        </details>
+        <details class="disclosure">
+          <summary class="link-row"><span class="label">More artwork</span>
+            <span class="summary">${imagesSummary(item.images)}</span></summary>
+          <div class="form"><${ArtworkList} id=${id} images=${item.images} bad=${bad} path=${`${path}images`}
+            edit=${(change) => editItem((i) => set(i, 'images', change(i.images)))} /></div>
         </details>
         <details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>

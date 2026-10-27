@@ -9,6 +9,7 @@ const KINDS = {
   cover: 'image',
   'track-image': 'image',
   'live-image': 'image',
+  artwork: 'image',
   'track-audio': 'audio',
   recording: 'audio',
   lyrics: 'lyrics',
@@ -170,7 +171,8 @@ export function audioAddresses(item) {
 
 // The addresses of a field before the change, for `delete_unused` (ADR 0062
 // item 17). `subject` is the channel model for a cover field, the transcript
-// entry for a lyrics field, else the item.
+// entry for a lyrics field, the image entry for an artwork field, else the
+// item.
 // The new address is not in the list, and no address is in it twice.
 export function replacedAddresses(field, subject, newAddress) {
   let found;
@@ -180,6 +182,8 @@ export function replacedAddresses(field, subject, newAddress) {
     found = audioAddresses(subject);
   } else if (fieldKind(field) === 'lyrics') {
     found = [subject.url];
+  } else if (field === 'artwork') {
+    found = [subject.href];
   } else {
     found = [subject.image];
   }

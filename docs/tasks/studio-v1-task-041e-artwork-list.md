@@ -3,7 +3,7 @@
 Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 10 to 12, [ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0025](../adr/0025-studio-serves-cover-art.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md).
 Sequence: the last packet of task 041. It depends on 041d.
 
-Status: Not started.
+Status: Complete on 2026-10-27. The visual check is open.
 
 ## Goal
 
@@ -13,9 +13,9 @@ The album page and the track page get a list of `podcast:image` entries. When th
 
 Inspect: `crates/api/ui/editor.js` (`AlbumPage`, `CreditsPage`, `TrackPage`, `Persons`, `EntryRow`, `EntryActions`, `addOpen`, `PickedImageField`, `useFilePick`, `FIELD_NOUN`), `crates/api/ui/app.js` (`useImage`, `ImageThumb`), `crates/api/src/routes.rs` (`get_image`), `crates/api/src/ui.rs`.
 
-Change: a new file `crates/api/ui/artwork.js`, a new file `crates/api/ui-tests/artwork.test.mjs`, `crates/api/ui/editor.js`, `crates/api/src/ui.rs`.
+Change: a new file `crates/api/ui/artwork.js`, a new file `crates/api/ui-tests/artwork.test.mjs`, `crates/api/ui/editor.js`, `crates/api/ui/picker.js`, `crates/api/ui-tests/picker.test.mjs`, `crates/api/src/ui.rs`, `crates/api/src/tests.rs`.
 
-Do not change: the core, the API routes, `crates/api/ui/picker.js`, `crates/api/ui/cover.js`.
+Do not change: the core, the API routes, `crates/api/ui/cover.js`.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ These choices are fixed. Do not change them.
   - When the ratio of the image is within 2 % of a ratio of the list, the result is the nearest ratio of the list. The difference is relative to the ratio of the list.
   - In each other case, the result is the width and the height divided by their greatest common divisor.
   - A width or a height of 0 or of no value gives `null`.
-- `imageFacts(width, height, mediaType)` gives `{ width, height, media_type, aspect_ratio }` as text values, for the fields of an entry.
+- `imageFacts(width, height, mediaType)` gives `{ width, height, media_type, aspect_ratio }` as text values, for the fields of an entry. These are the JSON names of the model. The XML attributes are `aspect-ratio` and `type`.
 - The module has no Preact and no browser state.
 
 ### The Facts Of An Image
@@ -46,13 +46,19 @@ These choices are fixed. Do not change them.
 - `ArtworkList` lists the `podcast:image` entries of one parent, with `EntryRow`, `EntryActions` and `addOpen`, as `Persons` does. One entry is open at a time (ADR 0028).
 - The summary line of an entry gives the purpose tokens and the dimensions, such as "banner · 3000 × 1000". With no purpose, it gives "No purpose".
 - An entry has these fields:
-  - "Image address", for `href`. It uses `PickedImageField`.
+  - "Image address", for `href`. It uses `PickedImageField` with the picker field `artwork` and the entry as its subject.
   - "Description", for `alt`. The hint says: "A short text for people who cannot see the image."
-  - "Purpose": one check box for each token of `PURPOSES`. A token of the feed that is not in `PURPOSES` shows as a note with its text, and stays.
+  - "Purpose": one check box for each token of `PURPOSES`. Each label is the RSS token in code form, also in the summary line (musicindex ADR 0033 R-WORD-4 item 2). A token of the feed that is not in `PURPOSES` shows as a note with its text, and stays.
   - "Width", "Height", "Ratio" and "Type", in one `grid2`, for `width`, `height`, `aspect-ratio` and `type`.
 - A new entry has `href` empty and each other value `null`.
 - The album: the page "Credits and links" gets the section "More artwork" after "License". The summary of its row in the album page does not change.
 - The track: the section "More" gets the disclosure "More artwork" after "Track image". Its summary gives the number of images, such as "2 images", or "None".
+
+### The Picker Field `artwork`
+
+- `picker.js`: `KINDS` gets `artwork: 'image'`. `replacedAddresses` gives `subject.href` for the field `artwork`, because the subject is the entry. Each other field does not change.
+- `editor.js`: `FIELD_NOUN` gets `artwork: 'the image'`.
+- A Node test: `replacedAddresses('artwork', { href: A, image: B }, C)` gives `[A]`.
 
 ### The Served Files
 
@@ -104,7 +110,6 @@ node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-- Stop and report when `/images` does not give the type of the image in its response.
 - Stop and report when `PickedImageField` cannot take the address path of an entry of a list.
 
 ## Prompt for lower-context coding model

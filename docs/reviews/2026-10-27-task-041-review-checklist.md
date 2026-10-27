@@ -22,7 +22,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | 041b | Complete | Pass on 2026-10-27. The four checks pass. The UI has no feed rule. The visual check is open. |
 | 041c | Complete | Pass on 2026-10-27. The four checks pass. The planning model changed the noun of the field to "the lyrics file", as the other nouns are. |
 | 041d | Complete | Pass on 2026-10-27. The four checks pass. The planning model corrected the lyrics subject and the season number. The visual check is open. |
-| 041e | Not started | |
+| 041e | Complete | Pass on 2026-10-27. The four checks pass. The planning model corrected the fill of the image facts and the form of the purpose tokens. The visual check is open. |
 
 ## Decisions
 
@@ -55,6 +55,13 @@ A coding model implements each packet. The planning model examines the diff and 
 ### Packet 041d
 
 - Before the packet started, the planning model found two problems in the packet. `Persons` writes the fixed address path `persons`, and `PickedImageField` always shows an image. `Persons` gets an optional property `path`. The lyrics entry uses a new component `PickedFileField` with no image. The packet also lists `crates/api/src/tests.rs` for its API test.
-- `replacedAddresses` of `picker.js` gave the track image for a lyrics field. The coding model gave the picker a subject with no image, so an old lyrics file stayed on the host. The planning model added a `lyrics` branch that gives the address of the transcript entry, with a Node test. The picker gets the entry as its subject.
-- The season number is a text in the core model, not an optional text. A season with only a name sent `null` for the number, and the draft save failed. The UI sends an empty text for an empty number. No test covers this function, because it is in `editor.js`. The visual check examines it.
+- `replacedAddresses` of `picker.js` gave the track image for a lyrics field. The coding model gave the picker a subject with no image, so the replaced lyrics file stayed on the host. The planning model added a `lyrics` branch that gives the address of the transcript entry, with a Node test. The picker gets the entry as its subject.
+- The season number is a text in the core model, not an optional text. A season with only a name sent `null` for the number, and the draft save gave an error. The UI sends an empty text for an empty number. No test covers this function, because it is in `editor.js`. The visual check examines it.
 - When the album has no persons, "Credits for this track" adds one blank person. Without it, the empty list selects "Use the album credits" again.
+
+### Packet 041e
+
+- Before the packet started, the planning model added the picker field `artwork` to the packet. `replacedAddresses` reads `subject.image` for an image field, and an artwork entry keeps its address in `href`. After this change, the packet lets the coding model change `picker.js` for this field. The packet also gives the JSON names of the image facts, and it lists `crates/api/src/tests.rs`.
+- The purpose check boxes showed the token `publisher` as a plain label. musicindex ADR 0033 R-WORD-4 item 1 does not let interface text use that word. The operator decided on 2026-10-27 that the check boxes are a technical view (R-WORD-4 item 2). Each token shows as an RSS token in code form, also in the summary line. The name of the remove action is "this image".
+- A loaded fact with no value wrote `null` over a value that the user typed. The planning model changed the fill, so a fact with no value does not change the entry.
+- `readImageFacts` loads an image through `/images`, as `useImage` of `app.js` does. `useImage` can give the result of the address before the change for one render, so the entry does not use it.

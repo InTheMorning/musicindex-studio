@@ -14,6 +14,7 @@ test('fieldKind gives the kind of each file field', () => {
   assert.equal(fieldKind('cover'), 'image');
   assert.equal(fieldKind('track-image'), 'image');
   assert.equal(fieldKind('live-image'), 'image');
+  assert.equal(fieldKind('artwork'), 'image');
   assert.equal(fieldKind('track-audio'), 'audio');
   assert.equal(fieldKind('recording'), 'audio');
   assert.equal(fieldKind('lyrics'), 'lyrics');
@@ -118,6 +119,11 @@ test('replacedAddresses gives each cover address except the new one, once', () =
 test('replacedAddresses gives the image of a track and of a live show', () => {
   assert.deepEqual(replacedAddresses('track-image', { image: A }, B), [A]);
   assert.deepEqual(replacedAddresses('live-image', { image: null }, B), []);
+});
+
+test('replacedAddresses gives the address of an image entry and not the track image', () => {
+  assert.deepEqual(replacedAddresses('artwork', { href: A, image: B }, 'https://m.example/c.jpg'), [A]);
+  assert.deepEqual(replacedAddresses('artwork', { href: '' }, B), []);
 });
 
 test('replacedAddresses gives the address of a lyrics entry and not the track image', () => {

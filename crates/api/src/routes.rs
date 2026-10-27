@@ -34,6 +34,7 @@ use studio_core::nostr_events::Signing;
 use studio_core::pipeline;
 use studio_core::playlist;
 use studio_core::publisher;
+use studio_core::remote;
 use zeroize::Zeroizing;
 
 use crate::error::ApiError;
@@ -1278,14 +1279,18 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             let state = draft_state(w, &row)?;
             // The cover image comes from the same source as the file list.
             // A feed with no readable source has no image.
-            let image = files_feed(w, row.id)
-                .ok()
-                .flatten()
-                .and_then(|feed| feed.image);
+            let feed = files_feed(w, row.id).ok().flatten();
+            let image = feed.as_ref().and_then(|feed| feed.image.clone());
+            // The UI applies the cover rule to both addresses (ADR 0060).
+            let rss_image_url = feed
+                .as_ref()
+                .and_then(|feed| feed.rss_image.as_ref())
+                .and_then(|rss_image| rss_image.url.clone());
             let mut value =
                 serde_json::to_value(&row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
             value["image"] = json!(image);
+            value["rss_image_url"] = json!(rss_image_url);
             rows.push(value);
         }
         to_json(rows)
@@ -2723,6 +2728,126 @@ fn remote_file_in_use(
     Ok(is_in_use(file.source_url.as_deref(), addresses) || by_copy)
 }
 
+/// True when the draft uses a library file: its source address, an
+/// address of a copy, or its planned address when it is in the library
+/// (ADR 0036 items 10 and 12, ADR 0038 item 5). `has_host` is true when the
+/// file has a planned address.
+fn file_in_use(
+    collection: &Collection,
+    hosts: &Hosts,
+    file: &LibraryFile,
+    has_host: bool,
+    addresses: &[String],
+) -> Result<bool, ApiError> {
+    Ok(remote_file_in_use(collection, hosts, file, addresses)?
+        || (has_host && file.local && pipeline::library_file_in_use(collection, hosts, file)?))
+}
+
+/// The query of the picker routes: `kind` is `image` or `audio`.
+#[derive(Deserialize)]
+pub(crate) struct PickerQuery {
+    kind: String,
+}
+
+impl PickerQuery {
+    fn kind(&self) -> Result<media::FileKind, ApiError> {
+        media::FileKind::parse(&self.kind).ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_kind",
+                "the kind of a file is image or audio",
+            )
+        })
+    }
+}
+
+/// The files of this release for one kind of file field (ADR 0062 items
+/// 3 and 6). The list holds the library files of this feed only. It reads
+/// no host. A file with no public address has `address` `null`. The
+/// library records no duration, so `duration` is `null`.
+pub(crate) async fn picker_release(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Query(query): Query<PickerQuery>,
+) -> ApiResult {
+    let kind = query.kind()?;
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let feed_row = w.collection.feed(id)?;
+        let hosts = w.hosts()?;
+        let compared = files_feed(w, id)?;
+        let addresses = feed_address_list(compared.as_ref());
+        let mut files = Vec::new();
+        for file in w.collection.library_files(id)? {
+            if media::kind_of_path(&file.path) != Some(kind) {
+                continue;
+            }
+            let planned = planned_or_none(&w.collection, &hosts, &feed_row, &file)?;
+            let address = planned
+                .as_ref()
+                .and_then(|p| p.url.clone())
+                .or_else(|| file.source_url.clone());
+            let in_use = file_in_use(&w.collection, &hosts, &file, planned.is_some(), &addresses)?;
+            files.push(json!({
+                "name": file.path,
+                "address": address,
+                "local": file.local,
+                "size": file.size,
+                "media_type": remote::media_type_of_name(&file.path)
+                    .unwrap_or_else(|| file.media_type.clone()),
+                "duration": Value::Null,
+                "in_use": in_use,
+            }));
+        }
+        Ok(Json(json!({ "files": files })))
+    })
+    .await
+}
+
+/// The files of one kind on the host of a connector (ADR 0062 items 3, 8
+/// and 9). The route lists the host one time and changes nothing on it
+/// (ADR 0019 item 7). A file with no public address has `address` `null`
+/// and the reason `no_public_address`.
+pub(crate) async fn connector_picker(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Query(query): Query<PickerQuery>,
+) -> ApiResult {
+    let kind = query.kind()?;
+    blocking(shared, move |w| {
+        let row = w.collection.connector(ConnectorId(id))?;
+        if row.secret_ref.is_some() && w.vault.is_none() {
+            return Err(ApiError::vault_locked());
+        }
+        let made = w.connector_of(&row)?;
+        let listed = made
+            .list()
+            .map_err(|e| ApiError::new(StatusCode::BAD_GATEWAY, "host_failed", e.to_string()))?;
+        let files: Vec<Value> = listed
+            .files
+            .iter()
+            .filter(|file| media::kind_of_path(&file.path) == Some(kind))
+            .map(|file| {
+                let address = made.public_url(&file.path);
+                let mut value = json!({
+                    "path": file.path,
+                    "size": file.size,
+                    "media_type": remote::media_type_of_name(&file.path),
+                    "address": address,
+                });
+                if address.is_none() {
+                    value["reason"] = json!("no_public_address");
+                }
+                value
+            })
+            .collect();
+        Ok(Json(
+            json!({ "files": files, "truncated": listed.truncated }),
+        ))
+    })
+    .await
+}
+
 /// The files of a release (ADR 0036 items 4, 7, 9, 10, 11 and 12).
 ///
 /// The result gives the folder, the default host, and each library
@@ -2755,10 +2880,7 @@ pub(crate) async fn list_release_files(
             let planned = planned_or_none(&w.collection, &hosts, &feed_row, file)?;
             // The draft can use the address that the file came from, also
             // after a download, or the address of a copy (ADR 0038 item 5).
-            let in_use = remote_file_in_use(&w.collection, &hosts, file, &addresses)?
-                || (planned.is_some()
-                    && file.local
-                    && pipeline::library_file_in_use(&w.collection, &hosts, file)?);
+            let in_use = file_in_use(&w.collection, &hosts, file, planned.is_some(), &addresses)?;
             if !file.local {
                 remote_count += 1;
                 remote_bytes += file.size;
@@ -3021,12 +3143,17 @@ fn file_addresses(
 
 /// Replace each address of `feed` that is `from` with `to` (ADR 0036
 /// item 12). The function checks the same addresses as the host
-/// inventory (ADR 0036 item 7): the channel image, each item's
+/// inventory (ADR 0036 item 7): the channel images, each item's
 /// enclosure and image, and each `podcast:source` of an alternate
 /// enclosure.
 fn reference_feed(feed: &mut Feed, from: &str, to: &str) {
     if feed.image.as_deref() == Some(from) {
         feed.image = Some(to.to_owned());
+    }
+    if let Some(rss_image) = feed.rss_image.as_mut()
+        && rss_image.url.as_deref() == Some(from)
+    {
+        rss_image.url = Some(to.to_owned());
     }
     for entry in &mut feed.items {
         let item = &mut entry.value;
@@ -3054,6 +3181,15 @@ fn reference_feed(feed: &mut Feed, from: &str, to: &str) {
 fn dereference_feed(feed: &mut Feed, url: &str) {
     if feed.image.as_deref() == Some(url) {
         feed.image = None;
+    }
+    // RSS 2.0 requires `url` in `image`, so the full element goes out
+    // (ADR 0060 item 5).
+    if feed
+        .rss_image
+        .as_ref()
+        .is_some_and(|rss_image| rss_image.url.as_deref() == Some(url))
+    {
+        feed.rss_image = None;
     }
     for entry in &mut feed.items {
         let item = &mut entry.value;
@@ -3211,9 +3347,39 @@ pub(crate) async fn add_operation(
     .await
 }
 
+/// The addresses that the other feeds of the collection use, in their
+/// drafts and in their live files (ADR 0062 item 18, ADR 0036 item 7). The
+/// live file of a feed with a draft is the file at the start of the draft.
+/// A feed that Studio cannot read gives no address.
+fn other_feeds_addresses(w: &Workspace, id: FeedId) -> Result<Vec<String>, ApiError> {
+    let mut addresses = Vec::new();
+    for row in w.collection.feeds()? {
+        if row.id == id {
+            continue;
+        }
+        let mut models = Vec::new();
+        if let Some(draft) = w.collection.draft(row.id)? {
+            for bytes in [&draft.draft_xml, &draft.base_xml] {
+                if let Ok(doc) = studio_core::xml::Document::parse_bytes(bytes)
+                    && let Ok(feed) = Feed::read(&doc)
+                {
+                    models.push(feed);
+                }
+            }
+        } else if let Some(feed) = files_feed(w, row.id)? {
+            models.push(feed);
+        }
+        for feed in &models {
+            addresses.extend(feed_address_list(Some(feed)));
+        }
+    }
+    Ok(addresses)
+}
+
 /// Add a deletion for each copy of a library file of the feed whose
-/// address is in `urls` and not in the draft (ADR 0040 item 6). A copy
-/// that has a deletion in the draft already gets no second one.
+/// address is in `urls`, not in the draft and not in another feed of the
+/// collection (ADR 0040 item 6, ADR 0062 item 18). A copy that has a
+/// deletion in the draft already gets no second one.
 fn delete_unused_copies(
     w: &Workspace,
     hosts: &Hosts,
@@ -3221,10 +3387,11 @@ fn delete_unused_copies(
     urls: &[String],
 ) -> Result<(), ApiError> {
     let addresses = feed_address_list(files_feed(w, id)?.as_ref());
+    let others = other_feeds_addresses(w, id)?;
     let unused: Vec<&str> = urls
         .iter()
         .map(String::as_str)
-        .filter(|url| !is_in_use(Some(url), &addresses))
+        .filter(|url| !is_in_use(Some(url), &addresses) && !is_in_use(Some(url), &others))
         .collect();
     if unused.is_empty() {
         return Ok(());
@@ -4083,6 +4250,19 @@ pub(crate) async fn get_image(
 /// 0036 items 5 and 9). Each failure gives `None`, so the route then
 /// reads the address from the web.
 fn pending_image(w: &Workspace, url: &str) -> Option<studio_core::web::WebImage> {
+    let (path, media_type) = pending_library_file(w, url, "image/")?;
+    let bytes = std::fs::read(path).ok()?;
+    Some(studio_core::web::WebImage { bytes, media_type })
+}
+
+/// The path and the media type of the library file whose planned address is
+/// `url`, when its bytes are in the release folder and not on the host yet.
+/// The media type starts with `media_prefix`. Each failure gives `None`.
+pub(crate) fn pending_library_file(
+    w: &Workspace,
+    url: &str,
+    media_prefix: &str,
+) -> Option<(PathBuf, String)> {
     let library = w.library().ok()?;
     let hosts = w.hosts().ok()?;
     for feed in w.collection.feeds().ok()? {
@@ -4093,7 +4273,7 @@ fn pending_image(w: &Workspace, url: &str) -> Option<studio_core::web::WebImage>
             continue;
         };
         for file in files {
-            if !file.local || !file.media_type.starts_with("image/") {
+            if !file.local || !file.media_type.starts_with(media_prefix) {
                 continue;
             }
             let Ok(planned) = inventory::planned_path(&w.collection, &hosts, &feed, &file) else {
@@ -4102,11 +4282,7 @@ fn pending_image(w: &Workspace, url: &str) -> Option<studio_core::web::WebImage>
             if planned.on_host || planned.url.as_deref() != Some(url) {
                 continue;
             }
-            let bytes = std::fs::read(library.path(folder, &file.path)).ok()?;
-            return Some(studio_core::web::WebImage {
-                bytes,
-                media_type: file.media_type,
-            });
+            return Some((library.path(folder, &file.path), file.media_type));
         }
     }
     None
@@ -4874,4 +5050,62 @@ pub(crate) async fn sign_with_signer(
     serde_json::from_str::<Value>(&event.as_json())
         .map(Json)
         .map_err(|e| ApiError::internal(e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use studio_core::feed::RssImage;
+
+    fn demu_feed(url: &str) -> Feed {
+        Feed {
+            rss_image: Some(RssImage {
+                url: Some(url.to_owned()),
+                title: Some("Art".to_owned()),
+                ..RssImage::default()
+            }),
+            ..Feed::default()
+        }
+    }
+
+    #[test]
+    fn a_reference_changes_the_rss_image_url_and_keeps_its_other_children() {
+        let mut feed = demu_feed("https://a.example/c.png");
+        reference_feed(
+            &mut feed,
+            "https://a.example/c.png",
+            "https://b.example/c.png",
+        );
+        let image = feed.rss_image.unwrap();
+        assert_eq!(image.url.as_deref(), Some("https://b.example/c.png"));
+        assert_eq!(image.title.as_deref(), Some("Art"));
+        assert_eq!(feed.image, None);
+    }
+
+    #[test]
+    fn a_reference_of_another_address_keeps_the_rss_image() {
+        let mut feed = demu_feed("https://a.example/c.png");
+        let before = feed.clone();
+        reference_feed(
+            &mut feed,
+            "https://a.example/other.png",
+            "https://b.example/x.png",
+        );
+        assert_eq!(feed, before);
+    }
+
+    #[test]
+    fn a_dereference_removes_the_full_rss_image() {
+        let mut feed = demu_feed("https://a.example/c.png");
+        dereference_feed(&mut feed, "https://a.example/c.png");
+        assert_eq!(feed.rss_image, None);
+    }
+
+    #[test]
+    fn a_dereference_of_another_address_keeps_the_rss_image() {
+        let mut feed = demu_feed("https://a.example/c.png");
+        let before = feed.clone();
+        dereference_feed(&mut feed, "https://a.example/other.png");
+        assert_eq!(feed, before);
+    }
 }

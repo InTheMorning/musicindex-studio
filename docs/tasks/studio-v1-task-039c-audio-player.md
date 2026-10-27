@@ -3,7 +3,7 @@
 Parent: [task 039](studio-v1-task-039-file-picker.md). Decisions: [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 16 and 23 to 29, [ADR 0023](../adr/0023-web-addresses-and-audio-file-facts.md) items 4 and 5, [ADR 0025](../adr/0025-studio-serves-cover-art.md) item 2, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0017](../adr/0017-local-api-access.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the third packet of task 039. It depends on 039a. It can go before or after 039b.
 
-Status: Ready - 2026-10-27.
+Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 
@@ -39,7 +39,7 @@ These choices are fixed. Do not change them.
   - `propertiesSummary(enclosure)`: the size in MB with one decimal and the short type, for example "3.8 MB · MP3". A missing value gives "—" for that part.
   - `propertiesOpen(enclosure, errors)`: true when the size or the media type is empty, or when either one has an error.
   - `durationFromSeconds(seconds)`: the duration value of the track, in the form that the duration field uses now.
-  - `needsMetadataRead(source)`: true for a file that only a host holds.
+  - `needsMetadataRead(source)`: true for each selection from "This release" or "Hosts". False for an upload, because the import reads the duration from the file.
 
 ### The Audio Section
 

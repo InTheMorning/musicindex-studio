@@ -20,7 +20,7 @@ The two tags have different sources. RSS 2.0 defines `<image>` as a small channe
 
 ### The Cover Of A Channel
 
-1. The core models the channel RSS `<image>` with its four children `url`, `title`, `link` and `description`. The editor changes only `url`. The writer keeps the other children as the source has them.
+1. The core models the channel RSS `<image>` with its four children `url`, `title`, `link` and `description`. The editor changes only `url`. The writer keeps the other children as the source has them. The `url` is an address field of [ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 1. The host operations of [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 7 change it as they change `itunes:image`.
 2. The editor has one cover field for each channel. The field shows the `href` of the channel `itunes:image`. When the channel has no `itunes:image`, the field shows the `<url>` of the channel `<image>`.
 3. An edit of the cover field keeps the form of the feed. The writer changes each of the two tags that the feed has:
    - A feed with only `<image>` keeps only `<image>`. The writer changes its `<url>` and adds no `itunes:image`. This is the DeMu form.

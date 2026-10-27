@@ -8,6 +8,7 @@ mod access;
 mod announcer;
 mod downloads;
 mod error;
+mod media;
 mod routes;
 mod ui;
 mod uploads;
@@ -129,11 +130,13 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             put(routes::update_connector).delete(routes::delete_connector),
         )
         .route("/connectors/{id}/feeds", get(routes::connector_feeds))
+        .route("/connectors/{id}/picker", get(routes::connector_picker))
         .route("/connectors/{id}/site", get(routes::connector_site))
         .route("/connectors/{id}/match", post(routes::match_connector))
         .route("/discover", post(routes::discover))
         .route("/images", get(routes::get_image))
         .route("/media/facts", post(routes::media_facts))
+        .route("/media/tickets", post(media::make_ticket))
         .route("/search", get(routes::search))
         .route("/recipients", get(routes::list_recipients))
         .route("/recipients/saved", post(routes::save_recipient))
@@ -190,6 +193,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/feeds/{id}/downloads/{file}",
             delete(routes::stop_download),
         )
+        .route("/feeds/{id}/picker/release", get(routes::picker_release))
         .route("/feeds/{id}/hosts", put(routes::set_files_host))
         .route("/feeds/{id}/feed-host", put(routes::set_feed_host))
         .route("/feeds/{id}/files/{file}/host", put(routes::set_file_host))
@@ -256,7 +260,16 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             Arc::clone(&shared),
             routes::app_check,
         ));
-    let router = Router::new().nest("/api/v1", api).nest("/app/v1", app_api);
+    // The audio route is outside `/api/v1`. The player cannot send the
+    // access token, so a media ticket in the query is the access
+    // (ADR 0062 item 29).
+    let audio = Router::new()
+        .route("/media/audio", get(media::audio))
+        .with_state(Arc::clone(&shared));
+    let router = Router::new()
+        .nest("/api/v1", api)
+        .nest("/app/v1", app_api)
+        .merge(audio);
     (router, WorkspaceHandle::new(shared))
 }
 

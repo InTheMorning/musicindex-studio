@@ -108,6 +108,10 @@ impl Feed {
         let mut checker = Checker { found: Vec::new() };
         checker.field("link", self.link.as_ref());
         checker.field("image", self.image.as_ref());
+        checker.field(
+            "rss_image/url",
+            self.rss_image.as_ref().and_then(|i| i.url.as_ref()),
+        );
         checker.images("", &self.images);
         checker.persons("", &self.persons);
         checker.fundings("", &self.fundings);

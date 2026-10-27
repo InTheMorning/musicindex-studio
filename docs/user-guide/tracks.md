@@ -57,22 +57,40 @@ Select a track in the outline or on the album page.
 The track page has these sections:
 
 - **Track**. Fields: **Title**, **Description**, **Publication date** and **Duration**. Some apps sort the tracks by the publication date. Write the date like this: `Thu, 22 Oct 2026 12:00:00 GMT`.
-- **Audio file**. Fields: **Audio file address**, **Audio file size in bytes** and **Audio file type**. Alternative files show as lines with **Remove**.
+- **Audio file**. The field **Audio file address** with **Choose…**, a player and the disclosure **Properties**. Alternative files show as lines with **Remove**.
 - **Value routes**. See [Value routes](value-routes.md).
-- **More**. **Track image** sets an image for this track. **Identity** shows the track number and the track GUID. Studio gives a GUID when it saves a new track.
+- **More**. **Track image** sets an image for this track. Use **Choose…** to pick the image file. **Identity** shows the track number and the track GUID. Studio gives a GUID when it saves a new track.
 
 The two arrow buttons in the header open the track before and the track after this one.
 
 ## Replace the audio of a track
 
 1. Open the track page.
-2. Select **Replace the Audio File**.
-3. Select the new audio file.
+2. Select **Choose…** adjacent to **Audio file address**.
+3. Select a source in the sheet: **This release**, **Hosts** or **This computer**.
+4. Select the new audio file.
 
+You can also drop one audio file on the field.
 The track keeps its GUID and its other values.
-Studio puts the new file in the release folder.
+A file from **This computer** goes in the release folder.
+A file from **This release** or **Hosts** is not copied. Studio uses its public address.
+
+Studio reads the duration from a file that you select from **This release** or **Hosts**.
+If Studio cannot read it, the field **Duration** asks you to type it.
+
 When you write, Studio deletes the file from before on the host.
-The review lists that deletion. See [Review and write your changes](review-and-write.md).
+The review lists that deletion.
+Studio does not delete a file that another feed uses.
+Select **Undo** in the review to keep the file.
+See [Review and write your changes](review-and-write.md).
+
+### The audio section
+
+The audio section shows the address with **Choose…**, then a player, then the disclosure **Properties**.
+The player plays the file when you press play.
+**Properties** is closed. Its summary shows the size and the type.
+It holds **Audio file size in bytes** and **Audio file type**.
+**Properties** opens by itself when a value is missing or not correct.
 
 ## Change the order or remove a track
 

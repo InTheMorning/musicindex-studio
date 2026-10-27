@@ -460,7 +460,7 @@ pub(crate) fn write_text(
     hosted: Option<&[HostedType]>,
     names: &mut Names,
 ) {
-    let make = value.map(|v| move |e: &mut Element, _: &mut Names| e.set_text(v));
+    let make = value.map(|v| move |e: &mut Element, _: &mut Names| set_model_text(e, v));
     write_single(
         parent,
         ns,
@@ -592,7 +592,33 @@ impl<'p, 'n> Children<'p, 'n> {
 
 /// Read the text of an optional child.
 pub(crate) fn read_text(parent: &Element, ns: Ns, local: &str) -> Option<String> {
-    parent.child(ns, local).map(Element::text)
+    parent.child(ns, local).map(model_text)
+}
+
+/// The XML white space that a modeled text value does not have at its ends
+/// (ADR 0061 item 1): space, tab, carriage return and line feed.
+const XML_SPACE: [char; 4] = [' ', '\t', '\r', '\n'];
+
+/// The text of `element` with no XML white space at its start and at its
+/// end (ADR 0061 items 1 and 2). Space in the text stays. An element that
+/// holds only space gives an empty text.
+pub(crate) fn model_text(element: &Element) -> String {
+    element.text().trim_matches(XML_SPACE).to_owned()
+}
+
+/// Make `element` hold `value` as a modeled text value (ADR 0061 items 3
+/// to 5).
+///
+/// The function removes the XML white space from the ends of `value`. When
+/// the result is equal to [`model_text`] of the element, and the element has
+/// no child element, it changes nothing, so the element keeps its source
+/// bytes.
+pub(crate) fn set_model_text(element: &mut Element, value: &str) {
+    let value = value.trim_matches(XML_SPACE);
+    if value == model_text(element) && element.elements().next().is_none() {
+        return;
+    }
+    element.set_text(value);
 }
 
 fn positions(parent: &Element, mut matches: impl FnMut(&Element) -> bool) -> Vec<usize> {

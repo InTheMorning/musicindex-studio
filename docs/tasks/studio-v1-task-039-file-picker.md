@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
 Decisions: [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md), [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md), [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md), [ADR 0019](../adr/0019-select-a-feed-from-the-host.md), [ADR 0025](../adr/0025-studio-serves-cover-art.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md), [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) and [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md).
 
-Status: Ready - 2026-10-27. It starts after [task 038](studio-v1-task-038-cover-and-text-space.md).
+Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 

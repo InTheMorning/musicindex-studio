@@ -3,7 +3,7 @@
 Parent: [task 039](studio-v1-task-039-file-picker.md). Decisions: [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 3, 6 to 10 and 14 to 18, [ADR 0019](../adr/0019-select-a-feed-from-the-host.md) items 2 and 3, [ADR 0032](../adr/0032-new-releases-formats-paths-and-new-feeds.md) item 1, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) item 7, [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 1 and [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md) item 6.
 Sequence: the first packet of task 039. It depends on task 038.
 
-Status: Ready - 2026-10-27.
+Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 
@@ -28,20 +28,20 @@ These choices are fixed. Do not change them.
 
 ### This Release
 
-- `GET /feeds/{id}/picker/release?kind=image|audio` gives `{"files": [...]}`. Each file has `name`, `address` (the public address, or `null`), `local` (true when the library holds the bytes), `size`, `duration` (seconds, when the library records it) and `in_use` (true when the draft uses the address).
+- `GET /feeds/{id}/picker/release?kind=image|audio` gives `{"files": [...]}`. Each file has `name`, `address` (the public address, or `null`), `local` (true when the library holds the bytes), `size`, `media_type`, `duration` (always `null`, because the library records no duration) and `in_use` (true when the draft uses the address).
 - The list holds the library files of this feed only, of the asked kind. It uses the same records as `list_release_files`. Do not read a host for this list.
 - A file with no public address and no planned address is in the list with `address` `null`. The UI shows it, and the user cannot select it.
 
 ### Hosts
 
-- `GET /connectors/{id}/picker?kind=image|audio` gives `{"files": [...], "truncated": bool}`. It calls `Connector::list` once, keeps the files of the asked kind, and gives for each file `path`, `size` and `address` from `Connector::public_url`. A file with no public address has `address` `null` and `reason` `no_public_address`.
+- `GET /connectors/{id}/picker?kind=image|audio` gives `{"files": [...], "truncated": bool}`. It calls `Connector::list` once, keeps the files of the asked kind, and gives for each file `path`, `size`, `media_type` and `address` from `Connector::public_url`. A file with no public address has `address` `null` and `reason` `no_public_address`.
 - The route follows the vault rule of `connector_feeds`: a connector with a secret and a locked vault gives the error of `ApiError::vault_locked`.
 - The route does not change a file on the host (ADR 0019 item 7).
 
 ### A Selection From A Host
 
 - A selection is a draft change of the UI: the field gets the address. No route is new for it.
-- After the draft save, the address gets its library row with `local` false, as ADR 0038 item 1 says. Use the code that does this today. When no code does it at a draft save, stop and report (see Escalation).
+- The address gets its library row with `local` false after the next write. The code that records the addresses of a written feed today does this (ADR 0038 items 1 and 3). Do not add a row at a draft save. The diff makes no upload for an address with no SHA-256.
 
 ### The Deletion Rule
 
@@ -50,14 +50,14 @@ These choices are fixed. Do not change them.
 
 ### The Facts Of An Audio File
 
-- No route is new. For a file of this release with `local` true, the release list gives `size` and `duration`, and the library gives the media type. For a file that only a host holds, the UI calls `POST /media/facts` (ADR 0023 item 5) for the size and the media type. Task 039c reads its duration.
+- No route is new. Both lists give `size` and `media_type`. The `media_type` comes from `remote::media_type_of_name`. Do not add a second map of media types. Task 039c reads the duration from the player metadata.
 
 ## Steps
 
 1. Add the kind function with core tests.
 2. Add the release list route with API tests.
 3. Add the host list route with API tests on a local test host.
-4. Confirm the library row of a host address after a draft save, with an API test.
+4. Confirm that the diff uploads no file for a host address, and that the write gives the address its library row, with an API test.
 5. Change `delete_unused_copies`, with API tests.
 6. Run the four checks.
 
@@ -77,7 +77,7 @@ Mechanical:
 - An API test lists a local test host with images, audio files, an XML file and a hidden folder. The list holds only the asked kind, and no file of the hidden folder.
 - An API test lists a host with more files than the limit of ADR 0019 item 3. `truncated` is true.
 - An API test lists a host whose connector gives no public address. Each file has `address` `null` and `reason` `no_public_address`.
-- An API test saves a draft with a host address in a track image. The library has a row for that address with `local` false, and the diff lists no upload.
+- An API test saves a draft with a host address in a track image. The diff lists no upload. After the write, the library has a row for that address with `local` false.
 - An API test replaces a track image and sends `delete_unused` with the address from before. The draft gets one deletion.
 - An API test gives the address from before to a second feed of the collection, then does the same replacement. The draft gets no deletion.
 - The four commit checks pass.
@@ -93,7 +93,6 @@ node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-- Stop and report when no code gives a draft address its library row at a draft save. ADR 0038 item 1 then needs a decision on when the row is made.
 - Stop and report when `Connector::list` of a connector cannot give a public address for each file.
 
 ## Prompt for lower-context coding model

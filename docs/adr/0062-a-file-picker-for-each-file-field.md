@@ -26,12 +26,12 @@ Each connector can list the files of its host, to a folder depth of 4 and a maxi
 1. Each field that holds the address of an image or of an audio file has the button "Choose…" adjacent to the address ([ADR 0037](0037-button-roles.md)). The fields are:
    - the cover of an album, a publisher feed and a playlist
    - the image of a track and of a live item
-   - the audio file of a track
+   - the audio file of a track, and the recording of a live item
 2. The button opens one sheet with three sources, in this sequence:
    - **This release.** The files of the release folder and of its hosts that the field accepts.
    - **Hosts.** The file tree of each connected host, from the list function of ADR 0019.
    - **This computer.** An upload of one file.
-3. The sheet shows only the files that the field accepts. An image field accepts the image formats of [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md) item 1. An audio field accepts the audio formats of that item. Studio selects a host file by its extension.
+3. The sheet shows only the files that the field accepts. An image field accepts the image formats of [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md) item 1. An audio field accepts the audio formats of that item. An upload to an audio field also accepts a WAV file, because [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md) converts it. Studio selects a host file by its extension.
 4. Each image in the sheet shows a small copy of the image, through the API as [ADR 0025](0025-studio-serves-cover-art.md) requires. Each audio file in "This release" shows its duration when the library records it.
 5. The address field stays. The user can still type or paste an address.
 
@@ -44,7 +44,7 @@ Each connector can list the files of its host, to a folder depth of 4 and a maxi
 
 8. "Hosts" shows one tree for each connected host. A host with no folders shows one flat list. The tree shows the limit of ADR 0019 item 3 when the limit stops the list.
 9. The user can select only a file that has a public address on its host. A file with no public address shows the reason and cannot be selected.
-10. A selection puts the public address into the field. Studio records the file for the release with no bytes in the library ([ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 1). Studio does not copy the file and does not upload it again.
+10. A selection puts the public address into the field. Studio does not copy the file and does not upload it again. After the next write, the library records the file for the release with no bytes. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 1 and 3 give this rule for each address of a written feed.
 
 ### This Computer
 
@@ -52,11 +52,11 @@ Each connector can list the files of its host, to a folder depth of 4 and a maxi
 12. An audio upload to a track is the replacement of ADR 0040. The track keeps its GUID and its values, and a lossless file gives an MP3 file and a FLAC file ([ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md)). The button "Replace the Audio File" goes away in the same change, because "Choose…" replaces it.
 13. A file that is not of the kind of the field goes away again, and the sheet shows an error. The button "Import Image" of the publisher page goes away in the same change.
 
-### An Audio File From A Host
+### An Audio File From This Release Or A Host
 
 14. When the user selects an audio file from "This release" or "Hosts", the track changes as ADR 0040 item 4 says. The track keeps its GUID, its title and its track number. The selected file is the one enclosure, so the track gets no alternative enclosure with an audio media type.
-15. When the library holds the bytes of the file, Studio reads its size, media type and duration, as for an import.
-16. When only a host holds the file, Studio reads the size and the media type with the request of [ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 5. Studio does not download the file. The player of item 26 then reads the metadata of the file through the API, with no press of the play button. Studio puts the duration of that metadata into the duration of the track. When the player cannot read the metadata, the duration field becomes empty and shows the notice "Type the duration of the new file".
+15. The size comes from the library or from the host list. The media type comes from the extension of the file. When the library does not know the size, Studio reads it with the request of [ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 5.
+16. Studio does not download the file. The library records no duration. Thus the player of item 26 reads the metadata of the file through the API, with no press of the play button. Studio puts the duration of that metadata into the duration of the track. When the player cannot read the metadata, the duration field becomes empty and shows the notice "Type the duration of the new file".
 
 ### The File From Before
 
@@ -107,7 +107,7 @@ Mechanical:
 
 - An API test lists the files of "This release" for an image field and for an audio field. Each list holds only the files of the release, and only the kinds that the field accepts.
 - An API test lists the tree of a test host. It holds only the accepted kinds, marks a file with no public address, and reports the limit when the limit stops the list.
-- An API test selects a host file for a track image. The draft refers to its public address. The library records the file for the release with no bytes, and the diff uploads no file.
+- An API test selects a host file for a track image. The draft refers to its public address, and the diff uploads no file. After the write, the library records the file for the release with no bytes.
 - An API test selects a host audio file for a track. The track keeps its GUID, its title and its track number, and gets the size, the media type and the duration of the file.
 - An API test replaces a track image with an upload. The draft gets a deletion of the image from before. A second test gives the image from before to a second feed. The draft then gets no deletion.
 - The Node tests refuse a file of a different kind for a field, and give the removal of that file (item 13).

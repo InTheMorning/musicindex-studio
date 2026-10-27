@@ -634,9 +634,63 @@ fn io_error(name: &str, error: impl fmt::Display) -> MediaError {
     MediaError::new(MediaErrorKind::Io, format!("{name}: {error}"))
 }
 
+/// The kind of a file that a file field accepts (ADR 0062 item 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileKind {
+    /// An image of the formats of ADR 0032 item 1.
+    Image,
+    /// An audio file of the formats of ADR 0032 item 1.
+    Audio,
+}
+
+impl FileKind {
+    /// Read the name that the API uses: `image` or `audio`.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "image" => Some(Self::Image),
+            "audio" => Some(Self::Audio),
+            _ => None,
+        }
+    }
+}
+
+/// The kind of the file at `path`, from its extension. The comparison
+/// ignores case. The result is `None` for any other extension (ADR 0032
+/// item 1, ADR 0062 item 3).
+#[must_use]
+pub fn kind_of_path(path: &str) -> Option<FileKind> {
+    let (_, extension) = path.rsplit_once('.')?;
+    match extension.to_ascii_lowercase().as_str() {
+        "jpg" | "jpeg" | "png" | "webp" | "gif" => Some(FileKind::Image),
+        "mp3" | "m4a" | "flac" | "ogg" | "opus" => Some(FileKind::Audio),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn kind_of_path_gives_the_kind_of_each_accepted_extension() {
+        for name in [
+            "a.jpg", "a.jpeg", "a.png", "a.webp", "a.gif", "A.JPG", "x/y.PnG",
+        ] {
+            assert_eq!(kind_of_path(name), Some(FileKind::Image), "{name}");
+        }
+        for name in [
+            "a.mp3", "a.m4a", "a.flac", "a.ogg", "a.opus", "A.MP3", "x/y.FlAc",
+        ] {
+            assert_eq!(kind_of_path(name), Some(FileKind::Audio), "{name}");
+        }
+    }
+
+    #[test]
+    fn kind_of_path_gives_no_kind_for_other_files() {
+        for name in ["a.xml", "a.txt", "a.wav", "noextension", "mp3"] {
+            assert_eq!(kind_of_path(name), None, "{name}");
+        }
+    }
 
     #[test]
     fn strip_leading_track_number_removes_the_number_and_the_separator() {

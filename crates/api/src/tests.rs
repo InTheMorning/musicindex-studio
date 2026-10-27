@@ -1314,6 +1314,27 @@ fn the_ui_names_no_other_server_and_sends_the_token() {
     assert!(app_js.contains("Authorization: `Bearer ${token}`"));
 }
 
+/// On 2026-10-27 the files `cover.js` and `picker.js` were in the UI folder
+/// and imported by `editor.js`, but `ui.rs` did not serve them. Each script
+/// of the UI folder must be served.
+#[test]
+fn each_ui_script_of_the_ui_folder_is_served() {
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui");
+    let served: Vec<&str> = crate::ui::paths().collect();
+    for entry in std::fs::read_dir(folder).unwrap() {
+        let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+        if std::path::Path::new(&name)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("js"))
+        {
+            assert!(
+                served.contains(&name.as_str()),
+                "ADR 0016: crates/api/ui/{name} is not served. Add it to FILES in crates/api/src/ui.rs."
+            );
+        }
+    }
+}
+
 #[test]
 fn each_ui_address_in_the_ui_files_is_served() {
     // On 2026-10-22 the lockup image was in app.js but not in the served
@@ -1868,6 +1889,7 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     let row = listed(&app, read_only_id).await;
     assert_eq!(row["draft_state"], "none");
     assert_eq!(row["image"], Value::Null);
+    assert_eq!(row["rss_image_url"], Value::Null);
     assert!(row["added_at"].as_i64().unwrap() > 0);
 
     // A new release has a draft and no hosted file.
@@ -1913,6 +1935,24 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     let row = listed(&app, id).await;
     assert_eq!(row["draft_state"], "changed");
     assert_eq!(row["image"], "https://music.example/cover.jpg");
+    assert_eq!(row["rss_image_url"], Value::Null);
+
+    // A feed in the DeMu form gives the address of its RSS image (ADR 0060).
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["image"] = Value::Null;
+    model["rss_image"] = json!({ "url": "https://music.example/demu.png" });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let row = listed(&app, id).await;
+    assert_eq!(row["image"], Value::Null);
+    assert_eq!(row["rss_image_url"], "https://music.example/demu.png");
 }
 
 /// The live file of the feed that `set_up` adds.
@@ -2238,6 +2278,186 @@ async fn an_api_request_with_no_token_to_images_gives_401() {
     let (status, body, _) = send(&app, request).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["error"]["code"], "token_required");
+}
+
+/// A request to the audio route. It carries no access token: the ticket is
+/// the access (ADR 0062 item 29).
+fn audio_request(ticket: &str, range: Option<&str>) -> Request<Body> {
+    let builder = Request::builder()
+        .uri(format!("/media/audio?ticket={ticket}"))
+        .header(header::HOST, HOST);
+    match range {
+        Some(range) => builder.header(header::RANGE, range),
+        None => builder,
+    }
+    .body(Body::empty())
+    .unwrap()
+}
+
+async fn ticket_for(app: &App, url: &str) -> String {
+    let (status, body) = call(
+        app,
+        "POST",
+        "/api/v1/media/tickets",
+        Some(json!({ "url": url })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let ticket = body["ticket"].as_str().unwrap().to_owned();
+    assert_eq!(ticket.len(), 32);
+    assert!(ticket.bytes().all(|b| b.is_ascii_hexdigit()));
+    ticket
+}
+
+#[tokio::test]
+async fn the_audio_route_gives_a_range_of_a_file_of_the_release_folder() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    assert!(bytes.len() > 100);
+    let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    let ticket = ticket_for(&app, file["url"].as_str().unwrap()).await;
+
+    let (status, headers, body) = send_raw(&app, audio_request(&ticket, Some("bytes=0-99"))).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body.len(), 100);
+    assert_eq!(body, bytes[..100]);
+    assert_eq!(
+        headers[header::CONTENT_RANGE],
+        format!("bytes 0-99/{}", bytes.len()).as_str()
+    );
+    assert_eq!(headers[header::CONTENT_TYPE], "audio/mpeg");
+    assert_eq!(headers[header::ACCEPT_RANGES], "bytes");
+
+    // A range with no end and a range of the last bytes.
+    let (status, _, body) = send_raw(&app, audio_request(&ticket, Some("bytes=100-"))).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, bytes[100..]);
+    let (status, _, body) = send_raw(&app, audio_request(&ticket, Some("bytes=-10"))).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, bytes[bytes.len() - 10..]);
+
+    // No range gives the whole file with 200.
+    let (status, headers, body) = send_raw(&app, audio_request(&ticket, None)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, bytes);
+    assert_eq!(
+        headers[header::CONTENT_LENGTH],
+        bytes.len().to_string().as_str()
+    );
+}
+
+#[tokio::test]
+async fn the_audio_route_gives_a_range_of_a_file_of_a_web_server() {
+    let body: Vec<u8> = (0..=255_u8).cycle().take(5000).collect();
+    let server = studio_core::testing::RangeServer::start(body.clone());
+    let app = app();
+    let ticket = ticket_for(&app, &server.url("/a.mp3")).await;
+
+    let (status, headers, bytes) =
+        send_raw(&app, audio_request(&ticket, Some("bytes=10-19"))).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(bytes, body[10..20]);
+    assert_eq!(headers[header::CONTENT_RANGE], "bytes 10-19/5000");
+    assert_eq!(headers[header::CONTENT_TYPE], "audio/mpeg");
+    assert_eq!(server.ranges(), vec![Some("bytes=10-19".to_owned())]);
+
+    let (status, _, bytes) = send_raw(&app, audio_request(&ticket, None)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, body);
+}
+
+#[tokio::test]
+async fn the_audio_route_gives_416_for_a_range_outside_the_file() {
+    let app = app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    let ticket = ticket_for(&app, file["url"].as_str().unwrap()).await;
+    for range in [
+        format!("bytes={}-", bytes.len()),
+        "bytes=99999999-".to_owned(),
+        "bytes=-0".to_owned(),
+        "bytes=5-1".to_owned(),
+        "bytes=0-1,5-6".to_owned(),
+        "lines=0-1".to_owned(),
+    ] {
+        let (status, headers, _) = send_raw(&app, audio_request(&ticket, Some(&range))).await;
+        assert_eq!(status, StatusCode::RANGE_NOT_SATISFIABLE, "{range}");
+        if range.starts_with("bytes=9") || range == format!("bytes={}-", bytes.len()) {
+            assert_eq!(
+                headers[header::CONTENT_RANGE],
+                format!("bytes */{}", bytes.len()).as_str()
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_audio_route_refuses_an_unknown_an_expired_and_a_missing_ticket() {
+    let app = app();
+    let (status, body, _) = send(&app, audio_request(&"0".repeat(32), None)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["code"], "ticket_not_valid");
+    let (status, _, _) = send(
+        &app,
+        Request::builder()
+            .uri("/media/audio")
+            .header(header::HOST, HOST)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // A ticket that is valid for no time is expired at its first use.
+    let data = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_ticket_lifetime(std::time::Duration::ZERO);
+    let expired = App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds: tempfile::tempdir().unwrap(),
+    };
+    let ticket = ticket_for(&expired, "https://music.example/a.mp3").await;
+    let (status, body, _) = send(&expired, audio_request(&ticket, None)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["code"], "ticket_not_valid");
+}
+
+#[tokio::test]
+async fn the_ticket_route_needs_the_token_and_a_correct_address() {
+    let app = app();
+    let no_token = Request::builder()
+        .method("POST")
+        .uri("/api/v1/media/tickets")
+        .header(header::HOST, HOST)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({ "url": "https://example.com/a.mp3" }).to_string(),
+        ))
+        .unwrap();
+    let (status, body, _) = send(&app, no_token).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"]["code"], "token_required");
+    for url in [
+        "",
+        "not-an-address",
+        "ftp://example.com/a.mp3",
+        "https://a b/c",
+    ] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            "/api/v1/media/tickets",
+            Some(json!({ "url": url })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{url}");
+        assert_eq!(body["error"]["code"], "invalid_address");
+    }
 }
 
 #[tokio::test]
@@ -7704,4 +7924,361 @@ async fn an_app_lists_the_shows_of_its_grants_while_the_user_vault_is_locked() {
     assert_eq!(status, StatusCode::OK, "{shows}");
     assert_eq!(shows.as_array().unwrap().len(), 1);
     assert_eq!(shows[0]["status"], "live");
+}
+
+// ---- The file sources of the picker (task 039a, ADR 0062) ----
+
+/// Give the app a release library, so that a feed has a release folder.
+async fn set_library(app: &App) {
+    let root = app.data.path().join("library");
+    let (status, _) = call(
+        app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": root.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+fn names(list: &Value, key: &str) -> Vec<String> {
+    let mut names: Vec<String> = list["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f[key].as_str().unwrap().to_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[tokio::test]
+async fn the_release_picker_lists_only_the_files_of_this_feed_of_the_asked_kind() {
+    let app = app();
+    set_library(&app).await;
+    let id = set_up(&app).await;
+    for (name, file) in [("image.png", "image.png"), ("tagged.mp3", "tagged.mp3")] {
+        let bytes = std::fs::read(media_path(file)).unwrap();
+        let (status, body) = upload(&app, id, name, bytes).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+    }
+    let (_, images) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/picker/release?kind=image"),
+        None,
+    )
+    .await;
+    assert_eq!(names(&images, "name"), vec!["image.png"], "{images}");
+    let image = &images["files"][0];
+    assert_eq!(image["local"], true);
+    assert_eq!(image["media_type"], "image/png");
+    assert_eq!(image["in_use"], false);
+    assert_eq!(image["address"], "https://music.example/album/image.png");
+    assert!(image["size"].as_u64().unwrap() > 0);
+    let (_, audio) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/picker/release?kind=audio"),
+        None,
+    )
+    .await;
+    assert_eq!(names(&audio, "name"), vec!["tagged.mp3"], "{audio}");
+    assert_eq!(audio["files"][0]["media_type"], "audio/mpeg");
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/picker/release?kind=video"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+}
+
+/// Fill a host folder: images, audio files, an XML file and a hidden
+/// folder.
+fn fill_host(root: &std::path::Path) {
+    for name in ["a.jpg", "b.PNG", "c.mp3", "d.flac", "feed.xml", "notes.txt"] {
+        std::fs::write(root.join(name), b"x").unwrap();
+    }
+    std::fs::create_dir_all(root.join("sub")).unwrap();
+    std::fs::write(root.join("sub/e.webp"), b"x").unwrap();
+    std::fs::create_dir_all(root.join(".hidden")).unwrap();
+    std::fs::write(root.join(".hidden/f.jpg"), b"x").unwrap();
+}
+
+#[tokio::test]
+async fn the_host_picker_lists_only_the_asked_kind_and_no_hidden_folder() {
+    let app = app();
+    let host = tempfile::tempdir().unwrap();
+    fill_host(host.path());
+    let id = add_host(&app, "Files", host.path(), "https://files.example").await;
+    let (status, images) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/connectors/{id}/picker?kind=image"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{images}");
+    assert_eq!(names(&images, "path"), vec!["a.jpg", "b.PNG", "sub/e.webp"]);
+    assert_eq!(images["truncated"], false);
+    let first = images["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "a.jpg")
+        .unwrap();
+    assert_eq!(first["address"], "https://files.example/a.jpg");
+    assert_eq!(first["size"], 1);
+    assert_eq!(first["media_type"], "image/jpeg");
+    let png = images["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "b.PNG")
+        .unwrap();
+    assert_eq!(png["media_type"], "image/png");
+    let (_, audio) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/connectors/{id}/picker?kind=audio"),
+        None,
+    )
+    .await;
+    assert_eq!(names(&audio, "path"), vec!["c.mp3", "d.flac"]);
+    let mp3 = audio["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "c.mp3")
+        .unwrap();
+    assert_eq!(mp3["media_type"], "audio/mpeg");
+}
+
+#[tokio::test]
+async fn the_host_picker_is_truncated_at_the_limit_of_adr_0019() {
+    let app = app();
+    let host = tempfile::tempdir().unwrap();
+    for n in 0..studio_core::connector::LIST_MAX_FILES + 5 {
+        std::fs::write(host.path().join(format!("{n:05}.jpg")), b"x").unwrap();
+    }
+    let id = add_host(&app, "Files", host.path(), "https://files.example").await;
+    let (status, images) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/connectors/{id}/picker?kind=image"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(images["truncated"], true, "truncated");
+    assert_eq!(
+        images["files"].as_array().unwrap().len(),
+        studio_core::connector::LIST_MAX_FILES
+    );
+}
+
+#[tokio::test]
+async fn a_host_with_no_public_address_gives_null_addresses_with_a_reason() {
+    let app = app();
+    let host = tempfile::tempdir().unwrap();
+    fill_host(host.path());
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Private", "root": host.path().to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{connector}");
+    let id = connector["id"].as_i64().unwrap();
+    let (_, images) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/connectors/{id}/picker?kind=image"),
+        None,
+    )
+    .await;
+    let files = images["files"].as_array().unwrap();
+    assert_eq!(files.len(), 3, "{images}");
+    for file in files {
+        assert_eq!(file["address"], Value::Null, "{file}");
+        assert_eq!(file["reason"], "no_public_address", "{file}");
+    }
+}
+
+/// A host address in a track image gives a diff with no upload. After the
+/// write, the library has a row for the address with `local` false (ADR
+/// 0038 items 1 and 3, ADR 0062 item 10).
+#[tokio::test]
+async fn a_host_address_in_the_draft_uploads_nothing_and_gets_a_remote_row_after_the_write() {
+    let app = app();
+    set_library(&app).await;
+    let id = set_up(&app).await;
+    // The first read gives the feed its release folder (ADR 0038 item 4).
+    let (status, _) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let address = "https://other.example/art/cover.jpg";
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["image"] = json!(address);
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let uploads = diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|op| op["kind"] == "upload")
+        .count();
+    assert_eq!(uploads, 0, "{diff}");
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    let row = files["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["source_url"] == address)
+        .unwrap_or_else(|| panic!("no library row for the address: {files}"));
+    assert_eq!(row["local"], false, "{row}");
+}
+
+/// Replace the image of a track and send `delete_unused` with the address
+/// from before. When `shared` is true, a second feed of the collection
+/// uses the address from before in its draft or in its live file. Gives
+/// the number of deletions in the diff.
+async fn replace_image_and_delete_unused(shared: bool, in_draft: bool) -> usize {
+    let app = app();
+    set_library(&app).await;
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("image.png")).unwrap();
+    let (status, first) = upload(&app, id, "image.png", bytes).await;
+    assert_eq!(status, StatusCode::CREATED, "{first}");
+    let before = first["url"].as_str().unwrap().to_owned();
+
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["image"] = json!(before);
+    call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+
+    if shared {
+        // A second feed of the collection uses the address from before.
+        let second = FEED.replace("g-1", "g-2").replace(
+            "<item><guid>t-1</guid>",
+            &format!("<item><guid>t-1</guid><itunes:image href=\"{before}\"/>"),
+        );
+        let second = second.replace(
+            "<rss ",
+            "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" ",
+        );
+        std::fs::write(app.feeds.path().join("second.xml"), second).unwrap();
+        let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+        let connector = connectors[0]["id"].clone();
+        let (status, feed) = call(
+            &app,
+            "POST",
+            "/api/v1/feeds",
+            Some(json!({ "connector_id": connector, "path": "second.xml" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{feed}");
+        // The first read gives the second feed its release folder with
+        // its live file (ADR 0038 item 4).
+        let other = feed["id"].as_i64().unwrap();
+        let (status, _) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{other}/refresh"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        if in_draft {
+            // The live file of the second feed has no image. Its draft has.
+            let other = feed["id"].as_i64().unwrap();
+            let other_path = format!("/api/v1/feeds/{other}/draft");
+            let (_, other_draft) = call(&app, "GET", &other_path, None).await;
+            let mut other_model = other_draft["model"].clone();
+            other_model["items"][0]["image"] = json!(before);
+            call(
+                &app,
+                "PUT",
+                &other_path,
+                Some(json!({ "revision": other_draft["revision"], "model": other_model })),
+            )
+            .await;
+        }
+    }
+
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["image"] = json!("https://other.example/new.png");
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "delete_unused", "urls": [before] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|op| op["kind"] == "delete")
+        .count()
+}
+
+#[tokio::test]
+async fn a_replaced_track_image_gets_one_deletion() {
+    assert_eq!(replace_image_and_delete_unused(false, false).await, 1);
+}
+
+#[tokio::test]
+async fn a_replaced_track_image_that_a_second_feed_uses_in_its_live_file_gets_no_deletion() {
+    assert_eq!(replace_image_and_delete_unused(true, false).await, 0);
+}
+
+#[tokio::test]
+async fn a_replaced_track_image_that_a_second_feed_uses_in_its_draft_gets_no_deletion() {
+    assert_eq!(replace_image_and_delete_unused(true, true).await, 0);
 }

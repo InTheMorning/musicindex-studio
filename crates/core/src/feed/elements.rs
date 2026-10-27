@@ -1,6 +1,6 @@
 //! Elements that hold only attributes, or text and attributes.
 
-use super::sync::{Modeled, Names};
+use super::sync::{Children, Modeled, Names, model_text, read_text, set_model_text};
 use crate::xml::{Element, Ns};
 
 /// Define a struct for an element with optional text and attributes.
@@ -29,14 +29,14 @@ macro_rules! element_type {
 
             fn read(element: &Element) -> Self {
                 Self {
-                    $($text: element.text(),)?
+                    $($text: model_text(element),)?
                     $($field: element.attribute($attr).map(str::to_owned),)*
                 }
             }
 
             fn apply(&self, element: &mut Element, _: &mut Names) {
                 $(element.set_attribute($attr, self.$field.as_deref());)*
-                $(element.set_text(&self.$text);)?
+                $(set_model_text(element, &self.$text);)?
             }
         }
     };
@@ -230,5 +230,43 @@ element_type! {
         uri => "uri",
         /// `protocol`, such as `socket.io`.
         protocol => "protocol",
+    }
+}
+
+/// The channel `image` of RSS 2.0, with no namespace (ADR 0060 item 1).
+///
+/// The `DeMu` template holds the cover of the album here. A child of `image`
+/// that this type does not model stays in the tree.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct RssImage {
+    /// `url`: the address of the image.
+    pub url: Option<String>,
+    /// `title`.
+    pub title: Option<String>,
+    /// `link`.
+    pub link: Option<String>,
+    /// `description`.
+    pub description: Option<String>,
+}
+
+impl Modeled for RssImage {
+    const NS: Ns = Ns::None;
+    const NAME: &'static str = "image";
+
+    fn read(element: &Element) -> Self {
+        Self {
+            url: read_text(element, Ns::None, "url"),
+            title: read_text(element, Ns::None, "title"),
+            link: read_text(element, Ns::None, "link"),
+            description: read_text(element, Ns::None, "description"),
+        }
+    }
+
+    fn apply(&self, element: &mut Element, names: &mut Names) {
+        let mut c = Children::new(element, &[], names, None);
+        c.text(Ns::None, "url", self.url.as_ref());
+        c.text(Ns::None, "title", self.title.as_ref());
+        c.text(Ns::None, "link", self.link.as_ref());
+        c.text(Ns::None, "description", self.description.as_ref());
     }
 }

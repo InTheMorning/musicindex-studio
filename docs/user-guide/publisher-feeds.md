@@ -24,7 +24,7 @@ A publisher feed has two pages: **Publisher** and **Files**.
 
 The page **Publisher** has these sections:
 
-- **Publisher**. Fields: **Title**, **Name**, **Description**, **Cover image address** and **Website**. Select **Import Image** to use an image file from your computer.
+- **Publisher**. Fields: **Title**, **Name**, **Description**, **Cover image address** and **Website**. Select **Choose…** to pick an image file. See [Edit the album details](edit-album.md).
 - **Role**. Select **Artist** or **Label**. Studio can find the role in the feed. Then it shows "Studio found this role in the feed."
 - **Releases**. The releases of this publisher.
 

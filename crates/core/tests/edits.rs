@@ -329,3 +329,146 @@ fn a_channel_element_absent_from_the_hosted_file_keeps_its_old_position() {
     let after = doc.write();
     assert!(after.contains("<podcast:license>cc-by-4.0</podcast:license>\n      <item>"));
 }
+
+// Task 038: the space around text (ADR 0061) and the channel image (ADR 0060).
+
+const SPACED: &str = "<rss version=\"2.0\">\n <channel>\n  <title>T</title>\n  <description>\n    testing stophammer\n  </description>\n  <link>  </link>\n </channel>\n</rss>\n";
+
+const SPACED_CDATA: &str = "<rss version=\"2.0\">\n <channel>\n  <title>T</title>\n  <description><![CDATA[\n    testing <b>x</b>\n  ]]></description>\n </channel>\n</rss>\n";
+
+#[test]
+fn a_description_with_space_at_its_ends_reads_without_that_space() {
+    let feed = Feed::read(&Document::parse(SPACED).unwrap()).unwrap();
+    assert_eq!(feed.description.as_deref(), Some("testing stophammer"));
+}
+
+#[test]
+fn a_write_with_no_edit_keeps_the_bytes_of_a_value_with_space() {
+    assert_eq!(edit(SPACED, |_| {}), SPACED);
+    assert_eq!(edit(SPACED_CDATA, |_| {}), SPACED_CDATA);
+}
+
+#[test]
+fn a_new_value_is_written_with_no_added_space() {
+    let after = edit(SPACED, |f| f.description = Some("new text".into()));
+    assert!(
+        after.contains("<description>new text</description>"),
+        "{after}"
+    );
+}
+
+#[test]
+fn a_new_value_with_space_at_its_ends_is_written_without_it() {
+    let after = edit(SPACED, |f| {
+        f.description = Some(" \t\r\nnew text \n".into());
+    });
+    assert!(
+        after.contains("<description>new text</description>"),
+        "{after}"
+    );
+}
+
+#[test]
+fn a_value_with_space_that_equals_the_source_after_removal_keeps_the_source_bytes() {
+    let after = edit(SPACED, |f| {
+        f.description = Some("  testing stophammer\n".into());
+    });
+    assert_eq!(after, SPACED);
+    let after = edit(SPACED_CDATA, |f| {
+        f.description = Some("\ntesting <b>x</b> ".into());
+    });
+    assert_eq!(after, SPACED_CDATA);
+}
+
+#[test]
+fn an_element_with_only_space_reads_as_an_empty_value() {
+    let feed = Feed::read(&Document::parse(SPACED).unwrap()).unwrap();
+    assert_eq!(feed.link.as_deref(), Some(""));
+    assert_eq!(edit(SPACED, |f| f.link = Some(String::new())), SPACED);
+}
+
+#[test]
+fn a_cdata_section_stays_a_cdata_section_after_an_edit() {
+    let feed = Feed::read(&Document::parse(SPACED_CDATA).unwrap()).unwrap();
+    assert_eq!(feed.description.as_deref(), Some("testing <b>x</b>"));
+    let after = edit(SPACED_CDATA, |f| {
+        f.description = Some(" other <i>y</i> ".into());
+    });
+    assert!(
+        after.contains("<description><![CDATA[other <i>y</i>]]></description>"),
+        "{after}"
+    );
+}
+
+const DEMU_IMAGE: &str = "<rss version=\"2.0\">\n  <channel>\n    <title>T</title>\n    <language>en</language>\n    <image>\n      <url>https://m.example/a.jpg</url>\n      <title>T</title>\n      <link>https://m.example</link>\n      <description>Art</description>\n      <width>144</width>\n    </image>\n  </channel>\n</rss>\n";
+
+#[test]
+fn the_demu_feed_template_gives_rss_image_url_and_no_itunes_image() {
+    let bytes = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/corpus/demu-feed-template.xml"
+    ))
+    .unwrap();
+    let feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
+    let image = feed.rss_image.expect("the template has an image");
+    assert_eq!(
+        image.url.as_deref(),
+        Some("https://pbs.twimg.com/profile_images/1566110862087278593/puLJTmxF_400x400.jpg")
+    );
+    assert_eq!(image.title.as_deref(), Some("My Demu Album"));
+    assert_eq!(feed.image, None);
+}
+
+#[test]
+fn a_changed_rss_image_url_changes_one_line_and_adds_no_itunes_image() {
+    let after = edit(DEMU_IMAGE, |f| {
+        f.rss_image.as_mut().unwrap().url = Some("https://m.example/b.png".into());
+    });
+    let changed = changed_lines(DEMU_IMAGE, &after);
+    assert_eq!(changed.len(), 1, "{changed:?}");
+    assert!(changed[0].contains("https://m.example/b.png"));
+    assert!(!after.contains("itunes:image"));
+    assert!(after.contains("<width>144</width>"));
+}
+
+#[test]
+fn a_feed_with_no_edit_keeps_the_bytes_of_its_rss_image() {
+    assert_eq!(edit(DEMU_IMAGE, |_| {}), DEMU_IMAGE);
+}
+
+#[test]
+fn removing_rss_image_and_image_leaves_no_cover_tag() {
+    let both = "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\">\n  <channel>\n    <title>T</title>\n    <image>\n      <url>https://m.example/a.jpg</url>\n    </image>\n    <itunes:image href=\"https://m.example/b.jpg\"/>\n  </channel>\n</rss>\n";
+    let feed = Feed::read(&Document::parse(both).unwrap()).unwrap();
+    assert_eq!(feed.image.as_deref(), Some("https://m.example/b.jpg"));
+    let after = edit(both, |f| {
+        f.rss_image = None;
+        f.image = None;
+    });
+    assert!(!after.contains("<image"), "{after}");
+    assert!(!after.contains("itunes:image"), "{after}");
+}
+
+#[test]
+fn feed_addresses_gives_the_url_of_rss_image() {
+    let feed = Feed::read(&Document::parse(DEMU_IMAGE).unwrap()).unwrap();
+    assert_eq!(
+        studio_core::pipeline::feed_addresses(&feed),
+        ["https://m.example/a.jpg"]
+    );
+}
+
+#[test]
+fn a_bad_rss_image_url_is_a_bad_address_with_its_model_path() {
+    let feed = edit_feed(DEMU_IMAGE, |f| {
+        f.rss_image.as_mut().unwrap().url = Some("m.example/a.jpg".into());
+    });
+    let fields: Vec<_> = feed.bad_addresses().into_iter().map(|b| b.field).collect();
+    assert_eq!(fields, ["rss_image/url"]);
+}
+
+fn edit_feed(source: &str, change: impl FnOnce(&mut Feed)) -> Feed {
+    let mut feed = Feed::read(&Document::parse(source).unwrap()).unwrap();
+    change(&mut feed);
+    feed
+}

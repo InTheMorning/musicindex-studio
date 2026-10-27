@@ -19,7 +19,7 @@ use std::fmt;
 
 pub use elements::{
     AtomLink, ContentLink, Enclosure, Funding, Image, License, LiveValue, Locked, Person,
-    Recipient, RemoteItem, Source, Transcript, Txt,
+    Recipient, RemoteItem, RssImage, Source, Transcript, Txt,
 };
 pub use enclosures::AlternateEnclosure;
 pub use links::{BadAddress, is_web_address};
@@ -61,6 +61,9 @@ pub struct Feed {
     pub link: Option<String>,
     /// `language`.
     pub language: Option<String>,
+    /// The channel `image` of RSS 2.0 (ADR 0060). The core has no cover
+    /// rule: it models this tag and `itunes:image` as two fields.
+    pub rss_image: Option<RssImage>,
     /// `podcast:guid`. It does not change after the feed has one (ADR 0008).
     pub podcast_guid: Option<String>,
     /// `podcast:medium`, such as `music`, `publisher` or `musicL`.
@@ -113,6 +116,7 @@ impl Feed {
             description: read_text(channel, Ns::None, "description"),
             link: read_text(channel, Ns::None, "link"),
             language: read_text(channel, Ns::None, "language"),
+            rss_image: read_one(channel),
             podcast_guid: read_text(channel, Ns::Podcast, "guid"),
             medium: read_text(channel, Ns::Podcast, "medium"),
             locked: read_one(channel),
@@ -165,6 +169,7 @@ impl Feed {
         c.text(Ns::None, "description", self.description.as_ref());
         c.text(Ns::None, "link", self.link.as_ref());
         c.text(Ns::None, "language", self.language.as_ref());
+        c.one(self.rss_image.as_ref());
         c.text(Ns::Podcast, "guid", self.podcast_guid.as_ref());
         c.text(Ns::Podcast, "medium", self.medium.as_ref());
         c.one(self.locked.as_ref());

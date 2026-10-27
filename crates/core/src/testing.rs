@@ -234,11 +234,14 @@ impl RangeServer {
                     }
                     header.clear();
                 }
-                let start = range
+                // `bytes=a-` and `bytes=a-b`.
+                let (start, last) = range
                     .as_deref()
                     .and_then(|r| r.strip_prefix("bytes="))
-                    .and_then(|r| r.strip_suffix('-'))
-                    .and_then(|r| r.parse::<usize>().ok());
+                    .and_then(|r| r.split_once('-'))
+                    .map_or((None, None), |(a, b)| {
+                        (a.parse::<usize>().ok(), b.parse::<usize>().ok())
+                    });
                 let cut = {
                     let mut state = shared.lock().expect("the state");
                     state.ranges.push(range);
@@ -246,21 +249,22 @@ impl RangeServer {
                 };
                 let total = body.len();
                 let first = start.unwrap_or(0).min(total);
+                let stop = last.map_or(total, |last| (last + 1).min(total)).max(first);
                 let mut head = if start.is_some() {
                     format!(
                         "HTTP/1.1 206 X\r\nContent-Range: bytes {first}-{}/{total}\r\n",
-                        total.saturating_sub(1)
+                        stop.saturating_sub(1)
                     )
                 } else {
                     "HTTP/1.1 200 X\r\n".to_owned()
                 };
                 let _ = write!(
                     head,
-                    "Content-Length: {}\r\nConnection: close\r\n\r\n",
-                    total - first
+                    "Content-Type: audio/mpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    stop - first
                 );
                 let mut bytes = head.into_bytes();
-                let end = cut.map_or(total, |n| (first + n).min(total));
+                let end = cut.map_or(stop, |n| (first + n).min(stop));
                 bytes.extend_from_slice(&body[first..end]);
                 let _ = stream.write_all(&bytes);
             }

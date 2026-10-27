@@ -239,6 +239,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Task 036 review checklist, 2026-10-26](reviews/2026-10-26-task-036-review-checklist.md)
 - [Phase 12 human tests, 2026-10-26](reviews/2026-10-26-phase-12-human-tests.md)
 - [Distribution documentation review, 2026-10-26](reviews/2026-10-26-distribution-review.md)
+- [Tasks 038 and 039 review checklist, 2026-10-27](reviews/2026-10-27-tasks-038-039-review-checklist.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

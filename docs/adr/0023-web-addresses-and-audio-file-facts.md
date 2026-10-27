@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Amended: 2026-10-27 by operator decision. [ADR 0060](0060-the-album-cover-keeps-the-form-of-its-feed.md) item 1 adds the `url` of the channel RSS `<image>` to the address fields of item 1.
 
 ## Context
 

@@ -3,7 +3,7 @@
 Parent: [task 039](studio-v1-task-039-file-picker.md). Decisions: [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 1 to 5, 7, 9 to 13, 17, 20 to 22, [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md), [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md), [ADR 0037](../adr/0037-button-roles.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md).
 Sequence: the second packet of task 039. It depends on 039a.
 
-Status: Ready - 2026-10-27.
+Status: Implemented - 2026-10-27. The four commit checks are Green. The visual check is open. The [review checklist](../reviews/2026-10-27-tasks-038-039-review-checklist.md) records the review.
 
 ## Goal
 
@@ -38,7 +38,7 @@ These choices are fixed. Do not change them.
 - "This release" calls `GET /feeds/{id}/picker/release`. "Hosts" calls `GET /connectors/{id}/picker` for the host that the user opens. "This computer" uses `sendInParts` and a file input with the accept list of the kind.
 - Each image shows its small copy through `ImageThumb`. A file that `canSelect` refuses shows its reason, and its row is disabled.
 - A selection or an upload gives the address to the field and closes the sheet. A cover field uses `withCover` of `cover.js`. Then the UI sends `delete_unused` with `replacedAddresses`.
-- An audio field uses the change of the audio of a track that the replacement of ADR 0040 uses today (`withNewAudio` or its successor). The facts come from the release list, from `POST /media/facts`, or from the upload.
+- An audio field uses the change of the audio of a track that the replacement of ADR 0040 uses today (`withNewAudio` or its successor). The size and the media type come from the release list, from the host list, or from the upload. The duration of a selection comes from task 039c.
 - An upload that `acceptsFile` refuses is removed with `DELETE /feeds/{id}/files?file=` and shows "Select an image file" or "Select an audio file".
 
 ### The Field
@@ -93,7 +93,7 @@ node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-- Stop and report when the replacement of the audio cannot take facts from the release list or from `POST /media/facts`. Do not change its behavior for an upload.
+- Stop and report when the replacement of the audio cannot take facts from the two picker lists. Do not change its behavior for an upload.
 
 ## Prompt for lower-context coding model
 

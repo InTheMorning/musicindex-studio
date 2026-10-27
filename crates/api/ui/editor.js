@@ -2,7 +2,7 @@
 // items 5 to 10) and its toolbar and sheets (task 014b, ADR 0029). The UI
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
-import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
+import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
@@ -13,6 +13,9 @@ import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
+import { coverOf, coverConflict, withCover } from './cover.js';
+import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
+import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -28,9 +31,10 @@ const BAD_ADDRESS = 'This is not a full web address. Start it with https://.';
 
 // A text field. An address field gives its model path in `address`. The
 // field then shows red text when the core finds the address not correct
-// (ADR 0023 item 4).
+// (ADR 0023 item 4). `address` can be a list of model paths.
 export function TextField({ id, label, value, onChange, required = false, address, bad = [], ...rest }) {
-  const error = address && bad.some((b) => b.field === address) ? BAD_ADDRESS : null;
+  const paths = [].concat(address || []);
+  const error = bad.some((b) => paths.includes(b.field)) ? BAD_ADDRESS : null;
   return html`<${Field} id=${id} label=${label} value=${value ?? ''} error=${error} ...${rest}
     onInput=${(e) => onChange(required ? e.target.value : optional(e.target.value))} />`;
 }
@@ -166,16 +170,121 @@ function LicenseFields({ license, onChange, bad }) {
 
 // ---- The audio file ----
 
-function Enclosure({ id, path, enclosure, onChange, bad }) {
+function Enclosure({ id, path, enclosure, onChange, bad, pick }) {
   const value = enclosure || { url: null, length: null, media_type: null };
   // An enclosure with no field is no enclosure.
   const change = (name) => (text) => {
     const next = set(value, name, text);
     onChange(next.url === null && next.length === null && next.media_type === null ? null : next);
   };
-  return html`<${TextField} id=${`${id}-url`} label="Audio file address" type="url" address=${`${path}enclosure/url`} bad=${bad} value=${value.url} onChange=${change('url')} />
-    <${TextField} id=${`${id}-length`} label="Audio file size in bytes" inputmode="numeric" value=${value.length} onChange=${change('length')} />
-    <${TextField} id=${`${id}-type`} label="Audio file type" hint="For example audio/mpeg." value=${value.media_type} onChange=${change('media_type')} />`;
+  // "Properties" opens by itself when a value is empty or has an error. It
+  // stays open until the user closes it (ADR 0062 items 24 and 25).
+  const errors = ['length', 'media_type'].filter((name) => (bad || []).some((b) => b.field === `${path}enclosure/${name}`));
+  const mustOpen = propertiesOpen(enclosure, errors);
+  const [opened, setOpened] = useState(mustOpen);
+  useEffect(() => { if (mustOpen) setOpened(true); }, [mustOpen]);
+  return html`<${TextField} id=${`${id}-url`} label="Audio file address" type="url" address=${`${path}enclosure/url`} bad=${bad} value=${value.url} onChange=${change('url')}
+      rootProps=${pick.rootProps}><${ChooseFile} pick=${pick} /><//>
+    <${AudioPlayer} id=${id} url=${value.url} pick=${pick} />
+    <details class="disclosure" open=${opened} onToggle=${(e) => setOpened(e.currentTarget.open)}>
+      <summary class="link-row"><span class="label">Properties</span>
+        <span class="summary">${propertiesSummary(enclosure)}</span></summary>
+      <div class="form">
+        <${TextField} id=${`${id}-length`} label="Audio file size in bytes" inputmode="numeric" value=${value.length} onChange=${change('length')} />
+        <${TextField} id=${`${id}-type`} label="Audio file type" hint="For example audio/mpeg." value=${value.media_type} onChange=${change('media_type')} />
+      </div>
+    </details>`;
+}
+
+// The player of an audio file (ADR 0062 items 26 to 29). It plays through
+// Studio with a media ticket and reads no audio before the user presses
+// play. The one exception is the read of the metadata after a selection that
+// `needsMetadataRead` marks. The element then reads the duration, and
+// `pick.metadataDone` puts it in the track.
+const TICKET_RENEW_MS = 50 * 60 * 1000;
+const PLAYER_ERROR = 'Studio cannot play this file.';
+
+function AudioPlayer({ id, url, pick }) {
+  const audio = useRef(null);
+  // The address that the element holds, with the time of its ticket.
+  const held = useRef(null);
+  // The position to restore after a new ticket.
+  const resume = useRef(0);
+  const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [length, setLength] = useState(NaN);
+  const [error, setError] = useState(null);
+  const usable = typeof url === 'string' && /^https?:\/\/\S+$/i.test(url);
+  const reading = Boolean(pick.metadataFor) && pick.metadataFor === url;
+  // A ticket is for one address, so a new address needs a new ticket.
+  const load = async () => {
+    const { ticket } = await api('/media/tickets', { method: 'POST', body: { url } });
+    audio.current.preload = reading ? 'metadata' : 'none';
+    audio.current.src = `/media/audio?ticket=${ticket}`;
+    held.current = { url, at: Date.now() };
+  };
+  useEffect(() => {
+    const element = audio.current;
+    element.pause();
+    element.removeAttribute('src');
+    element.load();
+    held.current = null;
+    resume.current = 0;
+    setPlaying(false);
+    setPosition(0);
+    setLength(NaN);
+    setError(null);
+  }, [url]);
+  useEffect(() => {
+    if (!reading || !usable) return;
+    load().catch(() => pick.metadataDone(null));
+  }, [url, pick.metadataFor]);
+  const toggle = async () => {
+    const element = audio.current;
+    if (!element.paused) { element.pause(); return; }
+    setError(null);
+    const fresh = held.current && held.current.url === url && Date.now() - held.current.at < TICKET_RENEW_MS;
+    try {
+      if (!fresh) {
+        resume.current = held.current && held.current.url === url ? element.currentTime : 0;
+        await load();
+      }
+      await element.play();
+    } catch (e) {
+      setError(PLAYER_ERROR);
+    }
+  };
+  const onLoadedMetadata = (e) => {
+    const element = e.currentTarget;
+    setLength(element.duration);
+    if (resume.current > 0) { element.currentTime = resume.current; resume.current = 0; }
+    if (reading) pick.metadataDone(durationFromSeconds(element.duration));
+  };
+  const onError = (e) => {
+    // An element with no address gives no error of its own.
+    if (!e.currentTarget.getAttribute('src')) return;
+    setPlaying(false);
+    setError(PLAYER_ERROR);
+    if (reading) pick.metadataDone(null);
+  };
+  const known = Number.isFinite(length) && length > 0;
+  return html`<div class="field">
+    <label for=${`${id}-play`}>Player</label>
+    <div class="field-body">
+      <div class="player">
+        <button id=${`${id}-play`} class="button icon-button" type="button" disabled=${!usable}
+          aria-label=${playing ? 'Pause' : 'Play'} onClick=${toggle}>${playing ? '❚❚' : '▶'}</button>
+        <input class="player-bar" type="range" min="0" max=${known ? length : 0} step="any" value=${position}
+          aria-label="Position" disabled=${!known}
+          onInput=${(e) => { audio.current.currentTime = Number(e.currentTarget.value); setPosition(Number(e.currentTarget.value)); }} />
+        <span class="player-time">${clockText(position)} / ${clockText(length)}</span>
+      </div>
+      ${error && html`<span class="field-error" role="alert">${error}</span>`}
+      <audio ref=${audio} preload="none" onLoadedMetadata=${onLoadedMetadata} onDurationChange=${(e) => setLength(e.currentTarget.duration)}
+        onTimeUpdate=${(e) => setPosition(e.currentTarget.currentTime)} onPlay=${() => setPlaying(true)} onPause=${() => setPlaying(false)}
+        onEnded=${() => setPlaying(false)} onError=${onError}></audio>
+    </div>
+  </div>`;
 }
 
 // The alternate enclosures of a track, each as one summary line with a
@@ -285,71 +394,256 @@ function AddTrackSheet({ open, onClose, onAdd }) {
 // The track with the facts of its new audio file. Only the enclosure, the
 // alternative enclosures with an audio type, and the duration change. The
 // GUID, the title and the track number stay (ADR 0040 items 4 and 5).
-function withNewAudio(item, facts) {
+// `readsMetadata` is true after a selection that `needsMetadataRead` marks.
+function withNewAudio(item, facts, readsMetadata) {
   const isAudio = (enc) => (enc.media_type || '').startsWith('audio/');
   return {
     ...item,
-    enclosure: { url: facts.url, length: String(facts.size), media_type: facts.media_type },
+    enclosure: { url: facts.url, length: facts.size == null ? '' : String(facts.size), media_type: facts.media_type },
     alternate_enclosures: [
       ...item.alternate_enclosures.filter((enc) => !isAudio(enc)),
       ...withCids(alternateEnclosures(facts)),
     ],
-    duration: facts.duration || item.duration,
+    // A file that only the host holds has no duration yet. The player reads
+    // it from the metadata (ADR 0062 item 16), so the old duration goes.
+    duration: readsMetadata ? null : facts.duration || item.duration,
   };
 }
 
-// Each address of the audio of a track: its enclosure and the sources of
-// its alternative enclosures with an audio type.
-function audioAddresses(item) {
-  const found = item.enclosure && item.enclosure.url ? [item.enclosure.url] : [];
-  for (const enc of item.alternate_enclosures) {
-    if (!(enc.media_type || '').startsWith('audio/')) continue;
-    for (const source of enc.sources) if (source.uri) found.push(source.uri);
-  }
-  return found;
+// ---- The file picker (ADR 0062) ----
+// Each image field and each audio field has "Choose…", a sheet with three
+// sources, and a drop. `picker.js` has the rules. The code here shows the
+// sheet and does the requests. `AlbumEditor` gives the context.
+
+const PickerContext = createContext(null);
+
+// The name of the thing in each file field, for the label of its button.
+const FIELD_NOUN = {
+  cover: 'the cover image',
+  'track-image': 'the track image',
+  'live-image': 'the image of the show',
+  'track-audio': 'the audio file',
+  recording: 'the recording',
+};
+
+// Does the drag carry a file?
+function hasFiles(event) {
+  return Array.from((event.dataTransfer && event.dataTransfer.types) || []).includes('Files');
 }
 
-// "Replace the Audio File" (ADR 0040 items 1 to 6). The new file goes into
-// the release folder, with the hash name when a different file has its
-// name. The draft then gets the new addresses, and each copy from before
-// that the draft does not use gets a deletion.
-function ReplaceAudio({ feedId, item, change, draft, onOpsChanged, hadAudio = true, label = 'Replace the Audio File', hint }) {
+// The state and the actions of one file field. `subject` is the channel
+// model of a cover field, else the item. It gives the addresses from before.
+// `apply(address, facts, source)` puts the new file in the model. A selection
+// or an upload calls it, and then the UI sends `delete_unused` for the files
+// from before (ADR 0062 items 7, 10, 11 and 17). `source` is `release`,
+// `hosts` or `computer`. After a selection that `needsMetadataRead` marks, the
+// player reads the duration, and `onDuration(duration)` puts it in the model
+// (ADR 0062 item 16).
+function useFilePick(field, subject, apply, onDuration) {
+  const { feedId, draft, onOpsChanged } = useContext(PickerContext);
+  const kind = fieldKind(field);
   const { busy, error, run } = useAction();
-  const [done, setDone] = useState(false);
-  const inputId = `replace-${item._cid}`;
-  const replace = (file) => run(async () => {
-    setDone(false);
+  const [open, setOpen] = useState(false);
+  const [over, setOver] = useState(false);
+  const [dropError, setDropError] = useState(null);
+  const [sent, setSent] = useState(0);
+  const [size, setSize] = useState(0);
+  // The address whose metadata the player reads now, and the result of a
+  // read that did not give a duration.
+  const [metadataFor, setMetadataFor] = useState(null);
+  const [metadataFailed, setMetadataFailed] = useState(false);
+  const metadataDone = (duration) => {
+    setMetadataFor(null);
+    setMetadataFailed(!duration);
+    if (duration) onDuration(duration);
+  };
+  const finish = async (address, facts, source) => {
+    const before = replacedAddresses(field, subject, address);
+    apply(address, facts, source);
+    setMetadataFailed(false);
+    setMetadataFor(kind === 'audio' && needsMetadataRead(source) ? address : null);
     if (!(await draft.flush())) return;
-    const facts = await sendInParts(feedId, file, { replace: true });
-    if (facts.kind !== 'audio') {
-      if (!facts.on_host) {
-        api(`/feeds/${feedId}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});
-      }
-      throw Object.assign(new Error('Select an audio file.'), { code: 'not_audio' });
-    }
-    // The stream address of a show is not a file of the host. Only audio
-    // from before gives addresses for the deletion.
-    const before = hadAudio ? audioAddresses(item) : [];
-    change((i) => withNewAudio(i, facts));
-    if (!(await draft.flush())) return;
+    if (before.length === 0) return;
     await api(`/feeds/${feedId}/operations`, { method: 'POST', body: { op: 'delete_unused', urls: before } });
     onOpsChanged();
-    // The done text tells whether a file from before goes out.
-    setDone(before.length > 0 ? 'replaced' : 'added');
-  });
-  return html`<div class="import-pick">
-    <input id=${inputId} class="visually-hidden" type="file" disabled=${busy}
-      aria-describedby=${`${inputId}-hint`}
-      accept="audio/*,.wav,.flac,.m4a,.ogg,.opus"
-      onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) replace(file); }} />
-    <label for=${inputId} class="button action">${busy ? 'Replacing…' : label}</label>
-    <p class="hint" id=${`${inputId}-hint`} role="status">${done
-      ? (done === 'replaced'
-        ? 'Studio replaced the audio file. The review lists the deletion of the file from before.'
-        : 'Studio added the audio file. Open Review to write it.')
-      : (hint || 'The track keeps its GUID and its other values. Studio deletes the file from before on the host when you write.')}</p>
-    ${error && html`<p class="field-error" role="alert">${importErrorText(error)}</p>`}
-  </div>`;
+  };
+  // A file of the list. The sheet closes at once.
+  const choose = (file, source) => {
+    setOpen(false);
+    setDropError(null);
+    run(() => finish(file.address, selectedFacts(file), source));
+  };
+  // A file from this computer: the button of the sheet and the drop. A file
+  // of the wrong kind is removed again.
+  const upload = async (file) => {
+    setDropError(null);
+    setSent(0);
+    setSize(file.size);
+    const done = await run(async () => {
+      if (!(await draft.flush())) return false;
+      const facts = await sendInParts(feedId, file, { replace: kind === 'audio', onProgress: setSent });
+      if (!acceptsFile(field, facts)) {
+        if (!facts.on_host) {
+          api(`/feeds/${feedId}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});
+        }
+        throw Object.assign(new Error(wrongKindText(field)), { code: 'wrong_kind' });
+      }
+      await finish(facts.url, facts, 'computer');
+      return true;
+    });
+    if (done) setOpen(false);
+  };
+  const drop = (files) => {
+    const result = dropResult(field, files);
+    if (result.action === 'upload') upload(result.file);
+    else if (result.action === 'error') setDropError(result.text);
+  };
+  // The properties of the `.field` element of the address: the drop state
+  // and the drop (ADR 0062 items 20 and 21).
+  const rootProps = {
+    class: over ? 'field drop-over' : 'field',
+    onDragOver: (e) => { if (hasFiles(e) && !busy) { e.preventDefault(); if (!over) setOver(true); } },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); },
+    onDrop: (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setOver(false);
+      if (!busy) drop(Array.from(e.dataTransfer.files));
+    },
+  };
+  const errorText = dropError || (error ? importErrorText(error) : null);
+  return {
+    field, kind, noun: FIELD_NOUN[field], open, busy, over, sent, size, errorText, rootProps, choose, upload,
+    metadataFor, metadataFailed, metadataDone,
+    openSheet: () => { setDropError(null); setOpen(true); },
+    closeSheet: () => setOpen(false),
+  };
+}
+
+// The list of a picker source. A `null` path gives an empty list.
+function usePickerList(path) {
+  const empty = { loading: false, error: null, files: [], truncated: false };
+  const [state, setState] = useState(empty);
+  useEffect(() => {
+    if (!path) { setState(empty); return undefined; }
+    let current = true;
+    setState({ ...empty, loading: true });
+    api(path).then(
+      (result) => { if (current) setState({ ...empty, files: result.files, truncated: Boolean(result.truncated) }); },
+      (error) => { if (current) setState({ ...empty, error }); },
+    );
+    return () => { current = false; };
+  }, [path]);
+  return state;
+}
+
+// One file of a list. A file with no public address shows its reason, and
+// its row is disabled (ADR 0062 item 9).
+function PickerFile({ file, kind, onSelect }) {
+  const ok = canSelect(file);
+  const facts = [file.size > 0 ? fileSize(file.size) : null, file.media_type ? formatLabel(file.media_type) : null, ok ? null : reasonText(file)];
+  return html`<button class="link-row picker-file" type="button" disabled=${!ok} onClick=${() => onSelect(file)}>
+    ${kind === 'image' && html`<${ImageThumb} url=${ok ? file.address : null} glow="var(--c-track)" className="picker-thumb" always />`}
+    <span class="title">${file.name}</span>
+    <span class="summary">${facts.filter(Boolean).join(' · ')}</span>
+  </button>`;
+}
+
+// A folder of files, with the folders in it. A list with no folders is one
+// flat level.
+function PickerTree({ node, kind, onSelect }) {
+  return html`${node.folders.map((folder) => html`<details class="disclosure picker-folder" key=${folder.path}>
+      <summary class="link-row"><span class="label">${folder.name}</span></summary>
+      <div class="picker-children"><${PickerTree} node=${folder} kind=${kind} onSelect=${onSelect} /></div>
+    </details>`)}
+    ${node.files.map((file) => html`<${PickerFile} key=${file.path} file=${file} kind=${kind} onSelect=${onSelect} />`)}`;
+}
+
+// The files of "This release" or of one host.
+function PickerList({ path, kind, byName, onSelect }) {
+  const list = usePickerList(path);
+  if (list.loading) return html`<p class="hint" role="status">Studio reads the list…</p>`;
+  if (list.error) return html`<${ErrorNotice} error=${list.error} />`;
+  const files = byName ? list.files.map((f) => ({ ...f, path: f.name })) : list.files;
+  if (files.length === 0) return html`<p class="hint">No file of this kind is here.</p>`;
+  return html`<div class="group"><${PickerTree} node=${hostTree(files)} kind=${kind} onSelect=${onSelect} /></div>
+    ${list.truncated && html`<p class="hint">The list stops at the limit of Studio. The host has more files.</p>`}`;
+}
+
+// The sheet of the picker (ADR 0062 item 2). It has the three sources as
+// segments.
+function FilePicker({ pick }) {
+  const { feedId, connectors } = useContext(PickerContext);
+  const ref = useSheet(pick.open);
+  const [source, setSource] = useState('release');
+  const [hostId, setHostId] = useState(null);
+  const list = sources(pick.field, connectors);
+  const hosts = list[1].hosts;
+  const host = hosts.find((h) => h.connectorId === hostId) || hosts[0] || null;
+  useEffect(() => { if (pick.open) setSource('release'); }, [pick.open]);
+  const inputId = `pick-input-${pick.field}`;
+  const title = pick.kind === 'image' ? 'Choose an image' : 'Choose an audio file';
+  let path = null;
+  if (pick.open && source === 'release') path = `/feeds/${feedId}/picker/release?kind=${pick.kind}`;
+  if (pick.open && source === 'hosts' && host) path = `/connectors/${host.connectorId}/picker?kind=${pick.kind}`;
+  // A drop on the sheet must not reach the field below it.
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby=${`${inputId}-title`} onClose=${pick.closeSheet}
+      onDragOver=${stop} onDrop=${stop}>
+    <header>
+      <h2 id=${`${inputId}-title`}>${title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <div class="actions picker-tabs" role="group" aria-label="Where the file comes from">
+        ${list.map((s) => html`<button class="button" type="button" key=${s.id} aria-pressed=${source === s.id}
+          onClick=${() => setSource(s.id)}>${s.label}</button>`)}
+      </div>
+      ${source === 'release' && html`<${PickerList} path=${path} kind=${pick.kind} byName onSelect=${(file) => pick.choose(file, 'release')} />`}
+      ${source === 'hosts' && hosts.length === 0 && html`<p class="hint">No host is connected.</p>`}
+      ${source === 'hosts' && host && html`<div class="field">
+          <label for=${`${inputId}-host`}>Host</label>
+          <div class="field-body"><select id=${`${inputId}-host`} value=${host.connectorId} onChange=${(e) => setHostId(Number(e.target.value))}>
+            ${hosts.map((h) => html`<option value=${h.connectorId}>${h.name}</option>`)}
+          </select></div>
+        </div>
+        <${PickerList} key=${host.connectorId} path=${path} kind=${pick.kind} onSelect=${(file) => pick.choose(file, 'hosts')} />`}
+      ${source === 'computer' && html`<div class="group">
+          <div class="import-pick">
+            <input id=${inputId} class="visually-hidden" type="file" disabled=${pick.busy} accept=${list[2].accept}
+              onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) pick.upload(file); }} />
+            <label for=${inputId} class="button action">${pick.busy ? `Sending… ${progressPercent(pick.sent, pick.size)}%` : 'Select a file'}</label>
+          </div>
+          <p class="hint">Studio sends the file to the release folder. The host gets the file when you write.</p>
+        </div>`}
+      ${pick.errorText && html`<p class="field-error" role="alert">${pick.errorText}</p>`}
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+    </footer>
+  </dialog>`;
+}
+
+// The button "Choose…" with the sheet, the drop hint and the error below
+// the field (ADR 0062 items 1, 5 and 21). `children` go before the button.
+function ChooseFile({ pick, children }) {
+  return html`<div class="file-choose">
+      ${children}
+      <button class="button action" type="button" id=${`choose-${pick.field}`} disabled=${pick.busy} aria-label=${`Choose… ${pick.noun}`}
+        onClick=${pick.openSheet}>${pick.busy ? 'Sending…' : 'Choose…'}</button>
+    </div>
+    ${pick.over && html`<span class="hint" role="status">Drop the file here to send it.</span>`}
+    ${!pick.open && pick.errorText && html`<span class="field-error" role="alert">${pick.errorText}</span>`}
+    <${FilePicker} pick=${pick} />`;
+}
+
+// An image address field with its preview, "Choose…" and the drop.
+function PickedImageField({ field, subject, apply, id, label, address, bad, value, onChange, glow }) {
+  const pick = useFilePick(field, subject, apply);
+  return html`<${TextField} id=${id} label=${label} type="url" address=${address} bad=${bad} value=${value} onChange=${onChange}
+      rootProps=${pick.rootProps}>
+    <${ChooseFile} pick=${pick}><${ImageThumb} url=${value} glow=${glow} className="field-cover" /><//>
+  <//>`;
 }
 
 // ---- The import sheet (task 018d, ADR 0026, ADR 0032) ----
@@ -454,11 +748,6 @@ function importStateText(row, kind) {
 // One row of the import sheet: the name of the file, its state, the WAV
 // notice when it is a WAV file, and its facts when it is ready. An image row
 // also has the list of its use (task architecture).
-// The short format name of a media type, for the badge of a file row.
-function formatLabel(mediaType) {
-  const known = { 'audio/mpeg': 'MP3', 'audio/flac': 'FLAC', 'audio/mp4': 'M4A', 'audio/ogg': 'OGG', 'image/jpeg': 'JPEG' };
-  return known[mediaType] || (mediaType || '').split('/').pop().toUpperCase();
-}
 
 // The files that Studio keeps for one import row. Each file is one row with
 // its format, its name, its role and its size. A lossless import has two
@@ -1217,6 +1506,21 @@ function publisherLine(entry, match, index) {
   return parts.join(' · ');
 }
 
+// The cover field of a channel (ADR 0060). It shows the cover of the model
+// and keeps the form of the feed on a change. When the two cover tags have
+// different addresses, it shows the second address with an action that
+// puts one address in both.
+function CoverField({ id, model, update, bad }) {
+  const conflict = coverConflict(model);
+  const change = (address) => update((m) => withCover(m, address));
+  return html`<${PickedImageField} field="cover" subject=${model} apply=${change} id=${id} label="Cover image address"
+          address=${['image', 'rss_image/url']} bad=${bad} value=${coverOf(model)} onChange=${change} />
+        ${conflict && html`<div class="field-note">
+          <span>The RSS image tag has a different address: <span class="mono">${conflict}</span></span>
+          <button class="button action" type="button" onClick=${() => change(conflict)}>Use this address</button>
+        </div>`}`;
+}
+
 // The channel fields that the album page and the playlist page share: the
 // title, the author, the description, the image, the link and the language.
 function ChannelFields({ model, update, bad, artistLabel }) {
@@ -1224,9 +1528,7 @@ function ChannelFields({ model, update, bad, artistLabel }) {
   return html`        <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
         <${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
         <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${TextField} id="ch-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')}>
-          <${ImageThumb} url=${model.image} className="field-cover" />
-        <//>
+        <${CoverField} id="ch-image" model=${model} update=${update} bad=${bad} />
         <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
 `;
@@ -1530,13 +1832,21 @@ function RecipientsPage({ model, update }) {
 // The track page: the track before it and the track after it, then its
 // fields, its audio file, its recipients and its other facts (task 014c
 // step 3). The current editor has no credits for a track.
-function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChanged }) {
+function TrackPage({ feed, model, update, bad, trackIndex, go }) {
   const items = model.items;
   const item = items[trackIndex];
   const id = `track-${item._cid}`;
   const path = `items/${trackIndex}/`;
   const change = (name) => (value) => update((m) => set(m, 'items', setAt(m.items, trackIndex, set(item, name, value))));
   const changeItems = (nextItems) => update((m) => set(m, 'items', nextItems));
+  // A change that works on the current model, also after a long upload.
+  const editItem = (edit) => update((m) => set(m, 'items', m.items.map((i) => (i._cid === item._cid ? edit(i) : i))));
+  const pickAudio = useFilePick(
+    'track-audio',
+    item,
+    (_address, facts, source) => editItem((i) => withNewAudio(i, facts, needsMetadataRead(source))),
+    (duration) => editItem((i) => set(i, 'duration', duration)),
+  );
   const openTrack = (i) => go({ name: 'feed', id: feed.id, page: 'track', track: trackKey(items[i]) });
   const removeTrack = () => {
     changeItems(items.filter((_, i) => i !== trackIndex));
@@ -1545,7 +1855,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChang
   // No wrapper: the head and each section are direct rows of .page, with
   // the gap of .page between them (review of task 014c, defect 2).
   return html`<header class="head">
-      <${ImageThumb} url=${item.image || model.image} glow="var(--c-track)" className="cover" always />
+      <${ImageThumb} url=${item.image || coverOf(model)} glow="var(--c-track)" className="cover" always />
       <div class="text"><span class="eyebrow">Track ${trackIndex + 1} of ${items.length}</span>
         <h1>${item.title || 'Untitled track'}</h1></div>
       <div class="pager">
@@ -1563,17 +1873,16 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChang
         <${TextField} id=${`${id}-date`} label="Publication date"
           hint="For example Thu, 22 Oct 2026 12:00:00 GMT. Some apps sort the tracks by this date."
           value=${item.pub_date} onChange=${change('pub_date')} />
-        <${TextField} id=${`${id}-duration`} label="Duration" hint="Seconds, or HH:MM:SS." value=${item.duration} onChange=${change('duration')} />
+        <${TextField} id=${`${id}-duration`} label="Duration" hint=${pickAudio.metadataFailed && !item.duration ? DURATION_NOTICE : 'Seconds, or HH:MM:SS.'}
+          value=${item.duration} onChange=${change('duration')} />
       </div>
     </section>
 
     <section class="page-section"><h2>Audio file</h2>
       <div class="group">
-        <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} />
+        <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio} />
         <${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />
       </div>
-      <${ReplaceAudio} feedId=${feed.id} item=${item} draft=${draft} onOpsChanged=${onOpsChanged}
-          change=${(edit) => update((m) => set(m, 'items', m.items.map((i) => (i._cid === item._cid ? edit(i) : i))))} />
     </section>
 
     <${TrackPayments} id=${id} item=${item} albumBlocks=${model.values} onChange=${change('values')} />
@@ -1583,9 +1892,9 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, draft, onOpsChang
         <details class="disclosure">
           <summary class="link-row"><span class="label">Track image</span>
             <span class="summary">${item.image ? 'Has an image' : 'Uses the album cover'}</span></summary>
-          <div class="form"><${TextField} id=${`${id}-image`} label="Track image address" type="url" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')}>
-            <${ImageThumb} url=${item.image} glow="var(--c-track)" className="field-cover" />
-          <//></div>
+          <div class="form"><${PickedImageField} field="track-image" subject=${item} apply=${(address) => editItem((i) => set(i, 'image', address))}
+            id=${`${id}-image`} label="Track image address" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')}
+            glow="var(--c-track)" /></div>
         </details>
         <details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>
@@ -1685,7 +1994,7 @@ function ContentLinks({ id, links, onChange }) {
 // The page of one live item. It edits the show, the stream, the content
 // links, the live value and the value routes. "Go live" and "End the show"
 // change the draft and open the review sheet (ADR 0054 items 3 and 5).
-function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) {
+function LivePage({ feed, model, update, bad, liveIndex, draft }) {
   const lives = model.live_items;
   const live = lives[liveIndex];
   const id = `live-${live._cid}`;
@@ -1693,6 +2002,17 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) 
   const changeLive = (next) => update((m) => set(m, 'live_items', setAt(m.live_items, liveIndex, next)));
   const field = (name) => (value) => changeLive(set(live, name, value));
   const itemField = (name) => (value) => changeLive(set(live, 'item', set(live.item, name, value)));
+  // A change that works on the current model, also after a long upload.
+  const editLive = (edit) => update((m) => set(m, 'live_items', m.live_items.map((l) => (l._cid === live._cid ? edit(l) : l))));
+  // Before the first recording, the show has no audio file from before. The
+  // enclosure is then the stream (ADR 0054).
+  const recordingBefore = hasRecording(live) ? live.item : { ...live.item, enclosure: null, alternate_enclosures: [] };
+  const pickRecording = useFilePick(
+    'recording',
+    recordingBefore,
+    (_address, facts, source) => editLive((l) => set(l, 'item', withNewAudio(l.item, facts, needsMetadataRead(source)))),
+    (duration) => editLive((l) => set(l, 'item', set(l.item, 'duration', duration))),
+  );
   const stream = live.item.enclosure || { url: null, length: null, media_type: null };
   const streamField = (name) => (text) => {
     const next = set(stream, name, text);
@@ -1740,7 +2060,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) 
     window.dispatchEvent(new Event(OPEN_REVIEW));
   });
   return html`<header class="head">
-      <${ImageThumb} url=${live.item.image || model.image} glow="var(--c-track)" className="cover" always />
+      <${ImageThumb} url=${live.item.image || coverOf(model)} glow="var(--c-track)" className="cover" always />
       <div class="text"><span class="eyebrow">Live show</span>
         <h1>${live.item.title || 'Untitled show'}</h1>
         <p class="sub">${showSummary(live, start)}</p></div>
@@ -1775,10 +2095,9 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) 
         <${TextArea} id=${`${id}-description`} label="Description" value=${live.item.description} onChange=${itemField('description')} />
         <${TimeField} id=${`${id}-start`} label="Start time" value=${live.start} onChange=${field('start')} />
         <${TimeField} id=${`${id}-end`} label="End time" value=${live.end} onChange=${field('end')} />
-        <${TextField} id=${`${id}-image`} label="Image address" type="url" address=${`live_items/${liveIndex}/item/image`} bad=${bad}
-          value=${live.item.image} onChange=${itemField('image')}>
-          <${ImageThumb} url=${live.item.image} glow="var(--c-track)" className="field-cover" />
-        <//>
+        <${PickedImageField} field="live-image" subject=${live.item} apply=${(address) => editLive((l) => set(l, 'item', set(l.item, 'image', address)))}
+          id=${`${id}-image`} label="Image address" address=${`live_items/${liveIndex}/item/image`} bad=${bad}
+          value=${live.item.image} onChange=${itemField('image')} glow="var(--c-track)" />
       </div>
     </section>
 
@@ -1791,16 +2110,15 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, onOpsChanged }) 
     </section>`}
 
     ${canRecord(live) && html`<section class="page-section"><h2>Recording</h2>
-      ${hasRecording(live) && html`<div class="group">
-        <${Enclosure} id=${`${id}-recording`} path=${`live_items/${liveIndex}/item/`} bad=${bad} enclosure=${live.item.enclosure}
-          onChange=${itemField('enclosure')} />
-        <${AlternateEnclosures} list=${live.item.alternate_enclosures} onChange=${itemField('alternate_enclosures')} />
-      </div>`}
-      <${ReplaceAudio} feedId=${feed.id} item=${live.item} draft=${draft} onOpsChanged=${onOpsChanged}
-        hadAudio=${hasRecording(live)}
-        label=${hasRecording(live) ? 'Replace the recording' : 'Add the recording'}
-        hint="Studio puts the audio file in the enclosure of the show. The stream address goes out of the draft."
-        change=${(edit) => changeLive(set(live, 'item', edit(live.item)))} />
+      <div class="group">
+        ${hasRecording(live)
+          ? html`<${Enclosure} id=${`${id}-recording`} path=${`live_items/${liveIndex}/item/`} bad=${bad} enclosure=${live.item.enclosure}
+              onChange=${itemField('enclosure')} pick=${pickRecording} />
+            <${AlternateEnclosures} list=${live.item.alternate_enclosures} onChange=${itemField('alternate_enclosures')} />`
+          : html`<div class="field" ...${pickRecording.rootProps}><label for="choose-recording">Recording</label>
+              <div class="field-body"><${ChooseFile} pick=${pickRecording} /></div></div>`}
+      </div>
+      <p class="hint">Studio puts the audio file in the enclosure of the show. The stream address goes out of the draft.</p>
     </section>`}
 
     <section class="page-section"><h2>Content links</h2>
@@ -1901,7 +2219,6 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   const field = (name) => (value) => update((m) => set(m, name, value));
   const roleAction = useAction();
   const linkAction = useAction();
-  const imageAction = useAction();
   // The feeds whose draft the last link or role change altered.
   const [changed, setChanged] = useState([]);
   const [chosen, setChosen] = useState('');
@@ -1950,36 +2267,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       return e;
     })));
   };
-  // Send one image to the release folder, and use its address as the
-  // cover image. A file that is not an image is removed again.
-  const importImage = (file) => imageAction.run(async () => {
-    if (!(await draft.flush())) return;
-    const facts = await sendInParts(feed.id, file);
-    if (facts.kind !== 'image') {
-      if (!facts.on_host) {
-        api(`/feeds/${feed.id}/files?file=${facts.library_file_id}`, { method: 'DELETE' }).catch(() => {});
-      }
-      throw Object.assign(new Error('Select an image file.'), { code: 'not_image' });
-    }
-    update((m) => set(m, 'image', facts.url));
-    await draft.flush();
-  });
   return html`<${ChangedNotices} changed=${changed} go=${go} />
     <section class="page-section"><h2>Publisher</h2>
       <div class="group">
         <${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />
         <${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
         <${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${TextField} id="pub-image" label="Cover image address" type="url" address="image" bad=${bad} value=${model.image} onChange=${field('image')}>
-          <${ImageThumb} url=${model.image} className="field-cover" />
-        <//>
-        <div class="import-pick">
-          <input id="pub-image-input" class="visually-hidden" type="file" disabled=${imageAction.busy}
-            accept="image/*"
-            onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) importImage(file); }} />
-          <label for="pub-image-input" class="button action">Import Image</label>
-          ${imageAction.error && html`<p class="field-error" role="alert">${imageAction.error.message}</p>`}
-        </div>
+        <${CoverField} id="pub-image" model=${model} update=${update} bad=${bad} />
         <${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
       </div>
     </section>
@@ -2552,10 +2846,9 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   } else if (playlist && page !== 'recipients' && page !== 'files') {
     body = html`<${PlaylistPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} onRemoved=${onRemoved} />`;
   } else if (page === 'track' && trackIndex !== -1) {
-    body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go}
-      draft=${draft} onOpsChanged=${onOpsChanged} />`;
+    body = html`<${TrackPage} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} />`;
   } else if (page === 'live' && liveIndex !== -1 && !publisher && !playlist) {
-    body = html`<${LivePage} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} onOpsChanged=${onOpsChanged} />`;
+    body = html`<${LivePage} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
   } else if (page === 'credits') {
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {
@@ -2589,18 +2882,18 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   const onImport = (tracks, albumImageUrl) => {
     const added = withCids(tracks);
     update((m) => {
-      const withImage = albumImageUrl ? set(m, 'image', albumImageUrl) : m;
+      const withImage = albumImageUrl ? withCover(m, albumImageUrl) : m;
       return set(withImage, 'items', [...withImage.items, ...added]);
     });
     onImporting(false);
     go({ name: 'feed', id: feed.id });
   };
-  return html`<div class="page">
+  return html`<${PickerContext.Provider} value=${{ feedId: feed.id, connectors, draft, onOpsChanged }}><div class="page">
     ${body}
     ${!publisher && !playlist && html`<${AddTrackSheet} open=${adding === true} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
     ${!publisher && !playlist && html`<${AddLiveSheet} open=${adding === 'live'} onClose=${() => onAdding(false)}
       onAdd=${onAddLive} busy=${addLive.busy} error=${addLive.error} />`}
-    ${!publisher && !playlist && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(model.image)}
+    ${!publisher && !playlist && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(coverOf(model))}
       onClose=${() => onImporting(false)} onAdd=${onImport} />`}
-  </div>`;
+  </div><//>`;
 }

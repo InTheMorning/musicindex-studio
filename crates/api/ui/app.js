@@ -9,6 +9,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource,
 } from './account.js';
 import { isLiveItem } from './live.js';
+import { coverOf } from './cover.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
@@ -300,9 +301,9 @@ function title(error) {
 // A labelled input. `error` is a line of red text below the field (ADR 0018).
 // The label and the input sit in one body div, so that a field in a group
 // can put the label at the left at a wide width (ADR 0029, task 014c).
-export function Field({ id, label, hint, error, children, ...input }) {
+export function Field({ id, label, hint, error, children, rootProps, ...input }) {
   const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
-  return html`<div class="field">
+  return html`<div class="field" ...${rootProps}>
     <label for=${id}>${label}</label>
     <div class="field-body">
       ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
@@ -1722,7 +1723,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     <//>
     <div class="feed-head">
       <header class="head">
-        <${ImageThumb} url=${draft.model && draft.model.image} glow=${glow} className="cover" always />
+        <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always />
         <div class="text">
           <span class="eyebrow">${kind.label}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>

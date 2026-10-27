@@ -319,3 +319,17 @@ test('a playlist gives Playlist, Tracks, Value routes and Files, with no add or 
   assert.equal(panel.items.find((item) => item.label === 'Tracks').current, true);
   assert.equal(panel.items.some((item) => item.action), false);
 });
+
+test('a feed row with only rss_image_url gives that address as the cover of the outline and of the release row', () => {
+  const demu = { ...album, image: null, rss_image_url: 'https://m.example/demu.png' };
+  const panel = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [demu], model, vaultOpen: true });
+  assert.equal(panel.feed.image, 'https://m.example/demu.png');
+  const list = releasesList({ feeds: [demu], connectors: [], sort: 'newest', view: 'rows' });
+  assert.equal(list.rows[0].image, 'https://m.example/demu.png');
+});
+
+test('the itunes:image of a feed row comes before its rss_image_url', () => {
+  const both = { ...album, image: 'https://m.example/a.png', rss_image_url: 'https://m.example/b.png' };
+  const list = releasesList({ feeds: [both], connectors: [], sort: 'newest', view: 'rows' });
+  assert.equal(list.rows[0].image, 'https://m.example/a.png');
+});

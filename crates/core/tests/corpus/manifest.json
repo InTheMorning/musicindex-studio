@@ -240,5 +240,21 @@
   "sha256": "2e7b592890691d5c999abc4fd20dd8ca4fec616c64a91a60c8353b36574889bd",
   "bytes": 17169,
   "source": "Fixture: podcast-namespace repository example.xml at commit d4036dc (CC0). Not a published feed."
+ },
+ {
+  "file": "demu-feed-template.xml",
+  "url": null,
+  "fetched_at": null,
+  "sha256": "37a3f30b416eaf8c740f67fe6a7d2215e48350a0b4b6820146f49f991b7b33d8",
+  "bytes": 4552,
+  "source": "Fixture: DeMu template feed.xml at commit 4e2a1dc (de-mu/demu-feed-template). Not a published feed."
+ },
+ {
+  "file": "demu-feed-template-with-comments.xml",
+  "url": null,
+  "fetched_at": null,
+  "sha256": "852c92a6e53360b554fa5022076024a3ee9b7424283c6b33d76e510b20445070",
+  "bytes": 17410,
+  "source": "Fixture: DeMu template feed-with-comments.xml at commit 4e2a1dc (de-mu/demu-feed-template). Not a published feed."
  }
 ]

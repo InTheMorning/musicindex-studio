@@ -21,7 +21,7 @@ Write it to make the file. See [Review and write your changes](review-and-write.
 
 The outline of a playlist has these pages:
 
-- **Playlist**. Fields: **Title**, **Author**, **Description**, **Cover image address**, **Website** and **Language**. **Feed facts** is also on this page.
+- **Playlist**. Fields: **Title**, **Author**, **Description**, **Cover image address** (with **Choose…**), **Website** and **Language**. **Feed facts** is also on this page.
 - **Tracks**
 - **Value routes**. See [Value routes](value-routes.md).
 - **Files**. See [Manage the files of a release](release-files.md).

@@ -246,6 +246,72 @@ async fn two_users_do_not_see_the_feeds_of_each_other() {
     assert_eq!(still.json.as_array().unwrap().len(), 1);
 }
 
+/// The audio route needs the session of the user who made the ticket
+/// (ADR 0062 item 29).
+async fn audio(app: &App, who: Option<&(String, String)>, ticket: &str) -> Reply {
+    let path = format!("/media/audio?ticket={ticket}");
+    let mut c = call("GET", &path, None);
+    c.token = who.map(|who| who.0.as_str());
+    send(app, c).await
+}
+
+async fn ticket_of(app: &App, who: &(String, String), url: &str) -> String {
+    let made = api(
+        app,
+        who,
+        "POST",
+        "/api/v1/media/tickets",
+        Some(json!({ "url": url })),
+    )
+    .await;
+    assert_eq!(made.status, StatusCode::OK, "{:?}", made.json);
+    made.json["ticket"].as_str().unwrap().to_owned()
+}
+
+#[tokio::test]
+async fn a_media_ticket_works_only_for_the_session_of_its_user() {
+    let app = app(Signup::Invite);
+    let one = new_user(&app, "one@example.org", PASS_ONE).await;
+    let two = new_user(&app, "two@example.org", PASS_TWO).await;
+    let ticket = ticket_of(&app, &one, "https://music.example/a.mp3").await;
+
+    // The ticket of the first user, with no session and with the session of
+    // the second user. The server does not look at the address.
+    let none = audio(&app, None, &ticket).await;
+    assert_eq!(none.status, StatusCode::UNAUTHORIZED);
+    let other = audio(&app, Some(&two), &ticket).await;
+    assert_eq!(other.status, StatusCode::FORBIDDEN);
+    assert_eq!(other.code(), "ticket_not_valid");
+    // The ticket route itself needs the session and the CSRF header.
+    let mut c = call(
+        "POST",
+        "/api/v1/media/tickets",
+        Some(json!({ "url": "https://a.example/b" })),
+    );
+    c.token = Some(&one.0);
+    let no_csrf = send(&app, c).await;
+    assert_eq!(no_csrf.status, StatusCode::FORBIDDEN);
+    assert_eq!(no_csrf.code(), "csrf_required");
+}
+
+#[tokio::test]
+async fn the_audio_route_refuses_an_address_in_a_private_network() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "one@example.org", PASS_ONE).await;
+    let server = studio_core::testing::RangeServer::start(vec![1; 100]);
+    let ticket = ticket_of(&app, &who, &server.url("/a.mp3")).await;
+    let reply = audio(&app, Some(&who), &ticket).await;
+    assert_eq!(
+        reply.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        reply.text
+    );
+    assert_eq!(reply.code(), "address_not_public");
+    // The guard stopped the request before it reached the server.
+    assert_eq!(server.ranges().len(), 0);
+}
+
 #[tokio::test]
 async fn a_new_user_has_a_folder_with_a_library_and_an_open_vault() {
     let app = app(Signup::Invite);

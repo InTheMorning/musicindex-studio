@@ -210,7 +210,8 @@ fn percent_decode(text: &str) -> Option<String> {
 }
 
 /// The media type of a file name, from its extension.
-pub(crate) fn media_type_of_name(name: &str) -> Option<String> {
+#[must_use]
+pub fn media_type_of_name(name: &str) -> Option<String> {
     let (_, extension) = name.rsplit_once('.')?;
     let media_type = match extension.to_ascii_lowercase().as_str() {
         "mp3" => "audio/mpeg",

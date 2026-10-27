@@ -559,6 +559,8 @@ pub struct Workspace {
     pub(crate) discovered: HashMap<String, Found>,
     /// The images that the core already read (ADR 0025, ADR 0032 item 13).
     pub(crate) images: ImageCache,
+    /// The media tickets of the audio player (ADR 0062 item 29).
+    pub(crate) tickets: crate::media::Tickets,
     /// The staging folder for the body of an upload, before its import
     /// (ADR 0026, ADR 0033 item 1). Task 021e removes the pending-file
     /// store: an import now writes directly into the release folder.
@@ -657,6 +659,7 @@ impl Workspace {
             lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
             discovered: HashMap::new(),
             images: ImageCache::default(),
+            tickets: crate::media::Tickets::default(),
             incoming_dir: data_dir.join("incoming"),
             imports_dir: data_dir.join("imports"),
             downloads: DownloadQueue::new(),
@@ -734,6 +737,15 @@ impl Workspace {
     pub fn with_net_policy(mut self, policy: NetPolicy) -> Self {
         self.web = Web::with_policy(&policy);
         self.net_policy = policy;
+        self
+    }
+
+    /// Make a media ticket valid for `lifetime`. A test uses this to make
+    /// an expired ticket.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_ticket_lifetime(mut self, lifetime: Duration) -> Self {
+        self.tickets = crate::media::Tickets::new(lifetime);
         self
     }
 

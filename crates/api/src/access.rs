@@ -23,14 +23,7 @@ impl Access {
     ///
     /// Gives an [`ApiError`] when the random source is not available.
     pub fn new(port: u16) -> Result<Self, ApiError> {
-        let mut bytes = [0_u8; 32];
-        getrandom::fill(&mut bytes)
-            .map_err(|_| ApiError::internal("the random source is not available"))?;
-        let token = bytes.iter().fold(String::with_capacity(64), |mut text, b| {
-            use std::fmt::Write as _;
-            let _ = write!(text, "{b:02x}");
-            text
-        });
+        let token = random_hex::<32>()?;
         Ok(Self::with_token(&token, port))
     }
 
@@ -109,4 +102,22 @@ pub(crate) async fn check(
         }
     }
     Ok(next.run(request).await)
+}
+
+/// `N` random bytes as lowercase hexadecimal text.
+///
+/// # Errors
+///
+/// Gives an [`ApiError`] when the random source is not available.
+pub(crate) fn random_hex<const N: usize>() -> Result<String, ApiError> {
+    let mut bytes = [0_u8; N];
+    getrandom::fill(&mut bytes)
+        .map_err(|_| ApiError::internal("the random source is not available"))?;
+    Ok(bytes
+        .iter()
+        .fold(String::with_capacity(N * 2), |mut text, b| {
+            use std::fmt::Write as _;
+            let _ = write!(text, "{b:02x}");
+            text
+        }))
 }

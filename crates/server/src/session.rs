@@ -427,6 +427,51 @@ pub fn same(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |d, (x, y)| d | (x ^ y)) == 0
 }
 
+/// The open workspace of the user of a session.
+async fn open_user(
+    state: &ServerState,
+    session: &Session,
+) -> Result<crate::users::OpenUser, Response> {
+    let folder = match state.accounts.folder_of(session.account_id) {
+        Ok(Some(folder)) => folder,
+        Ok(None) => {
+            return Err(failure(
+                StatusCode::UNAUTHORIZED,
+                "session_required",
+                "the account does not exist",
+            ));
+        }
+        Err(_) => return Err(internal("the account database failed")),
+    };
+    state
+        .users
+        .get(session.account_id, &folder)
+        .await
+        .map_err(IntoResponse::into_response)
+}
+
+/// The route `/media/audio`: find the session, and send the request to
+/// the router of the user. A ticket belongs to the workspace that made it,
+/// so the router of a different user does not know the ticket
+/// (ADR 0062 item 29). The route needs no CSRF header, because it reads.
+pub async fn media(State(state): State<Shared>, request: Request) -> Response {
+    let session = match active_session(&state, request.headers()).await {
+        Ok(session) => session,
+        Err(response) => return response,
+    };
+    if let Err(response) = check_restricted(&session, request.method(), request.uri().path()) {
+        return response;
+    }
+    let user = match open_user(&state, &session).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    match user.router.oneshot(request).await {
+        Ok(response) => response,
+        Err(never) => match never {},
+    }
+}
+
 /// The `/api/` layer: find the session, check the CSRF header, and send
 /// the request to the router of the user (ADR 0055 item 5).
 pub async fn api(State(state): State<Shared>, request: Request) -> Response {
@@ -446,20 +491,9 @@ pub async fn api(State(state): State<Shared>, request: Request) -> Response {
     if let Err(response) = check_restricted(&session, request.method(), request.uri().path()) {
         return response;
     }
-    let folder = match state.accounts.folder_of(session.account_id) {
-        Ok(Some(folder)) => folder,
-        Ok(None) => {
-            return failure(
-                StatusCode::UNAUTHORIZED,
-                "session_required",
-                "the account does not exist",
-            );
-        }
-        Err(_) => return internal("the account database failed"),
-    };
-    let user = match state.users.get(session.account_id, &folder).await {
+    let user = match open_user(&state, &session).await {
         Ok(user) => user,
-        Err(error) => return error.into_response(),
+        Err(response) => return response,
     };
     // An unlock with a passphrase derives a key with Argon2id. The permit
     // stays until the router has answered (ADR 0055 item 22).
@@ -505,12 +539,15 @@ fn needs_derivation(request: &Request) -> bool {
 }
 
 /// The fallback of the router: `/api/` goes to the `/api/` layer, `/app/v1/`
-/// goes to the layer of the apps, and each other path gives 404.
+/// goes to the layer of the apps, `/media/audio` goes to the media route,
+/// and each other path gives 404.
 pub async fn dispatch(State(state): State<Shared>, request: Request) -> Response {
     if request.uri().path().starts_with("/api/") {
         api(State(state), request).await
     } else if request.uri().path().starts_with("/app/v1/") {
         crate::apps::app(State(state), request).await
+    } else if request.uri().path() == "/media/audio" {
+        media(State(state), request).await
     } else {
         failure(StatusCode::NOT_FOUND, "not_found", "no such route")
     }

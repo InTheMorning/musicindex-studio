@@ -476,6 +476,75 @@ impl Web {
     }
 }
 
+/// An open response for a file or a range of a file. The caller reads the
+/// body as a stream (ADR 0062 item 27).
+pub struct WebStream {
+    /// The status: 200, 206 or 416.
+    pub status: u16,
+    /// The `Content-Range` header of the response, when it has one.
+    pub content_range: Option<String>,
+    /// The `Content-Length` header of the response, when it has one.
+    pub content_length: Option<u64>,
+    /// The media type without parameters, when the response gives one.
+    pub media_type: Option<String>,
+    /// The body of the response. It reads from the connection.
+    pub reader: Box<dyn Read + Send>,
+}
+
+impl Web {
+    /// Open a file, or a range of it, and do not read the body.
+    ///
+    /// `range` is the value of a `Range` header, such as `bytes=0-99`. The
+    /// client follows each redirect, and the policy of the client applies
+    /// to the address and to each redirect (ADR 0057). The transfer has no
+    /// time limit for the whole body, because a player reads for minutes.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] for an address that is not `http` or `https`, a
+    /// status that is not 200, 206 or 416, a refused address, or a network
+    /// failure.
+    pub fn open_range(&self, url: &str, range: Option<&str>) -> Result<WebStream, WebError> {
+        let lower = url.trim().to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(WebError::new(
+                WebErrorKind::InvalidAddress,
+                format!("{url} is not an http or https address"),
+            ));
+        }
+        let mut request = self.transfer.get(url.trim());
+        if let Some(range) = range {
+            request = request.header("Range", range);
+        }
+        let response = request.call().map_err(|e| network_error(url, &e))?;
+        let status = response.status().as_u16();
+        if !matches!(status, 200 | 206 | 416) {
+            return Err(WebError {
+                kind: WebErrorKind::Status,
+                status: Some(status),
+                message: format!("{url} answered with status {status}"),
+            });
+        }
+        let content_range = header(&response, "content-range");
+        let content_length = header(&response, "content-length").and_then(|v| v.parse().ok());
+        let media_type = header(&response, "content-type")
+            .as_deref()
+            .and_then(media_type);
+        let reader = response
+            .into_body()
+            .into_with_config()
+            .limit(u64::MAX)
+            .reader();
+        Ok(WebStream {
+            status,
+            content_range,
+            content_length,
+            media_type,
+            reader: Box::new(reader),
+        })
+    }
+}
+
 /// The error for a failed request. A host that the policy refuses gets its
 /// own kind.
 fn network_error(url: &str, error: &ureq::Error) -> WebError {

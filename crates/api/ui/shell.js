@@ -4,6 +4,7 @@
 // components in `app.js` and `editor.js` use these functions. The Node tests
 // in `crates/api/ui-tests/` examine them.
 import { liveKey, isLiveItem, statusLabel } from './live.js';
+import { coverOf } from './cover.js';
 
 // The kind of a medium: its dot class and its label.
 export function mediumKind(medium) {
@@ -160,12 +161,20 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     feed: {
       id: feed.id,
       title: displayTitle(feed),
-      image: feed.image ?? null,
+      image: feedCover(feed),
       typeLabel: mediumKind(feed.medium).label,
     },
     items: outlineItems(feed, view, model, narrow),
     bottom,
   };
+}
+
+// The cover of a feed row. The row has the `itunes:image` as `image` and
+// the address of the RSS image as `rss_image_url`. The cover rule is in
+// `cover.js` (ADR 0060). A feed with no cover gives `null`.
+function feedCover(feed) {
+  const rssImage = feed.rss_image_url ? { url: feed.rss_image_url } : null;
+  return coverOf({ image: feed.image ?? null, rss_image: rssImage }) || null;
 }
 
 // The label of each draft state in the Releases list (ADR 0039 item 2).
@@ -228,7 +237,7 @@ export function releasesList({ feeds, connectors, sort, view, marked }) {
     title: displayTitle(feed),
     typeLabel: mediumKind(feed.medium).label,
     host: hostOf(feed, connectors),
-    image: feed.image ?? null,
+    image: feedCover(feed),
     draftLabel: DRAFT_LABELS[feed.draft_state] || 'No changes',
     marked: feed.id === marked,
   }));

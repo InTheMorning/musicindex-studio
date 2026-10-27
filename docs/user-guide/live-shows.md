@@ -34,7 +34,7 @@ Studio opens the page of the show. The outline lists the show under **Live shows
 | --- | --- |
 | Status | The status: "Planned", "Live now" or "Ended". It also lists problems that stop a write. |
 | Grant | The grant of the show. See [Connected apps and show grants](connected-apps.md). |
-| Show | **Title**, **Description**, **Start time**, **End time** and **Image address**. |
+| Show | **Title**, **Description**, **Start time**, **End time** and **Image address**. Select **Choose…** to pick an image file. |
 | Stream | **Stream address** and **Stream type**, for example `application/x-mpegURL`. It shows until the show ends. |
 | Recording | After the show ends. See below. |
 | Content links | **Add a content link**. Each link has **Link address** and **Link text**. |
@@ -61,9 +61,14 @@ See [Review and write your changes](review-and-write.md).
 
 After a show ends, the page has the section **Recording**.
 
-1. Select **Add the recording**.
-2. Select the audio file.
+1. Select **Choose…** adjacent to **Recording**.
+2. Select a source in the sheet: **This release**, **Hosts** or **This computer**.
+3. Select the audio file.
 
+You can also drop one audio file on the field.
 Studio puts the file in the enclosure of the show.
 The stream address goes out of the draft.
-If the show has a recording, the button is **Replace the recording**.
+If the show has a recording, the section shows the address with **Choose…**, a player and **Properties**.
+Use **Choose…** to replace the recording.
+
+The review lists a deletion of the file from before. Select **Undo** to keep it.

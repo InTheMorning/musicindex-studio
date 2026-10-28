@@ -6,12 +6,24 @@
 # Usage:
 #   tools/deploy-server.sh --release 0.1.0-rc.1 [--host USER@HOST] [--dir PATH]
 #
+# The repository holds no host and no folder of the VPS. The script reads
+# STUDIO_DEPLOY_HOST and STUDIO_DEPLOY_DIR from the environment, or from the
+# file .studio-dev/deploy.env. Git ignores that file.
+#
 set -euo pipefail
 
-VPS="USER@HOST"
-VPS_DIR="PATH"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_PREFIX="ghcr.io/inthemorning/studio-server"
+
+# A value in the environment has priority over the file.
+VPS="${STUDIO_DEPLOY_HOST:-}"
+VPS_DIR="${STUDIO_DEPLOY_DIR:-}"
+if [[ -f "${LOCAL_DIR}/.studio-dev/deploy.env" ]]; then
+    # shellcheck source=/dev/null
+    source "${LOCAL_DIR}/.studio-dev/deploy.env"
+    VPS="${VPS:-${STUDIO_DEPLOY_HOST:-}}"
+    VPS_DIR="${VPS_DIR:-${STUDIO_DEPLOY_DIR:-}}"
+fi
 
 usage() {
     cat >&2 <<'USAGE'
@@ -22,9 +34,12 @@ usage: deploy-server.sh --release VERSION [--host USER@HOST] [--dir PATH]
               VERSION must have a hyphen (ADR 0066 item 9). The local tag
               vVERSION must exist. The script builds nothing.
   --host USER@HOST
-              The VPS. The default is USER@HOST.
+              The VPS. The default is STUDIO_DEPLOY_HOST.
   --dir PATH  The folder of compose.yml on the VPS. The default is
-              PATH.
+              STUDIO_DEPLOY_DIR.
+
+The script reads STUDIO_DEPLOY_HOST and STUDIO_DEPLOY_DIR from the
+environment, or from .studio-dev/deploy.env. Git ignores that file.
 
 The script copies deploy/compose.yml to the folder. It does not copy .env.
 The folder on the VPS must have a .env file (see deploy/env.example).
@@ -80,6 +95,11 @@ done
 
 if [[ -z "${release}" ]]; then
     usage
+    exit 1
+fi
+if [[ -z "${VPS}" || -z "${VPS_DIR}" ]]; then
+    echo >&2 "error: set STUDIO_DEPLOY_HOST and STUDIO_DEPLOY_DIR, or use --host and --dir."
+    echo >&2 "       .studio-dev/deploy.env can hold the two values."
     exit 1
 fi
 

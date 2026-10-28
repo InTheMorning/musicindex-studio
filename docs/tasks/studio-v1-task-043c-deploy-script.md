@@ -20,7 +20,7 @@ Do not change: the crates, the workflows, the `Dockerfile`, `deploy/compose.yml`
 
 These choices are fixed. Do not change them.
 
-- The script has the usage `tools/deploy-server.sh --release VERSION [--host USER@HOST] [--dir PATH]`. The default host is `USER@HOST`, and the default folder is `PATH`, as for stophammer. `--help` gives the usage.
+- The script has the usage `tools/deploy-server.sh --release VERSION [--host USER@HOST] [--dir PATH]`. The default host is `STUDIO_DEPLOY_HOST`, and the default folder is `STUDIO_DEPLOY_DIR`. The script reads them from the environment or from `.studio-dev/deploy.env`, which Git ignores. `--help` gives the usage.
 - Before it connects, the script refuses a version with no local tag `vVERSION`, and a version with no hyphen (ADR 0066 item 9).
 - It copies `deploy/compose.yml` to the folder on the VPS with `rsync`. It does not copy `.env`. When `.env` does not exist on the VPS, it stops and tells the operator to make it from `deploy/env.example`.
 - On the VPS, it pulls `ghcr.io/inthemorning/studio-server:VERSION` first. When the pull fails, it stops and changes nothing.

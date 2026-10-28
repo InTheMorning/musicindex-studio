@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   mediumKind, isEditable, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
-  startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll,
+  startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView,
 } from '../ui/shell.js';
 
@@ -68,20 +68,23 @@ test('Lock Studio shows only when the vault is open', () => {
 test('an open album gives the outline in the sequence of ADR 0039 item 6', () => {
   const panel = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [album], model, vaultOpen: true });
   assert.equal(panel.kind, 'outline');
-  assert.deepEqual(panel.feed, { id: 1, title: 'Night Songs', image: null, glow: 'var(--c-feed)', typeLabel: 'Album' });
+  assert.deepEqual(panel.feed, {
+    id: 1, title: 'Night Songs', image: null, glow: 'var(--c-feed)', typeLabel: 'Album',
+    page: 'album', current: false, label: 'Night Songs, Album',
+  });
   assert.deepEqual(panel.items[0], { id: 'releases', label: 'Releases' });
   assert.deepEqual(labels(panel.items), [
-    'Releases', 'Album', 'First', 'Untitled track', 'Add a track', 'Import files',
+    'Releases', 'First', 'Untitled track', 'Add a track', 'Import files',
     'Live shows', 'Add a live show', 'Value routes', 'Credits and links', 'Feed settings', 'Files',
   ]);
-  assert.equal(panel.items[2].number, 1);
-  assert.equal(panel.items[2].current, true);
-  assert.equal(panel.items[1].current, false);
-  assert.equal(panel.items[4].action, 'add-track');
-  assert.equal(panel.items[5].action, 'import');
-  assert.equal(panel.items[6].heading, true);
-  assert.equal(panel.items[7].action, 'add-live');
-  assert.equal(panel.items[8].page, 'recipients');
+  assert.equal(panel.items[1].number, 1);
+  assert.equal(panel.items[1].current, true);
+  assert.equal(panel.items[2].current, false);
+  assert.equal(panel.items[3].action, 'add-track');
+  assert.equal(panel.items[4].action, 'import');
+  assert.equal(panel.items[5].heading, true);
+  assert.equal(panel.items[6].action, 'add-live');
+  assert.equal(panel.items[7].page, 'recipients');
 });
 
 test('the live shows come after the tracks, one entry for each live item', () => {
@@ -94,18 +97,18 @@ test('the live shows come after the tracks, one entry for each live item', () =>
   };
   const view = { name: 'feed', id: 1, page: 'live', track: 'l-1' };
   const panel = leftPanel({ view, feeds: [album], model: withLive, vaultOpen: false });
-  assert.deepEqual(labels(panel.items).slice(5, 11), [
+  assert.deepEqual(labels(panel.items).slice(4, 10), [
     'Import files', 'Live shows', 'Launch', 'Untitled show', 'Add a live show', 'Value routes',
   ]);
-  const entry = panel.items[7];
+  const entry = panel.items[6];
   assert.equal(entry.page, 'live');
   assert.equal(entry.track, 'l-1');
   assert.equal(entry.status, 'Planned');
   assert.equal(entry.current, true);
-  assert.equal(panel.items[8].track, 'cid-12');
-  assert.equal(panel.items[8].status, 'Live now');
-  assert.equal(panel.items[8].current, false);
-  assert.equal(panel.items[9].action, 'add-live');
+  assert.equal(panel.items[7].track, 'cid-12');
+  assert.equal(panel.items[7].status, 'Live now');
+  assert.equal(panel.items[7].current, false);
+  assert.equal(panel.items[8].action, 'add-live');
   // The track entries do not become current on a live page.
   assert.equal(panel.items.filter((i) => i.current).length, 1);
 });
@@ -119,21 +122,23 @@ test('a playlist and a publisher feed have no live shows', () => {
   }
 });
 
-test('an open album before its draft loads gives the Releases link, Album and Files', () => {
+test('an open album before its draft loads gives the Releases link and Files', () => {
   const panel = leftPanel({ view: { name: 'feed', id: 1 }, feeds: [album], model: null, vaultOpen: false });
-  assert.deepEqual(labels(panel.items), ['Releases', 'Album', 'Files']);
+  assert.deepEqual(labels(panel.items), ['Releases', 'Files']);
 });
 
-test('a publisher feed gives its role and Files, and a read-only feed gives Feed', () => {
+test('a publisher feed gives Feed settings and Files, and a read-only feed gives no page', () => {
   // musicindex ADR 0033 R-WORD-3: the page has the role word.
   const label = { ...publisher, publisher_role: 'label' };
   const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [label], model: null, vaultOpen: false });
-  assert.deepEqual(labels(pub.items), ['Releases', 'Label', 'Feed settings', 'Files']);
+  assert.deepEqual(labels(pub.items), ['Releases', 'Feed settings', 'Files']);
   const noRole = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: null, vaultOpen: false });
-  assert.deepEqual(labels(noRole.items), ['Releases', 'Feed', 'Feed settings', 'Files']);
+  assert.deepEqual(labels(noRole.items), ['Releases', 'Feed settings', 'Files']);
   const read = leftPanel({ view: { name: 'feed', id: 3 }, feeds: [readOnly], model: null, vaultOpen: false });
-  assert.deepEqual(labels(read.items), ['Releases', 'Feed']);
-  assert.equal(read.items[1].current, true);
+  assert.deepEqual(labels(read.items), ['Releases']);
+  assert.equal(pub.feed.label, `${pub.feed.title}, Label`);
+  assert.equal(read.feed.label, `${read.feed.title}, ${read.feed.typeLabel}`);
+  assert.equal(read.feed.current, true);
 });
 
 test('the Releases list gives the newest feed first, with the greater ID first on a tie', () => {
@@ -274,7 +279,7 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
   assert.equal(narrow.kind, 'outline');
   assert.equal(narrow.items.some((item) => item.id === 'releases'), false);
   assert.deepEqual(labels(narrow.items), [
-    'Album', 'First', 'Untitled track', 'Add a track', 'Import files', 'Live shows', 'Add a live show',
+    'First', 'Untitled track', 'Add a track', 'Import files', 'Live shows', 'Add a live show',
     'Value routes', 'Credits and links', 'Feed settings', 'Files',
   ]);
   assert.equal(narrow.items.some((item) => item.current), false);
@@ -327,7 +332,7 @@ test('a musicL feed is a playlist, with no regard to case', () => {
 test('a playlist gives Playlist, Tracks, Value routes and Files, with no add or import entry', () => {
   const playlist = { ...album, id: 4, medium: 'musicL' };
   const panel = leftPanel({ view: { name: 'feed', id: 4, page: 'tracks' }, feeds: [playlist], model, vaultOpen: false });
-  assert.deepEqual(labels(panel.items), ['Releases', 'Playlist', 'Tracks', 'Value routes', 'Feed settings', 'Files']);
+  assert.deepEqual(labels(panel.items), ['Releases', 'Tracks', 'Value routes', 'Feed settings', 'Files']);
   assert.equal(panel.items.find((item) => item.label === 'Tracks').current, true);
   assert.equal(panel.items.some((item) => item.action), false);
 });
@@ -344,4 +349,36 @@ test('the itunes:image of a feed row comes before its rss_image_url', () => {
   const both = { ...album, image: 'https://m.example/a.png', rss_image_url: 'https://m.example/b.png' };
   const list = releasesList({ feeds: [both], connectors: [], sort: 'newest', view: 'rows' });
   assert.equal(list.rows[0].image, 'https://m.example/a.png');
+});
+
+test('no outline has an item for the first page of the feed (ADR 0069)', () => {
+  const list = { ...album, id: 4, medium: 'musicL' };
+  const feeds = [album, list, publisher, readOnly];
+  for (const feed of feeds) {
+    const panel = leftPanel({ view: { name: 'feed', id: feed.id }, feeds, model, vaultOpen: true });
+    const ids = panel.items.map((item) => item.id);
+    for (const id of ['album', 'publisher', 'playlist', 'feed']) assert.equal(ids.includes(id), false);
+  }
+});
+
+test('the head is current on the first page and not on a track page (ADR 0069)', () => {
+  const first = leftPanel({ view: { name: 'feed', id: 1 }, feeds: [album], model, vaultOpen: true });
+  assert.equal(first.feed.current, true);
+  assert.equal(first.items.some((item) => item.current), false);
+  const track = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [album], model, vaultOpen: true });
+  assert.equal(track.feed.current, false);
+});
+
+test('releasesView gives the scroll of the nearest Releases entry and does not change nav (ADR 0069)', () => {
+  const nav = {
+    entries: [{ name: 'releases', marked: 9, scroll: 40 }, { name: 'feed', id: 1 }, { name: 'feed', id: 1, page: 'files' }],
+    index: 2,
+  };
+  const copy = JSON.parse(JSON.stringify(nav));
+  assert.deepEqual(releasesView(nav, 1), { name: 'releases', marked: 1, scroll: 40 });
+  assert.deepEqual(nav, copy);
+  const none = { entries: [{ name: 'feed', id: 1 }], index: 0 };
+  assert.deepEqual(releasesView(none, 1), { name: 'releases', marked: 1 });
+  const later = { entries: [{ name: 'feed', id: 1 }, { name: 'releases', scroll: 5 }], index: 0 };
+  assert.deepEqual(releasesView(later, 1), { name: 'releases', marked: 1 });
 });

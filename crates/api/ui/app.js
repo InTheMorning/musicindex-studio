@@ -16,7 +16,7 @@ import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from
 import {
   mediumKind, kindGlow, isEditable, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
-  startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll,
+  startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
 } from './shell.js';
 import {
@@ -2263,14 +2263,16 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   const releases = panel.items.find((item) => item.id === 'releases');
   const rest = panel.items.filter((item) => item.id !== 'releases');
   const hasBadAddress = (number) => draft.bad.some((b) => b.field.startsWith(`items/${number - 1}/`));
-  return html`${releases && html`<button class="row" type="button" onClick=${() => showReleases(feed.id)}>${releases.label}</button>`}
-    <div class="outline-feed">
+  return html`${releases && html`<button class="row" type="button" onClick=${() => showReleases(feed.id)}><${Chevron} direction="back" />${releases.label}</button>`}
+    <button class="outline-feed" type="button" aria-current=${currentAttr(feed)}
+      aria-label=${changedFeeds.has(feed.id) ? `${feed.label}, changes in the library folder` : feed.label}
+      onClick=${() => { if (!feed.current) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
       <${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always />
       <div class="text">
-        <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
+        <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"></span>`}</span>
         <span class="sub">${feed.typeLabel}</span>
       </div>
-    </div>
+    </button>
     <ul class="tree">
       ${rest.map((item) => {
         if (item.heading) {
@@ -2514,13 +2516,11 @@ function Shell({ vault, onLock }) {
     commit(next);
     history.pushState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
   };
-  // The link "Releases" of an open feed. It goes back when the Releases
-  // entry is directly before it, so that the page keeps its scroll.
+  // The link "Releases" of an open feed. It opens Releases as a new view,
+  // and it does not go back in the history (ADR 0069). The view keeps the
+  // scroll of the nearest Releases entry.
   const showReleases = (feedId) => {
-    const current = withScroll();
-    const before = current.index > 0 ? current.entries[current.index - 1] : null;
-    if (before && before.name === 'releases') back();
-    else go({ name: 'releases', marked: feedId });
+    go(releasesView(withScroll(), feedId));
   };
   // The browser Back and Forward buttons. The state moves until its index
   // agrees with the index of the history entry.

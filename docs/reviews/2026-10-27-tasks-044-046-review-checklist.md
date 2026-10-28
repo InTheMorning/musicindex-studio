@@ -13,13 +13,13 @@ The packets run one at a time, because each packet changes the UI or the write p
 5. Task 046b.
 6. Task 046c.
 
-A coding model implements each packet. The planning model examines the diff and runs the four commit checks before the next packet starts. Before each commit of a UI packet, the planning model makes the screenshots and runs `$edges()`. No packet is committed until the operator says so.
+A coding model implements each packet. The planning model examines the diff and runs the four commit checks before the next packet starts. Before each commit of a UI packet, the planning model makes the screenshots and runs `$edges()`. On 2026-10-27 the operator said to commit each packet after it passes.
 
 ## Packets
 
 | Packet | Status | Review |
 |---|---|---|
-| 044 | Ready | Not started |
+| 044 | Complete | Pass. See "Packet 044". |
 | 045a | Ready | Not started |
 | 045b | Ready | Not started |
 | 046a | Ready | Not started |
@@ -47,3 +47,11 @@ A coding model implements each packet. The planning model examines the diff and 
 - `FeedMoveMethod::None` gives the move of ADR 0067 item 8.
 - The write of a read-only draft compares the SHA-256 of the public file with the draft base version (ADR 0007 item 3).
 - A folder match keeps the draft. When the host has the bytes of the draft base, the base version becomes the version of the host.
+
+### Packet 044
+
+- The diff follows the packet. The planning model divided one long comment line in `shell.js`.
+- The four commit checks pass: Cargo 961 tests, Node 190 tests.
+- The visual check used `.studio-dev/visual-044` in the dark theme, the light theme and at 390 px. The head has the selected fill on the album page and no fill on a track page. "‹ Releases" opens Releases with the row of the feed marked. At 390 px, the head is 59 px high, and the outline page has no row "Album". `$edges()` gives an empty list.
+- `drive-ui.mjs` cannot send a key. A temporary copy in the scratchpad sent Tab and Enter. Tab reaches the head, the focus ring shows, and Enter opens the album page.
+- Open: the list of Releases in the check has five feeds and does not scroll. So the check did not examine the scroll position after "‹ Releases".

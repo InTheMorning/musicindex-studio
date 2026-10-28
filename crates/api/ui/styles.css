@@ -1168,8 +1168,10 @@ textarea:focus { background: var(--fill); }
   text-align: left;
   cursor: pointer;
 }
-.node:hover { background: var(--fill-soft); }
-.node[aria-current="page"] {
+.node:hover,
+button.outline-feed:hover { background: var(--fill-soft); }
+.node[aria-current="page"],
+button.outline-feed[aria-current="page"] {
   background: linear-gradient(var(--gloss-top), var(--gloss-bottom));
   border-color: var(--gloss-edge);
 }
@@ -1183,6 +1185,20 @@ textarea:focus { background: var(--fill); }
 
 /* The outline of the open feed: its cover and title, then its items. */
 .outline-feed { display: flex; align-items: center; gap: 10px; padding: 8px 10px; min-width: 0; }
+/* The head is a button (ADR 0069). It has the fill states of .node. */
+button.outline-feed {
+  width: 100%;
+  min-height: var(--target);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The chevron of the link "Releases" has the size of the chevron of the bar. */
+.row .chevron { flex: none; display: block; width: 1.45em; height: 1.45em; margin-right: -4px; }
 .outline-feed .text { display: grid; min-width: 0; }
 .outline-feed .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outline-feed .sub { color: var(--muted); font-size: .85rem; }

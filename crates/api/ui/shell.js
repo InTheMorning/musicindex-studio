@@ -74,9 +74,10 @@ function isCurrentPage(view, page, track) {
   return page !== 'track' || view.track === track;
 }
 
-// The entries of the outline of an open feed (ADR 0039 item 6). At narrow
-// width there is no "Releases" entry, because Back opens Releases (ADR 0039
-// item 11a).
+// The entries of the outline of an open feed (ADR 0039 item 6). The head of
+// the outline opens the first page of the feed, so no entry is for that page
+// (ADR 0069). At narrow width there is no "Releases" entry, because Back
+// opens Releases (ADR 0039 item 11a).
 function outlineItems(feed, view, model, narrow) {
   const items = narrow ? [] : [{ id: 'releases', label: 'Releases' }];
   const page = (id, label, pageName, track) => ({
@@ -88,14 +89,12 @@ function outlineItems(feed, view, model, narrow) {
   });
   if (isPublisher(feed)) {
     // A publisher feed has two pages and no tracks (ADR 0041 item 3).
-    items.push(page('publisher', mediumKind(feed.medium, feed.publisher_role).label, 'album'));
     items.push(page('settings', 'Feed settings', 'settings'));
     items.push(page('files', 'Files', 'files'));
     return items;
   }
   if (isEditable(feed) && isPlaylist(feed)) {
     // A playlist has no track pages and no import (ADR 0053 item 4).
-    items.push(page('playlist', 'Playlist', 'album'));
     items.push(page('tracks', 'Tracks', 'tracks'));
     items.push(page('recipients', 'Value routes', 'recipients'));
     items.push(page('settings', 'Feed settings', 'settings'));
@@ -104,10 +103,8 @@ function outlineItems(feed, view, model, narrow) {
   }
   if (!isEditable(feed)) {
     // A feed that the editor cannot open shows one page.
-    items.push(page('feed', 'Feed', 'album'));
     return items;
   }
-  items.push(page('album', 'Album', 'album'));
   if (model) {
     model.items.forEach((item, i) => {
       const key = trackKey(item);
@@ -181,6 +178,10 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       image: feedCover(feed),
       glow: kindGlow(mediumKind(feed.medium, feed.publisher_role)),
       typeLabel: mediumKind(feed.medium, feed.publisher_role).label,
+      // The head opens the first page (ADR 0069).
+      page: 'album',
+      current: isCurrentPage(view, 'album'),
+      label: `${displayTitle(feed)}, ${mediumKind(feed.medium, feed.publisher_role).label}`,
     },
     items: outlineItems(feed, view, model, narrow),
     bottom,
@@ -320,6 +321,21 @@ export function backNav(nav) {
     return { entries: next, index: index - 1 };
   }
   return { entries: entries.slice(), index: Math.max(0, index - 1) };
+}
+
+// The view that the link "Releases" opens (ADR 0069). The nearest Releases
+// entry at or before the index gives its scroll. The function does not
+// change `nav`.
+export function releasesView(nav, feedId) {
+  const view = { name: 'releases', marked: feedId };
+  for (let i = nav.index; i >= 0; i -= 1) {
+    const entry = nav.entries[i];
+    if (entry && entry.name === 'releases') {
+      if (entry.scroll !== undefined) view.scroll = entry.scroll;
+      break;
+    }
+  }
+  return view;
 }
 
 // Forward. It moves to the next entry, when an entry is after the current one.

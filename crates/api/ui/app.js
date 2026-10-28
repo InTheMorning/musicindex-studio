@@ -9,7 +9,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource,
 } from './account.js';
-import { addChoices, MAKE_TYPES, makeFields, feedFileStart } from './addfeeds.js';
+import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
 import { coverOf } from './cover.js';
 import { SignerConnect } from './signer.js';
@@ -1087,18 +1087,41 @@ function AddHostForm({ feeds, onAdded }) {
 // One form makes each new feed, as a draft with no file on the host yet
 // (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
-function MakeFeedForm({ connectors, startType, onAdded }) {
+function MakeFeedForm({ connectors, feeds, startType, onAdded }) {
   const [type, setType] = useState(startType);
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [role, setRole] = useState(null);
   const [typedPath, setTypedPath] = useState(null);
+  const [from, setFrom] = useState('');
+  const [authorTyped, setAuthorTyped] = useState(false);
   const [pathOpen, setPathOpen] = useState(false);
   const { busy, error, run } = useAction();
+  const authorTypedRef = useRef(false);
+  authorTypedRef.current = authorTyped;
   const fields = makeFields(type);
   const path = typedPath ?? feedFileStart(title);
   const formError = splitError(error, ['no_public_address', 'file_exists']);
+  const starts = startChoices(feeds);
+  const showFrom = type === 'album' && starts.length > 1;
+  // "Start from" is for the type Album only. Another type clears it.
+  const changeType = (value) => {
+    setType(value);
+    if (value !== 'album') setFrom('');
+  };
+  // An album gives the start value of "Artist" when the user did not type
+  // there. This is an edit aid. The core makes the copy (ADR 0077, ADR 0065).
+  const changeFrom = async (value) => {
+    setFrom(value);
+    if (!value) return;
+    try {
+      const draft = await api(`/feeds/${value}/draft`);
+      if (!authorTypedRef.current && draft.model && draft.model.author) setAuthor(draft.model.author);
+    } catch (e) {
+      // The start value is optional. The core reports a real error at the save.
+    }
+  };
   // Open "Feed file" when the API gives an error for it.
   useEffect(() => { if (formError.field) setPathOpen(true); }, [formError.field]);
   const submit = (event) => {
@@ -1107,13 +1130,16 @@ function MakeFeedForm({ connectors, startType, onAdded }) {
     run(async () => {
       const body = { connector_id: connectorId, path, title: name, author: fields.authorLabel === null ? name : author, medium: fields.medium };
       if (fields.role) body.role = role;
+      if (showFrom && from) body.from = Number(from);
       onAdded(await api('/feeds/new', { method: 'POST', body }));
     });
   };
   const ready = connectorId !== null && path.trim() && title.trim()
     && (fields.authorLabel === null || author.trim()) && (!fields.role || role !== null);
   return html`<form class="form" onSubmit=${submit}>
-    <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${setType} />
+    <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${changeType} />
+    ${showFrom && html`<${ChoiceSelect} id="make-from" label="Start from" value=${from} options=${starts.slice(1)}
+      placeholder=${starts[0][1]} onChange=${changeFrom} />`}
     ${connectors.length > 1 && html`<div class="field"><label for="make-host">Host</label>
       <select id="make-host" class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
@@ -1122,7 +1148,7 @@ function MakeFeedForm({ connectors, startType, onAdded }) {
     <${Field} id="make-title" label=${fields.titleLabel} required
       value=${title} onInput=${(e) => setTitle(e.target.value)} />
     ${fields.authorLabel !== null && html`<${Field} id="make-author" label=${fields.authorLabel} required
-      value=${author} onInput=${(e) => setAuthor(e.target.value)} />`}
+      value=${author} onInput=${(e) => { setAuthorTyped(true); setAuthor(e.target.value); }} />`}
     ${fields.role && html`<${ChoiceSelect} id="make-role" label="Role" value=${role ?? ''} placeholder="Select a role"
       options=${[['artist', 'Artist'], ['label', 'Label']]} onChange=${(value) => setRole(value || null)} />`}
     <div class="group"><details class="disclosure" open=${pathOpen} onToggle=${(e) => setPathOpen(e.currentTarget.open)}>
@@ -2203,12 +2229,12 @@ function SettingsPage() {
 
 // The sheet of one row of the Add feeds page (ADR 0073 item 3). `open` is the
 // ID of the row, or null. The forms of "Add a feed you have" do not change.
-function AddFeedSheet({ open, title, connectors, found, setFound, onAdded, onClose }) {
+function AddFeedSheet({ open, title, connectors, feeds, found, setFound, onAdded, onClose }) {
   const ref = useSheet(open !== null);
   const makeType = ['album', 'publisher', 'show', 'playlist'].includes(open) ? open : null;
   let body = null;
   if (makeType) {
-    body = html`<${MakeFeedForm} key=${open} connectors=${connectors} startType=${makeType} onAdded=${onAdded} />`;
+    body = html`<${MakeFeedForm} key=${open} connectors=${connectors} feeds=${feeds} startType=${makeType} onAdded=${onAdded} />`;
   } else if (open === 'find') {
     body = found
       ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
@@ -2230,7 +2256,7 @@ function AddFeedSheet({ open, title, connectors, found, setFound, onAdded, onClo
 
 // The Add feeds page: two groups of rows. A row opens its form in a sheet
 // (ADR 0073 items 1 to 4).
-function AddFeeds({ connectors, onAdded, go }) {
+function AddFeeds({ connectors, feeds, onAdded, go }) {
   const [open, setOpen] = useState(null);
   const [found, setFound] = useState(null);
   const groups = addChoices({ hasHost: connectors.length > 0 });
@@ -2250,7 +2276,7 @@ function AddFeeds({ connectors, onAdded, go }) {
         </button>`)}
       </div>`}
     </section>`)}
-    <${AddFeedSheet} open=${open} title=${title} connectors=${connectors} found=${found} setFound=${setFound}
+    <${AddFeedSheet} open=${open} title=${title} connectors=${connectors} feeds=${feeds} found=${found} setFound=${setFound}
       onAdded=${onAdded} onClose=${close} />
   </section></div>`;
 }
@@ -2685,7 +2711,7 @@ function Shell({ vault, onLock }) {
   } else if (view.name === 'settings') {
     main = html`<${SettingsPage} />`;
   } else if (view.name === 'add-feed') {
-    main = html`<${AddFeeds} connectors=${connectors} go=${go}
+    main = html`<${AddFeeds} connectors=${connectors} feeds=${feeds} go=${go}
       onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); }} />`;
   } else if (selected && view.name === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go}

@@ -1,7 +1,7 @@
 // The rules of the Add feeds page and of the form that makes a feed (ADR 0073).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addChoices, makeFields, feedFileStart, MAKE_TYPES } from '../ui/addfeeds.js';
+import { addChoices, makeFields, feedFileStart, startChoices, MAKE_TYPES } from '../ui/addfeeds.js';
 
 test('feedFileStart gives the file name from the title', () => {
   assert.equal(feedFileStart('Pixel Palace'), 'pixel-palace.xml');
@@ -43,4 +43,31 @@ test('makeFields gives the fields of each type', () => {
 test('MAKE_TYPES lists the four types that makeFields knows', () => {
   assert.deepEqual(MAKE_TYPES.map(([id]) => id), ['album', 'publisher', 'show', 'playlist']);
   for (const [id] of MAKE_TYPES) assert.ok(makeFields(id).button);
+});
+
+test('startChoices gives only the empty album when no album exists', () => {
+  assert.deepEqual(startChoices([]), [['', 'Empty album']]);
+  assert.deepEqual(startChoices(undefined), [['', 'Empty album']]);
+});
+
+test('startChoices gives the albums in the sequence of their titles', () => {
+  const feeds = [
+    { id: 7, medium: 'music', title: 'Zebra' },
+    { id: 3, medium: 'music', title: 'Apple' },
+  ];
+  assert.deepEqual(startChoices(feeds), [['', 'Empty album'], ['3', 'Apple'], ['7', 'Zebra']]);
+});
+
+test('startChoices uses the address of a feed with no title', () => {
+  const feeds = [{ id: 4, medium: 'music', title: '', path: 'a/b.xml' }];
+  assert.deepEqual(startChoices(feeds), [['', 'Empty album'], ['4', 'a/b.xml']]);
+});
+
+test('startChoices leaves out a publisher feed and a playlist', () => {
+  const feeds = [
+    { id: 1, medium: 'publisher', publisher_role: 'artist', title: 'Band' },
+    { id: 2, medium: 'musicL', title: 'Mix' },
+    { id: 3, medium: 'music', title: 'Album' },
+  ];
+  assert.deepEqual(startChoices(feeds), [['', 'Empty album'], ['3', 'Album']]);
 });

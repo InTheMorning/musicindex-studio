@@ -1,6 +1,7 @@
 // The model of the Add feeds page and of the form that makes a feed (ADR 0073
 // items 1 to 10, ADR 0042). The functions have no Preact and no browser
 // state. `app.js` shows the rows and the form.
+import { mediumKind } from './shell.js';
 
 // The rows of the Add feeds page, in two groups. With no connected host, the
 // group "Make a new feed" has no rows and the flag `connect`. The row
@@ -59,4 +60,15 @@ export function feedFileStart(title) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return stem === '' ? '' : `${stem}.xml`;
+}
+
+// The values of the select menu "Start from" (ADR 0077 item 1). The first
+// value is an empty album. Then come the albums of the list of releases, in
+// the sequence of their titles. A feed with no title uses its address.
+export function startChoices(feeds) {
+  const albums = (feeds || [])
+    .filter((feed) => mediumKind(feed.medium, feed.publisher_role).label === 'Album')
+    .map((feed) => [String(feed.id), feed.title || feed.path || 'Untitled feed']);
+  albums.sort((a, b) => a[1].localeCompare(b[1]));
+  return [['', 'Empty album'], ...albums];
 }

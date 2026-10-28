@@ -34,6 +34,19 @@ A notice tells you that the host has no file for this release yet.
 If the host has no public address, Studio shows "Give this host a public address first, in Hosts."
 If a file with this path exists, Studio shows "A file exists at this path already."
 
+## Start from an album
+
+If you have an album in Studio, a new album can start from it.
+
+1. In the sheet, keep **Album** in **Type**.
+2. Select an album in **Start from**.
+3. Examine **Album title** and **Artist**. Studio puts the artist of the source in **Artist**.
+4. Select **Make the release**.
+
+The new album gets the tracks of the source. Each track and the album get new GUIDs.
+The source album does not change.
+**Start from** is only in the sheet for an album. The value **Empty album** makes an album with no tracks.
+
 ## Add the content
 
 Fill in the album details and add tracks. See these pages:

@@ -28,7 +28,7 @@ These decisions are in the limits of ADR 0067. The [review checklist](../reviews
 - The write of a read-only draft reads the public address through the `Web` of the workspace, so that the network policy of ADR 0057 applies. A different SHA-256 gives a conflict.
 - After a write, the feed row gets the new connector, the path, the address and the default host of the files.
 - A link by a folder match keeps the draft. When the host file has the SHA-256 of the draft base, the base version becomes the version of the host. Otherwise the base version stays, and the write gives a conflict. The link removes the draft feed move.
-- An upload in a read-only draft with no host choice waits for the host. The diff shows it, and the write refuses the draft.
+- The import of a file into a read-only draft is refused until the feed has a host. With a host choice, each upload goes to the new host.
 
 ## Acceptance Criteria
 

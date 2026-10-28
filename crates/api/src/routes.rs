@@ -1733,6 +1733,16 @@ pub(crate) async fn match_connector(
                 w.collection
                     .set_feed_connector(feed.id, row.id, &file.path)?;
                 give_linked_feed_folder(w, made.as_ref(), feed.id, &file.path);
+                // The feed keeps its draft, now on the host (ADR 0067
+                // item 13). An error goes into the log and the link stays.
+                if let Err(error) =
+                    pipeline::rebase_linked_draft(&w.collection, made.as_ref(), feed.id)
+                {
+                    eprintln!(
+                        "studio: feed {} keeps its link, but its draft was not rebased: {error}",
+                        feed.id.0
+                    );
+                }
                 linked.push(feed.id);
             }
         }
@@ -1868,11 +1878,17 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
 }
 
 /// Start the draft of a feed when it has none (ADR 0041 item 8). A feed
-/// with a draft is not changed.
+/// with a draft is not changed. A feed with no connector starts its draft
+/// from its release folder (ADR 0067 item 3).
 fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
     if w.collection.draft(id)?.is_none() {
-        let made = writer(w, id)?;
-        pipeline::start_draft(&w.collection, made.as_ref(), id)?;
+        if w.collection.feed(id)?.connector_id.is_none() {
+            let library = w.library()?;
+            pipeline::start_public_draft(&w.collection, &library, id)?;
+        } else {
+            let made = writer(w, id)?;
+            pipeline::start_draft(&w.collection, made.as_ref(), id)?;
+        }
     }
     Ok(())
 }
@@ -2028,8 +2044,13 @@ pub(crate) async fn set_publisher_role(
 /// true when the draft is different from the live file. Each bad address
 /// stops a write (ADR 0023).
 ///
+/// The value of `has_host` is false for a feed with no connector and no
+/// draft feed move (ADR 0067 item 6).
+///
 /// This route needs no host and no library: it only shows the draft.
 fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
+    let has_host = w.collection.feed(id)?.connector_id.is_some()
+        || w.collection.draft_feed_move(id)?.is_some();
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
     let changed = pipeline::draft_changed(&w.collection, id)?;
     let bad_addresses = model.bad_addresses();
@@ -2040,18 +2061,16 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
         "changed": changed,
         "bad_addresses": bad_addresses,
         "hidden": hidden,
+        "has_host": has_host,
     })))
 }
 
 /// The draft of a feed. Studio starts one from the live file when the feed
-/// has none.
+/// has none. A feed with no connector starts from its release folder.
 pub(crate) async fn get_draft(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        let made = writer(w, id)?;
-        if w.collection.draft(id)?.is_none() {
-            pipeline::start_draft(&w.collection, made.as_ref(), id)?;
-        }
+        ensure_draft(w, id)?;
         draft_json(w, id)
     })
     .await
@@ -2072,7 +2091,7 @@ pub(crate) async fn put_draft(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        writer(w, id)?;
+        ensure_draft(w, id)?;
         pipeline::replace_model(&w.collection, id, &body.revision, body.model)?;
         draft_json(w, id)
     })
@@ -2215,7 +2234,6 @@ pub(crate) async fn delete_draft(
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        writer(w, id)?;
         // A new release has no file on the host until its first write. With
         // no draft, Studio cannot start a draft again, so the release keeps
         // its draft (ADR 0032 item 9).
@@ -2276,7 +2294,7 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
 pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        writer(w, id)?;
+        ensure_draft(w, id)?;
         diff_json(w, id)
     })
     .await
@@ -2335,6 +2353,10 @@ pub(crate) async fn write_feed(
             Some(check) => check.0.as_ref(),
             None => &w.web,
         };
+        // A feed with no connector writes through its draft feed move. The
+        // write reads the public address through `w.web`, so that the
+        // network policy applies (ADR 0057, ADR 0067 item 7).
+        let public = w.collection.feed(id)?.connector_id.is_none();
         pipeline::write_draft_signed(
             &mut w.collection,
             &hosts,
@@ -2344,7 +2366,7 @@ pub(crate) async fn write_feed(
             &approved,
             &signed,
             now,
-            None,
+            public.then_some(&w.web),
         )?;
         if let Some((feed, _)) = written {
             w.record_remote_files(id, &feed);
@@ -3022,12 +3044,16 @@ pub(crate) async fn list_release_files(
 
 #[derive(Deserialize)]
 pub(crate) struct SetFeedHost {
-    connector_id: i64,
+    connector_id: Option<i64>,
 }
 
 /// Put the feed XML on a different host through the draft (ADR 0038
 /// item 16). The host of the feed removes the move. A host that has a file
 /// at the path gives 409 `file_exists`. Gives the new diff summary.
+///
+/// A feed with no connector chooses its first host here, and the body
+/// `{ "connector_id": null }` removes the choice (ADR 0067 item 5). A feed
+/// with a connector refuses `null` with 422.
 pub(crate) async fn set_feed_host(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -3035,9 +3061,29 @@ pub(crate) async fn set_feed_host(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        writer(w, id)?;
-        let hosts = w.hosts()?;
-        pipeline::set_feed_host(&w.collection, &hosts, id, ConnectorId(body.connector_id))?;
+        let has_connector = w.collection.feed(id)?.connector_id.is_some();
+        match body.connector_id {
+            Some(target) => {
+                if has_connector {
+                    writer(w, id)?;
+                } else {
+                    ensure_draft(w, id)?;
+                }
+                let hosts = w.hosts()?;
+                pipeline::set_feed_host(&w.collection, &hosts, id, ConnectorId(target))?;
+            }
+            None if has_connector => {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_body",
+                    "a feed with a host needs a connector_id",
+                ));
+            }
+            None => {
+                ensure_draft(w, id)?;
+                pipeline::clear_feed_host(&w.collection, id)?;
+            }
+        }
         w.sync_grant_vaults(Some(id));
         diff_json(w, id)
     })
@@ -4014,6 +4060,20 @@ pub(crate) async fn import_file(
     // The guard removes the temporary file at the end of this function,
     // also after an error of the import or the collection.
     let guard = TempFile(temp_path.clone());
+    // A feed with no host has no host for its files (ADR 0067 item 7). The
+    // check comes before the encode, so that Studio does no work for a
+    // refused file.
+    blocking(shared.clone(), move |w| {
+        if w.collection.feed(FeedId(id))?.connector_id.is_none() {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "read_only",
+                "choose a host for this feed first, in Review",
+            ));
+        }
+        Ok(())
+    })
+    .await?;
     let import_path = temp_path.clone();
     let imported =
         blocking_unlocked(move || media::import(&import_path, &file_name).map_err(ApiError::from))

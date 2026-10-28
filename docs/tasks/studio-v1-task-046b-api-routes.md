@@ -3,7 +3,7 @@
 Parent: [task 046](studio-v1-task-046-read-only-editor.md). Decisions: [ADR 0067](../adr/0067-a-read-only-feed-opens-in-the-editor.md) items 3 to 7 and 12, [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md) item 5 and [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md).
 Sequence: the second packet of task 046. It depends on 046a.
 
-Status: Ready.
+Status: Complete - 2026-10-27. The four commit checks pass, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records the review.
 
 ## Goal
 

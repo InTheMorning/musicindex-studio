@@ -3773,7 +3773,7 @@ fn a_write_of_a_public_draft_needs_the_web_of_the_caller() {
 }
 
 #[test]
-fn an_upload_of_a_public_draft_waits_for_a_host_and_goes_to_the_target_after_the_choice() {
+fn an_upload_of_a_public_draft_goes_to_the_target_after_the_host_choice() {
     let mut s = public_setup();
     pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
     s.collection
@@ -3795,19 +3795,12 @@ fn an_upload_of_a_public_draft_waits_for_a_host_and_goes_to_the_target_after_the
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.operations.len(), 0);
     assert_eq!(diff.blocked.len(), 0);
-    assert_eq!(
-        diff.waiting_uploads,
-        [pipeline::WaitingUpload {
-            path: "cover.jpg".to_owned()
-        }]
-    );
     let error = public_write(&mut s, &diff.id).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
 
     pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.blocked.len(), 0);
-    assert_eq!(diff.waiting_uploads.len(), 0);
     assert_eq!(diff.operations.len(), 1);
     assert_eq!(diff.operations[0].kind, OperationKind::Upload);
     assert_eq!(diff.operations[0].connector_id, s.target);

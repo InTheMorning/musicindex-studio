@@ -23,7 +23,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | 045a | Complete | Pass. See "Packet 045a". |
 | 045b | Complete | Pass. See "Packet 045b". |
 | 046a | Complete | Pass after one correction. See "Packet 046a". |
-| 046b | Ready | Not started |
+| 046b | Complete | Pass after one correction. See "Packet 046b". |
 | 046c | Ready | Not started |
 
 ## The Review Of Each Packet
@@ -78,7 +78,17 @@ A coding model implements each packet. The planning model examines the diff and 
 
 - The first diff put an upload that waits for a host into `BlockedDelete`, as the packet text said. That type is for a refused deletion. The change made `connector_id` and `operation_id` optional in each refused deletion. The planning model rejected it. The coding model restored `BlockedDelete`, and added `WaitingUpload` and the diff field `waiting_uploads`. The paths of the list are in the bytes of the diff ID.
 - No path reaches a write check of `waiting_uploads`. A write with no host choice stops at "choose a host for this feed first", and with a host choice each upload has a planned host. The planning model removed that check, because no entry point reaches it.
-- A feed with no host has no planned address for a library file. So `waiting_upload` compares the end of each draft address with the library path. This rule is approximate. Open: a later packet can replace it with a rule from the import.
+- A feed with no host has no planned address for a library file. So `waiting_upload` compares the end of each draft address with the library path. Packet 046b removed this rule (see "Packet 046b").
 - The write of a feed with a connector does not change. Each test of it passes with no change.
 - The four commit checks pass: Cargo 975 tests, Node 200 tests. The core pipeline tests went from 92 to 105.
 - The tests examine each criterion of the packet. The write of a moved read-only draft sends only GET requests to the old address. The announcements give the new address, then the old address.
+
+### Packet 046b
+
+- The routes follow the packet. The draft routes and the diff route work for a feed with no connector. The draft response gives `has_host`, and the host route accepts `null`.
+- The planning model accepts `502 network` for a write that the network policy refuses. `refresh_public` gives the same code for the same refusal.
+- The old test `each_draft_route_of_a_read_only_feed_gives_read_only` stated a rule that ADR 0067 replaced. The coding model replaced it with a test of the routes that still need a host.
+- In the review, the planning model found a defect of packet 046a. The import route refuses a feed with no connector, so no library file of a read-only draft is an upload. The rule of `waiting_upload` also listed each file that Studio downloaded from the feed. So `waiting_uploads` gave only false results. The coding model removed it from the core and the API.
+- The import of a file into a read-only feed gives 409 `read_only` and "choose a host for this feed first, in Review". The planning model moved this check before the encode, so that Studio does no work for a refused file.
+- These routes still need a host and give 409 `read_only` for a feed with no connector: the snapshots, a snapshot to the draft, the host operations and the hosts of the files. Packet 046c shows their error text.
+- The four commit checks pass: Cargo 982 tests, Node 200 tests.

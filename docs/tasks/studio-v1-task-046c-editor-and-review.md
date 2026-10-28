@@ -41,6 +41,8 @@ These choices are fixed. Do not change them.
   - The button "Connect the Host of This File", with the role action. It opens Hosts.
   - The field "Move to a host": a select menu of the connectors that have a public address, then the button "Move to This Host" with the role action. The button sends `PUT /feeds/{id}/feed-host` with the selected connector.
 - With `move`, Review shows the feed move row, the button "Write to the host" as now, and this warning in a `notice`: "The file at the address before the move stays and does not change. Apps that read that address continue to get the version from before the move."
+- The import route refuses a read-only feed with 409 `read_only` and "choose a host for this feed first, in Review" (packet 046b). The import sheet shows that error text, as it shows each other error.
+- The snapshot routes refuse a read-only feed with 409 `read_only`. The Versions sheet shows the error text, as it shows each other error.
 - "Undo" of the move row of a read-only feed sends `PUT /feeds/{id}/feed-host` with `{ "connector_id": null }`.
 - `moveNote` gives a text for the method `none`: "Studio writes nothing at the address before the move."
 

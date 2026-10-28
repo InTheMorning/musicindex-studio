@@ -281,9 +281,6 @@ pub struct Diff {
     /// Each deletion that Studio refuses because a feed refers to the
     /// file (ADR 0036 item 13).
     pub blocked: Vec<BlockedDelete>,
-    /// Each library file that waits for the host choice of a feed with no
-    /// host (ADR 0067 item 6).
-    pub waiting_uploads: Vec<WaitingUpload>,
     /// The move of the feed XML to a different host, when the draft has
     /// one (ADR 0038 item 18).
     pub feed_move: Option<FeedMove>,
@@ -427,14 +424,6 @@ pub struct BlockedDelete {
     /// True when the file is a pointer file of Studio. Studio keeps it:
     /// it tells the apps the new address of the feed (ADR 0038 item 20).
     pub pointer: bool,
-}
-
-/// A library file of a feed with no host, which the draft refers to, and
-/// which waits for the host choice (ADR 0067 item 6).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct WaitingUpload {
-    /// The path of the library file.
-    pub path: String,
 }
 
 /// The result of an import of a file into the library (ADR 0036 item 5).
@@ -1110,11 +1099,9 @@ pub fn diff_at(
     let feed_row = collection.feed(id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let (operations, blocked, waiting_uploads) =
-        host_operations(collection, library, hosts, &feed_row, &feed)?;
+    let (operations, blocked) = host_operations(collection, library, hosts, &feed_row, &feed)?;
     let feed_move = feed_move(collection, hosts, &feed_row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
-    extra.extend(waiting_bytes(&waiting_uploads));
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let (announcements, announce_skip) =
         plan_announcements(collection, hosts, &feed_row, feed_move.as_ref())?;
@@ -1170,7 +1157,6 @@ pub fn diff_at(
         files,
         operations,
         blocked,
-        waiting_uploads,
         feed_move,
         announcements,
         announce_skip,
@@ -1750,10 +1736,6 @@ fn confirm_operation(
     })
 }
 
-/// The host operations, the blocked deletions and the waiting uploads of a
-/// draft.
-type HostPlan = (Vec<HostOperation>, Vec<BlockedDelete>, Vec<WaitingUpload>);
-
 /// Each host operation of the draft of a feed, and each deletion that
 /// Studio refuses because a feed refers to the file (ADR 0036 items 10,
 /// 12, 13 and 14).
@@ -1771,11 +1753,10 @@ fn host_operations(
     hosts: &Hosts,
     feed_row: &FeedRow,
     feed: &Feed,
-) -> Result<HostPlan, PipelineError> {
+) -> Result<(Vec<HostOperation>, Vec<BlockedDelete>), PipelineError> {
     let urls = feed_addresses(feed);
     let mut operations = Vec::new();
     let mut blocked = Vec::new();
-    let mut waiting = Vec::new();
 
     // A feed with no host plans its files for the host of its feed move
     // (ADR 0067 item 6).
@@ -1803,7 +1784,6 @@ fn host_operations(
                 if error.kind() == InventoryErrorKind::NoHost
                     && feed_row.connector_id.is_none() =>
             {
-                waiting.extend(waiting_upload(&file, &urls));
                 continue;
             }
             Err(error) => return Err(error.into()),
@@ -1900,34 +1880,7 @@ fn host_operations(
         }
     }
 
-    Ok((operations, blocked, waiting))
-}
-
-/// The upload of a library file that waits for a host, when the draft
-/// names the file and the file has bytes (ADR 0067 item 6). A feed with no
-/// host has no planned address, so the rule compares the end of each draft
-/// address with the library path.
-fn waiting_upload(file: &LibraryFile, urls: &[&str]) -> Option<WaitingUpload> {
-    let encoded = file.path.replace(' ', "%20");
-    let named = urls
-        .iter()
-        .any(|url| url.ends_with(&file.path) || url.ends_with(&encoded));
-    (file.sha256.is_some() && named).then(|| WaitingUpload {
-        path: file.path.clone(),
-    })
-}
-
-/// The bytes that [`diff_id`] adds for the waiting uploads. The bytes are
-/// empty when no upload waits.
-fn waiting_bytes(waiting: &[WaitingUpload]) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    for upload in waiting {
-        bytes.push(0);
-        bytes.extend_from_slice(b"waiting");
-        bytes.push(0);
-        bytes.extend_from_slice(upload.path.as_bytes());
-    }
-    bytes
+    Ok((operations, blocked))
 }
 
 /// The bytes that [`diff_id`] adds for each host operation: its kind, its
@@ -2423,13 +2376,9 @@ pub fn write_draft_signed(
     let connector = hosts.get(connector_id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    // A write has a host for the feed XML, so each upload has a planned
-    // host and no upload waits. The bytes keep the diff ID of `diff_at`.
-    let (operations, _blocked, waiting_uploads) =
-        host_operations(collection, library, hosts, &row, &feed)?;
+    let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
     let feed_move = feed_move(collection, hosts, &row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
-    extra.extend(waiting_bytes(&waiting_uploads));
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let (announcements, announce_skip) =
         plan_announcements(collection, hosts, &row, feed_move.as_ref())?;

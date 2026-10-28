@@ -2169,18 +2169,24 @@ async fn a_stale_or_invalid_model_and_a_changed_file_give_errors() {
 }
 
 #[tokio::test]
-async fn each_draft_route_of_a_read_only_feed_gives_read_only() {
+async fn each_host_route_of_a_read_only_feed_with_no_folder_gives_an_error() {
     let app = app();
     set_up(&app).await;
     let (_, feed) = call(&app, "POST", "/api/v1/feeds", Some(json!({}))).await;
     let id = feed["id"].as_i64().unwrap();
     let model = serde_json::to_value(studio_core::feed::Feed::default()).unwrap();
     let body = json!({ "revision": "r", "model": model });
+    // A feed with no release folder has no draft to start (ADR 0067 item 3).
     for (method, path, body) in [
         ("GET", format!("/api/v1/feeds/{id}/draft"), None),
         ("PUT", format!("/api/v1/feeds/{id}/draft"), Some(body)),
-        ("DELETE", format!("/api/v1/feeds/{id}/draft"), None),
         ("GET", format!("/api/v1/feeds/{id}/diff"), None),
+    ] {
+        let (status, response) = call(&app, method, &path, body).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{method} {path}");
+        assert_eq!(response["error"]["code"], "not_found", "{method} {path}");
+    }
+    for (method, path, body) in [
         (
             "POST",
             format!("/api/v1/feeds/{id}/write"),
@@ -8606,5 +8612,272 @@ async fn a_change_of_the_alt_of_an_image_with_an_unknown_purpose_token_changes_o
     assert_eq!(
         live(&app),
         FEED_WITH_ARTWORK.replace("alt=\"Old text\"", "alt=\"New text\"")
+    );
+}
+
+// ---- A read-only feed with a release folder (ADR 0067) ----
+
+/// Add a read-only feed that reads `address`, and give it a release folder
+/// that holds the feed XML that the address serves. Gives the feed ID.
+fn read_only_with_folder(app: &App, address: &str) -> i64 {
+    let mut collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let id = collection.add_feed(Some(address), None).unwrap();
+    let web = studio_core::web::Web::new();
+    studio_core::pipeline::refresh_public(&mut collection, &web, id).unwrap();
+    collection.set_feed_folder(id, "album").unwrap();
+    let library = studio_core::library::Library::open(app.data.path().join("library")).unwrap();
+    library
+        .write_feed_xml("album", "a.xml", FEED.as_bytes())
+        .unwrap();
+    id.0
+}
+
+#[tokio::test]
+async fn the_draft_of_a_read_only_feed_has_no_host_and_a_saved_edit_gives_a_diff() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    set_library_root(&app);
+    let id = read_only_with_folder(&app, &server.url("/a.xml"));
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+
+    let (status, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(draft["model"]["title"], "Album");
+    assert_eq!(draft["has_host"], false);
+
+    let mut model = draft["model"].clone();
+    model["title"] = json!("Album (remaster)");
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(saved["changed"], true);
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert!(
+        diff["unified"]
+            .as_str()
+            .unwrap()
+            .contains("+    <title>Album (remaster)</title>")
+            || diff["unified"]
+                .as_str()
+                .unwrap()
+                .contains("Album (remaster)"),
+        "{diff}"
+    );
+
+    // A write with no host gives 409 `read_only`.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "read_only");
+}
+
+#[tokio::test]
+async fn a_host_choice_of_a_read_only_draft_gives_a_feed_move_and_a_write_moves_the_feed() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    set_library_root(&app);
+    let id = read_only_with_folder(&app, &server.url("/a.xml"));
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let host_path = format!("/api/v1/feeds/{id}/feed-host");
+    let new_dir = tempfile::tempdir().unwrap();
+    let new_id = add_host(&app, "New", new_dir.path(), "https://new.example").await;
+    call(&app, "GET", &draft_path, None).await;
+
+    let (status, diff) = call(
+        &app,
+        "PUT",
+        &host_path,
+        Some(json!({ "connector_id": new_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["feed_move"]["connector_id"], new_id);
+    assert_eq!(diff["feed_move"]["method"], "none");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(draft["has_host"], true);
+
+    // `null` removes the move.
+    let (status, diff) = call(
+        &app,
+        "PUT",
+        &host_path,
+        Some(json!({ "connector_id": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["feed_move"], Value::Null);
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(draft["has_host"], false);
+
+    // A write of the moved draft gives the feed its host.
+    let (_, diff) = call(
+        &app,
+        "PUT",
+        &host_path,
+        Some(json!({ "connector_id": new_id })),
+    )
+    .await;
+    let (status, feed) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{feed}");
+    assert_eq!(feed["connector_id"], new_id);
+    assert_eq!(feed["path"], "album/a.xml");
+    assert!(new_dir.path().join("album/a.xml").exists());
+}
+
+#[tokio::test]
+async fn a_null_host_for_a_feed_with_a_host_gives_422() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+}
+
+#[tokio::test]
+async fn a_folder_match_keeps_the_draft_of_a_read_only_feed() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    set_library_root(&app);
+    let id = read_only_with_folder(&app, &server.url("/a.xml"));
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["title"] = json!("Album (kept)");
+    call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{}/match", connector["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        body["linked"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["id"] == id)
+    );
+    let (status, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(draft["model"]["title"], "Album (kept)");
+    assert_eq!(draft["has_host"], true);
+}
+
+#[tokio::test]
+async fn a_link_of_a_publisher_feed_and_a_read_only_release_with_a_folder_gives_409() {
+    let server = web_feeds();
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let read_only = read_only_with_folder(&app, &server.url("/a.xml"));
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{}/links", label["id"]),
+        Some(json!({ "release": read_only })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "read_only");
+}
+
+#[tokio::test]
+async fn with_the_policy_public_the_write_of_a_read_only_draft_on_loopback_gives_the_policy_error()
+{
+    let server = web_feeds();
+    let app = public_app();
+    set_library_root(&app);
+    let id = read_only_with_folder(&app, &server.url("/a.xml"));
+    let new_dir = tempfile::tempdir().unwrap();
+    let new_id = add_host(&app, "New", new_dir.path(), "https://new.example").await;
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    let (status, diff) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": new_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    // The core reports the policy error as a failed web read.
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{body}");
+    assert_eq!(body["error"]["code"], "network", "{body}");
+    assert_eq!(
+        body["error"]["message"],
+        "Studio on a server cannot connect to 127.0.0.1, because it is not a public address."
+    );
+    assert!(!new_dir.path().join("album/a.xml").exists());
+}
+
+#[tokio::test]
+async fn an_upload_for_a_feed_with_no_host_gives_409_read_only() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    set_library_root(&app);
+    let id = read_only_with_folder(&app, &server.url("/a.xml"));
+    let bytes = std::fs::read(media_path("image.png")).unwrap();
+    let (status, body) = upload(&app, id, "image.png", bytes).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "read_only");
+    assert_eq!(
+        body["error"]["message"],
+        "choose a host for this feed first, in Review"
     );
 }

@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
 Decisions: [ADR 0067](../adr/0067-a-read-only-feed-opens-in-the-editor.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md), [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) and [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md).
 
-Status: Complete - 2026-10-27, except the human test. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records it. The human test with a real public feed is open.
+Status: Complete - 2026-10-27. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records it. The human test with a real public feed passed on 2026-10-28, on `0.1.0-rc.3`.
 
 ## Goal
 

@@ -523,7 +523,11 @@ code, .mono {
 :root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
 
-.main { overflow-y: auto; background: var(--level-1); }
+/* The main pane is the containing block of an absolute element in it, such
+   as a visually hidden file input. Without it, that element takes the body as
+   its containing block, and the document scrolls with the bar (human test of
+   task 046, 2026-10-28). */
+.main { position: relative; overflow-y: auto; background: var(--level-1); }
 /* The toolbar: a row with the feed title, then the draft toolbar. It stays
    visible at all scroll positions (ADR 0029 item 1). */
 .bar {

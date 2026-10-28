@@ -2,7 +2,7 @@
 
 Parent: [task 047](studio-v1-task-047-settings-page-and-tiers.md). Decision: [ADR 0071](../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 5 and 9 to 14.
 
-Status: Open. It depends on packet 047a.
+Status: Complete - 2026-10-28.
 
 ## Goal
 

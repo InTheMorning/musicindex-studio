@@ -7,6 +7,7 @@ Studio has a left panel with these entries:
 - **Releases**
 - **Add a feed**
 - **Hosts** (at the bottom)
+- **Settings** (at the bottom)
 - **Lock Studio** (at the bottom, when the vault is open)
 - **Unlock Studio** (at the bottom, on a server with a locked vault)
 
@@ -80,7 +81,7 @@ They move through the pages that you opened.
 
 When the window is 760 pixels wide or less, Studio shows one page at a time. It opens on **Releases**.
 Select the back button to go to the first page.
-The first page lists **Releases**, **Add a feed**, **Hosts** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
+The first page lists **Releases**, **Add a feed**, **Hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
 When you open a release, you see its outline first. Select a page in the outline to open it.
 Use the back button to go back.
 
@@ -98,7 +99,7 @@ Use the sun and moon button in the left panel to change the theme.
 
 ## Your account on a server
 
-On a server, the Hosts page has the panel **Account**.
+On a server, the Settings page has the panel **Account**.
 Use it to add a passkey, to sign out and to delete the account.
 See [Your account on a server](account.md).
 

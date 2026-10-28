@@ -77,19 +77,19 @@ test('with no open feed, the left panel gives the four destinations', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
   assert.equal(panel.kind, 'destinations');
   assert.deepEqual(panel.top.map((e) => e.id), ['releases', 'add-feed']);
-  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'lock']);
+  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings', 'lock']);
   assert.equal(panel.top[0].current, true);
   assert.equal(JSON.stringify(panel).includes('Select a feed'), false);
 });
 
 test('Unlock Studio takes the place of Lock Studio on a server with a locked vault', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: false, vaultLocked: true });
-  assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['hosts', 'Hosts'], ['unlock', 'Unlock Studio']]);
+  assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['hosts', 'Hosts'], ['settings', 'Settings'], ['unlock', 'Unlock Studio']]);
 });
 
 test('Lock Studio shows only when the vault is open', () => {
   const panel = leftPanel({ view: { name: 'hosts' }, feeds: [], model: null, vaultOpen: false });
-  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts']);
+  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings']);
   assert.equal(panel.bottom[0].current, true);
 });
 
@@ -316,11 +316,11 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
   assert.equal(wide.items[0].id, 'releases');
 });
 
-test('the root page has no current destination, and gives Hosts at the bottom', () => {
+test('the root page has no current destination, and gives Hosts and Settings at the bottom', () => {
   const panel = leftPanel({ view: { name: 'root' }, feeds: [album], model: null, vaultOpen: false });
   assert.equal(panel.kind, 'destinations');
   assert.deepEqual(panel.top.map((e) => e.current), [false, false]);
-  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts']);
+  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings']);
 });
 
 test('Back from the outline marks the feed on Releases, and Back from a part keeps no mark', () => {
@@ -410,4 +410,9 @@ test('releasesView gives the scroll of the nearest Releases entry and does not c
   assert.deepEqual(releasesView(none, 1), { name: 'releases', marked: 1 });
   const later = { entries: [{ name: 'feed', id: 1 }, { name: 'releases', scroll: 5 }], index: 0 };
   assert.deepEqual(releasesView(later, 1), { name: 'releases', marked: 1 });
+});
+
+test('Settings is current on the view settings', () => {
+  const panel = leftPanel({ view: { name: 'settings' }, feeds: [], model: null, vaultOpen: true });
+  assert.deepEqual(panel.bottom.map((e) => [e.id, e.current]), [['hosts', false], ['settings', true], ['lock', false]]);
 });

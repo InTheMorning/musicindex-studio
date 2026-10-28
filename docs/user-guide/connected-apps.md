@@ -10,7 +10,7 @@ Without a grant, Studio writes only changes that you reviewed.
 
 ## Connect an app
 
-1. Select **Hosts** in the left panel.
+1. Select **Settings** in the left panel.
 2. In the panel **Connected apps**, select **Connect an app**.
 3. Type a name in **Name of the app**.
 4. Select **Make the token**.
@@ -42,7 +42,7 @@ You give a grant when you write a planned show.
 3. Select the check box "Let connected apps start and end this show, and set its live value".
 4. Select **Write to the host**.
 
-If you have no connected app, the sheet shows "No app is connected. Connect an app in Hosts."
+If you have no connected app, the sheet shows "No app is connected. Connect an app in Settings."
 
 A host that uses **My signer** cannot do a granted write. During a granted write, no person can use the signer.
 If the feed file is on such a host, the check box is disabled.

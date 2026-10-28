@@ -25,7 +25,7 @@ test('announceLines gives one line for each address', () => {
 
 test('announceLines gives the reason for no announcement', () => {
   assert.deepEqual(announceLines({ announcements: [], announce_skip: 'off' }),
-    ['No announcement: the announcements are off in Hosts.']);
+    ['No announcement: the announcements are off in Settings.']);
   assert.deepEqual(announceLines({ announcements: [], announce_skip: 'no_address' }),
     ['No announcement: this feed has no public address.']);
   assert.deepEqual(announceLines({ announcements: [], announce_skip: null }), []);

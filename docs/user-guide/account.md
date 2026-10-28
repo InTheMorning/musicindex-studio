@@ -3,7 +3,7 @@
 This page is for Studio on a server.
 The desktop app has no account.
 
-Select **Hosts** at the bottom of the left panel. The panel **Account** is on the Hosts page.
+Select **Settings** at the bottom of the left panel. The panel **Account** is on the Settings page.
 
 ## What the panel shows
 

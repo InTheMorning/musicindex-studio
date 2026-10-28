@@ -5,7 +5,7 @@ The hub is the Podcast Index service that lists feeds.
 
 ## Set the announcements
 
-1. Select **Hosts** in the left panel.
+1. Select **Settings** in the left panel.
 2. Find the panel **Announcements**.
 3. Use the check boxes:
    - **Tell Podcast Index after each write**
@@ -22,7 +22,7 @@ Each line starts with **Announce**. It shows the address that Studio sends.
 
 The sheet can also tell you why Studio sends no announcement:
 
-- "No announcement: the announcements are off in Hosts."
+- "No announcement: the announcements are off in Settings."
 - "No announcement: this feed has no public address."
 
 ## See the state of the last announcement

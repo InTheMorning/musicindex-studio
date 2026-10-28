@@ -136,11 +136,11 @@ The line **Different addresses** shows when the address of a feed does not agree
 You cannot remove a host while feeds use it.
 Studio shows "Feeds use this host." Remove those feeds from your collection first.
 
-## Other settings on the Hosts page
+## Studio settings
 
-The Hosts page has three more panels:
+The settings of Studio are not on the Hosts page. Select **Settings** at the bottom of the left panel. The Settings page has these panels:
 
-- **Library**. On the desktop, it shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the limits**.
-- **Announcements**. See [Announcements](announcements.md).
 - **Account**, on a server only. See [Your account on a server](account.md).
 - **Connected apps**. See [Connected apps and show grants](connected-apps.md).
+- **Announcements**. See [Announcements](announcements.md).
+- **Library**. On the desktop, it shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the limits**.

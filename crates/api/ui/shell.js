@@ -180,7 +180,10 @@ export function isFeedView(view) {
 // true on a server with a locked vault: the row "Unlock Studio" then takes
 // the place of "Lock Studio" (ADR 0039 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false }) {
-  const bottom = [{ id: 'hosts', label: 'Hosts', current: view.name === 'hosts' }];
+  const bottom = [
+    { id: 'hosts', label: 'Hosts', current: view.name === 'hosts' },
+    { id: 'settings', label: 'Settings', current: view.name === 'settings' },
+  ];
   if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', current: false });
   else if (vaultLocked) bottom.push({ id: 'unlock', label: 'Unlock Studio', current: false });
   const feed = isFeedView(view) && Array.isArray(feeds)

@@ -21,7 +21,7 @@ The page lists the number of release folders, the number of feed files and the n
 Select **Continue**.
 
 Studio asks for this folder one time only.
-The Hosts page shows the folder. You cannot move the library to a different folder in this version.
+The Settings page shows the folder. You cannot move the library to a different folder in this version.
 This step is for the desktop only.
 
 ## Answer the first question

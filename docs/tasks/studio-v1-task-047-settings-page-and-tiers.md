@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Pages And The Outline".
 Decisions: [ADR 0071](../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md), [ADR 0068](../adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 
-Status: Open.
+Status: Complete - 2026-10-28, except the human test. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-28-task-047-review-checklist.md) records it. The human test on the server from a phone is open.
 
 ## Goal
 

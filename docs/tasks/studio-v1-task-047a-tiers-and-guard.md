@@ -2,7 +2,7 @@
 
 Parent: [task 047](studio-v1-task-047-settings-page-and-tiers.md). Decision: [ADR 0071](../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 1 to 8, 15 and the item 9 row.
 
-Status: Open.
+Status: Complete - 2026-10-28.
 
 ## Goal
 

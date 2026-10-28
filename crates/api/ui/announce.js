@@ -15,7 +15,7 @@ export function announceLines(diff) {
   }
   const skip = diff ? diff.announce_skip : null;
   if (skip === 'off') {
-    lines.push('No announcement: the announcements are off in Hosts.');
+    lines.push('No announcement: the announcements are off in Settings.');
   } else if (skip === 'no_address') {
     lines.push('No announcement: this feed has no public address.');
   }

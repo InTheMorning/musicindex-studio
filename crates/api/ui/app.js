@@ -1,5 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
+import { pageSequence } from './pages.js';
 import { AlbumEditor, DraftToolbar, useSheet } from './editor.js';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods, accountName, deleteConfirmation,
@@ -2173,17 +2174,23 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     setAdding(false);
   });
   const showForm = adding || connectors.length === 0;
+  // The sections of the page come from `pageSequence('hosts')` (ADR 0071).
+  const sections = {
+    cards: () => html`${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} feeds=${feeds} removeBusy=${busy}
+        onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}`,
+    add: () => (showForm
+      ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first host' : 'Add a host'}</h2>
+          <${AddHostForm} feeds=${feeds} onAdded=${added} />
+          ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
+      : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a host</button></div>`),
+  };
   return html`<div>
     <${Bar}><span class="bar-title">Hosts</span><//>
     <section class="section">
-      <${LibraryPanel} />
-      <${AnnouncePanel} />
-      ${serverMode && html`<${AccountPanel} />`}
-      <${ConnectedAppsPanel} />
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
         : html`<${ErrorNotice} error=${error} />`}
-      <div ref=${resultRef}></div>
+      ${linked && html`<div ref=${resultRef}></div>`}
       ${linked && linked.feeds.length > 0 && html`<div class="notice" role="status">
         Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.connector.name}”.
       </div>`}
@@ -2196,13 +2203,28 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
         Studio did not set a public address for the folder. The host card lists the feeds.
       </div>`}
       ${linked && html`<${FolderFeeds} key=${linked.connector.id} connector=${linked.connector} onAdded=${onChanged} />`}
-      ${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} feeds=${feeds} removeBusy=${busy}
-        onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}
-      ${showForm
-        ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first host' : 'Add a host'}</h2>
-            <${AddHostForm} feeds=${feeds} onAdded=${added} />
-            ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
-        : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a host</button></div>`}
+      ${pageSequence('hosts').map((section) => sections[section.id]())}
+    </section>
+  </div>`;
+}
+
+// The Settings page (ADR 0071 items 5 and 9). It shows the panels of Studio
+// in the sequence of `pageSequence('studio-settings')`. The Account panel
+// shows on a server only.
+function SettingsPage() {
+  const panels = {
+    account: AccountPanel,
+    apps: ConnectedAppsPanel,
+    announcements: AnnouncePanel,
+    library: LibraryPanel,
+  };
+  return html`<div>
+    <${Bar}><span class="bar-title">Settings</span><//>
+    <section class="section">
+      ${pageSequence('studio-settings', { server: serverMode }).map((section) => {
+        const Panel = panels[section.id];
+        return html`<${Panel} key=${section.id} />`;
+      })}
     </section>
   </div>`;
 }
@@ -2238,9 +2260,9 @@ function AddFeeds({ connectors, onAdded, go }) {
 }
 
 // The left panel (ADR 0039 items 1, 5 and 6). It shows the destinations, or
-// the outline of the open feed, and Hosts and Lock Studio at the bottom.
-// `panel` is the value of `leftPanel()`. Only the scroll area scrolls, so
-// that the brand and the footer stay in view (visual check of task 022).
+// the outline of the open feed, and Hosts, Settings and Lock Studio at the
+// bottom. `panel` is the value of `leftPanel()`. Only the scroll area scrolls,
+// so that the brand and the footer stay in view (visual check of task 022).
 // At 760 px or less the left panel is not shown: its content is the root
 // page and the outline page of the stack (ADR 0039 item 11, musicindex ADR
 // 0030 R-SHELL-2).
@@ -2315,8 +2337,8 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     </ul>`;
 }
 
-// The footer of the left panel and of the root page: Hosts, and Lock Studio
-// when the vault is open. On a server with a locked vault, Unlock Studio
+// The footer of the left panel and of the root page: Hosts, Settings, and Lock
+// Studio when the vault is open. On a server with a locked vault, Unlock Studio
 // opens the unlock sheet.
 function LeftPanelFooter({ panel, go, onLock }) {
   return html`<footer>
@@ -2324,13 +2346,16 @@ function LeftPanelFooter({ panel, go, onLock }) {
       ? html`<button class="row" type="button" onClick=${onLock}>Lock Studio</button>`
       : item.id === 'unlock'
       ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}>Unlock Studio</button>`
+      : item.id === 'settings'
+      ? html`<button class="row" type="button" aria-current=${currentAttr(item)}
+          onClick=${() => { if (!item.current) go({ name: 'settings' }); }}>${item.label}</button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
           onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}><span class="dot hosting"></span>${item.label}</button>`))}
   </footer>`;
 }
 
 // The root page of a narrow window (ADR 0039 item 11): the destinations, with
-// Hosts and Lock Studio at its bottom. It has no back control.
+// Hosts, Settings and Lock Studio at its bottom. It has no back control.
 function RootPage({ panel, go, onLock }) {
   return html`<div class="panel-page">
     <${Bar} back=${false}><span class="bar-title">Studio</span><//>
@@ -2659,6 +2684,8 @@ function Shell({ vault, onLock }) {
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} />`;
+  } else if (view.name === 'settings') {
+    main = html`<${SettingsPage} />`;
   } else if (view.name === 'add-feed') {
     main = html`<${AddFeeds} connectors=${connectors} go=${go}
       onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); }} />`;
@@ -3254,7 +3281,7 @@ function PasskeyList() {
   </form>`;
 }
 
-// The Account panel of the Hosts page, on a server only (ADR 0055 item 9).
+// The Account panel of the Settings page, on a server only (ADR 0055 item 9).
 function AccountPanel() {
   const { session, reload } = useContext(SessionContext);
   const [deleting, setDeleting] = useState(false);

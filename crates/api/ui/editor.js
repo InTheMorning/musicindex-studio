@@ -1159,7 +1159,7 @@ function GrantChecks({ feedId, model, diff, apps, busy, signerHost, onDiff, run 
         <span>Let connected apps start and end this show, and set its live value${shows.length > 1 ? `: ${l.item.title || 'Untitled show'}` : ''}</span></label>
     </div>`)}
     ${box.note && html`<p class="hint">${box.note}</p>`}
-    ${apps && apps.length === 0 && html`<p class="hint">No app is connected. Connect an app in Hosts.</p>`}
+    ${apps && apps.length === 0 && html`<p class="hint">No app is connected. Connect an app in Settings.</p>`}
   </div>`;
 }
 

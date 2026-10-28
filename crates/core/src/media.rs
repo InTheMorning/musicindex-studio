@@ -8,6 +8,7 @@
 //! with `claxon`. `mp3lame-encoder` compiles LAME from its bundled
 //! source at build time. Each other library is pure Rust.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::fs;
 use std::io::Read;
@@ -696,6 +697,117 @@ pub fn kind_of_path(path: &str) -> Option<FileKind> {
         "mp3" | "m4a" | "flac" | "ogg" | "opus" => Some(FileKind::Audio),
         "srt" | "vtt" | "txt" | "json" | "html" => Some(FileKind::Lyrics),
         _ => None,
+    }
+}
+
+/// The start of an address with the OP3 prefix (ADR 0076).
+const OP3_PREFIX: &str = "https://op3.dev/e";
+
+/// The length of the OP3 prefix in `url`, with its `pg=` part and its
+/// closing `/`. Gives `None` when `url` has no OP3 prefix.
+fn op3_prefix_len(url: &str) -> Option<usize> {
+    let rest = url.strip_prefix(OP3_PREFIX)?;
+    let after = if rest.starts_with(',') {
+        rest.find('/')?
+    } else if rest.starts_with('/') {
+        0
+    } else {
+        return None;
+    };
+    Some(OP3_PREFIX.len() + after + 1)
+}
+
+/// The address of a file with no OP3 prefix (ADR 0076 item 1).
+///
+/// An address with no prefix stays as it is. Else the function removes
+/// `https://op3.dev/e`, an optional `,pg=...` part and the `/` after it.
+/// When the remaining text has no scheme, the function adds `https://`.
+#[must_use]
+pub fn plain_address(url: &str) -> Cow<'_, str> {
+    let Some(length) = op3_prefix_len(url) else {
+        return Cow::Borrowed(url);
+    };
+    let rest = &url[length..];
+    if rest.starts_with("http://") || rest.starts_with("https://") {
+        Cow::Borrowed(rest)
+    } else {
+        Cow::Owned(format!("https://{rest}"))
+    }
+}
+
+/// `url` with its plain part replaced by `new_plain`. An OP3 prefix with
+/// its `pg=` part stays (ADR 0076 item 4). An address with no prefix gives
+/// `new_plain`.
+///
+/// An `http` address keeps its scheme after the prefix. An `https` address
+/// has no scheme after the prefix, as in the form of the OP3 setup page.
+#[must_use]
+pub fn with_plain_address(url: &str, new_plain: &str) -> String {
+    match op3_prefix_len(url) {
+        Some(length) => {
+            let tail = new_plain.strip_prefix("https://").unwrap_or(new_plain);
+            format!("{}{tail}", &url[..length])
+        }
+        None => new_plain.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod plain_address_tests {
+    use super::{plain_address, with_plain_address};
+
+    #[test]
+    fn plain_address_removes_each_op3_form() {
+        for (given, plain) in [
+            (
+                "https://op3.dev/e/ipfspodcasting.net/e/music.example.com/a.mp3",
+                "https://ipfspodcasting.net/e/music.example.com/a.mp3",
+            ),
+            (
+                "https://op3.dev/e,pg=23c2d5df-52e2-4e9a-b562-54e0e0123511/music.example.com/a.mp3",
+                "https://music.example.com/a.mp3",
+            ),
+            (
+                "https://op3.dev/e/http://example.com/a.mp3",
+                "http://example.com/a.mp3",
+            ),
+            (
+                "https://op3.dev/e,pg=abc/https://example.com/a.mp3",
+                "https://example.com/a.mp3",
+            ),
+            ("https://example.com/a.mp3", "https://example.com/a.mp3"),
+            ("https://op3.dev/show/abc", "https://op3.dev/show/abc"),
+            ("https://op3.dev/embed", "https://op3.dev/embed"),
+        ] {
+            assert_eq!(plain_address(given), plain, "address {given}");
+        }
+    }
+
+    #[test]
+    fn with_plain_address_keeps_the_prefix_and_its_pg_part() {
+        assert_eq!(
+            with_plain_address(
+                "https://op3.dev/e,pg=abc/music.example.com/a.mp3",
+                "https://cdn.example.com/b.mp3"
+            ),
+            "https://op3.dev/e,pg=abc/cdn.example.com/b.mp3"
+        );
+        assert_eq!(
+            with_plain_address(
+                "https://op3.dev/e/http://a.example/a.mp3",
+                "http://b.example/b.mp3"
+            ),
+            "https://op3.dev/e/http://b.example/b.mp3"
+        );
+        assert_eq!(
+            with_plain_address("https://a.example/a.mp3", "https://b.example/b.mp3"),
+            "https://b.example/b.mp3"
+        );
+        let moved = with_plain_address(
+            "https://op3.dev/e,pg=abc/a.example/a.mp3",
+            "https://b.example/b.mp3",
+        );
+        assert_eq!(plain_address(&moved), "https://b.example/b.mp3");
     }
 }
 

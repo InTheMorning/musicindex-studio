@@ -12,6 +12,7 @@ use std::fmt;
 use crate::collection::{Collection, CollectionError, ConnectorId, FeedRow, LibraryFile};
 use crate::connector::{Connector, ConnectorError, Stamp};
 use crate::digest::sha256_hex;
+use crate::media::plain_address;
 use crate::pipeline::release_path;
 
 /// The kind of an [`InventoryError`].
@@ -286,23 +287,23 @@ pub fn copies(
         for host_file in collection.host_files(connector_id)? {
             let connector = hosts.get(connector_id)?;
             let url = connector.public_url(&host_file.path);
-            match &file.sha256 {
-                Some(wanted) => {
-                    if host_file.size != file.size {
-                        continue;
-                    }
-                    let sha256 = match &host_file.sha256 {
-                        Some(sha256) => Some(sha256.clone()),
-                        None => host_sha(collection, hosts, connector_id, &host_file.path)?,
-                    };
-                    if sha256.as_deref() != Some(wanted.as_str()) {
-                        continue;
-                    }
+            if let Some(wanted) = &file.sha256 {
+                if host_file.size != file.size {
+                    continue;
                 }
-                None => {
-                    if url.is_none() || url != file.source_url {
-                        continue;
-                    }
+                let sha256 = match &host_file.sha256 {
+                    Some(sha256) => Some(sha256.clone()),
+                    None => host_sha(collection, hosts, connector_id, &host_file.path)?,
+                };
+                if sha256.as_deref() != Some(wanted.as_str()) {
+                    continue;
+                }
+            } else {
+                // The source address of an older record can carry an OP3
+                // prefix (ADR 0076 item 2).
+                let source = file.source_url.as_deref().map(plain_address);
+                if url.is_none() || url.as_deref() != source.as_deref() {
+                    continue;
                 }
             }
             found.push(Copy {

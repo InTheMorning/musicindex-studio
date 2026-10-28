@@ -16,6 +16,7 @@ use crate::collection::{Collection, CollectionError, LibraryFile};
 use crate::digest::sha256_file;
 use crate::inventory::{self, Hosts, InventoryError};
 use crate::library::{Library, file_stamp};
+use crate::media::plain_address;
 use crate::web::{Web, WebError, WebErrorKind};
 
 /// The default of each download limit setting, 2 GiB (ADR 0036 item 17).
@@ -136,7 +137,9 @@ pub fn source_of(
             path: copy.path,
         }));
     }
-    Ok(file.source_url.clone().map(|url| Source::Web { url }))
+    Ok(file.source_url.as_deref().map(|url| Source::Web {
+        url: plain_address(url).into_owned(),
+    }))
 }
 
 /// The partial file of a download: `.{name}.part` in the release folder.

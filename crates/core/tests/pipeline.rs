@@ -4015,3 +4015,160 @@ fn a_granted_write_of_a_feed_with_no_connector_stays_refused() {
     assert!(result.is_err());
     assert!(!s.dir.path().join("target").exists());
 }
+
+/// The address of `plain` with the OP3 prefix of a feed (ADR 0076).
+fn op3_form(plain: &str) -> String {
+    format!(
+        "https://op3.dev/e,pg=917393e3-1b1e-5cef-ace4-edaa54e1f810/{}",
+        plain.strip_prefix("https://").unwrap_or(plain)
+    )
+}
+
+/// Give the draft of `s` an item whose enclosure has the OP3 prefix and
+/// the planned address of a library file.
+fn reference_planned_with_prefix(s: &Setup, file_id: LibraryFileId) -> inventory::PlannedPath {
+    let feed_row = s.collection.feed(s.feed).unwrap();
+    let file = s.collection.library_file(file_id).unwrap();
+    let planned = inventory::planned_path(&s.collection, &s.hosts, &feed_row, &file).unwrap();
+    let url = op3_form(planned.url.as_deref().unwrap());
+    let item = Item {
+        title: Some(file.path.clone()),
+        enclosure: Some(Enclosure {
+            url: Some(url),
+            length: Some(file.size.to_string()),
+            media_type: Some(file.media_type.clone()),
+        }),
+        ..Item::default()
+    };
+    pipeline::edit_draft(&s.collection, s.feed, move |f| {
+        f.items.push(Entry::new(item));
+    })
+    .unwrap();
+    planned
+}
+
+#[test]
+fn the_plan_of_the_write_finds_a_prefixed_enclosure_by_its_plain_address() {
+    let s = setup();
+    s.collection.set_feed_folder(s.feed, "album").unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let imported = import_file(&s, "01.mp3", b"one");
+    let planned = reference_planned_with_prefix(&s, imported.library_file_id);
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.operations.len(), 1);
+    assert_eq!(diff.operations[0].kind, OperationKind::Upload);
+    assert_eq!(diff.operations[0].url, planned.url);
+}
+
+#[test]
+fn library_file_in_use_finds_a_file_that_a_prefixed_enclosure_refers_to() {
+    let s = setup();
+    s.collection.set_feed_folder(s.feed, "album").unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let imported = import_file(&s, "01.mp3", b"one");
+    let file = s.collection.library_file(imported.library_file_id).unwrap();
+    assert!(!pipeline::library_file_in_use(&s.collection, &s.hosts, &file).unwrap());
+
+    reference_planned_with_prefix(&s, imported.library_file_id);
+    assert!(pipeline::library_file_in_use(&s.collection, &s.hosts, &file).unwrap());
+}
+
+#[test]
+fn the_deletion_check_blocks_a_file_that_a_prefixed_enclosure_refers_to() {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    s.connector
+        .write("song.mp3", b"song", &Expected::Absent)
+        .unwrap();
+    inventory::scan(&s.collection, &s.hosts, connector_id).unwrap();
+    let song_url = op3_form(&s.connector.public_url("song.mp3").unwrap());
+    pipeline::edit_draft(&s.collection, s.feed, move |f| {
+        f.items.push(Entry::new(Item {
+            enclosure: Some(Enclosure {
+                url: Some(song_url),
+                length: Some("4".into()),
+                media_type: Some("audio/mpeg".into()),
+            }),
+            ..Item::default()
+        }));
+    })
+    .unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            connector_id,
+            "song.mp3",
+        )
+        .unwrap();
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.operations, Vec::new());
+    assert_eq!(diff.blocked.len(), 1);
+    assert_eq!(diff.blocked[0].path, "song.mp3");
+    assert_eq!(diff.blocked[0].feed_titles, ["Album".to_owned()]);
+}
+
+#[test]
+fn a_delete_for_a_file_that_a_different_feed_refers_to_with_a_prefix_does_not_delete_it() {
+    let mut s = setup();
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    s.connector
+        .write("shared/song.mp3", b"song", &Expected::Absent)
+        .unwrap();
+    inventory::scan(&s.collection, &s.hosts, connector_id).unwrap();
+    let song_url = op3_form(&s.connector.public_url("shared/song.mp3").unwrap());
+
+    // A second feed of the library refers to the shared file with the
+    // OP3 prefix.
+    let second = pipeline::new_feed(
+        &mut s.collection,
+        s.connector.as_ref(),
+        connector_id,
+        "second.xml",
+        "Second Album",
+        "Second Artist",
+        "music",
+    )
+    .unwrap();
+    s.collection.set_feed_folder(second, "second").unwrap();
+    pipeline::edit_draft(&s.collection, second, move |f| {
+        f.items.push(Entry::new(Item {
+            enclosure: Some(Enclosure {
+                url: Some(song_url),
+                length: Some("4".into()),
+                media_type: Some("audio/mpeg".into()),
+            }),
+            ..Item::default()
+        }));
+    })
+    .unwrap();
+    let diff_second = pipeline::diff(&s.collection, &s.hosts, &s.library, second).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        second,
+        &diff_second.id,
+    )
+    .unwrap();
+
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            connector_id,
+            "shared/song.mp3",
+        )
+        .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.operations, Vec::new());
+    assert_eq!(diff.blocked.len(), 1);
+    assert_eq!(diff.blocked[0].feed_titles, ["Second Album".to_owned()]);
+}

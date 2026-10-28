@@ -2758,7 +2758,7 @@ fn feed_address_list(feed: Option<&Feed>) -> Vec<String> {
     feed.map(|feed| {
         pipeline::feed_addresses(feed)
             .into_iter()
-            .map(str::to_owned)
+            .map(std::borrow::Cow::into_owned)
             .collect()
     })
     .unwrap_or_default()
@@ -2776,7 +2776,9 @@ fn feed_lengths(feed: Option<&Feed>) -> std::collections::HashMap<String, u64> {
             && let (Some(url), Some(length)) = (&enclosure.url, &enclosure.length)
             && let Ok(length) = length.trim().parse::<u64>()
         {
-            lengths.entry(url.clone()).or_insert(length);
+            lengths
+                .entry(media::plain_address(url).into_owned())
+                .or_insert(length);
         }
         // An alternative source has the length of its alternative
         // enclosure, as the remote records do (ADR 0038 item 2).
@@ -2791,7 +2793,9 @@ fn feed_lengths(feed: Option<&Feed>) -> std::collections::HashMap<String, u64> {
             };
             for source in &alternate.value.sources {
                 if let Some(uri) = &source.value.uri {
-                    lengths.entry(uri.clone()).or_insert(length);
+                    lengths
+                        .entry(media::plain_address(uri).into_owned())
+                        .or_insert(length);
                 }
             }
         }
@@ -3385,15 +3389,20 @@ fn reference_feed(feed: &mut Feed, from: &str, to: &str) {
         if item.image.as_deref() == Some(from) {
             item.image = Some(to.to_owned());
         }
+        // An enclosure with an OP3 prefix keeps its prefix (ADR 0076
+        // item 4).
         if let Some(enclosure) = item.enclosure.as_mut()
-            && enclosure.url.as_deref() == Some(from)
+            && let Some(url) = enclosure.url.as_deref()
+            && media::plain_address(url) == from
         {
-            enclosure.url = Some(to.to_owned());
+            enclosure.url = Some(media::with_plain_address(url, to));
         }
         for alternate in &mut item.alternate_enclosures {
             for source in &mut alternate.value.sources {
-                if source.value.uri.as_deref() == Some(from) {
-                    source.value.uri = Some(to.to_owned());
+                if let Some(uri) = source.value.uri.as_deref()
+                    && media::plain_address(uri) == from
+                {
+                    source.value.uri = Some(media::with_plain_address(uri, to));
                 }
             }
         }
@@ -3421,7 +3430,12 @@ fn dereference_feed(feed: &mut Feed, url: &str) {
         if item.image.as_deref() == Some(url) {
             item.image = None;
         }
-        if item.enclosure.as_ref().and_then(|e| e.url.as_deref()) == Some(url) {
+        if item
+            .enclosure
+            .as_ref()
+            .and_then(|e| e.url.as_deref())
+            .is_some_and(|enclosure_url| media::plain_address(enclosure_url) == url)
+        {
             let promoted = item
                 .alternate_enclosures
                 .iter()
@@ -3434,10 +3448,13 @@ fn dereference_feed(feed: &mut Feed, url: &str) {
             }
         }
         for alternate in &mut item.alternate_enclosures {
-            alternate
-                .value
-                .sources
-                .retain(|source| source.value.uri.as_deref() != Some(url));
+            alternate.value.sources.retain(|source| {
+                source
+                    .value
+                    .uri
+                    .as_deref()
+                    .is_none_or(|uri| media::plain_address(uri) != url)
+            });
         }
     }
 }
@@ -3911,17 +3928,21 @@ fn set_length_at(feed: &mut Feed, url: &str, length: u64) {
     for entry in &mut feed.items {
         let item = &mut entry.value;
         if let Some(enclosure) = item.enclosure.as_mut()
-            && enclosure.url.as_deref() == Some(url)
+            && enclosure
+                .url
+                .as_deref()
+                .is_some_and(|enclosure_url| media::plain_address(enclosure_url) == url)
         {
             enclosure.length = Some(length.to_string());
         }
         for alternate in &mut item.alternate_enclosures {
-            if alternate
-                .value
-                .sources
-                .iter()
-                .any(|source| source.value.uri.as_deref() == Some(url))
-            {
+            if alternate.value.sources.iter().any(|source| {
+                source
+                    .value
+                    .uri
+                    .as_deref()
+                    .is_some_and(|uri| media::plain_address(uri) == url)
+            }) {
                 alternate.value.length = Some(length.to_string());
             }
         }
@@ -4448,7 +4469,12 @@ pub(crate) async fn media_facts(
     State(shared): State<Shared>,
     Json(body): Json<Media>,
 ) -> ApiResult {
-    blocking(shared, move |w| to_json(w.web.media_facts(&body.url)?)).await
+    // The read uses the address with no OP3 prefix, so that it is not a
+    // download for OP3 (ADR 0076 item 3).
+    blocking(shared, move |w| {
+        to_json(w.web.media_facts(&media::plain_address(&body.url))?)
+    })
+    .await
 }
 
 #[derive(Deserialize)]

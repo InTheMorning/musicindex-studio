@@ -95,7 +95,10 @@ pub(crate) async fn make_ticket(
         ));
     }
     blocking(shared, move |w| {
-        let ticket = w.tickets.issue(&body.url, Instant::now())?;
+        // A ticket holds the address with no OP3 prefix, so that the player
+        // does not make a download for OP3 (ADR 0076 item 3).
+        let plain = studio_core::media::plain_address(&body.url);
+        let ticket = w.tickets.issue(&plain, Instant::now())?;
         Ok(Json(json!({ "ticket": ticket })))
     })
     .await

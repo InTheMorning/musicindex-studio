@@ -3,6 +3,7 @@
 //! A write to a host occurs only through [`write_draft`], and only with the
 //! ID of the diff that the user approved.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::path::Path;
@@ -26,6 +27,7 @@ use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::{Library, file_stamp};
 use crate::live::{self, LiveStatus};
+use crate::media::plain_address;
 use crate::nostr_events::npub_text;
 use crate::xml::{Document, ParseError};
 
@@ -1095,22 +1097,28 @@ pub fn host_file_matches(
 /// a live item is a file of the feed, as the audio of a track is (ADR 0054
 /// item 6).
 #[must_use]
-pub fn feed_addresses(feed: &Feed) -> Vec<&str> {
-    let mut urls: Vec<&str> = Vec::new();
-    urls.extend(feed.image.as_deref());
-    urls.extend(feed.rss_image.as_ref().and_then(|i| i.url.as_deref()));
+pub fn feed_addresses(feed: &Feed) -> Vec<Cow<'_, str>> {
+    let mut urls: Vec<Cow<'_, str>> = Vec::new();
+    urls.extend(feed.image.as_deref().map(plain_address));
+    urls.extend(
+        feed.rss_image
+            .as_ref()
+            .and_then(|i| i.url.as_deref())
+            .map(plain_address),
+    );
     let items = feed.items.iter().map(|entry| &entry.value);
     let live_items = feed.live_items.iter().map(|entry| &entry.value.item);
     for item in items.chain(live_items) {
         urls.extend(
             item.enclosure
                 .as_ref()
-                .and_then(|enclosure| enclosure.url.as_deref()),
+                .and_then(|enclosure| enclosure.url.as_deref())
+                .map(plain_address),
         );
-        urls.extend(item.image.as_deref());
+        urls.extend(item.image.as_deref().map(plain_address));
         for enclosure in &item.alternate_enclosures {
             for source in &enclosure.sources {
-                urls.extend(source.uri.as_deref());
+                urls.extend(source.uri.as_deref().map(plain_address));
             }
         }
     }
@@ -1682,7 +1690,7 @@ fn feed_refers_in_library(library: &Library, row: &FeedRow, url: &str) -> bool {
     let Ok(feed) = Feed::read(&doc) else {
         return false;
     };
-    feed_addresses(&feed).contains(&url)
+    feed_addresses(&feed).iter().any(|address| address == url)
 }
 
 /// True when a host already has a file at `path` with this size and this
@@ -1850,7 +1858,7 @@ fn host_operations(
         let planned_in_use = planned
             .url
             .as_deref()
-            .is_some_and(|url| urls.contains(&url));
+            .is_some_and(|url| urls.iter().any(|address| address == url));
         // A remote file has no bytes in the library, so it is never an
         // upload (ADR 0038 item 1).
         if planned_in_use && !planned.on_host && file.sha256.is_some() {
@@ -1895,7 +1903,7 @@ fn host_operations(
                     }
                 }
                 if let Some(url) = url.as_deref() {
-                    if urls.contains(&url) {
+                    if urls.iter().any(|address| address == url) {
                         referring.push(feed_title(feed_row));
                     }
                     for other in &all_feeds {
@@ -2167,7 +2175,7 @@ pub fn library_file_in_use(
     let urls: Vec<String> = match draft_model(collection, file.feed_id) {
         Ok((feed, _)) => feed_addresses(&feed)
             .into_iter()
-            .map(str::to_owned)
+            .map(Cow::into_owned)
             .collect(),
         Err(error) if error.kind() == PipelineErrorKind::NoDraft => Vec::new(),
         Err(error) => return Err(error),

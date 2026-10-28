@@ -9327,3 +9327,39 @@ async fn with_the_policy_public_a_nip05_domain_and_a_relay_on_loopback_get_no_re
     let body = profiles(&app, &nostr_npub(1)).await;
     assert_eq!(body["profiles"][0]["name"], Value::Null);
 }
+
+/// The OP3 form of an address of the local test server (ADR 0076). The
+/// test server is the only host that these tests reach.
+fn op3_address(plain: &str) -> String {
+    format!("https://op3.dev/e,pg=abc/{plain}")
+}
+
+#[tokio::test]
+async fn the_media_route_reads_the_plain_address_of_a_prefixed_enclosure() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set_file("/a.mp3", vec![0; 4321], "audio/mpeg", false);
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/media/facts",
+        Some(json!({ "url": op3_address(&server.url("/a.mp3")) })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body, json!({ "length": 4321, "media_type": "audio/mpeg" }));
+}
+
+#[tokio::test]
+async fn the_audio_route_reads_the_plain_address_of_a_prefixed_enclosure() {
+    let body: Vec<u8> = (0..=255_u8).cycle().take(5000).collect();
+    let server = studio_core::testing::RangeServer::start(body.clone());
+    let app = app();
+    let ticket = ticket_for(&app, &op3_address(&server.url("/a.mp3"))).await;
+
+    let (status, headers, bytes) =
+        send_raw(&app, audio_request(&ticket, Some("bytes=10-19"))).await;
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(bytes, body[10..20]);
+    assert_eq!(headers[header::CONTENT_RANGE], "bytes 10-19/5000");
+}

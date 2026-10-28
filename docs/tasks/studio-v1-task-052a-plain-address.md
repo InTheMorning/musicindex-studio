@@ -2,7 +2,7 @@
 
 Parent: [task 052](studio-v1-task-052-op3-switch.md). Decision: [ADR 0076](../adr/0076-an-op3-switch-on-feed-settings.md) items 1 to 4.
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass.
 
 ## Goal
 

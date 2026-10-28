@@ -12,6 +12,7 @@ use crate::collection::{Collection, CollectionError, FeedId};
 use crate::feed::Feed;
 use crate::inventory::{self, Hosts};
 use crate::library::is_plain_name;
+use crate::media::plain_address;
 use crate::pipeline::feed_addresses;
 
 /// The result of [`record_remote_files`].
@@ -66,7 +67,7 @@ pub fn record_remote_files(
             && file
                 .source_url
                 .as_deref()
-                .is_some_and(|url| !addresses.contains(&url));
+                .is_some_and(|url| !addresses.iter().any(|address| address == url));
         if gone {
             collection.remove_library_file(file.id)?;
             report.removed += 1;
@@ -101,7 +102,7 @@ pub fn record_remote_files(
         );
     }
 
-    for address in addresses {
+    for address in addresses.iter().map(AsRef::as_ref) {
         if known.contains(address) {
             continue;
         }
@@ -138,7 +139,7 @@ fn facts_of(feed: &Feed, address: &str) -> Facts {
     };
     for item in &feed.items {
         if let Some(enclosure) = &item.value.enclosure
-            && enclosure.url.as_deref() == Some(address)
+            && enclosure.url.as_deref().map(plain_address).as_deref() == Some(address)
         {
             facts.size = facts.size.or_else(|| {
                 enclosure
@@ -150,7 +151,7 @@ fn facts_of(feed: &Feed, address: &str) -> Facts {
         }
         for alternate in &item.value.alternate_enclosures {
             for source in &alternate.value.sources {
-                if source.value.uri.as_deref() == Some(address) {
+                if source.value.uri.as_deref().map(plain_address).as_deref() == Some(address) {
                     facts.size = facts.size.or_else(|| {
                         alternate
                             .value

@@ -15,6 +15,7 @@ import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
+import { pageSequence } from './pages.js';
 import { isExplicit } from './explicit.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
@@ -1538,20 +1539,30 @@ function ArtworkRow({ summary, onOpen }) {
     </button>`;
 }
 
-// The channel fields that the album page and the playlist page share: the
-// title, the author, the description, the artwork, the link and the language.
-function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork }) {
+// The channel fields that the album page and the playlist page share. The
+// list `fields` gives the sequence of the page (ADR 0068). The language is
+// on the page "Feed settings".
+function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork, fields }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
-  return html`        <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
-        <${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
-        <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />
-        <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
-        <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
-        <${ListingField} id="ch-listing" feedId=${feedId} draft=${draft} model=${model} />
-        <${ExplicitField} id="ch-explicit" model=${model} update=${update} />
-`;
+  const shown = {
+    title: () => html`<${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />`,
+    author: () => html`<${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
+    description: () => html`<${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />`,
+    artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
+    link: () => html`<${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />`,
+    listing: () => html`<${ListingField} id="ch-listing" feedId=${feedId} draft=${draft} model=${model} />`,
+    explicit: () => html`<${ExplicitField} id="ch-explicit" model=${model} update=${update} />`,
+  };
+  return fields.map((id) => shown[id]());
 }
+
+// Show the sections of a page in the sequence of `list`. `shown` maps each
+// section ID to a function that gives the section.
+const showSections = (list, shown) => list.map((section) => shown[section.id](section));
+
+// Show the fields or the rows of a section. `shown` maps each ID to a
+// function that gives its markup.
+const showEach = (ids, shown) => ids.map((id) => shown[id]());
 
 // The explicit switch of a channel (ADR 0064 item 4, ADR 0065). The switch
 // shows off when the feed has no `itunes:explicit`, and Studio sets no value
@@ -1576,6 +1587,7 @@ const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase
 function settingsSummary(model) {
   const owner = model.owner && (model.owner.name || model.owner.email);
   const parts = [
+    model.language && `Language ${model.language}`,
     owner && 'Owner set',
     model.keywords && 'Keywords set',
     isLocked(model.locked) && 'Locked',
@@ -1593,8 +1605,8 @@ function SettingsRow({ model, onOpen }) {
     </button>`;
 }
 
-// The page "Feed settings": the owner, the keywords, the lock and the two
-// editor fields (ADR 0064 items 3 to 7). An empty field gives `null`, so that
+// The page "Feed settings": the language, the owner, the keywords, the lock
+// and the two editor fields (ADR 0064 items 3 to 7, ADR 0068 item 8). An empty field gives `null`, so that
 // Studio writes no empty element. No field refuses a value that is not an
 // email address. The core removes the space at the ends of each text.
 function SettingsPage({ model, update }) {
@@ -1609,19 +1621,25 @@ function SettingsPage({ model, update }) {
     ? { ...(m.locked || { owner: null }), value: 'yes' }
     : { ...m.locked, value: 'no' }));
   const setLockOwner = (value) => update((m) => set(m, 'locked', { ...m.locked, owner: value }));
-  return html`<section class="page-section"><h2>Owner</h2>
+  const shown = {
+    language: () => html`<section class="page-section"><h2>Language</h2>
+      <div class="group">
+        <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
+      </div>
+    </section>`,
+    owner: () => html`<section class="page-section"><h2>Owner</h2>
       <div class="group">
         <${TextField} id="set-owner-name" label="Owner name" value=${owner.name} onChange=${(v) => setOwner('name', v)} />
         <${TextField} id="set-owner-email" label="Owner email" value=${owner.email} onChange=${(v) => setOwner('email', v)} />
       </div>
-    </section>
-    <section class="page-section"><h2>Keywords</h2>
+    </section>`,
+    keywords: () => html`<section class="page-section"><h2>Keywords</h2>
       <div class="group">
         <${TextField} id="set-keywords" label="Keywords" hint="Words that apps can search for, with a comma between them."
           value=${model.keywords} onChange=${field('keywords')} />
       </div>
-    </section>
-    <section class="page-section"><h2>Lock against import</h2>
+    </section>`,
+    locked: () => html`<section class="page-section"><h2>Lock against import</h2>
       <div class="group">
         <div class="field">
           <label for="set-locked">Lock against import</label>
@@ -1632,13 +1650,15 @@ function SettingsPage({ model, update }) {
         </div>
         ${locked && html`<${TextField} id="set-lock-owner" label="Lock owner email" value=${locked.owner} onChange=${setLockOwner} />`}
       </div>
-    </section>
-    <section class="page-section"><h2>Editors</h2>
+    </section>`,
+    editors: () => html`<section class="page-section"><h2>Editors</h2>
       <div class="group">
         <${TextField} id="set-managing-editor" label="Managing editor" value=${model.managing_editor} onChange=${field('managing_editor')} />
         <${TextField} id="set-web-master" label="Webmaster" value=${model.web_master} onChange=${field('web_master')} />
       </div>
-    </section>`;
+    </section>`,
+  };
+  return showSections(pageSequence('settings'), shown);
 }
 
 // The listing control of a channel (ADR 0063, ADR 0065). One switch hides the
@@ -1714,29 +1734,28 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
   };
   // No wrapper: each section is a direct row of .page, with the gap of
   // .page between sections (review of task 014c, defect 2).
-  return html`<section class="page-section"><h2>Album</h2>
+  const shown = {
+    album: (s) => html`<section class="page-section"><h2>Album</h2>
       <div class="group">
-        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} />
+        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} fields=${s.fields} />
       </div>
-    </section>
-
-    <section class="page-section"><h2>Album details</h2>
+    </section>`,
+    details: (s) => html`<section class="page-section"><h2>Album details</h2>
       <div class="group">
-        <button class="link-row" type="button" onClick=${() => openPage({ page: 'credits' })}>
-          <span class="label">Credits and links</span><span class="summary">${creditSummary(model)}</span>
-          <span class="go" aria-hidden="true">›</span>
-        </button>
-        <${SettingsRow} model=${model} onOpen=${() => openPage({ page: 'settings' })} />
-        <button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
-          <span class="label">Value routes</span><span class="summary">${recipientSummary(model.values)}</span>
-          ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} focusable=${false} />`}
-          <span class="go" aria-hidden="true">›</span>
-        </button>
-        <${FeedFacts} feed=${feed} onRemoved=${onRemoved} />
+        ${showEach(s.rows, {
+          recipients: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
+            <span class="label">Value routes</span><span class="summary">${recipientSummary(model.values)}</span>
+            ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} focusable=${false} />`}
+            <span class="go" aria-hidden="true">›</span>
+          </button>`,
+          credits: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'credits' })}>
+            <span class="label">Credits and links</span><span class="summary">${creditSummary(model)}</span>
+            <span class="go" aria-hidden="true">›</span>
+          </button>`,
+        })}
       </div>
-    </section>
-
-    <section class="page-section"><h2>Artists and labels</h2>
+    </section>`,
+    publishers: () => html`<section class="page-section"><h2>Artists and labels</h2>
       <div class="group">
         <${ChangedNotices} changed=${changed} go=${go} />
         ${rows.length === 0 && html`<p class="hint">No artist or label yet.</p>`}
@@ -1769,9 +1788,16 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
         ${candidates.length === 0 && html`<p class="hint">Studio has no other artist feed or label feed in the collection to add.</p>`}
         <${ErrorNotice} error=${publisherError(linkAction.error, 'Open that feed and select its role first.')} />
       </div>
-    </section>
-
-    <section class="page-section"><h2>Tracks</h2>
+    </section>`,
+    feed: (s) => html`<section class="page-section"><h2>Feed</h2>
+      <div class="group">
+        ${showEach(s.rows, {
+          settings: () => html`<${SettingsRow} model=${model} onOpen=${() => openPage({ page: 'settings' })} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
+        })}
+      </div>
+    </section>`,
+    tracks: () => html`<section class="page-section"><h2>Tracks</h2>
       <div class="group">
         ${model.items.map((item, i) => html`<button key=${trackKey(item)} class="link-row" type="button"
           onClick=${() => openPage({ page: 'track', track: trackKey(item) })}>
@@ -1788,22 +1814,29 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
         </button>
       </div>
       <p class="note">Studio sets the track numbers (podcast:episode) from this sequence. It does not change the publication dates.</p>
-    </section>`;
+    </section>`,
+  };
+  return showSections(pageSequence('album'), shown);
 }
 
 // The playlist page (ADR 0053 item 4): the channel fields and the feed facts.
 function PlaylistPage({ feed, draft, model, update, bad, go, onRemoved, onArtwork }) {
-  return html`<section class="page-section"><h2>Playlist</h2>
+  const shown = {
+    channel: (s) => html`<section class="page-section"><h2>Playlist</h2>
       <div class="group">
-        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Author" onArtwork=${onArtwork} />
+        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Author" onArtwork=${onArtwork} fields=${s.fields} />
       </div>
-    </section>
-    <section class="page-section"><h2>Playlist details</h2>
+    </section>`,
+    feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
-        <${SettingsRow} model=${model} onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} />
-        <${FeedFacts} feed=${feed} onRemoved=${onRemoved} />
+        ${showEach(s.rows, {
+          settings: () => html`<${SettingsRow} model=${model} onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
+        })}
       </div>
-    </section>`;
+    </section>`,
+  };
+  return showSections(pageSequence('playlist'), shown);
 }
 
 // The Tracks page of a playlist: one row for each remote item, with the
@@ -2214,41 +2247,21 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
   };
   // No wrapper: the head and each section are direct rows of .page, with
   // the gap of .page between them (review of task 014c, defect 2).
-  return html`<header class="head">
-      <${ImageThumb} url=${item.image || coverOf(model)} glow="var(--c-track)" className="cover" always
-        onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} label=${`Artwork of ${item.title || 'Untitled track'}`} />
-      <div class="text"><span class="eyebrow"><span class="dot track"></span>Track ${trackIndex + 1} of ${items.length}</span>
-        <h1>${item.title || 'Untitled track'}</h1></div>
-      <div class="pager">
-        <button class="button icon-button" type="button" aria-label="The track before this one"
-          disabled=${trackIndex === 0} onClick=${() => openTrack(trackIndex - 1)}>‹</button>
-        <button class="button icon-button" type="button" aria-label="The track after this one"
-          disabled=${trackIndex === items.length - 1} onClick=${() => openTrack(trackIndex + 1)}>›</button>
-      </div>
-    </header>
-
-    <section class="page-section"><h2>Track</h2>
+  const shown = {
+    track: (s) => html`<section class="page-section"><h2>Track</h2>
       <div class="group">
-        <${TextField} id=${`${id}-title`} label="Title" value=${item.title} onChange=${change('title')} />
-        <${TextArea} id=${`${id}-description`} label="Description" value=${item.description} onChange=${change('description')} />
-        <${TextField} id=${`${id}-date`} label="Publication date"
-          hint="For example Thu, 22 Oct 2026 12:00:00 GMT. Some apps sort the tracks by this date."
-          value=${item.pub_date} onChange=${change('pub_date')} />
-        <${TextField} id=${`${id}-duration`} label="Duration" hint=${pickAudio.metadataFailed && !item.duration ? DURATION_NOTICE : 'Seconds, or HH:MM:SS.'}
-          value=${item.duration} onChange=${change('duration')} />
-        <${ExplicitField} id=${`${id}-explicit`} model=${item} update=${editItem} />
-        <${ArtworkRow} summary=${artworkSummary(item, 'track')} onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} />
+        ${showEach(s.fields, {
+          title: () => html`<${TextField} id=${`${id}-title`} label="Title" value=${item.title} onChange=${change('title')} />`,
+          audio: () => html`<${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio} />`,
+          duration: () => html`<${TextField} id=${`${id}-duration`} label="Duration" hint=${pickAudio.metadataFailed && !item.duration ? DURATION_NOTICE : 'Seconds, or HH:MM:SS.'}
+            value=${item.duration} onChange=${change('duration')} />`,
+          alternates: () => html`<${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />`,
+          artwork: () => html`<${ArtworkRow} summary=${artworkSummary(item, 'track')} onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} />`,
+          description: () => html`<${TextArea} id=${`${id}-description`} label="Description" value=${item.description} onChange=${change('description')} />`,
+        })}
       </div>
-    </section>
-
-    <section class="page-section"><h2>Audio file</h2>
-      <div class="group">
-        <${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio} />
-        <${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />
-      </div>
-    </section>
-
-    <section class="page-section"><h2>Credits</h2>
+    </section>`,
+    credits: () => html`<section class="page-section"><h2>Credits</h2>
       <div class="group">
         <div class="field">
           <label for=${`${id}-credits`}>Credits</label>
@@ -2262,9 +2275,8 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
               onChange=${(persons) => editItem((i) => set(i, 'persons', persons))} />`
           : html`<p class="hint">This track uses the album credits.</p>`}
       </div>
-    </section>
-
-    <section class="page-section"><h2>Lyrics</h2>
+    </section>`,
+    lyrics: () => html`<section class="page-section"><h2>Lyrics</h2>
       <div class="group">
         ${item.transcripts.length === 0 && html`<p class="hint">No lyrics files yet.</p>`}
         ${item.transcripts.map((t, i) => html`<${LyricsEntry} key=${t._cid} id=${`${id}-lyrics-${t._cid}`} list=${item.transcripts} index=${i}
@@ -2273,13 +2285,16 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
           <span class="num">＋</span><span class="title">Add a lyrics file</span>
         </button>
       </div>
-    </section>
-
-    <${TrackPayments} id=${id} item=${item} albumBlocks=${model.values} onChange=${change('values')} />
-
-    <section class="page-section"><h2>More</h2>
+    </section>`,
+    payments: () => html`<${TrackPayments} id=${id} item=${item} albumBlocks=${model.values} onChange=${change('values')} />`,
+    more: (s) => html`<section class="page-section"><h2>More</h2>
       <div class="group">
-        <details class="disclosure">
+        ${showEach(s.rows, {
+          pub_date: () => html`<${TextField} id=${`${id}-date`} label="Publication date"
+            hint="For example Thu, 22 Oct 2026 12:00:00 GMT. Some apps sort the tracks by this date."
+            value=${item.pub_date} onChange=${change('pub_date')} />`,
+          explicit: () => html`<${ExplicitField} id=${`${id}-explicit`} model=${item} update=${editItem} />`,
+          identity: () => html`<details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>
             <span class="summary">Number ${item.episode || '—'}${item.season ? ` · Season ${item.season.value || item.season.name}` : ''}</span></summary>
           <div class="form">
@@ -2292,9 +2307,25 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
               <dt>Track GUID</dt><dd class="mono">${item.guid || 'Studio gives one when it saves'}</dd>
             </dl>
           </div>
-        </details>
+        </details>`,
+        })}
       </div>
-    </section>
+    </section>`,
+  };
+  return html`<header class="head">
+      <${ImageThumb} url=${item.image || coverOf(model)} glow="var(--c-track)" className="cover" always
+        onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} label=${`Artwork of ${item.title || 'Untitled track'}`} />
+      <div class="text"><span class="eyebrow"><span class="dot track"></span>Track ${trackIndex + 1} of ${items.length}</span>
+        <h1>${item.title || 'Untitled track'}</h1></div>
+      <div class="pager">
+        <button class="button icon-button" type="button" aria-label="The track before this one"
+          disabled=${trackIndex === 0} onClick=${() => openTrack(trackIndex - 1)}>‹</button>
+        <button class="button icon-button" type="button" aria-label="The track after this one"
+          disabled=${trackIndex === items.length - 1} onClick=${() => openTrack(trackIndex + 1)}>›</button>
+      </div>
+    </header>
+
+    ${showSections(pageSequence('track'), shown)}
 
     <div class="actions">
       <button class="button" type="button" disabled=${trackIndex === 0} onClick=${() => changeItems(move(items, trackIndex, -1))}>Move up</button>
@@ -2602,7 +2633,7 @@ const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 // The publisher page: the fields, the role and the releases (ADR 0041 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
-function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged, onArtwork }) {
+function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged, onArtwork, onRemoved }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const roleAction = useAction();
   const linkAction = useAction();
@@ -2654,25 +2685,21 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       return e;
     })));
   };
-  return html`<${ChangedNotices} changed=${changed} go=${go} />
-    <section class="page-section"><h2>${mediumKind(feed.medium, feed.publisher_role).label}</h2>
+  const shown = {
+    channel: (s) => html`<section class="page-section"><h2>${mediumKind(feed.medium, feed.publisher_role).label}</h2>
       <div class="group">
-        <${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />
-        <${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
-        <${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />
-        <${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
-        <${ListingField} id="pub-listing" feedId=${feed.id} draft=${draft} model=${model} />
-        <${ExplicitField} id="pub-explicit" model=${model} update=${update} />
+        ${showEach(s.fields, {
+          title: () => html`<${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />`,
+          author: () => html`<${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
+          description: () => html`<${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />`,
+          artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
+          link: () => html`<${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />`,
+          listing: () => html`<${ListingField} id="pub-listing" feedId=${feed.id} draft=${draft} model=${model} />`,
+          explicit: () => html`<${ExplicitField} id="pub-explicit" model=${model} update=${update} />`,
+        })}
       </div>
-    </section>
-
-    <section class="page-section"><h2>${mediumKind(feed.medium, feed.publisher_role).label} details</h2>
-      <div class="group"><${SettingsRow} model=${model}
-        onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} /></div>
-    </section>
-
-    <section class="page-section"><h2>Role</h2>
+    </section>`,
+    role: () => html`<section class="page-section"><h2>Role</h2>
       <div class="group">
         <div class="field">
           <label for="pub-role">Role</label>
@@ -2687,9 +2714,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         </div>
         <${ErrorNotice} error=${publisherError(roleAction.error, PUBLISHER_ROLE_TEXT)} />
       </div>
-    </section>
-
-    <section class="page-section"><h2>Releases</h2>
+    </section>`,
+    releases: () => html`<section class="page-section"><h2>Releases</h2>
       <div class="group">
         ${rows.length === 0 && html`<p class="hint">No releases yet.</p>`}
         ${rows.map((row, position) => html`<div class="release-row" key=${row.entry._cid}>
@@ -2721,7 +2747,18 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         ${candidates.length === 0 && html`<p class="hint">Studio has no other release in the collection to add.</p>`}
         <${ErrorNotice} error=${publisherError(linkAction.error, PUBLISHER_ROLE_TEXT)} />
       </div>
-    </section>`;
+    </section>`,
+    feed: (s) => html`<section class="page-section"><h2>Feed</h2>
+      <div class="group">
+        ${showEach(s.rows, {
+          settings: () => html`<${SettingsRow} model=${model} onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
+        })}
+      </div>
+    </section>`,
+  };
+  return html`<${ChangedNotices} changed=${changed} go=${go} />
+    ${showSections(pageSequence('publisher'), shown)}`;
 }
 
 // ---- The Files page (task 021g, ADR 0036 items 4, 7 to 14) ----
@@ -3242,7 +3279,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${SettingsPage} model=${model} update=${update} />`;
   } else if (publisher && page !== 'files') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
-      draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} />`;
+      draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} />`;
   } else if (playlist && page === 'tracks') {
     body = html`<${PlaylistTracksPage} feed=${feed} model=${model} update=${update} />`;
   } else if (playlist && page !== 'recipients' && page !== 'files') {

@@ -3,7 +3,7 @@
 Parent: [task 045](studio-v1-task-045-page-sequence-and-artwork.md). Decisions: [ADR 0068](../adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0024](../adr/0024-track-numbers-follow-the-track-sequence.md) item 5 and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the second packet of task 045. It depends on 045a.
 
-Status: Ready.
+Status: Complete - 2026-10-27. The four commit checks pass. The screenshot visual checks passed, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records them.
 
 ## Goal
 

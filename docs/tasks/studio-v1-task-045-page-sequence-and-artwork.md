@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
 Decisions: [ADR 0068](../adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), [ADR 0070](../adr/0070-a-cover-opens-the-artwork-sheet.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md).
 
-Status: Ready. It starts after task 044.
+Status: Complete - 2026-10-27. The four commit checks pass. The screenshot visual checks passed, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records them.
 
 ## Goal
 

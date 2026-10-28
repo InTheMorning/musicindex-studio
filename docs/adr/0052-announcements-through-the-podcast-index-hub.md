@@ -4,6 +4,7 @@
 - Date: 2026-10-25
 - Owner: operator
 - Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 14 moves the two settings from the Hosts page to the Settings page.
 
 ## Context
 
@@ -94,7 +95,7 @@ Visual:
 
 - The review sheet shows the announcement lines, and the reason when there is no announcement.
 - The feed page shows the last announcement in each of its three states.
-- The Hosts page shows the two settings. The podping setting is not available when the Podcast Index setting is off.
+- The Settings page shows the two settings. The podping setting is not available when the Podcast Index setting is off.
 
 Human test:
 

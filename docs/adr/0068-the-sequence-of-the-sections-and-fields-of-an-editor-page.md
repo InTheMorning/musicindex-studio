@@ -4,6 +4,7 @@
 - Date: 2026-10-27
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
+- Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 15 replaces item 11 and the mechanical check. The sequences of items 2 to 9 are the start values of the model module. The module now owns the sequence, and the tier test of ADR 0071 item 6 is the guard.
 
 ## Context
 
@@ -75,14 +76,14 @@ The Studio journeys in `../musicindex-research` (`research_notes/ui-design/journ
 
 ## Invariants
 
-- The sections and the fields of each page of this ADR show in the sequence of this ADR.
+- The sections of each page show in the sequence of the model module, and their tiers do not go down (ADR 0071).
 - The outline keeps its sequence.
 
 ## Verification
 
 Mechanical:
 
-- A Node test compares the list of the model module with items 2, 5 to 9 of this ADR. The error message names this ADR and the page.
+- The tier test of ADR 0071 item 6 replaces the comparison with the lists of items 2 and 5 to 9.
 
 Visual:
 

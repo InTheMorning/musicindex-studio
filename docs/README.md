@@ -74,6 +74,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0068: The sequence of the sections and fields of an editor page](adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md)
 - [ADR 0069: The outline head opens the feed page](adr/0069-the-outline-head-opens-the-feed-page.md)
 - [ADR 0070: A cover opens the artwork sheet](adr/0070-a-cover-opens-the-artwork-sheet.md)
+- [ADR 0071: Settings is a destination, and each page orders its sections by tier](adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md)
 
 ## Plans
 
@@ -239,6 +240,9 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 046a: The draft with no host in the core](tasks/studio-v1-task-046a-core-draft-with-no-host.md)
 - [Studio v1 task 046b: The API routes for a read-only draft](tasks/studio-v1-task-046b-api-routes.md)
 - [Studio v1 task 046c: The editor and Review for a read-only feed](tasks/studio-v1-task-046c-editor-and-review.md)
+- [Studio v1 task 047: The Settings page and the section tiers](tasks/studio-v1-task-047-settings-page-and-tiers.md)
+- [Studio v1 task 047a: The tiers and the guard](tasks/studio-v1-task-047a-tiers-and-guard.md)
+- [Studio v1 task 047b: The Settings page and the Hosts page](tasks/studio-v1-task-047b-settings-and-hosts-pages.md)
 
 ## Reviews
 
@@ -276,6 +280,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Task 041 visual check, 2026-10-27](reviews/2026-10-27-task-041-visual-check.md)
 - [Task 042 review checklist, 2026-10-27](reviews/2026-10-27-task-042-review-checklist.md)
 - [Tasks 044 to 046 review checklist, 2026-10-27](reviews/2026-10-27-tasks-044-046-review-checklist.md)
+- [Task 047 review checklist, 2026-10-28](reviews/2026-10-28-task-047-review-checklist.md)
 - [UI feed rule audit, 2026-10-27](reviews/2026-10-27-ui-feed-rule-audit.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)

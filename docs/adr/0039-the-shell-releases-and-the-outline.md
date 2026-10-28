@@ -13,6 +13,7 @@
 - Amended: 2026-10-27 by operator decision. [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) changes items 6 and 7. The outline head opens the first page, and the outline has no row for it. The link shows "‹ Releases".
 - Amended: 2026-10-25 by operator decision. musicindex ADR 0031 makes the Touch back control of item 9 a circular icon button with no word.
 - Amended: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
+- Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 9 and 10 add the destination "Settings" between Hosts and Lock Studio in items 1, 5 and 11.
 
 ## Context
 
@@ -30,7 +31,7 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### The Destinations
 
-1. With no feed open, the left panel holds the destinations. Releases and Add a feed are at the top. Hosts and Lock Studio are at the bottom of the panel, and stay there at each height of the window. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio".
+1. With no feed open, the left panel holds the destinations. Releases and Add a feed are at the top. Hosts, Settings and Lock Studio are at the bottom of the panel, and stay there at each height of the window. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio".
 2. Releases is a list page at the full width of the content area. Each row shows the cover, the type label, the host and the draft state, for example "Saved, not written".
 2a. Releases has the sort and the view of musicindex ADR 0027 R-LIST-1:
    - The sorts are "Newest", the default, and "A to Z" with a letter bar. "Newest" gives the feed that joined the collection last first.
@@ -42,7 +43,7 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### The Outline Of An Open Feed
 
-5. While a feed is open, the left panel shows the outline of that feed in place of Releases and Add a feed. Hosts and Lock Studio stay at the bottom (item 1). The left panel is one panel at any time.
+5. While a feed is open, the left panel shows the outline of that feed in place of Releases and Add a feed. Hosts, Settings and Lock Studio stay at the bottom (item 1). The left panel is one panel at any time.
 6. The outline shows a link "Releases", the cover and the title of the feed, then these items in this sequence: Album, each track by its number and title, "Add a track", "Import files", Value routes, Credits and links, Files.
 7. The link "Releases" opens the Releases page at the same scroll position, with the row of the feed marked. It is a destination link, not a back control (musicindex ADR 0027 R-NAV-2 item 5).
 8. Each item of the outline opens one page of the editor. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
@@ -57,7 +58,7 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 10a. At 760 px or less, the bar of a feed has two rows. The first row has the back control and the title. The second row has the draft status, then "Versions" and "Review". No part of the bar is hidden.
 
-11. The root page "Studio" shows the destinations of item 1: Releases and Add a feed, with Hosts and Lock Studio at its bottom. It has no back control. Releases stays the start page (item 3), and the root page is below it in the stack. The root page has the color of the left panel, and its bar has the color of the other bars.
+11. The root page "Studio" shows the destinations of item 1: Releases and Add a feed, with Hosts, Settings and Lock Studio at its bottom. It has no back control. Releases stays the start page (item 3), and the root page is below it in the stack. The root page has the color of the left panel, and its bar has the color of the other bars.
 
 11a. A selection of a feed on Releases opens the outline page of the feed: the items of item 6 as a page. A selection on the outline page opens its part. Back from a part opens the outline page, and Back from the outline page opens Releases with the row of the feed marked. The outline page has the color of the left panel, as the root page has.
 
@@ -92,11 +93,11 @@ Mechanical, at the owning layer, in the model modules of [ADR 0042](0042-ui-mode
 Visual, for the operator:
 
 - Studio starts on Releases, and a feed opens over it with its outline.
-- Hosts and Lock Studio are at the bottom of the left panel in a short window and in a tall window.
+- Hosts, Settings and Lock Studio are at the bottom of the left panel in a short window and in a tall window.
 - At 390 px, no page has a menu button. Back on Releases opens the root page, and a feed opens on its outline page.
 
 ## Invariants
 
 Situational, until a decision replaces this layout:
 
-- The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts and Lock Studio always show at its bottom. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio". At 760 px or less, the root page and the outline page hold the same content.
+- The left panel holds Releases and Add a feed, or the outline of the open feed. Hosts, Settings and Lock Studio always show at its bottom. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio". At 760 px or less, the root page and the outline page hold the same content.

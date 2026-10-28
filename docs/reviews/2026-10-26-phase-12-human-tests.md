@@ -8,9 +8,12 @@ The operator does each test. The planning model records the device, the browser,
 
 ## Before The Tests
 
-- Add `client_max_body_size 9m;` to the server block of `studio.musicindex.org` in `../musicindex/nginx-site` (runbook section 3).
-- Install the binary and the unit of runbook section 2, with `--client-address-header X-Real-IP`.
-- Make one invite code (runbook section 5).
+Each step is done on 2026-10-27:
+
+- The server block of `studio.musicindex.org` has `client_max_body_size 9m;` (commit `3af81a2` of `musicindex`). `pushsite.sh` installed it, and `nginx -t` passed.
+- The image `ghcr.io/inthemorning/studio-server:0.1.0-rc.2` runs on the VPS, through `tools/deploy-server.sh` ([ADR 0066](../adr/0066-the-server-ships-as-a-container-image.md)). The revision label is `ac28566`, and the log has the start line of `0.1.0-rc.2`.
+- From outside, `/` and the manifest gave 200, and `/auth/v1/session` gave the server mode with sign-up by invite code. A `PUT` of 5 MB got 403 from Studio, not 413 from nginx.
+- The operator made one invite code.
 
 ## Results
 

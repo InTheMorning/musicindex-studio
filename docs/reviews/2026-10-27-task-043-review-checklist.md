@@ -12,6 +12,11 @@ A coding model implements each packet. The planning model examines the diff and 
 | 043b | Complete | Pass on 2026-10-27. The build job runs the image with `--version` before the push. `actionlint` is not installed, so only a YAML parse examined the files. The first run on a candidate tag is open. |
 | 043c | Complete | Pass on 2026-10-27. The two refusals work with no connection. `shellcheck` is not installed. The first deployment is open. |
 
+## Manual Criteria
+
+- 2026-10-27: CI passed on `ac28566`. The tag `v0.1.0-rc.2` built `ghcr.io/inthemorning/studio-server:0.1.0-rc.2` with `amd64` and `arm64`. GHCR gave the manifest with no login.
+- 2026-10-27: `tools/deploy-server.sh --release 0.1.0-rc.2` passed its two checks. `https://studio.musicindex.org/` gave 200.
+
 ## Decisions
 
 - The operator decided on 2026-10-27 that GitHub builds a server image, as for stophammer. The operator selected Alpine with musl, the CPU types `amd64` and `arm64`, and a deploy script with `--release`.

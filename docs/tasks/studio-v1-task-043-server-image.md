@@ -2,7 +2,7 @@
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 12. Decision: [ADR 0066](../adr/0066-the-server-ships-as-a-container-image.md).
 
-Status: Complete on 2026-10-27. The first candidate tag and the first deployment are open. The operator accepted ADR 0066 on 2026-10-27. The [review checklist](../reviews/2026-10-27-task-043-review-checklist.md) records each packet.
+Status: Complete on 2026-10-27. The tag `v0.1.0-rc.2` built the image for both CPU types, and the deploy script ran it on the VPS with its two checks. The operator accepted ADR 0066 on 2026-10-27. The [review checklist](../reviews/2026-10-27-task-043-review-checklist.md) records each packet.
 
 ## Goal
 

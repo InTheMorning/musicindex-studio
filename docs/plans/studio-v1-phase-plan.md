@@ -212,6 +212,15 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Mechanical check: the mechanical criteria of tasks 038 to 041.
 - Visual check: the visual criteria of tasks 038 to 041.
 
+### MSP 2.0 Parity
+
+- On 2026-10-28 the [parity research](../research/2026-10-28-msp-parity-and-nostr-identities.md) compared Studio with MSP 2.0 `origin/master`. The operator selected four gaps to close now.
+- Decisions: [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) (Nostr keys and the profile search), [ADR 0075](../adr/0075-the-publisher-page-has-payments-and-credits.md) (payments and credits of a publisher feed), [ADR 0076](../adr/0076-an-op3-switch-on-feed-settings.md) (the OP3 switch) and [ADR 0077](../adr/0077-a-new-album-can-start-from-an-album.md) (a new album from an album).
+- Tasks, in this sequence: [task 050](../tasks/studio-v1-task-050-publisher-payments-and-credits.md) (one packet), [task 051](../tasks/studio-v1-task-051-nostr-keys.md) (three packets), [task 052](../tasks/studio-v1-task-052-op3-switch.md) (two packets) and [task 053](../tasks/studio-v1-task-053-album-from-album.md) (two packets). Task 053 needs task 052a.
+- The other gaps of the research stay open. Some need research first: the feed check, the first submission to Podcast Index and Nostr Music events. Some need a change of a decision: a write to a feed that MSP 2.0 hosts (ADR 0006), and albums of other hosts in a publisher feed (ADR 0041).
+- Mechanical check: the mechanical criteria of tasks 050 to 053.
+- Visual check: the visual criteria of tasks 050 to 053.
+
 ### Phase 13: Desktop Shell
 
 - Package the Tauri app for Linux, macOS and Windows.

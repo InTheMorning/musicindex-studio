@@ -4,6 +4,7 @@
 - Date: 2026-10-25
 - Owner: operator, with the technical choices of the planning model
 - Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Amended: 2026-10-28 by operator decision. [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) removes "A value block in a publisher feed" from the non-goals. The publisher page edits the value block, the support links, the people and the license.
 
 ## Context
 

@@ -77,6 +77,10 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0071: Settings is a destination, and each page orders its sections by tier](adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md)
 - [ADR 0072: Add a feed opens from Releases](adr/0072-add-a-feed-opens-from-releases.md)
 - [ADR 0073: The add pages ask one question at a time](adr/0073-the-add-pages-ask-one-question-at-a-time.md)
+- [ADR 0074: Nostr keys for artists, labels and contributors](adr/0074-nostr-keys-for-artists-labels-and-contributors.md)
+- [ADR 0075: The publisher page has payments and credits](adr/0075-the-publisher-page-has-payments-and-credits.md)
+- [ADR 0076: An OP3 switch on Feed settings](adr/0076-an-op3-switch-on-feed-settings.md)
+- [ADR 0077: A new album can start from an album](adr/0077-a-new-album-can-start-from-an-album.md)
 
 ## Plans
 
@@ -249,6 +253,17 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 049: The add pages](tasks/studio-v1-task-049-add-pages.md)
 - [Studio v1 task 049a: The Add feeds page and one form to make a feed](tasks/studio-v1-task-049a-add-feeds-page.md)
 - [Studio v1 task 049b: Add tracks](tasks/studio-v1-task-049b-add-tracks.md)
+- [Studio v1 task 050: Payments and credits on the publisher page](tasks/studio-v1-task-050-publisher-payments-and-credits.md)
+- [Studio v1 task 051: Nostr keys for artists, labels and contributors](tasks/studio-v1-task-051-nostr-keys.md)
+- [Studio v1 task 051a: The keys in the feed model and the key rules](tasks/studio-v1-task-051a-key-model-and-rules.md)
+- [Studio v1 task 051b: The profile route and the search relay setting](tasks/studio-v1-task-051b-profile-route.md)
+- [Studio v1 task 051c: The rows, the sheet and the setting in the UI](tasks/studio-v1-task-051c-nostr-ui.md)
+- [Studio v1 task 052: An OP3 switch on Feed settings](tasks/studio-v1-task-052-op3-switch.md)
+- [Studio v1 task 052a: The plain address](tasks/studio-v1-task-052a-plain-address.md)
+- [Studio v1 task 052b: The switch](tasks/studio-v1-task-052b-op3-switch.md)
+- [Studio v1 task 053: A new album from an album](tasks/studio-v1-task-053-album-from-album.md)
+- [Studio v1 task 053a: The copy in the core and the route](tasks/studio-v1-task-053a-copy-in-the-core.md)
+- [Studio v1 task 053b: "Start from" in the form](tasks/studio-v1-task-053b-start-from.md)
 
 ## Reviews
 
@@ -303,3 +318,4 @@ This is the index of the project documents. The user guide is in the root [READM
 
 - [Studio baseline research, 2026-10-22](research/2026-10-22-studio-baseline-research.md)
 - [Phase 12 authentication research, 2026-10-26](research/2026-10-26-phase-12-auth-research.md)
+- [MSP 2.0 parity and Nostr identities, 2026-10-28](research/2026-10-28-msp-parity-and-nostr-identities.md)

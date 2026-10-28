@@ -281,6 +281,9 @@ pub struct Diff {
     /// Each deletion that Studio refuses because a feed refers to the
     /// file (ADR 0036 item 13).
     pub blocked: Vec<BlockedDelete>,
+    /// Each library file that waits for the host choice of a feed with no
+    /// host (ADR 0067 item 6).
+    pub waiting_uploads: Vec<WaitingUpload>,
     /// The move of the feed XML to a different host, when the draft has
     /// one (ADR 0038 item 18).
     pub feed_move: Option<FeedMove>,
@@ -308,6 +311,10 @@ pub enum FeedMoveMethod {
     Redirect,
     /// Studio writes a pointer file with `itunes:new-feed-url`.
     Pointer,
+    /// Studio writes nothing at the address before the move. The feed had
+    /// no host, so Studio has no access to that address (ADR 0067
+    /// item 8).
+    None,
 }
 
 impl FeedMoveMethod {
@@ -317,6 +324,7 @@ impl FeedMoveMethod {
         match self {
             Self::Redirect => "redirect",
             Self::Pointer => "pointer",
+            Self::None => "none",
         }
     }
 }
@@ -419,6 +427,14 @@ pub struct BlockedDelete {
     /// True when the file is a pointer file of Studio. Studio keeps it:
     /// it tells the apps the new address of the feed (ADR 0038 item 20).
     pub pointer: bool,
+}
+
+/// A library file of a feed with no host, which the draft refers to, and
+/// which waits for the host choice (ADR 0067 item 6).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct WaitingUpload {
+    /// The path of the library file.
+    pub path: String,
 }
 
 /// The result of an import of a file into the library (ADR 0036 item 5).
@@ -531,6 +547,121 @@ pub fn start_draft(
     };
     collection.save_draft(id, &draft)?;
     Ok(draft)
+}
+
+/// The file name of a feed with no connector: the last segment of its
+/// public address, as in [`crate::library::give_published_folder`].
+fn public_file_name(row: &FeedRow) -> Option<&str> {
+    let url = row.public_url.as_deref()?;
+    let name = url.rsplit_once('/').map_or(url, |(_, name)| name);
+    (!name.is_empty()).then_some(name)
+}
+
+/// Start a draft of a feed with no connector from the feed XML in its
+/// release folder. It replaces an older draft (ADR 0067 items 3 and 4).
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::Conflict`] when the feed has a host, or the
+/// release folder has a different feed XML than the last read. Gives
+/// [`PipelineErrorKind::NotFound`] when the feed has no release folder, no
+/// public address, or no file in the folder.
+pub fn start_public_draft(
+    collection: &Collection,
+    library: &Library,
+    id: FeedId,
+) -> Result<DraftRow, PipelineError> {
+    let row = collection.feed(id)?;
+    if row.connector_id.is_some() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::Conflict,
+            format!("feed {} has a host; start the draft from the host", id.0),
+        ));
+    }
+    let (Some(folder), Some(file_name)) = (row.folder.as_deref(), public_file_name(&row)) else {
+        return Err(PipelineError::new(
+            PipelineErrorKind::NotFound,
+            format!("feed {} has no release folder or no public address", id.0),
+        ));
+    };
+    let bytes = library.read_feed_xml(folder, file_name).map_err(|error| {
+        let kind = if error.kind() == std::io::ErrorKind::NotFound {
+            PipelineErrorKind::NotFound
+        } else {
+            PipelineErrorKind::Connector
+        };
+        PipelineError::new(kind, error.to_string())
+    })?;
+    if Some(&crate::digest::content_version(&bytes)) != row.last_version.as_ref() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::Conflict,
+            "the release folder has a different feed XML; read the feed again",
+        ));
+    }
+    let draft = DraftRow {
+        base_version: row.last_version,
+        base_xml: bytes.clone(),
+        draft_xml: bytes,
+    };
+    collection.save_draft(id, &draft)?;
+    Ok(draft)
+}
+
+/// Prepare the draft of a feed that a folder match has linked to a host
+/// (ADR 0067 item 13). Call it after
+/// [`Collection::set_feed_connector`] gives the feed its connector.
+///
+/// The function removes the host choice and puts the `self` link back, as
+/// [`clear_feed_host`] does. When the host file has the same SHA-256 as
+/// the base of the draft, the base version becomes the version of the host
+/// file. Otherwise the base version stays, and a write gives a conflict.
+/// A feed with no draft does not change.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::ReadOnly`] when the feed has no connector or
+/// no path. Gives a [`PipelineError`] when the host or the collection
+/// fails.
+pub fn rebase_linked_draft(
+    collection: &Collection,
+    connector: &dyn Connector,
+    id: FeedId,
+) -> Result<(), PipelineError> {
+    let Some(draft) = collection.draft(id)? else {
+        return Ok(());
+    };
+    let row = collection.feed(id)?;
+    let (_, path) = writable(&row)?;
+    collection.remove_draft_feed_move(id)?;
+    restore_self_link(collection, id, &draft)?;
+    let Some(file) = connector.read(path)? else {
+        return Ok(());
+    };
+    if sha256_hex(&[&file.bytes]) == sha256_hex(&[&draft.base_xml]) {
+        let mut kept = current_draft(collection, id)?;
+        kept.base_version = Some(file.version);
+        collection.save_draft(id, &kept)?;
+    }
+    Ok(())
+}
+
+/// The host and the path that the draft of a feed with no connector moves
+/// the feed to. Gives `None` for a feed with a connector, or a draft with
+/// no host choice (ADR 0067 item 7).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn public_target(
+    collection: &Collection,
+    row: &FeedRow,
+) -> Result<Option<(ConnectorId, String)>, PipelineError> {
+    if row.connector_id.is_some() {
+        return Ok(None);
+    }
+    Ok(collection
+        .draft_feed_move(row.id)?
+        .map(|DraftFeedMove { connector_id, path }| (connector_id, path)))
 }
 
 /// The template of a new feed: `rss` version 2.0 with an empty `channel`
@@ -979,9 +1110,11 @@ pub fn diff_at(
     let feed_row = collection.feed(id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let (operations, blocked) = host_operations(collection, library, hosts, &feed_row, &feed)?;
+    let (operations, blocked, waiting_uploads) =
+        host_operations(collection, library, hosts, &feed_row, &feed)?;
     let feed_move = feed_move(collection, hosts, &feed_row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
+    extra.extend(waiting_bytes(&waiting_uploads));
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let (announcements, announce_skip) =
         plan_announcements(collection, hosts, &feed_row, feed_move.as_ref())?;
@@ -1037,6 +1170,7 @@ pub fn diff_at(
         files,
         operations,
         blocked,
+        waiting_uploads,
         feed_move,
         announcements,
         announce_skip,
@@ -1115,14 +1249,15 @@ fn host_changes(
             OperationKind::Confirm => {}
         }
     }
-    // A feed with no host has no feed XML write.
-    let Ok((from_id, from_path)) = writable(row) else {
+    // The feed XML goes to the host of the feed, or to the new host of a
+    // feed move. A feed with no host and no move has no feed XML write.
+    let from = writable(row).ok();
+    let Some((feed_host, feed_path)) = feed_move
+        .map(|m| (m.connector_id, m.path.as_str()))
+        .or(from)
+    else {
         return Ok(changes);
     };
-    // The feed XML goes to the host of the feed, or to the new host of a
-    // feed move.
-    let (feed_host, feed_path) =
-        feed_move.map_or((from_id, from_path), |m| (m.connector_id, m.path.as_str()));
     changes
         .entry(feed_host)
         .or_default()
@@ -1131,6 +1266,7 @@ fn host_changes(
     // The pointer file stays on the host from before.
     if let Some(moved) = feed_move
         && moved.method == FeedMoveMethod::Pointer
+        && let Some((from_id, from_path)) = from
         && let Some(new_url) = moved.url.as_deref()
     {
         let pointer = pointer_bytes(draft, new_url)?;
@@ -1167,6 +1303,16 @@ fn feed_move(
     let Some(DraftFeedMove { connector_id, path }) = collection.draft_feed_move(row.id)? else {
         return Ok(None);
     };
+    if row.connector_id.is_none() {
+        // A feed with no host: Studio writes nothing at the old address.
+        return Ok(Some(FeedMove {
+            connector_id,
+            url: hosts.get(connector_id)?.public_url(&path),
+            path,
+            from_url: row.public_url.clone(),
+            method: FeedMoveMethod::None,
+        }));
+    }
     let (from_id, from_path) = writable(row)?;
     if connector_id == from_id {
         return Ok(None);
@@ -1323,13 +1469,18 @@ fn grant_bytes(grants: &[String]) -> Vec<u8> {
 /// The host of the feed gives no move. The function then removes the move,
 /// and puts the `self` link back to the link of the live file.
 ///
+/// A feed with no connector has no host to name. Its path is the release
+/// folder, `/`, and the file name of its public address (ADR 0067
+/// item 7).
+///
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::FileExists`] when the inventory of the new
 /// host has a file at the path, and [`PipelineErrorKind::NoPublicAddress`]
 /// when the new host gives no public address for the path. Gives
-/// [`PipelineErrorKind::NotFound`] when the feed has no hosted file yet.
-/// The draft then does not change.
+/// [`PipelineErrorKind::NotFound`] when the feed has no hosted file yet,
+/// or a feed with no connector has no release folder or no public
+/// address. The draft then does not change.
 pub fn set_feed_host(
     collection: &Collection,
     hosts: &Hosts,
@@ -1337,18 +1488,24 @@ pub fn set_feed_host(
     target: ConnectorId,
 ) -> Result<(), PipelineError> {
     let row = collection.feed(id)?;
-    let (from_id, path) = writable(&row)?;
+    let (from_id, path) = if row.connector_id.is_some() {
+        let (from_id, path) = writable(&row)?;
+        (Some(from_id), path.to_owned())
+    } else {
+        let (Some(folder), Some(file_name)) = (row.folder.as_deref(), public_file_name(&row))
+        else {
+            return Err(PipelineError::new(
+                PipelineErrorKind::NotFound,
+                format!("feed {} has no release folder or no public address", id.0),
+            ));
+        };
+        (None, format!("{folder}/{file_name}"))
+    };
+    let path = path.as_str();
     let draft = current_draft(collection, id)?;
-    if target == from_id {
+    if Some(target) == from_id {
         collection.remove_draft_feed_move(id)?;
-        let back = Feed::read(&Document::parse_bytes(&draft.base_xml)?)
-            .ok()
-            .and_then(|base| base.self_url().map(str::to_owned));
-        if let Some(back) = back {
-            edit_draft(collection, id, |feed| {
-                feed.set_self_url(&back);
-            })?;
-        }
+        restore_self_link(collection, id, &draft)?;
         return Ok(());
     }
     if draft.base_version.is_none() {
@@ -1376,6 +1533,52 @@ pub fn set_feed_host(
         feed.set_self_url(&url);
     })?;
     Ok(())
+}
+
+/// Put the `self` link of the draft back to the `self` link of its base,
+/// when the base has one.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the draft is not a feed.
+fn restore_self_link(
+    collection: &Collection,
+    id: FeedId,
+    draft: &DraftRow,
+) -> Result<(), PipelineError> {
+    let back = Feed::read(&Document::parse_bytes(&draft.base_xml)?)
+        .ok()
+        .and_then(|base| base.self_url().map(str::to_owned));
+    if let Some(back) = back {
+        edit_draft(collection, id, |feed| {
+            feed.set_self_url(&back);
+        })?;
+    }
+    Ok(())
+}
+
+/// Remove the host choice from the draft of a feed with no connector, and
+/// put the `self` link of the draft back to the link of the base (ADR 0067
+/// item 7).
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::Conflict`] when the feed has a connector, and
+/// [`PipelineErrorKind::NoDraft`] when it has no draft.
+pub fn clear_feed_host(collection: &Collection, id: FeedId) -> Result<(), PipelineError> {
+    let row = collection.feed(id)?;
+    if row.connector_id.is_some() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::Conflict,
+            format!(
+                "feed {} has a host; choose its host with set_feed_host",
+                id.0
+            ),
+        ));
+    }
+    let draft = current_draft(collection, id)?;
+    collection.remove_draft_feed_move(id)?;
+    restore_self_link(collection, id, &draft)
 }
 
 /// Each library file that an upload of `operations` will put on a host,
@@ -1547,6 +1750,10 @@ fn confirm_operation(
     })
 }
 
+/// The host operations, the blocked deletions and the waiting uploads of a
+/// draft.
+type HostPlan = (Vec<HostOperation>, Vec<BlockedDelete>, Vec<WaitingUpload>);
+
 /// Each host operation of the draft of a feed, and each deletion that
 /// Studio refuses because a feed refers to the file (ADR 0036 items 10,
 /// 12, 13 and 14).
@@ -1554,22 +1761,53 @@ fn confirm_operation(
 /// # Errors
 ///
 /// Gives a [`PipelineError`] when the collection or a host fails.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the uploads and the draft operations are two loops of one plan"
+)]
 fn host_operations(
     collection: &Collection,
     library: &Library,
     hosts: &Hosts,
     feed_row: &FeedRow,
     feed: &Feed,
-) -> Result<(Vec<HostOperation>, Vec<BlockedDelete>), PipelineError> {
+) -> Result<HostPlan, PipelineError> {
     let urls = feed_addresses(feed);
     let mut operations = Vec::new();
+    let mut blocked = Vec::new();
+    let mut waiting = Vec::new();
+
+    // A feed with no host plans its files for the host of its feed move
+    // (ADR 0067 item 6).
+    let moved_row;
+    let planning_row = match public_target(collection, feed_row)? {
+        Some((target, path)) => {
+            moved_row = FeedRow {
+                files_connector_id: Some(target),
+                path: Some(path),
+                ..feed_row.clone()
+            };
+            &moved_row
+        }
+        None => feed_row,
+    };
 
     // Each library file whose planned address is in the draft, with no
     // copy of the same bytes at its planned path yet, is an upload
     // (ADR 0036 item 10). A draft that refers to a copy on a different
     // host uses that copy, so it needs no upload.
     for file in collection.library_files(feed_row.id)? {
-        let planned = inventory::planned_path(collection, hosts, feed_row, &file)?;
+        let planned = match inventory::planned_path(collection, hosts, planning_row, &file) {
+            Ok(planned) => planned,
+            Err(error)
+                if error.kind() == InventoryErrorKind::NoHost
+                    && feed_row.connector_id.is_none() =>
+            {
+                waiting.extend(waiting_upload(&file, &urls));
+                continue;
+            }
+            Err(error) => return Err(error.into()),
+        };
         let planned_in_use = planned
             .url
             .as_deref()
@@ -1593,7 +1831,6 @@ fn host_operations(
     // Each draft operation gives a copy, or a deletion, or a blocked
     // deletion (ADR 0036 items 12 and 13).
     let all_feeds = collection.feeds()?;
-    let mut blocked = Vec::new();
     for operation in collection.draft_operations(feed_row.id)? {
         match operation.kind {
             DraftOperationKind::Copy => {
@@ -1663,7 +1900,34 @@ fn host_operations(
         }
     }
 
-    Ok((operations, blocked))
+    Ok((operations, blocked, waiting))
+}
+
+/// The upload of a library file that waits for a host, when the draft
+/// names the file and the file has bytes (ADR 0067 item 6). A feed with no
+/// host has no planned address, so the rule compares the end of each draft
+/// address with the library path.
+fn waiting_upload(file: &LibraryFile, urls: &[&str]) -> Option<WaitingUpload> {
+    let encoded = file.path.replace(' ', "%20");
+    let named = urls
+        .iter()
+        .any(|url| url.ends_with(&file.path) || url.ends_with(&encoded));
+    (file.sha256.is_some() && named).then(|| WaitingUpload {
+        path: file.path.clone(),
+    })
+}
+
+/// The bytes that [`diff_id`] adds for the waiting uploads. The bytes are
+/// empty when no upload waits.
+fn waiting_bytes(waiting: &[WaitingUpload]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for upload in waiting {
+        bytes.push(0);
+        bytes.extend_from_slice(b"waiting");
+        bytes.push(0);
+        bytes.extend_from_slice(upload.path.as_bytes());
+    }
+    bytes
 }
 
 /// The bytes that [`diff_id`] adds for each host operation: its kind, its
@@ -1958,6 +2222,36 @@ pub fn write_draft(
         approved,
         &[],
         unix_now(),
+        None,
+    )
+}
+
+/// The same as [`write_draft`], for a feed with no connector. The draft
+/// needs a host choice. `web` reads the public address of the feed, so that
+/// the network policy of the caller applies (ADR 0067 items 8 to 11).
+///
+/// # Errors
+///
+/// Gives the errors of [`write_draft_signed`].
+pub fn write_public_draft(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    web: &crate::web::Web,
+    id: FeedId,
+    approved: &DiffId,
+) -> Result<Version, PipelineError> {
+    write_draft_signed(
+        collection,
+        hosts,
+        library,
+        addresses,
+        id,
+        approved,
+        &[],
+        unix_now(),
+        Some(web),
     )
 }
 
@@ -2063,9 +2357,19 @@ fn invalid_signature(message: &str) -> PipelineError {
 /// After the check of the diff ID, and before the first change on a host,
 /// the function makes the planned events again and checks each event.
 ///
+/// A feed with no connector needs a draft feed move and `public`, the
+/// client that reads its public address. The feed XML goes to the host of
+/// the move, and Studio writes nothing at the address before the move
+/// (ADR 0067 items 8 to 11). A feed with a connector ignores `public`.
+///
 /// # Errors
 ///
-/// Gives the errors of [`write_draft`]. It also gives
+/// Gives [`PipelineErrorKind::ReadOnly`] when a feed with no connector has
+/// no draft feed move, or `public` is `None`. Gives
+/// [`PipelineErrorKind::Conflict`] when its public address gives other
+/// bytes than the base of the draft, and [`PipelineErrorKind::FileExists`]
+/// when the new host has a file at the path. Gives the errors of
+/// [`write_draft`]. It also gives
 /// [`PipelineErrorKind::PlanExpired`], [`PipelineErrorKind::SignatureMissing`]
 /// and [`PipelineErrorKind::SignatureInvalid`] before any file changes on
 /// a host.
@@ -2086,16 +2390,46 @@ pub fn write_draft_signed(
     approved: &DiffId,
     signed: &[nostr::prelude::Event],
     now: u64,
+    public: Option<&crate::web::Web>,
 ) -> Result<Version, PipelineError> {
     let row = collection.feed(id)?;
-    let (connector_id, path) = writable(&row)?;
-    let path = path.to_owned();
+    // A feed with no connector writes to the host of its draft feed move.
+    let from_host = if row.connector_id.is_some() {
+        let (connector_id, path) = writable(&row)?;
+        Some((connector_id, path.to_owned()))
+    } else {
+        None
+    };
+    let (connector_id, path) = if let Some(host) = &from_host {
+        host.clone()
+    } else {
+        let target = public_target(collection, &row)?.ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::ReadOnly,
+                "choose a host for this feed first",
+            )
+        })?;
+        if public.is_none() {
+            return Err(PipelineError::new(
+                PipelineErrorKind::ReadOnly,
+                format!(
+                    "feed {} has no connector, so Studio cannot write it here",
+                    id.0
+                ),
+            ));
+        }
+        target
+    };
     let connector = hosts.get(connector_id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
+    // A write has a host for the feed XML, so each upload has a planned
+    // host and no upload waits. The bytes keep the diff ID of `diff_at`.
+    let (operations, _blocked, waiting_uploads) =
+        host_operations(collection, library, hosts, &row, &feed)?;
     let feed_move = feed_move(collection, hosts, &row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
+    extra.extend(waiting_bytes(&waiting_uploads));
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let (announcements, announce_skip) =
         plan_announcements(collection, hosts, &row, feed_move.as_ref())?;
@@ -2145,14 +2479,30 @@ pub fn write_draft_signed(
             format!("a live item is not correct: {}", texts.join(" ")),
         ));
     }
-    let live = connector.read(&path)?;
-    let live_version = live.as_ref().map(|f| &f.version);
-    if live_version != draft.base_version.as_ref() {
-        return Err(PipelineError::new(
-            PipelineErrorKind::Conflict,
-            format!("{path} changed on the host after the draft started"),
-        ));
-    }
+    let live = if from_host.is_some() {
+        let live = connector.read(&path)?;
+        let live_version = live.as_ref().map(|f| &f.version);
+        if live_version != draft.base_version.as_ref() {
+            return Err(PipelineError::new(
+                PipelineErrorKind::Conflict,
+                format!("{path} changed on the host after the draft started"),
+            ));
+        }
+        live
+    } else {
+        // The feed XML at the public address is the base of the draft, and
+        // the new host has no file at the path (ADR 0067 items 9 and 10).
+        if let Some(web) = public {
+            check_public_base(&row, web, &draft)?;
+        }
+        if connector.read(&path)?.is_some() {
+            return Err(PipelineError::new(
+                PipelineErrorKind::FileExists,
+                format!("a file exists at {path} on the new host already"),
+            ));
+        }
+        None
+    };
     // ADR 0050 item 12: the planned events are correct before the first
     // change on a host.
     let changes = host_changes(
@@ -2178,7 +2528,9 @@ pub fn write_draft_signed(
     // and then the host from before points to it (ADR 0038 item 19). The
     // release folder then keeps the same bytes as the hosted file
     // (ADR 0036 item 3).
-    let version = if let Some(moved) = &feed_move {
+    let version = if from_host.is_none() {
+        put_public_feed_file(collection, id, connector, &path, &draft)?
+    } else if let Some(moved) = &feed_move {
         let old = FeedHost {
             connector,
             connector_id,
@@ -2206,6 +2558,9 @@ pub fn write_draft_signed(
     // keeps the bytes of the file on the new host.
     if let Some(moved) = &feed_move {
         collection.set_feed_location(id, moved.connector_id, &moved.path, moved.url.as_deref())?;
+        if from_host.is_none() {
+            collection.set_files_connector(id, Some(moved.connector_id))?;
+        }
     }
     collection.record_state(id, &feed, &version)?;
     if let Some(folder) = row.folder.as_deref() {
@@ -2514,6 +2869,7 @@ fn write_granted_with(
             &diff.id,
             &[],
             now,
+            None,
         )
     })();
     if result.is_err() {
@@ -2674,6 +3030,69 @@ fn put_moved_feed_file(
             )?;
             collection.add_feed_pointer(old.connector_id, old.path, id)?;
         }
+        // A feed with a host never has this method.
+        FeedMoveMethod::None => {}
+    }
+    Ok(version)
+}
+
+/// Check that the public address of a feed with no connector still gives
+/// the base of the draft (ADR 0067 item 9). `web` applies the network
+/// policy of the caller.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::Conflict`] when the bytes differ from the
+/// base, and [`PipelineErrorKind::Network`] when the read fails.
+fn check_public_base(
+    row: &FeedRow,
+    web: &crate::web::Web,
+    draft: &DraftRow,
+) -> Result<(), PipelineError> {
+    let url = row.public_url.as_deref().ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::ReadOnly,
+            format!("feed {} has no public address", row.id.0),
+        )
+    })?;
+    let read = crate::discover::read_public(web, url)
+        .map_err(|message| PipelineError::new(PipelineErrorKind::Network, message))?;
+    if Some(&read.version) != draft.base_version.as_ref() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::Conflict,
+            "the feed changed at its public address after the draft started",
+        ));
+    }
+    Ok(())
+}
+
+/// Put the feed XML of a feed with no connector on its new host. Studio
+/// keeps the base of the draft as a snapshot. It writes nothing at the
+/// address before the move (ADR 0067 item 8). Gives the version of the new
+/// file.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::FileExists`] when a file is at the path.
+fn put_public_feed_file(
+    collection: &Collection,
+    id: FeedId,
+    target: &dyn Connector,
+    path: &str,
+    draft: &DraftRow,
+) -> Result<Version, PipelineError> {
+    let version = match target.write(path, &draft.draft_xml, &Expected::Absent) {
+        Ok(version) => version,
+        Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
+            return Err(PipelineError::new(
+                PipelineErrorKind::FileExists,
+                format!("a file exists at {path} on the new host already"),
+            ));
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if let Some(base) = &draft.base_version {
+        collection.add_snapshot(id, base, &draft.base_xml)?;
     }
     Ok(version)
 }

@@ -2426,6 +2426,7 @@ impl SigningSite {
             diff_id,
             signed,
             now,
+            None,
         )
     }
 
@@ -2714,6 +2715,7 @@ fn a_write_to_a_local_folder_host_needs_no_plan() {
         &diff.id,
         &[],
         time_now(),
+        None,
     )
     .unwrap();
     assert!(live(&s).contains("Album (Deluxe)"));
@@ -2966,6 +2968,7 @@ fn write_granted_show(s: &mut Setup) -> String {
         &diff.id,
         &[],
         during_show(),
+        None,
     )
     .unwrap();
     guid
@@ -3462,4 +3465,432 @@ fn a_sent_null_removes_the_explicit_and_adds_none() {
     let saved = save_explicit(None, None, |_| {});
     assert_eq!(saved.explicit, None);
     assert_eq!(saved.items[0].explicit, None);
+}
+
+// ---- A feed with no host (task 046a, ADR 0067) ----
+
+/// A local HTTP server that gives one feed file. It records each request
+/// as the method and the path.
+struct FeedServer {
+    address: String,
+    body: Arc<Mutex<Vec<u8>>>,
+    requests: Arc<Mutex<Vec<String>>>,
+}
+
+fn feed_server(body: &str) -> FeedServer {
+    use std::io::Write;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
+    let body = Arc::new(Mutex::new(body.as_bytes().to_vec()));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let (served, seen) = (body.clone(), requests.clone());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut head = [0_u8; 4096];
+            let Ok(length) = stream.read(&mut head) else {
+                continue;
+            };
+            let text = String::from_utf8_lossy(&head[..length]).into_owned();
+            let mut line = text.lines().next().unwrap_or("").split(' ');
+            let request = format!(
+                "{} {}",
+                line.next().unwrap_or(""),
+                line.next().unwrap_or("")
+            );
+            seen.lock().unwrap().push(request);
+            let bytes = served.lock().unwrap().clone();
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/rss+xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                bytes.len()
+            );
+            let _ = stream.write_all(&bytes);
+        }
+    });
+    FeedServer {
+        address,
+        body,
+        requests,
+    }
+}
+
+struct PublicSetup {
+    dir: tempfile::TempDir,
+    collection: Collection,
+    hosts: Hosts,
+    library: Library,
+    web: studio_core::web::Web,
+    server: FeedServer,
+    feed: FeedId,
+    target: ConnectorId,
+    xml: String,
+}
+
+fn public_setup() -> PublicSetup {
+    let dir = tempfile::tempdir().unwrap();
+    let probe = feed_server("");
+    let url = format!("{}/album.xml", probe.address);
+    let xml = MOVE_FEED.replace("https://a.example/album.xml", &url);
+    *probe.body.lock().unwrap() = xml.as_bytes().to_vec();
+    let web = studio_core::web::Web::new();
+    let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let folder = LocalFolder::new(dir.path().join("target"), Some("https://b.example".into()));
+    let target = collection
+        .add_connector(LocalFolder::KIND, "B", &folder.config(), None)
+        .unwrap();
+    let mut hosts = Hosts::new();
+    hosts.insert(target, Box::new(folder));
+    let library = Library::open(dir.path().join("library")).unwrap();
+    let feed = collection.add_feed(Some(&url), None).unwrap();
+    pipeline::refresh_public(&mut collection, &web, feed).unwrap();
+    collection.set_feed_folder(feed, "album").unwrap();
+    library
+        .write_feed_xml("album", "album.xml", xml.as_bytes())
+        .unwrap();
+    probe.requests.lock().unwrap().clear();
+    PublicSetup {
+        dir,
+        collection,
+        hosts,
+        library,
+        web,
+        server: probe,
+        feed,
+        target,
+        xml,
+    }
+}
+
+fn public_edit(s: &PublicSetup) {
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.title = Some("Album (Deluxe)".into());
+    })
+    .unwrap();
+}
+
+fn public_write(s: &mut PublicSetup, id: &DiffId) -> Result<Version, pipeline::PipelineError> {
+    pipeline::write_public_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &s.web,
+        s.feed,
+        id,
+    )
+}
+
+#[test]
+fn a_public_draft_has_the_release_folder_xml_as_its_base() {
+    let s = public_setup();
+    let row = s.collection.feed(s.feed).unwrap();
+    let draft = pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    assert_eq!(draft.base_xml, s.xml.as_bytes());
+    assert_eq!(draft.draft_xml, s.xml.as_bytes());
+    assert_eq!(draft.base_version, row.last_version);
+    assert!(draft.base_version.is_some());
+}
+
+#[test]
+fn a_public_draft_refuses_a_feed_with_a_host_and_a_different_release_folder_xml() {
+    let s = setup();
+    let error = pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::Conflict);
+    assert!(error.to_string().contains("has a host"));
+
+    let p = public_setup();
+    p.library
+        .write_feed_xml("album", "album.xml", b"<rss/>")
+        .unwrap();
+    let error = pipeline::start_public_draft(&p.collection, &p.library, p.feed).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::Conflict);
+    assert!(error.to_string().contains("different feed XML"));
+}
+
+#[test]
+fn the_diff_of_a_public_draft_gives_the_unified_diff_and_no_move() {
+    let s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    public_edit(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(diff.changed);
+    assert!(diff.unified.contains("+    <title>Album (Deluxe)</title>"));
+    assert!(diff.feed_move.is_none());
+    assert_eq!(diff.blocked.len(), 0);
+}
+
+#[test]
+fn the_write_of_a_public_draft_with_no_host_choice_refuses_with_read_only() {
+    let mut s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    public_edit(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = public_write(&mut s, &diff.id).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
+    assert!(error.to_string().contains("choose a host"));
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
+}
+
+#[test]
+fn a_host_choice_of_a_public_draft_gives_the_path_the_self_link_and_a_move_with_no_method() {
+    let s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    let chosen = s.collection.draft_feed_move(s.feed).unwrap().unwrap();
+    assert_eq!(chosen.connector_id, s.target);
+    assert_eq!(chosen.path, "album/album.xml");
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml).unwrap()).unwrap();
+    assert_eq!(feed.self_url(), Some("https://b.example/album/album.xml"));
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let moved = diff.feed_move.unwrap();
+    assert_eq!(moved.method, pipeline::FeedMoveMethod::None);
+    assert_eq!(moved.method.as_str(), "none");
+    assert_eq!(moved.path, "album/album.xml");
+    assert_eq!(
+        moved.url.as_deref(),
+        Some("https://b.example/album/album.xml")
+    );
+    assert_eq!(
+        moved.from_url,
+        s.collection.feed(s.feed).unwrap().public_url
+    );
+}
+
+#[test]
+fn a_host_choice_on_a_target_with_a_file_at_the_path_gives_file_exists() {
+    let s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    s.collection
+        .put_host_file(s.target, "album/album.xml", 1, &Stamp::new("1"))
+        .unwrap();
+    let error = pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+}
+
+#[test]
+fn clear_feed_host_removes_the_move_and_gives_the_self_link_of_the_base() {
+    let s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::clear_feed_host(&s.collection, s.feed).unwrap();
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(draft.draft_xml, draft.base_xml);
+}
+
+#[test]
+fn the_write_of_a_moved_public_draft_puts_the_feed_on_the_target_and_nothing_at_the_address() {
+    let mut s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    public_edit(&s);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(
+        announced(&diff)
+            .iter()
+            .map(|(url, _)| url.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "https://b.example/album/album.xml",
+            format!("{}/album.xml", s.server.address).as_str(),
+        ]
+    );
+    s.server.requests.lock().unwrap().clear();
+    let version = public_write(&mut s, &diff.id).unwrap();
+
+    let on_target = fs::read_to_string(s.dir.path().join("target/album/album.xml")).unwrap();
+    assert!(on_target.contains("Album (Deluxe)"));
+    assert!(on_target.contains("href=\"https://b.example/album/album.xml\""));
+    let requests = s.server.requests.lock().unwrap().clone();
+    assert_ne!(requests.len(), 0);
+    assert!(
+        requests.iter().all(|r| r == "GET /album.xml"),
+        "the old address gets only reads: {requests:?}"
+    );
+    let row = s.collection.feed(s.feed).unwrap();
+    assert_eq!(row.connector_id, Some(s.target));
+    assert_eq!(row.path.as_deref(), Some("album/album.xml"));
+    assert_eq!(
+        row.public_url.as_deref(),
+        Some("https://b.example/album/album.xml")
+    );
+    assert_eq!(row.files_connector_id, Some(s.target));
+    assert_eq!(row.last_version, Some(version));
+    assert_eq!(
+        row.podcast_guid.as_deref(),
+        Some("917393e3-1b1e-5cef-ace4-edaa54e1f810")
+    );
+    assert_eq!(s.collection.item_guids(s.feed).unwrap(), ["track-1"]);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
+    let in_library = fs::read(s.library.path("album", "album.xml")).unwrap();
+    assert_eq!(in_library, on_target.as_bytes());
+    assert_eq!(queued(&s.collection, s.feed), 2);
+}
+
+#[test]
+fn a_public_file_that_changed_after_the_draft_started_gives_conflict_and_writes_nothing() {
+    let mut s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    public_edit(&s);
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    *s.server.body.lock().unwrap() = s.xml.replace("Album", "Changed").into_bytes();
+    let error = public_write(&mut s, &diff.id).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::Conflict);
+    assert!(!s.dir.path().join("target/album/album.xml").exists());
+    assert!(s.collection.feed(s.feed).unwrap().connector_id.is_none());
+}
+
+#[test]
+fn a_write_of_a_public_draft_needs_the_web_of_the_caller() {
+    let mut s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
+    assert!(!s.dir.path().join("target/album/album.xml").exists());
+}
+
+#[test]
+fn an_upload_of_a_public_draft_waits_for_a_host_and_goes_to_the_target_after_the_choice() {
+    let mut s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    s.collection
+        .add_library_file(
+            s.feed,
+            "cover.jpg",
+            11,
+            Some("abc"),
+            "image/jpeg",
+            true,
+            None,
+            None,
+        )
+        .unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.image = Some("https://b.example/album/album/cover.jpg".into());
+    })
+    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.operations.len(), 0);
+    assert_eq!(diff.blocked.len(), 0);
+    assert_eq!(
+        diff.waiting_uploads,
+        [pipeline::WaitingUpload {
+            path: "cover.jpg".to_owned()
+        }]
+    );
+    let error = public_write(&mut s, &diff.id).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
+
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.blocked.len(), 0);
+    assert_eq!(diff.waiting_uploads.len(), 0);
+    assert_eq!(diff.operations.len(), 1);
+    assert_eq!(diff.operations[0].kind, OperationKind::Upload);
+    assert_eq!(diff.operations[0].connector_id, s.target);
+    assert_eq!(diff.operations[0].path, "album/album/cover.jpg");
+}
+
+#[test]
+fn a_linked_draft_with_the_same_bytes_on_the_host_takes_the_version_of_the_host() {
+    let s = public_setup();
+    let draft = pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let host = LocalFolder::new(dir.path(), Some("https://c.example".into()));
+    let written = host
+        .write("album.xml", &draft.base_xml, &Expected::Absent)
+        .unwrap();
+    let linked = s
+        .collection
+        .add_connector(LocalFolder::KIND, "C", &host.config(), None)
+        .unwrap();
+    s.collection
+        .set_feed_connector(s.feed, linked, "album.xml")
+        .unwrap();
+    pipeline::rebase_linked_draft(&s.collection, &host, s.feed).unwrap();
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
+    let kept = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(kept.base_version, Some(written));
+    assert_eq!(kept.draft_xml, kept.base_xml);
+}
+
+#[test]
+fn a_linked_draft_with_different_bytes_on_the_host_gives_a_conflict_at_the_write() {
+    let mut s = public_setup();
+    let draft = pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    public_edit(&s);
+    let dir = tempfile::tempdir().unwrap();
+    let host = LocalFolder::new(dir.path(), Some("https://c.example".into()));
+    host.write(
+        "album.xml",
+        b"<rss version=\"2.0\"><channel/></rss>",
+        &Expected::Absent,
+    )
+    .unwrap();
+    let linked = s
+        .collection
+        .add_connector(LocalFolder::KIND, "C", &host.config(), None)
+        .unwrap();
+    let mut hosts = Hosts::new();
+    hosts.insert(linked, Box::new(host));
+    s.collection
+        .set_feed_connector(s.feed, linked, "album.xml")
+        .unwrap();
+    pipeline::rebase_linked_draft(&s.collection, hosts.get(linked).unwrap(), s.feed).unwrap();
+    let kept = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(kept.base_version, draft.base_version);
+    let diff = pipeline::diff(&s.collection, &hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::Conflict);
+}
+
+#[test]
+fn a_granted_write_of_a_feed_with_no_connector_stays_refused() {
+    let mut s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    let result = pipeline::write_granted(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        "live-1",
+        &GrantChange::GoLive,
+        "Show tool",
+        time_now(),
+    );
+    assert!(result.is_err());
+    assert!(!s.dir.path().join("target").exists());
 }

@@ -102,6 +102,20 @@ impl Library {
         Ok(())
     }
 
+    /// Read the feed XML of a release folder. This is the reverse of
+    /// [`Library::write_feed_xml`] (ADR 0067 item 5).
+    ///
+    /// # Errors
+    ///
+    /// Gives an `io::Error` when `folder` or `file_name` is not a plain
+    /// name, or Studio cannot read the file.
+    pub fn read_feed_xml(&self, folder: &str, file_name: &str) -> io::Result<Vec<u8>> {
+        check_plain(folder)?;
+        check_plain(file_name)?;
+        let full = self.root.join(folder).join(file_name);
+        fs::read(&full).map_err(|e| named(&full, &e))
+    }
+
     /// Remove a file of a release folder. A file that does not exist is
     /// not an error.
     ///

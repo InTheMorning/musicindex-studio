@@ -22,7 +22,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | 044 | Complete | Pass. See "Packet 044". |
 | 045a | Complete | Pass. See "Packet 045a". |
 | 045b | Complete | Pass. See "Packet 045b". |
-| 046a | Ready | Not started |
+| 046a | Complete | Pass after one correction. See "Packet 046a". |
 | 046b | Ready | Not started |
 | 046c | Ready | Not started |
 
@@ -72,4 +72,13 @@ A coding model implements each packet. The planning model examines the diff and 
 - The coding model changed `crates/api/src/ui.rs`, which the packet did not name. The server sends each UI file from the list `FILES`, and a Rust test requires each UI script in that list. So `pages.js` needs an entry. The planning model accepts this change.
 - The planning model divided one long comment line in `editor.js`.
 - The four commit checks pass: Cargo 961 tests, Node 200 tests.
-- The visual check used `.studio-dev/visual-044`, with a new label feed and a new playlist, in the dark theme, the light theme and at 390 px. The headings and the field sequence of the album page, the publisher page, the playlist page, the settings page and a track page agree with the packet. `$edges()` gives an empty list on each page.
+- The visual check used `.studio-dev/visual-044`, with a new label feed and a new playlist, in the dark theme, the light theme and at 390 px. On the five pages, the headings and the field sequence agree with the packet. `$edges()` gives an empty list on each page.
+
+### Packet 046a
+
+- The first diff put an upload that waits for a host into `BlockedDelete`, as the packet text said. That type is for a refused deletion. The change made `connector_id` and `operation_id` optional in each refused deletion. The planning model rejected it. The coding model restored `BlockedDelete`, and added `WaitingUpload` and the diff field `waiting_uploads`. The paths of the list are in the bytes of the diff ID.
+- No path reaches a write check of `waiting_uploads`. A write with no host choice stops at "choose a host for this feed first", and with a host choice each upload has a planned host. The planning model removed that check, because no entry point reaches it.
+- A feed with no host has no planned address for a library file. So `waiting_upload` compares the end of each draft address with the library path. This rule is approximate. Open: a later packet can replace it with a rule from the import.
+- The write of a feed with a connector does not change. Each test of it passes with no change.
+- The four commit checks pass: Cargo 975 tests, Node 200 tests. The core pipeline tests went from 92 to 105.
+- The tests examine each criterion of the packet. The write of a moved read-only draft sends only GET requests to the old address. The announcements give the new address, then the old address.

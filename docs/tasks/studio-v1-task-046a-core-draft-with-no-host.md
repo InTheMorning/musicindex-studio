@@ -3,7 +3,7 @@
 Parent: [task 046](studio-v1-task-046-read-only-editor.md). Decisions: [ADR 0067](../adr/0067-a-read-only-feed-opens-in-the-editor.md) items 3 to 11 and 13, [ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md) items 3 and 8, [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) items 13 and 18 to 21, [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 16 to 19, [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) item 8 and [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md).
 Sequence: the first packet of task 046. It depends on task 045.
 
-Status: Ready.
+Status: Complete - 2026-10-27. The four commit checks pass, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records the review.
 
 ## Goal
 

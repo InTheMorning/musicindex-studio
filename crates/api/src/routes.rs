@@ -2344,6 +2344,7 @@ pub(crate) async fn write_feed(
             &approved,
             &signed,
             now,
+            None,
         )?;
         if let Some((feed, _)) = written {
             w.record_remote_files(id, &feed);

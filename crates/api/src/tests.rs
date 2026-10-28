@@ -9363,3 +9363,73 @@ async fn the_audio_route_reads_the_plain_address_of_a_prefixed_enclosure() {
     assert_eq!(bytes, body[10..20]);
     assert_eq!(headers[header::CONTENT_RANGE], "bytes 10-19/5000");
 }
+
+#[tokio::test]
+async fn a_new_album_with_from_is_a_copy_with_new_guids_and_leaves_the_source_as_it_was() {
+    let (app, connector) = publisher_app().await;
+    let source = make_feed(
+        &app,
+        new_feed_body(connector, "source.xml", "Source", None, None),
+    )
+    .await;
+    let source_id = source["id"].as_i64().unwrap();
+    let source_path = format!("/api/v1/feeds/{source_id}/draft");
+    let before = call(&app, "GET", &source_path, None).await.1;
+
+    let mut body = new_feed_body(connector, "copy.xml", "Copy", None, None);
+    body["from"] = json!(source_id);
+    let copy = make_feed(&app, body).await;
+    assert_eq!(copy["title"], "Copy");
+    assert_eq!(copy["medium"], "music");
+    assert_eq!(copy["public_url"], "https://music.example/copy.xml");
+    assert!(!app.feeds.path().join("copy.xml").exists());
+
+    let model = draft_model(&app, copy["id"].as_i64().unwrap()).await;
+    assert_eq!(model["title"], "Copy");
+    assert_eq!(
+        model["podcast_guid"],
+        studio_core::guid::podcast_guid_for_url("https://music.example/copy.xml")
+    );
+    assert_ne!(model["podcast_guid"], before["model"]["podcast_guid"]);
+
+    let after = call(&app, "GET", &source_path, None).await.1;
+    assert_eq!(after, before);
+}
+
+#[tokio::test]
+async fn from_with_a_publisher_feed_or_a_playlist_gives_422() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let playlist = make_feed(
+        &app,
+        new_feed_body(connector, "list.xml", "List", Some("musicL"), None),
+    )
+    .await;
+    let album = make_feed(
+        &app,
+        new_feed_body(connector, "mine.xml", "Album", None, None),
+    )
+    .await;
+    for (source, medium, path) in [
+        (&label, None, "c1.xml"),
+        (&playlist, None, "c2.xml"),
+        (&album, Some("musicL"), "c3.xml"),
+        (&album, Some("publisher"), "c4.xml"),
+    ] {
+        let mut body = new_feed_body(connector, path, "Copy", medium, Some("label"));
+        body["from"] = source["id"].clone();
+        let (status, response) = call(&app, "POST", "/api/v1/feeds/new", Some(body)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{path}");
+        assert_eq!(response["error"]["code"], "invalid_feed", "{path}");
+    }
+}

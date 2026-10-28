@@ -4172,3 +4172,212 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_with_a_prefix_does_not_de
     assert_eq!(diff.blocked.len(), 1);
     assert_eq!(diff.blocked[0].feed_titles, ["Second Album".to_owned()]);
 }
+
+const SOURCE_GUID: &str = "917393e3-1b1e-5cef-ace4-edaa54e1f810";
+
+/// An album with each element that the copy of ADR 0077 changes, and
+/// elements that the copy keeps.
+fn copy_source_feed() -> String {
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:atom=\"http://www.w3.org/2005/Atom\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">
+  <channel>
+    <title>Source Album</title>
+    <description>Keep   this   text.</description>
+    <atom:link href=\"https://music.example/album.xml\" rel=\"self\" type=\"application/rss+xml\"/>
+    <itunes:author>Source Artist</itunes:author>
+    <itunes:new-feed-url>https://elsewhere.example/feed.xml</itunes:new-feed-url>
+    <podcast:guid>{SOURCE_GUID}</podcast:guid>
+    <podcast:medium>music</podcast:medium>
+    <podcast:txt purpose=\"npub\">npub-of-the-artist</podcast:txt>
+    <podcast:txt purpose=\"verify\">token-of-the-source</podcast:txt>
+    <podcast:txt>plain note</podcast:txt>
+    <podcast:publisher>
+      <podcast:remoteItem feedGuid=\"2b7c6a1e-0000-5000-8000-000000000001\" medium=\"publisher\"/>
+    </podcast:publisher>
+    <item>
+      <title>Track One</title>
+      <guid>track-1</guid>
+      <enclosure url=\"https://op3.dev/e,pg={SOURCE_GUID}/music.example/one.mp3\" length=\"3\" type=\"audio/mpeg\"/>
+      <pubDate>Fri, 01 May 2026 00:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Track Two</title>
+      <guid>track-2</guid>
+      <enclosure url=\"https://op3.dev/e/music.example/two.mp3\" length=\"3\" type=\"audio/mpeg\"/>
+    </item>
+    <item>
+      <title>Track Three</title>
+      <guid>track-3</guid>
+      <enclosure url=\"https://music.example/three.mp3\" length=\"3\" type=\"audio/mpeg\"/>
+    </item>
+    <podcast:liveItem status=\"pending\" start=\"2026-12-01T10:00:00Z\">
+      <title>Show</title>
+      <guid>live-1</guid>
+      <enclosure url=\"https://music.example/live.mp3\" length=\"0\" type=\"audio/mpeg\"/>
+    </podcast:liveItem>
+  </channel>
+</rss>
+"
+    )
+}
+
+fn copy_of(s: &mut Setup, path: &str) -> FeedId {
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    pipeline::copy_feed(
+        &mut s.collection,
+        s.connector.as_ref(),
+        connector_id,
+        path,
+        "Copy Album",
+        "Copy Artist",
+        s.feed,
+    )
+    .unwrap()
+}
+
+fn uuid_text(text: &str) -> bool {
+    text.len() == 36 && text.chars().filter(|c| *c == '-').count() == 4
+}
+
+#[test]
+fn a_copy_has_new_guids_the_new_self_link_and_the_sent_title_and_author() {
+    let mut s = setup_with(&copy_source_feed());
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let source_draft = s.collection.draft(s.feed).unwrap().unwrap();
+    let id = copy_of(&mut s, "copy.xml");
+
+    let (copy, _) = pipeline::draft_model(&s.collection, id).unwrap();
+    let (source, _) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(copy.title.as_deref(), Some("Copy Album"));
+    assert_eq!(copy.author.as_deref(), Some("Copy Artist"));
+    let guid = podcast_guid_for_url("https://music.example/copy.xml");
+    assert_eq!(copy.podcast_guid.as_deref(), Some(guid.as_str()));
+    assert_ne!(copy.podcast_guid, source.podcast_guid);
+    assert_eq!(copy.items.len(), 3);
+    for (new, old) in copy.items.iter().zip(source.items.iter()) {
+        let new_guid = new.guid.as_deref().unwrap();
+        assert!(uuid_text(new_guid), "{new_guid}");
+        assert_ne!(new.guid, old.guid);
+    }
+    assert_eq!(copy.atom_links.len(), 1);
+    assert_eq!(
+        copy.atom_links[0].href.as_deref(),
+        Some("https://music.example/copy.xml")
+    );
+    // The copy makes no file. The source draft does not change.
+    assert!(!s.dir.path().join("copy.xml").exists());
+    assert_eq!(s.collection.draft(s.feed).unwrap().unwrap(), source_draft);
+    let row = s.collection.feed(id).unwrap();
+    assert_eq!(row.medium.as_deref(), Some("music"));
+    assert_eq!(row.path.as_deref(), Some("copy.xml"));
+}
+
+#[test]
+fn a_copy_keeps_the_artist_key_and_removes_the_other_links_and_texts() {
+    let mut s = setup_with(&copy_source_feed());
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let id = copy_of(&mut s, "copy.xml");
+
+    let (copy, _) = pipeline::draft_model(&s.collection, id).unwrap();
+    assert_eq!(copy.txts.len(), 1);
+    assert_eq!(copy.txts[0].purpose.as_deref(), Some("npub"));
+    assert_eq!(copy.txts[0].value.value, "npub-of-the-artist");
+    assert!(copy.publisher.is_none());
+    assert_eq!(copy.live_items.len(), 0);
+    assert!(copy.new_feed_url.is_none());
+    let draft = s.collection.draft(id).unwrap().unwrap();
+    let xml = String::from_utf8(draft.draft_xml).unwrap();
+    for gone in ["podcast:publisher", "liveItem", "new-feed-url", "verify"] {
+        assert!(!xml.contains(gone), "{gone} stays in {xml}");
+    }
+}
+
+#[test]
+fn a_copy_gives_an_op3_prefix_the_guid_of_the_copy() {
+    let mut s = setup_with(&copy_source_feed());
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let id = copy_of(&mut s, "copy.xml");
+
+    let (copy, _) = pipeline::draft_model(&s.collection, id).unwrap();
+    let guid = podcast_guid_for_url("https://music.example/copy.xml");
+    let url = |n: usize| copy.items[n].enclosure.as_ref().unwrap().url.clone();
+    assert_eq!(
+        url(0).unwrap(),
+        format!("https://op3.dev/e,pg={guid}/music.example/one.mp3")
+    );
+    assert_eq!(url(1).unwrap(), "https://op3.dev/e/music.example/two.mp3");
+    assert_eq!(url(2).unwrap(), "https://music.example/three.mp3");
+    let draft = s.collection.draft(id).unwrap().unwrap();
+    let xml = String::from_utf8(draft.draft_xml).unwrap();
+    assert!(!xml.contains(SOURCE_GUID), "{xml}");
+}
+
+#[test]
+fn a_copy_keeps_each_other_element_with_the_bytes_of_the_source() {
+    let mut s = setup_with(&copy_source_feed());
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let id = copy_of(&mut s, "copy.xml");
+
+    let draft = s.collection.draft(id).unwrap().unwrap();
+    let xml = String::from_utf8(draft.draft_xml).unwrap();
+    for kept in [
+        "<description>Keep   this   text.</description>",
+        "<podcast:medium>music</podcast:medium>",
+        "<podcast:txt purpose=\"npub\">npub-of-the-artist</podcast:txt>",
+        "<title>Track One</title>",
+        "<pubDate>Fri, 01 May 2026 00:00:00 +0000</pubDate>",
+        "<enclosure url=\"https://op3.dev/e/music.example/two.mp3\" length=\"3\" type=\"audio/mpeg\"/>",
+        "<enclosure url=\"https://music.example/three.mp3\" length=\"3\" type=\"audio/mpeg\"/>",
+    ] {
+        assert!(xml.contains(kept), "{kept} is not in {xml}");
+    }
+    assert_eq!(draft.base_xml.len(), 0);
+}
+
+#[test]
+fn a_copy_at_a_path_with_a_file_gives_an_error() {
+    let mut s = setup_with(&copy_source_feed());
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    fs::write(s.dir.path().join("taken.xml"), b"<rss/>").unwrap();
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    let error = pipeline::copy_feed(
+        &mut s.collection,
+        s.connector.as_ref(),
+        connector_id,
+        "taken.xml",
+        "Copy Album",
+        "Copy Artist",
+        s.feed,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+}
+
+#[test]
+fn the_deletion_check_keeps_a_source_file_that_the_copy_refers_to() {
+    let mut s = setup_with(&copy_source_feed());
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    s.connector
+        .write("three.mp3", b"mp3", &Expected::Absent)
+        .unwrap();
+    inventory::scan(&s.collection, &s.hosts, connector_id).unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    copy_of(&mut s, "copy.xml");
+
+    // The source drops its third track, and drafts the deletion of its file.
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.items.truncate(2)).unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            connector_id,
+            "three.mp3",
+        )
+        .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(diff.operations.is_empty(), "{:?}", diff.operations);
+    assert_eq!(diff.blocked.len(), 1);
+    assert_eq!(diff.blocked[0].feed_titles, ["Copy Album".to_owned()]);
+}

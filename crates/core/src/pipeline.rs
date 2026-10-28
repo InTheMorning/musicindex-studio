@@ -741,6 +741,98 @@ pub fn new_feed(
     Ok(id)
 }
 
+/// Make a new album feed from the draft of a source album (ADR 0077).
+///
+/// The checks are those of [`new_feed`]. The copy keeps each field and each
+/// track of the source draft, with the changes of ADR 0077 item 6: the sent
+/// `title` and `author`, the feed GUID of the new address, a new random GUID
+/// for each track, and the new address in the `atom:link` with
+/// `rel="self"`. The copy has no `podcast:txt` except the artist key
+/// (`purpose="npub"`), no publisher reference, no live item and no
+/// `itunes:new-feed-url`. An OP3 prefix with the GUID of the source gets the
+/// GUID of the copy. The copy makes no library file and no host operation.
+/// The source draft does not change.
+///
+/// # Errors
+///
+/// Gives the errors of [`new_feed`], and [`PipelineErrorKind::NoDraft`] when
+/// the source has no draft.
+pub fn copy_feed(
+    collection: &mut Collection,
+    connector: &dyn Connector,
+    connector_id: ConnectorId,
+    path: &str,
+    title: &str,
+    author: &str,
+    source: FeedId,
+) -> Result<FeedId, PipelineError> {
+    let address = connector.public_url(path).ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NoPublicAddress,
+            format!("{path} has no public address; give the host a public address first"),
+        )
+    })?;
+    if connector.read(path)?.is_some() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::FileExists,
+            format!("a file exists at {path} already"),
+        ));
+    }
+    let draft = current_draft(collection, source)?;
+    let mut doc = Document::parse_bytes(&draft.draft_xml)?;
+    let mut feed = Feed::read(&doc)?;
+    let new_guid = podcast_guid_for_url(&address);
+    let old_prefix = feed
+        .podcast_guid
+        .as_deref()
+        .map(|guid| format!("https://op3.dev/e,pg={guid}/"));
+    let new_prefix = format!("https://op3.dev/e,pg={new_guid}/");
+    let swap_prefix = |url: &mut Option<String>| {
+        if let (Some(old), Some(text)) = (old_prefix.as_deref(), url.as_deref())
+            && let Some(rest) = text.strip_prefix(old)
+        {
+            *url = Some(format!("{new_prefix}{rest}"));
+        }
+    };
+    feed.title = Some(title.to_owned());
+    feed.author = Some(author.to_owned());
+    feed.podcast_guid = Some(new_guid);
+    feed.new_feed_url = None;
+    feed.publisher = None;
+    feed.live_items.clear();
+    feed.txts.retain(|t| t.purpose.as_deref() == Some("npub"));
+    for link in &mut feed.atom_links {
+        if link.value.rel.as_deref() == Some("self") {
+            link.value.href = Some(address.clone());
+        }
+    }
+    for entry in &mut feed.items {
+        let item = &mut entry.value;
+        item.guid = Some(uuid::Uuid::new_v4().to_string());
+        if let Some(enclosure) = item.enclosure.as_mut() {
+            swap_prefix(&mut enclosure.url);
+        }
+        for alternate in &mut item.alternate_enclosures {
+            for source in &mut alternate.value.sources {
+                swap_prefix(&mut source.value.uri);
+            }
+        }
+    }
+    feed.write(&mut doc)?;
+    let id = collection.add_feed(None, Some((connector_id, path)))?;
+    collection.set_address(id, AddressSource::Folder, Some(&address))?;
+    collection.set_new_feed(id, title, "music")?;
+    collection.save_draft(
+        id,
+        &DraftRow {
+            base_version: None,
+            base_xml: Vec::new(),
+            draft_xml: doc.write().into_bytes(),
+        },
+    )?;
+    Ok(id)
+}
+
 /// Parse the hosted file that the draft started from, for `write_hosted`
 /// (ADR 0031).
 ///
@@ -1693,6 +1785,14 @@ fn feed_refers_in_library(library: &Library, row: &FeedRow, url: &str) -> bool {
     feed_addresses(&feed).iter().any(|address| address == url)
 }
 
+/// True when the draft of `row` gives `url` as an address. A copy of an
+/// album has a draft but no hosted file. Its draft keeps the files of its
+/// source in use (ADR 0077 item 8). A feed with no draft gives `false`.
+fn feed_draft_refers(collection: &Collection, row: &FeedRow, url: &str) -> bool {
+    draft_model(collection, row.id)
+        .is_ok_and(|(feed, _)| feed_addresses(&feed).iter().any(|address| address == url))
+}
+
 /// True when a host already has a file at `path` with this size and this
 /// SHA-256 (ADR 0036 item 9). The function reads the SHA-256 of the host
 /// file only when the size agrees, through [`inventory::host_sha`]
@@ -1907,7 +2007,10 @@ fn host_operations(
                         referring.push(feed_title(feed_row));
                     }
                     for other in &all_feeds {
-                        if other.id != feed_row.id && feed_refers_in_library(library, other, url) {
+                        if other.id != feed_row.id
+                            && (feed_refers_in_library(library, other, url)
+                                || feed_draft_refers(collection, other, url))
+                        {
                             referring.push(feed_title(other));
                         }
                     }

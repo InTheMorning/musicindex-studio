@@ -1365,6 +1365,9 @@ pub(crate) struct NewAlbumFeed {
     medium: Option<String>,
     /// `artist` or `label`. A publisher feed needs it (ADR 0041 item 1).
     role: Option<String>,
+    /// The ID of the source album. The new feed is a copy of its draft
+    /// (ADR 0077 item 4).
+    from: Option<i64>,
 }
 
 /// Make a new feed in a connected folder, as a draft with no hosted file
@@ -1422,15 +1425,38 @@ pub(crate) async fn new_album_feed(
             return Err(ApiError::vault_locked());
         }
         let made = w.connector_of(&row)?;
-        let id = pipeline::new_feed(
-            &mut w.collection,
-            made.as_ref(),
-            row.id,
-            &body.path,
-            title,
-            author,
-            medium,
-        )?;
+        let id = if let Some(from) = body.from {
+            // A copy starts only from an album, and makes an album
+            // (ADR 0077 item 4). The checks come before any draft starts.
+            let source = FeedId(from);
+            if medium != "music" || w.collection.feed(source)?.medium.as_deref() != Some("music") {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_feed",
+                    "a copy starts from an album and makes an album",
+                ));
+            }
+            ensure_draft(w, source)?;
+            pipeline::copy_feed(
+                &mut w.collection,
+                made.as_ref(),
+                row.id,
+                &body.path,
+                title,
+                author,
+                source,
+            )?
+        } else {
+            pipeline::new_feed(
+                &mut w.collection,
+                made.as_ref(),
+                row.id,
+                &body.path,
+                title,
+                author,
+                medium,
+            )?
+        };
         if let Some(role) = role {
             w.collection.set_publisher_role(id, Some(role))?;
         }

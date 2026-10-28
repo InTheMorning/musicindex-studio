@@ -2,7 +2,10 @@
 
 Parent: [task 053](studio-v1-task-053-album-from-album.md). Decision: [ADR 0077](../adr/0077-a-new-album-can-start-from-an-album.md) items 4 to 9.
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass. These are the differences from the packet:
+
+- The deletion check also reads the draft of each other feed. A copy has no hosted file, and its draft keeps the files of its source in use (ADR 0077 item 8).
+- The copy also replaces the OP3 GUID of the source in each `podcast:source` of an alternate enclosure.
 
 ## Goal
 

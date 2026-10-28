@@ -18,7 +18,7 @@ import { platformBlocks } from './listing.js';
 import { isExplicit } from './explicit.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
-import { PURPOSES, purposeTokens, withPurpose, imageFacts } from './artwork.js';
+import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
@@ -377,7 +377,7 @@ function AddTrackSheet({ open, onClose, onAdd }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <form class="body" id="add-track-form" onSubmit=${submit}>
-      <div class="group">
+      <div class="group rows">
         <${Field} id="new-track-title" label="Title" value=${title} onInput=${(e) => setTitle(e.target.value)} />
         <${Field} id="new-track-url" label="Audio file address" type="url" required
           hint="Studio does not keep audio files. Give the address where your host keeps the file."
@@ -1530,14 +1530,22 @@ function CoverField({ id, model, update, bad }) {
         <//>`;
 }
 
+// The row "Artwork" of a page. It opens the Artwork sheet (ADR 0070 item 9).
+function ArtworkRow({ summary, onOpen }) {
+  return html`<button class="link-row" type="button" onClick=${onOpen}>
+      <span class="label">Artwork</span><span class="summary">${summary}</span>
+      <span class="go" aria-hidden="true">›</span>
+    </button>`;
+}
+
 // The channel fields that the album page and the playlist page share: the
-// title, the author, the description, the image, the link and the language.
-function ChannelFields({ feedId, draft, model, update, bad, artistLabel }) {
+// title, the author, the description, the artwork, the link and the language.
+function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   return html`        <${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />
         <${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
         <${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${CoverField} id="ch-image" model=${model} update=${update} bad=${bad} />
+        <${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />
         <${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
         <${ListingField} id="ch-listing" feedId=${feedId} draft=${draft} model=${model} />
@@ -1668,7 +1676,7 @@ function ListingField({ id, feedId, draft, model }) {
     </details>`}`;
 }
 
-function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged }) {
+function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged, onArtwork }) {
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   const linkAction = useAction();
   // The feeds whose draft the last link change altered.
@@ -1708,7 +1716,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
   // .page between sections (review of task 014c, defect 2).
   return html`<section class="page-section"><h2>Album</h2>
       <div class="group">
-        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" />
+        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} />
       </div>
     </section>
 
@@ -1784,10 +1792,10 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
 }
 
 // The playlist page (ADR 0053 item 4): the channel fields and the feed facts.
-function PlaylistPage({ feed, draft, model, update, bad, go, onRemoved }) {
+function PlaylistPage({ feed, draft, model, update, bad, go, onRemoved, onArtwork }) {
   return html`<section class="page-section"><h2>Playlist</h2>
       <div class="group">
-        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Author" />
+        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Author" onArtwork=${onArtwork} />
       </div>
     </section>
     <section class="page-section"><h2>Playlist details</h2>
@@ -2044,8 +2052,53 @@ function ArtworkList({ id, images, edit, bad, path }) {
     </button>`;
 }
 
-// The count of the images of a track, for its summary line.
-const imagesSummary = (images) => (images.length === 0 ? 'None' : images.length === 1 ? '1 image' : `${images.length} images`);
+// The Artwork sheet of a feed or a track (ADR 0070 items 5 to 7). It holds
+// the image field, the note about the RSS image, the button "Use the Album
+// Cover" and the list "More artwork". Each change goes into the draft at
+// once, as a change of a field on a page. `artwork` is `{ kind: 'feed' }` or
+// `{ kind: 'track', key }`. `trackIndex` is the index of the track, or -1.
+// A playlist and a publisher feed have no list of other images.
+function ArtworkSheet({ feed, model, update, bad, artwork, trackIndex, onClose }) {
+  const ref = useSheet(true);
+  const isTrackSheet = artwork.kind === 'track';
+  const item = isTrackSheet ? model.items[trackIndex] : null;
+  const path = `items/${trackIndex}/`;
+  const editItem = (edit) => update((m) => set(m, 'items', m.items.map((i) => (i._cid === item._cid ? edit(i) : i))));
+  const title = isTrackSheet ? item.title || 'Untitled track' : model.title || feed.title || 'Untitled feed';
+  const hasList = isTrackSheet || (!isPublisher(feed) && !isPlaylist(feed));
+  const preview = isTrackSheet ? item.image || coverOf(model) : coverOf(model);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="artwork-title" onClose=${onClose}>
+    <header>
+      <h2 id="artwork-title">Artwork · ${title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <${ImageThumb} url=${preview} glow=${isTrackSheet ? 'var(--c-track)' : 'var(--c-feed)'} className="artwork-preview" always />
+      ${isTrackSheet && !item.image && html`<p class="hint">Uses the album cover</p>`}
+      <div class="group rows">
+        ${isTrackSheet
+          ? html`<${PickedImageField} field="track-image" subject=${item} apply=${(address) => editItem((i) => set(i, 'image', address))}
+              id="artwork-image" label="Track image address" address=${`${path}image`} bad=${bad} value=${item.image}
+              onChange=${(address) => editItem((i) => set(i, 'image', address))} glow="var(--c-track)" />`
+          : html`<${CoverField} id="artwork-image" model=${model} update=${update} bad=${bad} />`}
+      </div>
+      ${isTrackSheet && item.image && html`<div class="actions">
+        <button class="button" type="button" onClick=${() => editItem((i) => set(i, 'image', null))}>Use the Album Cover</button>
+      </div>`}
+      ${hasList && html`<section class="page-section"><h2>More artwork</h2>
+        <div class="group rows">${isTrackSheet
+          ? html`<${ArtworkList} id="artwork-track" images=${item.images} bad=${bad} path=${`${path}images`}
+              edit=${(change) => editItem((i) => set(i, 'images', change(i.images)))} />`
+          : html`<${ArtworkList} id="artwork-album" images=${model.images} bad=${bad} path="images"
+              edit=${(change) => update((m) => set(m, 'images', change(m.images)))} />`}
+        </div>
+      </section>`}
+    </div>
+    <footer>
+      <button class="button primary" type="button" onClick=${() => ref.current.close()}>Done</button>
+    </footer>
+  </dialog>`;
+}
 
 // The credits and links page: people, support links and the license, each
 // as a section (task 014c step 3). No wrapper: each section is a direct row
@@ -2062,10 +2115,6 @@ function CreditsPage({ model, update, bad }) {
     <section class="page-section"><h2>License</h2>
       <div class="group"><${LicenseFields} license=${model.license} bad=${bad}
         onChange=${(license) => update((m) => set(m, 'license', license))} /></div>
-    </section>
-    <section class="page-section"><h2>More artwork</h2>
-      <div class="group"><${ArtworkList} id="ch" images=${model.images} bad=${bad} path="images"
-        edit=${(change) => update((m) => set(m, 'images', change(m.images)))} /></div>
     </section>`;
 }
 
@@ -2118,7 +2167,7 @@ function LyricsEntry({ id, list, index, onChange, edit, bad, address }) {
 // The track page: the track before it and the track after it, then its
 // fields, its audio file, its recipients and its other facts (task 014c
 // step 3).
-function TrackPage({ feed, model, update, bad, trackIndex, go }) {
+function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
   const items = model.items;
   const item = items[trackIndex];
   const id = `track-${item._cid}`;
@@ -2166,7 +2215,8 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
   // No wrapper: the head and each section are direct rows of .page, with
   // the gap of .page between them (review of task 014c, defect 2).
   return html`<header class="head">
-      <${ImageThumb} url=${item.image || coverOf(model)} glow="var(--c-track)" className="cover" always />
+      <${ImageThumb} url=${item.image || coverOf(model)} glow="var(--c-track)" className="cover" always
+        onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} label=${`Artwork of ${item.title || 'Untitled track'}`} />
       <div class="text"><span class="eyebrow"><span class="dot track"></span>Track ${trackIndex + 1} of ${items.length}</span>
         <h1>${item.title || 'Untitled track'}</h1></div>
       <div class="pager">
@@ -2187,6 +2237,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
         <${TextField} id=${`${id}-duration`} label="Duration" hint=${pickAudio.metadataFailed && !item.duration ? DURATION_NOTICE : 'Seconds, or HH:MM:SS.'}
           value=${item.duration} onChange=${change('duration')} />
         <${ExplicitField} id=${`${id}-explicit`} model=${item} update=${editItem} />
+        <${ArtworkRow} summary=${artworkSummary(item, 'track')} onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} />
       </div>
     </section>
 
@@ -2228,19 +2279,6 @@ function TrackPage({ feed, model, update, bad, trackIndex, go }) {
 
     <section class="page-section"><h2>More</h2>
       <div class="group">
-        <details class="disclosure">
-          <summary class="link-row"><span class="label">Track image</span>
-            <span class="summary">${item.image ? 'Has an image' : 'Uses the album cover'}</span></summary>
-          <div class="form"><${PickedImageField} field="track-image" subject=${item} apply=${(address) => editItem((i) => set(i, 'image', address))}
-            id=${`${id}-image`} label="Track image address" address=${`${path}image`} bad=${bad} value=${item.image} onChange=${change('image')}
-            glow="var(--c-track)" /></div>
-        </details>
-        <details class="disclosure">
-          <summary class="link-row"><span class="label">More artwork</span>
-            <span class="summary">${imagesSummary(item.images)}</span></summary>
-          <div class="form"><${ArtworkList} id=${id} images=${item.images} bad=${bad} path=${`${path}images`}
-            edit=${(change) => editItem((i) => set(i, 'images', change(i.images)))} /></div>
-        </details>
         <details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>
             <span class="summary">Number ${item.episode || '—'}${item.season ? ` · Season ${item.season.value || item.season.name}` : ''}</span></summary>
@@ -2305,7 +2343,7 @@ function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <form class="body" id="add-live-form" onSubmit=${submit}>
-      <div class="group">
+      <div class="group rows">
         <${Field} id="new-live-title" label="Title" required value=${title} onInput=${(e) => setTitle(e.target.value)} />
         <${Field} id="new-live-start" label="Start time" type="datetime-local" required
           value=${start} onInput=${(e) => setStart(e.target.value)} />
@@ -2564,7 +2602,7 @@ const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 // The publisher page: the fields, the role and the releases (ADR 0041 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
-function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged }) {
+function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged, onArtwork }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const roleAction = useAction();
   const linkAction = useAction();
@@ -2622,7 +2660,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         <${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />
         <${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />
         <${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />
-        <${CoverField} id="pub-image" model=${model} update=${update} bad=${bad} />
+        <${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />
         <${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />
         <${ListingField} id="pub-listing" feedId=${feed.id} draft=${draft} model=${model} />
         <${ExplicitField} id="pub-explicit" model=${model} update=${update} />
@@ -3170,7 +3208,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged }) {
+export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged, artwork, onArtwork }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -3182,6 +3220,12 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   useEffect(() => {
     if (currentKey && currentKey !== view.track) go({ ...view, track: currentKey }, { replace: true });
   }, [currentKey, view.track]);
+  // The track of an open track sheet. A key that no track has closes the
+  // sheet (ADR 0070).
+  const artworkTrack = model && artwork && artwork.kind === 'track'
+    ? model.items.findIndex((item) => isTrack(item, artwork.key)) : -1;
+  const staleArtwork = Boolean(model && artwork && artwork.kind === 'track' && artworkTrack === -1);
+  useEffect(() => { if (staleArtwork) onArtwork(null); }, [staleArtwork]);
   if (!model) {
     return html`<div class="page"><p class="hint" role="status">${STATUS[draft.status]}</p>
       <${ErrorNotice} error=${draft.error} /></div>`;
@@ -3198,15 +3242,15 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${SettingsPage} model=${model} update=${update} />`;
   } else if (publisher && page !== 'files') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
-      draft=${draft} go=${go} onListChanged=${onListChanged} />`;
+      draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} />`;
   } else if (playlist && page === 'tracks') {
     body = html`<${PlaylistTracksPage} feed=${feed} model=${model} update=${update} />`;
   } else if (playlist && page !== 'recipients' && page !== 'files') {
-    body = html`<${PlaylistPage} feed=${feed} draft=${draft} model=${model} update=${update} bad=${draft.bad} go=${go} onRemoved=${onRemoved} />`;
+    body = html`<${PlaylistPage} feed=${feed} draft=${draft} model=${model} update=${update} bad=${draft.bad} go=${go} onRemoved=${onRemoved} onArtwork=${onArtwork} />`;
   } else if (page === 'track' && trackIndex !== -1) {
     // A key for each entry, so that one track or show does not keep the
     // state of the one before it, for example an open "Properties".
-    body = html`<${TrackPage} key=${model.items[trackIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} />`;
+    body = html`<${TrackPage} key=${model.items[trackIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} onArtwork=${onArtwork} />`;
   } else if (page === 'live' && liveIndex !== -1 && !publisher && !playlist) {
     body = html`<${LivePage} key=${model.live_items[liveIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
   } else if (page === 'credits') {
@@ -3218,7 +3262,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
       differences=${differences} onRescan=${onRescan} />`;
   } else {
     body = html`<${AlbumPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad} draft=${draft} go=${go}
-      onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} onListChanged=${onListChanged} />`;
+      onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} onListChanged=${onListChanged} onArtwork=${onArtwork} />`;
   }
   const onAdd = (item) => {
     const [added] = withCids([item]);
@@ -3250,6 +3294,8 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   };
   return html`<${PickerContext.Provider} value=${{ feedId: feed.id, connectors, draft, onOpsChanged }}><div class="page">
     ${body}
+    ${artwork && !staleArtwork && html`<${ArtworkSheet} feed=${feed} model=${model} update=${update} bad=${draft.bad} artwork=${artwork}
+      trackIndex=${artworkTrack} onClose=${() => onArtwork(null)} />`}
     ${!publisher && !playlist && html`<${AddTrackSheet} open=${adding === true} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
     ${!publisher && !playlist && html`<${AddLiveSheet} open=${adding === 'live'} onClose=${() => onAdding(false)}
       onAdd=${onAddLive} busy=${addLive.busy} error=${addLive.error} />`}

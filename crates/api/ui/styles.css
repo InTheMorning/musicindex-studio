@@ -609,6 +609,10 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   border-top: 1px solid var(--sep);
 }
 .sheet .group { background: var(--level-3); border-radius: 12px; padding: 4px 16px; }
+/* A sheet group of rows, such as fields, has no inner space of its own.
+   Each row has the inner space of a group row, so that the rows have the
+   same distance from the edge as on a page (ADR 0029 items 11 and 12). */
+.sheet .group.rows { padding: 0; }
 .icon-button { width: var(--target); padding: 0; }
 
 @media (max-width: 760px) {
@@ -1515,3 +1519,39 @@ button.outline-feed {
   mask: var(--mark-mask) center / contain no-repeat;
 }
 .picker-children { padding-left: 16px; }
+
+/* The cover of a header that opens the Artwork sheet (ADR 0070 items 1 to
+   3). The button has no box of its own. Its radius is the radius of the
+   cover in it, so that the focus ring follows the cover. */
+.cover-button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 12px;
+  cursor: pointer;
+  line-height: 0;
+}
+.cover-button:hover { filter: brightness(1.12); }
+/* The preview of the Artwork sheet: at most 240 px wide, square, with a
+   radius of 6 % and the shadow of a large image (musicindex ADR 0021
+   R-ART-4). */
+.artwork-preview {
+  width: min(240px, 100%);
+  aspect-ratio: 1;
+  border-radius: 14px;
+  box-shadow: 0 30px 80px var(--art-shadow);
+  overflow: hidden;
+  background: var(--level-3);
+  display: grid;
+  place-items: center;
+  justify-self: center;
+}
+.artwork-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.artwork-preview .mark {
+  width: 96px;
+  height: 84px;
+  background: var(--glow, var(--c-feed));
+  -webkit-mask: var(--mark-mask) center / contain no-repeat;
+  mask: var(--mark-mask) center / contain no-repeat;
+}

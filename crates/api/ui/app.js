@@ -220,14 +220,19 @@ export function useImage(url) {
 // mark, tinted with `glow`. For an image that Studio cannot read, the title
 // of the box gives its address. `always` keeps the box, with the mark, when
 // there is no address: the compact header always shows a cover, but a field
-// preview with no address shows nothing (ADR 0032 items 13 and 14).
-export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = false }) {
+// preview with no address shows nothing (ADR 0032 items 13 and 14). With
+// `onOpen`, the box is the content of a button with the name `label` (ADR
+// 0070 items 1 to 3).
+export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = false, onOpen, label }) {
   const { src, failed } = useImage(url);
   if (!url && !always) return null;
-  if (src) return html`<div class=${className}><img src=${src} alt="" /></div>`;
-  return html`<div class=${className} title=${failed ? url : undefined}>
-    <span class="mark" style=${{ '--glow': glow }}></span>
-  </div>`;
+  const box = src
+    ? html`<div class=${className}><img src=${src} alt="" /></div>`
+    : html`<div class=${className} title=${failed ? url : undefined}>
+      <span class="mark" style=${{ '--glow': glow }}></span>
+    </div>`;
+  if (!onOpen) return box;
+  return html`<button type="button" class="cover-button" aria-label=${label} title="Change the artwork" onClick=${onOpen}>${box}</button>`;
 }
 
 // ---- Small parts ----
@@ -1694,6 +1699,9 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   // milestone 7a, visual check of task 022).
   const [filesReloadKey, setFilesReloadKey] = useState(0);
   const reloadFiles = () => setFilesReloadKey((n) => n + 1);
+  // The Artwork sheet that is open: null, `{ kind: 'feed' }` or
+  // `{ kind: 'track', key }` (ADR 0070).
+  const [artwork, setArtwork] = useState(null);
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
@@ -1702,7 +1710,8 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     <//>
     <div class="feed-head">
       <header class="head">
-        <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always />
+        <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always
+          onOpen=${() => setArtwork({ kind: 'feed' })} label=${`Artwork of ${feed.title || 'Untitled feed'}`} />
         <div class="text">
           <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>
@@ -1721,7 +1730,8 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
       connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
-      differences=${differences} onRescan=${onRescan} onListChanged=${onListChanged} />
+      differences=${differences} onRescan=${onRescan} onListChanged=${onListChanged}
+      artwork=${artwork} onArtwork=${setArtwork} />
   </div>`;
 }
 

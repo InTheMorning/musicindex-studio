@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PURPOSES, purposeTokens, withPurpose, nearRatio, imageFacts } from '../ui/artwork.js';
+import { readFileSync } from 'node:fs';
+import { PURPOSES, purposeTokens, withPurpose, nearRatio, imageFacts, artworkSummary } from '../ui/artwork.js';
 
 test('nearRatio gives the near ratio of the list', () => {
   assert.equal(nearRatio(1376, 768), '16/9');
@@ -49,4 +50,23 @@ test('imageFacts gives text values with the JSON names', () => {
     width: '1376', height: '768', media_type: 'image/png', aspect_ratio: '16/9',
   });
   assert.deepEqual(imageFacts(0, 0, null), { width: null, height: null, media_type: null, aspect_ratio: null });
+});
+
+test('artworkSummary of a feed', () => {
+  assert.equal(artworkSummary({ image: 'https://x/c.jpg', images: [] }, 'feed'), 'Cover');
+  assert.equal(artworkSummary({ image: 'https://x/c.jpg', images: [{}, {}] }, 'feed'), 'Cover · 2 more images');
+  assert.equal(artworkSummary({ image: '', images: [] }, 'feed'), 'No cover');
+});
+
+test('artworkSummary of a track', () => {
+  assert.equal(artworkSummary({ image: null, images: [] }, 'track'), 'Uses the album cover');
+  assert.equal(artworkSummary({ image: 'https://x/t.jpg', images: [{}] }, 'track'), 'Own image · 1 more image');
+});
+
+test('editor.js has no imagesSummary and CreditsPage has no More artwork', () => {
+  const text = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.ok(!text.includes('imagesSummary'));
+  const start = text.indexOf('function CreditsPage');
+  const end = text.indexOf('\nfunction ', start + 1);
+  assert.ok(!text.slice(start, end).includes('More artwork'));
 });

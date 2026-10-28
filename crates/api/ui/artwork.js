@@ -2,6 +2,8 @@
 // functions have no Preact and no browser state. `editor.js` shows the list
 // and loads the image.
 
+import { coverOf } from './cover.js';
+
 // The tokens of `purpose` that the specification names.
 export const PURPOSES = ['artwork', 'social', 'canvas', 'banner', 'publisher', 'circular', 'poster'];
 
@@ -69,4 +71,17 @@ export function imageFacts(width, height, mediaType) {
     media_type: mediaType || null,
     aspect_ratio: known ? nearRatio(width, height) : null,
   };
+}
+
+// The summary line of the row "Artwork" (ADR 0070 item 9). `kind` is `feed`
+// or `track`. A feed gives `Cover` or `No cover`. A track gives `Own image`
+// or `Uses the album cover`. Other images of `subject.images` follow, as a
+// count.
+export function artworkSummary(subject, kind) {
+  let first;
+  if (kind === 'track') first = subject.image ? 'Own image' : 'Uses the album cover';
+  else first = coverOf(subject) ? 'Cover' : 'No cover';
+  const count = (subject.images || []).length;
+  if (count === 0) return first;
+  return `${first} · ${count === 1 ? '1 more image' : `${count} more images`}`;
 }

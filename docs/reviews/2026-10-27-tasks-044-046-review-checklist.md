@@ -20,7 +20,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | Packet | Status | Review |
 |---|---|---|
 | 044 | Complete | Pass. See "Packet 044". |
-| 045a | Ready | Not started |
+| 045a | Complete | Pass. See "Packet 045a". |
 | 045b | Ready | Not started |
 | 046a | Ready | Not started |
 | 046b | Ready | Not started |
@@ -55,3 +55,13 @@ A coding model implements each packet. The planning model examines the diff and 
 - The visual check used `.studio-dev/visual-044` in the dark theme, the light theme and at 390 px. The head has the selected fill on the album page and no fill on a track page. "‹ Releases" opens Releases with the row of the feed marked. At 390 px, the head is 59 px high, and the outline page has no row "Album". `$edges()` gives an empty list.
 - `drive-ui.mjs` cannot send a key. A temporary copy in the scratchpad sent Tab and Enter. Tab reaches the head, the focus ring shows, and Enter opens the album page.
 - Open: the list of Releases in the check has five feeds and does not scroll. So the check did not examine the scroll position after "‹ Releases".
+
+### Packet 045a
+
+- The diff follows the packet. The coding model added the component `ArtworkRow` for the row "Artwork", and a prop `feed` on `ArtworkSheet` to know a playlist and a publisher feed. Both are in the limits of ADR 0070.
+- The coding model was not sure that a track sheet stays open after a save gives the track its GUID. The lookup uses `isTrack`, which also matches the key `cid-…`, and the local model keeps `_cid`. So the sheet stays open.
+- The planning model changed the preview to a radius of 14 px and the shadow of a large image. A preview of 240 px gets 14 px from musicindex ADR 0021 R-ART-4 items 2 and 3.
+- The visual check found that each sheet group with fields had 32 px between the edge and its rows, and a page group has 16 px. `.sheet .group` and `.group > .field` both gave 16 px. The planning model added `.sheet .group.rows` with no padding. The groups of the Artwork sheet, "Add a track" and "Add a live show" have this class. The Versions sheet and the playlist picker keep the padding, because their lists have no inner space of their own.
+- The four commit checks pass: Cargo 961 tests, Node 193 tests.
+- The visual check used `.studio-dev/visual-044` in the dark theme, the light theme and at 390 px. A click on the album cover and on the track cover opens the sheet of the correct item. Escape and "Done" close it. "Use the Album Cover" shows only for a track with its own image, and it clears the field. The sheet fits the window at each size. `$edges()` gives an empty list on the page and in each sheet.
+- Open, for the operator to judge: the sheet shows the image two times, as the large preview and as the small preview of the image field.

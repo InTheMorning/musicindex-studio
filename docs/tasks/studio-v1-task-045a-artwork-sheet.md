@@ -3,7 +3,7 @@
 Parent: [task 045](studio-v1-task-045-page-sequence-and-artwork.md). Decisions: [ADR 0070](../adr/0070-a-cover-opens-the-artwork-sheet.md), [ADR 0060](../adr/0060-the-album-cover-keeps-the-form-of-its-feed.md) item 4, [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md), [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 10 to 12, [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the first packet of task 045. It depends on task 044.
 
-Status: Ready.
+Status: Complete - 2026-10-27. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records it.
 
 ## Goal
 

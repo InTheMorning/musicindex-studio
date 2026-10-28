@@ -15,6 +15,7 @@
 - Amended: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
 - Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 9 and 10 add the destination "Settings" between Hosts and Lock Studio in items 1, 5 and 11.
 - Amended: 2026-10-28 by operator decision. [ADR 0072](0072-add-a-feed-opens-from-releases.md) removes Add a feed from items 1, 5 and 11. It opens from a button on Releases.
+- Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 6 with one row "Add tracks".
 
 ## Context
 
@@ -45,7 +46,7 @@ The operator checked the Studio mockup of the research repository (`research_not
 ### The Outline Of An Open Feed
 
 5. While a feed is open, the left panel shows the outline of that feed in place of Releases. Hosts, Settings and Lock Studio stay at the bottom (item 1). The left panel is one panel at any time.
-6. The outline shows a link "Releases", the cover and the title of the feed, then these items in this sequence: Album, each track by its number and title, "Add a track", "Import files", Value routes, Credits and links, Files.
+6. The outline shows a link "Releases", the cover and the title of the feed, then these items in this sequence: Album, each track by its number and title, "Add tracks" ([ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11), Value routes, Credits and links, Files.
 7. The link "Releases" opens the Releases page at the same scroll position, with the row of the feed marked. It is a destination link, not a back control (musicindex ADR 0027 R-NAV-2 item 5).
 8. Each item of the outline opens one page of the editor. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
 

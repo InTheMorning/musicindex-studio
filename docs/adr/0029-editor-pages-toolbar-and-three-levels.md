@@ -5,6 +5,7 @@
 - Owner: operator
 - Changed by: musicindex ADR 0023 R-WORD-2, on 2026-10-25. The page "Recipients" of item 5 is "Value routes". [ADR 0010](0010-studio-uses-the-afterglow-direction.md#rules-that-musicindex-replaces) names the change.
 - Changed by: [ADR 0039](0039-the-shell-releases-and-the-outline.md), on 2026-10-25. The outline of an open feed replaces the sidebar tree of items 5 and 6, and the drawer of item 15. The invariant "The sidebar tree has two levels" goes.
+- Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) items 11 to 14 change the entry of item 8: one row "Add tracks" opens the file sheet.
 
 ## Context
 
@@ -39,7 +40,7 @@ The operator answered two rounds of questions and examined a mockup at desktop a
 5. Replaced by [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 5 and 6. In the sidebar, a feed row opens and closes. Below the open feed, the tree shows these pages: Album, Credits and links, Recipients, a "Tracks" label, each track by its number and title, and "Add a track".
 6. Replaced by [ADR 0039](0039-the-shell-releases-and-the-outline.md). The tree has two levels: the feed, and its pages.
 7. Each item of the tree opens one page of the editor. A track page shows one track, with buttons that go to the track before it and to the track after it.
-8. "Add a track" opens a sheet with the fields of [ADR 0023](0023-web-addresses-and-audio-file-facts.md) items 6 and 7.
+8. "Add a track" opens a sheet with the fields of [ADR 0023](0023-web-addresses-and-audio-file-facts.md) items 6 and 7. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) items 11 to 14 change the entry: "Add tracks" opens the file sheet, and the address sheet opens from its link.
 9. The recipients of a track are a section of the track page. They are not in a disclosure group.
 
 ### The Header

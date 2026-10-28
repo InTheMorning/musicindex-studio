@@ -76,6 +76,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0070: A cover opens the artwork sheet](adr/0070-a-cover-opens-the-artwork-sheet.md)
 - [ADR 0071: Settings is a destination, and each page orders its sections by tier](adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md)
 - [ADR 0072: Add a feed opens from Releases](adr/0072-add-a-feed-opens-from-releases.md)
+- [ADR 0073: The add pages ask one question at a time](adr/0073-the-add-pages-ask-one-question-at-a-time.md)
 
 ## Plans
 
@@ -245,6 +246,9 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 047a: The tiers and the guard](tasks/studio-v1-task-047a-tiers-and-guard.md)
 - [Studio v1 task 047b: The Settings page and the Hosts page](tasks/studio-v1-task-047b-settings-and-hosts-pages.md)
 - [Studio v1 task 048: Add a feed from Releases](tasks/studio-v1-task-048-add-a-feed-from-releases.md)
+- [Studio v1 task 049: The add pages](tasks/studio-v1-task-049-add-pages.md)
+- [Studio v1 task 049a: The Add feeds page and one form to make a feed](tasks/studio-v1-task-049a-add-feeds-page.md)
+- [Studio v1 task 049b: Add tracks](tasks/studio-v1-task-049b-add-tracks.md)
 
 ## Reviews
 
@@ -284,6 +288,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Tasks 044 to 046 review checklist, 2026-10-27](reviews/2026-10-27-tasks-044-046-review-checklist.md)
 - [Task 047 review checklist, 2026-10-28](reviews/2026-10-28-task-047-review-checklist.md)
 - [Task 048 review checklist, 2026-10-28](reviews/2026-10-28-task-048-review-checklist.md)
+- [Task 049 review checklist, 2026-10-28](reviews/2026-10-28-task-049-review-checklist.md)
 - [UI feed rule audit, 2026-10-27](reviews/2026-10-27-ui-feed-rule-audit.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)

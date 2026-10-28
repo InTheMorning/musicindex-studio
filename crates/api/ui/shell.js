@@ -193,8 +193,14 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     return {
       kind: 'destinations',
       top: [
-        { id: 'releases', label: 'Releases', current: view.name === 'releases' },
-        { id: 'add-feed', label: 'Add a feed', current: view.name === 'add-feed' },
+        // The Add feeds page belongs to Releases (ADR 0072 item 5). On that
+        // page the row is current, and a click on it still opens Releases.
+        {
+          id: 'releases',
+          label: 'Releases',
+          current: view.name === 'releases' || view.name === 'add-feed',
+          opens: view.name !== 'releases',
+        },
       ],
       bottom,
     };
@@ -400,6 +406,7 @@ export function narrowStack(view) {
   switch (view.name) {
     case 'root': return [root];
     case 'releases': return [root, releases];
+    case 'add-feed': return [root, releases, view];
     case 'outline': return [root, releases, view];
     case 'feed': return [root, releases, { name: 'outline', id: view.id }, view];
     default: return [root, view];

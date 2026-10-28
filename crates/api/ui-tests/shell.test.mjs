@@ -73,13 +73,22 @@ test('a track key uses the GUID, or the client ID with no GUID', () => {
   assert.equal(isTrack(model.items[0], 'g-2'), false);
 });
 
-test('with no open feed, the left panel gives the four destinations', () => {
+test('with no open feed, the left panel gives Releases at the top', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
   assert.equal(panel.kind, 'destinations');
-  assert.deepEqual(panel.top.map((e) => e.id), ['releases', 'add-feed']);
+  assert.deepEqual(panel.top.map((e) => e.id), ['releases']);
   assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings', 'lock']);
   assert.equal(panel.top[0].current, true);
   assert.equal(JSON.stringify(panel).includes('Select a feed'), false);
+});
+
+test('the row Releases is current on the view add-feed (ADR 0072 item 5)', () => {
+  const panel = leftPanel({ view: { name: 'add-feed' }, feeds: [album], model: null, vaultOpen: true });
+  assert.equal(panel.top.find((e) => e.id === 'releases').current, true, 'ADR 0072 item 5: Releases is current on Add feeds.');
+  assert.deepEqual(panel.top.map((e) => e.id), ['releases'], 'ADR 0072 item 1: the top holds Releases only.');
+  assert.equal(panel.top[0].opens, true, 'ADR 0072 item 5: on Add feeds, the row Releases must open Releases. Set opens in leftPanel of crates/api/ui/shell.js.');
+  const releases = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
+  assert.equal(releases.top[0].opens, false);
 });
 
 test('Unlock Studio takes the place of Lock Studio on a server with a locked vault', () => {
@@ -292,7 +301,7 @@ test('the narrow stack gives the root page below each view (ADR 0039 item 11)', 
   assert.deepEqual(narrowStack({ name: 'root' }), [root]);
   assert.deepEqual(narrowStack({ name: 'releases' }), [root, releases]);
   assert.deepEqual(narrowStack({ name: 'hosts' }), [root, { name: 'hosts' }]);
-  assert.deepEqual(narrowStack({ name: 'add-feed' }), [root, { name: 'add-feed' }]);
+  assert.deepEqual(narrowStack({ name: 'add-feed' }), [root, releases, { name: 'add-feed' }]);
   assert.deepEqual(narrowStack({ name: 'outline', id: 1 }), [root, releases, { name: 'outline', id: 1 }]);
   const feed = { name: 'feed', id: 1, page: 'track', track: 'g-1' };
   assert.deepEqual(narrowStack(feed), [root, releases, { name: 'outline', id: 1 }, feed]);
@@ -319,7 +328,7 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
 test('the root page has no current destination, and gives Hosts and Settings at the bottom', () => {
   const panel = leftPanel({ view: { name: 'root' }, feeds: [album], model: null, vaultOpen: false });
   assert.equal(panel.kind, 'destinations');
-  assert.deepEqual(panel.top.map((e) => e.current), [false, false]);
+  assert.deepEqual(panel.top.map((e) => e.current), [false]);
   assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings']);
 });
 

@@ -9,7 +9,7 @@ You can start and end a show in Studio, or let a connected app do it. See [Conne
 You can add a live show to any album feed.
 To keep your shows in their own feed, make a show feed.
 
-1. Select **Add a feed** in the left panel.
+1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
 2. In the panel **Make a show feed**, select the host in **Host** if you have more than one.
 3. Type the path of the new feed file in **Feed file**, for example `my-shows.xml`.
 4. Type the name in **Show feed title**.

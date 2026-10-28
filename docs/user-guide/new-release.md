@@ -17,7 +17,7 @@ A Blossom host keeps media only. Use a different host for the feed file.
 
 ## Make the release
 
-1. Select **Add a feed** in the left panel.
+1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
 2. In the panel **Make a new release**, select the host in **Host**. The field shows when you have more than one host.
 3. Type the path of the new feed file in **Feed file**, for example `my-album.xml`. The path is in the folder of the host.
 4. Type the name of the album in **Album title**.

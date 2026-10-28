@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
 Decisions: [ADR 0072](../adr/0072-add-a-feed-opens-from-releases.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-28-task-048-review-checklist.md) records it. The operator examines it on a phone after the next release candidate.
 
 ## Goal
 

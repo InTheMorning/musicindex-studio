@@ -2283,10 +2283,11 @@ function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onI
 // The current row of a list gets aria-current.
 const currentAttr = (item) => (item.current ? 'page' : undefined);
 
-// The destination rows: Releases and Add a feed.
+// The destination rows: Releases only (ADR 0072 item 1). A row opens its
+// destination when `opens` is true.
 function destinationRows(top, go) {
   return top.map((item) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
-    onClick=${() => { if (!item.current) go({ name: item.id }); }}>${item.label}</button>`);
+    onClick=${() => { if (item.opens) go({ name: item.id }); }}>${item.label}</button>`);
 }
 
 // The outline of an open feed (ADR 0039 item 6): the cover, the title and the
@@ -2436,6 +2437,7 @@ function ReleasesPage({ feeds, connectors, marked, list, changedFeeds, onQuery, 
           </div>
           ${viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
+          <button class="button action" type="button" onClick=${onAddFeed}>＋ Add a feed</button>
         </div>`}
       </div>
       ${releases.letters && html`<nav class="letters" aria-label="Letters">

@@ -1,6 +1,7 @@
 # Add feeds that you already have
 
-Select **Add a feed** in the left panel.
+Select **Releases** in the left panel. Then select **＋ Add a feed**.
+When Releases has no feed, select **Add a Feed** on the empty page.
 The page "Add feeds" has one panel for each way to add a feed.
 This page covers the panels for feeds that exist.
 To make a new feed, see [Make a new release](new-release.md).

@@ -1237,7 +1237,9 @@ button.outline-feed {
 .releases { padding: 8px 32px 32px; display: grid; gap: 16px; }
 .releases-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .releases-head h1 { flex: 1; min-width: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; }
-.releases-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+/* The tools wrap, so that "＋ Add a feed" goes to a new line in a narrow
+   window and stays in the margins of the page (ADR 0072 item 2). */
+.releases-tools { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; flex-wrap: wrap; min-width: 0; }
 .releases-tools .view-button[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent); }
 .sort { position: relative; }
 .sort-menu {

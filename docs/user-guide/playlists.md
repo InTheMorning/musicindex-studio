@@ -7,7 +7,7 @@ Studio keeps only the links to the tracks. It does not copy the audio.
 
 You need a host with a public address. See [Connect a host](hosts.md).
 
-1. Select **Add a feed** in the left panel.
+1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
 2. In the panel **Make a playlist**, select the host in **Host** if you have more than one.
 3. Type the path of the new feed file in **Feed file**, for example `my-playlist.xml`.
 4. Type the name in **Playlist name**.

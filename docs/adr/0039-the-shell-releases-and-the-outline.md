@@ -10,6 +10,7 @@
 - Amended: 2026-10-25 by operator decision, after the check of the touch back control in Firefox. Item 10a gives the bar of a feed two rows at narrow width.
 - Amended: 2026-10-25 by operator decision. musicindex ADR 0030 replaces the menu button and the drawer. Items 10, 10a, 11 and 11a now make Studio one stack at narrow width, with the root page and the outline page.
 - Amended: 2026-10-26 by operator decision, after the visual check of task 034f. On a server with a locked vault, "Unlock Studio" takes the place of "Lock Studio" in item 1. It opens the unlock sheet of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
+- Amended: 2026-10-27 by operator decision. [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) changes items 6 and 7. The outline head opens the first page, and the outline has no row for it. The link shows "‹ Releases".
 - Amended: 2026-10-25 by operator decision. musicindex ADR 0031 makes the Touch back control of item 9 a circular icon button with no word.
 - Amended: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
 

@@ -70,6 +70,10 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0064: The editor edits the fields that MSP 2.0 edits](adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md)
 - [ADR 0065: The core applies each feed rule](adr/0065-the-core-applies-each-feed-rule.md)
 - [ADR 0066: The server ships as a container image](adr/0066-the-server-ships-as-a-container-image.md)
+- [ADR 0067: A read-only feed opens in the editor](adr/0067-a-read-only-feed-opens-in-the-editor.md)
+- [ADR 0068: The sequence of the sections and fields of an editor page](adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md)
+- [ADR 0069: The outline head opens the feed page](adr/0069-the-outline-head-opens-the-feed-page.md)
+- [ADR 0070: A cover opens the artwork sheet](adr/0070-a-cover-opens-the-artwork-sheet.md)
 
 ## Plans
 
@@ -227,6 +231,14 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 043a: The Dockerfile and the compose file](tasks/studio-v1-task-043a-dockerfile.md)
 - [Studio v1 task 043b: The image job](tasks/studio-v1-task-043b-image-job.md)
 - [Studio v1 task 043c: The deploy script and the runbook](tasks/studio-v1-task-043c-deploy-script.md)
+- [Studio v1 task 044: The outline head](tasks/studio-v1-task-044-outline-head.md)
+- [Studio v1 task 045: The page sequence and the Artwork sheet](tasks/studio-v1-task-045-page-sequence-and-artwork.md)
+- [Studio v1 task 045a: The Artwork sheet](tasks/studio-v1-task-045a-artwork-sheet.md)
+- [Studio v1 task 045b: The page sequence](tasks/studio-v1-task-045b-page-sequence.md)
+- [Studio v1 task 046: A read-only feed opens in the editor](tasks/studio-v1-task-046-read-only-editor.md)
+- [Studio v1 task 046a: The draft with no host in the core](tasks/studio-v1-task-046a-core-draft-with-no-host.md)
+- [Studio v1 task 046b: The API routes for a read-only draft](tasks/studio-v1-task-046b-api-routes.md)
+- [Studio v1 task 046c: The editor and Review for a read-only feed](tasks/studio-v1-task-046c-editor-and-review.md)
 
 ## Reviews
 
@@ -263,6 +275,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Task 043 review checklist, 2026-10-27](reviews/2026-10-27-task-043-review-checklist.md)
 - [Task 041 visual check, 2026-10-27](reviews/2026-10-27-task-041-visual-check.md)
 - [Task 042 review checklist, 2026-10-27](reviews/2026-10-27-task-042-review-checklist.md)
+- [Tasks 044 to 046 review checklist, 2026-10-27](reviews/2026-10-27-tasks-044-046-review-checklist.md)
 - [UI feed rule audit, 2026-10-27](reviews/2026-10-27-ui-feed-rule-audit.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)

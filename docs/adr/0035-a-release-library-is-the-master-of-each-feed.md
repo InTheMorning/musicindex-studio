@@ -4,6 +4,7 @@
 - Date: 2026-10-23
 - Owner: operator
 - Amended: 2026-10-26 by operator decision. [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 3 answers item 4: the server keeps the library of each user in the user folder.
+- Amended: 2026-10-27 by operator decision. [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) item 8: a move from a read-only feed sets no redirect and writes no pointer file. Items 19 and 20 do not apply to that move.
 
 ## Context
 

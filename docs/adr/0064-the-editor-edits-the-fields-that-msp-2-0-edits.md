@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
+- Amended: 2026-10-27 by operator decision. [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 4 puts "Language" on the page "Feed settings", with the fields of item 7. [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) puts the "More artwork" lists of item 10 in the Artwork sheet.
 
 ## Context
 

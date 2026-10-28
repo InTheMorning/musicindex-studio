@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "MSP 2.0 Parity"
 Decisions: [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md), [ADR 0016](../adr/0016-ui-without-a-build-step.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0071](../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md).
 Research: [MSP 2.0 parity and Nostr identities](../research/2026-10-28-msp-parity-and-nostr-identities.md).
 
-Status: Open.
+Status: Complete - 2026-10-28, except the human test. The four commit checks pass. The screenshot visual check passed in the two themes and at 390 px, against the test relay. The human test is open.
 
 ## Goal
 

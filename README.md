@@ -18,6 +18,7 @@ Music Index Studio edits hosted Podcasting 2.0 music feeds. An artist keeps each
 - [Edit the album details](docs/user-guide/edit-album.md)
 - [Add, import and change tracks](docs/user-guide/tracks.md)
 - [Value routes](docs/user-guide/value-routes.md)
+- [Nostr keys](docs/user-guide/nostr-keys.md)
 - [Review and write your changes](docs/user-guide/review-and-write.md)
 - [Manage the files of a release](docs/user-guide/release-files.md)
 - [Live shows](docs/user-guide/live-shows.md)

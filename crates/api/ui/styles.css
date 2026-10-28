@@ -950,6 +950,9 @@ textarea:focus { background: var(--fill); }
 .entry-row > summary .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-row > summary .sub { color: var(--muted); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-row > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
+/* A link row in an open entry, such as "Nostr" (ADR 0074), starts at the
+   inner space of the entry, as each field of the entry does. */
+.entry-row > .form > .link-row { padding-inline: 0; }
 
 /* ---- The editor pages (task 014c, ADR 0029 items 5 to 10). ---- */
 

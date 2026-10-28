@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pageSequence, pageNames, tierError, TIERS } from '../ui/pages.js';
 
-const FEED_FIELDS = ['title', 'author', 'artwork', 'description', 'link', 'listing', 'explicit'];
+const FEED_FIELDS = ['title', 'author', 'nostr', 'artwork', 'description', 'link', 'listing', 'explicit'];
 test('pageSequence gives a new copy at each call', () => {
   const a = pageSequence('album');
   const b = pageSequence('album');
@@ -66,10 +66,18 @@ test('tierError gives a message that names ADR 0071 item 1 for an unknown tier',
 
 test('studio-settings has account only on a server', () => {
   const ids = (server) => pageSequence('studio-settings', { server }).map((s) => s.id);
-  assert.deepEqual(ids(true), ['account', 'apps', 'announcements', 'library']);
-  assert.deepEqual(ids(false), ['apps', 'announcements', 'library']);
+  assert.deepEqual(ids(true), ['account', 'apps', 'announcements', 'nostr', 'library']);
+  assert.deepEqual(ids(false), ['apps', 'announcements', 'nostr', 'library']);
 });
 
 test('hosts starts with cards', () => {
   assert.equal(pageSequence('hosts')[0].id, 'cards');
+});
+
+test('nostr follows author on the three feed pages', () => {
+  for (const name of ['album', 'publisher', 'playlist']) {
+    const fields = pageSequence(name)[0].fields;
+    assert.equal(fields.indexOf('nostr'), fields.indexOf('author') + 1,
+      'ADR 0074 item 19: the row nostr must follow author. Fix FEED_FIELDS in crates/api/ui/pages.js.');
+  }
 });

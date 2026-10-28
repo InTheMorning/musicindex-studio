@@ -29,3 +29,10 @@ test('withAlbumCredits gives an empty list and usesAlbumCredits then gives true'
 test('usesAlbumCredits gives false for an item with one person', () => {
   assert.equal(usesAlbumCredits({ persons: [{ name: 'Ann' }] }), false);
 });
+
+test('withTrackCredits keeps the Nostr key of each person', () => {
+  const key = 'npub1g2nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxck';
+  const item = withTrackCredits({ persons: [] }, [{ _cid: 'c1', key: 'k1', name: 'Ann', npub: key }, { _cid: 'c2', name: 'Bob', npub: null }]);
+  assert.equal(item.persons[0].npub, key);
+  assert.equal(item.persons[1].npub, null);
+});

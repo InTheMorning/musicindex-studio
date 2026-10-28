@@ -11,7 +11,7 @@ const PAGES_FILE = 'crates/api/ui' + '/pages.js';
 export const TIERS = ['identity', 'content', 'details', 'setup', 'limits'];
 
 // The fields of the first section of the three feed pages.
-const FEED_FIELDS = ['title', 'author', 'artwork', 'description', 'link', 'listing', 'explicit'];
+const FEED_FIELDS = ['title', 'author', 'nostr', 'artwork', 'description', 'link', 'listing', 'explicit'];
 
 const PAGES = {
   album: () => [
@@ -54,6 +54,7 @@ const PAGES = {
     ...(server ? [{ id: 'account', tier: 'setup' }] : []),
     { id: 'apps', tier: 'setup' },
     { id: 'announcements', tier: 'setup' },
+    { id: 'nostr', tier: 'setup' },
     { id: 'library', tier: 'limits' },
   ],
 };

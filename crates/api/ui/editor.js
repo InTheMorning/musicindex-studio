@@ -3,20 +3,21 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
-import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
+import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { mediumKind, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
-import { eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
+import { npubOf, eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
 import { isExplicit } from './explicit.js';
+import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
@@ -119,10 +120,11 @@ export function addOpen(list, blank) {
 // group's own inset separator (review of task 014c, defect 3).
 // `path` is the model path of the list, for the address fields. A track gives
 // `items/${index}/persons`.
-const BLANK_PERSON = { name: '', role: null, group: null, img: null, href: null };
+const BLANK_PERSON = { name: '', role: null, group: null, img: null, href: null, npub: null };
 
 function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
   const blank = BLANK_PERSON;
+  const { feedId } = useContext(PickerContext) || {};
   return html`${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
     ${persons.map((p, i) => {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
@@ -137,6 +139,10 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
         </div>
         <${TextField} id=${`${id}-img`} label="Picture address" type="url" address=${`${path}/${i}/img`} bad=${bad} value=${p.img} onChange=${change('img')} />
         <${TextField} id=${`${id}-href`} label="Information address" type="url" address=${`${path}/${i}/href`} bad=${bad} value=${p.href} onChange=${change('href')} />
+        <${NostrRow} label="Nostr" summary=${keySummary(p.name, p.npub)} value=${p.npub} feedId=${feedId}
+          bad=${(bad || []).some((b) => b.field === `${path}/${i}/npub`)}
+          person=${{ name: p.name, img: p.img }}
+          onSet=${(npub, picked) => onChange(setAt(persons, i, withPersonKey(p, npub, picked)))} />
         <${EntryActions} list=${persons} index=${i} name=${p.name || 'this person'} onChange=${onChange} />
       <//>`;
     })}
@@ -413,6 +419,130 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
     <footer>
       <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
       <button class="button primary" type="submit" form="add-track-form" disabled=${!ready}>＋ Add the track</button>
+    </footer>
+  </dialog>`;
+}
+
+// ---- The Nostr key rows and the sheet "Find a Nostr profile" (ADR 0074 items 18 to 25) ----
+
+// The row of a Nostr key. It opens the sheet. `person` gives the name and the
+// picture of a person entry, or it is missing for the key of a feed. `bad` is
+// true when the core found the key not correct.
+function NostrRow({ label, summary, value, feedId, bad, person, onSet }) {
+  const [open, setOpen] = useState(false);
+  return html`<button class="link-row" type="button" onClick=${() => setOpen(true)}>
+      <span class="label">${label}</span>
+      <span class=${bad ? 'summary field-error' : 'summary'}>${bad ? 'Not a Nostr key' : summary}</span>
+      <span class="go" aria-hidden="true">›</span>
+    </button>
+    <${NostrSheet} open=${open} value=${value} feedId=${feedId} person=${person} onSet=${onSet} onClose=${() => setOpen(false)} />`;
+}
+
+const FAILED_TEXT = {
+  collection: 'Studio could not read your feeds.',
+  musicindex: 'musicindex did not answer.',
+  relay: 'The search relay did not answer.',
+};
+
+// One profile of the answer of `GET /nostr/profiles`. The picture comes
+// through the image route (ADR 0016).
+function ProfileBody({ profile }) {
+  const { src } = useImage(profile.picture);
+  const domain = profile.nip05 && profile.nip05.includes('@') ? profile.nip05.split('@').pop() : '';
+  return html`<span style="flex:none;width:40px;height:40px;border-radius:8px;overflow:hidden;display:block">
+      ${src && html`<img src=${src} alt="" width="40" height="40" />`}</span>
+    <span class="text">
+      <span class="title">${profile.name || shortKey(profile.npub)}</span>
+      ${profile.nip05 && html`<span class="summary">${profile.nip05}${profile.nip05_ok ? ' ✓' : ''}</span>`}
+      <span class="summary mono">${shortKey(profile.npub)}</span>
+      <span class="summary">${profile.sources.map(sourceText).join(' · ')}</span>
+      ${profile.domain_match && html`<span class="summary">Confirmed at ${domain}</span>`}
+    </span>`;
+}
+
+// `value` is the key of the row, or `null`. A person entry gives `person`
+// with its name and picture. A selection calls `onSet(npub, picked)`. The key
+// `null` removes the key. `picked` has the profile name and picture that the
+// user chose to use.
+function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
+  const ref = useSheet(open);
+  const session = useContext(SessionContext);
+  const mine = session && session.session && session.session.pubkey ? npubOf(session.session.pubkey) : null;
+  const [changing, setChanging] = useState(false);
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState(null);
+  const [card, setCard] = useState(null);
+  const [useName, setUseName] = useState(false);
+  const [usePicture, setUsePicture] = useState(false);
+  const search = useAction();
+  const suffix = feedId ? `&feed=${feedId}` : '';
+  useEffect(() => {
+    if (!open) return undefined;
+    setChanging(false);
+    setQuery('');
+    setFound(null);
+    setCard(null);
+    setUseName(!!person && !person.name);
+    setUsePicture(!!person && !person.img);
+    if (!value) return undefined;
+    let current = true;
+    api(`/nostr/profiles?q=${encodeURIComponent(value)}${suffix}`).then(
+      (answer) => { if (current) setCard({ profile: answer.profiles.find((p) => p.npub === value) || null }); },
+      () => { if (current) setCard({ profile: null }); },
+    );
+    return () => { current = false; };
+  }, [open]);
+  const choose = (npub, profile) => {
+    onSet(npub, profile ? { name: useName ? profile.name : null, picture: usePicture ? profile.picture : null } : {});
+    ref.current.close();
+  };
+  const runSearch = (event) => {
+    event.preventDefault();
+    const text = query.trim();
+    if (!text) return;
+    search.run(async () => setFound(await api(`/nostr/profiles?q=${encodeURIComponent(text)}${suffix}`)));
+  };
+  const showCard = !!value && !changing;
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="nostr-sheet-title" onClose=${onClose}>
+    <header>
+      <h2 id="nostr-sheet-title">Find a Nostr profile</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      ${showCard && html`<div class="group rows">
+        ${card && card.profile
+          ? html`<div class="link-row"><${ProfileBody} profile=${card.profile} /></div>`
+          : html`<div class="link-row"><span class="text"><span class="summary mono">${value}</span>
+              ${card && html`<span class="summary">Studio found no profile for this key</span>`}</span></div>`}
+        <div class="actions">
+          <button class="button" type="button" onClick=${() => setChanging(true)}>Change</button>
+          <button class="button destructive" type="button" onClick=${() => choose(null, null)}>Remove</button>
+        </div>
+      </div>`}
+      ${!showCard && html`<form class="form" role="search" onSubmit=${runSearch}>
+        <div class="field">
+          <label for="nostr-query">npub, NIP-05 address or name</label>
+          <div class="inline"><input id="nostr-query" type="search" value=${query} onInput=${(e) => setQuery(e.target.value)} />
+            <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
+        </div>
+        ${mine && html`<div class="actions"><button class="button" type="button" onClick=${() => choose(mine, null)}>Use my key</button></div>`}
+        <${ErrorNotice} error=${search.error} />
+        ${person && html`<div class="group">
+          <label class="check"><input type="checkbox" checked=${useName} onChange=${(e) => setUseName(e.target.checked)} />
+            <span>Use the profile name</span></label>
+          <label class="check"><input type="checkbox" checked=${usePicture} onChange=${(e) => setUsePicture(e.target.checked)} />
+            <span>Use the profile picture</span></label>
+        </div>`}
+        ${found && found.failed.length > 0 && html`<p class="hint" role="status">${found.failed.map((f) => FAILED_TEXT[f] || 'A source did not answer.').join(' ')}</p>`}
+        ${found && found.profiles.length === 0 && html`<p class="empty">Studio found no profile.</p>`}
+        ${found && found.profiles.length > 0 && html`<div class="group rows">
+          ${found.profiles.map((p) => html`<button class="link-row" type="button" key=${p.npub} onClick=${() => choose(p.npub, p)}>
+            <${ProfileBody} profile=${p} /></button>`)}
+        </div>`}
+      </form>`}
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
     </footer>
   </dialog>`;
 }
@@ -1582,11 +1712,22 @@ function ArtworkRow({ summary, onOpen }) {
 // The channel fields that the album page and the playlist page share. The
 // list `fields` gives the sequence of the page (ADR 0068). The language is
 // on the page "Feed settings".
+// The row "Nostr profile" of the album, the publisher feed and the playlist:
+// the feed key, a `podcast:txt` with `purpose="npub"` (ADR 0074).
+function FeedKeyRow({ feedId, model, update, bad }) {
+  const key = feedKey(model);
+  const path = `txts/${(model.txts || []).findIndex((t) => t.purpose === 'npub')}/value`;
+  return html`<${NostrRow} label="Nostr profile" summary=${keySummary('', key)} value=${key} feedId=${feedId}
+    bad=${(bad || []).some((b) => b.field === path)}
+    onSet=${(npub) => update((m) => withFeedKey(m, npub))} />`;
+}
+
 function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork, fields }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const shown = {
     title: () => html`<${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />`,
     author: () => html`<${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
+    nostr: () => html`<${FeedKeyRow} feedId=${feedId} model=${model} update=${update} bad=${bad} />`,
     description: () => html`<${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />`,
     artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
     link: () => html`<${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />`,
@@ -2736,6 +2877,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         ${showEach(s.fields, {
           title: () => html`<${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />`,
           author: () => html`<${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
+          nostr: () => html`<${FeedKeyRow} feedId=${feed.id} model=${model} update=${update} bad=${bad} />`,
           description: () => html`<${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />`,
           artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
           link: () => html`<${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />`,

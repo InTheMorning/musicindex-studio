@@ -2,7 +2,7 @@
 
 Parent: [task 051](studio-v1-task-051-nostr-keys.md). Decision: [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 16 to 26.
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass. The planning model added the row "Nostr profile" to the publisher page, and aligned the link row of an open entry with its fields.
 
 ## Goal
 

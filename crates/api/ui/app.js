@@ -1823,6 +1823,38 @@ function AnnouncePanel() {
   </article>`;
 }
 
+// The Nostr search relay (ADR 0074 items 16 and 17). An empty field stops the
+// relay search. The core checks the address.
+function NostrPanel() {
+  const [saved, setSaved] = useState(null);
+  const [relay, setRelay] = useState('');
+  const { busy, error, run } = useAction();
+  const load = () => api('/settings/nostr').then((result) => {
+    setSaved(result.search_relay);
+    setRelay(result.search_relay);
+  });
+  useEffect(() => { load(); }, []);
+  const submit = (event) => {
+    event.preventDefault();
+    run(async () => {
+      await api('/settings/nostr', { method: 'PUT', body: { search_relay: relay.trim() } });
+      await load();
+    });
+  };
+  if (saved === null) return null;
+  return html`<article class="panel">
+    <h2>Nostr</h2>
+    <form class="form" onSubmit=${submit}>
+      <${Field} id="nostr-relay" label="Nostr search relay" type="text" placeholder="wss://search.nos.today"
+        hint="Studio sends the text of a name search to this relay. Leave the field empty to search only your feeds and musicindex."
+        value=${relay} onInput=${(e) => setRelay(e.target.value)} />
+      <${ErrorNotice} error=${error} />
+      <div class="actions"><button class="button primary" type="submit" disabled=${busy || relay.trim() === saved}>
+        ${busy ? 'Saving…' : 'Save'}</button></div>
+    </form>
+  </article>`;
+}
+
 // The connected apps (ADR 0054 items 7 to 10). "Make the token" shows the
 // token one time. The token stays in the state of this panel only.
 function ConnectedAppsPanel() {
@@ -2155,6 +2187,7 @@ function SettingsPage() {
     account: AccountPanel,
     apps: ConnectedAppsPanel,
     announcements: AnnouncePanel,
+    nostr: NostrPanel,
     library: LibraryPanel,
   };
   return html`<div>
@@ -3196,7 +3229,7 @@ function UnlockSheet({ session, onDone }) {
 }
 
 // The session of the signed-in user, and the function that reloads it.
-const SessionContext = createContext(null);
+export const SessionContext = createContext(null);
 
 // The passkeys of the account, with "Add a passkey" and "Remove" (ADR 0056
 // items 3 and 20 to 23). The browser must support passkeys.

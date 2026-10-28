@@ -33,7 +33,8 @@
 // $edges() opens each disclosure in a group, and gives each text and each
 // control that is nearer than 12 px to the left edge or the right edge of
 // its group (ADR 0029 items 11 and 12: a group holds rows, and a row has
-// inner space). An empty list means that no content touches an edge.
+// inner space). The content of a dialog in a group is not content of that
+// group. An empty list means that no content touches an edge.
 // The script prints each result and each console error.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -101,14 +102,18 @@ const helpers = `
         if (r.width === 0 || r.height === 0) return;
         if (r.left - g.left < 12 || g.right - r.right < 12) near.push(what.slice(0, 60) + ' @ ' + Math.round(r.left - g.left) + '/' + Math.round(g.right - r.right));
       };
+      // A dialog in the group shows in the top layer, not in the group. Its
+      // own groups get their own test.
+      const inDialog = (node) => { const d = node.closest('dialog'); return !!d && group.contains(d); };
       const walker = document.createTreeWalker(group, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        if (!n.textContent.trim()) continue;
+        if (!n.textContent.trim() || inDialog(n.parentElement)) continue;
         const range = document.createRange();
         range.selectNodeContents(n);
         for (const r of range.getClientRects()) test(visible(n, r), n.textContent.trim());
       }
       for (const c of group.querySelectorAll('input, select, textarea')) {
+        if (inDialog(c)) continue;
         if (c.checkVisibility ? c.checkVisibility() : c.offsetParent) test(visible(c, c.getBoundingClientRect()), c.outerHTML);
       }
     }

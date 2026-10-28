@@ -92,6 +92,11 @@ export const STATUS = {
   failed: 'Studio could not save the draft.',
 };
 
+// The fields that the core found not correct: the addresses and the Nostr
+// keys, each with its model path (ADR 0023, ADR 0074). The editor looks up a
+// field by its path in this one list.
+const badFields = (answer) => [...(answer.bad_addresses || []), ...(answer.bad_keys || [])];
+
 // The draft of one feed. A feed ID of `null` means that the selected feed
 // needs no draft now, for example a feed that is not an album (ADR 0029
 // item 4: the shell holds one draft and gives it to the editor).
@@ -127,7 +132,7 @@ export function useDraft(feedId) {
     setChanged(draft.changed);
     setHidden(draft.hidden);
     setHasHost(draft.has_host !== false);
-    setBad(draft.bad_addresses);
+    setBad(badFields(draft));
     setStatus('saved');
     setError(null);
   };
@@ -185,7 +190,7 @@ export function useDraft(feedId) {
     setChanged(saved.changed);
     setHidden(saved.hidden);
     if (saved.has_host !== undefined) setHasHost(saved.has_host);
-    setBad(saved.bad_addresses);
+    setBad(badFields(saved));
   };
 
   // Send each change that is not saved. Only one save runs at a time.

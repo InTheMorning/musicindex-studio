@@ -38,6 +38,7 @@ Most steps are the same in the two. A page tells you when a step is different.
 - [Edit the album details](edit-album.md)
 - [Add, import and change tracks](tracks.md)
 - [Value routes](value-routes.md)
+- [Nostr keys](nostr-keys.md)
 - [Review and write your changes](review-and-write.md)
 - [Manage the files of a release](release-files.md)
 

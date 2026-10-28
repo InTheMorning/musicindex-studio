@@ -123,6 +123,12 @@ pub struct Feed {
     pub items: Vec<Entry<Item>>,
     /// The `podcast:liveItem` elements.
     pub live_items: Vec<Entry<LiveItem>>,
+    /// The OP3 switch (ADR 0076). [`Feed::read`] computes it: true when the
+    /// feed has one or more items and each enclosure has the OP3 prefix.
+    /// [`Feed::write_hosted`] ignores it. The pipeline applies it at the
+    /// draft save.
+    #[serde(default)]
+    pub op3: bool,
 }
 
 impl Feed {
@@ -133,7 +139,7 @@ impl Feed {
     /// Gives a [`FeedError`] when the document has no `rss/channel` element.
     pub fn read(doc: &Document) -> Result<Self, FeedError> {
         let channel = channel(doc.root()).ok_or(NO_CHANNEL)?;
-        Ok(Self {
+        let mut feed = Self {
             title: read_text(channel, Ns::None, "title"),
             description: read_text(channel, Ns::None, "description"),
             link: read_text(channel, Ns::None, "link"),
@@ -164,7 +170,15 @@ impl Feed {
             values: read_list(channel),
             items: read_list(channel),
             live_items: read_list(channel),
-        })
+            op3: false,
+        };
+        feed.op3 = !feed.items.is_empty()
+            && feed.items.iter().all(|entry| {
+                (entry.value.enclosure.as_ref())
+                    .and_then(|e| e.url.as_deref())
+                    .is_some_and(crate::media::has_op3_prefix)
+            });
+        Ok(feed)
     }
 
     /// Put the values into `doc` and change only what is different.

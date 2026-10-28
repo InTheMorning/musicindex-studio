@@ -2,7 +2,7 @@
 
 Parent: [task 053](studio-v1-task-053-album-from-album.md). Decision: [ADR 0077](../adr/0077-a-new-album-can-start-from-an-album.md) items 1 to 3.
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass.
 
 ## Goal
 

@@ -220,6 +220,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - The other gaps of the research stay open. Some need research first: the feed check, the first submission to Podcast Index and Nostr Music events. Some need a change of a decision: a write to a feed that MSP 2.0 hosts (ADR 0006), and albums of other hosts in a publisher feed (ADR 0041).
 - Mechanical check: the mechanical criteria of tasks 050 to 053.
 - Visual check: the visual criteria of tasks 050 to 053.
+- Status on 2026-10-28: tasks 050 to 053 are complete. The mechanical checks pass, and the screenshot visual checks passed. The human tests of the four tasks are open.
 
 ### Phase 13: Desktop Shell
 

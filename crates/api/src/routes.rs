@@ -2201,8 +2201,23 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let bad_addresses = model.bad_addresses();
     let bad_keys = model.bad_keys();
     let hidden = model.hidden();
+    let op3_tracks = json!({
+        "prefixed": model
+            .items
+            .iter()
+            .filter(|i| {
+                i.value
+                    .enclosure
+                    .as_ref()
+                    .and_then(|e| e.url.as_deref())
+                    .is_some_and(media::has_op3_prefix)
+            })
+            .count(),
+        "tracks": model.items.len(),
+    });
     Ok(Json(json!({
         "revision": revision,
+        "op3_tracks": op3_tracks,
         "model": model,
         "changed": changed,
         "bad_addresses": bad_addresses,

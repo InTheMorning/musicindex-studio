@@ -17,6 +17,7 @@ import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
 import { isExplicit } from './explicit.js';
+import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
@@ -1790,7 +1791,7 @@ function SettingsRow({ model, onOpen }) {
 // and the two editor fields (ADR 0064 items 3 to 7, ADR 0068 item 8). An empty field gives `null`, so that
 // Studio writes no empty element. No field refuses a value that is not an
 // email address. The core removes the space at the ends of each text.
-function SettingsPage({ model, update }) {
+function SettingsPage({ model, update, album, op3Tracks }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const owner = model.owner || { name: null, email: null };
   const setOwner = (name, value) => update((m) => {
@@ -1801,6 +1802,10 @@ function SettingsPage({ model, update }) {
   const setLocked = (on) => update((m) => set(m, 'locked', on
     ? { ...(m.locked || { owner: null }), value: 'yes' }
     : { ...m.locked, value: 'no' }));
+  // The UI sends only the value of the switch. The core changes the
+  // addresses (ADR 0076 item 12).
+  const setOp3 = (on) => update((m) => set(m, 'op3', on));
+  const hint = op3Hint(op3Tracks);
   const setLockOwner = (value) => update((m) => set(m, 'locked', { ...m.locked, owner: value }));
   const shown = {
     language: () => html`<section class="page-section"><h2>Language</h2>
@@ -1832,6 +1837,20 @@ function SettingsPage({ model, update }) {
         ${locked && html`<${TextField} id="set-lock-owner" label="Lock owner email" value=${locked.owner} onChange=${setLockOwner} />`}
       </div>
     </section>`,
+    op3: () => html`<section class="page-section"><h2>OP3 statistics</h2>
+      <div class="group">
+        <div class="field">
+          <label for="set-op3">OP3 statistics</label>
+          <div class="field-body">
+            <label class="check"><input id="set-op3" type="checkbox" checked=${!!model.op3}
+              onChange=${(e) => setOp3(e.target.checked)} /></label>
+            <span class="hint">OP3 counts the downloads of each track. Studio adds the OP3 address to each audio address.</span>
+            ${hint && html`<span class="hint" id="set-op3-count">${hint}</span>`}
+            ${model.op3 && model.podcast_guid && html`<div class="actions"><a class="button action" href=${op3Page(model.podcast_guid)} target="_blank" rel="noopener">OP3 statistics</a></div>`}
+          </div>
+        </div>
+      </div>
+    </section>`,
     editors: () => html`<section class="page-section"><h2>Editors</h2>
       <div class="group">
         <${TextField} id="set-managing-editor" label="Managing editor" value=${model.managing_editor} onChange=${field('managing_editor')} />
@@ -1839,7 +1858,7 @@ function SettingsPage({ model, update }) {
       </div>
     </section>`,
   };
-  return showSections(pageSequence('settings'), shown);
+  return showSections(pageSequence('settings', { album }), shown);
 }
 
 // The listing control of a channel (ADR 0063, ADR 0065). One switch hides the
@@ -3468,7 +3487,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   // write that gave each item a new client ID, the editor shows the album
   // page (task 014c, Architecture).
   if (page === 'settings') {
-    body = html`<${SettingsPage} model=${model} update=${update} />`;
+    body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist} op3Tracks=${draft.op3Tracks} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
       draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} />`;

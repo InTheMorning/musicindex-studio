@@ -1,5 +1,6 @@
 //! The write pipeline over the local folder connector (ADR 0007, ADR 0015).
 
+use std::fmt::Write as _;
 use std::fs;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
@@ -4380,4 +4381,119 @@ fn the_deletion_check_keeps_a_source_file_that_the_copy_refers_to() {
     assert!(diff.operations.is_empty(), "{:?}", diff.operations);
     assert_eq!(diff.blocked.len(), 1);
     assert_eq!(diff.blocked[0].feed_titles, ["Copy Album".to_owned()]);
+}
+
+const OP3_GUID: &str = "917393e3-1b1e-5cef-ace4-edaa54e1f810";
+
+/// A feed with one `item` for each address in `urls`, an alternate
+/// enclosure, an item image and a live item.
+fn op3_feed(urls: &[&str]) -> String {
+    let mut items = String::new();
+    for (n, url) in urls.iter().enumerate() {
+        let _ = write!(
+            items,
+            "<item><title>T{n}</title><guid>t-{n}</guid>\
+             <enclosure url=\"{url}\" length=\"1\" type=\"audio/mpeg\"/>\
+             <podcast:alternateEnclosure type=\"audio/flac\" length=\"2\">\
+             <podcast:source uri=\"https://music.example/t{n}.flac\"/>\
+             </podcast:alternateEnclosure>\
+             <itunes:image href=\"https://music.example/t{n}.jpg\"/></item>"
+        );
+    }
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+         <rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" \
+         xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel>\
+         <title>Album</title><podcast:guid>{OP3_GUID}</podcast:guid>\
+         <podcast:medium>music</podcast:medium>{items}\
+         <podcast:liveItem status=\"pending\"><title>Show</title><guid>live-1</guid>\
+         <enclosure url=\"https://music.example/live.mp3\" length=\"1\" type=\"audio/mpeg\"/>\
+         </podcast:liveItem></channel></rss>"
+    )
+}
+
+const PLAIN_ONE: &str = "https://music.example/one.mp3";
+const PLAIN_TWO: &str = "https://music.example/two.mp3";
+const PREFIXED_ONE: &str =
+    "https://op3.dev/e,pg=917393e3-1b1e-5cef-ace4-edaa54e1f810/music.example/one.mp3";
+const PREFIXED_TWO: &str =
+    "https://op3.dev/e,pg=917393e3-1b1e-5cef-ace4-edaa54e1f810/music.example/two.mp3";
+
+/// Send the draft model of an album changed by `change`, and give the model
+/// that the draft has afterwards.
+fn save_op3(urls: &[&str], change: impl FnOnce(&mut Feed)) -> Feed {
+    let s = setup_with(&op3_feed(urls));
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let (mut sent, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    change(&mut sent);
+    pipeline::replace_model(&s.collection, s.feed, &revision, sent).unwrap();
+    pipeline::draft_model(&s.collection, s.feed).unwrap().0
+}
+
+fn track_urls(feed: &Feed) -> Vec<String> {
+    feed.items
+        .iter()
+        .map(|i| i.value.enclosure.as_ref().unwrap().url.clone().unwrap())
+        .collect()
+}
+
+#[test]
+fn the_op3_switch_starts_on_only_when_each_track_has_the_prefix() {
+    let model = |urls: &[&str]| {
+        let s = setup_with(&op3_feed(urls));
+        pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+        pipeline::draft_model(&s.collection, s.feed).unwrap().0
+    };
+    assert!(model(&[PREFIXED_ONE, PREFIXED_TWO]).op3);
+    assert!(!model(&[PREFIXED_ONE, PLAIN_TWO]).op3);
+    assert!(!model(&[PLAIN_ONE, PLAIN_TWO]).op3);
+    assert!(!model(&[]).op3);
+}
+
+#[test]
+fn a_sent_op3_true_adds_the_prefix_with_the_feed_guid_to_each_track() {
+    let saved = save_op3(&[PLAIN_ONE, PREFIXED_TWO], |f| f.op3 = true);
+    assert_eq!(track_urls(&saved), [PREFIXED_ONE, PREFIXED_TWO]);
+    assert!(saved.op3);
+}
+
+#[test]
+fn a_sent_op3_false_over_true_removes_each_prefix() {
+    let saved = save_op3(&[PREFIXED_ONE, PREFIXED_TWO], |f| f.op3 = false);
+    assert_eq!(track_urls(&saved), [PLAIN_ONE, PLAIN_TWO]);
+    assert!(!saved.op3);
+}
+
+#[test]
+fn a_sent_op3_false_over_a_mixed_set_changes_no_address() {
+    let saved = save_op3(&[PREFIXED_ONE, PLAIN_TWO], |f| f.op3 = false);
+    assert_eq!(track_urls(&saved), [PREFIXED_ONE, PLAIN_TWO]);
+}
+
+#[test]
+fn a_track_added_while_op3_is_on_gets_the_prefix() {
+    let saved = save_op3(&[PREFIXED_ONE], |f| {
+        f.items.push(Entry::new(Item {
+            title: Some("New".into()),
+            enclosure: Some(Enclosure {
+                url: Some(PLAIN_TWO.into()),
+                length: Some("1".into()),
+                media_type: Some("audio/mpeg".into()),
+            }),
+            ..Item::default()
+        }));
+    });
+    assert_eq!(track_urls(&saved), [PREFIXED_ONE, PREFIXED_TWO]);
+}
+
+#[test]
+fn the_op3_switch_changes_only_the_enclosure_of_a_track() {
+    let before = save_op3(&[PLAIN_ONE], |_| {});
+    let saved = save_op3(&[PLAIN_ONE], |f| f.op3 = true);
+    assert_eq!(
+        saved.items[0].value.alternate_enclosures,
+        before.items[0].value.alternate_enclosures
+    );
+    assert_eq!(saved.items[0].value.image, before.items[0].value.image);
+    assert_eq!(saved.live_items, before.live_items);
 }

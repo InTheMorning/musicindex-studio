@@ -2,7 +2,7 @@
 
 Parent: [task 052](studio-v1-task-052-op3-switch.md). Decision: [ADR 0076](../adr/0076-an-op3-switch-on-feed-settings.md) items 5 to 12.
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass. The link "OP3 statistics" is an action button, so that it has the target size of touch. A feed with no `podcast:guid` gets the prefix `https://op3.dev/e/` with no `pg=` part. The ADR 0016 test accepts the link to `https://op3.dev/show/`, because the UI does not load it.
 
 ## Goal
 

@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "MSP 2.0 Parity".
 Decisions: [ADR 0077](../adr/0077-a-new-album-can-start-from-an-album.md), [ADR 0073](../adr/0073-the-add-pages-ask-one-question-at-a-time.md), [ADR 0032](../adr/0032-new-releases-formats-paths-and-new-feeds.md), [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: Open. Start after task 052a, because the copy uses `media::plain_address`.
+Status: Complete - 2026-10-28, except the human test. The four commit checks pass. The screenshot visual check passed in the two themes and at 390 px. The human test is open.
 
 ## Goal
 

@@ -1287,6 +1287,9 @@ fn the_ui_names_no_other_server_and_sends_the_token() {
                         .is_some_and(char::is_alphanumeric)
                 })
                 .filter(|s| !s.contains("www.w3.org/2000/svg") && !s.contains("music.example"))
+                // The link that the user opens to the OP3 page (ADR 0076
+                // item 11). The UI does not load it.
+                .filter(|s| !s.starts_with("https://op3.dev/show/"))
                 .collect();
             assert!(
                 found.is_empty(),
@@ -2235,6 +2238,44 @@ async fn the_draft_and_the_save_give_bad_keys() {
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "bad_key");
+}
+
+#[tokio::test]
+async fn the_draft_and_the_save_give_the_op3_track_counts() {
+    let app = app();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": "https://music.example/one.mp3",
+        "length": "1",
+        "media_type": "audio/mpeg",
+    });
+    let (_, draft) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(draft["model"]["op3"], json!(false));
+    assert_eq!(draft["op3_tracks"], json!({ "prefixed": 0, "tracks": 1 }));
+    let mut model = draft["model"].clone();
+    model["op3"] = json!(true);
+    let (_, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(saved["model"]["op3"], json!(true));
+    assert_eq!(saved["op3_tracks"], json!({ "prefixed": 1, "tracks": 1 }));
+    assert_eq!(
+        saved["model"]["items"][0]["enclosure"]["url"],
+        json!("https://op3.dev/e,pg=g-1/music.example/one.mp3")
+    );
 }
 
 #[tokio::test]

@@ -66,14 +66,26 @@ export function rekey(value, found) {
 // The server sets two fields of a track: the GUID of a new track (ADR 0022
 // item 7) and the track number (ADR 0024). Copy them into the local model, or
 // the next save would change them back.
-export function copyServerFields(local, saved, found) {
+//
+// The core also sets the OP3 switch and the enclosure address of each track
+// (ADR 0076). Copy them from the saved model when the user did not change them
+// after the send. `sent` is the model that the save sent.
+export function copyServerFields(local, saved, found, sent = null) {
+  const sentItems = new Map((sent ? sent.items : []).map((item) => [item._cid, item]));
+  const url = (item) => (item.enclosure ? item.enclosure.url : undefined);
   return {
     ...local,
+    ...(sent && local.op3 === sent.op3 ? { op3: saved.op3 } : {}),
     items: local.items.map((item) => {
       const index = found.get(item._cid);
       const from = index === undefined ? null : saved.items[index];
       if (!from) return item;
-      return { ...item, guid: item.guid || from.guid, episode: from.episode };
+      const before = sentItems.get(item._cid);
+      const next = { ...item, guid: item.guid || from.guid, episode: from.episode };
+      if (before && item.enclosure && from.enclosure && url(before) === url(item)) {
+        next.enclosure = { ...item.enclosure, url: from.enclosure.url };
+      }
+      return next;
     }),
   };
 }
@@ -105,6 +117,8 @@ export function useDraft(feedId) {
   const [changed, setChanged] = useState(false);
   // Whether the core says that the feed is hidden from apps (ADR 0065 item 9).
   const [hidden, setHidden] = useState(false);
+  // The count of the tracks with the OP3 prefix (ADR 0076 item 7).
+  const [op3Tracks, setOp3Tracks] = useState(null);
   // Whether the feed has a host, or a host choice (ADR 0067 item 6).
   const [hasHost, setHasHost] = useState(true);
   // Each address field that is not correct, by its model path (ADR 0023).
@@ -131,6 +145,7 @@ export function useDraft(feedId) {
     setModel(current.current);
     setChanged(draft.changed);
     setHidden(draft.hidden);
+    setOp3Tracks(draft.op3_tracks || null);
     setHasHost(draft.has_host !== false);
     setBad(badFields(draft));
     setStatus('saved');
@@ -164,6 +179,7 @@ export function useDraft(feedId) {
     setModel(null);
     setChanged(false);
     setHidden(false);
+    setOp3Tracks(null);
     setBad([]);
     setError(null);
     setEdits(0);
@@ -184,11 +200,12 @@ export function useDraft(feedId) {
     if (active.current !== feedId) return;
     const found = positions(sent);
     revision.current = saved.revision;
-    const copied = copyServerFields(rekey(current.current, found), saved.model, found);
+    const copied = copyServerFields(rekey(current.current, found), saved.model, found, sent);
     current.current = withSavedCover(copied, sent, saved.model);
     setModel(current.current);
     setChanged(saved.changed);
     setHidden(saved.hidden);
+    setOp3Tracks(saved.op3_tracks || null);
     if (saved.has_host !== undefined) setHasHost(saved.has_host);
     setBad(badFields(saved));
   };
@@ -228,5 +245,5 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush]);
 
-  return { model, changed, hidden, hasHost, bad, status, error, edits, update, flush, load, show };
+  return { model, changed, hidden, op3Tracks, hasHost, bad, status, error, edits, update, flush, load, show };
 }

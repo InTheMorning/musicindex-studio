@@ -27,7 +27,7 @@ use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::{Library, file_stamp};
 use crate::live::{self, LiveStatus};
-use crate::media::plain_address;
+use crate::media::{op3_prefix, plain_address};
 use crate::nostr_events::npub_text;
 use crate::xml::{Document, ParseError};
 
@@ -935,6 +935,7 @@ pub fn replace_model(
     number_tracks(&current, &mut sent);
     keep_cover_form(&current, &mut sent);
     keep_explicit_form(&current, &mut sent);
+    apply_op3(&current, &mut sent);
     keep_key_form(&current, &mut sent);
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
@@ -942,6 +943,28 @@ pub fn replace_model(
     collection.save_draft(id, &draft)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     Ok((feed, revision(&draft)))
+}
+
+/// Apply the OP3 switch to the enclosure of each track (ADR 0076 items 8
+/// to 10). A sent `true` adds the prefix of the feed to each enclosure with
+/// no prefix. This includes a new track. A sent `false` over a draft
+/// `true` removes the prefix from each enclosure. A sent `false` over a
+/// draft `false` changes no address. The step does not change an alternate
+/// enclosure, an image or a live item.
+fn apply_op3(current: &Feed, sent: &mut Feed) {
+    let guid = current.podcast_guid.as_deref().unwrap_or_default();
+    for entry in &mut sent.items {
+        let Some(url) = entry.value.enclosure.as_mut().and_then(|e| e.url.as_mut()) else {
+            continue;
+        };
+        if sent.op3 {
+            if !url.is_empty() {
+                *url = op3_prefix(url, guid);
+            }
+        } else if current.op3 {
+            *url = plain_address(url).into_owned();
+        }
+    }
 }
 
 /// Keep the form of the cover when the sent `image` is a new address

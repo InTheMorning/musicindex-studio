@@ -735,6 +735,31 @@ pub fn plain_address(url: &str) -> Cow<'_, str> {
     }
 }
 
+/// Whether `url` has the OP3 prefix (ADR 0076).
+#[must_use]
+pub fn has_op3_prefix(url: &str) -> bool {
+    op3_prefix_len(url).is_some()
+}
+
+/// `url` with the OP3 prefix of the feed with the `podcast:guid` `guid`
+/// (ADR 0076 items 8 and 9).
+///
+/// An address with a prefix stays as it is. An `https` address has no scheme
+/// after the prefix. An `http` address keeps its scheme. An empty `guid`
+/// gives the prefix with no `pg=` part.
+#[must_use]
+pub fn op3_prefix(url: &str, guid: &str) -> String {
+    if has_op3_prefix(url) {
+        return url.to_owned();
+    }
+    let tail = url.strip_prefix("https://").unwrap_or(url);
+    if guid.is_empty() {
+        format!("{OP3_PREFIX}/{tail}")
+    } else {
+        format!("{OP3_PREFIX},pg={guid}/{tail}")
+    }
+}
+
 /// `url` with its plain part replaced by `new_plain`. An OP3 prefix with
 /// its `pg=` part stays (ADR 0076 item 4). An address with no prefix gives
 /// `new_plain`.
@@ -754,7 +779,33 @@ pub fn with_plain_address(url: &str, new_plain: &str) -> String {
 
 #[cfg(test)]
 mod plain_address_tests {
-    use super::{plain_address, with_plain_address};
+    use super::{op3_prefix, plain_address, with_plain_address};
+
+    #[test]
+    fn op3_prefix_handles_https_http_and_prefixed_addresses() {
+        assert_eq!(
+            op3_prefix("https://a.example/a.mp3", "g-1"),
+            "https://op3.dev/e,pg=g-1/a.example/a.mp3"
+        );
+        assert_eq!(
+            op3_prefix("http://a.example/a.mp3", "g-1"),
+            "https://op3.dev/e,pg=g-1/http://a.example/a.mp3"
+        );
+        for done in [
+            "https://op3.dev/e,pg=other/a.example/a.mp3",
+            "https://op3.dev/e/a.example/a.mp3",
+        ] {
+            assert_eq!(op3_prefix(done, "g-1"), done);
+        }
+        assert_eq!(
+            op3_prefix("https://a.example/a.mp3", ""),
+            "https://op3.dev/e/a.example/a.mp3"
+        );
+        assert_eq!(
+            plain_address(&op3_prefix("http://a.example/a.mp3", "g-1")),
+            "http://a.example/a.mp3"
+        );
+    }
 
     #[test]
     fn plain_address_removes_each_op3_form() {

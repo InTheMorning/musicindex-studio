@@ -72,6 +72,23 @@ Some feeds also have a block for one platform, such as `spotify`.
 Then **Advanced** shows below the switch, with one check box for each platform.
 The switch does not change these blocks.
 
+### OP3 statistics
+
+OP3 counts the downloads of each track.
+The switch **OP3 statistics** is on the page **Feed settings**.
+Set it to add the OP3 address to the audio address of each track.
+The new start of the address is `https://op3.dev/e,pg=GUID/`, with the feed GUID.
+The diff shows each address that changes.
+Studio does not change an alternative file, an image or a live item.
+
+If you remove the check mark of the switch, Studio removes the OP3 address from each track.
+If you add a track while the switch is on, the track gets the OP3 address.
+When the switch is on, the link **OP3 statistics** opens the OP3 page of the album.
+
+The switch is off when only some tracks have the OP3 address.
+Then a hint shows the count, for example "2 of 9 tracks use OP3".
+Studio then changes no address until you set the switch.
+
 ### Album details
 
 This section has three rows.

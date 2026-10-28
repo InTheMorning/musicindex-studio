@@ -32,6 +32,19 @@ test('the page publisher gives the sections in the sequence of ADR 0075', () => 
   assert.deepEqual(pageSequence('publisher')[2].rows, ['recipients', 'credits']);
 });
 
+test('the page settings gives op3 after locked for an album only', () => {
+  const ids = (options) => pageSequence('settings', options).map((s) => s.id);
+  const album = ids({ album: true });
+  assert.equal(
+    album.indexOf('op3'),
+    album.indexOf('locked') + 1,
+    'ADR 0076 item 5: the section op3 must come after locked on the page settings of an album. Fix the page settings in crates/api/ui/pages.js.',
+  );
+  assert.ok(!ids({ album: false }).includes('op3'), 'ADR 0076 item 5: only an album shows op3. Fix the page settings in crates/api/ui/pages.js.');
+  assert.ok(!ids().includes('op3'));
+  assert.equal(tierError('settings', pageSequence('settings', { album: true })), null);
+});
+
 for (const server of [true, false]) {
   for (const page of pageNames()) {
     test(`the sections of the page ${page} have tiers that do not go down (server ${server})`, () => {

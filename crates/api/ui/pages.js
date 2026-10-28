@@ -32,11 +32,12 @@ const PAGES = {
     { id: 'channel', tier: 'identity', fields: [...FEED_FIELDS] },
     { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
   ],
-  settings: () => [
+  settings: ({ album = false } = {}) => [
     { id: 'language', tier: 'setup' },
     { id: 'keywords', tier: 'setup' },
     { id: 'owner', tier: 'setup' },
     { id: 'locked', tier: 'setup' },
+    ...(album ? [{ id: 'op3', tier: 'setup' }] : []),
     { id: 'editors', tier: 'setup' },
   ],
   track: () => [

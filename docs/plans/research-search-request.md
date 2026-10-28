@@ -9,7 +9,7 @@ Its index is `AGENTS.md`.
 This document binds nothing in Studio. Studio records each decision in its own
 ADR.
 
-The research examined Studio at commit `a834386`.
+The research examined Studio at commit `78a623d`.
 
 Stophammer release 0.14.0 is deployed on 2026-10-24. Section 4 gives the
 changes for Studio.

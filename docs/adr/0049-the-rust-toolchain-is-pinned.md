@@ -6,7 +6,7 @@
 
 ## Context
 
-CI installed the newest stable Rust at each run, and the development computer used its own stable toolchain. On 2026-10-25, CI failed on commit `c05cbed`. The new stable Rust 1.99.1 added two Clippy lints. The code passed Clippy on Rust 1.93.1 on the development computer. During the correction, the development computer also changed to Rust 1.99.1.
+CI installed the newest stable Rust at each run, and the development computer used its own stable toolchain. On 2026-10-25, CI failed on commit `6ceaddb`. The new stable Rust 1.99.1 added two Clippy lints. The code passed Clippy on Rust 1.93.1 on the development computer. During the correction, the development computer also changed to Rust 1.99.1.
 
 On 2026-10-25 the operator selected a pinned toolchain.
 

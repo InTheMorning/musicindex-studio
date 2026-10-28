@@ -13,7 +13,7 @@ ADR.
 ADRs 0027 to 0029 state the shared rules. [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md)
 states sections 1 and 2 of this request for Studio. Section 3 stays open.
 
-The research examined Studio at commit `563cce6`. The mockups are research
+The research examined Studio at commit `24980a3`. The mockups are research
 commits `6bacd1c`, `4fedc27` and `8d02b00`.
 
 ## The Data

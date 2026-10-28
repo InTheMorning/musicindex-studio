@@ -31,7 +31,7 @@ No server artifact is a production release in this plan until those gates pass.
 ## Milestone 1 status
 
 The release workflow and five native build jobs are on `main`.
-A manual run on `8e820e6` built, packaged, and tested the five archives on their native runners.
+A manual run on `81542b8` built, packaged, and tested the five archives on their native runners.
 No workflow run has made a draft Release. The first release candidate tag is `v0.1.0-rc.1`.
 The draft job marks a tag with a hyphen as a pre-release.
 

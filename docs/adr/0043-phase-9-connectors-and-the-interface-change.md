@@ -6,7 +6,7 @@
 
 ## Context
 
-Phase 9 adds the remote connectors of [ADR 0006](0006-connectors-and-the-v1-set.md). The [research request on the Phase 9 connectors](../plans/research-phase-9-connectors-request.md) examined Studio at commit `c05cbed`. It found these limits in the connector interface:
+Phase 9 adds the remote connectors of [ADR 0006](0006-connectors-and-the-v1-set.md). The [research request on the Phase 9 connectors](../plans/research-phase-9-connectors-request.md) examined Studio at commit `6ceaddb`. It found these limits in the connector interface:
 
 - The upload step reads the full library file into memory, because `write` takes `&[u8]`.
 - The confirmation step of [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 15 calls `read`, so it downloads each new file again.

@@ -14,7 +14,7 @@ A coding model implements each packet. The planning model examines the diff and 
 
 ## Manual Criteria
 
-- 2026-10-27: CI passed on `ac28566`. The tag `v0.1.0-rc.2` built `ghcr.io/inthemorning/studio-server:0.1.0-rc.2` with `amd64` and `arm64`. GHCR gave the manifest with no login.
+- 2026-10-27: CI passed on `af83e56`. The tag `v0.1.0-rc.2` built `ghcr.io/inthemorning/studio-server:0.1.0-rc.2` with `amd64` and `arm64`. GHCR gave the manifest with no login.
 - 2026-10-27: `tools/deploy-server.sh --release 0.1.0-rc.2` passed its two checks. `https://studio.musicindex.org/` gave 200.
 
 ## Decisions

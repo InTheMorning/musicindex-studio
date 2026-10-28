@@ -9,7 +9,7 @@ Its index is `AGENTS.md`.
 This document binds nothing in Studio. Studio records each decision in its own
 ADR.
 
-The research examined Studio at commit `c05cbed`.
+The research examined Studio at commit `6ceaddb`.
 
 The report is `reports/2026-10-25-studio-phase-9-connectors.md` in the research
 repository. The notes are in `research_notes/connectors/`.

@@ -14,7 +14,7 @@ No public Release or signing credential was created during this review.
 
 ## Release gates
 
-1. **Native results are present.** A manual run of the release workflow on `8e820e6` passed on the five native runners.
+1. **Native results are present.** A manual run of the release workflow on `81542b8` passed on the five native runners.
    After a change to the workflow, the release tool, or the desktop shell, run the manual workflow again.
    Do this before you push the next version tag.
 2. **The archives have no installer or signature.** Users must extract an archive and start the binary.

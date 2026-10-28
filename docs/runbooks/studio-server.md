@@ -5,7 +5,7 @@
 - Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) and [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md)
 - Task: [task 037](../tasks/studio-v1-task-037-runbook-and-human-tests.md)
 
-This runbook tells an operator how to run `studio-server` behind a reverse proxy. The decisions above own each rule. This runbook only restates them. The planning model wrote it from the code of commit `548ae1f`.
+This runbook tells an operator how to run `studio-server` behind a reverse proxy. The decisions above own each rule. This runbook only restates them. The planning model wrote it from the code of commit `485dd2e`.
 
 ## 1. Purpose
 

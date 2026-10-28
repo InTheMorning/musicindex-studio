@@ -21,7 +21,7 @@
 
 musicindex ADR 0027 R-SHELL-1 gives the shell of musicindex.org, Studio and v4vmm: a stack with two exceptions. Studio is the case of exception 1, an editor of one item with many parts. musicindex ADR 0028 R-PAGE-1 gives the sequence of the sections of an item page. Studio follows these records. It does not change them.
 
-On 2026-10-24 the research examined Studio at commit `563cce6` (`docs/plans/research-ui-shell-request.md`). It found these facts:
+On 2026-10-24 the research examined Studio at commit `24980a3` (`docs/plans/research-ui-shell-request.md`). It found these facts:
 
 - The sidebar holds a tree of the feeds and their pages ([ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5 and 6).
 - With no feed open, the editor area says "Select a feed". It is a placeholder.

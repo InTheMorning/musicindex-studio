@@ -143,8 +143,7 @@ function outlineItems(feed, view, model, narrow) {
         current: isCurrentPage(view, 'track', key),
       });
     });
-    items.push({ id: 'add-track', label: 'Add a track', action: 'add-track' });
-    items.push({ id: 'import', label: 'Import files', action: 'import' });
+    items.push({ id: 'add-tracks', label: 'Add tracks', action: 'add-tracks' });
     // The live shows come after the tracks (ADR 0054 item 3). An entry of
     // a live show uses `track` for the key of the live item.
     items.push({ id: 'live-shows', label: 'Live shows', heading: true });

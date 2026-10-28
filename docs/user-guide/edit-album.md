@@ -87,7 +87,7 @@ See [Artist and label feeds](artist-and-label-feeds.md).
 
 ### Tracks
 
-This section lists the tracks and has the rows **Add a track** and **Import files**.
+This section lists the tracks and has the row **Add tracks**.
 See [Add, import and change tracks](tracks.md).
 
 ## Credits and links

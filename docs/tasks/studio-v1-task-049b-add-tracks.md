@@ -2,7 +2,7 @@
 
 Parent: [task 049](studio-v1-task-049-add-pages.md). Decision: [ADR 0073](../adr/0073-the-add-pages-ask-one-question-at-a-time.md) items 11 to 14.
 
-Status: Open. It goes after packet 049a.
+Status: Complete - 2026-10-28.
 
 ## Goal
 

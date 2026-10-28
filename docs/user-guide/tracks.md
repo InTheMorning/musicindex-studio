@@ -4,12 +4,12 @@ Open an album. The outline lists the tracks.
 Studio sets the track numbers from the order of the tracks.
 It does not change the publication dates.
 
-## Import music and image files
+## Add tracks
 
 Use this method to add audio files from your computer.
 Studio puts the files in the release folder. It sends them to the host when you write.
 
-1. Select **Import files** in the outline or on the album page.
+1. Select **Add tracks** in the outline or on the album page.
 2. Select **＋ Choose music and image files**. You can select many files.
 3. Studio reads each file in turn. Each row shows the file name and a state: "Waiting to send…", "Sending…", "Track ready" or "Image ready".
 4. Check the facts of each track: **Title**, **Track number** and **Duration**.
@@ -18,7 +18,7 @@ Studio puts the files in the release folder. It sends them to the host when you 
 
 Studio sends each file in parts of 8 MiB. The row shows the percent that Studio sent.
 If a part fails, Studio tries it again 3 times. The row then shows "A part failed. Trying again…".
-If the page closes during a send, open **Import files** again and select the same file.
+If the page closes during a send, open **Add tracks** again and select the same file.
 Studio continues from the first part that it does not have.
 
 Studio adds the tracks in the order of their track numbers.
@@ -40,16 +40,19 @@ Studio can show these errors:
 - "A file with this name exists on the host already."
 - "This host has no public address. Give it one in Hosts."
 
-## Add a track from an address
+## The audio is already online
 
 Use this method when the audio file is already on a web server.
 Studio does not keep the file.
 
-1. Select **Add a track** in the outline or on the album page.
-2. Type the web address of the audio file in **Audio file address**. Studio asks the host for the size and the type.
-3. Check **Audio file size in bytes** and **Audio file type**. Type them if Studio could not find them.
-4. Type a **Title** if you want.
-5. Select **＋ Add the track**.
+1. Select **Add tracks** in the outline or on the album page.
+2. Select **The audio is already online**. The sheet **Add a track from an address** opens.
+3. Type a **Title** if you want.
+4. Type the web address of the audio file in **Audio file address**. Studio asks the host for the size and the type.
+5. Examine the row **Properties**. Its summary shows the size and the type. If Studio could not find them, the row opens. Type **Audio file size in bytes** and **Audio file type**.
+6. Select **＋ Add the track**.
+
+To go back to the files on your computer, select **Choose files from this computer**.
 
 ## Edit a track
 

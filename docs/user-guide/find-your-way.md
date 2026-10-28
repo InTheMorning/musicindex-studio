@@ -46,7 +46,7 @@ For an album, the outline has these entries:
 
 - **Album**
 - One entry for each track
-- **Add a track** and **Import files**
+- **Add tracks**
 - The live shows, and **Add a live show**
 - **Value routes**
 - **Credits and links**

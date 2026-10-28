@@ -2280,7 +2280,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
         if (item.action) {
           const open = () => {
             go({ name: 'feed', id: feed.id, page: 'album' });
-            if (item.action === 'import') onImporting(true);
+            if (item.action === 'add-tracks') onImporting(true);
             else onAdding(item.action === 'add-live' ? 'live' : true);
           };
           return html`<li key=${item.id}><button class="node add" type="button" onClick=${open}>

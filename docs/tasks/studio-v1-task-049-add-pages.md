@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
 Decisions: [ADR 0073](../adr/0073-the-add-pages-ask-one-question-at-a-time.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md), [ADR 0037](../adr/0037-button-roles.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: Open.
+Status: Complete - 2026-10-28, except the human test. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-28-task-049-review-checklist.md) records it. The human test on a phone is open.
 
 ## Goal
 

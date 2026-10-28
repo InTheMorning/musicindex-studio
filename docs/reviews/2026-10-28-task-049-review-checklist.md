@@ -19,14 +19,14 @@ Task: [task 049](../tasks/studio-v1-task-049-add-pages.md). Decision: [ADR 0073]
 
 ## Packet 049b
 
-- [ ] The outline has one row `add-tracks`.
-- [ ] The import queue of `ImportSheet` did not change.
-- [ ] "Properties" opens only when the lookup did not find the two facts.
-- [ ] The playlist "Add a track" did not change.
+- [x] The outline has one row `add-tracks`.
+- [x] The import queue of `ImportSheet` did not change.
+- [x] "Properties" opens only when the lookup did not find the two facts.
+- [x] The playlist "Add a track" did not change.
 
 ## Visual Check
 
-- [ ] The visual criteria of task 049, with screenshots and `$edges()`.
+- [x] The visual criteria of task 049, with screenshots and `$edges()`.
 
 ## Result Of Packet 049a, 2026-10-28
 
@@ -39,3 +39,9 @@ Task: [task 049](../tasks/studio-v1-task-049-add-pages.md). Decision: [ADR 0073]
   - Each row shows its title above its text, and the text wraps. At 390 px the text was cut.
   - The first-run text and `first-run.md` name the row "Album".
 - Visual check at 1100 px in the two themes and at 390 px: the page is 900 px high at 1100 px, before 2942 px. Type changes the fields. A title "Ça va — Live!" gives `ca-va-live.xml`. A submit to a host with no public address opens "Feed file" with the error. `$edges()` gave empty lists, and `$small()` gave an empty list at 390 px.
+
+## Result Of Packet 049b, 2026-10-28
+
+- The packet passed. The coding model also moved the indexes of two outline tests, because the outline has one row less. That change is correct.
+- The visual check found one defect. After a found address, a second address that fails kept the size and the type of the first file. The planning model clears the two facts at the start of each lookup. "Properties" then opens with "— · —". The current code had the same defect, but the user could see the fields.
+- Visual check at 1100 px in the two themes and at 390 px, with a local file server for the lookup: "Add tracks" opens the file sheet. Its link opens the address sheet, and the link of that sheet opens the file sheet. A found address gives "3.8 MB · MP3" with "Properties" closed. An address on a closed port opens "Properties". `$edges()` gave empty lists, and `$small()` gave an empty list at 390 px.

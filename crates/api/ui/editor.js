@@ -314,13 +314,20 @@ function AlternateEnclosures({ list, onChange }) {
 // A new track needs the address, the size and the type of its audio file
 // (ADR 0023 items 6 and 7). Studio asks the host of the file for the size
 // and the type. Studio does not host files (ADR 0009).
-function AddTrackSheet({ open, onClose, onAdd }) {
+function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
   const ref = useSheet(open);
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [length, setLength] = useState('');
   const [type, setType] = useState('');
   const [facts, setFacts] = useState({ state: 'none', for: '' });
+  const [opened, setOpened] = useState(false);
+  // "Properties" opens by itself when the lookup finds fewer than two facts.
+  // It stays closed while the lookup is not done. The user can open it at
+  // each time (ADR 0073 item 14).
+  const mustOpen = (facts.state === 'partial' || facts.state === 'failed')
+    && propertiesOpen({ length, media_type: type }, []);
+  useEffect(() => { if (mustOpen) setOpened(true); }, [mustOpen]);
   // Clear the sheet each time that it opens.
   useEffect(() => {
     if (!open) return;
@@ -329,10 +336,15 @@ function AddTrackSheet({ open, onClose, onAdd }) {
     setLength('');
     setType('');
     setFacts({ state: 'none', for: '' });
+    setOpened(false);
   }, [open]);
   const readFacts = async () => {
     const address = url.trim();
     if (!address || facts.for === address) return;
+    // A new address clears the facts of the address before it, so that a
+    // failed lookup does not keep the size and the type of a different file.
+    setLength('');
+    setType('');
     setFacts({ state: 'reading', for: address });
     try {
       const found = await api('/media/facts', { method: 'POST', body: { url: address } });
@@ -374,7 +386,7 @@ function AddTrackSheet({ open, onClose, onAdd }) {
   };
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-track-title" onClose=${onClose}>
     <header>
-      <h2 id="add-track-title">Add a track</h2>
+      <h2 id="add-track-title">Add a track from an address</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <form class="body" id="add-track-form" onSubmit=${submit}>
@@ -385,11 +397,18 @@ function AddTrackSheet({ open, onClose, onAdd }) {
           error=${facts.state === 'invalid' && facts.for === url.trim() ? BAD_ADDRESS : null}
           value=${url} onInput=${(e) => setUrl(e.target.value)} onBlur=${readFacts} />
         ${FACTS[facts.state] && html`<p class="hint" role="status">${FACTS[facts.state]}</p>`}
-        <${Field} id="new-track-length" label="Audio file size in bytes" inputmode="numeric" required
-          value=${length} onInput=${(e) => setLength(e.target.value)} />
-        <${Field} id="new-track-type" label="Audio file type" hint="For example audio/mpeg." required
-          value=${type} onInput=${(e) => setType(e.target.value)} />
+        <details class="disclosure" open=${opened} onToggle=${(e) => setOpened(e.currentTarget.open)}>
+          <summary class="link-row"><span class="label">Properties</span>
+            <span class="summary">${propertiesSummary({ length, media_type: type })}</span></summary>
+          <div class="form">
+            <${Field} id="new-track-length" label="Audio file size in bytes" inputmode="numeric" required
+              value=${length} onInput=${(e) => setLength(e.target.value)} />
+            <${Field} id="new-track-type" label="Audio file type" hint="For example audio/mpeg." required
+              value=${type} onInput=${(e) => setType(e.target.value)} />
+          </div>
+        </details>
       </div>
+      <button class="button link" type="button" onClick=${onFiles}>Choose files from this computer</button>
     </form>
     <footer>
       <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
@@ -814,7 +833,7 @@ let nextImportId = 1;
 // already, for the default use of the first image. The browser file field
 // is hidden. Its label is a button of the app, and the field keeps the
 // focus, so the button works from the keyboard.
-function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
+function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress }) {
   const ref = useSheet(open);
   const [rows, setRows] = useState([]);
   // A copy of `rows`, for the parts of this component that read the current
@@ -988,7 +1007,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
 
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="import-title" onClose=${close}>
     <header>
-      <h2 id="import-title">Import files</h2>
+      <h2 id="import-title">Add tracks</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
@@ -1002,6 +1021,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd }) {
           onChange=${(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         <label for="import-input" class="button action">＋ Choose music and image files</label>
       </div>
+      ${rows.length === 0 && html`<button class="button link" type="button" onClick=${onAddress}>The audio is already online</button>`}
       ${rows.length === 0 && html`<p class="hint">Select the files to import.</p>`}
       ${rows.length > 0 && html`<div class="group">
         ${rows.map((row) => html`<${ImportRow} key=${row.id} row=${row} audioOptions=${audioOptions}
@@ -1826,11 +1846,8 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
           ${item.duration && html`<span class="dur">${item.duration}</span>`}
           <span class="go" aria-hidden="true">›</span>
         </button>`)}
-        <button class="link-row add" type="button" onClick=${() => onAdding(true)}>
-          <span class="num">＋</span><span class="title">Add a track</span>
-        </button>
         <button class="link-row add" type="button" onClick=${() => onImporting(true)}>
-          <span class="num">＋</span><span class="title">Import files</span>
+          <span class="num">＋</span><span class="title">Add tracks</span>
         </button>
       </div>
       <p class="note">Studio sets the track numbers (podcast:episode) from this sequence. It does not change the publication dates.</p>
@@ -3353,10 +3370,12 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     ${body}
     ${artwork && !staleArtwork && html`<${ArtworkSheet} feed=${feed} model=${model} update=${update} bad=${draft.bad} artwork=${artwork}
       trackIndex=${artworkTrack} onClose=${() => onArtwork(null)} />`}
-    ${!publisher && !playlist && html`<${AddTrackSheet} open=${adding === true} onClose=${() => onAdding(false)} onAdd=${onAdd} />`}
+    ${!publisher && !playlist && html`<${AddTrackSheet} open=${adding === true} onClose=${() => onAdding(false)} onAdd=${onAdd}
+      onFiles=${() => { onAdding(false); onImporting(true); }} />`}
     ${!publisher && !playlist && html`<${AddLiveSheet} open=${adding === 'live'} onClose=${() => onAdding(false)}
       onAdd=${onAddLive} busy=${addLive.busy} error=${addLive.error} />`}
     ${!publisher && !playlist && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(coverOf(model))}
-      onClose=${() => onImporting(false)} onAdd=${onImport} />`}
+      onClose=${() => onImporting(false)} onAdd=${onImport}
+      onAddress=${() => { onImporting(false); onAdding(true); }} />`}
   </div><//>`;
 }

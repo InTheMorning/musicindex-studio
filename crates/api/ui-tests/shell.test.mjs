@@ -111,17 +111,18 @@ test('an open album gives the outline in the sequence of ADR 0039 item 6', () =>
   });
   assert.deepEqual(panel.items[0], { id: 'releases', label: 'Releases' });
   assert.deepEqual(labels(panel.items), [
-    'Releases', 'First', 'Untitled track', 'Add a track', 'Import files',
+    'Releases', 'First', 'Untitled track', 'Add tracks',
     'Live shows', 'Add a live show', 'Value routes', 'Credits and links', 'Feed settings', 'Files',
   ]);
   assert.equal(panel.items[1].number, 1);
   assert.equal(panel.items[1].current, true);
   assert.equal(panel.items[2].current, false);
-  assert.equal(panel.items[3].action, 'add-track');
-  assert.equal(panel.items[4].action, 'import');
-  assert.equal(panel.items[5].heading, true);
-  assert.equal(panel.items[6].action, 'add-live');
-  assert.equal(panel.items[7].page, 'recipients');
+  assert.equal(panel.items[3].action, 'add-tracks', 'ADR 0073 item 11: the outline has one row "Add tracks". Give it the action add-tracks.');
+  assert.ok(!panel.items.some((item) => item.action === 'add-track' || item.action === 'import'),
+    'ADR 0073 item 11: the outline has no row with the action add-track or import. Remove it.');
+  assert.equal(panel.items[4].heading, true);
+  assert.equal(panel.items[5].action, 'add-live');
+  assert.equal(panel.items[6].page, 'recipients');
 });
 
 test('the live shows come after the tracks, one entry for each live item', () => {
@@ -134,18 +135,18 @@ test('the live shows come after the tracks, one entry for each live item', () =>
   };
   const view = { name: 'feed', id: 1, page: 'live', track: 'l-1' };
   const panel = leftPanel({ view, feeds: [album], model: withLive, vaultOpen: false });
-  assert.deepEqual(labels(panel.items).slice(4, 10), [
-    'Import files', 'Live shows', 'Launch', 'Untitled show', 'Add a live show', 'Value routes',
+  assert.deepEqual(labels(panel.items).slice(3, 9), [
+    'Add tracks', 'Live shows', 'Launch', 'Untitled show', 'Add a live show', 'Value routes',
   ]);
-  const entry = panel.items[6];
+  const entry = panel.items[5];
   assert.equal(entry.page, 'live');
   assert.equal(entry.track, 'l-1');
   assert.equal(entry.status, 'Planned');
   assert.equal(entry.current, true);
-  assert.equal(panel.items[7].track, 'cid-12');
-  assert.equal(panel.items[7].status, 'Live now');
-  assert.equal(panel.items[7].current, false);
-  assert.equal(panel.items[8].action, 'add-live');
+  assert.equal(panel.items[6].track, 'cid-12');
+  assert.equal(panel.items[6].status, 'Live now');
+  assert.equal(panel.items[6].current, false);
+  assert.equal(panel.items[7].action, 'add-live');
   // The track entries do not become current on a live page.
   assert.equal(panel.items.filter((i) => i.current).length, 1);
 });
@@ -317,7 +318,7 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
   assert.equal(narrow.kind, 'outline');
   assert.equal(narrow.items.some((item) => item.id === 'releases'), false);
   assert.deepEqual(labels(narrow.items), [
-    'First', 'Untitled track', 'Add a track', 'Import files', 'Live shows', 'Add a live show',
+    'First', 'Untitled track', 'Add tracks', 'Live shows', 'Add a live show',
     'Value routes', 'Credits and links', 'Feed settings', 'Files',
   ]);
   assert.equal(narrow.items.some((item) => item.current), false);

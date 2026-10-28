@@ -46,6 +46,36 @@ pub struct IndexRoutes {
     pub tracks: Vec<IndexTrack>,
 }
 
+/// The Nostr keys that musicindex records for a feed (ADR 0074 item 9).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FeedKeys {
+    /// The release artist that musicindex gives.
+    pub artist: Option<String>,
+    /// Each `nostr_npub` entity ID of the feed.
+    pub feed_keys: Vec<String>,
+    /// Each contributor with a key, as a name and a key.
+    pub contributors: Vec<(String, String)>,
+}
+
+#[derive(Deserialize)]
+struct KeysData {
+    release_artist: Option<String>,
+    source_ids: Option<Vec<EntityIdData>>,
+    source_contributors: Option<Vec<ContributorData>>,
+}
+
+#[derive(Deserialize)]
+struct EntityIdData {
+    scheme: String,
+    value: String,
+}
+
+#[derive(Deserialize)]
+struct ContributorData {
+    name: String,
+    npub: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct Envelope<T> {
     data: T,
@@ -246,6 +276,45 @@ impl MusicIndex {
                     .ok()
                     .map(|e| e.data.into()),
             ),
+            Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The Nostr keys of a feed, from `source_ids` and
+    /// `source_contributors` (ADR 0074 item 9). Gives `None` when
+    /// musicindex does not know the feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails.
+    pub fn feed_keys(&self, feed_guid: &str) -> Result<Option<FeedKeys>, WebError> {
+        let url = format!("{}/v1/feeds/{}", self.base, filter_guid(feed_guid));
+        match self.web.get_with_query(
+            &url,
+            &[("include", "source_ids,source_contributors")],
+            MAX_RESPONSE_BYTES,
+        ) {
+            Ok(file) => Ok(serde_json::from_slice::<Envelope<KeysData>>(&file.bytes)
+                .ok()
+                .map(|e| FeedKeys {
+                    artist: e.data.release_artist,
+                    feed_keys: e
+                        .data
+                        .source_ids
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|id| id.scheme == "nostr_npub")
+                        .map(|id| id.value)
+                        .collect(),
+                    contributors: e
+                        .data
+                        .source_contributors
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|c| c.npub.map(|npub| (c.name, npub)))
+                        .collect(),
+                })),
             Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
             Err(e) => Err(e),
         }

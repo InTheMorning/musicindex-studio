@@ -31,7 +31,7 @@ These choices are fixed. Do not change them.
 - One component `NostrSheet({ open, value, feedId, personName, onSet, onClose })` gives a `dialog class="sheet small"` with `useSheet`:
   - With a key, it shows the profile card of `GET /api/nostr/profiles?q=KEY`, and the buttons "Change" (normal) and "Remove" (destructive). "Change" shows the search.
   - The search is a `form role="search"` with the field "npub, NIP-05 address or name" and the button "Search", as `FindFeeds` has. With a session that has a key, the button "Use my key" sets the key of the session.
-  - Each result is a `button class="link-row"`. It shows the picture (`img`, 40 px, from `picture`), the name and the NIP-05 address with "✓" when `nip05_ok`. It also shows the short key and the source texts. A result with `domain_match` shows "Confirmed at DOMAIN".
+  - Each result is a `button class="link-row"`. It shows the picture (40 px), the name and the NIP-05 address with "✓" when `nip05_ok`. `picture` is the address from the profile. `useImage` of `app.js` loads it through the image route. It also shows the short key and the source texts. A result with `domain_match` shows "Confirmed at DOMAIN".
   - `failed` gives one hint, for example "musicindex did not answer."
   - In a person entry with no name or no picture, the sheet shows two check boxes before the results: "Use the profile name" and "Use the profile picture". Their start value is checked when the field is empty.
   - A selection calls `onSet` with the key, and the name and the picture when the boxes are checked. The sheet then closes.

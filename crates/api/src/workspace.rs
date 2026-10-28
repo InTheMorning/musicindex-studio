@@ -554,6 +554,8 @@ pub struct Workspace {
     /// The relays that give the relay list and the server list of a key
     /// (ADR 0048 item 3). A test sets the address of a test relay.
     pub(crate) lookup_relays: Vec<String>,
+    /// The scheme of a NIP-05 request: `https`. A test sets `http`.
+    pub(crate) nip05_scheme: &'static str,
     /// The feeds of the last discovery, by address, so that an import does
     /// not read them again.
     pub(crate) discovered: HashMap<String, Found>,
@@ -657,6 +659,7 @@ impl Workspace {
             address_check: None,
             index: MusicIndex::new(Web::new(), DEFAULT_API),
             lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
+            nip05_scheme: "https",
             discovered: HashMap::new(),
             images: ImageCache::default(),
             tickets: crate::media::Tickets::default(),
@@ -778,6 +781,15 @@ impl Workspace {
     #[must_use]
     pub(crate) fn with_lookup_relays(mut self, relays: Vec<String>) -> Self {
         self.lookup_relays = relays;
+        self
+    }
+
+    /// Send the NIP-05 requests over `http`, so that a test server on
+    /// loopback can answer them.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_plain_nip05(mut self) -> Self {
+        self.nip05_scheme = "http";
         self
     }
 

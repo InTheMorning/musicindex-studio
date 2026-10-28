@@ -177,6 +177,23 @@ fn newest_first(mut events: Vec<Event>) -> Vec<Event> {
     events
 }
 
+/// True when the event matches the filter. The `search` field (NIP-50)
+/// matches when the content has each word of it, with no difference of
+/// letter case.
+fn matches(filter: &Filter, event: &Event) -> bool {
+    let Some(search) = filter.search.as_deref() else {
+        return filter.match_event(event, MatchEventOptions::new());
+    };
+    let content = event.content.to_lowercase();
+    filter
+        .clone()
+        .remove_search()
+        .match_event(event, MatchEventOptions::new())
+        && search
+            .split_whitespace()
+            .all(|word| content.contains(&word.to_lowercase()))
+}
+
 type Socket = WebSocket<TcpStream>;
 
 /// The open subscriptions of one connection.
@@ -202,10 +219,7 @@ fn push_live(shared: &Shared, socket: &mut Socket, live: &mut Live) {
     };
     for event in fresh {
         for (id, filters) in &live.subscriptions {
-            if filters
-                .iter()
-                .any(|f| f.match_event(&event, MatchEventOptions::new()))
-            {
+            if filters.iter().any(|f| matches(f, &event)) {
                 reply(socket, &json!(["EVENT", id, event]));
             }
         }
@@ -322,7 +336,7 @@ fn on_req(shared: &Shared, socket: &mut Socket, live: &mut Live, message: &[Valu
         let mut matches = newest_first(
             stored
                 .iter()
-                .filter(|e| filter.match_event(e, MatchEventOptions::new()))
+                .filter(|e| matches(filter, e))
                 .cloned()
                 .collect(),
         );
@@ -510,6 +524,36 @@ mod tests {
             }
             ids.push(message[2]["id"].as_str().expect("an ID").to_owned());
         }
+    }
+
+    #[test]
+    fn the_search_field_needs_each_word_in_the_content() {
+        let relay = TestRelay::start();
+        let mut socket = connect(&relay);
+        let a = event(&keys(1), 100, 0, None, r#"{"name":"Matt Finlay"}"#);
+        let b = event(&keys(2), 200, 0, None, r#"{"name":"Fentlay Band"}"#);
+        relay.insert(a.clone());
+        relay.insert(b.clone());
+        let id = |e: &Event| e.id.to_hex();
+        assert_eq!(
+            query(&mut socket, &json!({"kinds": [0], "search": "matt FINLAY"})),
+            [id(&a)]
+        );
+        assert_eq!(
+            query(&mut socket, &json!({"kinds": [0], "search": "finlay"})),
+            [id(&a)]
+        );
+        assert_eq!(
+            query(
+                &mut socket,
+                &json!({"kinds": [0], "search": "band fentlay"})
+            ),
+            [id(&b)]
+        );
+        assert_eq!(
+            query(&mut socket, &json!({"kinds": [0], "search": "matt band"})),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

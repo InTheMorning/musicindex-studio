@@ -245,6 +245,11 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/settings/announcements",
             get(routes::get_announce_settings).put(routes::put_announce_settings),
         )
+        .route("/nostr/profiles", get(routes::nostr_profiles))
+        .route(
+            "/settings/nostr",
+            get(routes::get_nostr_settings).put(routes::put_nostr_settings),
+        )
         .route("/feeds/{id}/announcements", get(routes::list_announcements))
         .route("/hosts/{id}/scan", post(routes::scan_host))
         .route("/apps", get(routes::list_apps).post(routes::add_app))

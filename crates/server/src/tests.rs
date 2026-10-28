@@ -313,6 +313,24 @@ async fn the_audio_route_refuses_an_address_in_a_private_network() {
 }
 
 #[tokio::test]
+async fn the_profile_route_sends_no_request_to_a_nip05_domain_in_a_private_network() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "one@example.org", PASS_ONE).await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let domain = format!("127.0.0.1:{}", listener.local_addr().unwrap().port());
+    let path = format!(
+        "/api/v1/nostr/profiles?q=ann%40{}",
+        domain.replace(':', "%3A")
+    );
+    let reply = api(&app, &who, "GET", &path, None).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.text);
+    assert_eq!(reply.json["profiles"], json!([]));
+    // The guard stopped the request before it reached the domain.
+    assert!(listener.accept().is_err(), "the domain got a request");
+}
+
+#[tokio::test]
 async fn a_new_user_has_a_folder_with_a_library_and_an_open_vault() {
     let app = app(Signup::Invite);
     let who = new_user(&app, "One@Example.org ", PASS_ONE).await;

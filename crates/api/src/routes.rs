@@ -33,6 +33,7 @@ use studio_core::migrate;
 use studio_core::nostr_events::Signing;
 use studio_core::pipeline;
 use studio_core::playlist;
+use studio_core::profiles;
 use studio_core::publisher;
 use studio_core::remote;
 use zeroize::Zeroizing;
@@ -1619,6 +1620,124 @@ pub(crate) async fn search(
     axum::extract::Query(query): axum::extract::Query<Search>,
 ) -> ApiResult {
     blocking(shared, move |w| to_json(w.index.search(&query.q)?)).await
+}
+
+/// The model of a feed for the profile search: its draft, or else its
+/// newest snapshot. A feed with neither gives `None`.
+fn recorded_model(w: &Workspace, id: FeedId) -> Option<Feed> {
+    let xml = if let Some(draft) = w.collection.draft(id).ok()? {
+        draft.draft_xml
+    } else {
+        let newest = w.collection.snapshots(id).ok()?.into_iter().next()?;
+        w.collection.snapshot_xml(id, newest.id).ok()?
+    };
+    Feed::read(&studio_core::xml::Document::parse_bytes(&xml).ok()?).ok()
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ProfilesQuery {
+    q: String,
+    feed: Option<i64>,
+}
+
+/// Find Nostr profiles for a key, a web address, a NIP-05 address or a
+/// name (ADR 0074 items 7 to 15). The request to each relay and to each
+/// other server goes through the network policy, with no lock of the
+/// workspace.
+pub(crate) async fn nostr_profiles(
+    State(shared): State<Shared>,
+    Query(query): Query<ProfilesQuery>,
+) -> ApiResult {
+    let text = query.q.trim().to_owned();
+    if text.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_query",
+            "enter a key, a NIP-05 address or a name",
+        ));
+    }
+    let feed = query.feed;
+    let (web, policy, lookup_relays, relay, index, keys, link, scheme) =
+        blocking(shared, move |w| {
+            let mut keys: Vec<(String, String)> = Vec::new();
+            for row in w.collection.feeds()? {
+                if let Some(model) = recorded_model(w, row.id) {
+                    for pair in profiles::feed_keys(&model) {
+                        if !keys.contains(&pair) {
+                            keys.push(pair);
+                        }
+                    }
+                }
+            }
+            let link = feed
+                .and_then(|id| recorded_model(w, FeedId(id)))
+                .and_then(|model| model.link);
+            Ok((
+                w.web.clone(),
+                w.net_policy.clone(),
+                w.lookup_relays.clone(),
+                profiles::search_relay(&w.collection)?,
+                w.index.clone(),
+                keys,
+                link,
+                w.nip05_scheme,
+            ))
+        })
+        .await?;
+    blocking_unlocked(move || {
+        let cx = profiles::Context {
+            web: &web,
+            policy: &policy,
+            lookup_relays: &lookup_relays,
+            search_relay: Some(relay.as_str()).filter(|r| !r.is_empty()),
+            index: &index,
+            collection_keys: &keys,
+            nip05_scheme: scheme,
+            limit: profiles::SOURCE_LIMIT,
+        };
+        to_json(profiles::find(
+            &cx,
+            &profiles::parse_query(&text),
+            link.as_deref(),
+        ))
+    })
+    .await
+}
+
+/// The Nostr settings: the search relay (ADR 0074 item 16).
+pub(crate) async fn get_nostr_settings(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        Ok(Json(
+            json!({ "search_relay": profiles::search_relay(&w.collection)? }),
+        ))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NostrSettingsBody {
+    search_relay: String,
+}
+
+/// Set the search relay. An empty text stops the relay search.
+pub(crate) async fn put_nostr_settings(
+    State(shared): State<Shared>,
+    Json(body): Json<NostrSettingsBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        if !profiles::valid_search_relay(&body.search_relay) {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_relay",
+                "the search relay must be empty or start with wss:// or ws://",
+            ));
+        }
+        profiles::set_search_relay(&w.collection, &body.search_relay)?;
+        Ok(Json(
+            json!({ "search_relay": profiles::search_relay(&w.collection)? }),
+        ))
+    })
+    .await
 }
 
 #[derive(Deserialize)]

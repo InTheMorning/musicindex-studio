@@ -298,6 +298,55 @@ pub(crate) fn fetch(
     result.map(|()| events)
 }
 
+/// Read the events that match a filter from one relay, and stop at `EOSE`
+/// or at the time limit.
+///
+/// The function gives the events that arrived before the stop, also when
+/// the relay did not send `EOSE`. It drops each event with a bad ID or a
+/// bad signature. A relay that closes the connection or the subscription
+/// early gives the events that came before.
+///
+/// # Errors
+///
+/// Gives `InvalidConfig` for an address that is not `ws://` or `wss://`.
+/// Gives `NotPublic` when the policy refuses the relay. Gives `Unavailable`
+/// when the relay does not connect.
+pub(crate) fn fetch_until(
+    relay_url: &str,
+    filter: &Filter,
+    limit: Duration,
+    policy: &NetPolicy,
+) -> Result<Vec<Event>, ConnectorError> {
+    let mut connection = connect(relay_url, limit, policy)?;
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let mut events = Vec::new();
+    if connection.send(&json!(["REQ", id, filter])).is_ok() {
+        // Each failure of the read ends the wait. The events stay.
+        while let Ok(message) = connection.receive() {
+            if message.get(1).and_then(Value::as_str) != Some(id.as_str()) {
+                continue;
+            }
+            match message.first().and_then(Value::as_str) {
+                Some("EVENT") => {
+                    let event = message
+                        .get(2)
+                        .and_then(|v| serde_json::from_value::<Event>(v.clone()).ok());
+                    if let Some(event) = event
+                        && event.verify().is_ok()
+                    {
+                        events.push(event);
+                    }
+                }
+                Some("EOSE" | "CLOSED") => break,
+                _ => {}
+            }
+        }
+        let _ = connection.send(&json!(["CLOSE", id]));
+    }
+    connection.finish();
+    Ok(events)
+}
+
 /// Publish an event to one relay and wait for the `OK` answer.
 ///
 /// # Errors
@@ -706,6 +755,60 @@ mod tests {
         relay.insert(event(&b, 100, "site", "other"));
         let events = fetch(&relay.url(), &filter(&a), SHORT, &NetPolicy::Open).expect("events");
         assert_eq!(events, vec![mine]);
+    }
+
+    #[test]
+    fn fetch_until_gives_the_events_of_a_relay_that_sends_no_eose() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
+        let port = listener.local_addr().expect("an address").port();
+        let a = keys(1);
+        let one = event(&a, 100, "one", "first");
+        let one_json = serde_json::to_value(&one).expect("JSON");
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("a client");
+            let mut socket = tungstenite::accept(stream).expect("a handshake");
+            let Message::Text(text) = socket.read().expect("a REQ") else {
+                panic!("not text");
+            };
+            let request: Value = serde_json::from_str(text.as_str()).expect("JSON");
+            socket
+                .send(Message::text(
+                    json!(["EVENT", request[1], one_json]).to_string(),
+                ))
+                .expect("sent");
+            // No EOSE. The connection stays open until the client ends it.
+            while socket.read().is_ok() {}
+        });
+        let started = Instant::now();
+        let events = fetch_until(
+            &format!("ws://127.0.0.1:{port}"),
+            &filter(&a),
+            Duration::from_millis(600),
+            &NetPolicy::Open,
+        )
+        .expect("events");
+        assert_eq!(events, vec![one]);
+        assert!(started.elapsed() >= Duration::from_millis(500));
+        assert!(started.elapsed() < Duration::from_secs(4));
+        server.join().expect("the server thread");
+    }
+
+    #[test]
+    fn fetch_until_stops_at_eose_and_gives_an_error_only_for_no_connection() {
+        let relay = TestRelay::start();
+        let a = keys(1);
+        let mine = event(&a, 100, "site", "mine");
+        relay.insert(mine.clone());
+        let started = Instant::now();
+        let events =
+            fetch_until(&relay.url(), &filter(&a), SHORT, &NetPolicy::Open).expect("events");
+        assert_eq!(events, vec![mine]);
+        assert!(started.elapsed() < Duration::from_secs(3));
+        let error = fetch_until(&dead_address(), &filter(&a), SHORT, &NetPolicy::Open).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::Unavailable);
+        let error =
+            fetch_until(&relay.url(), &filter(&a), SHORT, &NetPolicy::public()).unwrap_err();
+        assert_eq!(error.kind(), ConnectorErrorKind::NotPublic);
     }
 
     #[test]

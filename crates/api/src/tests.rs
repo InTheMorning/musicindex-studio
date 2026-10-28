@@ -8913,3 +8913,417 @@ async fn an_upload_for_a_feed_with_no_host_gives_409_read_only() {
         "choose a host for this feed first, in Review"
     );
 }
+
+// ---- The Nostr profile route and the search relay setting (ADR 0074) ----
+
+fn nostr_keys(seed: u8) -> nostr::prelude::Keys {
+    nostr::prelude::Keys::new(nostr::prelude::SecretKey::from_slice(&[seed; 32]).unwrap())
+}
+
+fn nostr_npub(seed: u8) -> String {
+    nostr::nips::nip19::ToBech32::to_bech32(&nostr_keys(seed).public_key()).unwrap()
+}
+
+/// A kind 0 event of the key `seed`, with this JSON content.
+fn profile_event(seed: u8, time: u64, content: &Value) -> nostr::prelude::Event {
+    use nostr::prelude::{Kind, Timestamp, UnsignedEvent};
+    let keys = nostr_keys(seed);
+    let unsigned = UnsignedEvent::new(
+        keys.public_key(),
+        Timestamp::from_secs(time),
+        Kind::Metadata,
+        Vec::new(),
+        content.to_string(),
+    );
+    studio_core::nostr_events::sign_with_keys(unsigned, &keys).unwrap()
+}
+
+/// An app for the profile route. NIP-05 requests use `http`, so that a
+/// test server on loopback can answer them.
+fn nostr_app(index: &str, lookup: Vec<String>, public: bool) -> App {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
+    let mut workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex(index)
+        .with_lookup_relays(lookup)
+        .with_plain_nip05()
+        .with_address_check(std::sync::Arc::new(PassAll));
+    if public {
+        workspace = workspace.with_net_policy(studio_core::net::NetPolicy::public());
+    }
+    App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    }
+}
+
+/// A server that answers `/.well-known/nostr.json` with these names.
+fn nip05_server(names: &Value) -> studio_core::testing::TestServer {
+    studio_core::testing::TestServer::start(vec![(
+        "/.well-known/nostr.json",
+        200,
+        json!({ "names": names }).to_string().into_bytes(),
+    )])
+}
+
+fn nostr_hex(seed: u8) -> String {
+    nostr_keys(seed).public_key().to_hex()
+}
+
+async fn profiles(app: &App, query: &str) -> Value {
+    let path = format!("/api/v1/nostr/profiles?q={}", url_encode(query));
+    let (status, body) = call(app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body
+}
+
+async fn set_search_relay(app: &App, relay: &str) {
+    let (status, body) = call(
+        app,
+        "PUT",
+        "/api/v1/settings/nostr",
+        Some(json!({ "search_relay": relay })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn the_nostr_settings_give_the_start_value_and_refuse_a_bad_relay() {
+    let app = app();
+    let (_, body) = call(&app, "GET", "/api/v1/settings/nostr", None).await;
+    assert_eq!(body["search_relay"], "wss://search.nos.today");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        "/api/v1/settings/nostr",
+        Some(json!({ "search_relay": "https://search.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_relay");
+    set_search_relay(&app, "ws://127.0.0.1:9").await;
+    let (_, body) = call(&app, "GET", "/api/v1/settings/nostr", None).await;
+    assert_eq!(body["search_relay"], "ws://127.0.0.1:9");
+    set_search_relay(&app, "").await;
+    let (_, body) = call(&app, "GET", "/api/v1/settings/nostr", None).await;
+    assert_eq!(body["search_relay"], "");
+}
+
+#[tokio::test]
+async fn an_empty_query_gives_422() {
+    let app = app();
+    let (status, body) = call(&app, "GET", "/api/v1/nostr/profiles?q=%20", None).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "invalid_query");
+}
+
+#[tokio::test]
+async fn a_key_gives_its_profile_from_the_lookup_relay() {
+    let relay = studio_core::testing::relay::TestRelay::start();
+    relay.insert(profile_event(
+        1,
+        100,
+        &json!({ "name": "old", "display_name": "Old Name" }),
+    ));
+    relay.insert(profile_event(
+        1,
+        200,
+        &json!({ "name": "ann", "display_name": "Ann Lee", "picture": "https://img.example/a.png" }),
+    ));
+    let app = nostr_app("http://127.0.0.1:9", vec![relay.url()], false);
+    let npub = nostr_npub(1);
+    for text in [
+        npub.clone(),
+        nostr_hex(1),
+        format!("nostr:{npub}"),
+        format!("https://njump.me/{npub}"),
+    ] {
+        let body = profiles(&app, &text).await;
+        assert_eq!(body["failed"], json!([]), "{text}");
+        assert_eq!(body["profiles"].as_array().unwrap().len(), 1, "{text}");
+        let profile = &body["profiles"][0];
+        assert_eq!(profile["npub"], npub);
+        assert_eq!(profile["name"], "Ann Lee");
+        assert_eq!(profile["picture"], "https://img.example/a.png");
+        assert_eq!(profile["nip05_ok"], false);
+        assert_eq!(profile["sources"], json!([]));
+    }
+    // A key with no kind 0 still gives a profile with the key only.
+    let body = profiles(&app, &nostr_npub(9)).await;
+    assert_eq!(body["profiles"][0]["npub"], nostr_npub(9));
+    assert_eq!(body["profiles"][0]["name"], Value::Null);
+}
+
+#[tokio::test]
+async fn a_nip05_address_gives_its_profile_and_a_different_key_gives_nip05_ok_false() {
+    let server = nip05_server(&json!({ "ann": nostr_hex(1), "bob": nostr_hex(2) }));
+    let domain = format!("127.0.0.1:{}", server.port());
+    let relay = studio_core::testing::relay::TestRelay::start();
+    relay.insert(profile_event(
+        1,
+        100,
+        &json!({ "display_name": "Ann Lee", "nip05": format!("ann@{domain}") }),
+    ));
+    // The profile of key 3 claims the name "bob", but the domain gives key 2.
+    relay.insert(profile_event(
+        3,
+        100,
+        &json!({ "display_name": "Fake Bob", "nip05": format!("bob@{domain}") }),
+    ));
+    let app = nostr_app("http://127.0.0.1:9", vec![relay.url()], false);
+
+    let body = profiles(&app, &format!("ann@{domain}")).await;
+    assert_eq!(body["profiles"].as_array().unwrap().len(), 1);
+    assert_eq!(body["profiles"][0]["npub"], nostr_npub(1));
+    assert_eq!(body["profiles"][0]["name"], "Ann Lee");
+    assert_eq!(body["profiles"][0]["nip05"], format!("ann@{domain}"));
+    assert_eq!(body["profiles"][0]["nip05_ok"], true);
+
+    // The domain gives key 2 for "bob", so the claim of key 3 fails.
+    let body = profiles(&app, &nostr_npub(3)).await;
+    assert_eq!(body["profiles"][0]["name"], "Fake Bob");
+    assert_eq!(body["profiles"][0]["nip05"], format!("bob@{domain}"));
+    assert_eq!(body["profiles"][0]["nip05_ok"], false);
+
+    // A name that the domain does not give has no profile.
+    let body = profiles(&app, &format!("zed@{domain}")).await;
+    assert_eq!(body["profiles"], json!([]));
+}
+
+#[tokio::test]
+async fn a_nip05_answer_after_a_redirect_gives_no_key() {
+    // NIP-05: a client ignores each HTTP redirect of `nostr.json`.
+    let target = nip05_server(&json!({ "ann": nostr_hex(1) }));
+    let server = studio_core::testing::TestServer::start(vec![(
+        "/.well-known/nostr.json",
+        302,
+        target.url("/.well-known/nostr.json").into_bytes(),
+    )]);
+    let domain = format!("127.0.0.1:{}", server.port());
+    let relay = studio_core::testing::relay::TestRelay::start();
+    relay.insert(profile_event(
+        1,
+        100,
+        &json!({ "display_name": "Ann Lee", "nip05": format!("ann@{domain}") }),
+    ));
+    let app = nostr_app("http://127.0.0.1:9", vec![relay.url()], false);
+
+    let body = profiles(&app, &format!("ann@{domain}")).await;
+    assert_eq!(body["profiles"], json!([]));
+    let body = profiles(&app, &nostr_npub(1)).await;
+    assert_eq!(body["profiles"][0]["nip05_ok"], false);
+}
+
+/// The musicindex test server of a name search: one feed with a feed key
+/// and two contributors.
+fn nostr_index() -> studio_core::testing::TestServer {
+    let guid = "a1b2c3d4-0000-0000-0000-000000000001";
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set(
+        "/v1/search",
+        200,
+        json!({ "data": [{ "entity_type": "feed", "entity_id": guid, "title": "Songs", "release_artist": "Ann Lee" }] })
+            .to_string()
+            .into_bytes(),
+    );
+    server.set(
+        &format!("/v1/feeds/{guid}"),
+        200,
+        json!({ "data": {
+            "release_artist": "Ann Lee",
+            "source_ids": [
+                { "scheme": "nostr_npub", "value": nostr_npub(1) },
+                { "scheme": "other", "value": "x" },
+            ],
+            "source_contributors": [
+                { "name": "Ann Other", "npub": nostr_npub(2) },
+                { "name": "Cy Unrelated", "npub": nostr_npub(5) },
+                { "name": "Ann NoKey", "npub": null },
+            ],
+        } })
+        .to_string()
+        .into_bytes(),
+    );
+    server
+}
+
+#[tokio::test]
+async fn a_name_gives_profiles_from_three_sources_merged_by_key() {
+    let index = nostr_index();
+    let lookup = studio_core::testing::relay::TestRelay::start();
+    lookup.insert(profile_event(1, 100, &json!({ "display_name": "Ann Lee" })));
+    let search = studio_core::testing::relay::TestRelay::start();
+    search.insert(profile_event(
+        1,
+        300,
+        &json!({ "display_name": "Ann Lee (relay)" }),
+    ));
+    search.insert(profile_event(3, 100, &json!({ "name": "ann third" })));
+    search.insert(profile_event(
+        4,
+        100,
+        &json!({ "name": "unrelated person" }),
+    ));
+    let app = nostr_app(&index.url(""), vec![lookup.url()], false);
+    set_search_relay(&app, &search.url()).await;
+    // A person with the key 1 in a feed of the user.
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["persons"] = json!([
+        { "name": "Ann Lee", "npub": nostr_npub(1) },
+        { "name": "Bob", "npub": nostr_npub(7) },
+    ]);
+    call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+
+    let body = profiles(&app, "ann").await;
+    assert_eq!(body["failed"], json!([]));
+    let list = body["profiles"].as_array().unwrap();
+    let by_key = |seed: u8| {
+        list.iter()
+            .find(|p| p["npub"] == nostr_npub(seed))
+            .unwrap_or_else(|| panic!("no profile for key {seed}: {body}"))
+            .clone()
+    };
+    assert_eq!(list.len(), 3, "{body}");
+    // Key 1 has the three sources. The newest event wins for the name.
+    assert_eq!(
+        by_key(1)["sources"],
+        json!([
+            { "kind": "collection" },
+            { "kind": "music_index", "feeds": 1 },
+            { "kind": "relay" },
+        ])
+    );
+    assert_eq!(by_key(1)["name"], "Ann Lee (relay)");
+    assert_eq!(
+        by_key(2)["sources"],
+        json!([{ "kind": "music_index", "feeds": 1 }])
+    );
+    assert_eq!(by_key(2)["name"], "Ann Other");
+    assert_eq!(by_key(3)["sources"], json!([{ "kind": "relay" }]));
+    assert_eq!(by_key(3)["name"], "ann third");
+    // The profile with the most sources is first.
+    assert_eq!(list[0]["npub"], nostr_npub(1));
+    // A name that no source has gives nothing from the collection.
+    let body = profiles(&app, "Bob").await;
+    assert_eq!(body["profiles"][0]["npub"], nostr_npub(7));
+    assert_eq!(
+        body["profiles"][0]["sources"],
+        json!([{ "kind": "collection" }])
+    );
+}
+
+#[tokio::test]
+async fn a_source_that_does_not_answer_gives_the_other_results_and_is_named() {
+    let search = studio_core::testing::relay::TestRelay::start();
+    search.insert(profile_event(3, 100, &json!({ "name": "ann third" })));
+    // musicindex does not answer (port 9).
+    let app = nostr_app("http://127.0.0.1:9", vec![UNUSED_RELAY.to_owned()], false);
+    set_search_relay(&app, &search.url()).await;
+    let body = profiles(&app, "ann").await;
+    assert_eq!(body["failed"], json!(["musicindex"]));
+    assert_eq!(body["profiles"][0]["npub"], nostr_npub(3));
+
+    // The relay does not answer, and musicindex does.
+    let index = nostr_index();
+    let app = nostr_app(&index.url(""), vec![UNUSED_RELAY.to_owned()], false);
+    set_search_relay(&app, &dead_relay()).await;
+    let body = profiles(&app, "ann").await;
+    assert_eq!(body["failed"], json!(["relay"]));
+    assert_eq!(body["profiles"].as_array().unwrap().len(), 2, "{body}");
+}
+
+#[tokio::test]
+async fn domain_match_is_true_only_for_the_domain_of_the_feed_link() {
+    let server = nip05_server(&json!({ "ann": nostr_hex(1) }));
+    let domain = format!("127.0.0.1:{}", server.port());
+    let relay = studio_core::testing::relay::TestRelay::start();
+    relay.insert(profile_event(
+        1,
+        100,
+        &json!({ "display_name": "Ann Lee", "nip05": format!("ann@{domain}") }),
+    ));
+    let app = nostr_app("http://127.0.0.1:9", vec![relay.url()], false);
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut revision = draft["revision"].clone();
+    let model = draft["model"].clone();
+    let query = format!(
+        "/api/v1/nostr/profiles?q={}&feed={id}",
+        url_encode(&nostr_npub(1))
+    );
+    for (link, expected) in [
+        ("http://www.127.0.0.1/music", true),
+        ("https://example.org/", false),
+    ] {
+        let mut changed = model.clone();
+        changed["link"] = json!(link);
+        let (_, saved) = call(
+            &app,
+            "PUT",
+            &draft_path,
+            Some(json!({ "revision": revision, "model": changed })),
+        )
+        .await;
+        revision = saved["revision"].clone();
+        let (status, body) = call(&app, "GET", &query, None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["profiles"][0]["nip05_ok"], true, "{link}");
+        assert_eq!(body["profiles"][0]["domain_match"], expected, "{link}");
+    }
+    // With no feed, there is no domain match.
+    let body = profiles(&app, &nostr_npub(1)).await;
+    assert_eq!(body["profiles"][0]["domain_match"], false);
+}
+
+#[tokio::test]
+async fn an_empty_search_relay_setting_makes_no_relay_request() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let app = nostr_app("http://127.0.0.1:9", vec![UNUSED_RELAY.to_owned()], false);
+    // The listener was the search relay. The empty setting replaces it.
+    let relay = format!("ws://{}", listener.local_addr().unwrap());
+    set_search_relay(&app, &relay).await;
+    set_search_relay(&app, "").await;
+    let body = profiles(&app, "ann").await;
+    assert_eq!(body["failed"], json!(["musicindex"]));
+    assert_eq!(body["profiles"], json!([]));
+    assert!(listener.accept().is_err(), "a connection came in");
+}
+
+#[tokio::test]
+async fn with_the_policy_public_a_nip05_domain_and_a_relay_on_loopback_get_no_request() {
+    let nip05 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    nip05.set_nonblocking(true).unwrap();
+    let domain = format!("127.0.0.1:{}", nip05.local_addr().unwrap().port());
+    let search = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    search.set_nonblocking(true).unwrap();
+    let lookup = studio_core::testing::relay::TestRelay::start();
+    lookup.insert(profile_event(1, 100, &json!({ "display_name": "Ann Lee" })));
+    let app = nostr_app("http://127.0.0.1:9", vec![lookup.url()], true);
+    set_search_relay(&app, &format!("ws://{}", search.local_addr().unwrap())).await;
+
+    let body = profiles(&app, &format!("ann@{domain}")).await;
+    assert_eq!(body["profiles"], json!([]));
+    assert!(nip05.accept().is_err(), "the NIP-05 server got a request");
+
+    // The relay search and the lookup relay are refused too.
+    let body = profiles(&app, "ann").await;
+    assert_eq!(body["failed"], json!(["musicindex", "relay"]));
+    assert!(search.accept().is_err(), "the search relay got a request");
+    let body = profiles(&app, &nostr_npub(1)).await;
+    assert_eq!(body["profiles"][0]["name"], Value::Null);
+}

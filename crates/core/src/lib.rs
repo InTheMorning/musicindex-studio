@@ -30,6 +30,7 @@ pub mod nip46;
 pub mod nostr_events;
 pub mod pipeline;
 pub mod playlist;
+pub mod profiles;
 pub mod publisher;
 pub mod remote;
 #[cfg(any(test, feature = "testing"))]

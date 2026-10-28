@@ -2,7 +2,11 @@
 
 Parent: [task 051](studio-v1-task-051-nostr-keys.md). Decision: [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 7 to 17.
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass. These are the differences from the packet:
+
+- Each `picture` in the answer is the address from the kind 0 event, not an `/images` path. The UI loads it through `useImage`, and "Use the profile picture" puts this address into the person.
+- The last recorded state of a feed with no draft is its newest snapshot. A feed with no draft and no snapshot gives no keys to the source "In your feeds".
+- The NIP-05 check ignores each answer that came through a redirect, as NIP-05 requires.
 
 ## Goal
 

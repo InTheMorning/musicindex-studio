@@ -100,6 +100,8 @@ export function useDraft(feedId) {
   const [changed, setChanged] = useState(false);
   // Whether the core says that the feed is hidden from apps (ADR 0065 item 9).
   const [hidden, setHidden] = useState(false);
+  // Whether the feed has a host, or a host choice (ADR 0067 item 6).
+  const [hasHost, setHasHost] = useState(true);
   // Each address field that is not correct, by its model path (ADR 0023).
   const [bad, setBad] = useState([]);
   const [status, setStatus] = useState(feedId === null ? 'idle' : 'loading');
@@ -124,6 +126,7 @@ export function useDraft(feedId) {
     setModel(current.current);
     setChanged(draft.changed);
     setHidden(draft.hidden);
+    setHasHost(draft.has_host !== false);
     setBad(draft.bad_addresses);
     setStatus('saved');
     setError(null);
@@ -181,6 +184,7 @@ export function useDraft(feedId) {
     setModel(current.current);
     setChanged(saved.changed);
     setHidden(saved.hidden);
+    if (saved.has_host !== undefined) setHasHost(saved.has_host);
     setBad(saved.bad_addresses);
   };
 
@@ -219,5 +223,5 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush]);
 
-  return { model, changed, hidden, bad, status, error, edits, update, flush, load, show };
+  return { model, changed, hidden, hasHost, bad, status, error, edits, update, flush, load, show };
 }

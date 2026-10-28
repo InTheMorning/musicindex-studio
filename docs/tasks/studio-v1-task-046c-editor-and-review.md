@@ -3,7 +3,7 @@
 Parent: [task 046](studio-v1-task-046-read-only-editor.md). Decisions: [ADR 0067](../adr/0067-a-read-only-feed-opens-in-the-editor.md) items 1, 2, 5, 6, 7 and 9, [ADR 0037](../adr/0037-button-roles.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 Sequence: the third packet of task 046. It depends on 046b.
 
-Status: Ready.
+Status: Complete - 2026-10-27. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records it.
 
 ## Goal
 

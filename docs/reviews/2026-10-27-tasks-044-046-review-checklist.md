@@ -24,7 +24,7 @@ A coding model implements each packet. The planning model examines the diff and 
 | 045b | Complete | Pass. See "Packet 045b". |
 | 046a | Complete | Pass after one correction. See "Packet 046a". |
 | 046b | Complete | Pass after one correction. See "Packet 046b". |
-| 046c | Ready | Not started |
+| 046c | Complete | Pass after two corrections. See "Packet 046c". |
 
 ## The Review Of Each Packet
 
@@ -92,3 +92,13 @@ A coding model implements each packet. The planning model examines the diff and 
 - The import of a file into a read-only feed gives 409 `read_only` and "choose a host for this feed first, in Review". The planning model moved this check before the encode, so that Studio does no work for a refused file.
 - These routes still need a host and give 409 `read_only` for a feed with no connector: the snapshots, a snapshot to the draft, the host operations and the hosts of the files. Packet 046c shows their error text.
 - The four commit checks pass: Cargo 982 tests, Node 200 tests.
+
+### Packet 046c
+
+- The diff follows the packet. `moveNote` moved to `shell.js`, so that a Node test can examine it, as the packet allows.
+- The coding model added `hostHasAddress`, which read the connector config in the UI to find the hosts with a public address. The core decides this with `public_url`, and refuses a host with no address with a clear error. The planning model removed the UI copy. The menu lists each connected host, and Review shows the error of the core.
+- The visual check found that the two host choices came after the full diff. The user had to scroll past the diff to continue. The planning model put the choices in the position of the move row, at the top of Review, with one line that gives the reason.
+- The visual check used `.studio-dev/visual-044`, with two read-only feeds from a local web server, in the dark theme, the light theme and at 390 px. The editor shows "Album · read-only". Review shows the choices, then the move row, the warning and "Write to the host", then the choices again after "Undo". `$edges()` gives an empty list in each state.
+- A write moved the second feed to the local host. The new host has the changed feed, and the old address keeps the old feed. The old address got only GET requests. Review closed, and the header shows the new address with no "read-only".
+- Open: the first write of the check ran with no web server for the local host. The write put the feed on the new host and recorded it. Then the confirmation of ADR 0043 failed, and Review showed the error over the old state of the page. This order is the same for each write, and this task did not change it.
+- The four commit checks pass: Cargo 982 tests, Node 205 tests.

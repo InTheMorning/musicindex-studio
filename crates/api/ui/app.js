@@ -14,7 +14,7 @@ import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
 import {
-  mediumKind, kindGlow, isEditable, isPublisher, trackKey, isTrack,
+  mediumKind, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
@@ -1706,6 +1706,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
+        onOpenHosts=${() => go({ name: 'hosts' })}
         onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} />
     <//>
     <div class="feed-head">
@@ -1713,7 +1714,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always
           onOpen=${() => setArtwork({ kind: 'feed' })} label=${`Artwork of ${feed.title || 'Untitled feed'}`} />
         <div class="text">
-          <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}</span>
+          <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}${isReadOnly(feed) ? ' · read-only' : ''}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>
           <p class="sub mono">${feed.public_url || 'This feed has no public address yet.'}</p>
         </div>
@@ -2350,7 +2351,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
   return html`<div class="panel-page">
     <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span>
       ${isEditable(feed) && html`<${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft}
-        onWritten=${onChanged} connectors=${connectors} onOpsChanged=${opsChanged} onOpsCleared=${() => {}} />`}
+        onWritten=${onChanged} connectors=${connectors} onOpenHosts=${() => go({ name: 'hosts' })} onOpsChanged=${opsChanged} onOpsCleared=${() => {}} />`}
     <//>
     <section class="section outline-page">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${null}

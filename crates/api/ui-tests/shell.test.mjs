@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mediumKind, isEditable, isPublisher, isPlaylist, trackKey, isTrack,
+  mediumKind, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView,
@@ -30,11 +30,39 @@ test('the medium kind gives the dot and the label', () => {
 test('an album or a publisher feed with a connector is editable', () => {
   assert.equal(isEditable(album), true);
   assert.equal(isEditable(publisher), true);
-  assert.equal(isEditable(readOnly), false);
   assert.equal(isEditable({ ...album, medium: 'musicL' }), true);
-  assert.equal(isEditable({ ...album, medium: 'musicL', connector_id: null }), false);
   assert.equal(isPublisher(publisher), true);
   assert.equal(isPublisher(album), false);
+});
+
+test('a read-only album, publisher feed and playlist are editable, and a read-only podcast feed is not', () => {
+  assert.equal(isEditable(readOnly), true);
+  assert.equal(isEditable({ ...publisher, connector_id: null }), true);
+  assert.equal(isEditable({ ...readOnly, medium: 'musicL' }), true);
+  assert.equal(isEditable({ ...readOnly, medium: 'podcast' }), false);
+});
+
+test('only a feed with no connector is read-only', () => {
+  assert.equal(isReadOnly(readOnly), true);
+  assert.equal(isReadOnly({ ...readOnly, connector_id: undefined }), true);
+  assert.equal(isReadOnly(album), false);
+});
+
+test('the outline of a read-only album has the item IDs of the album with a connector', () => {
+  const ids = (feed) => leftPanel({ view: { name: 'feed', id: feed.id }, feeds: [feed], model, vaultOpen: true }).items.map((item) => item.id);
+  assert.deepEqual(ids(readOnly), ids({ ...readOnly, connector_id: 'c1' }));
+});
+
+test('reviewHost gives host, choose and move', () => {
+  assert.deepEqual(reviewHost({ hasHost: true, isReadOnly: false, feedMove: null }), { kind: 'host' });
+  assert.deepEqual(reviewHost({ hasHost: false, isReadOnly: true, feedMove: null }), { kind: 'choose' });
+  assert.deepEqual(reviewHost({ hasHost: true, isReadOnly: true, feedMove: { connector_id: 4 } }), { kind: 'move', connectorId: 4 });
+});
+
+test('moveNote gives a text for each method', () => {
+  assert.equal(moveNote('none'), 'Studio writes nothing at the address before the move.');
+  assert.match(moveNote('redirect'), /redirect/);
+  assert.match(moveNote('pointer'), /pointer file/);
 });
 
 test('a track key uses the GUID, or the client ID with no GUID', () => {
@@ -127,14 +155,15 @@ test('an open album before its draft loads gives the Releases link and Files', (
   assert.deepEqual(labels(panel.items), ['Releases', 'Files']);
 });
 
-test('a publisher feed gives Feed settings and Files, and a read-only feed gives no page', () => {
+test('a publisher feed gives Feed settings and Files, and a feed that the editor does not open gives no page', () => {
   // musicindex ADR 0033 R-WORD-3: the page has the role word.
   const label = { ...publisher, publisher_role: 'label' };
   const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [label], model: null, vaultOpen: false });
   assert.deepEqual(labels(pub.items), ['Releases', 'Feed settings', 'Files']);
   const noRole = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: null, vaultOpen: false });
   assert.deepEqual(labels(noRole.items), ['Releases', 'Feed settings', 'Files']);
-  const read = leftPanel({ view: { name: 'feed', id: 3 }, feeds: [readOnly], model: null, vaultOpen: false });
+  const podcast = { ...readOnly, medium: 'podcast' };
+  const read = leftPanel({ view: { name: 'feed', id: 3 }, feeds: [podcast], model: null, vaultOpen: false });
   assert.deepEqual(labels(read.items), ['Releases']);
   assert.equal(pub.feed.label, `${pub.feed.title}, Label`);
   assert.equal(read.feed.label, `${read.feed.title}, ${read.feed.typeLabel}`);

@@ -41,10 +41,36 @@ export function isPlaylist(feed) {
 }
 
 // Is this feed an album, a publisher feed or a playlist that the editor can
-// open (ADR 0029 item 4, ADR 0041 item 3, ADR 0053 item 1)?
+// open? A feed with no connector opens too (ADR 0029 item 4, ADR 0041 item 3,
+// ADR 0053 item 1, ADR 0067 item 1).
 export function isEditable(feed) {
-  return Boolean(feed.connector_id)
-    && (mediumKind(feed.medium).label === 'Album' || isPublisher(feed) || isPlaylist(feed));
+  return mediumKind(feed.medium).label === 'Album' || isPublisher(feed) || isPlaylist(feed);
+}
+
+// Is this feed read-only? A feed with no connector has no host that Studio
+// can write to (ADR 0067 item 1).
+export function isReadOnly(feed) {
+  return !feed.connector_id;
+}
+
+// The second line of the feed move row: what the address from before gets
+// (ADR 0038 items 16 to 18).
+export function moveNote(method) {
+  if (method === 'none') return 'Studio writes nothing at the address before the move.';
+  return method === 'redirect'
+    ? 'The address from before gets a redirect to the new address.'
+    : 'The address from before gets a pointer file with the new address.';
+}
+
+// What Review shows for the host of a feed (ADR 0067 items 5 and 9). `host`:
+// the feed has a connector. `choose`: the feed is read-only and has no host
+// choice. `move`: the feed is read-only and has a host choice. `feedMove` is
+// the move of the diff, or null.
+export function reviewHost({ hasHost, isReadOnly: readOnly, feedMove }) {
+  if (!readOnly) return { kind: 'host' };
+  if (feedMove) return { kind: 'move', connectorId: feedMove.connector_id };
+  if (hasHost) return { kind: 'move', connectorId: null };
+  return { kind: 'choose' };
 }
 
 // The key of a track: its GUID, or its client ID when it has no GUID yet

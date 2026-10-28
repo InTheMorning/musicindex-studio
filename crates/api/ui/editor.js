@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
-import { mediumKind, trackKey, isTrack, isPublisher, isPlaylist } from './shell.js';
+import { mediumKind, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
@@ -1077,14 +1077,6 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
   </div>`;
 }
 
-// The second line of the feed move row: what the address from before gets
-// (ADR 0038 items 16 to 18).
-function moveNote(method) {
-  return method === 'redirect'
-    ? 'The address from before gets a redirect to the new address.'
-    : 'The address from before gets a pointer file with the new address.';
-}
-
 // The move of the feed XML to a different host (ADR 0038 item 16). It
 // is the first row of the operations. "Undo" puts the feed XML back on the
 // host of the feed.
@@ -1195,7 +1187,7 @@ export function useSheet(open) {
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
 // 2). It is the same content as the former Changes panel.
-function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose, connectors, onOpsChanged, onOpsCleared }) {
+function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
@@ -1221,10 +1213,20 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   });
   // "Undo" of a feed move sets the host of the feed again. The route
   // changes the self link in the draft, so the shell loads the draft again.
-  const undoMove = () => run(async () => {
-    setDiff(await api(`/feeds/${feedId}/feed-host`, { method: 'PUT', body: { connector_id: feedConnectorId } }));
+  // A read-only feed has no host to go back to, so "Undo" removes the choice.
+  const readOnly = isReadOnly({ connector_id: feedConnectorId });
+  const setHost = (connectorId) => run(async () => {
+    setDiff(await api(`/feeds/${feedId}/feed-host`, { method: 'PUT', body: { connector_id: connectorId } }));
     onOpsChanged();
   });
+  const undoMove = () => setHost(readOnly ? null : feedConnectorId);
+  // The hosts that can take the file of a read-only feed. The core refuses
+  // a host with no public address, and Review shows its error.
+  const targets = connectors || [];
+  const [target, setTarget] = useState(null);
+  const targetId = targets.some((c) => c.id === target) ? target : (targets[0] ? targets[0].id : null);
+  const host = reviewHost({ hasHost: draft.hasHost, isReadOnly: readOnly, feedMove: diff && diff.feed_move });
+  const choosing = !!diff && host.kind === 'choose';
   const toSign = diff ? eventsToSign(diff) : [];
   // The host of the feed XML after the write: the target of a move, or the
   // host of the feed now.
@@ -1340,6 +1342,24 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
+      ${choosing && html`<div class="group rows">
+        <p class="hint">Studio cannot write to the host of this feed. Connect that host, or move the feed to a host that you connected.</p>
+        <div class="actions">
+          <button class="button action" type="button" disabled=${busy} onClick=${() => { ref.current.close(); onOpenHosts(); }}>Connect the Host of This File</button>
+        </div>
+        <div class="field"><label for="move-host">Move to a host</label>
+          ${targets.length === 0
+            ? html`<p class="hint">No host is connected yet. Connect a host in Hosts first.</p>`
+            : html`<select id="move-host" value=${targetId} onChange=${(e) => setTarget(Number(e.target.value))}>
+                ${targets.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+              </select>`}
+        </div>
+        <div class="actions">
+          <button class="button action" type="button" disabled=${busy || targetId === null} onClick=${() => setHost(targetId)}>Move to This Host</button>
+        </div>
+      </div>`}
+      ${diff && host.kind === 'move' && html`<div class="notice" role="status">
+        The file at the address before the move stays and does not change. Apps that read that address continue to get the version from before the move.</div>`}
       ${hasWork && draft.model && draft.hidden && html`<div class="notice" role="status">
         <strong>This feed is hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
@@ -1361,7 +1381,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
-      ${diff && hasWork && !addressesBlocked && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner} onClick=${write}>
+      ${diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the host'}</button>`}
     </footer>
   </dialog>`;
@@ -1417,7 +1437,7 @@ function toolbarStatus(draft) {
 
 // The toolbar of the editor: the draft status, and the buttons that open
 // the review sheet and the versions sheet (ADR 0029 items 1 to 3).
-export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpsChanged, onOpsCleared }) {
+export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
   useEffect(() => {
@@ -1431,7 +1451,7 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
     <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'}
-      onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors}
+      onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors} onOpenHosts=${onOpenHosts}
       onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} />
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
   </div>`;

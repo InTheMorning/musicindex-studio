@@ -505,7 +505,7 @@ function LocalHostForm({ onAdded }) {
         // An empty name takes the last part of the folder path.
         body: { kind: 'local', name: name.trim() || root.replace(/\/+$/, '').split('/').pop() || root, root, base_url: baseUrl || null },
       });
-      onAdded(connector);
+      await onAdded(connector);
     });
   };
   const hostError = splitError(error, ['invalid_config', 'folder_not_found']);
@@ -563,7 +563,7 @@ function S3HostForm({ onAdded }) {
       if (e.code === 'vault_required') { setNeedVault(true); return; }
       throw e;
     }
-    onAdded(connector);
+    await onAdded(connector);
   });
   const submit = (event) => {
     event.preventDefault();
@@ -688,7 +688,7 @@ function SftpHostForm({ onAdded }) {
       if (['invalid_address', 'invalid_config', 'folder_not_found'].includes(e.code)) setStep(1);
       throw e;
     }
-    onAdded(connector);
+    await onAdded(connector);
   });
   const submit = (event) => {
     event.preventDefault();
@@ -928,7 +928,7 @@ function useNostrHostAdd(nk, makeBody, onAdded) {
       throw e;
     }
     nk.clear();
-    onAdded(connector);
+    await onAdded(connector);
   });
   const gate = (form) => {
     if (recoveryKey) {
@@ -2164,11 +2164,13 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     });
   };
   // A new folder takes each read-only feed whose file it holds (ADR 0020).
+  // The add form waits for this, so that its button stays busy until the
+  // new host card shows. A second click then cannot add the host again.
   const added = (connector) => run(async () => {
     const result = await api(`/connectors/${connector.id}/match`, { method: 'POST' });
     setLinked({ connector, feeds: result.linked, folder: result.folder_address });
+    await onChanged();
     setAdding(false);
-    onChanged();
   });
   const showForm = adding || connectors.length === 0;
   return html`<div>

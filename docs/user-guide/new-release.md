@@ -10,7 +10,7 @@ The host type "Folder on this computer" is not available on a server.
 
 Connect a host that publishes its files on the web.
 The host needs a public address. See [Connect a host](hosts.md).
-If you have no host, the panel shows "Studio puts the files of a release on a host. Connect a host first."
+If you have no host, the group **Make a new feed** shows "Studio puts the files of a release on a host. Connect a host first."
 Select **Connect a Host**.
 
 A Blossom host keeps media only. Use a different host for the feed file.
@@ -18,11 +18,15 @@ A Blossom host keeps media only. Use a different host for the feed file.
 ## Make the release
 
 1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
-2. In the panel **Make a new release**, select the host in **Host**. The field shows when you have more than one host.
-3. Type the path of the new feed file in **Feed file**, for example `my-album.xml`. The path is in the folder of the host.
+2. On the page **Add feeds**, select **Album** in the group **Make a new feed**. A sheet opens.
+3. If you have more than one host, select the host in **Host**.
 4. Type the name of the album in **Album title**.
 5. Type the name of the artist in **Artist**.
 6. Select **Make the release**.
+
+Studio gives the feed file from the title. For example, "Pixel Palace" gives `pixel-palace.xml`.
+The row **Feed file** shows this path. To change it, open the row and type a new path in the folder of the host.
+After you type a path, the title does not change it again.
 
 Studio opens the new release.
 A notice tells you that the host has no file for this release yet.
@@ -48,8 +52,10 @@ Studio now makes the feed file on the host. See [Review and write your changes](
 
 ## Other new feeds
 
-The page **Add feeds** also has these panels:
+The group **Make a new feed** also has these rows. They open the same sheet:
 
-- **Make an artist feed or a label feed**. See [Artist and label feeds](artist-and-label-feeds.md).
-- **Make a show feed**. See [Live shows](live-shows.md).
-- **Make a playlist**. See [Playlists](playlists.md).
+- **Artist or label**. See [Artist and label feeds](artist-and-label-feeds.md).
+- **Show**. See [Live shows](live-shows.md).
+- **Playlist**. See [Playlists](playlists.md).
+
+In the sheet, **Type** selects the feed type.

@@ -44,7 +44,7 @@ To edit it, connect the folder that holds the feed files. See [Connect a host](h
 1. Select **No, I am new**.
 2. Read the page "Welcome". Then select **Open Studio**.
 
-To make a new release, first connect a host. Then use "Make a new release" on the page **Add a feed**.
+To make a new release, first connect a host. Then select **Album** on the page **Add a feed**.
 See [Make a new release](new-release.md).
 
 ### I used MSP 2.0

@@ -9,6 +9,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource,
 } from './account.js';
+import { addChoices, MAKE_TYPES, makeFields, feedFileStart } from './addfeeds.js';
 import { isLiveItem } from './live.js';
 import { coverOf } from './cover.js';
 import { SignerConnect } from './signer.js';
@@ -1083,121 +1084,59 @@ function AddHostForm({ feeds, onAdded }) {
   </div>`;
 }
 
-// Make a new album feed in a connected folder, as a draft with no file on
-// the host yet (ADR 0032 items 6 to 9).
-function NewReleaseForm({ connectors, onAdded, show = false }) {
+// One form makes each new feed, as a draft with no file on the host yet
+// (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
+// item 2). "Feed file" starts from the title until the user types in it.
+function MakeFeedForm({ connectors, startType, onAdded }) {
+  const [type, setType] = useState(startType);
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
-  const [path, setPath] = useState('');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
-  const { busy, error, run } = useAction();
-  const submit = (event) => {
-    event.preventDefault();
-    run(async () => {
-      const feed = await api('/feeds/new', {
-        method: 'POST',
-        body: { connector_id: connectorId, path, title, author, medium: 'music' },
-      });
-      onAdded(feed);
-    });
-  };
-  const prefix = show ? 'show' : 'release';
-  const releaseError = splitError(error, ['no_public_address', 'file_exists']);
-  const ready = connectorId !== null && path.trim() && title.trim() && author.trim();
-  return html`<form class="form" onSubmit=${submit}>
-    ${connectors.length > 1 && html`<div class="field"><label for=${`${prefix}-host`}>Host</label>
-      <select id=${`${prefix}-host`} class="button" value=${connectorId}
-        onChange=${(e) => setConnectorId(Number(e.target.value))}>
-        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-      </select></div>`}
-    <${Field} id=${`${prefix}-path`} label="Feed file" required placeholder=${show ? 'my-shows.xml' : 'my-album.xml'}
-      hint="The path of the new feed file in the folder of the host."
-      error=${releaseError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
-    <${Field} id=${`${prefix}-title`} label=${show ? 'Show feed title' : 'Album title'} required
-      value=${title} onInput=${(e) => setTitle(e.target.value)} />
-    <${Field} id=${`${prefix}-author`} label="Artist" required
-      value=${author} onInput=${(e) => setAuthor(e.target.value)} />
-    <${ErrorNotice} error=${releaseError.other} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
-      ${busy ? (show ? 'Making the show feed…' : 'Making the release…') : show ? 'Make the show feed' : 'Make the release'}</button></div>
-  </form>`;
-}
-
-// Make a publisher feed in a connected folder, as a draft with no file on
-// the host yet (ADR 0041 item 2). The name goes to `title` and to `author`.
-function NewPublisherForm({ connectors, onAdded }) {
-  const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
-  const [path, setPath] = useState('');
-  const [name, setName] = useState('');
   const [role, setRole] = useState(null);
+  const [typedPath, setTypedPath] = useState(null);
+  const [pathOpen, setPathOpen] = useState(false);
   const { busy, error, run } = useAction();
+  const fields = makeFields(type);
+  const path = typedPath ?? feedFileStart(title);
+  const formError = splitError(error, ['no_public_address', 'file_exists']);
+  // Open "Feed file" when the API gives an error for it.
+  useEffect(() => { if (formError.field) setPathOpen(true); }, [formError.field]);
   const submit = (event) => {
     event.preventDefault();
+    const name = title;
     run(async () => {
-      const feed = await api('/feeds/new', {
-        method: 'POST',
-        body: { connector_id: connectorId, path, title: name, author: name, medium: 'publisher', role },
-      });
-      onAdded(feed);
+      const body = { connector_id: connectorId, path, title: name, author: fields.authorLabel === null ? name : author, medium: fields.medium };
+      if (fields.role) body.role = role;
+      onAdded(await api('/feeds/new', { method: 'POST', body }));
     });
   };
-  const formError = splitError(error, ['no_public_address', 'file_exists']);
-  const ready = connectorId !== null && path.trim() && name.trim() && role !== null;
+  const ready = connectorId !== null && path.trim() && title.trim()
+    && (fields.authorLabel === null || author.trim()) && (!fields.role || role !== null);
   return html`<form class="form" onSubmit=${submit}>
-    ${connectors.length > 1 && html`<div class="field"><label for="publisher-host">Host</label>
-      <select id="publisher-host" class="button" value=${connectorId}
+    <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${setType} />
+    ${connectors.length > 1 && html`<div class="field"><label for="make-host">Host</label>
+      <select id="make-host" class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
       </select></div>`}
-    <${Field} id="publisher-path" label="Feed file" required placeholder="my-label.xml"
-      hint="The path of the new feed file in the folder of the host."
-      error=${formError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
-    <${Field} id="publisher-name" label="Name" required
-      value=${name} onInput=${(e) => setName(e.target.value)} />
-    <${ChoiceSelect} id="publisher-role" label="Role" value=${role ?? ''} placeholder="Select a role"
-      options=${[['artist', 'Artist'], ['label', 'Label']]} onChange=${(value) => setRole(value || null)} />
-    <${ErrorNotice} error=${formError.other} />
-    <div class="actions"><button class="button action" type="submit" disabled=${busy || !ready}>
-      ${busy ? 'Making the feed…' : role === 'label' ? 'Make the Label Feed' : role === 'artist' ? 'Make the Artist Feed' : 'Make the Feed'}</button></div>
-  </form>`;
-}
-
-// Make a playlist in a connected folder, as a draft with no file on the host
-// yet (ADR 0053 item 2). The author goes to `author`, and `medium` is musicL.
-function NewPlaylistForm({ connectors, onAdded }) {
-  const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
-  const [path, setPath] = useState('');
-  const [title, setTitle] = useState('');
-  const [author, setAuthor] = useState('');
-  const { busy, error, run } = useAction();
-  const submit = (event) => {
-    event.preventDefault();
-    run(async () => {
-      const feed = await api('/feeds/new', {
-        method: 'POST',
-        body: { connector_id: connectorId, path, title, author, medium: 'musicL' },
-      });
-      onAdded(feed);
-    });
-  };
-  const formError = splitError(error, ['no_public_address', 'file_exists']);
-  const ready = connectorId !== null && path.trim() && title.trim() && author.trim();
-  return html`<form class="form" onSubmit=${submit}>
-    ${connectors.length > 1 && html`<div class="field"><label for="playlist-host">Host</label>
-      <select id="playlist-host" class="button" value=${connectorId}
-        onChange=${(e) => setConnectorId(Number(e.target.value))}>
-        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-      </select></div>`}
-    <${Field} id="playlist-path" label="Feed file" required placeholder="my-playlist.xml"
-      hint="The path of the new feed file in the folder of the host."
-      error=${formError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />
-    <${Field} id="playlist-title" label="Playlist name" required
+    <${Field} id="make-title" label=${fields.titleLabel} required
       value=${title} onInput=${(e) => setTitle(e.target.value)} />
-    <${Field} id="playlist-author" label="Author" required
-      value=${author} onInput=${(e) => setAuthor(e.target.value)} />
+    ${fields.authorLabel !== null && html`<${Field} id="make-author" label=${fields.authorLabel} required
+      value=${author} onInput=${(e) => setAuthor(e.target.value)} />`}
+    ${fields.role && html`<${ChoiceSelect} id="make-role" label="Role" value=${role ?? ''} placeholder="Select a role"
+      options=${[['artist', 'Artist'], ['label', 'Label']]} onChange=${(value) => setRole(value || null)} />`}
+    <div class="group"><details class="disclosure" open=${pathOpen} onToggle=${(e) => setPathOpen(e.currentTarget.open)}>
+      <summary class="link-row"><span class="label">Feed file</span>
+        <span class="summary">${path || 'From the title'}</span></summary>
+      <div class="form">
+        <${Field} id="make-path" label="Path" required
+          hint="The path of the new feed file in the folder of the host."
+          error=${formError.field} value=${path} onInput=${(e) => setTypedPath(e.target.value)} />
+      </div>
+    </details></div>
     <${ErrorNotice} error=${formError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
-      ${busy ? 'Making the playlist…' : 'Make the playlist'}</button></div>
+      ${busy ? fields.busyLabel : fields.button}</button></div>
   </form>`;
 }
 
@@ -1477,7 +1416,7 @@ function Wizard({ onFinish }) {
       <div class="actions"><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
   } else if (step === 'new') {
     body = html`<div class="form"><div><h1>Welcome</h1>
-      <p>To make a new release, connect the folder that your web server publishes in Hosts. Then use “Make a new release” in Add a feed.</p></div>
+      <p>To make a new release, connect the folder that your web server publishes in Hosts. Then select “Album” in Add a feed.</p></div>
       <div class="actions"><${BackButton} /><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
   } else {
     // A reload lost the wizard memory. Start again at the question.
@@ -2229,33 +2168,57 @@ function SettingsPage() {
   </div>`;
 }
 
+// The sheet of one row of the Add feeds page (ADR 0073 item 3). `open` is the
+// ID of the row, or null. The forms of "Add a feed you have" do not change.
+function AddFeedSheet({ open, title, connectors, found, setFound, onAdded, onClose }) {
+  const ref = useSheet(open !== null);
+  const makeType = ['album', 'publisher', 'show', 'playlist'].includes(open) ? open : null;
+  let body = null;
+  if (makeType) {
+    body = html`<${MakeFeedForm} key=${open} connectors=${connectors} startType=${makeType} onAdded=${onAdded} />`;
+  } else if (open === 'find') {
+    body = found
+      ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
+        <div class="actions"><button class="button link" type="button" onClick=${() => setFound(null)}>Search again</button></div>`
+      : html`<${FindFeeds} onFound=${setFound} />`;
+  } else if (open === 'folder') {
+    body = html`<${AddFeedForm} connectors=${connectors} onAdded=${onAdded} />`;
+  } else if (open === 'msp') {
+    body = html`<${MspImport} onAdded=${(result) => onAdded(result.added[0])} />`;
+  }
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-feed-title" onClose=${onClose}>
+    <header>
+      <h2 id="add-feed-title">${title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">${body}</div>
+  </dialog>`;
+}
+
+// The Add feeds page: two groups of rows. A row opens its form in a sheet
+// (ADR 0073 items 1 to 4).
 function AddFeeds({ connectors, onAdded, go }) {
+  const [open, setOpen] = useState(null);
   const [found, setFound] = useState(null);
+  const groups = addChoices({ hasHost: connectors.length > 0 });
+  const rows = groups.flatMap((group) => group.rows);
+  const close = () => { setOpen(null); setFound(null); };
+  // A make row opens the form with Type, so its sheet has the title of the
+  // group. The type can change in the form.
+  const makeRow = groups[0].rows.some((row) => row.id === open);
+  const title = makeRow ? 'Make a new feed' : (rows.find((row) => row.id === open) || {}).title || '';
   return html`<div><${Bar}><span class="bar-title">Add feeds</span><//><section class="section">
-    <div class="panel"><h2>Make a new release</h2>
-      ${connectors.length > 0
-        ? html`<${NewReleaseForm} connectors=${connectors} onAdded=${onAdded} />`
-        : html`<p class="hint">Studio puts the files of a release on a host. Connect a host first.</p>
-          <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a Host</button></div>`}
-    </div>
-    ${connectors.length > 0 && html`<div class="panel"><h2>Make an artist feed or a label feed</h2>
-      <${NewPublisherForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
-    ${connectors.length > 0 && html`<div class="panel"><h2>Make a show feed</h2>
-      <p class="hint">A show feed holds live shows. It is a music feed.</p>
-      <${NewReleaseForm} connectors=${connectors} onAdded=${onAdded} show />
-    </div>`}
-    ${connectors.length > 0 && html`<div class="panel"><h2>Make a playlist</h2>
-      <${NewPlaylistForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
-    <div class="panel"><h2>Find feeds by address or name</h2>
-      ${found
-        ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
-          <div class="actions"><button class="button link" type="button" onClick=${() => setFound(null)}>Search again</button></div>`
-        : html`<${FindFeeds} onFound=${setFound} />`}
-    </div>
-    ${connectors.length > 0 && html`<div class="panel"><h2>From a connected folder</h2>
-      <${AddFeedForm} connectors=${connectors} onAdded=${onAdded} /></div>`}
-    <div class="panel"><h2>From MSP 2.0 backup files</h2>
-      <${MspImport} onAdded=${(result) => onAdded(result.added[0])} /></div>
+    ${groups.map((group) => html`<section key=${group.id} class="page-section"><h2>${group.label}</h2>
+      ${group.connect && html`<p class="hint">Studio puts the files of a release on a host. Connect a host first.</p>
+        <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a Host</button></div>`}
+      ${group.rows.length > 0 && html`<div class="group">
+        ${group.rows.map((row) => html`<button key=${row.id} class="link-row" type="button" onClick=${() => setOpen(row.id)}>
+          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
+        </button>`)}
+      </div>`}
+    </section>`)}
+    <${AddFeedSheet} open=${open} title=${title} connectors=${connectors} found=${found} setFound=${setFound}
+      onAdded=${onAdded} onClose=${close} />
   </section></div>`;
 }
 

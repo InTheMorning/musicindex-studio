@@ -1021,6 +1021,10 @@ textarea:focus { background: var(--fill); }
 .link-row .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-row .summary { flex: 1; min-width: 0; color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-row .go { color: var(--muted); }
+/* A row with its title above its text. The text wraps, so that a narrow
+   window shows all of it (ADR 0073 item 2). */
+.link-row .text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.link-row .text .summary { white-space: normal; overflow: visible; }
 .link-row .num { flex: none; width: 2ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .link-row .dur { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .9rem; }
 .link-row.add { color: var(--accent); font-weight: 600; }

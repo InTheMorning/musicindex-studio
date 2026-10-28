@@ -2,13 +2,14 @@
 
 Select **Releases** in the left panel. Then select **＋ Add a feed**.
 When Releases has no feed, select **Add a Feed** on the empty page.
-The page "Add feeds" has one panel for each way to add a feed.
-This page covers the panels for feeds that exist.
+
+The page "Add feeds" has two groups of rows. Select a row to open its sheet.
+This page covers the group **Add a feed you have**.
 To make a new feed, see [Make a new release](new-release.md).
 
 ## Find feeds by address or name
 
-Use the panel **Find feeds by address or name**.
+Select the row **By address or name**. A sheet opens.
 Feeds that you add this way are read-only until you connect the host that holds them.
 
 1. Type one feed address on each line in **Feed addresses**. An artist feed or a label feed brings all of its releases.
@@ -27,9 +28,9 @@ To edit a feed that you found, connect its folder. See [Connect a host](hosts.md
 Some hosts are services where Studio can only read the feeds.
 The page tells you which.
 
-## From a connected folder
+## From a host folder
 
-If you connected a host, use the panel **From a connected folder**.
+If you connected a host, select the row **From a host folder**. A sheet opens.
 
 1. If you have more than one host, select it in **Host**.
 2. Under **Feeds in this folder**, select a feed. Studio lists the feed files that it finds, with the type.
@@ -41,9 +42,9 @@ To go back to the list, select **Select from the list**.
 
 If the file is not a feed that Studio can read, Studio shows "This file is not a feed that Studio can read."
 
-## From MSP 2.0 backup files
+## From MSP 2.0 backups
 
-Use the panel **From MSP 2.0 backup files** to move your hosted feeds from MSP 2.0.
+Select the row **From MSP 2.0 backups** to move your hosted feeds from MSP 2.0.
 
 1. Select **Choose Backup Files**.
 2. Select one or more .json files that MSP 2.0 saved.

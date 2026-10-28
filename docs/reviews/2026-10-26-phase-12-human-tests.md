@@ -13,6 +13,7 @@ Each step is done on 2026-10-27:
 - The server block of `studio.musicindex.org` has `client_max_body_size 9m;` (commit `3af81a2` of `musicindex`). `pushsite.sh` installed it, and `nginx -t` passed.
 - The image `ghcr.io/inthemorning/studio-server:0.1.0-rc.2` runs on the VPS, through `tools/deploy-server.sh` ([ADR 0066](../adr/0066-the-server-ships-as-a-container-image.md)). The revision label is `af83e56`, and the log has the start line of `0.1.0-rc.2`.
 - 2026-10-28: the operator deployed `0.1.0-rc.3` with `tools/deploy-server.sh`. The file `/ui/app.js` that `studio.musicindex.org` gives is the same as at `9e0eb5f`, the commit of the tag `v0.1.0-rc.3`. The human tests of tasks 046 and 047 use this version.
+- 2026-10-28: the operator deployed `0.1.0-rc.4` with `tools/deploy-server.sh`. The file `/ui/app.js` that `studio.musicindex.org` gives is the same as at `3767bd2`, the commit of the tag `v0.1.0-rc.4`. The human tests of tasks 048 to 053 use this version.
 - From outside, `/` and the manifest gave 200, and `/auth/v1/session` gave the server mode with sign-up by invite code. A `PUT` of 5 MB got 403 from Studio, not 413 from nginx.
 - The operator made one invite code.
 

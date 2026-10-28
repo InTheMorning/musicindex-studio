@@ -2040,7 +2040,7 @@ pub(crate) async fn set_publisher_role(
 }
 
 /// The draft as the UI edits it: the model, its revision, `changed`,
-/// `bad_addresses` and `hidden` (ADR 0065 item 9). The value of `changed` is
+/// `bad_addresses`, `bad_keys` and `hidden` (ADR 0065 item 9, ADR 0074). The value of `changed` is
 /// true when the draft is different from the live file. Each bad address
 /// stops a write (ADR 0023).
 ///
@@ -2054,12 +2054,14 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
     let changed = pipeline::draft_changed(&w.collection, id)?;
     let bad_addresses = model.bad_addresses();
+    let bad_keys = model.bad_keys();
     let hidden = model.hidden();
     Ok(Json(json!({
         "revision": revision,
         "model": model,
         "changed": changed,
         "bad_addresses": bad_addresses,
+        "bad_keys": bad_keys,
         "hidden": hidden,
         "has_host": has_host,
     })))

@@ -11,6 +11,7 @@
 
 mod elements;
 mod enclosures;
+mod keys;
 mod links;
 mod sync;
 mod value;
@@ -22,6 +23,7 @@ pub use elements::{
     Person, Recipient, RemoteItem, RssImage, Season, Source, Transcript, Txt,
 };
 pub use enclosures::{AlternateEnclosure, lossless_pair};
+pub use keys::BadKey;
 pub use links::{BadAddress, is_web_address};
 use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
 pub use sync::{Entry, KeyError};

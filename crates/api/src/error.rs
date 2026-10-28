@@ -162,6 +162,7 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::DiffNotApproved => (StatusCode::CONFLICT, "diff_not_approved"),
             PipelineErrorKind::StaleRevision => (StatusCode::CONFLICT, "stale_revision"),
             PipelineErrorKind::BadAddress => (StatusCode::UNPROCESSABLE_ENTITY, "bad_address"),
+            PipelineErrorKind::BadKey => (StatusCode::UNPROCESSABLE_ENTITY, "bad_key"),
             PipelineErrorKind::BadLiveItem => (StatusCode::UNPROCESSABLE_ENTITY, "bad_live_item"),
             PipelineErrorKind::InvalidModel => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_model"),
             PipelineErrorKind::Conflict => (StatusCode::CONFLICT, "conflict"),

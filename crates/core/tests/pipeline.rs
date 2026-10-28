@@ -57,10 +57,14 @@ struct Setup {
 }
 
 fn setup() -> Setup {
+    setup_with(FEED)
+}
+
+fn setup_with(feed_xml: &str) -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let folder = LocalFolder::new(dir.path(), Some("https://music.example".into()));
     folder
-        .write("album.xml", FEED.as_bytes(), &Expected::Absent)
+        .write("album.xml", feed_xml.as_bytes(), &Expected::Absent)
         .unwrap();
     let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
     let connector_id = collection
@@ -3465,6 +3469,130 @@ fn a_sent_null_removes_the_explicit_and_adds_none() {
     let saved = save_explicit(None, None, |_| {});
     assert_eq!(saved.explicit, None);
     assert_eq!(saved.items[0].explicit, None);
+}
+
+// ---- Nostr keys (task 051a, ADR 0074) ----
+
+/// The hexadecimal key and the `npub` of one test key.
+fn test_key() -> (String, String) {
+    let parts = studio_core::nostr_events::secret_key_parts(&"01".repeat(32)).unwrap();
+    let npub = studio_core::nostr_events::key_ids(&parts.public_key)
+        .unwrap()
+        .npub;
+    (parts.public_key, npub)
+}
+
+/// A feed with one person key, one feed key and one track person.
+fn key_feed(person_key: &str, feed_key: &str) -> String {
+    FEED.replace(
+        "    <podcast:medium>",
+        &format!(
+            "    <podcast:person role=\"artist\" npub=\"{person_key}\">Ann</podcast:person>
+    <podcast:txt purpose=\"npub\">{feed_key}</podcast:txt>
+    <podcast:medium>"
+        ),
+    )
+}
+
+fn draft_xml(s: &Setup) -> String {
+    String::from_utf8(s.collection.draft(s.feed).unwrap().unwrap().draft_xml).unwrap()
+}
+
+/// Start a draft of `feed_xml`, send the model changed by `change`, and
+/// give the setup.
+fn save_keys(feed_xml: &str, change: impl FnOnce(&mut Feed)) -> Setup {
+    let s = setup_with(feed_xml);
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let (mut sent, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    change(&mut sent);
+    pipeline::replace_model(&s.collection, s.feed, &revision, sent).unwrap();
+    s
+}
+
+#[test]
+fn a_sent_hexadecimal_key_of_a_new_person_becomes_the_npub() {
+    let (hex, npub) = test_key();
+    let s = save_keys(FEED, |f| {
+        f.persons.push(Entry::new(studio_core::feed::Person {
+            name: "Ann".into(),
+            npub: Some(hex),
+            ..Default::default()
+        }));
+    });
+    let (saved, _) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(saved.persons[0].npub.as_deref(), Some(npub.as_str()));
+}
+
+#[test]
+fn a_sent_nprofile_in_the_feed_key_becomes_the_npub() {
+    let (hex, npub) = test_key();
+    let key = nostr::prelude::PublicKey::from_hex(&hex).unwrap();
+    let nprofile = nostr::nips::nip19::ToBech32::to_bech32(&nostr::nips::nip19::Nip19Profile::new(
+        key,
+        Vec::new(),
+    ))
+    .unwrap();
+    let s = save_keys(&key_feed(&npub, "old"), |f| {
+        f.txts[0].value.value = nprofile;
+    });
+    let (saved, _) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(saved.txts[0].value.value, npub);
+}
+
+#[test]
+fn a_key_that_the_user_did_not_change_stays_as_it_is_also_when_it_is_bad() {
+    let (hex, npub) = test_key();
+    // The hexadecimal form is valid but is not the `npub` form.
+    let s = save_keys(&key_feed(&hex, "bad key"), |f| {
+        f.title = Some("Album 2".into());
+    });
+    let (saved, _) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(saved.persons[0].npub.as_deref(), Some(hex.as_str()));
+    assert_eq!(saved.txts[0].value.value, "bad key");
+    assert_eq!(saved.bad_keys().len(), 2);
+    assert_ne!(hex, npub);
+}
+
+#[test]
+fn an_edit_of_one_person_key_changes_only_that_attribute() {
+    let (hex, npub) = test_key();
+    let before = key_feed("old", &npub);
+    let s = save_keys(&before, |f| f.persons[0].npub = Some(hex));
+    assert_eq!(
+        draft_xml(&s),
+        before.replace("npub=\"old\"", &format!("npub=\"{npub}\""))
+    );
+}
+
+#[test]
+fn the_write_refuses_a_new_bad_key_but_not_a_bad_key_of_the_hosted_feed() {
+    let (_, npub) = test_key();
+    let hosted = key_feed("hosted bad", &npub);
+    let mut s = save_keys(&hosted, |f| f.title = Some("Album 2".into()));
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .expect("a hosted bad key does not stop the write");
+
+    let mut s = save_keys(&hosted, |f| f.persons[0].npub = Some("new bad".into()));
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &diff.id,
+    )
+    .expect_err("a new bad key stops the write");
+    assert_eq!(error.kind(), PipelineErrorKind::BadKey);
+    assert!(error.to_string().contains("persons/0/npub"));
 }
 
 // ---- A feed with no host (task 046a, ADR 0067) ----

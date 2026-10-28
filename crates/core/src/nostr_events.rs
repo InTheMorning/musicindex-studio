@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use nostr::nips::nip19::{FromBech32, ToBech32};
+use nostr::nips::nip19::{FromBech32, Nip19Profile, ToBech32};
 use nostr::prelude::{Event, Keys, Kind, PublicKey, SecretKey, Tag, Timestamp, UnsignedEvent};
 use secp256k1::Secp256k1;
 use zeroize::Zeroizing;
@@ -64,6 +64,36 @@ pub fn key_ids(text: &str) -> Result<KeyIds, ConnectorError> {
         public_key: key.to_hex(),
         npub,
     })
+}
+
+/// The `npub` text of a Nostr key in a feed (ADR 0074 item 4).
+///
+/// The function trims the text and removes a `nostr:` prefix. It accepts an
+/// `npub`, an `nprofile` and 64 hexadecimal characters. It gives `None` for
+/// other text, also for an `nsec` and for an empty text.
+#[must_use]
+pub fn npub_text(text: &str) -> Option<String> {
+    let text = text.trim();
+    let text = text.strip_prefix("nostr:").unwrap_or(text);
+    let key = if text.starts_with("npub1") {
+        PublicKey::from_bech32(text).ok()?
+    } else if text.starts_with("nprofile1") {
+        Nip19Profile::from_bech32(text).ok()?.public_key
+    } else if is_hex64(text) {
+        PublicKey::from_hex(text).ok()?
+    } else {
+        return None;
+    };
+    key.to_bech32().ok()
+}
+
+/// The `npub` of the key with the secret key `[seed; 32]`, for tests.
+#[cfg(test)]
+pub(crate) fn test_npub(seed: u8) -> String {
+    Keys::new(SecretKey::from_slice(&[seed; 32]).expect("a secret key"))
+        .public_key()
+        .to_bech32()
+        .expect("an npub")
 }
 
 /// A secret key as hexadecimal text, and its public key.
@@ -542,6 +572,28 @@ mod tests {
             parse_public_key(&keys().public_key().to_hex()).expect("hex"),
             keys().public_key()
         );
+    }
+
+    #[test]
+    fn npub_text_gives_the_npub_of_each_accepted_form() {
+        let key = keys().public_key();
+        let npub = key.to_bech32().expect("an npub");
+        let nprofile = Nip19Profile::new(key, Vec::new())
+            .to_bech32()
+            .expect("an nprofile");
+        for form in [
+            npub.clone(),
+            nprofile,
+            key.to_hex(),
+            format!("nostr:{npub}"),
+            format!("  {npub}  "),
+        ] {
+            assert_eq!(npub_text(&form).as_deref(), Some(npub.as_str()), "{form}");
+        }
+        let nsec = keys().secret_key().to_bech32().expect("an nsec");
+        for bad in ["npub1xyz", nsec.as_str(), "", "  ", "nostr:"] {
+            assert_eq!(npub_text(bad), None, "{bad:?}");
+        }
     }
 
     #[test]

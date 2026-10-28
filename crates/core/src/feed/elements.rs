@@ -129,6 +129,8 @@ element_type! {
         img => "img",
         /// `href`: the URL of information about the person.
         href => "href",
+        /// `npub`: the Nostr key of the person (ADR 0074 item 1).
+        npub => "npub",
     }
 }
 

@@ -2,7 +2,7 @@
 
 Parent: [task 051](studio-v1-task-051-nostr-keys.md). Decision: [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 1 to 6.
 
-Status: Open.
+Status: Complete - 2026-10-28. The four commit checks pass.
 
 ## Goal
 

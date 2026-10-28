@@ -20,12 +20,13 @@ use crate::connector::{
     PlannedWrite, Version,
 };
 use crate::digest::sha256_hex;
-use crate::feed::{Feed, FeedError};
+use crate::feed::{Entry, Feed, FeedError, Person};
 use crate::grant::{self, GrantChange};
 use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::{Library, file_stamp};
 use crate::live::{self, LiveStatus};
+use crate::nostr_events::npub_text;
 use crate::xml::{Document, ParseError};
 
 /// The kind of a [`PipelineError`].
@@ -51,6 +52,9 @@ pub enum PipelineErrorKind {
     /// An address field of the draft is not a correct web address
     /// (ADR 0023).
     BadAddress,
+    /// A key field of the draft is not a Nostr key, and the hosted feed
+    /// does not have the same text in a key field (ADR 0074 item 5).
+    BadKey,
     /// A live item has no start, no content link, or a status that is not
     /// `pending`, `live` or `ended` (ADR 0054 item 4).
     BadLiveItem,
@@ -837,6 +841,7 @@ pub fn replace_model(
     number_tracks(&current, &mut sent);
     keep_cover_form(&current, &mut sent);
     keep_explicit_form(&current, &mut sent);
+    keep_key_form(&current, &mut sent);
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
@@ -912,6 +917,60 @@ fn keep_form(draft: Option<&str>, sent: &mut Option<String>) {
         word[..1].make_ascii_uppercase();
     }
     *sent = Some(word);
+}
+
+/// Give each changed Nostr key the `npub` form (ADR 0074 items 4 and 5). A
+/// key field is the `npub` of a person of the channel, of an item or of a
+/// live item, or the text of a channel `podcast:txt` with `purpose` `npub`.
+/// A value that equals the value of the same entry in the draft does not
+/// change. A new entry has no draft value. For each other value,
+/// [`npub_text`] gives the new value. When it gives `None`, the value stays
+/// as the user typed it, and `Feed::bad_keys` lists it.
+fn keep_key_form(current: &Feed, sent: &mut Feed) {
+    fn form(before: Option<&str>, value: &mut String) {
+        if before == Some(value.as_str()) {
+            return;
+        }
+        if let Some(npub) = npub_text(value) {
+            *value = npub;
+        }
+    }
+    fn persons(before: Option<&[Entry<Person>]>, sent: &mut [Entry<Person>]) {
+        for entry in sent {
+            let old = entry
+                .key()
+                .and_then(|k| before.and_then(|list| list.get(k)))
+                .and_then(|p| p.npub.as_deref());
+            if let Some(value) = entry.value.npub.as_mut() {
+                form(old, value);
+            }
+        }
+    }
+    persons(Some(&current.persons), &mut sent.persons);
+    for entry in &mut sent.txts {
+        if entry.value.purpose.as_deref() != Some("npub") {
+            continue;
+        }
+        let old = entry
+            .key()
+            .and_then(|k| current.txts.get(k))
+            .map(|t| t.value.value.as_str());
+        form(old, &mut entry.value.value);
+    }
+    for entry in &mut sent.items {
+        let before = entry.key().and_then(|k| current.items.get(k));
+        persons(
+            before.map(|i| i.persons.as_slice()),
+            &mut entry.value.persons,
+        );
+    }
+    for entry in &mut sent.live_items {
+        let before = entry.key().and_then(|k| current.live_items.get(k));
+        persons(
+            before.map(|l| l.item.persons.as_slice()),
+            &mut entry.value.item.persons,
+        );
+    }
 }
 
 /// Give each track its position as its `podcast:episode` when the sent model
@@ -2144,8 +2203,8 @@ pub fn library_file_in_use(
 ///
 /// Gives [`PipelineErrorKind::DiffNotApproved`],
 /// [`PipelineErrorKind::WaitingForDownload`],
-/// [`PipelineErrorKind::BadAddress`] or [`PipelineErrorKind::Conflict`]
-/// before any file changes on a host.
+/// [`PipelineErrorKind::BadAddress`], [`PipelineErrorKind::BadKey`] or
+/// [`PipelineErrorKind::Conflict`] before any file changes on a host.
 ///
 /// Gives [`PipelineErrorKind::FileExists`] when a file exists already at
 /// the planned path of an upload or a copy. Gives
@@ -2414,6 +2473,26 @@ pub fn write_draft_signed(
                 fields.join(", ")
             ),
         ));
+    }
+    // ADR 0074 item 5: a new bad key stops the write. A bad key text that
+    // the hosted feed has does not stop it.
+    let bad_keys = feed.bad_keys();
+    if !bad_keys.is_empty() {
+        let hosted = hosted_document(&draft)
+            .and_then(|doc| Feed::read(&doc).ok())
+            .map(|f| f.key_texts())
+            .unwrap_or_default();
+        let new: Vec<String> = bad_keys
+            .iter()
+            .filter(|b| !hosted.contains(&b.value))
+            .map(|b| format!("{} ({:?})", b.field, b.value))
+            .collect();
+        if !new.is_empty() {
+            return Err(PipelineError::new(
+                PipelineErrorKind::BadKey,
+                format!("these key fields are not Nostr keys: {}", new.join(", ")),
+            ));
+        }
     }
     // ADR 0054 item 4: a live item with a problem stops the write before
     // any change on a host.

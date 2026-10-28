@@ -2206,6 +2206,38 @@ async fn each_host_route_of_a_read_only_feed_with_no_folder_gives_an_error() {
 }
 
 #[tokio::test]
+async fn the_draft_and_the_save_give_bad_keys() {
+    let app = app();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(draft["bad_keys"], json!([]));
+    let mut model = draft["model"].clone();
+    model["persons"] = json!([{ "name": "Ann", "npub": "npub1xyz" }]);
+    let (_, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(
+        saved["bad_keys"],
+        json!([{ "field": "persons/0/npub", "value": "npub1xyz" }])
+    );
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["error"]["code"], "bad_key");
+}
+
+#[tokio::test]
 async fn a_bad_address_is_listed_with_the_draft_and_stops_the_write() {
     let app = app();
     let id = set_up(&app).await;

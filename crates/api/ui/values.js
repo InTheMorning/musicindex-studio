@@ -489,18 +489,19 @@ export function recipientSummary(blocks) {
   return `${count} recipient${count === 1 ? '' : 's'}`;
 }
 
-// The Value routes page of the album: a section, not a disclosure group (ADR
-// 0029 item 9). `editor.js` puts this behind the Value routes link row of the
-// album page.
+// The Value routes page of an album or a publisher feed: a section, not a
+// disclosure group (ADR 0029 item 9). `editor.js` puts this behind the Value
+// routes link row. A publisher feed has no tracks, so it shows no track hint
+// (ADR 0075).
 export function AlbumPayments({ model, update }) {
   const onChange = (values) => update((m) => set(m, 'values', values));
   return html`<section class="page-section">
     <div class="section-head"><h2>Value routes</h2>
       ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} />`}</div>
     <div class="group">
-      <p class="hint">These recipients get the payments for each track that has no recipients of its own.</p>
+      ${model.items.length > 0 && html`<p class="hint">These recipients get the payments for each track that has no recipients of its own.</p>`}
       ${model.values.length === 0
-        ? html`<p class="hint">This album has no recipients.</p>
+        ? html`<p class="hint">This feed has no recipients.</p>
           <button class="link-row add" type="button"
             onClick=${() => onChange(withCids([BLANK_BLOCK]))}><span class="num">＋</span><span class="title">Add recipients</span></button>`
         : html`<${Payments} id="ch-pay" blocks=${model.values} onChange=${onChange} />`}

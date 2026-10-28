@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "MSP 2.0 Parity".
 Decisions: [ADR 0075](../adr/0075-the-publisher-page-has-payments-and-credits.md), [ADR 0071](../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: Open.
+Status: Complete - 2026-10-28, except the human test. The four commit checks pass. The screenshot visual check passed in the two themes and at 390 px. The Value routes page shows the track hint only when the feed has tracks, and its empty text is "This feed has no recipients." The human test is open.
 
 ## Goal
 

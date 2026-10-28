@@ -23,6 +23,15 @@ test('ChannelFields in editor.js has no field Language', () => {
   );
 });
 
+test('the page publisher gives the sections in the sequence of ADR 0075', () => {
+  assert.deepEqual(
+    pageSequence('publisher').map((s) => s.id),
+    ['channel', 'releases', 'details', 'role', 'feed'],
+    'ADR 0075 item 1: the publisher page must give channel, releases, details, role and feed. Fix the page publisher in crates/api/ui/pages.js.',
+  );
+  assert.deepEqual(pageSequence('publisher')[2].rows, ['recipients', 'credits']);
+});
+
 for (const server of [true, false]) {
   for (const page of pageNames()) {
     test(`the sections of the page ${page} have tiers that do not go down (server ${server})`, () => {

@@ -24,6 +24,7 @@ const PAGES = {
   publisher: () => [
     { id: 'channel', tier: 'identity', fields: [...FEED_FIELDS] },
     { id: 'releases', tier: 'content' },
+    { id: 'details', tier: 'details', rows: ['recipients', 'credits'] },
     { id: 'role', tier: 'setup' },
     { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
   ],

@@ -1736,6 +1736,23 @@ function ListingField({ id, feedId, draft, model }) {
     </details>`}`;
 }
 
+// The rows "Value routes" and "Credits and links" of the section Details.
+// The album page and the publisher page both show them (ADR 0075 item 2).
+// `openPage({ page })` opens the page of a row.
+function detailRows(rows, model, openPage) {
+  return showEach(rows, {
+    recipients: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
+      <span class="label">Value routes</span><span class="summary">${recipientSummary(model.values)}</span>
+      ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} focusable=${false} />`}
+      <span class="go" aria-hidden="true">›</span>
+    </button>`,
+    credits: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'credits' })}>
+      <span class="label">Credits and links</span><span class="summary">${creditSummary(model)}</span>
+      <span class="go" aria-hidden="true">›</span>
+    </button>`,
+  });
+}
+
 function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged, onArtwork }) {
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   const linkAction = useAction();
@@ -1782,17 +1799,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
     </section>`,
     details: (s) => html`<section class="page-section"><h2>Album details</h2>
       <div class="group">
-        ${showEach(s.rows, {
-          recipients: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
-            <span class="label">Value routes</span><span class="summary">${recipientSummary(model.values)}</span>
-            ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} focusable=${false} />`}
-            <span class="go" aria-hidden="true">›</span>
-          </button>`,
-          credits: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'credits' })}>
-            <span class="label">Credits and links</span><span class="summary">${creditSummary(model)}</span>
-            <span class="go" aria-hidden="true">›</span>
-          </button>`,
-        })}
+        ${detailRows(s.rows, model, openPage)}
       </div>
     </section>`,
     publishers: () => html`<section class="page-section"><h2>Artists and labels</h2>
@@ -2722,6 +2729,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       return e;
     })));
   };
+  const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   const shown = {
     channel: (s) => html`<section class="page-section"><h2>${mediumKind(feed.medium, feed.publisher_role).label}</h2>
       <div class="group">
@@ -2734,6 +2742,11 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
           listing: () => html`<${ListingField} id="pub-listing" feedId=${feed.id} draft=${draft} model=${model} />`,
           explicit: () => html`<${ExplicitField} id="pub-explicit" model=${model} update=${update} />`,
         })}
+      </div>
+    </section>`,
+    details: (s) => html`<section class="page-section"><h2>Details</h2>
+      <div class="group">
+        ${detailRows(s.rows, model, openPage)}
       </div>
     </section>`,
     role: () => html`<section class="page-section"><h2>Role</h2>
@@ -3314,7 +3327,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   // page (task 014c, Architecture).
   if (page === 'settings') {
     body = html`<${SettingsPage} model=${model} update=${update} />`;
-  } else if (publisher && page !== 'files') {
+  } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
       draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} />`;
   } else if (playlist && page === 'tracks') {

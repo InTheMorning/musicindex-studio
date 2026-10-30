@@ -2936,7 +2936,7 @@ const SHOW_END: &str = "2026-11-01T12:00:00Z";
 
 /// A time during the show, in seconds since the Unix epoch.
 fn during_show() -> u64 {
-    u64::try_from(grant::parse_time(SHOW_START).unwrap()).unwrap() + 60
+    u64::try_from(studio_core::datetime::parse_time(SHOW_START).unwrap()).unwrap() + 60
 }
 
 /// A draft with a pending live item with a content link.
@@ -3225,7 +3225,7 @@ fn a_draft_with_only_a_grant_or_a_host_operation_is_a_change_and_an_empty_draft_
 fn a_granted_write_24_hours_and_1_second_after_the_end_gives_grant_not_active() {
     let mut s = setup();
     let guid = write_granted_show(&mut s);
-    let end = u64::try_from(grant::parse_time(SHOW_END).unwrap()).unwrap();
+    let end = u64::try_from(studio_core::datetime::parse_time(SHOW_END).unwrap()).unwrap();
     let before = live(&s);
     let error = granted(&mut s, &guid, &GrantChange::GoLive, end + 24 * 3600 + 1).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::GrantNotActive);
@@ -4496,4 +4496,87 @@ fn the_op3_switch_changes_only_the_enclosure_of_a_track() {
     );
     assert_eq!(saved.items[0].value.image, before.items[0].value.image);
     assert_eq!(saved.live_items, before.live_items);
+}
+
+/// A feed with one track whose `pubDate` is `date`.
+fn dated_feed(date: &str) -> String {
+    FEED.replace(
+        "<guid>track-1</guid>",
+        &format!("<guid>track-1</guid>\n      <pubDate>{date}</pubDate>"),
+    )
+}
+
+const DATED: &str = "Fri, 6 Feb 2026 09:54:10 +0000";
+
+#[test]
+fn the_same_pub_date_time_keeps_the_bytes_of_pub_date() {
+    let s = save_keys(&dated_feed(DATED), |f| {
+        f.title = Some("Album 2".into());
+        // The sent `pub_date` does not count.
+        f.items[0].pub_date = Some("Mon, 1 Jan 2001 00:00:00 +0000".into());
+    });
+    let xml = draft_xml(&s);
+    assert!(
+        xml.contains(&format!("<pubDate>{DATED}</pubDate>")),
+        "{xml}"
+    );
+}
+
+#[test]
+fn a_new_pub_date_time_writes_rfc_2822_text_with_the_sent_offset() {
+    let s = save_keys(&dated_feed(DATED), |f| {
+        f.items[0].pub_date_time = Some("2026-10-30T20:00:00+01:00".into());
+    });
+    let xml = draft_xml(&s);
+    assert!(
+        xml.contains("<pubDate>Fri, 30 Oct 2026 20:00:00 +0100</pubDate>"),
+        "{xml}"
+    );
+}
+
+#[test]
+fn a_null_pub_date_time_removes_pub_date() {
+    let s = save_keys(&dated_feed(DATED), |f| {
+        f.items[0].pub_date_time = None;
+    });
+    assert!(!draft_xml(&s).contains("pubDate"));
+}
+
+#[test]
+fn a_new_track_gets_pub_date_from_a_sent_time() {
+    let s = save_keys(FEED, |f| {
+        f.items.push(Entry::new(Item {
+            title: Some("Two".into()),
+            pub_date: Some("ignored".into()),
+            pub_date_time: Some("2026-10-30T20:00:00+01:00".into()),
+            ..Item::default()
+        }));
+    });
+    let xml = draft_xml(&s);
+    assert!(
+        xml.contains("<pubDate>Fri, 30 Oct 2026 20:00:00 +0100</pubDate>"),
+        "{xml}"
+    );
+    assert!(!xml.contains("ignored"));
+}
+
+#[test]
+fn a_pub_date_that_is_not_a_time_stays_when_the_sent_time_is_null() {
+    let s = save_keys(&dated_feed("yesterday"), |f| {
+        assert_eq!(f.items[0].pub_date_time, None);
+        f.title = Some("Album 2".into());
+    });
+    assert!(draft_xml(&s).contains("<pubDate>yesterday</pubDate>"));
+}
+
+#[test]
+fn a_pub_date_time_with_no_zone_gives_invalid_model_and_the_draft_stays() {
+    let s = setup_with(&dated_feed(DATED));
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let before = draft_xml(&s);
+    let (mut sent, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    sent.items[0].pub_date_time = Some("2026-10-30T20:00".into());
+    let error = pipeline::replace_model(&s.collection, s.feed, &revision, sent).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::InvalidModel);
+    assert_eq!(draft_xml(&s), before);
 }

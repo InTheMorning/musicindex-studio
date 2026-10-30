@@ -936,6 +936,7 @@ pub fn replace_model(
     keep_cover_form(&current, &mut sent);
     keep_explicit_form(&current, &mut sent);
     apply_op3(&current, &mut sent);
+    apply_pub_date_time(&current, &mut sent).map_err(invalid)?;
     keep_key_form(&current, &mut sent);
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
@@ -965,6 +966,46 @@ fn apply_op3(current: &Feed, sent: &mut Feed) {
             *url = plain_address(url).into_owned();
         }
     }
+}
+
+/// Write `pubDate` from `pub_date_time` (ADR 0093 items 6 and 7). The step
+/// compares the sent `pub_date_time` with the value that the core computes
+/// from the draft `pubDate`. A sent value that is equal keeps the draft
+/// `pubDate`, and a new item gets none. A sent time becomes RFC 2822 text
+/// with the sent offset. A sent null removes `pubDate`. The step ignores
+/// the sent `pub_date`. It applies to each item and to the item of each
+/// live item.
+fn apply_pub_date_time(current: &Feed, sent: &mut Feed) -> Result<(), String> {
+    let items = sent
+        .items
+        .iter_mut()
+        .map(|e| {
+            (
+                e.key().and_then(|k| current.items.get(k)).map(|c| &c.value),
+                &mut e.value,
+            )
+        })
+        .chain(sent.live_items.iter_mut().map(|e| {
+            (
+                e.key()
+                    .and_then(|k| current.live_items.get(k))
+                    .map(|c| &c.item),
+                &mut e.value.item,
+            )
+        }));
+    for (before, item) in items {
+        let expected = before.and_then(|c| c.pub_date_time.as_ref());
+        if item.pub_date_time.as_ref() == expected {
+            item.pub_date = before.and_then(|c| c.pub_date.clone());
+        } else if let Some(text) = &item.pub_date_time {
+            let moment = crate::datetime::parse_rfc3339(text)
+                .ok_or("pub_date_time is not an RFC 3339 time with a zone")?;
+            item.pub_date = Some(crate::datetime::format_rfc2822(moment));
+        } else {
+            item.pub_date = None;
+        }
+    }
+    Ok(())
 }
 
 /// Keep the form of the cover when the sent `image` is a new address

@@ -10,6 +10,7 @@ pub mod announce;
 pub mod apps;
 pub mod collection;
 pub mod connector;
+pub mod datetime;
 mod digest;
 pub mod discover;
 pub mod download;

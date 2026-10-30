@@ -9,6 +9,7 @@ use rusqlite::OptionalExtension;
 use serde::Serialize;
 
 use crate::collection::{Collection, CollectionError, FeedId};
+use crate::datetime::parse_time;
 use crate::feed::{Feed, LiveItem};
 use crate::live::LiveStatus;
 
@@ -306,110 +307,6 @@ pub fn grant_limit(live: &LiveItem) -> Option<i64> {
     end.unwrap_or(start).checked_add(GRANT_MARGIN)
 }
 
-/// Read an ISO 8601 time with a zone, such as `2026-11-01T10:00:00Z` or
-/// `2021-09-26T07:30:00.000-0600`. Gives the time in seconds since the
-/// Unix epoch.
-///
-/// The time must have the date, the hours and the minutes. The seconds and
-/// a fraction of a second are optional. The zone is `Z`, `+HH:MM`, `+HHMM`
-/// or `+HH`, or the same with `-`. A time with no zone gives `None`,
-/// because Studio cannot know the zone that the user meant.
-#[must_use]
-pub fn parse_time(text: &str) -> Option<i64> {
-    let text = text.trim();
-    let (date, rest) = text.split_once('T')?;
-    let mut date_parts = date.split('-');
-    let year: i64 = digits(date_parts.next()?, 4)?;
-    let month: i64 = digits(date_parts.next()?, 2)?;
-    let day: i64 = digits(date_parts.next()?, 2)?;
-    if date_parts.next().is_some() || !(1..=12).contains(&month) {
-        return None;
-    }
-    if day < 1 || day > days_in_month(year, month) {
-        return None;
-    }
-    let zone_at = rest.find(['Z', '+', '-'])?;
-    let (clock, zone) = rest.split_at(zone_at);
-    let mut clock_parts = clock.split(':');
-    let hour = digits(clock_parts.next()?, 2)?;
-    let minute = digits(clock_parts.next()?, 2)?;
-    let second = match clock_parts.next() {
-        None => 0,
-        Some(part) => {
-            let whole = part.split_once('.').map_or(part, |(whole, fraction)| {
-                if fraction.is_empty() || !fraction.bytes().all(|b| b.is_ascii_digit()) {
-                    // A bad fraction makes the whole value bad.
-                    ""
-                } else {
-                    whole
-                }
-            });
-            digits(whole, 2)?
-        }
-    };
-    if clock_parts.next().is_some() || hour > 23 || minute > 59 || second > 60 {
-        return None;
-    }
-    let offset = zone_offset(zone)?;
-    let days = days_from_civil(year, month, day);
-    Some(days * 86_400 + hour * 3600 + minute * 60 + second - offset)
-}
-
-/// The value of a text of exactly `count` ASCII digits.
-fn digits(text: &str, count: usize) -> Option<i64> {
-    if text.len() != count || !text.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    text.parse().ok()
-}
-
-/// The offset of a zone in seconds east of UTC.
-fn zone_offset(zone: &str) -> Option<i64> {
-    if zone == "Z" {
-        return Some(0);
-    }
-    let sign = match zone.as_bytes().first()? {
-        b'+' => 1,
-        b'-' => -1,
-        _ => return None,
-    };
-    let rest = &zone[1..];
-    let (hours, minutes) = match rest.len() {
-        2 => (digits(rest, 2)?, 0),
-        4 => (digits(&rest[..2], 2)?, digits(&rest[2..], 2)?),
-        5 if rest.as_bytes()[2] == b':' => (digits(&rest[..2], 2)?, digits(&rest[3..], 2)?),
-        _ => return None,
-    };
-    if hours > 23 || minutes > 59 {
-        return None;
-    }
-    Some(sign * (hours * 3600 + minutes * 60))
-}
-
-fn is_leap(year: i64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-}
-
-fn days_in_month(year: i64, month: i64) -> i64 {
-    match month {
-        2 if is_leap(year) => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    }
-}
-
-/// The number of days from 1970-01-01 to a date of the Gregorian calendar.
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month_index = (month + 9) % 12;
-    let day_of_year = (153 * month_index + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
 /// True when the only differences between `before` and `after` are the
 /// status and the `podcast:liveValue` of the live item with this `guid`
 /// (ADR 0054 item 13). A status change must also be `pending` to `live`
@@ -514,31 +411,6 @@ mod tests {
     type Change = Box<dyn FnOnce(&mut Feed)>;
 
     const END: i64 = 1_793_534_400; // 2026-11-01T12:00:00Z
-
-    #[test]
-    fn a_time_with_a_zone_is_read_and_a_time_with_no_zone_is_not() {
-        assert_eq!(parse_time("2026-11-01T12:00:00Z"), Some(END));
-        assert_eq!(parse_time("1970-01-01T00:00:00Z"), Some(0));
-        assert_eq!(parse_time("1970-01-01T00:00Z"), Some(0));
-        assert_eq!(parse_time("2026-11-01T12:00:00.000Z"), Some(END));
-        assert_eq!(parse_time("2026-11-01T06:00:00-06:00"), Some(END));
-        assert_eq!(parse_time("2026-11-01T06:00:00.000-0600"), Some(END));
-        assert_eq!(parse_time("2026-11-01T14:00:00+02"), Some(END));
-        assert_eq!(parse_time("2024-02-29T00:00:00Z"), Some(1_709_164_800));
-        for bad in [
-            "2026-11-01T12:00:00",
-            "2026-11-01",
-            "2026-13-01T12:00:00Z",
-            "2026-02-29T12:00:00Z",
-            "2026-11-01T24:00:00Z",
-            "2026-11-01T12:00:00.Z",
-            "2026-11-01T12:00:00+2",
-            "soon",
-            "",
-        ] {
-            assert_eq!(parse_time(bad), None, "{bad}");
-        }
-    }
 
     #[test]
     fn a_grant_is_active_until_24_hours_after_the_end() {

@@ -494,6 +494,12 @@ pub struct Item {
     pub alternate_enclosures: Vec<Entry<AlternateEnclosure>>,
     /// `pubDate`, as the source wrote it.
     pub pub_date: Option<String>,
+    /// The `pubDate` as an RFC 3339 time with its own offset, or none when
+    /// `pubDate` is not an RFC 2822 time (ADR 0093). [`Feed::read`] computes
+    /// it. [`Feed::write_hosted`] ignores it. The pipeline writes `pubDate`
+    /// from a changed value at the draft save.
+    #[serde(default)]
+    pub pub_date_time: Option<String>,
     /// `itunes:duration`, as the source wrote it.
     pub duration: Option<String>,
     /// `itunes:explicit`, as the source wrote it (ADR 0064).
@@ -531,13 +537,18 @@ pub struct Item {
 
 impl Item {
     fn read_fields(element: &Element) -> Self {
+        let pub_date = read_text(element, Ns::None, "pubDate");
         Self {
             title: read_text(element, Ns::None, "title"),
             description: read_text(element, Ns::None, "description"),
             guid: read_text(element, Ns::None, "guid"),
             enclosure: read_one(element),
             alternate_enclosures: read_list(element),
-            pub_date: read_text(element, Ns::None, "pubDate"),
+            pub_date: pub_date.clone(),
+            pub_date_time: pub_date
+                .as_deref()
+                .and_then(crate::datetime::parse_rfc2822)
+                .map(crate::datetime::format_rfc3339),
             duration: read_text(element, Ns::Itunes, "duration"),
             explicit: read_text(element, Ns::Itunes, "explicit"),
             season: read_one(element),
@@ -693,6 +704,26 @@ impl Modeled for LiveItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn read_dates(dates: [&str; 2]) -> Feed {
+        let xml = format!(
+            "<rss version=\"2.0\"><channel><item><pubDate>{}</pubDate></item>\
+             <item><pubDate>{}</pubDate></item></channel></rss>",
+            dates[0], dates[1]
+        );
+        Feed::read(&Document::parse(&xml).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn pub_date_time_is_the_rfc_3339_form_of_pub_date_or_none() {
+        let feed = read_dates(["Fri, 6 Feb 2026 09:54:10 +0000", "yesterday"]);
+        assert_eq!(
+            feed.items[0].pub_date_time.as_deref(),
+            Some("2026-02-06T09:54:10+00:00")
+        );
+        assert_eq!(feed.items[1].pub_date_time, None);
+        assert_eq!(feed.items[1].pub_date.as_deref(), Some("yesterday"));
+    }
 
     fn recipient(address: &str) -> Entry<Recipient> {
         Entry::new(Recipient {

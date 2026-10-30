@@ -1,5 +1,6 @@
 //! The rules of a live item (ADR 0054 items 2 to 5).
 
+use crate::datetime::parse_time;
 use crate::feed::{Entry, Feed, LiveItem};
 
 /// The status of a live item.
@@ -56,7 +57,7 @@ impl std::error::Error for LiveError {}
 pub struct LiveProblem {
     /// The `guid` of the live item. It is empty when the item has none.
     pub guid: String,
-    /// The field with the problem: `start`, `contentLink` or `status`.
+    /// The field with the problem: `start`, `end`, `contentLink` or `status`.
     pub field: String,
     /// The text for the user.
     pub text: String,
@@ -117,6 +118,16 @@ pub fn problems(feed: &Feed) -> Vec<LiveProblem> {
         if live.start.as_deref().is_none_or(|s| s.trim().is_empty()) {
             add("start", "This show has no start time.");
         }
+        if let Some(start) = live.start.as_deref().filter(|s| !s.trim().is_empty())
+            && parse_time(start).is_none()
+        {
+            add("start", "The start time is not a time with a zone.");
+        }
+        if let Some(end) = live.end.as_deref().filter(|s| !s.trim().is_empty())
+            && parse_time(end).is_none()
+        {
+            add("end", "The end time is not a time with a zone.");
+        }
         if live.content_links.is_empty() {
             add("contentLink", "This show has no content link.");
         }
@@ -157,6 +168,43 @@ mod tests {
         let found = problems(&feed);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].text, "This show has no start time.");
+    }
+
+    fn feed_with_times(start: &str, end: Option<&str>) -> Feed {
+        let mut feed = Feed::default();
+        let mut live = new_live_item("Show", start);
+        live.end = end.map(str::to_owned);
+        live.content_links
+            .push(Entry::new(crate::feed::ContentLink {
+                href: Some("https://example.com/show".to_owned()),
+                ..Default::default()
+            }));
+        feed.live_items.push(Entry::new(live));
+        feed
+    }
+
+    #[test]
+    fn a_start_with_no_zone_is_a_problem() {
+        let found = problems(&feed_with_times("2026-10-30T20:00", None));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].field, "start");
+        assert_eq!(found[0].text, "The start time is not a time with a zone.");
+    }
+
+    #[test]
+    fn an_end_that_is_not_a_time_is_a_problem_and_a_blank_end_is_not() {
+        let found = problems(&feed_with_times("2026-10-30T20:00:00Z", Some("soon")));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].field, "end");
+        assert_eq!(found[0].text, "The end time is not a time with a zone.");
+        assert_eq!(
+            problems(&feed_with_times("2026-10-30T20:00:00Z", Some(" "))),
+            Vec::new()
+        );
+        assert_eq!(
+            problems(&feed_with_times("2026-10-30T20:00:00Z", None)),
+            Vec::new()
+        );
     }
 
     #[test]

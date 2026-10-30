@@ -263,3 +263,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Later work that the operator noted on 2026-10-22, with no phase yet:
   - v4vmm sends value time splits to Studio. The album editor does not edit them (task 012).
   - A check that a payment route works. It probably needs a connected Lightning node. Podcast Index marks some routes with a warning, and its method is not known.
+- Later work that the operator noted on 2026-10-29, with no phase yet:
+  - The diff of the Review sheet shows a moved track as a removed track and an added track. A line diff does not find moves. A summary of the track order above the diff can show each move, for example "Emily-song: 1 → 3". The operator wants to address it later.
+  - The drag of a list entry, with the insertion line of v4vmm. It needs a shared musicindex ADR first ([ADR 0081](../adr/0081-a-position-menu-sets-the-sequence-of-a-list.md)).
+  - The list "Artists and labels" of an album and the entry lists of ADR 0028 keep "Move up" and "Move down" (ADR 0081).

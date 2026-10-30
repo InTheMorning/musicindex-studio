@@ -28,7 +28,16 @@ On 2026-10-29, the operator opened the **Address style** select menu of the S3 o
 
 `styles.css` sets `color-scheme: dark` on `:root`, and `.field select` sets `color: var(--text)`. The text of each option thus is light. Chromium on Linux drew the background of the list in a light color. This explanation is not confirmed.
 
-This is an open defect. A correction must first compare the select menus of musicindex.org and v4vmm, because the three apps use the same look.
+Claude compared the other two apps. `search.html` of musicindex.org has no `select` element, and v4vmm is a native app. Thus no shared rule owns the control.
+
+The cause: `.field select` has the fill `--fill-soft`, which is transparent. Chromium on Linux drew the open list on that fill.
+
+The correction gives each `option` the level color `--level-3` and the text color `--text`. These colors have no transparency. The computed colors were these:
+
+- Dark theme: text `rgb(245, 245, 247)` on `rgb(38, 38, 42)`.
+- Light theme: text `rgb(29, 29, 31)` on `rgb(236, 236, 239)`.
+
+A screenshot does not show an open select list, so the operator did the visual check. On 2026-10-29, the operator opened **Type of host** in a local desktop Studio with the correction, in Chromium 156 on Linux. Each option was readable in the dark theme and in the light theme. The visual check passed.
 
 ### The Access Key ID Shows In Clear Text
 

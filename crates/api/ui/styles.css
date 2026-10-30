@@ -822,6 +822,10 @@ textarea:focus { background: var(--fill); }
   font: inherit;
 }
 .field select:focus { background: var(--fill); }
+/* The open list of a select menu. The fill of a select is transparent, and
+   Chromium on Linux draws the list on that fill over a light system color.
+   The open list thus gets a level color, which has no transparency. */
+select option { background: var(--level-3); color: var(--text); }
 /* Disclosure groups. The summary line stays visible, and the details open
    below it (Apple HIG, disclosure controls). */
 .disclosure > summary {

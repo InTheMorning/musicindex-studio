@@ -5,6 +5,7 @@
 - Owner: operator
 - Amended: 2026-10-27 by operator decision. [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 4 puts "Language" on the page "Feed settings", with the fields of item 7. [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) puts the "More artwork" lists of item 10 in the Artwork sheet.
 - Amended: 2026-10-28 by operator decision. [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) item 26 keeps the Nostr key of each person in the copy of item 8. [ADR 0076](0076-an-op3-switch-on-feed-settings.md) adds the switch "OP3 statistics" to the page "Feed settings" of item 7.
+- Amended: 2026-10-29 by operator decision. [ADR 0080](0080-the-season-of-a-track-is-an-experimental-disc-setting.md) shows the "Season" fields of item 8 as an experimental "Disc" entry.
 
 ## Context
 

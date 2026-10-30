@@ -83,6 +83,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0077: A new album can start from an album](adr/0077-a-new-album-can-start-from-an-album.md)
 - [ADR 0078: A secret value stays hidden until the user shows it](adr/0078-a-secret-value-stays-hidden-until-the-user-shows-it.md)
 - [ADR 0079: The core writes both track numbers](adr/0079-the-core-writes-both-track-numbers.md)
+- [ADR 0080: The season of a track is an experimental disc setting](adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md)
 
 ## Plans
 

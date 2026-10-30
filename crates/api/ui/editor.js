@@ -2502,16 +2502,23 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
           explicit: () => html`<${ExplicitField} id=${`${id}-explicit`} model=${item} update=${editItem} />`,
           identity: () => html`<details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>
-            <span class="summary">Number ${item.episode || '—'}${item.season ? ` · Season ${item.season.value || item.season.name}` : ''}</span></summary>
+            <span class="summary">Track ${item.episode || item.itunes_episode || '—'}${item.season ? ` · Disc ${item.season.value || item.season.name}` : ''}</span></summary>
           <div class="form">
-            <div class="grid2">
-              <${TextField} id=${`${id}-season-number`} label="Season number" inputmode="numeric" value=${item.season && item.season.value} onChange=${changeSeason('value')} />
-              <${TextField} id=${`${id}-season-name`} label="Season name" value=${item.season && item.season.name} onChange=${changeSeason('name')} />
-            </div>
             <dl class="facts">
-              <dt>Track number</dt><dd>${item.episode || '—'}</dd>
+              <dt>Track number</dt><dd>${item.episode || item.itunes_episode || '—'}</dd>
               <dt>Track GUID</dt><dd class="mono">${item.guid || 'Studio gives one when it saves'}</dd>
             </dl>
+            <details class="disclosure">
+              <summary class="link-row"><span class="label">Disc <span class="badge-experimental">Experimental</span></span>
+                <span class="summary">${item.season ? item.season.value || item.season.name : 'Not set'}</span></summary>
+              <div class="form">
+                <p class="hint">Studio writes this as <code>podcast:season</code>. The Podcasting 2.0 namespace defines it for the seasons of a podcast, so apps can show it as a season.</p>
+                <div class="grid2">
+                  <${TextField} id=${`${id}-season-number`} label="Disc number" inputmode="numeric" value=${item.season && item.season.value} onChange=${changeSeason('value')} />
+                  <${TextField} id=${`${id}-season-name`} label="Disc name" value=${item.season && item.season.name} onChange=${changeSeason('name')} />
+                </div>
+              </div>
+            </details>
           </div>
         </details>`,
         })}

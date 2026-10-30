@@ -135,6 +135,10 @@
    "live now" (ADR 0018). Contrast is 4.5:1 or more on each surface. */
 :root { --error: #ff6961; }
 :root[data-theme="light"] { --error: #c41e3a; }
+/* The Warning text color of musicindex ADR 0025 R-STATUS-1. The
+   Experimental badge uses it (musicindex ADR 0034 R-EXPERIMENT-1). */
+:root { --warning: #ff9f0a; }
+:root[data-theme="light"] { --warning: #a05a00; }
 
 /* Button role tints (ADR 0037): an action button and a destructive
    button each use a pale fill of their own color, not an entity color
@@ -307,6 +311,18 @@ code, .mono {
    level with the field. */
 .notice > .secret { margin: 8px 0; }
 .secret > .token-field { margin: 0; }
+/* The Experimental badge (musicindex ADR 0034 R-EXPERIMENT-1): the word in
+   the Warning color, a 1 px border, no fill and the badge radius. */
+.badge-experimental {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  color: var(--warning);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
 /* A text area that hides its value (ADR 0078 item 5). */
 textarea.masked { -webkit-text-security: disc; }
 
@@ -969,6 +985,9 @@ select option { background: var(--level-3); color: var(--text); }
 /* A link row in an open entry, such as "Nostr" (ADR 0074), starts at the
    inner space of the entry, as each field of the entry does. */
 .entry-row > .form > .link-row { padding-inline: 0; }
+/* A disclosure in the form of a disclosure has the padding of its parent, so
+   its summary lines up with its content (ADR 0080). */
+.disclosure .form > .disclosure > summary.link-row { padding-inline: 0; }
 
 /* ---- The editor pages (task 014c, ADR 0029 items 5 to 10). ---- */
 

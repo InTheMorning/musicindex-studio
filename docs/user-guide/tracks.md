@@ -63,6 +63,7 @@ The track page has these sections:
 - **Audio file**. The field **Audio file address** with **Choose…**, a player and the disclosure **Properties**. Alternative files show as lines with **Remove**.
 - **Value routes**. See [Value routes](value-routes.md).
 - **More**. **Track image** sets an image for this track. Use **Choose…** to pick the image file. **Identity** shows the track number and the track GUID. Studio gives a GUID when it saves a new track.
+  - **Disc** is in **Identity**, with the mark **Experimental**. Studio writes the disc as `podcast:season`. The Podcasting 2.0 namespace defines that element for the seasons of a podcast, so apps can show it as a season.
 
 The two arrow buttons in the header open the track before and the track after this one.
 

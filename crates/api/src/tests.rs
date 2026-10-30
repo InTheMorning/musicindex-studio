@@ -810,6 +810,42 @@ async fn a_publisher_feed_is_made_with_its_role_and_a_bad_medium_or_role_gives_4
 }
 
 #[tokio::test]
+async fn the_feed_list_gives_the_link_of_each_feed() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let release = make_feed(
+        &app,
+        new_feed_body(connector, "release.xml", "Release", None, None),
+    )
+    .await;
+    let label_id = label["id"].as_i64().unwrap();
+    let release_id = release["id"].as_i64().unwrap();
+    assert_eq!(listed(&app, release_id).await["publisher_ids"], json!([]));
+    let path = format!("/api/v1/feeds/{label_id}/links");
+    let (status, body) = call(&app, "POST", &path, Some(json!({ "release": release_id }))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // ADR 0085 item 2: the core gives the links of each feed.
+    assert_eq!(
+        listed(&app, label_id).await["release_ids"],
+        json!([release_id])
+    );
+    assert_eq!(
+        listed(&app, release_id).await["publisher_ids"],
+        json!([label_id])
+    );
+}
+
+#[tokio::test]
 async fn a_link_changes_both_drafts_and_a_role_change_and_a_removal_follow_it() {
     let (app, connector) = publisher_app().await;
     let label = make_feed(

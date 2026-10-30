@@ -30,6 +30,7 @@ const PAGES = {
   ],
   playlist: () => [
     { id: 'channel', tier: 'identity', fields: [...FEED_FIELDS] },
+    { id: 'publishers', tier: 'details' },
     { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
   ],
   settings: ({ album = false } = {}) => [

@@ -36,6 +36,14 @@ export function mediumKind(medium, roles = [], confirmed = false) {
   }
 }
 
+// The words of the roles in the `rel` of a link, joined as a type label
+// (musicindex ADR 0037 R-WORD-7). A `rel` with no known role gives "No role".
+export function relLabel(rel) {
+  const words = String(rel || '').toLowerCase().split(/\s+/);
+  const own = ROLES.filter((role) => words.includes(role));
+  return own.length > 0 ? own.map(roleWord).join(' · ') : 'No role';
+}
+
 // The kind of a feed of the collection or of a discovery.
 export function feedKind(feed) {
   return mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed);
@@ -224,6 +232,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     ? feeds.find((f) => f.id === view.id)
     : undefined;
   if (!feed) {
+    const all = view.name === 'releases' && view.group === undefined;
     return {
       kind: 'destinations',
       top: [
@@ -232,9 +241,10 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
         {
           id: 'releases',
           label: 'Releases',
-          current: view.name === 'releases' || view.name === 'add-feed',
-          opens: view.name !== 'releases',
+          current: all || view.name === 'add-feed',
+          opens: !all,
         },
+        ...groupDestinations(feeds, view),
       ],
       bottom,
     };
@@ -255,6 +265,36 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     items: outlineItems(feed, view, model, narrow),
     bottom,
   };
+}
+
+// The destinations below Releases (ADR 0085 items 1 and 3): each artist,
+// label or other feed with roles, A to Z, then "Not linked" when a release
+// has no link. `count` is the number of releases of the destination.
+export function groupDestinations(feeds, view) {
+  const list = Array.isArray(feeds) ? feeds : [];
+  const shown = (group) => view.name === 'releases' && view.group === group;
+  const groups = list.filter(isPublisher).sort(compareAz).map((feed) => ({
+    id: `group-${feed.id}`,
+    group: feed.id,
+    label: displayTitle(feed),
+    dot: feedKind(feed).dot,
+    count: (feed.release_ids || []).length,
+    current: shown(feed.id),
+    opens: !shown(feed.id),
+  }));
+  const unlinked = unlinkedReleases(list).length;
+  if (unlinked > 0) {
+    groups.push({
+      id: 'group-none', group: 'none', label: 'Not linked', dot: null,
+      count: unlinked, current: shown('none'), opens: !shown('none'),
+    });
+  }
+  return groups;
+}
+
+// The releases with no artist or label in the collection (ADR 0085 item 3).
+function unlinkedReleases(feeds) {
+  return feeds.filter((feed) => !isPublisher(feed) && (feed.publisher_ids || []).length === 0);
 }
 
 // The cover of a feed row. The row has the `itunes:image` as `image` and
@@ -313,13 +353,54 @@ function letterGroups(rows) {
   return groups;
 }
 
+// The sorts of each list (ADR 0039 item 2a, ADR 0085 item 4). The first
+// sort is the default.
+const ALL_SORTS = ['newest', 'az'];
+const GROUP_SORTS = ['order', 'newest', 'az'];
+
 // The Releases list (ADR 0039 items 2 and 2a). `marked` is the ID of the feed
-// that the last Back selection left marked.
-export function releasesList({ feeds, connectors, sort, view, marked }) {
-  const sortKey = sort === 'az' ? 'az' : 'newest';
+// that the last Back selection left marked. With no `group` it gives each
+// album and playlist (ADR 0085 item 6). With the ID of a feed with roles as
+// `group`, it gives the releases of that feed, and `head` gives the feed. The
+// group 'none' gives the releases with no link (ADR 0085 items 3 and 4).
+export function releasesList({ feeds, connectors, sort, view, marked, group }) {
+  const list = Array.isArray(feeds) ? feeds : [];
+  const owner = group === undefined || group === 'none'
+    ? null
+    : list.find((feed) => feed.id === group && isPublisher(feed)) || null;
+  let chosen;
+  let head = null;
+  if (owner) {
+    const byId = new Map(list.map((feed) => [feed.id, feed]));
+    chosen = (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
+    head = {
+      id: owner.id,
+      title: displayTitle(owner),
+      typeLabel: feedKind(owner).label,
+      dot: feedKind(owner).dot,
+    };
+  } else if (group === 'none') {
+    chosen = unlinkedReleases(list);
+    head = { id: null, title: 'Not linked', typeLabel: null, dot: null };
+  } else {
+    chosen = list.filter((feed) => !isPublisher(feed));
+  }
+  const sorts = owner ? GROUP_SORTS : ALL_SORTS;
+  const sortKey = sorts.includes(sort) ? sort : sorts[0];
   const viewKey = view === 'tiles' ? 'tiles' : 'rows';
-  const sorted = (Array.isArray(feeds) ? feeds.slice() : [])
-    .sort(sortKey === 'az' ? compareAz : compareNewest);
+  const sorted = sortKey === 'order'
+    ? chosen.slice()
+    : chosen.slice().sort(sortKey === 'az' ? compareAz : compareNewest);
+  const titleOf = (id) => {
+    const feed = list.find((f) => f.id === id);
+    return feed ? displayTitle(feed) : null;
+  };
+  // A release of two feeds names the other feeds (ADR 0085 item 5).
+  const noteOf = (feed) => {
+    if (!owner) return null;
+    const others = (feed.publisher_ids || []).filter((id) => id !== owner.id).map(titleOf).filter(Boolean);
+    return others.length > 0 ? `Also on ${others.join(', ')}` : null;
+  };
   const rows = sorted.map((feed) => ({
     id: feed.id,
     title: displayTitle(feed),
@@ -331,10 +412,13 @@ export function releasesList({ feeds, connectors, sort, view, marked }) {
     // A feed that apps do not list (ADR 0063).
     hidden: feed.hidden === true,
     marked: feed.id === marked,
+    note: noteOf(feed),
   }));
   return {
     sort: sortKey,
+    sorts,
     view: viewKey,
+    head,
     rows,
     letters: sortKey === 'az' ? letterGroups(rows) : null,
   };
@@ -439,7 +523,8 @@ export function narrowStack(view) {
   const releases = { name: 'releases' };
   switch (view.name) {
     case 'root': return [root];
-    case 'releases': return [root, releases];
+    // A destination below Releases is a page of the root (ADR 0085 item 7).
+    case 'releases': return view.group === undefined ? [root, releases] : [root, view];
     case 'add-feed': return [root, releases, view];
     case 'outline': return [root, releases, view];
     case 'feed': return [root, releases, { name: 'outline', id: view.id }, view];

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { mediumKind, releasesList } from '../ui/shell.js';
+import { mediumKind, relLabel, feedKind, kindGlow } from '../ui/shell.js';
 
 const MESSAGE = `musicindex ADR 0033 R-WORD-4: most artists do not know the RSS word
 "publisher". Show the role of a publisher feed: "Artist", "Label" or
@@ -109,7 +109,7 @@ test('a publisher feed lists each role, or shows Feed with a hollow dot', () => 
 
 test('a feed with no cover shows the logo shape in the color of its kind', () => {
   // musicindex ADR 0021 R-ART-2 and ADR 0033 R-WORD-3 item 1.
-  const glow = (feed) => releasesList({ feeds: [feed], connectors: [], sort: 'newest', view: 'rows' }).rows[0].glow;
+  const glow = (feed) => kindGlow(feedKind(feed));
   const base = { id: 1, title: 'A', connector_id: 'c1', path: 'a', added_at: 1, draft_state: 'none', image: null };
   assert.equal(glow({ ...base, medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true }), 'var(--c-artist)');
   assert.equal(glow({ ...base, medium: 'publisher', publisher_roles: ['label'], roles_confirmed: false }), 'var(--c-label)');
@@ -117,4 +117,13 @@ test('a feed with no cover shows the logo shape in the color of its kind', () =>
   assert.equal(glow({ ...base, medium: 'publisher' }), 'var(--c-feed)');
   assert.equal(glow({ ...base, medium: 'musicL' }), 'var(--c-playlist)');
   assert.equal(glow({ ...base, medium: 'music' }), 'var(--c-feed)');
+});
+
+test('the rel of a link shows each of its roles', () => {
+  const message = 'musicindex ADR 0037 R-WORD-7: the rel of a link shows each role in the sequence of musicindex ADR 0036. Use relLabel of crates/api/ui/shell.js.';
+  assert.equal(relLabel('artist'), 'Artist', message);
+  assert.equal(relLabel('producer label artist'), 'Artist · Label · Producer', message);
+  assert.equal(relLabel('Label'), 'Label', message);
+  assert.equal(relLabel(''), 'No role', message);
+  assert.equal(relLabel(null), 'No role', message);
 });

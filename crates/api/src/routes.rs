@@ -1275,12 +1275,18 @@ fn set_connector_base_url(
 /// image (ADR 0039 item 2, task 026a).
 pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
-        let mut rows = Vec::new();
+        // The cover image comes from the same source as the file list. A
+        // feed with no readable source has no image and no link.
+        let mut feeds = Vec::new();
         for row in w.collection.feeds()? {
-            let state = draft_state(w, &row)?;
-            // The cover image comes from the same source as the file list.
-            // A feed with no readable source has no image.
             let feed = files_feed(w, row.id).ok().flatten();
+            feeds.push((row, feed));
+        }
+        // The links of each feed give its destination (ADR 0085).
+        let catalogs = publisher::catalogs(&feeds);
+        let mut rows = Vec::new();
+        for ((row, feed), catalog) in feeds.iter().zip(catalogs) {
+            let state = draft_state(w, row)?;
             let image = feed.as_ref().and_then(|feed| feed.image.clone());
             // The UI applies the cover rule to both addresses (ADR 0060).
             let rss_image_url = feed
@@ -1288,12 +1294,16 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 .and_then(|feed| feed.rss_image.as_ref())
                 .and_then(|rss_image| rss_image.url.clone());
             let mut value =
-                serde_json::to_value(&row).map_err(|e| ApiError::internal(e.to_string()))?;
+                serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
             value["image"] = json!(image);
             value["rss_image_url"] = json!(rss_image_url);
             // The release list marks a feed that apps do not list (ADR 0063).
             value["hidden"] = json!(feed.as_ref().is_some_and(Feed::hidden));
+            value["release_ids"] =
+                json!(catalog.releases.iter().map(|id| id.0).collect::<Vec<_>>());
+            value["publisher_ids"] =
+                json!(catalog.publishers.iter().map(|id| id.0).collect::<Vec<_>>());
             rows.push(value);
         }
         to_json(rows)
@@ -2090,13 +2100,17 @@ fn check_mediums(
             format!("feed {} is not a publisher feed", publisher.0),
         ));
     }
+    // A release is an album or a playlist (ADR 0086 item 1).
     if let Some(release) = release
-        && w.collection.feed(release)?.medium.as_deref() != Some("music")
+        && !matches!(
+            w.collection.feed(release)?.medium.as_deref(),
+            Some("music" | "musicL")
+        )
     {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "not_release",
-            format!("feed {} is not a music feed", release.0),
+            format!("feed {} is not an album or a playlist", release.0),
         ));
     }
     Ok(())

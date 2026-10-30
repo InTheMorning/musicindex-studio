@@ -5,6 +5,8 @@
 Studio has a left panel with these entries:
 
 - **Releases**
+- Each artist feed, label feed or other feed with roles, with the number of its releases
+- **Not linked**, when a release has no artist or label
 - **Hosts** (at the bottom)
 - **Settings** (at the bottom)
 - **Lock Studio** (at the bottom, when the vault is open)
@@ -14,7 +16,7 @@ Studio starts on **Releases**.
 
 ## The Releases page
 
-The page lists each feed in your collection.
+The page lists each album and each playlist in your collection.
 Each row shows the cover, the title, the type and the host.
 A feed with no host shows "Read-only".
 The row also tells you the draft state:
@@ -36,6 +38,19 @@ Studio remembers the sort and the view in the address of the page.
 
 If you have no feeds, the page shows "No releases yet."
 Select **Add a Feed**. See [Add feeds that you already have](add-feeds.md).
+
+## The releases of an artist or a label
+
+Select an artist feed or a label feed in the left panel. The page shows its releases.
+The line below the title shows each role of the feed.
+
+The sort is **Feed order** at first. This is the sequence of the releases in the feed. You can also select **Newest** or **A to Z**.
+
+A release of two feeds shows on the page of each feed. The row names the other feed, for example "Also on Some Label".
+Select **Open the feed** to edit the artist feed or the label feed.
+
+**Not linked** lists the releases that have no artist or label in your collection.
+To add a link, see [Artist and label feeds](artist-and-label-feeds.md).
 
 ## The outline of a release
 
@@ -80,7 +95,7 @@ They move through the pages that you opened.
 
 When the window is 760 pixels wide or less, Studio shows one page at a time. It opens on **Releases**.
 Select the back button to go to the first page.
-The first page lists **Releases**, **Hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
+The first page lists **Releases**, each artist and label, **Hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
 When you open a release, you see its outline first. Select a page in the outline to open it.
 Use the back button to go back.
 

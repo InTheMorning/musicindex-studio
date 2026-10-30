@@ -1,4 +1,5 @@
-//! Publisher feeds and their links to releases (ADR 0041).
+//! Publisher feeds and their links to releases (ADR 0041). A release is an
+//! album or a playlist (ADR 0086).
 //!
 //! A link is a `podcast:remoteItem` in the draft of each of its two feeds.
 //! The publisher feed lists the release in its channel. The release names
@@ -11,8 +12,16 @@ use std::fmt;
 use crate::collection::{
     Collection, CollectionError, FeedId, FeedRow, PublisherRole, inferred_roles, rel_of,
 };
-use crate::feed::{Entry, Publisher, RemoteItem};
+use crate::feed::{Entry, Feed, Publisher, RemoteItem};
 use crate::pipeline::{self, PipelineError};
+
+/// The media of a release: an album and a playlist (ADR 0086 item 1).
+const RELEASE_MEDIA: [&str; 2] = ["music", "musicL"];
+
+/// True when a medium is the medium of a release.
+fn is_release(medium: Option<&str>) -> bool {
+    medium.is_some_and(|medium| RELEASE_MEDIA.contains(&medium))
+}
 
 /// The kind of a [`PublisherError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +29,7 @@ use crate::pipeline::{self, PipelineError};
 pub enum PublisherErrorKind {
     /// The first feed is not a publisher feed.
     NotPublisher,
-    /// The second feed is not a music feed.
+    /// The second feed is not an album or a playlist.
     NotRelease,
     /// A feed has no connector, so Studio cannot write it.
     ReadOnly,
@@ -124,7 +133,8 @@ pub fn roles(
     Ok(roles)
 }
 
-/// The music feeds that the draft of a publisher feed links to.
+/// The albums and the playlists that the draft of a publisher feed links
+/// to.
 ///
 /// # Errors
 ///
@@ -137,14 +147,14 @@ pub fn linked_releases(
     let (publisher_feed, _) = pipeline::draft_model(collection, publisher)?;
     let mut linked = Vec::new();
     for row in collection.feeds()? {
-        if row.medium.as_deref() != Some("music") || row.connector_id.is_none() {
+        if !is_release(row.medium.as_deref()) || row.connector_id.is_none() {
             continue;
         }
         let release = party(collection, &row)?;
         let is_linked = publisher_feed
             .remote_items
             .iter()
-            .any(|item| item.medium.as_deref() == Some("music") && names(&item.value, &release));
+            .any(|item| is_release(item.medium.as_deref()) && names(&item.value, &release));
         if is_linked {
             linked.push(row.id);
         }
@@ -179,8 +189,9 @@ pub fn link(
     check_named(&release_party, "release")?;
     let rel = rel_of(&roles(collection, publisher)?);
 
+    // The channel item has the medium of the release (ADR 0086 item 2).
     let channel_link = RemoteItem {
-        medium: Some("music".to_owned()),
+        medium: release_row.medium.clone(),
         feed_guid: release_party.guid.clone(),
         feed_url: release_party.url.clone(),
         title: release_party.title.clone(),
@@ -257,7 +268,7 @@ pub fn unlink(
 }
 
 /// Record and confirm the roles of a publisher feed. The `rel` of each
-/// music item of its draft changes, and so does the `rel` of its link in
+/// release item of its draft changes, and so does the `rel` of its link in
 /// each linked release (ADR 0041 item 11, ADR 0082 item 8).
 ///
 /// # Errors
@@ -283,7 +294,7 @@ pub fn set_roles(
 
     pipeline::edit_draft(collection, publisher, |feed| {
         for item in &mut feed.remote_items {
-            if item.medium.as_deref() == Some("music") {
+            if is_release(item.medium.as_deref()) {
                 item.rel = Some(rel.clone());
             }
         }
@@ -300,6 +311,90 @@ pub fn set_roles(
         })?;
     }
     Ok(())
+}
+
+/// The links of one feed of the collection, for its destination (ADR 0085).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Catalog {
+    /// For a publisher feed: its releases in the collection. The releases
+    /// that its channel lists come first, in that sequence. Then come the
+    /// releases that only name it in `podcast:publisher`.
+    pub releases: Vec<FeedId>,
+    /// For a release: its publisher feeds in the collection. The feeds of
+    /// its `podcast:publisher` come first, in that sequence, so the primary
+    /// one is first (ADR 0041 item 9). Then come the publisher feeds that
+    /// only list it.
+    pub publishers: Vec<FeedId>,
+}
+
+/// The catalog of each feed of the collection (ADR 0085 items 2 and 5).
+/// Each feed has its row and its model: the draft, or the hosted file when
+/// it has no draft. A feed with no model has no link. A link counts when
+/// one of its two feeds names the other, so a link that is in one draft
+/// only also counts. The result has the sequence of `feeds`.
+#[must_use]
+pub fn catalogs(feeds: &[(FeedRow, Option<Feed>)]) -> Vec<Catalog> {
+    let parties: Vec<Party> = feeds
+        .iter()
+        .map(|(row, model)| Party {
+            guid: model
+                .as_ref()
+                .and_then(|feed| feed.podcast_guid.clone())
+                .or_else(|| row.podcast_guid.clone()),
+            url: row.public_url.clone(),
+            title: None,
+        })
+        .collect();
+    let is_publisher = |index: usize| feeds[index].0.medium.as_deref() == Some("publisher");
+    let find = |item: &RemoteItem, wanted: &dyn Fn(usize) -> bool| {
+        (0..feeds.len()).find(|&index| wanted(index) && names(item, &parties[index]))
+    };
+    let mut result = vec![Catalog::default(); feeds.len()];
+    let mut listed_by: Vec<Vec<usize>> = vec![Vec::new(); feeds.len()];
+
+    // The channel items of each publisher feed, in their sequence.
+    for (publisher, (_, model)) in feeds.iter().enumerate() {
+        let Some(model) = model.as_ref().filter(|_| is_publisher(publisher)) else {
+            continue;
+        };
+        for item in &model.remote_items {
+            let wanted = |index: usize| is_release(feeds[index].0.medium.as_deref());
+            if let Some(release) = find(&item.value, &wanted)
+                && !listed_by[release].contains(&publisher)
+            {
+                listed_by[release].push(publisher);
+                result[publisher].releases.push(feeds[release].0.id);
+            }
+        }
+    }
+    // The `podcast:publisher` items of each release, in their sequence.
+    for (release, (row, model)) in feeds.iter().enumerate() {
+        if !is_release(row.medium.as_deref()) {
+            continue;
+        }
+        let mut named = Vec::new();
+        if let Some(links) = model.as_ref().and_then(|feed| feed.publisher.as_ref()) {
+            for item in &links.remote_items {
+                if let Some(publisher) = find(&item.value, &is_publisher)
+                    && !named.contains(&publisher)
+                {
+                    named.push(publisher);
+                }
+            }
+        }
+        for &publisher in &named {
+            if !listed_by[release].contains(&publisher) {
+                result[publisher].releases.push(row.id);
+            }
+        }
+        for &publisher in &listed_by[release] {
+            if !named.contains(&publisher) {
+                named.push(publisher);
+            }
+        }
+        result[release].publishers = named.iter().map(|&index| feeds[index].0.id).collect();
+    }
+    result
 }
 
 /// What a link needs from one feed.
@@ -363,10 +458,10 @@ fn check_publisher(collection: &Collection, id: FeedId) -> Result<FeedRow, Publi
 
 fn check_release(collection: &Collection, id: FeedId) -> Result<FeedRow, PublisherError> {
     let row = collection.feed(id)?;
-    if row.medium.as_deref() != Some("music") {
+    if !is_release(row.medium.as_deref()) {
         return Err(PublisherError::new(
             PublisherErrorKind::NotRelease,
-            format!("feed {} is not a music feed", id.0),
+            format!("feed {} is not an album or a playlist", id.0),
         ));
     }
     Ok(row)

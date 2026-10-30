@@ -500,14 +500,14 @@ pub fn roles_from_rel(text: &str) -> Vec<PublisherRole> {
 }
 
 /// The roles that the channel `remoteItem` elements with `medium="music"`
-/// of a publisher feed give: each role of each `rel`, in their sequence
-/// (ADR 0082 item 4).
+/// or `medium="musicL"` of a publisher feed give: each role of each `rel`,
+/// in their sequence (ADR 0082 item 4, ADR 0086 item 3).
 #[must_use]
 pub fn inferred_roles(feed: &Feed) -> Vec<PublisherRole> {
     let mut roles: Vec<PublisherRole> = feed
         .remote_items
         .iter()
-        .filter(|item| item.medium.as_deref() == Some("music"))
+        .filter(|item| matches!(item.medium.as_deref(), Some("music" | "musicL")))
         .filter_map(|item| item.rel.as_deref())
         .flat_map(roles_from_rel)
         .collect();

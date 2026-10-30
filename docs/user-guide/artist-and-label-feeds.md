@@ -53,7 +53,7 @@ Studio does not put these recipients into the releases of the feed.
 2. In **Releases**, select a release in the field **Release**.
 3. Select **Add the Release**.
 
-The list shows only releases from your collection that have a host.
+The list shows only releases from your collection that have a host. A release is an album or a playlist.
 Each row says "In the collection" or "Not in the collection".
 Select a number in the position menu of a row to move the release. Use **Remove** to remove it.
 
@@ -66,7 +66,7 @@ If the feed has no role, Studio asks you to select the role first.
 
 ## Add an artist or a label to a release
 
-1. Open the album.
+1. Open the album or the playlist.
 2. In the section **Artists and labels**, select a feed in the field **Artist or label**.
 3. Select **Add the Feed**.
 

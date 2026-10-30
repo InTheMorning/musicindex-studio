@@ -526,6 +526,12 @@ textarea.masked { -webkit-text-security: disc; }
   border-color: var(--gloss-edge);
 }
 .row .text { display: grid; min-width: 0; }
+/* The destinations below Releases (ADR 0085 item 1): the dot, the name and
+   the number of releases. */
+.destination-group { display: grid; gap: 2px; }
+.row .row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .count { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.row .dot-space { width: var(--dot-size); flex: none; }
 .row .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .sub { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar footer { margin-top: auto; display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--sep); }
@@ -1301,6 +1307,7 @@ button.outline-feed {
 .releases { padding: 8px 32px 32px; display: grid; gap: 16px; }
 .releases-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .releases-head h1 { flex: 1; min-width: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; }
+.releases-roles { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); }
 /* The tools wrap, so that "＋ Add a feed" goes to a new line in a narrow
    window and stays in the margins of the page (ADR 0072 item 2). */
 .releases-tools { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; flex-wrap: wrap; min-width: 0; }

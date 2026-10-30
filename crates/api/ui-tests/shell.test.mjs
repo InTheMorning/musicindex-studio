@@ -76,7 +76,7 @@ test('a track key uses the GUID, or the client ID with no GUID', () => {
 test('with no open feed, the left panel gives Releases at the top', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
   assert.equal(panel.kind, 'destinations');
-  assert.deepEqual(panel.top.map((e) => e.id), ['releases']);
+  assert.equal(panel.top[0].id, 'releases');
   assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings', 'lock']);
   assert.equal(panel.top[0].current, true);
   assert.equal(JSON.stringify(panel).includes('Select a feed'), false);
@@ -85,7 +85,7 @@ test('with no open feed, the left panel gives Releases at the top', () => {
 test('the row Releases is current on the view add-feed (ADR 0072 item 5)', () => {
   const panel = leftPanel({ view: { name: 'add-feed' }, feeds: [album], model: null, vaultOpen: true });
   assert.equal(panel.top.find((e) => e.id === 'releases').current, true, 'ADR 0072 item 5: Releases is current on Add feeds.');
-  assert.deepEqual(panel.top.map((e) => e.id), ['releases'], 'ADR 0072 item 1: the top holds Releases only.');
+  assert.equal(panel.top[0].id, 'releases', 'ADR 0072 item 1: Releases is the first destination.');
   assert.equal(panel.top[0].opens, true, 'ADR 0072 item 5: on Add feeds, the row Releases must open Releases. Set opens in leftPanel of crates/api/ui/shell.js.');
   const releases = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
   assert.equal(releases.top[0].opens, false);
@@ -184,9 +184,11 @@ test('the Releases list gives the newest feed first, with the greater ID first o
   const tie = { ...album, id: 9, added_at: 200 };
   const list = releasesList({ feeds: [album, publisher, readOnly, tie], connectors: [{ id: 'c1', name: 'Local' }], sort: 'newest', view: 'rows' });
   assert.equal(list.letters, null);
-  assert.deepEqual(list.rows.map((r) => r.id), [9, 2, 1, 3]);
+  // ADR 0085 item 6: a feed with roles opens from its destination, not from
+  // a row of Releases.
+  assert.deepEqual(list.rows.map((r) => r.id), [9, 1, 3]);
   assert.equal(list.rows[1].host, 'Local');
-  assert.equal(list.rows[3].host, 'Read-only');
+  assert.equal(list.rows[2].host, 'Read-only');
 });
 
 test('the Releases list gives the draft label of each draft state', () => {
@@ -329,7 +331,7 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
 test('the root page has no current destination, and gives Hosts and Settings at the bottom', () => {
   const panel = leftPanel({ view: { name: 'root' }, feeds: [album], model: null, vaultOpen: false });
   assert.equal(panel.kind, 'destinations');
-  assert.deepEqual(panel.top.map((e) => e.current), [false]);
+  assert.equal(panel.top.every((e) => e.current === false), true);
   assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings']);
 });
 
@@ -444,4 +446,53 @@ test('a check box adds or removes a role, and keeps one or more roles', () => {
   assert.deepEqual(toggleRole(['artist', 'label'], 'artist', false), ['label']);
   const last = ['host'];
   assert.equal(toggleRole(last, 'host', false), last);
+});
+
+// ---- Destinations below Releases (ADR 0085) ----
+
+const artist = { id: 20, title: 'Zed', medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true, release_ids: [22, 21], added_at: 1 };
+const label = { id: 30, title: 'Acme', medium: 'publisher', publisher_roles: ['label'], roles_confirmed: false, release_ids: [22], added_at: 2 };
+const first = { id: 21, title: 'First', medium: 'music', publisher_ids: [20], added_at: 30, draft_state: 'none' };
+const shared = { id: 22, title: 'Shared', medium: 'music', publisher_ids: [20, 30], added_at: 10, draft_state: 'none' };
+const mixtape = { id: 23, title: 'Mixtape', medium: 'musicL', publisher_ids: [], added_at: 20, draft_state: 'none' };
+const catalog = [artist, label, first, shared, mixtape];
+
+test('the destinations below Releases are each feed with roles A to Z, then Not linked', () => {
+  const message = 'ADR 0085 items 1 and 3: list each feed with roles A to Z, then "Not linked". Use groupDestinations of crates/api/ui/shell.js.';
+  const panel = leftPanel({ view: { name: 'releases', group: 30 }, feeds: catalog, model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.id, e.label, e.count]),
+    [['releases', 'Releases', undefined], ['group-30', 'Acme', 1], ['group-20', 'Zed', 2], ['group-none', 'Not linked', 1]], message);
+  assert.deepEqual(panel.top.map((e) => e.current), [false, true, false, false], message);
+  assert.equal(panel.top[0].opens, true, 'ADR 0085 item 1: on a destination below Releases, the row Releases opens Releases.');
+  assert.deepEqual(panel.top.map((e) => e.dot), [undefined, 'label hollow', 'artist', null], message);
+  const linked = leftPanel({ view: { name: 'releases' }, feeds: [artist, first], model: null, vaultOpen: false });
+  assert.deepEqual(linked.top.map((e) => e.id), ['releases', 'group-20'], 'ADR 0085 item 3: "Not linked" shows only when a release has no link.');
+});
+
+test('the page of a feed with roles gives its releases in feed order, with a note for another feed', () => {
+  const message = 'ADR 0085 items 4 and 5: the releases of the feed in its sequence, and "Also on" names each other feed. Use releasesList of crates/api/ui/shell.js.';
+  const list = releasesList({ feeds: catalog, connectors: [], sort: undefined, view: 'rows', group: 20 });
+  assert.deepEqual(list.rows.map((r) => r.id), [22, 21], message);
+  assert.equal(list.sort, 'order', message);
+  assert.deepEqual(list.sorts, ['order', 'newest', 'az'], message);
+  assert.deepEqual(list.head, { id: 20, title: 'Zed', typeLabel: 'Artist', dot: 'artist' }, message);
+  assert.deepEqual(list.rows.map((r) => r.note), ['Also on Acme', null], message);
+  const az = releasesList({ feeds: catalog, connectors: [], sort: 'az', view: 'rows', group: 20 });
+  assert.deepEqual(az.rows.map((r) => r.id), [21, 22]);
+});
+
+test('Not linked gives the releases with no link, and Releases gives each release', () => {
+  const none = releasesList({ feeds: catalog, connectors: [], sort: 'order', view: 'rows', group: 'none' });
+  assert.deepEqual(none.rows.map((r) => r.id), [23], 'ADR 0085 item 3: "Not linked" gives each release with no link.');
+  assert.equal(none.sort, 'newest', 'ADR 0085 item 4: "Not linked" has no feed order.');
+  assert.equal(none.head.title, 'Not linked');
+  const all = releasesList({ feeds: catalog, connectors: [], sort: 'newest', view: 'rows' });
+  assert.deepEqual(all.rows.map((r) => r.id), [21, 23, 22], 'ADR 0085 item 6: Releases gives each album and playlist.');
+  assert.equal(all.head, null);
+  assert.equal(all.rows.every((r) => r.note === null), true);
+});
+
+test('a destination below Releases is a page of the root at narrow width', () => {
+  const view = { name: 'releases', group: 20 };
+  assert.deepEqual(narrowStack(view), [{ name: 'root' }, view], 'ADR 0085 item 7: the root page opens the destination.');
 });

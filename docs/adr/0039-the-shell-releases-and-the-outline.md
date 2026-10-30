@@ -16,6 +16,7 @@
 - Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 9 and 10 add the destination "Settings" between Hosts and Lock Studio in items 1, 5 and 11.
 - Amended: 2026-10-28 by operator decision. [ADR 0072](0072-add-a-feed-opens-from-releases.md) removes Add a feed from items 1, 5 and 11. It opens from a button on Releases.
 - Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 6 with one row "Add tracks".
+- Amended: 2026-10-30 by operator decision. [ADR 0085](0085-each-artist-and-label-is-a-destination.md) adds a destination below Releases for each publisher feed in items 1 and 11. Releases no longer lists the publisher feeds (item 2).
 
 ## Context
 

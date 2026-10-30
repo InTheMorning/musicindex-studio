@@ -401,3 +401,102 @@ fn a_read_records_inferred_roles_and_keeps_confirmed_roles() {
     assert_eq!(row.publisher_roles, [PublisherRole::Label]);
     assert!(row.roles_confirmed);
 }
+
+#[test]
+fn a_playlist_links_to_a_publisher_feed_as_an_album_does() {
+    let mut s = setup();
+    let publisher = new_feed(&mut s, "label.xml", "Label", "publisher");
+    let playlist = new_feed(&mut s, "list.xml", "Mixtape", "musicL");
+    s.collection
+        .set_publisher_roles(publisher, &[PublisherRole::Artist], true)
+        .unwrap();
+    publisher::link(&s.collection, publisher, playlist).unwrap();
+
+    // ADR 0086 item 2: the channel item has the medium of the playlist.
+    let channel = &model(&s, publisher).remote_items;
+    assert_eq!(channel.len(), 1);
+    assert_eq!(channel[0].value.medium.as_deref(), Some("musicL"));
+    assert_eq!(channel[0].value.rel.as_deref(), Some("artist"));
+    let links = model(&s, playlist).publisher.unwrap().remote_items;
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].value.medium.as_deref(), Some("publisher"));
+
+    assert_eq!(
+        publisher::linked_releases(&s.collection, publisher).unwrap(),
+        vec![playlist]
+    );
+    // A role change reaches the playlist item, and the read of the roles
+    // takes its rel.
+    publisher::set_roles(&s.collection, publisher, &[PublisherRole::Label]).unwrap();
+    assert_eq!(
+        model(&s, publisher).remote_items[0].value.rel.as_deref(),
+        Some("label")
+    );
+    assert_eq!(
+        inferred_roles(&model(&s, publisher)),
+        vec![PublisherRole::Label]
+    );
+}
+
+#[test]
+fn catalogs_give_the_releases_of_each_publisher_and_the_publishers_of_each_release() {
+    let mut s = setup();
+    let artist = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    let first = new_feed(&mut s, "first.xml", "First", "music");
+    let shared = new_feed(&mut s, "shared.xml", "Shared", "music");
+    let mixtape = new_feed(&mut s, "mixtape.xml", "Mixtape", "musicL");
+    let half = new_feed(&mut s, "half.xml", "Half", "music");
+    let alone = new_feed(&mut s, "alone.xml", "Alone", "music");
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], true)
+        .unwrap();
+    publisher::link(&s.collection, artist, first).unwrap();
+    publisher::link(&s.collection, artist, shared).unwrap();
+    publisher::link(&s.collection, label, shared).unwrap();
+    publisher::link(&s.collection, label, mixtape).unwrap();
+    // A link in the draft of the release only.
+    let label_model = model(&s, label);
+    pipeline::edit_draft(&s.collection, half, |feed| {
+        feed.publisher = Some(Publisher {
+            remote_items: vec![Entry::new(remote(
+                "publisher",
+                label_model.podcast_guid.as_deref().unwrap(),
+                "https://music.example/label.xml",
+                "Label",
+                Some("label"),
+            ))],
+        });
+    })
+    .unwrap();
+
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            let feed = model(&s, row.id);
+            (row, Some(feed))
+        })
+        .collect();
+    let catalogs = publisher::catalogs(&feeds);
+    let of = |id: FeedId| {
+        let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
+        catalogs[index].clone()
+    };
+    assert_eq!(of(artist).releases, vec![first, shared]);
+    // ADR 0085 item 2: the listed releases in their sequence, then the
+    // release that names the label only.
+    assert_eq!(of(label).releases, vec![shared, mixtape, half]);
+    // ADR 0085 item 5: the primary publisher comes first.
+    assert_eq!(of(shared).publishers, vec![artist, label]);
+    assert_eq!(of(first).publishers, vec![artist]);
+    assert_eq!(of(mixtape).publishers, vec![label]);
+    assert_eq!(of(half).publishers, vec![label]);
+    assert_eq!(of(alone).publishers, Vec::new());
+    assert_eq!(of(alone).releases, Vec::new());
+}

@@ -2362,11 +2362,25 @@ function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onI
 // The current row of a list gets aria-current.
 const currentAttr = (item) => (item.current ? 'page' : undefined);
 
-// The destination rows: Releases only (ADR 0072 item 1). A row opens its
-// destination when `opens` is true.
+// The destination rows: Releases, then each artist, label or other feed with
+// roles, then "Not linked" (ADR 0072 item 1, ADR 0085 items 1 and 3). A row
+// opens its destination when `opens` is true. A row below Releases shows the
+// dot of the feed and the number of its releases.
 function destinationRows(top, go) {
-  return top.map((item) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
-    onClick=${() => { if (item.opens) go({ name: item.id }); }}>${item.label}</button>`);
+  const open = (item) => {
+    if (!item.opens) return;
+    go(item.group === undefined ? { name: item.id } : { name: 'releases', group: item.group });
+  };
+  const row = (item) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
+    aria-label=${item.group === undefined ? undefined : `${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`}
+    onClick=${() => open(item)}>
+    ${item.group !== undefined && html`<span class=${item.dot ? `dot ${item.dot}` : 'dot-space'} aria-hidden="true"></span>`}
+    <span class="row-label">${item.label}</span>
+    ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.count}</span>`}
+  </button>`;
+  const groups = top.filter((item) => item.group !== undefined);
+  return html`${top.filter((item) => item.group === undefined).map(row)}
+    ${groups.length > 0 && html`<div class="destination-group">${groups.map(row)}</div>`}`;
 }
 
 // The outline of an open feed (ADR 0039 item 6): the cover, the title and the
@@ -2467,19 +2481,25 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
   </div>`;
 }
 
-// The sort names of the Releases list (ADR 0039 item 2a).
-const SORTS = [{ id: 'newest', label: 'Newest' }, { id: 'az', label: 'A to Z' }];
+// The sort names of the Releases list (ADR 0039 item 2a, ADR 0085 item 4).
+const SORT_LABELS = { order: 'Feed order', newest: 'Newest', az: 'A to Z' };
 
 // The Releases page, the start page (ADR 0039 items 2, 2a and 3, musicindex
 // ADR 0027 R-LIST-1). `list` is the sort and the view from the address.
-// `marked` is the feed that the last Back selection left marked.
-function ReleasesPage({ feeds, connectors, marked, list, changedFeeds, onQuery, onOpen, onAddFeed }) {
+// `marked` is the feed that the last Back selection left marked. With a
+// `group`, the page shows the releases of one destination below Releases,
+// and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
+function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed }) {
   const [sortOpen, setSortOpen] = useState(false);
   const sortButton = useRef(null);
-  const releases = releasesList({ feeds, connectors, sort: list.sort, view: list.view, marked });
+  const inGroup = group !== undefined;
+  const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, view: list.view, marked, group });
+  const head = releases.head;
+  const title = head ? head.title : 'Releases';
   const pickSort = (id) => {
     setSortOpen(false);
-    onQuery({ sort: id });
+    if (inGroup) onGroupSort(id);
+    else onQuery({ sort: id });
     if (sortButton.current) sortButton.current.focus();
   };
   // Escape closes the sort menu and keeps the focus on its button.
@@ -2500,25 +2520,28 @@ function ReleasesPage({ feeds, connectors, marked, list, changedFeeds, onQuery, 
     aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
     onClick=${() => onQuery({ view: name })}>${icon}</button>`;
   return html`<div>
-    <${Bar}><span class="bar-title">Releases</span><//>
+    <${Bar}><span class="bar-title">${title}</span><//>
     <section class="releases">
       <div class="releases-head">
-        <h1>Releases</h1>
-        ${hasRows && html`<div class="releases-tools">
-          <div class="sort" onKeyDown=${onSortKey}>
+        <h1>${title}</h1>
+        ${(hasRows || (head && head.id !== null)) && html`<div class="releases-tools">
+          ${hasRows && html`<div class="sort" onKeyDown=${onSortKey}>
             <button class="button" type="button" ref=${sortButton} aria-haspopup="menu"
               aria-expanded=${sortOpen ? 'true' : 'false'} onClick=${() => setSortOpen(!sortOpen)}>
-              ${list.sort === 'az' ? 'A to Z' : 'Newest'} ⌄</button>
+              ${SORT_LABELS[releases.sort]} ⌄</button>
             ${sortOpen && html`<ul class="sort-menu" role="menu" aria-label="Sort">
-              ${SORTS.map((s) => html`<li><button type="button" role="menuitemradio" aria-checked=${list.sort === s.id ? 'true' : 'false'}
-                onClick=${() => pickSort(s.id)}><span class="sort-mark" aria-hidden="true">${list.sort === s.id ? '✓' : ''}</span>${s.label}</button></li>`)}
+              ${releases.sorts.map((id) => html`<li><button type="button" role="menuitemradio" aria-checked=${releases.sort === id ? 'true' : 'false'}
+                onClick=${() => pickSort(id)}><span class="sort-mark" aria-hidden="true">${releases.sort === id ? '✓' : ''}</span>${SORT_LABELS[id]}</button></li>`)}
             </ul>`}
-          </div>
-          ${viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
-          ${viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
-          <button class="button action" type="button" onClick=${onAddFeed}>＋ Add a feed</button>
+          </div>`}
+          ${hasRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
+          ${hasRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
+          ${!inGroup && html`<button class="button action" type="button" onClick=${onAddFeed}>＋ Add a feed</button>`}
+          ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the feed</button>`}
         </div>`}
       </div>
+      ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
+      ${head && head.id === null && html`<p class="hint releases-roles">These releases have no link to an artist or a label.</p>`}
       ${releases.letters && html`<nav class="letters" aria-label="Letters">
         ${releases.letters.map((g) => html`<button class="button letter" type="button" onClick=${() => showLetter(g.firstId)}>${g.letter}</button>`)}
       </nav>`}
@@ -2530,11 +2553,14 @@ function ReleasesPage({ feeds, connectors, marked, list, changedFeeds, onQuery, 
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
                   <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
+                  ${row.note && html`<span class="sub">${row.note}</span>`}
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
               </button>
             </li>`)}
           </ul>`
+        : inGroup
+        ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">
             <p class="empty">No releases yet.</p>
             <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button></div>
@@ -2781,6 +2807,8 @@ function Shell({ vault, onLock }) {
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
   } else {
     main = html`<${ReleasesPage} feeds=${feeds} connectors=${connectors} marked=${view.marked} list=${list}
+      group=${view.name === 'releases' ? view.group : undefined} groupSort=${view.sort}
+      onGroupSort=${(sort) => go({ ...view, sort }, { replace: true })}
       changedFeeds=${changedFeeds} onQuery=${changeList}
       onOpen=${(id) => go(openFeedView(id, narrow))} onAddFeed=${() => go({ name: 'add-feed' })} />`;
   }

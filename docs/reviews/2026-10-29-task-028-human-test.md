@@ -43,7 +43,7 @@ A screenshot does not show an open select list, so the operator did the visual c
 
 The **Access key ID** field of the S3 or R2 form is a text field. Studio keeps this value in the vault (ADR 0046 item 2), but the form shows it.
 
-On 2026-10-29 the operator made a decision about the fields of secret values. A secret value is in a vault, or Studio shows it one time only. The field hides the value until the user clicks an eye control. The SFTP private key gets a masked text area. ADR 0078 will record the decision after this test.
+On 2026-10-29 the operator made a decision about the fields of secret values. A secret value is in a vault, or Studio shows it one time only. The field hides the value until the user clicks an eye control. The SFTP private key gets a masked text area. [ADR 0078](../adr/0078-a-secret-value-stays-hidden-until-the-user-shows-it.md) records the decision. On 2026-10-29 Claude checked the correction in a local desktop Studio with screenshots. Each field and each display of a secret value showed dots, and its eye button showed the value. `$edges()` found no content at the edge of a group.
 
 ### Two Track Numbers For Each Track After A Removal
 

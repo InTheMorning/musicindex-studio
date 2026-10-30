@@ -297,6 +297,18 @@ code, .mono {
    error only (ADR 0018). */
 .field input[aria-invalid="true"] { border: 1px solid var(--error); }
 .field-error { color: var(--error); font-size: .9rem; font-weight: 500; }
+/* A secret value and its eye button (ADR 0078). The value takes the free
+   width. The button stays at the top line of a text area. */
+.secret { display: flex; gap: 8px; align-items: center; }
+.secret:has(> textarea) { align-items: flex-start; }
+.secret > :first-child { flex: 1; min-width: 0; }
+.secret > .icon-button { flex: none; }
+/* The token field keeps its space in the notice, and the button stays
+   level with the field. */
+.notice > .secret { margin: 8px 0; }
+.secret > .token-field { margin: 0; }
+/* A text area that hides its value (ADR 0078 item 5). */
+textarea.masked { -webkit-text-security: disc; }
 
 /* Passphrase strength meter (ADR 0018). */
 .meter { display: grid; gap: 6px; }

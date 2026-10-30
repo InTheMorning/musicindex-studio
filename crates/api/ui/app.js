@@ -321,6 +321,59 @@ export function Field({ id, label, hint, error, children, rootProps, ...input })
   </div>`;
 }
 
+// The eye button of a secret value (ADR 0078 item 3). `name` completes
+// "Show …" and "Hide …".
+function EyeButton({ shown, name, controls, onToggle }) {
+  return html`<button class="button quiet icon-button" type="button" aria-label=${`${shown ? 'Hide' : 'Show'} ${name}`}
+    aria-pressed=${shown ? 'true' : 'false'} aria-controls=${controls} onClick=${onToggle}>
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle>
+      ${shown && html`<path d="M3 3l18 18"></path>`}
+    </svg>
+  </button>`;
+}
+
+// The control of a secret value with its eye button (ADR 0078). The value
+// is hidden until the user selects the button. With `rows`, the control is a
+// text area for a value with more than one line, and CSS masks its text
+// (item 5). Without `rows`, it is a password field while it hides the value.
+export function SecretInput({ id, name, rows, ...input }) {
+  const [shown, setShown] = useState(false);
+  const control = rows
+    ? html`<textarea id=${id} rows=${rows} spellcheck="false" class=${shown ? undefined : 'masked'} ...${input}></textarea>`
+    : html`<input id=${id} spellcheck="false" ...${input} type=${shown ? 'text' : 'password'} />`;
+  return html`<div class="secret">
+    ${control}
+    <${EyeButton} shown=${shown} name=${name} controls=${id} onToggle=${() => setShown(!shown)} />
+  </div>`;
+}
+
+// A field of a secret value: a Field with a SecretInput (ADR 0078 item 7).
+// `name` completes "Show …" and "Hide …". Its default is the label.
+export function SecretField({ id, label, name, hint, error, children, rootProps, ...input }) {
+  const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
+  return html`<div class="field" ...${rootProps}>
+    <label for=${id}>${label}</label>
+    <div class="field-body">
+      ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
+      <${SecretInput} id=${id} name=${name || label.replace(/ \(optional\)$/, '').replace(/^./, (c) => c.toLowerCase())}
+        aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input} />
+      ${error && html`<span class="field-error" id=${`${id}-error`}>${error}</span>`}
+      ${children}
+    </div>
+  </div>`;
+}
+
+// A display of a value that Studio shows one time only (ADR 0078 item 6).
+// It shows dots until the user selects the eye button.
+export function SecretText({ id, name, value, className, label }) {
+  const [shown, setShown] = useState(false);
+  return html`<div class="secret">
+    <div id=${id} class=${className} aria-label=${label}>${shown ? value : '•'.repeat(value.length)}</div>
+    <${EyeButton} shown=${shown} name=${name} controls=${id} onToggle=${() => setShown(!shown)} />
+  </div>`;
+}
+
 // Run an API action with a busy state and an error state.
 export function useAction() {
   const [busy, setBusy] = useState(false);
@@ -467,11 +520,11 @@ function CreateVault({ onDone }) {
   return html`<form class="form" onSubmit=${submit} noValidate>
     <div><h1>Protect your keys</h1>
       <p>This step keeps a secret, so Studio makes a vault for it first. Only your passphrase opens the vault.</p></div>
-    <${Field} id="passphrase" label="Passphrase" type="password" autocomplete="new-password" required
+    <${SecretField} id="passphrase" label="Passphrase" autocomplete="new-password" required
       value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} error=${passError}>
       <${Meter} strength=${strength} />
     <//>
-    <${Field} id="confirm" label="Type the passphrase again" type="password" autocomplete="new-password" required
+    <${SecretField} id="confirm" label="Type the passphrase again" name="the second passphrase" autocomplete="new-password" required
       value=${confirm} onInput=${(e) => setConfirm(e.target.value)} error=${confirmError} />
     <label class="check"><input type="checkbox" checked=${recovery} onChange=${(e) => setRecovery(e.target.checked)} />
       Make a recovery key, in case I forget the passphrase</label>
@@ -487,7 +540,7 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
   return html`<div class="form">
     <div><h1>Write down your recovery key</h1>
       <p>Studio shows this key one time only. With it, you can open the vault if you forget your passphrase.</p></div>
-    <div class="recovery" aria-label="Recovery key">${recoveryKey}</div>
+    <${SecretText} id="recovery-key-shown" className="recovery" label="Recovery key" name="recovery key" value=${recoveryKey} />
     <label class="check"><input type="checkbox" checked=${kept} onChange=${(e) => setKept(e.target.checked)} />
       I wrote down the recovery key in a safe place</label>
     <div class="actions"><button class="button" type="button" disabled=${!kept} onClick=${onDone}>Continue</button></div>
@@ -626,9 +679,9 @@ function S3HostForm({ onAdded }) {
     <${Field} id="s3-url" label="Public address of the bucket (optional)" type="url"
       hint="The custom domain that publishes the bucket. R2 needs a custom domain for a public feed."
       error=${publicAddressError} value=${values.base_url} onInput=${set('base_url')} />
-    <${Field} id="s3-key" label="Access key ID" required autocomplete="off"
+    <${SecretField} id="s3-key" label="Access key ID" required autocomplete="off"
       value=${values.access_key_id} onInput=${set('access_key_id')} />
-    <${Field} id="s3-secret" label="Secret access key" type="password" required autocomplete="off"
+    <${SecretField} id="s3-secret" label="Secret access key" required autocomplete="off"
       hint="Studio keeps this key in your vault."
       value=${values.secret_access_key} onInput=${set('secret_access_key')} />
     ${notice}
@@ -757,17 +810,12 @@ function SftpHostForm({ onAdded }) {
     <${ChoiceSelect} id="sftp-login" label="Login" value=${values.login}
       options=${[['key', 'Private key'], ['password', 'Password'], ['agent', 'ssh-agent']]}
       onChange=${(login) => setValues((current) => ({ ...current, login }))} />
-    ${values.login === 'key' && html`<div class="field">
-      <label for="sftp-key">Private key</label>
-      <div class="field-body">
-        <span class="hint" id="sftp-key-hint">Paste the text of the key file, such as id_ed25519. Studio keeps it in your vault.</span>
-        <textarea id="sftp-key" rows="6" required autocomplete="off" spellcheck="false" aria-describedby="sftp-key-hint"
-          value=${values.private_key} onInput=${set('private_key')}></textarea>
-      </div>
-    </div>`}
-    ${values.login === 'key' && html`<${Field} id="sftp-passphrase" label="Passphrase of the key (optional)" type="password"
+    ${values.login === 'key' && html`<${SecretField} id="sftp-key" label="Private key" rows="6" required autocomplete="off"
+      hint="Paste the text of the key file, such as id_ed25519. Studio keeps it in your vault."
+      value=${values.private_key} onInput=${set('private_key')} />`}
+    ${values.login === 'key' && html`<${SecretField} id="sftp-passphrase" label="Passphrase of the key (optional)"
       autocomplete="off" value=${values.passphrase} onInput=${set('passphrase')} />`}
-    ${values.login === 'password' && html`<${Field} id="sftp-password" label="Password" type="password" required
+    ${values.login === 'password' && html`<${SecretField} id="sftp-password" label="Password" required
       autocomplete="off" hint="Studio keeps it in your vault."
       value=${values.password} onInput=${set('password')} />`}
     ${values.login === 'agent' && html`<p class="hint">Studio uses the keys of the ssh-agent on this computer, and keeps no secret.</p>`}
@@ -868,7 +916,7 @@ function SigningStep({ nk, idPrefix, keyError }) {
     ${nk.mode === 'signer' && nk.signer.error && (nk.signer.error.code === 'no_signer'
       ? noticeText(nk.signer.error.message)
       : html`<${ErrorNotice} error=${nk.signer.error} />`)}
-    ${nk.mode === 'vault' && html`<${Field} id=${`${idPrefix}-secret`} label="Private key of the site" type="password"
+    ${nk.mode === 'vault' && html`<${SecretField} id=${`${idPrefix}-secret`} label="Private key of the site"
       autocomplete="off" hint="Paste the nsec of the key. Studio keeps it in your vault."
       error=${keyError} value=${nk.secret} onInput=${(e) => nk.typeSecret(e.target.value)}
       onChange=${(e) => { if (isNsec(e.target.value)) nk.lookup(e.target.value.trim()); }} />`}
@@ -1511,7 +1559,7 @@ function Unlock({ onUnlocked }) {
   return html`<main class="center"><form class="card" onSubmit=${submit}>
     <${Brand} />
     <div><h1>Unlock Studio</h1><p>Your passphrase opens the vault with the keys of your hosts.</p></div>
-    <${Field} id="unlock" label="Passphrase" type="password" autocomplete="current-password" required autofocus
+    <${SecretField} id="unlock" label="Passphrase" autocomplete="current-password" required autofocus
       error=${unlockError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
     <${ErrorNotice} error=${unlockError.other} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !passphrase}>${busy ? 'Unlocking…' : 'Unlock'}</button></div>
@@ -1946,8 +1994,8 @@ function ConnectedAppsPanel() {
     </ul>`}
     ${made && html`<div class="notice" role="status">
       <strong>The token of “${made.name}”</strong>
-      <input class="mono token-field" type="text" readonly aria-label=${`Token of ${made.name}`}
-        value=${made.token} onFocus=${(e) => e.target.select()} />
+      <${SecretInput} id="app-token" name=${`the token of ${made.name}`} class="mono token-field" readonly
+        aria-label=${`Token of ${made.name}`} value=${made.token} onFocus=${(e) => e.target.select()} />
       <p class="hint">Give this token to the app now. Studio does not show it again.</p>
       <div class="actions">
         <button class="button" type="button" onClick=${copy}>${copied ? 'Copied' : 'Copy'}</button>
@@ -2995,7 +3043,7 @@ function SignInPage({ onDone, onSignUp, onRecovery }) {
     <div><h1>Sign in</h1></div>
     <${Field} id="sign-in-email" label="Email address" type="email" autocomplete="username" required autofocus
       value=${email} onInput=${(e) => setEmail(e.target.value)} />
-    <${Field} id="sign-in-passphrase" label="Passphrase" type="password" autocomplete="current-password" required
+    <${SecretField} id="sign-in-passphrase" label="Passphrase" autocomplete="current-password" required
       value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
     <${AuthNotice} error=${error} />
     <div class="actions">
@@ -3032,7 +3080,7 @@ function RecoveryPage({ onDone, onBack }) {
       <p>Give the email address or the public key of the account, and the recovery key.</p></div>
     <${Field} id="recovery-account" label="Email address or npub" autocomplete="username" required autofocus
       value=${account} onInput=${(e) => setAccount(e.target.value)} />
-    <${Field} id="recovery-key" label="Recovery key" autocomplete="off" spellcheck="false" required
+    <${SecretField} id="recovery-key" label="Recovery key" autocomplete="off" required
       value=${key} onInput=${(e) => setKey(e.target.value)} />
     ${error && html`<div class="notice error" role="alert">${error.code === 'offline' ? error.message : recoveryErrorText(error.code)}</div>`}
     <div class="actions">
@@ -3094,7 +3142,7 @@ function AddMethodPage() {
     <div><h1>Add a sign-in method</h1>
       <p>The recovery key opened the vault. Add a new way to sign in before you continue.</p></div>
     ${choices.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase} noValidate>
-      <${Field} id="add-method-passphrase" label="New passphrase" type="password" autocomplete="new-password" required autofocus
+      <${SecretField} id="add-method-passphrase" label="New passphrase" autocomplete="new-password" required autofocus
         value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} error=${passError}>
         <${Meter} strength=${strength} />
       <//>
@@ -3152,7 +3200,7 @@ function SignUpPage({ signup, onDone, onSignIn }) {
       error=${emailError} value=${email} onInput=${(e) => setEmail(e.target.value)} />
     ${needInvite && html`<${Field} id="sign-up-invite" label="Invite code" autocomplete="off" required
       value=${invite} onInput=${(e) => setInvite(e.target.value)} />`}
-    <${Field} id="sign-up-passphrase" label="Passphrase" type="password" autocomplete="new-password" required
+    <${SecretField} id="sign-up-passphrase" label="Passphrase" autocomplete="new-password" required
       value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} error=${passError}>
       <${Meter} strength=${strength} />
     <//>
@@ -3236,7 +3284,7 @@ function UnlockSheet({ session, onDone }) {
     <div class="body">
       <p>This step needs the vault. Your passphrase, your signer or your passkey opens it.</p>
       ${methods.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase}>
-        <${Field} id="unlock-sheet-passphrase" label="Passphrase" type="password" autocomplete="current-password" required autofocus
+        <${SecretField} id="unlock-sheet-passphrase" label="Passphrase" autocomplete="current-password" required autofocus
           error=${passError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
         <div class="actions"><button class="button primary" type="submit" disabled=${busy || !passphrase}>${busy ? 'Unlocking…' : 'Unlock'}</button></div>
       </form>`}

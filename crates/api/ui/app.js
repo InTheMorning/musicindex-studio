@@ -1,6 +1,7 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { pageSequence } from './pages.js';
+import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet } from './editor.js';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods, accountName, deleteConfirmation,
@@ -372,6 +373,14 @@ export function SecretText({ id, name, value, className, label }) {
     <div id=${id} class=${className} aria-label=${label}>${shown ? value : '•'.repeat(value.length)}</div>
     <${EyeButton} shown=${shown} name=${name} controls=${id} onToggle=${() => setShown(!shown)} />
   </div>`;
+}
+
+// One feed that Studio could not read: its name, its site and the reason
+// (musicindex ADR 0023 R-MSG-1).
+function FailedLine({ failed }) {
+  const line = failedLine(failed);
+  return html`<li><strong>${line.name}</strong>${line.site && html` · <span class="mono">${line.site}</span>`}
+    <br />${line.text}</li>`;
 }
 
 // Run an API action with a busy state and an error state.
@@ -1378,12 +1387,12 @@ function FoundFeeds({ found, onAdded, onNothingToAdd }) {
     </fieldset>`)}
     ${found.truncated && html`<p class="hint">Studio stopped at 100 feeds. Add the others in a second search.</p>`}
     ${found.failed.length > 0 && html`<div class="field"><span class="field-error">Studio could not read:</span>
-      <ul class="failed">${found.failed.map((f) => html`<li><span class="mono">${f.source}</span>: ${f.message}</li>`)}</ul></div>`}
+      <ul class="failed">${found.failed.map((f) => html`<${FailedLine} failed=${f} />`)}</ul></div>`}
     <${ErrorNotice} error=${error} />
     ${addable.length === 0 && found.feeds.length > 0
       ? html`<p role="status">Each of these feeds is in your collection.</p>
         ${onNothingToAdd && html`<div class="actions"><button class="button primary" type="button" onClick=${onNothingToAdd}>Open Studio</button></div>`}`
-      : html`<div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
+      : addable.length > 0 && html`<div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
           ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>`}
   </div>`;
 }
@@ -1433,7 +1442,7 @@ function MspImport({ onAdded }) {
     return html`<div class="form">
       <p>Studio added ${result.added.length} feed${result.added.length === 1 ? '' : 's'} and keeps the edit tokens in your vault.</p>
       ${result.failed.length > 0 && html`<div class="field"><span class="field-error">Studio could not import:</span>
-        <ul class="failed">${result.failed.map((f) => html`<li><span class="mono">${f.source}</span>: ${f.message}</li>`)}</ul></div>`}
+        <ul class="failed">${result.failed.map((f) => html`<${FailedLine} failed=${f} />`)}</ul></div>`}
       <div class="actions"><button class="button" type="button" onClick=${() => onAdded(result)}>Continue</button></div>
     </div>`;
   }

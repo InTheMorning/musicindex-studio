@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::connector::{Connector, ConnectorError, Version};
 use crate::digest::content_version;
 use crate::feed::{Feed, RemoteItem};
-use crate::musicindex::MusicIndex;
+use crate::musicindex::{IndexFeed, MusicIndex};
 use crate::web::{Web, WebErrorKind, host_of};
 use crate::xml::{Document, Ns};
 
@@ -155,16 +155,58 @@ pub struct Found {
     pub bytes: Vec<u8>,
 }
 
+/// Why Studio could not read a feed. The UI gives the words for each kind,
+/// because a message must not show the raw text of a library (musicindex
+/// ADR 0023 R-MSG-1 item 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum FailKind {
+    /// The address gives a file that is not an RSS feed.
+    NotAFeed,
+    /// The address gives 404 or 410.
+    Gone,
+    /// The site gives a different status that is not a success.
+    ServerError,
+    /// Studio cannot connect to the site.
+    Unreachable,
+    /// The network policy refused the address (ADR 0057).
+    NotPublic,
+    /// The file is larger than [`MAX_FEED_BYTES`].
+    TooLarge,
+    /// The text is not an `http` or `https` address.
+    InvalidAddress,
+    /// musicindex does not know the feed GUID.
+    UnknownGuid,
+    /// Studio cannot get the address of a feed GUID from musicindex.
+    IndexUnreachable,
+    /// The file is not an MSP 2.0 backup.
+    BadBackup,
+}
+
+/// A feed that Studio could not read, with the kind of the failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadFailure {
+    /// The kind of the failure.
+    pub kind: FailKind,
+    /// The text of the library, for the log only.
+    pub message: String,
+}
+
 /// A source that discovery could not read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Failed {
     /// The address or GUID.
     pub source: String,
-    /// Why the read failed.
+    /// The kind of the failure.
+    pub kind: FailKind,
+    /// The title of the feed, when musicindex knows it.
+    pub title: Option<String>,
+    /// The address that Studio read, when it has one.
+    pub url: Option<String>,
+    /// The text of the library. The UI does not show it (musicindex ADR
+    /// 0023 R-MSG-1 item 4).
     pub message: String,
-    /// True when the network policy refused the address (ADR 0057).
-    #[serde(skip)]
-    pub not_public: bool,
 }
 
 /// The result of a discovery from addresses.
@@ -222,18 +264,27 @@ pub struct PublicFeed {
 ///
 /// Gives a message when the read fails or the file is not an RSS feed.
 pub fn read_public(web: &Web, url: &str) -> Result<PublicFeed, String> {
-    read_public_checked(web, url).map_err(|(message, _)| message)
+    read_feed(web, url).map_err(|failure| failure.message)
 }
 
-/// Like [`read_public`]. The error also tells whether the network policy
-/// refused the address.
-fn read_public_checked(web: &Web, url: &str) -> Result<PublicFeed, (String, bool)> {
+/// Like [`read_public`]. The error also gives the kind of the failure.
+///
+/// # Errors
+///
+/// Gives a [`ReadFailure`] when the read fails or the file is not an RSS
+/// feed.
+pub fn read_feed(web: &Web, url: &str) -> Result<PublicFeed, ReadFailure> {
     let limit = u64::try_from(MAX_FEED_BYTES).unwrap_or(u64::MAX);
-    let file = web
-        .get(url, limit)
-        .map_err(|e| (e.to_string(), e.kind() == WebErrorKind::NotPublic))?;
-    let doc = Document::parse_bytes(&file.bytes).map_err(|e| (e.to_string(), false))?;
-    let feed = Feed::read(&doc).map_err(|e| (e.to_string(), false))?;
+    let not_a_feed = |message: String| ReadFailure {
+        kind: FailKind::NotAFeed,
+        message,
+    };
+    let file = web.get(url, limit).map_err(|e| ReadFailure {
+        kind: web_fail_kind(&e),
+        message: e.to_string(),
+    })?;
+    let doc = Document::parse_bytes(&file.bytes).map_err(|e| not_a_feed(e.to_string()))?;
+    let feed = Feed::read(&doc).map_err(|e| not_a_feed(e.to_string()))?;
     Ok(PublicFeed {
         feed,
         version: content_version(&file.bytes),
@@ -242,22 +293,49 @@ fn read_public_checked(web: &Web, url: &str) -> Result<PublicFeed, (String, bool
     })
 }
 
-/// The address of a source. A GUID gets its address from musicindex.
-fn resolve(source: &Source, index: &MusicIndex) -> Result<String, Failed> {
+/// The kind of a failed request to a site.
+fn web_fail_kind(error: &crate::web::WebError) -> FailKind {
+    match error.kind() {
+        WebErrorKind::Status if matches!(error.status(), Some(404 | 410)) => FailKind::Gone,
+        WebErrorKind::Status => FailKind::ServerError,
+        WebErrorKind::TooLarge => FailKind::TooLarge,
+        WebErrorKind::NotPublic => FailKind::NotPublic,
+        WebErrorKind::InvalidAddress => FailKind::InvalidAddress,
+        _ => FailKind::Unreachable,
+    }
+}
+
+/// The address and the title of a source. A GUID gets them from
+/// musicindex.
+fn resolve(source: &Source, index: &MusicIndex) -> Result<(String, Option<String>), Failed> {
+    let failed = |guid: &str, kind, message: String| Failed {
+        source: guid.to_owned(),
+        kind,
+        title: None,
+        url: None,
+        message,
+    };
     match source {
-        Source::Url(url) => Ok(url.clone()),
-        Source::Guid(guid) => match index.feed_url(guid) {
-            Ok(Some(url)) => Ok(url),
-            Ok(None) => Err(Failed {
-                source: guid.clone(),
-                message: "musicindex does not know this feed GUID".to_owned(),
-                not_public: false,
+        Source::Url(url) => Ok((url.clone(), None)),
+        Source::Guid(guid) => match index.feed(guid) {
+            Ok(Some(IndexFeed {
+                url: Some(url),
+                title,
+            })) => Ok((url, title)),
+            Ok(Some(IndexFeed { url: None, title })) => Err(Failed {
+                title,
+                ..failed(
+                    guid,
+                    FailKind::UnknownGuid,
+                    "musicindex has no address for this feed GUID".to_owned(),
+                )
             }),
-            Err(e) => Err(Failed {
-                source: guid.clone(),
-                message: e.to_string(),
-                not_public: false,
-            }),
+            Ok(None) => Err(failed(
+                guid,
+                FailKind::UnknownGuid,
+                "musicindex does not know this feed GUID".to_owned(),
+            )),
+            Err(e) => Err(failed(guid, FailKind::IndexUnreachable, e.to_string())),
         },
     }
 }
@@ -328,8 +406,8 @@ pub fn from_sources(
         {
             continue;
         }
-        let url = match resolve(&source, index) {
-            Ok(url) => url,
+        let (url, title) = match resolve(&source, index) {
+            Ok(found) => found,
             Err(failed) => {
                 result.failed.push(failed);
                 continue;
@@ -347,13 +425,15 @@ pub fn from_sources(
             version,
             url: read_url,
             bytes,
-        } = match read_public_checked(web, &url) {
+        } = match read_feed(web, &url) {
             Ok(read) => read,
-            Err((message, not_public)) => {
+            Err(failure) => {
                 result.failed.push(Failed {
                     source: source.label().to_owned(),
-                    message,
-                    not_public,
+                    kind: failure.kind,
+                    title,
+                    url: Some(url),
+                    message: failure.message,
                 });
                 continue;
             }
@@ -514,7 +594,44 @@ mod tests {
         );
         assert_eq!(found.feeds.len(), 1);
         assert_eq!(found.feeds[0].title.as_deref(), Some("Album B"));
-        assert_eq!(found.failed.len(), 3);
+        let kinds: Vec<_> = found.failed.iter().map(|f| f.kind).collect();
+        assert_eq!(
+            kinds,
+            [
+                FailKind::Gone,
+                FailKind::InvalidAddress,
+                FailKind::UnknownGuid
+            ]
+        );
+    }
+
+    /// The human test of 2026-10-29: a release GUID gave an address that
+    /// gives a sitemap. The failure names the feed and the reason, not the
+    /// parser text (musicindex ADR 0023 R-MSG-1).
+    #[test]
+    fn a_guid_whose_address_gives_no_feed_keeps_its_title_and_address() {
+        let server = server();
+        let sitemap = server.url("/feed.xml");
+        server.set(
+            "/feed.xml",
+            200,
+            b"<?xml version=\"1.0\"?><urlset><url><loc>https://x.example/</loc></url></urlset>"
+                .to_vec(),
+        );
+        server.set(
+            "/v1/feeds/c",
+            200,
+            format!("{{\"data\":{{\"feed_url\":\"{sitemap}\",\"title\":\"Album C\"}}}}")
+                .into_bytes(),
+        );
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let found = from_sources(&Web::new(), &index, &[], &["c".to_owned()]);
+        assert_eq!(found.failed.len(), 1, "{found:?}");
+        let failed = &found.failed[0];
+        assert_eq!(failed.kind, FailKind::NotAFeed);
+        assert_eq!(failed.source, "c");
+        assert_eq!(failed.title.as_deref(), Some("Album C"));
+        assert_eq!(failed.url.as_deref(), Some(sitemap.as_str()));
     }
 
     #[test]

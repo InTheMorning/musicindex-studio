@@ -20,7 +20,7 @@ use studio_core::connector::{
     self, ConnectorErrorKind, LocalFolder, S3Bucket, S3Config, S3Credentials, S3UrlStyle,
     SftpConfig, SftpCredentials, SftpHost, SftpLogin,
 };
-use studio_core::discover::PublicFeed;
+use studio_core::discover::{FailKind, PublicFeed, ReadFailure};
 use studio_core::download;
 use studio_core::feed::{Entry, Feed, Recipient};
 use studio_core::folder_scan;
@@ -1605,7 +1605,7 @@ pub(crate) async fn discover(
         // The policy refused an address and discovery found nothing
         // (ADR 0057 item 6).
         if found.feeds.is_empty()
-            && let Some(refused) = found.failed.iter().find(|f| f.not_public)
+            && let Some(refused) = found.failed.iter().find(|f| f.kind == FailKind::NotPublic)
         {
             return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -1771,6 +1771,18 @@ pub(crate) struct Import {
     urls: Vec<String>,
 }
 
+/// One failed read of an import, in the form of a discovery failure. The UI
+/// gives the words for its kind (musicindex ADR 0023 R-MSG-1).
+fn failed_json(url: &str, failure: &ReadFailure) -> Value {
+    json!({
+        "source": url,
+        "kind": failure.kind,
+        "title": null,
+        "url": url,
+        "message": failure.message,
+    })
+}
+
 /// True when the collection has the feed, by its read address or its GUID.
 fn is_known(read: &PublicFeed, keys: &(Vec<String>, Vec<String>)) -> bool {
     let guid = read
@@ -1826,10 +1838,10 @@ pub(crate) async fn import_feeds(
                     url: found.url.clone(),
                     bytes: found.bytes.clone(),
                 },
-                None => match studio_core::discover::read_public(&w.web, &url) {
+                None => match studio_core::discover::read_feed(&w.web, &url) {
                     Ok(read) => read,
-                    Err(message) => {
-                        failed.push(json!({ "source": url, "message": message }));
+                    Err(failure) => {
+                        failed.push(failed_json(&url, &failure));
                         continue;
                     }
                 },
@@ -1971,7 +1983,13 @@ pub(crate) async fn import_msp(
             let backup = match studio_core::msp::MspBackup::from_json(value) {
                 Ok(backup) => backup,
                 Err(message) => {
-                    failed.push(json!({ "source": "backup file", "message": message }));
+                    failed.push(json!({
+                        "source": "backup file",
+                        "kind": FailKind::BadBackup,
+                        "title": null,
+                        "url": null,
+                        "message": message,
+                    }));
                     continue;
                 }
             };
@@ -1982,14 +2000,14 @@ pub(crate) async fn import_msp(
             if keys.0.contains(&backup.feed_url) {
                 continue;
             }
-            match studio_core::discover::read_public(&w.web, &backup.feed_url) {
+            match studio_core::discover::read_feed(&w.web, &backup.feed_url) {
                 Ok(read) => {
                     if !is_known(&read, &keys) {
                         added.push(add_read_feed(w, &read)?);
                     }
                 }
-                Err(message) => {
-                    failed.push(json!({ "source": backup.feed_url, "message": message }));
+                Err(failure) => {
+                    failed.push(failed_json(&backup.feed_url, &failure));
                 }
             }
         }

@@ -19,7 +19,7 @@ Feeds that you add this way are read-only until you connect the host that holds 
 5. Studio lists what it found, grouped by host. Select the feeds to add.
 6. Select **Add N feeds**.
 
-If Studio cannot read an address, it lists the address under "Studio could not read".
+If Studio cannot read a feed, it lists the feed below "Studio could not read". Each line gives the name of the feed, its site, the cause and what you can do.
 Studio stops at 100 feeds. Add the rest in a second search.
 
 A feed that is in your collection shows "in your collection".

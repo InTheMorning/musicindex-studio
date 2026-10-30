@@ -84,6 +84,16 @@ struct Envelope<T> {
 #[derive(Deserialize)]
 struct FeedData {
     feed_url: Option<String>,
+    title: Option<String>,
+}
+
+/// The address and the title that musicindex knows for a feed GUID.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct IndexFeed {
+    /// The feed address.
+    pub url: Option<String>,
+    /// The title of the feed.
+    pub title: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -214,11 +224,24 @@ impl MusicIndex {
     ///
     /// Gives a [`WebError`] when the request fails.
     pub fn feed_url(&self, feed_guid: &str) -> Result<Option<String>, WebError> {
+        Ok(self.feed(feed_guid)?.and_then(|feed| feed.url))
+    }
+
+    /// The address and the title that musicindex knows for a feed GUID.
+    /// Gives `None` when musicindex does not know the feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails.
+    pub fn feed(&self, feed_guid: &str) -> Result<Option<IndexFeed>, WebError> {
         let url = format!("{}/v1/feeds/{}", self.base, filter_guid(feed_guid));
         match self.web.get(&url, MAX_RESPONSE_BYTES) {
             Ok(file) => Ok(serde_json::from_slice::<Envelope<FeedData>>(&file.bytes)
                 .ok()
-                .and_then(|e| e.data.feed_url)),
+                .map(|e| IndexFeed {
+                    url: e.data.feed_url,
+                    title: e.data.title,
+                })),
             Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
             Err(e) => Err(e),
         }

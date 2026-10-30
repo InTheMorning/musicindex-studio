@@ -133,6 +133,13 @@ export function addOpen(list, blank) {
 // `items/${index}/persons`.
 const BLANK_PERSON = { name: '', role: null, group: null, img: null, href: null, npub: null };
 
+// The picture of a person in an open entry. It shows only when the image
+// loads.
+function PersonPicture({ url }) {
+  const { src } = useImage(url || null);
+  return src ? html`<div class="person-picture"><img src=${src} alt="" /></div>` : null;
+}
+
 function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
   const blank = BLANK_PERSON;
   const { feedId } = useContext(PickerContext) || {};
@@ -148,6 +155,7 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
           <${TextField} id=${`${id}-role`} label="Role" hint="For example vocalist. Empty means host." value=${p.role} onChange=${change('role')} />
           <${TextField} id=${`${id}-group`} label="Group" hint="For example music. Empty means cast." value=${p.group} onChange=${change('group')} />
         </div>
+        <${PersonPicture} url=${p.img} />
         <${TextField} id=${`${id}-img`} label="Picture address" type="url" address=${`${path}/${i}/img`} bad=${bad} value=${p.img} onChange=${change('img')} />
         <${TextField} id=${`${id}-href`} label="Information address" type="url" address=${`${path}/${i}/href`} bad=${bad} value=${p.href} onChange=${change('href')} />
         <${NostrRow} label="Nostr" summary=${keySummary(p.name, p.npub)} value=${p.npub} feedId=${feedId}

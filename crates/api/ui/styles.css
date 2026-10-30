@@ -1307,6 +1307,13 @@ select.position:focus { background: var(--fill); }
 .head .text { flex: 1; min-width: 0; }
 .head h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; }
 .head .sub { color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The public address of a feed: a link that opens the feed in a new tab,
+   and a button that copies it. The link is truncated, the button is not. */
+.head .sub.feed-address { display: flex; align-items: center; gap: 2px; overflow: visible; }
+.feed-address a { min-width: 0; padding-block: calc((var(--target) - 1lh) / 2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; }
+.feed-address a:hover { color: var(--text); text-decoration: underline; }
+.feed-address .icon-button { flex: none; color: var(--muted); }
+.feed-address .icon { display: block; width: 16px; height: 16px; }
 .pager { display: flex; gap: 8px; flex: none; }
 
 /* ---- The outline of an open feed (ADR 0039 item 6). ---- */
@@ -1736,3 +1743,7 @@ button.outline-feed {
 .link-row .summary.field-error { overflow-wrap: anywhere; }
 .change-diff { padding: 4px 16px 12px; position: relative; }
 .change-diff .diff { margin: 0; }
+
+/* The picture of a person in an open entry of Credits. */
+.person-picture { width: 72px; height: 72px; border-radius: 12px; overflow: hidden; background: var(--fill); }
+.person-picture img { display: block; width: 100%; height: 100%; object-fit: cover; }

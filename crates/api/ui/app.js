@@ -1697,11 +1697,40 @@ const ICONS = {
   settings: () => html`<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" />`,
   lock: () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />`,
   'lock-open': () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" />`,
+  copy: () => html`<rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />`,
+  check: () => html`<path d="M20 6 9 17l-5-5" />`,
 };
 
 function Icon({ name }) {
   return html`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]?.()}</svg>`;
+}
+
+// The public address of a feed in the header of its page. The link opens
+// the feed in a new tab. A truncated address shows the full address as a
+// tooltip. The button copies the address.
+function FeedAddress({ url }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  const copy = () => {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(url).then(() => setCopied(true), () => {});
+  };
+  // The tooltip shows only when the link does not show the full address.
+  const showTitle = (e) => {
+    const link = e.currentTarget;
+    link.title = link.scrollWidth > link.clientWidth ? url : '';
+  };
+  return html`<p class="sub feed-address">
+    <a class="mono" href=${url} target="_blank" rel="noopener noreferrer" onMouseEnter=${showTitle} onFocus=${showTitle}>${url}</a>
+    <button class="button quiet icon-button" type="button" aria-label="Copy the feed address" onClick=${copy}>
+      <${Icon} name=${copied ? 'check' : 'copy'} /></button>
+    <span class="visually-hidden" role="status">${copied ? 'Copied' : ''}</span>
+  </p>`;
 }
 
 function Bar({ back = true, children }) {
@@ -1823,7 +1852,9 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         <div class="text">
           <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}${isReadOnly(feed) ? ' · read-only' : ''}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>
-          <p class="sub mono">${feed.public_url || 'This feed has no public address yet.'}</p>
+          ${feed.public_url
+            ? html`<${FeedAddress} url=${feed.public_url} />`
+            : html`<p class="sub mono">This feed has no public address yet.</p>`}
           <${CoverNote} url=${draft.model && coverOf(draft.model)} />
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>

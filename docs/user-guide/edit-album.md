@@ -4,6 +4,8 @@ Open a release from **Releases**. Select **Album** in the outline.
 Studio saves each change in the draft as you type.
 The hosted file does not change until you write. See [Review and write your changes](review-and-write.md).
 
+The header of the page shows the public address of the feed. Select the address to open the feed in a new tab. Select the copy button, and Studio puts the address on the clipboard. When the address is too long for the header, put the pointer on it to see the full address.
+
 ## The album page
 
 The page has four sections.
@@ -117,6 +119,8 @@ It has three sections.
 1. Select **Add a person**.
 2. Type the name in **Name**.
 3. Fill in the other fields if you want: **Role**, **Group**, **Picture address** and **Information address**. If you leave **Role** empty, it means host. If you leave **Group** empty, it means cast.
+
+When Studio can read the image at **Picture address**, the open entry of the person shows the picture.
 
 ### Support links
 

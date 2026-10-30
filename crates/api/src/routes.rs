@@ -1304,6 +1304,8 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 json!(catalog.releases.iter().map(|id| id.0).collect::<Vec<_>>());
             value["publisher_ids"] =
                 json!(catalog.publishers.iter().map(|id| id.0).collect::<Vec<_>>());
+            // The two sides of a link give the first role (ADR 0087).
+            value["roles_linked"] = json!(catalog.roles_linked);
             rows.push(value);
         }
         to_json(rows)

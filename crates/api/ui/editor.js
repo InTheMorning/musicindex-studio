@@ -2944,7 +2944,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
               <option value="custom">Custom</option>
             </select>
             ${readOnly && html`<span class="hint">To change the roles, connect the folder that holds this feed in Hosts.</span>`}
-            ${roles.length > 0 && !feed.roles_confirmed && html`<span class="hint">Studio found ${roles.length === 1 ? 'this role' : 'these roles'} in the feed: ${roles.map(roleWord).join(', ')}.${readOnly ? '' : ' Select the roles to confirm them.'}</span>`}
+            ${roles.length > 0 && !feed.roles_confirmed && feed.roles_linked && html`<span class="hint">The feed and its releases give the same role.</span>`}
+            ${roles.length > 0 && !feed.roles_confirmed && !feed.roles_linked && html`<span class="hint">Studio found ${roles.length === 1 ? 'this role' : 'these roles'} in the feed: ${roles.map(roleWord).join(', ')}.${readOnly ? '' : ' Select the roles to confirm them.'}</span>`}
             ${choice === 'custom' && html`<div class="role-choices" role="group" aria-label="Roles">
               ${ROLES.map((role) => html`<label class="check"><input type="checkbox" id=${`pub-role-${role}`}
                 checked=${roles.includes(role)} disabled=${roleAction.busy || readOnly || (roles.length === 1 && roles[0] === role)}

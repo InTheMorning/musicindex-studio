@@ -11,6 +11,7 @@ use std::fmt;
 
 use crate::collection::{
     Collection, CollectionError, FeedId, FeedRow, PublisherRole, inferred_roles, rel_of,
+    roles_from_rel,
 };
 use crate::feed::{Entry, Feed, Publisher, RemoteItem};
 use crate::pipeline::{self, PipelineError};
@@ -325,6 +326,11 @@ pub struct Catalog {
     /// one is first (ADR 0041 item 9). Then come the publisher feeds that
     /// only list it.
     pub publishers: Vec<FeedId>,
+    /// For a publisher feed: true when a release of the collection gives the
+    /// first role of the feed in the `rel` of its `podcast:publisher` link.
+    /// The two sides of the link then give the role (ADR 0087 item 1,
+    /// musicindex ADR 0033 R-WORD-3 item 3).
+    pub roles_linked: bool,
 }
 
 /// The catalog of each feed of the collection (ADR 0085 items 2 and 5).
@@ -375,9 +381,15 @@ pub fn catalogs(feeds: &[(FeedRow, Option<Feed>)]) -> Vec<Catalog> {
         let mut named = Vec::new();
         if let Some(links) = model.as_ref().and_then(|feed| feed.publisher.as_ref()) {
             for item in &links.remote_items {
-                if let Some(publisher) = find(&item.value, &is_publisher)
-                    && !named.contains(&publisher)
-                {
+                let Some(publisher) = find(&item.value, &is_publisher) else {
+                    continue;
+                };
+                let first = feeds[publisher].0.publisher_roles.iter().min();
+                let given = item.value.rel.as_deref().map(roles_from_rel);
+                if first.is_some_and(|role| given.is_some_and(|roles| roles.contains(role))) {
+                    result[publisher].roles_linked = true;
+                }
+                if !named.contains(&publisher) {
                     named.push(publisher);
                 }
             }

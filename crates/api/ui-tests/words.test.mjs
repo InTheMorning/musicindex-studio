@@ -127,3 +127,11 @@ test('the rel of a link shows each of its roles', () => {
   assert.equal(relLabel(''), 'No role', message);
   assert.equal(relLabel(null), 'No role', message);
 });
+
+test('a role that the two sides of a link give has a filled dot', () => {
+  const message = 'ADR 0087 item 2: a set with roles_linked has a filled dot. Use roles_linked in feedKind of crates/api/ui/shell.js.';
+  const base = { id: 1, title: 'A', medium: 'publisher', publisher_roles: ['artist', 'label'], roles_confirmed: false };
+  assert.equal(feedKind({ ...base, roles_linked: true }).dot, 'artist', message);
+  assert.equal(feedKind({ ...base, roles_linked: false }).dot, 'artist hollow', message);
+  assert.equal(feedKind({ ...base, roles_confirmed: true }).dot, 'artist', message);
+});

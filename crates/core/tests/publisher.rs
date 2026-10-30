@@ -500,3 +500,58 @@ fn catalogs_give_the_releases_of_each_publisher_and_the_publishers_of_each_relea
     assert_eq!(of(alone).publishers, Vec::new());
     assert_eq!(of(alone).releases, Vec::new());
 }
+
+#[test]
+fn a_role_that_the_two_sides_of_a_link_give_is_linked() {
+    let mut s = setup();
+    let artist = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    let album = new_feed(&mut s, "album.xml", "Album", "music");
+    let other = new_feed(&mut s, "other.xml", "Other", "music");
+    // Inferred sets: nothing in Studio confirms them.
+    s.collection
+        .set_publisher_roles(
+            artist,
+            &[PublisherRole::Label, PublisherRole::Artist],
+            false,
+        )
+        .unwrap();
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], false)
+        .unwrap();
+    let name = |s: &Setup, release: FeedId, publisher: FeedId, path: &str, rel: &str| {
+        let guid = model(s, publisher).podcast_guid.unwrap();
+        let url = format!("https://music.example/{path}");
+        pipeline::edit_draft(&s.collection, release, |feed| {
+            feed.publisher = Some(Publisher {
+                remote_items: vec![Entry::new(remote("publisher", &guid, &url, "P", Some(rel)))],
+            });
+        })
+        .unwrap();
+    };
+    // The album gives the first role of the artist feed. The other album
+    // names the label feed, but its rel does not give "label".
+    name(&s, album, artist, "artist.xml", "artist label");
+    name(&s, other, label, "label.xml", "artist");
+
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            let feed = model(&s, row.id);
+            (row, Some(feed))
+        })
+        .collect();
+    let catalogs = publisher::catalogs(&feeds);
+    let linked = |id: FeedId| {
+        let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
+        catalogs[index].roles_linked
+    };
+    let message =
+        "ADR 0087 item 1: a role is linked when a release gives the first role of the feed";
+    assert!(linked(artist), "{message}");
+    assert!(!linked(label), "{message}");
+    assert!(!linked(album), "{message}");
+}

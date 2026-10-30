@@ -90,6 +90,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0084: The label of a feed lists each role](adr/0084-the-label-of-a-feed-lists-each-role.md)
 - [ADR 0085: Each artist and label is a destination](adr/0085-each-artist-and-label-is-a-destination.md)
 - [ADR 0086: A playlist links to its artist or label](adr/0086-a-playlist-links-to-its-artist-or-label.md)
+- [ADR 0087: The two sides of a link confirm a role](adr/0087-the-two-sides-of-a-link-confirm-a-role.md)
 
 ## Plans
 

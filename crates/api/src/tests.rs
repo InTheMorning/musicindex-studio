@@ -843,6 +843,8 @@ async fn the_feed_list_gives_the_link_of_each_feed() {
         listed(&app, release_id).await["publisher_ids"],
         json!([label_id])
     );
+    // ADR 0087 item 1: the release gives the role of the label feed.
+    assert_eq!(listed(&app, label_id).await["roles_linked"], json!(true));
 }
 
 #[tokio::test]

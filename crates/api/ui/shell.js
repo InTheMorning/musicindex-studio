@@ -44,9 +44,11 @@ export function relLabel(rel) {
   return own.length > 0 ? own.map(roleWord).join(' · ') : 'No role';
 }
 
-// The kind of a feed of the collection or of a discovery.
+// The kind of a feed of the collection or of a discovery. The user confirms
+// a set of roles, or the core finds the first role on the two sides of a
+// link (ADR 0082 item 5, ADR 0087 item 2).
 export function feedKind(feed) {
-  return mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed);
+  return mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed === true || feed.roles_linked === true);
 }
 
 // The choice of the Role menu for a set of roles: "artist", "label",

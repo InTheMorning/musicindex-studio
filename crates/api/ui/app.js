@@ -12,6 +12,7 @@ import {
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
+import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { coverOf, coverNote } from './cover.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
@@ -352,6 +353,31 @@ export function Field({ id, label, hint, error, children, rootProps, ...input })
       ${children}
     </div>
   </div>`;
+}
+
+// A field for a date and a time (ADR 0093). It shows local time with the
+// native picker. `value` and `onChange` use RFC 3339 text, or null for no
+// time. `sourceText` is the date text of the feed that the core cannot read.
+// `note` is an optional hint below the zone hint.
+export function DateTimeField({ id, label, value, onChange, required = false, sourceText = null, note = null }) {
+  const unread = !value && sourceText;
+  const hint = unread
+    ? unreadDateHint(sourceText)
+    : zoneHint(value, Intl.DateTimeFormat().resolvedOptions().timeZone, new Date());
+  return html`<${Field} id=${id} label=${label} type="datetime-local" value=${isoToLocalInput(value)}
+    required=${required} aria-describedby=${`${id}-zone`}
+    onInput=${(e) => {
+      // A value that the user has not completed is empty. It must not remove the time.
+      if (e.target.validity.badInput) return;
+      onChange(localInputToIso(e.target.value));
+    }}>
+    <span class="hint" id=${`${id}-zone`}>${hint}</span>
+    ${note && html`<span class="hint">${note}</span>`}
+    <div class="datetime-actions">
+      <button class="button" type="button" onClick=${() => onChange(localInputToIso(nowInput(new Date())))}>Now</button>
+      ${!required && html`<button class="button" type="button" disabled=${!value} onClick=${() => onChange(null)}>Clear</button>`}
+    </div>
+  <//>`;
 }
 
 // The eye button of a secret value (ADR 0078 item 3). `name` completes

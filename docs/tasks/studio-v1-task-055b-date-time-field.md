@@ -2,7 +2,7 @@
 
 Parent: [task 055](studio-v1-task-055-date-time-fields.md). Decision: [ADR 0093](../adr/0093-dates-and-times-use-a-picker-in-local-time.md) items 1 to 5, 8 and 9.
 
-Status: Not started. It needs task 055a.
+Status: Complete, with its screenshot visual check. The note of the track field is a `note` of `DateTimeField`, so that it is in the same row as the field.
 
 ## Goal
 

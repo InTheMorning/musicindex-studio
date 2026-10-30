@@ -87,6 +87,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/explicit.js"),
     ),
     (
+        "datetime.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/datetime.js"),
+    ),
+    (
         "op3.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/op3.js"),

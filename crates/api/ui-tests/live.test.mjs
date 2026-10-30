@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary, liveProblems,
-  startToIso, isoToLocalInput, grantLimit, grantActive, grantSummary, grantWriteText,
+  grantLimit, grantActive, grantSummary, grantWriteText,
   hostUsesSigner, grantBoxState,
 } from '../ui/live.js';
 
@@ -51,16 +51,6 @@ test('the problems have the texts of the core', () => {
     ],
   );
   assert.deepEqual(liveProblems({ ...live, start: null }), ['This show has no start time.']);
-});
-
-test('the start time converts to ISO text and back', () => {
-  assert.equal(startToIso(''), null);
-  assert.equal(startToIso('not a time'), null);
-  const iso = startToIso('2026-11-01T20:30');
-  assert.match(iso, /^2026-1[01]-\d\dT\d\d:\d\d:00\.000Z$/);
-  assert.equal(isoToLocalInput(iso), '2026-11-01T20:30');
-  assert.equal(isoToLocalInput('x'), '');
-  assert.equal(isoToLocalInput(null), '');
 });
 
 test('only an ended show can have a recording', () => {

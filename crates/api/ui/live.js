@@ -76,24 +76,6 @@ export function liveProblems(live) {
   return found;
 }
 
-// The start time that the route needs, as ISO 8601 text, from the value of a
-// `datetime-local` field. An empty or incorrect value gives null.
-export function startToIso(value) {
-  if (!value) return null;
-  const time = new Date(value);
-  return Number.isNaN(time.getTime()) ? null : time.toISOString();
-}
-
-// The value of a `datetime-local` field from ISO 8601 text, in local time.
-// A text that is not a time gives an empty text.
-export function isoToLocalInput(text) {
-  if (!text) return '';
-  const time = new Date(text);
-  if (Number.isNaN(time.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${time.getFullYear()}-${pad(time.getMonth() + 1)}-${pad(time.getDate())}T${pad(time.getHours())}:${pad(time.getMinutes())}`;
-}
-
 // ---- Show grants (ADR 0054 items 11 to 17) ----
 
 const DAY = 24 * 60 * 60;

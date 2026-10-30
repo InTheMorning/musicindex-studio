@@ -3,11 +3,11 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
-import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
+import { api, sendInParts, DateTimeField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
-import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
+import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
@@ -383,6 +383,7 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
       enclosure: { url: url.trim(), length: length.trim(), media_type: type.trim() },
       alternate_enclosures: [],
       pub_date: null,
+      pub_date_time: null,
       duration: null,
       episode: null,
       itunes_episode: null,
@@ -1129,6 +1130,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
       enclosure: { url: row.facts.url, length: String(row.facts.size), media_type: row.facts.media_type },
       alternate_enclosures: row.facts.alternate_enclosures || [],
       pub_date: null,
+      pub_date_time: null,
       duration: row.facts.duration || null,
       episode: null,
       itunes_episode: null,
@@ -2513,9 +2515,9 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
     more: (s) => html`<section class="page-section"><h2>More</h2>
       <div class="group">
         ${showEach(s.rows, {
-          pub_date: () => html`<${TextField} id=${`${id}-date`} label="Publication date"
-            hint="For example Thu, 22 Oct 2026 12:00:00 GMT. Some apps sort the tracks by this date."
-            value=${item.pub_date} onChange=${change('pub_date')} />`,
+          pub_date: () => html`<${DateTimeField} id=${`${id}-date`} label="Publication date"
+              value=${item.pub_date_time} sourceText=${item.pub_date} onChange=${change('pub_date_time')}
+              note="Some apps sort the tracks by this date." />`,
           explicit: () => html`<${ExplicitField} id=${`${id}-explicit`} model=${item} update=${editItem} />`,
           identity: () => html`<details class="disclosure">
           <summary class="link-row"><span class="label">Identity</span>
@@ -2574,30 +2576,22 @@ const timeText = (text) => {
   return text && !Number.isNaN(time.getTime()) ? time.toLocaleString() : '';
 };
 
-// A field for a time. The field shows local time. The model keeps ISO 8601
-// text.
-function TimeField({ id, label, value, onChange }) {
-  return html`<${Field} id=${id} label=${label} type="datetime-local" value=${isoToLocalInput(value)}
-    onInput=${(e) => onChange(startToIso(e.target.value))} />`;
-}
-
 // A small sheet that asks for the title and the start time of a new live
-// show (ADR 0054 item 2). `onAdd` gets the title and the start as ISO text.
+// show (ADR 0054 item 2). `onAdd` gets the title and the start as RFC 3339 text.
 function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
   const ref = useSheet(open);
   const [title, setTitle] = useState('');
-  const [start, setStart] = useState('');
+  const [start, setStart] = useState(null);
   // Clear the sheet each time that it opens.
   useEffect(() => {
     if (!open) return;
     setTitle('');
-    setStart('');
+    setStart(null);
   }, [open]);
-  const iso = startToIso(start);
-  const ready = title.trim() && iso && !busy;
+  const ready = title.trim() && start && !busy;
   const submit = (event) => {
     event.preventDefault();
-    if (ready) onAdd({ title: title.trim(), start: iso });
+    if (ready) onAdd({ title: title.trim(), start });
   };
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-live-title" onClose=${onClose}>
     <header>
@@ -2607,8 +2601,7 @@ function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
     <form class="body" id="add-live-form" onSubmit=${submit}>
       <div class="group rows">
         <${Field} id="new-live-title" label="Title" required value=${title} onInput=${(e) => setTitle(e.target.value)} />
-        <${Field} id="new-live-start" label="Start time" type="datetime-local" required
-          value=${start} onInput=${(e) => setStart(e.target.value)} />
+        <${DateTimeField} id="new-live-start" label="Start time" required value=${start} onChange=${setStart} />
         <${ErrorNotice} error=${error} />
       </div>
     </form>
@@ -2742,8 +2735,8 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
       <div class="group">
         <${TextField} id=${`${id}-title`} label="Title" value=${live.item.title} onChange=${itemField('title')} />
         <${TextArea} id=${`${id}-description`} label="Description" value=${live.item.description} onChange=${itemField('description')} />
-        <${TimeField} id=${`${id}-start`} label="Start time" value=${live.start} onChange=${field('start')} />
-        <${TimeField} id=${`${id}-end`} label="End time" value=${live.end} onChange=${field('end')} />
+        <${DateTimeField} id=${`${id}-start`} label="Start time" required value=${live.start} onChange=${field('start')} />
+        <${DateTimeField} id=${`${id}-end`} label="End time" value=${live.end} onChange=${field('end')} />
         <${PickedImageField} field="live-image" subject=${live.item} apply=${(address) => editLive((l) => set(l, 'item', set(l.item, 'image', address)))}
           id=${`${id}-image`} label="Image address" address=${`live_items/${liveIndex}/item/image`} bad=${bad}
           value=${live.item.image} onChange=${itemField('image')} glow="var(--c-track)" />

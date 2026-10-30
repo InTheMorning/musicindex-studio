@@ -230,7 +230,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Task 056 is first. The word test of 056b then examines the new texts of tasks 054 and 055. Also, 054c uses the `Icon` component of 056a.
 - The packets share files. 055b, 056a and 054c change `app.js` and `styles.css`. 055a, 054a and 056b change `pipeline.rs`. 054b and 056b change `routes.rs`. Thus one packet starts after the commit of the packet before it.
 - Two pairs share no file, and each pair can run at the same time: 056a with 055a, and 055b with 054a.
-- Status on 2026-10-30: packets 056a, 056b and 055a are complete.
+- Status on 2026-10-30: packets 056a, 056b, 055a and 055b are complete.
 
 ### Phase 13: Desktop Shell
 

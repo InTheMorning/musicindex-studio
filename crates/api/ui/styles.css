@@ -295,6 +295,9 @@ code, .mono {
   color: var(--text);
   font: inherit;
 }
+/* The buttons "Now" and "Clear" of a date and time field (ADR 0093). They
+   wrap below the input when the body has no room. */
+.datetime-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .field input:focus, .field textarea:focus { background: var(--fill); }
 .field input:focus-visible { outline-offset: 0; }
 /* A field has a fill and no border (ADR 0029). The border shows the

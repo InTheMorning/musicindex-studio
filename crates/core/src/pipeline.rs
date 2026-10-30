@@ -1090,9 +1090,9 @@ fn keep_key_form(current: &Feed, sent: &mut Feed) {
     }
 }
 
-/// Give each track its position as its `podcast:episode` when the sent model
-/// changes the sequence of the tracks (ADR 0024). A `pubDate` does not
-/// change.
+/// Give each track its position as its `podcast:episode` and its
+/// `itunes:episode` when the sent model changes the sequence of the tracks
+/// (ADR 0024, ADR 0079). A `pubDate` does not change.
 fn number_tracks(current: &Feed, sent: &mut Feed) {
     let same = sent.items.len() == current.items.len()
         && sent
@@ -1105,6 +1105,7 @@ fn number_tracks(current: &Feed, sent: &mut Feed) {
     }
     for (number, item) in (1_usize..).zip(sent.items.iter_mut()) {
         item.episode = Some(number.to_string());
+        item.itunes_episode = Some(number.to_string());
     }
 }
 

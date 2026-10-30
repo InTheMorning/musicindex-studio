@@ -240,11 +240,13 @@ fn a_new_track_gets_the_indentation_of_the_other_tracks() {
     let (changed, _) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
     let guid = changed.items[2].guid.as_deref().unwrap();
     let expected = format!(
-        "      <podcast:season>2</podcast:season>\n      <podcast:episode>2</podcast:episode>\n    </item>\n    \
+        "      <podcast:season>2</podcast:season>\n      <podcast:episode>2</podcast:episode>\n      \
+         <itunes:episode>2</itunes:episode>\n    </item>\n    \
          <item>\n      <title>Three</title>\n      \
          <guid isPermaLink=\"false\">{guid}</guid>\n      \
          <enclosure url=\"https://music.example/3.mp3\" length=\"10\" type=\"audio/mpeg\"/>\n      \
-         <podcast:episode>3</podcast:episode>\n    </item>\n  </channel>"
+         <podcast:episode>3</podcast:episode>\n      \
+         <itunes:episode>3</itunes:episode>\n    </item>\n  </channel>"
     );
     let text = draft_text(&collection, id);
     assert!(text.contains(&expected), "{text}");
@@ -297,6 +299,59 @@ fn a_change_of_sequence_numbers_the_tracks_and_keeps_the_dates() {
     );
 }
 
+/// ADR 0079: the human test of task 028 removed the first track of a feed
+/// with only `itunes:episode`. The other track kept `itunes:episode` 2 and
+/// got `podcast:episode` 1. The core now sets the two numbers together.
+#[test]
+fn a_change_of_sequence_sets_the_two_track_numbers() {
+    let (collection, id) = draft();
+    let with_numbers = FEED
+        .replace(
+            "<title>One</title>",
+            "<title>One</title>\n      <itunes:episode>1</itunes:episode>",
+        )
+        .replace(
+            "<title>Two</title>",
+            "<title>Two</title>\n      <itunes:episode>2</itunes:episode>",
+        );
+    let row = DraftRow {
+        base_version: None,
+        base_xml: with_numbers.as_bytes().to_vec(),
+        draft_xml: with_numbers.as_bytes().to_vec(),
+    };
+    collection.save_draft(id, &row).unwrap();
+
+    // A change of a field adds no number and changes no number.
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    assert_eq!(feed.items[1].itunes_episode.as_deref(), Some("2"));
+    let mut model = sent(&feed);
+    model.title = Some("Album 2".to_owned());
+    let (feed, revision) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    assert_eq!(feed.items[1].episode, None);
+    assert_eq!(feed.items[1].itunes_episode.as_deref(), Some("2"));
+    assert!(!draft_text(&collection, id).contains("podcast:episode"));
+
+    // A removal changes the sequence. The track that stays gets 1 twice.
+    let mut model = sent(&feed);
+    model.items.remove(0);
+    let (removed, _) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    assert_eq!(removed.items[0].episode.as_deref(), Some("1"));
+    assert_eq!(removed.items[0].itunes_episode.as_deref(), Some("1"));
+    let text = draft_text(&collection, id);
+    assert!(
+        text.contains("<itunes:episode>1</itunes:episode>"),
+        "{text}"
+    );
+    assert!(
+        text.contains("<podcast:episode>1</podcast:episode>"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("<itunes:episode>2</itunes:episode>"),
+        "{text}"
+    );
+}
+
 /// Task 019a: a new track with two alternate enclosures puts them directly
 /// after the enclosure, each on its own line and indent (ADR 0031,
 /// ADR 0033 item 6).
@@ -338,7 +393,8 @@ fn a_new_track_puts_its_alternate_enclosures_after_the_enclosure() {
     let (changed, _) = pipeline::replace_model(&collection, id, &revision, model).unwrap();
     let guid = changed.items[2].guid.as_deref().unwrap();
     let expected = format!(
-        "      <podcast:season>2</podcast:season>\n      <podcast:episode>2</podcast:episode>\n    </item>\n    \
+        "      <podcast:season>2</podcast:season>\n      <podcast:episode>2</podcast:episode>\n      \
+         <itunes:episode>2</itunes:episode>\n    </item>\n    \
          <item>\n      <title>Three</title>\n      \
          <guid isPermaLink=\"false\">{guid}</guid>\n      \
          <enclosure url=\"https://music.example/3.mp3\" length=\"10\" type=\"audio/mpeg\"/>\n      \
@@ -348,7 +404,8 @@ fn a_new_track_puts_its_alternate_enclosures_after_the_enclosure() {
          <podcast:alternateEnclosure type=\"audio/mpeg\" title=\"MP3\" default=\"true\">\n        \
          <podcast:source uri=\"https://music.example/3-alt.mp3\"/>\n      \
          </podcast:alternateEnclosure>\n      \
-         <podcast:episode>3</podcast:episode>\n    </item>\n  </channel>"
+         <podcast:episode>3</podcast:episode>\n      \
+         <itunes:episode>3</itunes:episode>\n    </item>\n  </channel>"
     );
     let text = draft_text(&collection, id);
     assert!(text.contains(&expected), "{text}");
@@ -507,7 +564,8 @@ fn a_new_track_puts_its_alternate_enclosures_before_its_duration() {
          <podcast:source uri=\"https://music.example/2.flac\"/>\n      \
          </podcast:alternateEnclosure>\n      \
          <itunes:duration>00:02:00</itunes:duration>\n      \
-         <podcast:episode>2</podcast:episode>\n    </item>"
+         <podcast:episode>2</podcast:episode>\n      \
+         <itunes:episode>2</itunes:episode>\n    </item>"
     );
     let text = draft_text(&collection, id);
     assert!(text.contains(&expected), "{text}");

@@ -375,6 +375,7 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
       pub_date: null,
       duration: null,
       episode: null,
+      itunes_episode: null,
       image: null,
       images: [],
       persons: [],
@@ -1120,6 +1121,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
       pub_date: null,
       duration: row.facts.duration || null,
       episode: null,
+      itunes_episode: null,
       image: imageFor(row.id),
       images: [],
       persons: [],
@@ -2017,7 +2019,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
           <span class="num">＋</span><span class="title">Add tracks</span>
         </button>
       </div>
-      <p class="note">Studio sets the track numbers (podcast:episode) from this sequence. It does not change the publication dates.</p>
+      <p class="note">Studio sets the track numbers (podcast:episode and itunes:episode) from this sequence. It does not change the publication dates.</p>
     </section>`,
   };
   return showSections(pageSequence('album'), shown);

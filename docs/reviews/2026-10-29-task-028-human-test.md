@@ -56,7 +56,7 @@ The feed before the test had three tracks with `itunes:episode` 1, 2 and 3, and 
 
 [ADR 0024](../adr/0024-track-numbers-follow-the-track-sequence.md) item 2 sets the position of each track as its `podcast:episode`. ADR 0024 says nothing about `itunes:episode`. Thus the core follows the decision, but the written feed gives two different numbers for one track. An app that reads `itunes:episode` shows a different number from an app that reads `podcast:episode`.
 
-This is an open result of the test. A correction needs a decision about `itunes:episode`. Because the rule is a feed rule, the correction goes in the core ([ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md)).
+On 2026-10-29 the operator decided that the core writes the two elements. [ADR 0079](../adr/0079-the-core-writes-both-track-numbers.md) records the decision. The core sets the two numbers, because the rule is a feed rule ([ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md)). The test `a_change_of_sequence_sets_the_two_track_numbers` in `crates/core/tests/model.rs` does the removal of this test again.
 
 ### The Announcement Before The Write
 

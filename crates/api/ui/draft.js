@@ -63,9 +63,9 @@ export function rekey(value, found) {
   return value;
 }
 
-// The server sets two fields of a track: the GUID of a new track (ADR 0022
-// item 7) and the track number (ADR 0024). Copy them into the local model, or
-// the next save would change them back.
+// The server sets these fields of a track: the GUID of a new track (ADR 0022
+// item 7) and the two track numbers (ADR 0024, ADR 0079). Copy them into the
+// local model, or the next save would change them back.
 //
 // The core also sets the OP3 switch and the enclosure address of each track
 // (ADR 0076). Copy them from the saved model when the user did not change them
@@ -81,7 +81,12 @@ export function copyServerFields(local, saved, found, sent = null) {
       const from = index === undefined ? null : saved.items[index];
       if (!from) return item;
       const before = sentItems.get(item._cid);
-      const next = { ...item, guid: item.guid || from.guid, episode: from.episode };
+      const next = {
+        ...item,
+        guid: item.guid || from.guid,
+        episode: from.episode,
+        itunes_episode: from.itunes_episode,
+      };
       if (before && item.enclosure && from.enclosure && url(before) === url(item)) {
         next.enclosure = { ...item.enclosure, url: from.enclosure.url };
       }

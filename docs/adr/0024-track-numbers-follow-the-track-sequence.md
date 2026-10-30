@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Amended: 2026-10-29 by operator decision. [ADR 0079](0079-the-core-writes-both-track-numbers.md) adds `itunes:episode` to items 1 and 2. The core sets the two track numbers.
 
 ## Context
 

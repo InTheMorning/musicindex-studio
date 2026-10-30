@@ -505,6 +505,10 @@ pub struct Item {
     /// The text of `podcast:episode`: the track number of an album track.
     /// The core sets it from the track sequence (ADR 0024).
     pub episode: Option<String>,
+    /// The text of `itunes:episode`. The core sets it with `episode`
+    /// (ADR 0079).
+    #[serde(default)]
+    pub itunes_episode: Option<String>,
     /// The `href` of `itunes:image`.
     pub image: Option<String>,
     /// The `podcast:image` elements.
@@ -538,6 +542,7 @@ impl Item {
             explicit: read_text(element, Ns::Itunes, "explicit"),
             season: read_one(element),
             episode: read_text(element, Ns::Podcast, "episode"),
+            itunes_episode: read_text(element, Ns::Itunes, "episode"),
             image: read_href(element, Ns::Itunes, "image"),
             images: read_list(element),
             persons: read_list(element),
@@ -580,6 +585,7 @@ impl Item {
         c.text(Ns::Itunes, "explicit", self.explicit.as_ref());
         c.one(self.season.as_ref());
         c.text(Ns::Podcast, "episode", self.episode.as_ref());
+        c.text(Ns::Itunes, "episode", self.itunes_episode.as_ref());
         c.href(Ns::Itunes, "image", self.image.as_ref());
         c.list(&self.images);
         c.list(&self.persons);

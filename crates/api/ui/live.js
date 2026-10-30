@@ -37,8 +37,8 @@ export function statusLabel(status) {
 // The next action of a status: the label of the button and the status that
 // the status route sets (ADR 0054 item 5). An ended show has no action.
 export function nextAction(status) {
-  if (status === 'pending') return { label: 'Go live', status: 'live' };
-  if (status === 'live') return { label: 'End the show', status: 'ended' };
+  if (status === 'pending') return { label: 'Go Live', status: 'live' };
+  if (status === 'live') return { label: 'End the Show', status: 'ended' };
   return null;
 }
 

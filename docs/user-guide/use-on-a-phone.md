@@ -7,8 +7,8 @@ Open the address of the server in the browser of the phone, and sign in. See [Si
 
 These methods are easy on a phone:
 
-- **Sign in with a passkey**. Add the passkey before, in the Account panel. See [Your account on a server](account.md).
-- **Sign in with Amber or a bunker**. Select **Open in the signer app** to open your signer app on the same phone.
+- **Sign In with a Passkey**. Add the passkey before, in the Account panel. See [Your account on a server](account.md).
+- **Sign In with Amber or a Bunker**. Select **Open in the Signer App** to open your signer app on the same phone.
 
 ## One page at a time
 
@@ -36,8 +36,8 @@ See [Add, import and change tracks](tracks.md).
 ## Sign with the signer on your phone
 
 A file host with **My signer** needs a signature for each write.
-If the browser has no signer extension, the review sheet shows **Connect a signer**.
-Connect Amber or a bunker as for a sign-in. Then select **Write to the file host**.
+If the browser has no signer extension, the review sheet shows **Connect a Signer**.
+Connect Amber or a bunker as for a sign-in. Then select **Write to the File Host**.
 See [Review and write your changes](review-and-write.md).
 
 ## Put Studio on the home screen

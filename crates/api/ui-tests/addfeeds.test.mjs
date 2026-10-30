@@ -34,10 +34,10 @@ test('addChoices leaves out the make rows and the folder row when no host exists
 });
 
 test('makeFields gives the fields of each type', () => {
-  assert.deepEqual(makeFields('album'), { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the release', busyLabel: 'Making the release…' });
-  assert.deepEqual(makeFields('publisher'), { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the feed', busyLabel: 'Making the feed…' });
-  assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show feed title', authorLabel: 'Artist', role: false, button: 'Make the show feed', busyLabel: 'Making the show feed…' });
-  assert.deepEqual(makeFields('playlist'), { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the playlist', busyLabel: 'Making the playlist…' });
+  assert.deepEqual(makeFields('album'), { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' });
+  assert.deepEqual(makeFields('publisher'), { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Feed', busyLabel: 'Making the Feed…' });
+  assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show feed title', authorLabel: 'Artist', role: false, button: 'Make the Show Feed', busyLabel: 'Making the Show Feed…' });
+  assert.deepEqual(makeFields('playlist'), { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' });
 });
 
 test('MAKE_TYPES lists the four types that makeFields knows', () => {

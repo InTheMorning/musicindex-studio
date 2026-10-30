@@ -18,8 +18,8 @@ On a server, the library folder is in your account on the server. It is not on y
 
 ## Scan for changes
 
-- Select **Scan the file hosts** to read the release folders on the file hosts.
-- Select **Scan the library folder** to look for changes in the library folder on your computer.
+- Select **Scan the File Hosts** to read the release folders on the file hosts.
+- Select **Scan the Library Folder** to look for changes in the library folder on your computer.
 
 ## Changes in the library folder
 
@@ -27,9 +27,9 @@ Each difference is one row. Select a button to decide:
 
 | Difference | Buttons |
 | --- | --- |
-| New file | **Add to the library** |
-| Missing file | **Download again** (when Studio has a source), **Forget the file** |
-| Changed file | **Use the new file**, **Restore** (when a file host holds a copy) |
+| New file | **Add to the Library** |
+| Missing file | **Download Again** (when Studio has a source), **Forget the File** |
+| Changed file | **Use the New File**, **Restore** (when a file host holds a copy) |
 
 ## Choose the file hosts
 
@@ -62,8 +62,8 @@ The top of the list tells you the number of these files and the space that they 
 
 Select **Download** to get it. The page shows the progress.
 Select **Stop** to stop a download.
-Select **Download all** to download each such file. Select **Stop all** to stop all downloads.
-If a download fails, select **Try again**.
+Select **Download All** to download each such file. Select **Stop All** to stop all downloads.
+If a download fails, select **Try Again**.
 
 A copy or a move can need a download first. Studio then asks you to confirm. The write waits for the download.
 

@@ -24,7 +24,7 @@ Studio shows the page "Protect your keys".
 1. Type a passphrase in the field **Passphrase**.
 2. Type the same passphrase in **Type the passphrase again**.
 3. Decide if you want a recovery key. The check box is on by default.
-4. Select **Make the vault**.
+4. Select **Make the Vault**.
 
 The passphrase needs a minimum of 12 characters.
 Studio also refuses a passphrase that is too easy to guess.
@@ -82,9 +82,9 @@ You can also select **Unlock Studio** in the left panel.
 The sheet shows the methods of your account that this browser can use:
 
 - **Passphrase**, then **Unlock**. For an account with an email address.
-- **Unlock with a signer extension**. For an account with a Nostr key, in a browser with a NIP-07 signer extension.
-- **Use the remote signer**. When you signed in with a remote signer in this session. Allow the request in your signer app.
-- **Use a passkey**. When your account has a passkey and the browser can use it.
+- **Unlock with a Signer Extension**. For an account with a Nostr key, in a browser with a NIP-07 signer extension.
+- **Use the Remote Signer**. When you signed in with a remote signer in this session. Allow the request in your signer app.
+- **Use a Passkey**. When your account has a passkey and the browser can use it.
 
 After the unlock, Studio does the step again.
 Select **Cancel** to close the sheet. The step then does not occur.

@@ -51,7 +51,7 @@ Studio keeps your changes in a draft. Studio saves the draft for you.
 
 The hosted file changes only when you write.
 Before you write, you open **Review** and examine each change.
-Then you select **Write to the file host**.
+Then you select **Write to the File Host**.
 See [Review and write your changes](review-and-write.md).
 
 Before each write, Studio keeps the file that the write replaces. This file is an earlier version.

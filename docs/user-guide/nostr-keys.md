@@ -16,7 +16,7 @@ Studio writes a key only when you select a result or type the key.
 2. Type an `npub` key, a NIP-05 address or a name in the field. Then select **Search**.
 3. Select a result. Studio sets the key and closes the sheet.
 
-On a server where you signed in with a Nostr key, the button **Use my key** sets that key.
+On a server where you signed in with a Nostr key, the button **Use My Key** sets that key.
 
 For a person with no name or no picture, the sheet shows two check boxes: **Use the profile name** and **Use the profile picture**.
 Select a box to write that value from the profile into the person.

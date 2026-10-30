@@ -7,12 +7,12 @@ Studio keeps only the links to the tracks. It does not copy the audio.
 
 You need a file host with a public address. See [Connect a file host](hosts.md).
 
-1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
+1. Select **Releases** in the left panel. Then select **＋ Add a Feed**.
 2. On the page **Add feeds**, select **Playlist** in the group **Make a new feed**. A sheet opens.
 3. Select the file host in **File host** if you have more than one.
 4. Type the name in **Playlist name**.
 5. Type the author in **Author**.
-6. Select **Make the playlist**.
+6. Select **Make the Playlist**.
 
 Studio gives the feed file from the name. To change it, open the row **Feed file**.
 
@@ -31,10 +31,10 @@ The outline of a playlist has these pages:
 ## Add tracks
 
 1. Open **Tracks**.
-2. Select **Add a track**. The sheet "Add tracks" opens.
+2. Select **Add a Track**. The sheet "Add tracks" opens.
 3. Select where the tracks come from:
    - **Search musicindex**. Type a name, select **Search**, then open a feed to see its tracks.
-   - **My releases**. Studio lists the tracks in your collection, grouped by feed.
+   - **My Releases**. Studio lists the tracks in your collection, grouped by feed.
 4. Select **Add** on the line of a track. A track that is in the playlist shows "In the playlist".
 5. Select **Done**.
 

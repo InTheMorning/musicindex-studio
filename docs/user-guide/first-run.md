@@ -14,7 +14,7 @@ Studio shows the page "Where Studio keeps your releases".
 The folder holds the feed file, the images and the audio files of each release.
 
 1. Make sure that the path in the field **Folder** is correct. Studio fills it with a default folder.
-2. Select **Use this folder**.
+2. Select **Use This Folder**.
 
 Studio then shows "Studio set up your library".
 The page lists the number of release folders, the number of feed files and the number of files that Studio moved.
@@ -30,9 +30,9 @@ Studio asks "Do you already have a feed?" when your collection is empty and you 
 
 ### I have feeds
 
-1. Select **Yes, I have feeds**.
+1. Select **Yes, I Have Feeds**.
 2. Add the address of each feed, or search musicindex by name. See [Add feeds that you already have](add-feeds.md).
-3. Select **Find my feeds**.
+3. Select **Find My Feeds**.
 4. Select the feeds to add. Then select **Add** with the number of feeds.
 5. Select **Open Studio**.
 
@@ -41,7 +41,7 @@ To edit it, connect the folder that holds the feed files. See [Connect a file ho
 
 ### I am new
 
-1. Select **No, I am new**.
+1. Select **No, I Am New**.
 2. Read the page "Welcome". Then select **Open Studio**.
 
 To make a new release, first connect a file host. Then select **Album** on the page **Add a feed**.
@@ -51,7 +51,7 @@ See [Make a new release](new-release.md).
 
 Select **Import from MSP 2.0**.
 Then select **Choose Backup Files** and select the .json files that MSP 2.0 saved.
-Select **Import backups** to add the feeds.
+Select **Import Backups** to add the feeds.
 Studio keeps the edit tokens from the backup files in your vault.
 If you have no vault, Studio asks you to make one. See [Passphrase, unlock and lock](vault.md).
 On a server, the vault exists from the sign-up. If it is locked, Studio asks you to unlock it.

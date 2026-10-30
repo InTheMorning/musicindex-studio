@@ -11,9 +11,9 @@ Without a grant, Studio writes only changes that you reviewed.
 ## Connect an app
 
 1. Select **Settings** in the left panel.
-2. In the panel **Connected apps**, select **Connect an app**.
+2. In the panel **Connected apps**, select **Connect an App**.
 3. Type a name in **Name of the app**.
-4. Select **Make the token**.
+4. Select **Make the Token**.
 5. Studio shows the token. Give it to the app now. Studio does not show it again.
 6. Select **Copy** to copy the token. Select **Done** when you finish.
 
@@ -26,7 +26,7 @@ The app can then be on a different computer. The server permits 60 requests for 
 
 An app from an earlier version of Studio has no key.
 Its line shows "This app has no key, so it cannot use a grant."
-Select **Connect again** to give the app a new token. Studio asks you to confirm. The token from before stops working.
+Select **Connect Again** to give the app a new token. Studio asks you to confirm. The token from before stops working.
 
 ## Remove an app
 
@@ -40,7 +40,7 @@ You give a grant when you write a planned show.
 1. Open the page of a planned show. See [Live shows](live-shows.md).
 2. Select **Review** in the toolbar.
 3. Select the check box "Let connected apps start and end this show, and set its live value".
-4. Select **Write to the file host**.
+4. Select **Write to the File Host**.
 
 If you have no connected app, the sheet shows "No app is connected. Connect an app in Settings."
 
@@ -77,7 +77,7 @@ It lists each granted write with the app, the change and the time.
 ## Stop a grant
 
 1. Open the page of the show.
-2. In the section **Grant**, select **Stop the grant**.
+2. In the section **Grant**, select **Stop the Grant**.
 3. Confirm.
 
 Connected apps cannot change the show.

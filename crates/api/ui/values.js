@@ -213,7 +213,7 @@ function SaveRecipientButton({ recipient }) {
   return html`<${ErrorNotice} error=${error} />
     <div class="actions">
       <button class="button action" type="button" disabled=${busy} onClick=${save}>
-        ${saved ? 'Saved' : busy ? 'Saving…' : 'Save to your recipients'}</button>
+        ${saved ? 'Saved' : busy ? 'Saving…' : 'Save to Your Recipients'}</button>
     </div>`;
 }
 
@@ -451,11 +451,11 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
         <button class="button" type="button" disabled=${total === 0}
           aria-expanded=${showSelected && total > 0 ? 'true' : 'false'} aria-controls="picker-selected"
           onClick=${() => setShowSelected(!showSelected)}>
-          ${total} selected <span class="pick-arrow" aria-hidden="true">${showSelected && total > 0 ? '▼' : '▲'}</span></button>
+          ${total} Selected <span class="pick-arrow" aria-hidden="true">${showSelected && total > 0 ? '▼' : '▲'}</span></button>
         <span class="spacer"></span>
         <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
-          Add ${total} recipient${total === 1 ? '' : 's'}</button>
+          Add ${total} Recipient${total === 1 ? '' : 's'}</button>
       </div>
     </footer>
   </dialog>`;
@@ -528,8 +528,8 @@ export function TrackPayments({ id, item, albumBlocks, onChange, noun = 'track' 
       ${blocks.length === 0
         ? html`<p class="hint">This ${noun} uses the album recipients.</p>
           <div class="actions"><button class="button" type="button" onClick=${copy}>
-            Give this ${noun} its own recipients</button></div>`
-        : html`<div class="actions"><button class="button" type="button" onClick=${useAlbum}>Use the album recipients</button></div>
+            Give This ${noun.charAt(0).toUpperCase() + noun.slice(1)} Its Own Recipients</button></div>`
+        : html`<div class="actions"><button class="button" type="button" onClick=${useAlbum}>Use the Album Recipients</button></div>
           <p class="hint">These recipients replace the album recipients for this ${noun} only.</p>
           <${Payments} id=${`${id}-pay`} blocks=${blocks} onChange=${onChange} />`}
     </div>

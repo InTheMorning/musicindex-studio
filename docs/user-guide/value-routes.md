@@ -38,15 +38,15 @@ The recipient then moves to the group **Fees**, and the field is **Split (percen
 
 In an open recipient you can also use:
 
-- **Save to your recipients**. This keeps the recipient in your list for other feeds.
-- **Move up**, **Move down** and **Remove**.
+- **Save to Your Recipients**. This keeps the recipient in your list for other feeds.
+- **Move Up**, **Move Down** and **Remove**.
 
 ## Pick a recipient that you used before
 
 1. Select **Pick from your recipients**. The sheet "Pick recipients" opens.
 2. Under **From musicindex**, search for a feed by name. Open the feed or one of its tracks and select recipients. 
 3. Under **Your recipients**, select recipients from your list. Use **Filter** to find a name or an address.
-4. Select **Add N recipients**.
+4. Select **Add N Recipients**.
 
 Studio does not set a split for a recipient that you add this way.
 Type the split for each new recipient.
@@ -57,8 +57,8 @@ A track uses the album recipients by default.
 To give a track its own recipients:
 
 1. Open the track page.
-2. In **Value routes**, select **Give this track its own recipients**.
+2. In **Value routes**, select **Give This Track Its Own Recipients**.
 3. Edit the recipients as for the album.
 
 The recipients of the track replace the album recipients for that track only.
-To go back, select **Use the album recipients**. Studio asks you to confirm.
+To go back, select **Use the Album Recipients**. Studio asks you to confirm.

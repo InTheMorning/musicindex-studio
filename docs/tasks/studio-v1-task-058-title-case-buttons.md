@@ -2,7 +2,7 @@
 
 Decision: musicindex ADR 0023 R-CASE-1 (shared rule). Also [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 
-Status: Not started. It starts after the commit of [task 057](studio-v1-task-057-confirmation-sheets.md), because the two tasks change the same files.
+Status: Complete, with its screenshot visual check on 2026-10-30. The segments, the tabs, the sort menu and the buttons with the look of a link also use title case. The user guide keeps "File hosts" for the page, and gives "File Hosts" for the source segment of the picker.
 
 ## Goal
 

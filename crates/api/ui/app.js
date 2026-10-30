@@ -635,7 +635,7 @@ function CreateVault({ onDone }) {
       Make a recovery key, in case I forget the passphrase</label>
     <${ErrorNotice} error=${vaultError.other} />
     <div class="actions">
-      <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the vault…' : 'Make the vault'}</button>
+      <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the Vault…' : 'Make the Vault'}</button>
     </div>
   </form>`;
 }
@@ -680,7 +680,7 @@ function LocalHostForm({ onAdded }) {
       hint="When a web server publishes this folder, Studio uses this address for each feed."
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
     <${ErrorNotice} error=${hostError.other} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : 'Add the folder'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : 'Add the Folder'}</button></div>
   </form>`;
 }
 
@@ -790,7 +790,7 @@ function S3HostForm({ onAdded }) {
       hint="Studio keeps this key in your vault."
       value=${values.secret_access_key} onInput=${set('secret_access_key')} />
     ${notice}
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Testing the bucket…' : 'Add the bucket'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Testing the Bucket…' : 'Add the Bucket'}</button></div>
   </form>`;
 }
 
@@ -892,7 +892,7 @@ function SftpHostForm({ onAdded }) {
       <p class="mono" aria-label="Host key fingerprint">${fingerprint}</p>
       ${notice}
       <div class="actions">
-        <button class="button primary" type="submit" disabled=${busy}>${busy ? 'Adding…' : 'Accept and add the server'}</button>
+        <button class="button primary" type="submit" disabled=${busy}>${busy ? 'Adding…' : 'Accept and Add the Server'}</button>
         <button class="button" type="button" disabled=${busy} onClick=${() => setStep(1)}>Back</button>
       </div>
     </form>`;
@@ -1015,7 +1015,7 @@ function SigningStep({ nk, idPrefix, keyError }) {
       options=${[['signer', 'My signer'], ['vault', 'Key in the vault']]} onChange=${nk.choose} />
     ${nk.mode === 'signer' && html`<div class="actions">
       <button class="button action" type="button" disabled=${nk.signer.busy} onClick=${nk.askSigner}>
-        ${nk.signer.busy ? 'Asking your signer…' : 'Use my signer'}</button>
+        ${nk.signer.busy ? 'Asking Your Signer…' : 'Use My Signer'}</button>
     </div>`}
     ${nk.mode === 'signer' && nk.connecting && html`<${SignerConnect} onConnected=${nk.connected} onCancel=${nk.cancelConnect} />`}
     ${nk.mode === 'signer' && nk.signer.error && (nk.signer.error.code === 'no_signer'
@@ -1159,7 +1159,7 @@ function NsiteHostForm({ feeds, onAdded }) {
       value=${values.gateway} onInput=${set('gateway')} />
     <${Field} id="nsite-title" label="Title of the site (optional)" value=${values.title} onInput=${set('title')} />
     ${errors.notice}
-    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? 'Adding…' : 'Add the site'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? 'Adding…' : 'Add the Site'}</button></div>
   </form>`);
 }
 
@@ -1389,10 +1389,10 @@ function AddFeedForm({ connectors, onAdded }) {
       ? html`<${Field} id="feed-path" label="Feed file" required placeholder="album/feed.xml"
           hint="The path of the feed file in the folder of the file host."
           error=${feedError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />`
-      : html`<button class="button link" type="button" onClick=${() => setTyping(true)}>The feed is not in the list</button>`}
-    ${typing && available.length > 0 && html`<button class="button link" type="button" onClick=${() => setTyping(false)}>Select from the list</button>`}
+      : html`<button class="button link" type="button" onClick=${() => setTyping(true)}>The Feed Is Not in the List</button>`}
+    ${typing && available.length > 0 && html`<button class="button link" type="button" onClick=${() => setTyping(false)}>Select from the List</button>`}
     <${ErrorNotice} error=${feedError.other} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !target}>${busy ? 'Reading the feed…' : 'Add the feed'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !target}>${busy ? 'Reading the Feed…' : 'Add the Feed'}</button></div>
   </form>`;
 }
 
@@ -1443,7 +1443,7 @@ function FindFeeds({ onFound }) {
     </form>
     <${ErrorNotice} error=${find.error} />
     <div class="actions"><button class="button primary" type="button" disabled=${find.busy || count === 0} onClick=${runFind}>
-      ${find.busy ? 'Reading the feeds…' : count > 0 ? `Find my feeds (${count})` : 'Find my feeds'}</button></div>
+      ${find.busy ? 'Reading the Feeds…' : count > 0 ? `Find My Feeds (${count})` : 'Find My Feeds'}</button></div>
   </div>`;
 }
 
@@ -1489,7 +1489,7 @@ function FoundFeeds({ found, onAdded, onNothingToAdd }) {
       ? html`<p role="status">Each of these feeds is in your collection.</p>
         ${onNothingToAdd && html`<div class="actions"><button class="button primary" type="button" onClick=${onNothingToAdd}>Open Studio</button></div>`}`
       : addable.length > 0 && html`<div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
-          ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>`}
+          ${busy ? 'Adding…' : `Add ${chosen.length} Feed${chosen.length === 1 ? '' : 's'}`}</button></div>`}
   </div>`;
 }
 
@@ -1553,7 +1553,7 @@ function MspImport({ onAdded }) {
     </div>
     <${ErrorNotice} error=${error} />
     <div class="actions"><button class="button primary" type="button" disabled=${busy || backups.length === 0} onClick=${send}>
-      ${busy ? 'Importing…' : `Import ${backups.length || ''} backup${backups.length === 1 ? '' : 's'}`}</button></div>
+      ${busy ? 'Importing…' : `Import ${backups.length || ''} Backup${backups.length === 1 ? '' : 's'}`}</button></div>
   </div>`;
 }
 
@@ -1569,8 +1569,8 @@ function Wizard({ onFinish }) {
       <div><h1>Do you already have a feed?</h1>
         <p>Studio keeps your feeds in one collection, and edits them where you host them.</p></div>
       <div class="actions">
-        <button class="button primary" type="button" onClick=${() => go('find')}>Yes, I have feeds</button>
-        <button class="button" type="button" onClick=${() => go('new')}>No, I am new</button>
+        <button class="button primary" type="button" onClick=${() => go('find')}>Yes, I Have Feeds</button>
+        <button class="button" type="button" onClick=${() => go('new')}>No, I Am New</button>
       </div>
       <button class="button link" type="button" onClick=${() => go('msp')}>Import from MSP 2.0</button>
     </div>`;
@@ -1600,8 +1600,8 @@ function Wizard({ onFinish }) {
   } else {
     // A reload lost the wizard memory. Start again at the question.
     body = html`<div class="form"><div><h1>Do you already have a feed?</h1></div>
-      <div class="actions"><button class="button primary" type="button" onClick=${() => go('find')}>Yes, I have feeds</button>
-        <button class="button" type="button" onClick=${() => go('new')}>No, I am new</button></div></div>`;
+      <div class="actions"><button class="button primary" type="button" onClick=${() => go('find')}>Yes, I Have Feeds</button>
+        <button class="button" type="button" onClick=${() => go('new')}>No, I Am New</button></div></div>`;
   }
   return html`<main class="center"><div class="card"><${Brand} />${body}</div></main>`;
 }
@@ -1644,7 +1644,7 @@ function LibrarySheet({ defaultRoot, onDone }) {
     <${Field} id="library-path" label="Folder" required value=${path} onInput=${(e) => setPath(e.target.value)} />
     <${ErrorNotice} error=${error} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !path.trim()}>
-      ${busy ? 'Using this folder…' : 'Use this folder'}</button></div>
+      ${busy ? 'Using This Folder…' : 'Use This Folder'}</button></div>
   </form></main>`;
 }
 
@@ -1806,8 +1806,8 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
         <${CoverNote} url=${feedCover(feed)} />
         <div class="actions">
           <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
-            ${busy ? 'Reading…' : 'Read again'}</button>
-          <button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button>
+            ${busy ? 'Reading…' : 'Read Again'}</button>
+          <button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button>
         </div>
       </div>
     </section>
@@ -1890,7 +1890,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           <${CoverNote} url=${draft.model && coverOf(draft.model)} />
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
-          ${busy ? 'Reading…' : 'Read again'}</button>`}
+          ${busy ? 'Reading…' : 'Read Again'}</button>`}
       </header>
       <${ErrorNotice} error=${error} />
       ${feed.last_version === null && html`<div class="notice" role="status">
@@ -1964,7 +1964,7 @@ function FolderFeeds({ connector, onAdded }) {
     </fieldset>
     <${ErrorNotice} error=${error} />
     <div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
-      ${busy ? 'Adding…' : `Add ${chosen.length} feed${chosen.length === 1 ? '' : 's'}`}</button></div>
+      ${busy ? 'Adding…' : `Add ${chosen.length} Feed${chosen.length === 1 ? '' : 's'}`}</button></div>
   </div>`;
 }
 
@@ -2010,7 +2010,7 @@ function LibraryPanel() {
       </div>
       <${ErrorNotice} error=${error} />
       <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
-        ${busy ? 'Saving…' : 'Save the limits'}</button></div>
+        ${busy ? 'Saving…' : 'Save the Limits'}</button></div>
     </form>
   </article>`;
 }
@@ -2143,7 +2143,7 @@ function ConnectedAppsPanel() {
           ${!a.has_key && html`<span class="hint">This app has no key, so it cannot use a grant.</span>`}</span>
         <span class="app-buttons">
           ${!a.has_key && html`<button class="button action" type="button" disabled=${busy}
-            aria-label=${`Connect the app ${a.name} again`} onClick=${() => connectAgain(a)}>Connect again</button>`}
+            aria-label=${`Connect the app ${a.name} again`} onClick=${() => connectAgain(a)}>Connect Again</button>`}
           <button class="button destructive" type="button" disabled=${busy}
             aria-label=${`Remove the app ${a.name}`} onClick=${() => remove(a)}>Remove</button>
         </span>
@@ -2165,12 +2165,12 @@ function ConnectedAppsPanel() {
             value=${name} onInput=${(e) => setName(e.target.value)} />
           <div class="actions">
             <button class="button primary" type="submit" disabled=${busy || name.trim() === ''}>
-              ${busy ? 'Making…' : 'Make the token'}</button>
+              ${busy ? 'Making…' : 'Make the Token'}</button>
             <button class="button" type="button" disabled=${busy} onClick=${() => setAdding(false)}>Cancel</button>
           </div>
         </form>`
       : html`<div class="actions"><button class="button action" type="button"
-          onClick=${() => { setMade(null); setAdding(true); }}>Connect an app</button></div>`}
+          onClick=${() => { setMade(null); setAdding(true); }}>Connect an App</button></div>`}
     <${ErrorNotice} error=${error} />
   </article>`;
 }
@@ -2323,7 +2323,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
           </dl>
           ${isNsite && html`<div class="actions">
             <button class="button" type="button" disabled=${site.busy} onClick=${checkRelays}>
-              ${site.busy ? 'Checking…' : 'Check the relays'}</button>
+              ${site.busy ? 'Checking…' : 'Check the Relays'}</button>
           </div>`}
           ${isNsite && siteState && (siteState.consistent
             ? html`<p class="hint" role="status">Each relay has the newest manifest.</p>`
@@ -2336,14 +2336,14 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
           ${isNsite && html`<${ErrorNotice} error=${site.error} />`}
           ${isSftp && html`<div class="actions">
             <button class="button" type="button" disabled=${check.busy || accept.busy} onClick=${checkHost}>
-              ${check.busy ? 'Checking…' : 'Check the connection'}</button>
+              ${check.busy ? 'Checking…' : 'Check the Connection'}</button>
           </div>`}
           ${isSftp && newKey && html`<div class="notice error" role="alert">
             <strong>The server gives a new host key.</strong>
             <p>Make sure that this is the fingerprint of the server before you accept it:</p>
             <p class="mono">${newKey}</p>
             <div class="actions"><button class="button action" type="button" disabled=${accept.busy} onClick=${acceptKey}>
-              ${accept.busy ? 'Accepting…' : 'Accept the new key'}</button></div>
+              ${accept.busy ? 'Accepting…' : 'Accept the New Key'}</button></div>
           </div>`}
           ${mismatch && html`<div class="notice error" role="alert"><strong>The server gives a different key now.</strong>Connect again to see it.</div>`}
           ${!mismatch && html`<${ErrorNotice} error=${accept.error} />`}
@@ -2445,7 +2445,7 @@ function AddFeedSheet({ open, title, connectors, feeds, found, setFound, onAdded
   } else if (open === 'find') {
     body = found
       ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
-        <div class="actions"><button class="button link" type="button" onClick=${() => setFound(null)}>Search again</button></div>`
+        <div class="actions"><button class="button link" type="button" onClick=${() => setFound(null)}>Search Again</button></div>`
       : html`<${FindFeeds} onFound=${setFound} />`;
   } else if (open === 'folder') {
     body = html`<${AddFeedForm} connectors=${connectors} onAdded=${onAdded} />`;
@@ -2615,7 +2615,7 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
     </div>
     <footer>
       <button class=${`button ${kind === 'remove' ? 'destructive' : 'primary'}`} type="button" disabled=${busy || !ready} onClick=${submit}>
-        ${busy ? 'Making the change set…' : label}</button>
+        ${busy ? 'Making the Change Set…' : label}</button>
     </footer>`;
 }
 
@@ -2655,10 +2655,10 @@ function RecipientPage({ recipient, feeds, go }) {
     <header class="recipient-head"><h1>${row.title}</h1>
       <p class="hint"><span class="mono">${recipient.address}</span> · ${row.type}</p></header>
     <div class="actions recipient-actions">
-      <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change address</button>
+      <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change Address</button>
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('rename')}>Rename</button>
       <button class="button destructive" type="button" disabled=${count === 0} onClick=${() => setOpen('remove')}>Remove</button>
-      <button class="button action" type="button" onClick=${() => setOpen('add')}>Add to a level</button>
+      <button class="button action" type="button" onClick=${() => setOpen('add')}>Add to a Level</button>
     </div>
     <section class="page-section"><h2>Feeds${uses ? ` · ${count} of ${uses.length} selected` : ''}</h2>
       ${uses === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}
@@ -2983,7 +2983,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
 }
 
 // The sort names of the Releases list (ADR 0039 item 2a, ADR 0085 item 4).
-const SORT_LABELS = { order: 'Feed order', newest: 'Newest', az: 'A to Z' };
+const SORT_LABELS = { order: 'Feed Order', newest: 'Newest', az: 'A to Z' };
 
 // The Releases page, the start page (ADR 0039 items 2, 2a and 3, musicindex
 // ADR 0027 R-LIST-1). `list` is the sort and the view from the address.
@@ -3037,8 +3037,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
           </div>`}
           ${hasRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${hasRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
-          ${!inGroup && html`<button class="button action" type="button" onClick=${onAddFeed}>＋ Add a feed</button>`}
-          ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the feed</button>`}
+          ${!inGroup && html`<button class="button action" type="button" onClick=${onAddFeed}>＋ Add a Feed</button>`}
+          ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the Feed</button>`}
         </div>`}
       </div>
       ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
@@ -3495,7 +3495,7 @@ function Nip46Page({ title, invite, recoveryKey, onDone, onBack }) {
     <div><h1>${title}</h1>
       <p>Scan the QR code with your signer app. On a phone, open the link instead. Or paste a bunker address from your signer.</p></div>
     ${link && html`<img class="qr" alt="QR code of the signer link" src=${qrSource(link.qr_svg)} width="240" height="240" />`}
-    ${link && html`<div class="actions"><a class="button action" href=${link.uri}>Open in the signer app</a></div>`}
+    ${link && html`<div class="actions"><a class="button action" href=${link.uri}>Open in the Signer App</a></div>`}
     <form class="form" onSubmit=${connectBunker}>
       <${Field} id="nip46-bunker" label="Bunker address" autocomplete="off" spellcheck="false"
         placeholder="bunker://…" value=${bunker} onInput=${(e) => setBunker(e.target.value)} />
@@ -3507,7 +3507,7 @@ function Nip46Page({ title, invite, recoveryKey, onDone, onBack }) {
     <${AuthNotice} error=${paste.error || qr.error} />
     <div class="actions">
       ${(waiting || phase === 'failed') && html`<button class="button" type="button" onClick=${onBack}>${waiting ? 'Stop' : 'Back'}</button>`}
-      ${phase === 'failed' && html`<button class="button action" type="button" onClick=${start}>Try again</button>`}
+      ${phase === 'failed' && html`<button class="button action" type="button" onClick=${start}>Try Again</button>`}
     </div>
   </div></main>`;
 }
@@ -3601,13 +3601,13 @@ function SignInPage({ onDone, onSignUp, onRecovery }) {
       value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
     <${AuthNotice} error=${error} />
     <div class="actions">
-      <button class="button primary" type="submit" disabled=${busy || !email.trim() || !passphrase}>${busy ? 'Signing in…' : 'Sign in'}</button>
-      ${window.nostr && html`<button class="button action" type="button" disabled=${busy} onClick=${signer}>Sign in with a signer extension</button>`}
-      ${hasPasskeys && html`<button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Sign in with a passkey</button>`}
-      <button class="button action" type="button" disabled=${busy} onClick=${() => setRemote(true)}>Sign in with Amber or a bunker</button>
+      <button class="button primary" type="submit" disabled=${busy || !email.trim() || !passphrase}>${busy ? 'Signing In…' : 'Sign In'}</button>
+      ${window.nostr && html`<button class="button action" type="button" disabled=${busy} onClick=${signer}>Sign In with a Signer Extension</button>`}
+      ${hasPasskeys && html`<button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Sign In with a Passkey</button>`}
+      <button class="button action" type="button" disabled=${busy} onClick=${() => setRemote(true)}>Sign In with Amber or a Bunker</button>
     </div>
-    <button class="button link" type="button" onClick=${onSignUp}>Make an account</button>
-    <button class="button link" type="button" onClick=${onRecovery}>Sign in with the recovery key</button>
+    <button class="button link" type="button" onClick=${onSignUp}>Make an Account</button>
+    <button class="button link" type="button" onClick=${onRecovery}>Sign In with the Recovery Key</button>
   </form></main>`;
 }
 
@@ -3638,9 +3638,9 @@ function RecoveryPage({ onDone, onBack }) {
       value=${key} onInput=${(e) => setKey(e.target.value)} />
     ${error && html`<div class="notice error" role="alert">${error.code === 'offline' ? error.message : recoveryErrorText(error.code)}</div>`}
     <div class="actions">
-      <button class="button primary" type="submit" disabled=${busy || !account.trim() || !key.trim()}>${busy ? 'Signing in…' : 'Sign in'}</button>
+      <button class="button primary" type="submit" disabled=${busy || !account.trim() || !key.trim()}>${busy ? 'Signing In…' : 'Sign In'}</button>
     </div>
-    <button class="button link" type="button" onClick=${onBack}>Back to sign in</button>
+    <button class="button link" type="button" onClick=${onBack}>Back to Sign In</button>
   </form></main>`;
 }
 
@@ -3701,16 +3701,16 @@ function AddMethodPage() {
         <${Meter} strength=${strength} />
       <//>
       <div class="actions">
-        <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Saving…' : 'Save the passphrase'}</button>
+        <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Saving…' : 'Save the Passphrase'}</button>
       </div>
     </form>`}
     ${choices.includes('nip07') && html`<div class="actions">
-      <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Use the signer extension</button></div>`}
+      <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Use the Signer Extension</button></div>`}
     ${choices.includes('passkey') && html`<div class="actions">
-      <button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Use a passkey</button></div>`}
+      <button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Use a Passkey</button></div>`}
     ${choices.length === 0 && html`<p class="hint">This account signs in with a Nostr signer. Studio found no signer extension in this browser.</p>`}
     <${AuthNotice} error=${signerError || vaultError.other} />
-    <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign out</button></div>
+    <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign Out</button></div>
   </div></main>`;
 }
 
@@ -3762,13 +3762,13 @@ function SignUpPage({ signup, onDone, onSignIn }) {
       Make a recovery key, in case I forget the passphrase</label>
     <${AuthNotice} error=${serverError.other && error.code !== 'invalid_email' ? error : null} />
     <div class="actions">
-      <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the account…' : 'Make the account'}</button>
+      <button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Making the Account…' : 'Make the Account'}</button>
       ${window.nostr && html`<button class="button action" type="button" disabled=${busy || (needInvite && invite.trim() === '')}
-        onClick=${signer}>Sign up with a signer extension</button>`}
+        onClick=${signer}>Sign Up with a Signer Extension</button>`}
       <button class="button action" type="button" disabled=${busy || (needInvite && invite.trim() === '')}
-        onClick=${() => setRemote(true)}>Sign up with Amber or a bunker</button>
+        onClick=${() => setRemote(true)}>Sign Up with Amber or a Bunker</button>
     </div>
-    <button class="button link" type="button" onClick=${onSignIn}>I have an account</button>
+    <button class="button link" type="button" onClick=${onSignIn}>I Have an Account</button>
   </form></main>`;
 }
 
@@ -3843,12 +3843,12 @@ function UnlockSheet({ session, onDone }) {
         <div class="actions"><button class="button primary" type="submit" disabled=${busy || !passphrase}>${busy ? 'Unlocking…' : 'Unlock'}</button></div>
       </form>`}
       ${methods.includes('nip07') && html`<div class="actions">
-        <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Unlock with a signer extension</button></div>`}
+        <button class="button action" type="button" disabled=${busy} onClick=${bySigner}>Unlock with a Signer Extension</button></div>`}
       ${methods.includes('nip46') && html`<div class="actions">
-        <button class="button action" type="button" disabled=${busy} onClick=${byRemoteSigner}>Use the remote signer</button></div>
+        <button class="button action" type="button" disabled=${busy} onClick=${byRemoteSigner}>Use the Remote Signer</button></div>
         ${busy && html`<p class="hint" role="status">Allow the request in your signer app.</p>`}`}
       ${methods.includes('passkey') && html`<div class="actions">
-        <button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Use a passkey</button></div>`}
+        <button class="button action" type="button" disabled=${busy} onClick=${byPasskey}>Use a Passkey</button></div>`}
       ${methods.length === 0 && html`<p class="hint">This account opens with a Nostr signer. Studio found no signer extension in this browser.</p>`}
       <${AuthNotice} error=${signerError || passError.other} />
     </div>
@@ -3902,7 +3902,7 @@ function PasskeyList() {
     ${list && list.length === 0 && html`<p class="hint">This account has no passkey.</p>`}
     <${Field} id="passkey-name" label="Name of the new passkey" autocomplete="off" value=${name}
       onInput=${(e) => setName(e.target.value)} />
-    <div class="actions"><button class="button action" type="submit" disabled=${busy}>${busy ? 'Waiting for the passkey…' : 'Add a passkey'}</button></div>
+    <div class="actions"><button class="button action" type="submit" disabled=${busy}>${busy ? 'Waiting for the Passkey…' : 'Add a Passkey'}</button></div>
     <${AuthNotice} error=${error} />
   </form>`;
 }
@@ -3937,13 +3937,13 @@ function AccountPanel() {
           <${Field} id="delete-confirm" label=${`Type ${byEmail ? 'your email address' : 'your npub'} to confirm`}
             autocomplete="off" value=${typed} onInput=${(e) => setTyped(e.target.value)} />
           <div class="actions">
-            <button class="button destructive" type="submit" disabled=${busy || !confirmation}>${busy ? 'Deleting…' : 'Yes, delete the account'}</button>
+            <button class="button destructive" type="submit" disabled=${busy || !confirmation}>${busy ? 'Deleting…' : 'Yes, Delete the Account'}</button>
             <button class="button" type="button" disabled=${busy} onClick=${() => { setDeleting(false); setTyped(''); }}>Cancel</button>
           </div>
         </form>`
       : html`<div class="actions">
-          <button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign out</button>
-          <button class="button destructive" type="button" disabled=${busy} onClick=${() => setDeleting(true)}>Delete the account</button>
+          <button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign Out</button>
+          <button class="button destructive" type="button" disabled=${busy} onClick=${() => setDeleting(true)}>Delete the Account</button>
         </div>`}
     <${AuthNotice} error=${error} />
   </article>`;
@@ -3975,7 +3975,7 @@ function Studio({ epoch }) {
     return serverMode ? html`<p class="boot" role="status">Loading Studio…</p>` : html`<${NoToken} />`;
   }
   if (error) return html`<main class="center"><div class="card"><${Brand} /><${ErrorNotice} error=${error} />
-    <div class="actions"><button class="button" type="button" onClick=${load}>Try again</button></div></div></main>`;
+    <div class="actions"><button class="button" type="button" onClick=${load}>Try Again</button></div></div></main>`;
   if (!status || !library) return html`<p class="boot" role="status">Loading Studio…</p>`;
   // On a server, a locked vault does not stop the start. A route that needs
   // the vault opens the unlock sheet (ADR 0056 item 9).
@@ -4081,7 +4081,7 @@ function App() {
 
   if (bootError) {
     return html`<main class="center"><div class="card"><${Brand} /><${ErrorNotice} error=${bootError} />
-      <div class="actions"><button class="button" type="button" onClick=${reload}>Try again</button></div></div></main>`;
+      <div class="actions"><button class="button" type="button" onClick=${reload}>Try Again</button></div></div></main>`;
   }
   if (!session) return html`<p class="boot" role="status">Loading Studio…</p>`;
   const view = bootView(session, null);

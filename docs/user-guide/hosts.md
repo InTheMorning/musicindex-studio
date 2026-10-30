@@ -32,7 +32,7 @@ Studio needs it to know the address of each feed.
 1. Type a name in **Name (optional)**. If you leave it empty, Studio uses the folder name.
 2. Type the full path of the folder in **Folder**. For example `/home/me/feeds`.
 3. If a web server publishes the folder, type its address in **Public address of the folder (optional)**.
-4. Select **Add the folder**.
+4. Select **Add the Folder**.
 
 If the folder does not exist, Studio shows "Studio did not find this folder on this computer."
 
@@ -49,7 +49,7 @@ If the folder does not exist, Studio shows "Studio did not find this folder on t
    - **Public address of the bucket (optional)**. R2 needs a custom domain for a public feed.
    - **Access key ID**
    - **Secret access key**. Studio keeps this key in your vault.
-3. Select **Add the bucket**.
+3. Select **Add the Bucket**.
 
 Studio tests the bucket before it adds it.
 If you have no vault, Studio asks you to make one first. See [Passphrase, unlock and lock](vault.md).
@@ -78,11 +78,11 @@ This form has two steps.
    - For **ssh-agent**, Studio uses the keys of the ssh-agent on this computer. Studio keeps no secret.
 4. Select **Connect**.
 5. Studio shows the host key fingerprint of the server. Make sure that it is the fingerprint of your server.
-6. Select **Accept and add the server**. To change a field, select **Back**.
+6. Select **Accept and Add the Server**. To change a field, select **Back**.
 
 Studio checks the host key each time that it connects.
 If the server gives a different key, the host card shows "The server gives a new host key."
-Check the fingerprint. Then select **Accept the new key**.
+Check the fingerprint. Then select **Accept the New Key**.
 
 ## nsite site
 
@@ -90,7 +90,7 @@ An nsite site needs a Nostr key.
 
 1. Select **nsite site**.
 2. Under **Signing**, select how Studio gets the signature:
-   - **My signer**. Select **Use my signer**. Studio asks the signer for your public key. Studio uses the NIP-07 signer extension of the browser. If the browser has none, Studio shows a QR code to connect a remote signer, such as Amber. See [Sign in to a Studio server](sign-in.md#connect-a-remote-signer).
+   - **My signer**. Select **Use My Signer**. Studio asks the signer for your public key. Studio uses the NIP-07 signer extension of the browser. If the browser has none, Studio shows a QR code to connect a remote signer, such as Amber. See [Sign in to a Studio server](sign-in.md#connect-a-remote-signer).
    - **Key in the vault**. Paste the private key (the nsec) in **Private key of the site**. Studio keeps it in your vault.
 3. Studio shows your public key (the npub). It also fills **Relays** and **Blossom servers** from the lists of your key. If the key has no lists, type the addresses.
 4. Fill in the other fields:
@@ -101,7 +101,7 @@ An nsite site needs a Nostr key.
    - **Blossom servers**. Type one address on each line.
    - **Gateway**. The default is `nsite.lol`.
    - **Title of the site (optional)**
-5. Select **Add the site**.
+5. Select **Add the Site**.
 
 When you use **My signer**, Studio asks your signer to sign each write. See [Review and write your changes](review-and-write.md).
 
@@ -121,7 +121,7 @@ Studio then shows "Studio can now write N feeds through" the file host.
 Those feeds are no longer read-only.
 
 Studio can also list feed files in the folder that are not in your collection.
-Select the feeds and select **Add N feeds**.
+Select the feeds and select **Add N Feeds**.
 
 ## Change or remove a file host
 
@@ -129,8 +129,8 @@ Each file host has a card on the File hosts page. The card lists the settings of
 The line **Different addresses** shows when the address of a feed does not agree with the public address of the folder. Select the feed to open it.
 
 - Select **Edit** to change the name and the public address. For an nsite site, you can also change the relays, the Blossom servers and the gateway. Then select **Save**.
-- Select **Check the connection** on an SFTP card to test the login.
-- Select **Check the relays** on an nsite card. Studio tells you if each relay has the newest manifest.
+- Select **Check the Connection** on an SFTP card to test the login.
+- Select **Check the Relays** on an nsite card. Studio tells you if each relay has the newest manifest.
 - Select **Remove** to remove the file host. Studio asks you to confirm. The files in the file host do not change.
 
 You cannot remove a file host while feeds use it.
@@ -143,4 +143,4 @@ The settings of Studio are not on the File hosts page. Select **Settings** at th
 - **Account**, on a server only. See [Your account on a server](account.md).
 - **Connected apps**. See [Connected apps and show grants](connected-apps.md).
 - **Announcements**. See [Announcements](announcements.md).
-- **Library**. On the desktop, it shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the limits**.
+- **Library**. On the desktop, it shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the Limits**.

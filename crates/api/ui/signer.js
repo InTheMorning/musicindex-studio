@@ -86,7 +86,7 @@ export function SignerConnect({ onConnected, onCancel }) {
   return html`<div class="signer-connect">
     <p>Scan the QR code with your signer app. On a phone, open the link instead. Or paste a bunker address from your signer.</p>
     ${link && html`<img class="qr" alt="QR code of the signer link" src=${qrSource(link.qr_svg)} width="240" height="240" />`}
-    ${link && html`<div class="actions"><a class="button action" href=${link.uri}>Open in the signer app</a></div>`}
+    ${link && html`<div class="actions"><a class="button action" href=${link.uri}>Open in the Signer App</a></div>`}
     <form class="form" onSubmit=${connectBunker}>
       <${Field} id="signer-bunker" label="Bunker address" autocomplete="off" spellcheck="false"
         placeholder="bunker://…" value=${bunker} onInput=${(e) => setBunker(e.target.value)} />
@@ -98,7 +98,7 @@ export function SignerConnect({ onConnected, onCancel }) {
     <${ErrorNotice} error=${paste.error || start.error} />
     <div class="actions">
       <button class="button" type="button" onClick=${stop}>${waiting ? 'Stop' : 'Close'}</button>
-      ${phase === 'failed' && html`<button class="button action" type="button" onClick=${begin}>Try again</button>`}
+      ${phase === 'failed' && html`<button class="button action" type="button" onClick=${begin}>Try Again</button>`}
     </div>
   </div>`;
 }

@@ -10,11 +10,11 @@ Use this method to add audio files from your computer.
 Studio puts the files in the release folder. It sends them to the file host when you write.
 
 1. Select **Add tracks** in the outline or on the album page.
-2. Select **＋ Choose music and image files**. You can select many files.
+2. Select **＋ Choose Music and Image Files**. You can select many files.
 3. Studio reads each file in turn. Each row shows the file name and a state: "Waiting to send…", "Sending…", "Track ready" or "Image ready".
 4. Check the facts of each track: **Title**, **Track number** and **Duration**.
 5. For an image, use **Use for** to select **Album art**, a track, or **Not used**.
-6. Select **＋ Add N tracks**. If you only chose album art, select **＋ Add the album art**.
+6. Select **＋ Add N Tracks**. If you only chose album art, select **＋ Add the Album Art**.
 
 Studio sends each file in parts of 8 MiB. The row shows the percent that Studio sent.
 If a part fails, Studio tries it again 3 times. The row then shows "A part failed. Trying again…".
@@ -46,13 +46,13 @@ Use this method when the audio file is already on a web server.
 Studio does not keep the file.
 
 1. Select **Add tracks** in the outline or on the album page.
-2. Select **The audio is already online**. The sheet **Add a track from an address** opens.
+2. Select **The Audio Is Already Online**. The sheet **Add a track from an address** opens.
 3. Type a **Title** if you want.
 4. Type the web address of the audio file in **Audio file address**. Studio asks the file host for the size and the type.
 5. Examine the row **Properties**. Its summary shows the size and the type. If Studio could not find them, the row opens. Type **Audio file size in bytes** and **Audio file type**.
-6. Select **＋ Add the track**.
+6. Select **＋ Add the Track**.
 
-To go back to the files on your computer, select **Choose files from this computer**.
+To go back to the files on your computer, select **Choose Files from This Computer**.
 
 ## Edit a track
 
@@ -71,15 +71,15 @@ The two arrow buttons in the header open the track before and the track after th
 
 1. Open the track page.
 2. Select **Choose…** adjacent to **Audio file address**.
-3. Select a source in the sheet: **This release**, **File hosts** or **This computer**.
+3. Select a source in the sheet: **This Release**, **File Hosts** or **This Computer**.
 4. Select the new audio file.
 
 You can also drop one audio file on the field.
 The track keeps its GUID and its other values.
-A file from **This computer** goes in the release folder.
-A file from **This release** or **File hosts** is not copied. Studio uses its public address.
+A file from **This Computer** goes in the release folder.
+A file from **This Release** or **File Hosts** is not copied. Studio uses its public address.
 
-Studio reads the duration from a file that you select from **This release** or **File hosts**.
+Studio reads the duration from a file that you select from **This Release** or **File Hosts**.
 If Studio cannot read it, the field **Duration** asks you to type it.
 
 When you write, Studio deletes the file from before on the file host.
@@ -101,8 +101,8 @@ It holds **Audio file size in bytes** and **Audio file type**.
 Each track has a position menu. Select a number, and the track moves to that position. The tracks between the two positions move one position. Studio then sets the track numbers again.
 
 - On the album page, the menu is at the start of each row in **Tracks**.
-- On the track page, the menu **Position** is at the bottom, adjacent to **Remove the track**.
+- On the track page, the menu **Position** is at the bottom, adjacent to **Remove the Track**.
 
-**Remove the track** does not ask you to confirm.
+**Remove the Track** does not ask you to confirm.
 It removes the track from the draft.
-To get the track back, go back to an earlier version, or use **Discard the draft** to remove all changes that you did not write.
+To get the track back, go back to an earlier version, or use **Discard the Draft** to remove all changes that you did not write.

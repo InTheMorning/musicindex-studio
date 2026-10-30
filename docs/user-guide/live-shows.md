@@ -9,12 +9,12 @@ You can start and end a show in Studio, or let a connected app do it. See [Conne
 You can add a live show to any album feed.
 To keep your shows in their own feed, make a show feed.
 
-1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
+1. Select **Releases** in the left panel. Then select **＋ Add a Feed**.
 2. On the page **Add feeds**, select **Show** in the group **Make a new feed**. A sheet opens.
 3. Select the file host in **File host** if you have more than one.
 4. Type the name in **Show feed title**.
 5. Type the name of the artist in **Artist**.
-6. Select **Make the show feed**.
+6. Select **Make the Show Feed**.
 
 Studio gives the feed file from the title. To change it, open the row **Feed file**.
 
@@ -26,7 +26,7 @@ A show feed is a music feed, so Studio opens it as an album.
 2. Select **Add a live show** in the outline.
 3. Type a **Title**.
 4. Select a **Start time**.
-5. Select **＋ Add the show**.
+5. Select **＋ Add the Show**.
 
 Studio opens the page of the show. The outline lists the show under **Live shows** with its status.
 
@@ -40,7 +40,7 @@ Studio opens the page of the show. The outline lists the show under **Live shows
 | Stream | **Stream address** and **Stream type**, for example `application/x-mpegURL`. It shows until the show ends. |
 | Recording | After the show ends. See below. |
 | Content links | **Add a content link**. Each link has **Link address** and **Link text**. |
-| Live value | **Live value address** and **Live value protocol**. Select **Remove the live value** to remove it. |
+| Live value | **Live value address** and **Live value protocol**. Select **Remove the Live Value** to remove it. |
 | Value routes | Recipients for this show. |
 | More | **Identity** shows the show GUID. |
 
@@ -51,11 +51,11 @@ The status section tells you what is missing: "This show has no start time." or 
 ## Go live and end the show
 
 1. Open the page of the show.
-2. Select **Go live**.
+2. Select **Go Live**.
 3. Studio changes the draft and opens the review sheet.
-4. Select **Write to the file host**.
+4. Select **Write to the File Host**.
 
-When the show is over, select **End the show** and write in the same way.
+When the show is over, select **End the Show** and write in the same way.
 Neither button changes the file host until you write.
 See [Review and write your changes](review-and-write.md).
 
@@ -64,7 +64,7 @@ See [Review and write your changes](review-and-write.md).
 After a show ends, the page has the section **Recording**.
 
 1. Select **Choose…** adjacent to **Recording**.
-2. Select a source in the sheet: **This release**, **File hosts** or **This computer**.
+2. Select a source in the sheet: **This Release**, **File Hosts** or **This Computer**.
 3. Select the audio file.
 
 You can also drop one audio file on the field.

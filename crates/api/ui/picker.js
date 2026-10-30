@@ -50,8 +50,8 @@ const TOO_MANY_TEXT = 'Drop one file only';
 // The reason that a host file cannot be selected (ADR 0062 item 9).
 export const NO_ADDRESS_TEXT = 'This file has no public address';
 
-const SOURCE_RELEASE = { id: 'release', label: 'This release' };
-const SOURCE_COMPUTER = { id: 'computer', label: 'This computer' };
+const SOURCE_RELEASE = { id: 'release', label: 'This Release' };
+const SOURCE_COMPUTER = { id: 'computer', label: 'This Computer' };
 
 // The three sources of the sheet, in the sequence of ADR 0062 item 2. The
 // source "Hosts" has one entry for each connector. The source "This
@@ -62,7 +62,7 @@ export function sources(field, connectors) {
     SOURCE_RELEASE,
     {
       id: 'hosts',
-      label: 'File hosts',
+      label: 'File Hosts',
       hosts: (connectors || []).map((c) => ({ connectorId: c.id, name: c.name })),
     },
     { ...SOURCE_COMPUTER, accept: ACCEPT[kind] || '' },

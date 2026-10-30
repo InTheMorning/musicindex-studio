@@ -13,17 +13,17 @@ When Studio finds the roles in the feed, the dot is hollow until you select the 
 
 You need a file host with a public address. See [Connect a file host](hosts.md).
 
-1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
+1. Select **Releases** in the left panel. Then select **＋ Add a Feed**.
 2. On the page **Add feeds**, select **Artist or label** in the group **Make a new feed**. A sheet opens.
 3. Select the file host in **File host** if you have more than one.
 4. Type the name in **Name**.
 5. Under **Role**, select **Artist**, **Label** or **Hosting**.
-6. Select **Make the feed**.
+6. Select **Make the Feed**.
 
 Studio gives the feed file from the name. To change it, open the row **Feed file**.
 
 Studio opens the new feed as a draft.
-Select **Review** and **Write to the file host** to make the file. See [Review and write your changes](review-and-write.md).
+Select **Review** and **Write to the File Host** to make the file. See [Review and write your changes](review-and-write.md).
 
 ## The pages of the feed
 
@@ -72,7 +72,7 @@ If the feed has no role, Studio asks you to select the role first.
 
 The first feed in the list is the primary one.
 The row shows the role and "Primary".
-Use **Move up**, **Move down** and **Remove** to change the list.
+Use **Move Up**, **Move Down** and **Remove** to change the list.
 
 ## Remove a link
 

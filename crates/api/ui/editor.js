@@ -85,9 +85,9 @@ export function PositionSelect({ id, index, count, name, disabled, onMove }) {
 export function EntryActions({ list, index, name, onChange }) {
   return html`<div class="actions">
     <button class="button" type="button" disabled=${index === 0}
-      aria-label=${`Move ${name} up`} onClick=${() => onChange(move(list, index, -1))}>Move up</button>
+      aria-label=${`Move ${name} up`} onClick=${() => onChange(move(list, index, -1))}>Move Up</button>
     <button class="button" type="button" disabled=${index === list.length - 1}
-      aria-label=${`Move ${name} down`} onClick=${() => onChange(move(list, index, 1))}>Move down</button>
+      aria-label=${`Move ${name} down`} onClick=${() => onChange(move(list, index, 1))}>Move Down</button>
     <button class="button destructive" type="button"
       aria-label=${`Remove ${name}`} onClick=${() => onChange(list.filter((_, i) => i !== index))}>Remove</button>
   </div>`;
@@ -438,11 +438,11 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
           </div>
         </details>
       </div>
-      <button class="button link" type="button" onClick=${onFiles}>Choose files from this computer</button>
+      <button class="button link" type="button" onClick=${onFiles}>Choose Files from This Computer</button>
     </form>
     <footer>
       <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-      <button class="button primary" type="submit" form="add-track-form" disabled=${!ready}>＋ Add the track</button>
+      <button class="button primary" type="submit" form="add-track-form" disabled=${!ready}>＋ Add the Track</button>
     </footer>
   </dialog>`;
 }
@@ -549,7 +549,7 @@ function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
           <div class="inline"><input id="nostr-query" type="search" value=${query} onInput=${(e) => setQuery(e.target.value)} />
             <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
         </div>
-        ${mine && html`<div class="actions"><button class="button" type="button" onClick=${() => choose(mine, null)}>Use my key</button></div>`}
+        ${mine && html`<div class="actions"><button class="button" type="button" onClick=${() => choose(mine, null)}>Use My Key</button></div>`}
         <${ErrorNotice} error=${search.error} />
         ${person && html`<div class="group">
           <label class="check"><input type="checkbox" checked=${useName} onChange=${(e) => setUseName(e.target.checked)} />
@@ -804,7 +804,7 @@ function FilePicker({ pick }) {
           <div class="import-pick">
             <input id=${inputId} class="visually-hidden" type="file" disabled=${pick.busy} accept=${list[2].accept}
               onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) pick.upload(file); }} />
-            <label for=${inputId} class="button action">${pick.busy ? `Sending… ${progressPercent(pick.sent, pick.size)}%` : 'Select a file'}</label>
+            <label for=${inputId} class="button action">${pick.busy ? `Sending… ${progressPercent(pick.sent, pick.size)}%` : 'Select a File'}</label>
           </div>
           <p class="hint">Studio sends the file to the release folder. The file host gets the file when you write.</p>
         </div>`}
@@ -1118,8 +1118,8 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
   // An import of the album art alone is also an add.
   const canAdd = !stillGoing && (readyAudio.length > 0 || Boolean(albumArt));
   const addLabel = readyAudio.length > 0 || !albumArt
-    ? `＋ Add ${readyAudio.length} track${readyAudio.length === 1 ? '' : 's'}`
-    : '＋ Add the album art';
+    ? `＋ Add ${readyAudio.length} Track${readyAudio.length === 1 ? '' : 's'}`
+    : '＋ Add the Album Art';
 
   // The add: the audio files in the sequence of their track numbers, then
   // the files with no number in the sequence of selection (ADR 0026 item 3).
@@ -1177,9 +1177,9 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
           aria-describedby="import-input-hint"
           accept="audio/*,image/*,.wav,.flac,.m4a,.ogg,.opus"
           onChange=${(e) => { addFiles(e.target.files); e.target.value = ''; }} />
-        <label for="import-input" class="button action">＋ Choose music and image files</label>
+        <label for="import-input" class="button action">＋ Choose Music and Image Files</label>
       </div>
-      ${rows.length === 0 && html`<button class="button link" type="button" onClick=${onAddress}>The audio is already online</button>`}
+      ${rows.length === 0 && html`<button class="button link" type="button" onClick=${onAddress}>The Audio Is Already Online</button>`}
       ${rows.length === 0 && html`<p class="hint">Select the files to import.</p>`}
       ${rows.length > 0 && html`<div class="group">
         ${rows.map((row) => html`<${ImportRow} key=${row.id} row=${row} audioOptions=${audioOptions}
@@ -1518,12 +1518,12 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       ${draft.error && draft.error.code === 'stale_revision'
         ? html`<div class="notice error" role="alert"><strong>The draft changed in a different window.</strong>
             Load the draft again to continue. The changes in this window since the last save go out.
-            <div class="actions"><button class="button" type="button" onClick=${draft.load}>Load the draft again</button></div></div>`
+            <div class="actions"><button class="button" type="button" onClick=${draft.load}>Load the Draft Again</button></div></div>`
         : html`<${ErrorNotice} error=${draft.error} />`}
       ${conflict
         ? html`<div class="notice error" role="alert"><strong>The hosted file changed after the draft started.</strong>
             Studio did not write. A different tool or a different person changed the file.
-            <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startAgain}>Start again from the hosted file</button></div></div>`
+            <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startAgain}>Start Again from the Hosted File</button></div></div>`
         : stale
           ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
           : signErrorText(error && error.code)
@@ -1565,17 +1565,17 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       ${diff && choice.kind === 'differs' && html`<div class="notice error" role="alert"><strong>${signErrorText('signer_key_differs')}</strong></div>`}
       ${diff && needsSigner && choice.kind !== 'loading' && !connecting && html`<div class="actions">
         <button class="button action" type="button" disabled=${busy} onClick=${() => setConnecting(true)}>
-          ${choice.kind === 'differs' ? 'Connect a different signer' : 'Connect a signer'}</button>
+          ${choice.kind === 'differs' ? 'Connect a Different Signer' : 'Connect a Signer'}</button>
       </div>`}
       ${diff && connecting && html`<${SignerConnect} onConnected=${connected} onCancel=${() => setConnecting(false)} />`}
       <div class="actions">
-        <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the changes</button>
+        <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
       </div>
     </div>
     <footer>
-      <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
+      <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the Draft</button>
       ${diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner} onClick=${write}>
-        ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the file host'}</button>`}
+        ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
     </footer>
   </dialog>`;
 }
@@ -1612,7 +1612,7 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
       ${list && list.length > 0 && html`<div class="group"><ul class="snapshots">${list.map((s) => html`<li key=${s.id}>
         <span><span class="when">${new Date(s.taken_at * 1000).toLocaleString()}</span>
           <span class="mono sub">${s.version.slice(0, 19)}</span></span>
-        <button class="button" type="button" disabled=${busy} onClick=${() => restore(s)}>Put in the draft</button>
+        <button class="button" type="button" disabled=${busy} onClick=${() => restore(s)}>Put in the Draft</button>
       </li>`)}</ul></div>`}
     </div>
   </dialog>`;
@@ -1708,7 +1708,7 @@ function FeedFacts({ feed, onRemoved }) {
         <dt>Announcement</dt><dd>${announcementText.split('\n').map((line, i) => html`${i > 0 && html`<br />`}${line}`)}</dd>
       </dl>
       <${ErrorNotice} error=${error} />
-      <div class="actions"><button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from collection</button></div>
+      <div class="actions"><button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button></div>
     </div>
   </details>`;
 }
@@ -1761,10 +1761,10 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
         <div class="actions">
           <button class="button" type="button" disabled=${row.index === 0 || linkAction.busy}
             aria-label=${`Move ${row.entry.title || 'this feed'} up`}
-            onClick=${() => movePublisher(row.index, -1)}>Move up</button>
+            onClick=${() => movePublisher(row.index, -1)}>Move Up</button>
           <button class="button" type="button" disabled=${row.index === rows.length - 1 || linkAction.busy}
             aria-label=${`Move ${row.entry.title || 'this feed'} down`}
-            onClick=${() => movePublisher(row.index, 1)}>Move down</button>
+            onClick=${() => movePublisher(row.index, 1)}>Move Down</button>
           <button class="button destructive" type="button" disabled=${linkAction.busy}
             aria-label=${`Remove ${row.entry.title || 'this feed'}`}
             onClick=${() => removeRow(row)}>Remove</button>
@@ -1810,7 +1810,7 @@ function CoverField({ id, model, update, bad }) {
           address=${['image', 'rss_image/url']} bad=${bad} value=${coverOf(model)} onChange=${change}>
           ${conflict && html`<div class="field-note">
             <span>The RSS image tag has a different address: <span class="mono">${conflict}</span>. A write gives it the address of this field.</span>
-            <button class="button action" type="button" onClick=${() => change(conflict)}>Use this address</button>
+            <button class="button action" type="button" onClick=${() => change(conflict)}>Use This Address</button>
           </div>`}
         <//>`;
 }
@@ -1959,7 +1959,7 @@ function SettingsPage({ model, update, album, op3Tracks }) {
               onChange=${(e) => setOp3(e.target.checked)} /></label>
             <span class="hint">OP3 counts the downloads of each track. Studio adds the OP3 address to each audio address.</span>
             ${hint && html`<span class="hint" id="set-op3-count">${hint}</span>`}
-            ${model.op3 && model.podcast_guid && html`<div class="actions"><a class="button action" href=${op3Page(model.podcast_guid)} target="_blank" rel="noopener">OP3 statistics</a></div>`}
+            ${model.op3 && model.podcast_guid && html`<div class="actions"><a class="button action" href=${op3Page(model.podcast_guid)} target="_blank" rel="noopener">OP3 Statistics</a></div>`}
           </div>
         </div>
       </div>
@@ -2117,7 +2117,7 @@ function PlaylistTracksPage({ feed, model, update }) {
             </div>
           </div>`;
         })}
-        <div class="actions"><button class="button action" type="button" onClick=${() => setPicking(true)}>Add a track</button></div>
+        <div class="actions"><button class="button action" type="button" onClick=${() => setPicking(true)}>Add a Track</button></div>
       </div>
       <${PlaylistPickerSheet} feedId=${feed.id} open=${picking} remoteItems=${items}
         onClose=${() => setPicking(false)} onAdd=${(pick) => change((list) => addTrack(list, withCids([remoteItemFromPick(pick)])[0]))} />
@@ -2187,7 +2187,7 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
     <div class="body">
       <div class="actions playlist-tabs" role="group" aria-label="Where the tracks come from">
         <button class="button" type="button" aria-pressed=${tab === 'index'} onClick=${() => setTab('index')}>Search musicindex</button>
-        <button class="button" type="button" aria-pressed=${tab === 'mine'} onClick=${() => setTab('mine')}>My releases</button>
+        <button class="button" type="button" aria-pressed=${tab === 'mine'} onClick=${() => setTab('mine')}>My Releases</button>
       </div>
       ${tab === 'index' && html`<section class="page-section">
         <form class="form" onSubmit=${runSearch} role="search">
@@ -2593,7 +2593,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
       <label class="position-field" for="track-position">Position
         <${PositionSelect} id="track-position" index=${trackIndex} count=${items.length} name=${item.title || 'Untitled track'}
           onMove=${(to) => changeItems(moveTo(items, trackIndex, to))} /></label>
-      <button class="button destructive" type="button" onClick=${removeTrack}>Remove the track</button>
+      <button class="button destructive" type="button" onClick=${removeTrack}>Remove the Track</button>
     </div>`;
 }
 
@@ -2637,7 +2637,7 @@ function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
     </form>
     <footer>
       <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-      <button class="button primary" type="submit" form="add-live-form" disabled=${!ready}>＋ Add the show</button>
+      <button class="button primary" type="submit" form="add-live-form" disabled=${!ready}>＋ Add the Show</button>
     </footer>
   </dialog>`;
 }
@@ -2756,7 +2756,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
           ${grant.writes.map((write, index) => html`<li key=${index}>${grantWriteText(write, grantText)}</li>`)}
         </ul>`}
         ${grantActive(grant, live, nowSeconds) && html`<div class="actions"><button class="button destructive" type="button"
-          disabled=${action.busy} onClick=${stopGrant}>Stop the grant</button></div>`}
+          disabled=${action.busy} onClick=${stopGrant}>Stop the Grant</button></div>`}
         ${!grant && live.status === 'pending' && html`<p class="hint">Ask for a grant in the review sheet.</p>`}
       </div>
     </section>`}
@@ -2804,7 +2804,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
         <${TextField} id=${`${id}-value-uri`} label="Live value address" value=${value.uri} onChange=${valueField('uri')} />
         <${TextField} id=${`${id}-value-protocol`} label="Live value protocol" value=${value.protocol} onChange=${valueField('protocol')} />
         ${live.live_value && html`<div class="actions"><button class="button destructive" type="button"
-          onClick=${() => field('live_value')(null)}>Remove the live value</button></div>`}
+          onClick=${() => field('live_value')(null)}>Remove the Live Value</button></div>`}
       </div>
     </section>
 
@@ -3055,7 +3055,7 @@ function DownloadControls({ download, busy, onDownload, onStop }) {
     return html`<div class="download-state">
       <p class="hint error-text" role="alert">${download.message || 'The download failed.'}</p>
       <div class="actions">
-        <button class="button action" type="button" disabled=${busy} onClick=${onDownload}>Try again</button>
+        <button class="button action" type="button" disabled=${busy} onClick=${onDownload}>Try Again</button>
       </div>
     </div>`;
   }
@@ -3238,19 +3238,19 @@ function ChangeRow({ difference, file, busy, onAct }) {
   if (difference.kind === 'new') {
     text = html`New file: ${name} (${fileSize(difference.size)})`;
     buttons = html`<button class="button action" type="button" disabled=${off}
-      onClick=${() => act({ action: 'add', path: difference.path })}>Add to the library</button>`;
+      onClick=${() => act({ action: 'add', path: difference.path })}>Add to the Library</button>`;
   } else if (difference.kind === 'missing') {
     const hasSource = file && (file.copies.length > 0 || file.source_url);
     text = html`Missing: ${name}`;
     buttons = html`${hasSource && html`<button class="button action" type="button" disabled=${off}
-        onClick=${() => act({ action: 'download', file: difference.file })}>Download again</button>`}
+        onClick=${() => act({ action: 'download', file: difference.file })}>Download Again</button>`}
       <button class="button destructive" type="button" disabled=${off}
-        onClick=${() => act({ action: 'forget', file: difference.file })}>Forget the file</button>`;
+        onClick=${() => act({ action: 'forget', file: difference.file })}>Forget the File</button>`;
   } else {
     const hasCopy = file && file.copies.length > 0;
     text = html`Changed: ${name} (${fileSize(difference.size)}${file ? `, was ${fileSize(file.size)}` : ''})`;
     buttons = html`<button class="button action" type="button" disabled=${off}
-        onClick=${() => act({ action: 'use_new', file: difference.file })}>Use the new file</button>
+        onClick=${() => act({ action: 'use_new', file: difference.file })}>Use the New File</button>
       <button class="button" type="button" disabled=${off || !hasCopy}
         onClick=${() => act({ action: 'restore', file: difference.file })}>Restore</button>
       ${!hasCopy && html`<span class="sub">No copy on a file host</span>`}`;
@@ -3443,9 +3443,9 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     <section class="page-section"><h2>Files</h2>
       <div class="actions">
         <button class="button action" type="button" disabled=${scan.busy} onClick=${runScan}>
-          ${scan.busy ? 'Scanning…' : 'Scan the file hosts'}</button>
+          ${scan.busy ? 'Scanning…' : 'Scan the File Hosts'}</button>
         <button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
-          Scan the library folder</button>
+          Scan the Library Folder</button>
       </div>
       <${ErrorNotice} error=${scan.error} />
       <${ErrorNotice} error=${opError} />
@@ -3479,8 +3479,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
           : `${data.remote_count} ${data.remote_count === 1 ? 'file is' : 'files are'} not in the library (${fileSize(data.remote_bytes)}).`}</span>
         <div class="actions">
           ${activeCount > 0
-            ? html`<button class="button" type="button" disabled=${busy} onClick=${stopAll}>Stop all</button>`
-            : html`<button class="button action" type="button" disabled=${busy} onClick=${() => startDownloads({ all: true })}>Download all</button>`}
+            ? html`<button class="button" type="button" disabled=${busy} onClick=${stopAll}>Stop All</button>`
+            : html`<button class="button action" type="button" disabled=${busy} onClick=${() => startDownloads({ all: true })}>Download All</button>`}
         </div>
       </div>`}
       ${data.files.length === 0 && html`<p class="hint">No files yet.</p>`}

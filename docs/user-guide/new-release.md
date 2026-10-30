@@ -17,12 +17,12 @@ A Blossom file host keeps media only. Use a different file host for the feed fil
 
 ## Make the release
 
-1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
+1. Select **Releases** in the left panel. Then select **＋ Add a Feed**.
 2. On the page **Add feeds**, select **Album** in the group **Make a new feed**. A sheet opens.
 3. If you have more than one file host, select the file host in **File host**.
 4. Type the name of the album in **Album title**.
 5. Type the name of the artist in **Artist**.
-6. Select **Make the release**.
+6. Select **Make the Release**.
 
 Studio gives the feed file from the title. For example, "Pixel Palace" gives `pixel-palace.xml`.
 The row **Feed file** shows this path. To change it, open the row and type a new path in the folder of the file host.
@@ -41,7 +41,7 @@ If you have an album in Studio, a new album can start from it.
 1. In the sheet, keep **Album** in **Type**.
 2. Select an album in **Start from**.
 3. Examine **Album title** and **Artist**. Studio puts the artist of the source in **Artist**.
-4. Select **Make the release**.
+4. Select **Make the Release**.
 
 The new album gets the tracks of the source. Each track and the album get new GUIDs.
 The source album does not change.
@@ -59,7 +59,7 @@ Fill in the album details and add tracks. See these pages:
 
 1. Select **Review** in the toolbar.
 2. Check the changes.
-3. Select **Write to the file host**.
+3. Select **Write to the File Host**.
 
 Studio now makes the feed file on the file host. See [Review and write your changes](review-and-write.md).
 

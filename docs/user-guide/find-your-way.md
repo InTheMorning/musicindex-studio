@@ -63,10 +63,10 @@ When you open a release from a level, the first row of its outline names that le
 The page on the right shows the releases of the feed that you selected.
 The line below the title shows each role of the feed.
 
-The sort is **Feed order** at first. This is the sequence of the releases in the feed. You can also select **Newest** or **A to Z**.
+The sort is **Feed Order** at first. This is the sequence of the releases in the feed. You can also select **Newest** or **A to Z**.
 
 A release of two feeds shows on the page of each feed. The row names the other feed, for example "Also on Some Label". The row does not name a feed above or below the feed of the page.
-Select **Open the feed** to edit the artist feed or the label feed.
+Select **Open the Feed** to edit the artist feed or the label feed.
 
 **Not linked** lists the releases that have no artist or label in your collection.
 

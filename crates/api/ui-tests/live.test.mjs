@@ -28,8 +28,8 @@ test('the status labels', () => {
 });
 
 test('the next action follows the status', () => {
-  assert.deepEqual(nextAction('pending'), { label: 'Go live', status: 'live' });
-  assert.deepEqual(nextAction('live'), { label: 'End the show', status: 'ended' });
+  assert.deepEqual(nextAction('pending'), { label: 'Go Live', status: 'live' });
+  assert.deepEqual(nextAction('live'), { label: 'End the Show', status: 'ended' });
   assert.equal(nextAction('ended'), null);
   assert.equal(nextAction('soon'), null);
 });

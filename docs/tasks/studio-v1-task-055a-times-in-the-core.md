@@ -2,7 +2,7 @@
 
 Parent: [task 055](studio-v1-task-055-date-time-fields.md). Decision: [ADR 0093](../adr/0093-dates-and-times-use-a-picker-in-local-time.md) items 6, 7, 10 and 11.
 
-Status: Not started.
+Status: Complete in `a841462`.
 
 ## Goal
 

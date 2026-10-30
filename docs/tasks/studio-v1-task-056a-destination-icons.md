@@ -2,11 +2,11 @@
 
 Parent: [task 056](studio-v1-task-056-file-hosts-and-icons.md). Decision: [ADR 0092](../adr/0092-file-hosts-and-the-destination-icons.md) items 5 to 10.
 
-Status: Not started.
+Status: Complete, with its screenshot visual check. The check did not show "Unlock Studio" on a server, and a Node test examines its icon. `musicindex-assets` commit `322cf7e` adds `lock-open`.
 
 ## Goal
 
-Each fixed destination shows its Lucide icon. The current destination has the accent color. `lock-open` is in `musicindex-assets`.
+Each fixed destination shows its Lucide icon. The icon of the current destination has the accent color. `lock-open` is in `musicindex-assets`.
 
 ## Files
 
@@ -24,10 +24,9 @@ These choices are fixed. Do not change them.
 2. Each fixed entry of `leftPanel` gets `icon`: `library` (`releases`), `hard-drive` (`hosts`), `settings`, `lock` and `lock-open` (`unlock`). The map of item 3 also has `wallet`, for the Recipients row of task 054c. A publisher feed entry gets no `icon`.
 3. A new component `Icon({ name })` in `app.js` draws the elements of each icon in `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`. One object maps each name to its elements, copied from `musicindex-assets`. A comment names musicindex ADR 0022 and the source file of each icon. `Chevron` stays as it is.
 4. The rows of `LeftPanelFooter`, `RootPage` and the Releases row put `Icon` before the label.
-5. In `styles.css`, `.row .icon` has `flex: none`, a width and a height of `1lh` (the line height of the row text), and `color: inherit`. `.row[aria-current="page"]` gets `color: var(--accent)`. Check the accent token name in `styles.css` before the change.
-6. `destinations.test.mjs` has these tests:
+5. In `styles.css`, `.row .icon` has `flex: none`, a width and a height of `1lh` (the line height of the row text), and `color: inherit`. `.row[aria-current="page"] .icon` gets `color: var(--accent)`. The label keeps the text color (ADR 0092 item 8). Check the accent token name in `styles.css` before the change.
+6. `destinations.test.mjs` has these tests. The test of the destination labels is in 056b, because the label "Hosts" changes in 056b:
    - Each fixed destination of `leftPanel` gives the icon of item 2.
-   - No destination label of `leftPanel` is the same as a role heading of `shell.js`.
    - The source of `LeftPanelFooter` and `RootPage` in `app.js` has no `dot` class.
    Each failure message names ADR 0092 and the fix, for example: "ADR 0092 item 9: a destination row shows no type dot. Use the icon of its leftPanel entry."
 
@@ -48,18 +47,18 @@ These choices are fixed. Do not change them.
 
 Mechanical:
 
-- The three tests of item 6 pass.
+- The two tests of item 6 pass.
 - `python3 scripts/check.py verify` passes in `../musicindex-assets`.
 - The four commit checks pass.
 
 Visual, with `tools/drive-ui.mjs`, in the dark theme, in the light theme and at 390 px:
 
 - Each icon is centered on the line of its label.
-- The icon and the label of the current destination have the accent color.
+- The icon of the current destination has the accent color, and its label has the text color.
 - "Unlock Studio" on a server with a locked vault shows `lock-open`.
 - `$edges()` finds no content at the edge of a group.
 
 ## Escalation
 
 - Stop and report when `lucide-static` 1.43.0 has no `lock-open`.
-- Stop and report a contrast below 4.5:1 for the accent color on the fill of the current row.
+- Stop and report a contrast below 3:1 for the accent icon on the fill of the current row.

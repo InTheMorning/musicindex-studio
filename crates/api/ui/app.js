@@ -1654,6 +1654,24 @@ function Chevron({ direction }) {
   </svg>`;
 }
 
+// The icon of a fixed destination (ADR 0092 item 5). The elements come from
+// the Lucide icons of musicindex-assets (musicindex ADR 0022), in
+// icons/lucide/<name>.svg. The icon is decoration, and the label of the row
+// gives the accessible name.
+const ICONS = {
+  library: () => html`<path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" />`,
+  wallet: () => html`<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />`,
+  'hard-drive': () => html`<path d="M10 16h.01" /><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M21.946 12.013H2.054" /><path d="M6 16h.01" />`,
+  settings: () => html`<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" />`,
+  lock: () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />`,
+  'lock-open': () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" />`,
+};
+
+function Icon({ name }) {
+  return html`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]?.()}</svg>`;
+}
+
 function Bar({ back = true, children }) {
   const nav = useContext(NavContext);
   return html`<div class="bar">
@@ -2414,6 +2432,7 @@ function destinationRows(top, go) {
   const row = (item) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
     aria-label=${item.group === undefined ? undefined : `${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`}
     onClick=${() => open(item)}>
+    ${item.icon && html`<${Icon} name=${item.icon} />`}
     ${item.group !== undefined && (item.art
       ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
       : html`<span class="art-space" aria-hidden="true"></span>`)}
@@ -2518,14 +2537,14 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
 function LeftPanelFooter({ panel, go, onLock }) {
   return html`<footer>
     ${panel.bottom.map((item) => (item.id === 'lock'
-      ? html`<button class="row" type="button" onClick=${onLock}>Lock Studio</button>`
+      ? html`<button class="row" type="button" onClick=${onLock}><${Icon} name=${item.icon} />Lock Studio</button>`
       : item.id === 'unlock'
-      ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}>Unlock Studio</button>`
+      ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}><${Icon} name=${item.icon} />Unlock Studio</button>`
       : item.id === 'settings'
       ? html`<button class="row" type="button" aria-current=${currentAttr(item)}
-          onClick=${() => { if (!item.current) go({ name: 'settings' }); }}>${item.label}</button>`
+          onClick=${() => { if (!item.current) go({ name: 'settings' }); }}><${Icon} name=${item.icon} />${item.label}</button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
-          onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}>${item.label}</button>`))}
+          onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}
   </footer>`;
 }
 

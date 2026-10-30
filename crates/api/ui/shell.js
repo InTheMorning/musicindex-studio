@@ -241,11 +241,11 @@ export function isFeedView(view) {
 // the place of "Lock Studio" (ADR 0039 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false }) {
   const bottom = [
-    { id: 'hosts', label: 'Hosts', current: view.name === 'hosts' },
-    { id: 'settings', label: 'Settings', current: view.name === 'settings' },
+    { id: 'hosts', label: 'Hosts', icon: 'hard-drive', current: view.name === 'hosts' },
+    { id: 'settings', label: 'Settings', icon: 'settings', current: view.name === 'settings' },
   ];
-  if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', current: false });
-  else if (vaultLocked) bottom.push({ id: 'unlock', label: 'Unlock Studio', current: false });
+  if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', icon: 'lock', current: false });
+  else if (vaultLocked) bottom.push({ id: 'unlock', label: 'Unlock Studio', icon: 'lock-open', current: false });
   const feed = isFeedView(view) && Array.isArray(feeds)
     ? feeds.find((f) => f.id === view.id)
     : undefined;
@@ -261,6 +261,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
         {
           id: 'releases',
           label: 'Releases',
+          icon: 'library',
           current: all || view.name === 'add-feed',
           opens: !all,
         },

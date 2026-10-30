@@ -525,6 +525,11 @@ textarea.masked { -webkit-text-security: disc; }
   background: linear-gradient(var(--gloss-top), var(--gloss-bottom));
   border-color: var(--gloss-edge);
 }
+/* The icon of a destination (ADR 0092 item 5) has the height of the row text.
+   Only the icon of the current destination has the accent color, because
+   accent text has less than 4.5:1 on the gloss (ADR 0092 item 8). */
+.row .icon { flex: none; display: block; width: 1lh; height: 1lh; color: inherit; }
+.row[aria-current="page"] .icon { color: var(--accent); }
 .row .text { display: grid; min-width: 0; }
 /* The destinations below Releases (ADR 0085 item 1): the dot, the name and
    the number of releases. */

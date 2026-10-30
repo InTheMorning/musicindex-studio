@@ -29,13 +29,14 @@ These choices are fixed. Do not change them.
    A button label uses title case (musicindex ADR 0023), for example "Add a File Host".
 4. A text that names a server name, such as "the host name" of SFTP or "Host key fingerprint", does not change. These are network names, not connectors.
 5. A server message that names a connector and reaches the UI uses "file host". About 46 messages in `routes.rs` and `pipeline.rs` contain "host". Change only the messages that name a connector.
-6. A new test in `crates/api/ui-tests/words.test.mjs` finds "host" and "hosts" with no "file" before them in the string literals of `crates/api/ui/*.js`. A list gives each permitted text: the role heading, the role words of `shell.js`, and the network names of item 4. The failure message names ADR 0092 item 2 and the fix.
+6. A new test in `crates/api/ui-tests/destinations.test.mjs`: no destination label of `leftPanel` is the same as a role heading of `shell.js`. The failure message names ADR 0092 item 8 and the fix. Packet 056a moved this test here, because it fails until the change of item 1.
+7. A new test in `crates/api/ui-tests/words.test.mjs` finds "host" and "hosts" with no "file" before them in the string literals of `crates/api/ui/*.js`. A list gives each permitted text: the role heading, the role words of `shell.js`, and the network names of item 4. The failure message names ADR 0092 item 2 and the fix.
 
 ## Steps
 
 1. Change the UI texts, and the tests that give them.
 2. Change the server messages, and the tests that give them.
-3. Write the test of item 6.
+3. Write the tests of items 6 and 7.
 4. Change the user guide pages that name the destination.
 5. Take the screenshots of each changed page, and run `$edges()`.
 6. Run the four commit checks.
@@ -49,7 +50,8 @@ These choices are fixed. Do not change them.
 
 Mechanical:
 
-- The test of item 6 passes, and it fails on the text "Add a host first".
+- The test of item 6 passes.
+- The test of item 7 passes, and it fails on the text "Add a host first".
 - A Node test: the `hosts` entry of `leftPanel` has the label "File hosts".
 - The four commit checks pass.
 

@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Recipient Batch Edits, File Hosts And Dates".
 Decisions: [ADR 0092](../adr/0092-file-hosts-and-the-destination-icons.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0018](../adr/0018-passphrase-strength-and-error-color.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md). Shared: musicindex ADR 0022, ADR 0025 R-ICON-1 and ADR 0032 R-DOT-1.
 
-Status: Not started. Commit `b13c30c` removed the type dot from the Hosts row before this task.
+Status: In progress. Packet 056a is complete. Commit `b13c30c` removed the type dot from the Hosts row before this task.
 
 ## Goal
 
@@ -31,7 +31,7 @@ Mechanical: the mechanical criteria of ADR 0092 §Verification, the criteria of 
 Visual, for the planning model with `tools/drive-ui.mjs`. In the dark theme, in the light theme and at 390 px:
 
 - The left panel and the root page show the icon of each fixed destination, aligned with its label.
-- The current destination has the accent color on its icon and its label.
+- The current destination has the accent color on its icon. Its label has the text color.
 - A collection with a feed with the role `host` shows the role heading "Hosts" and the destination "File hosts".
 - `$edges()` finds no content at the edge of a group.
 

@@ -533,12 +533,11 @@ impl S3Bucket {
 impl Connector for S3Bucket {
     fn read(&self, path: &str) -> Result<Option<FileRead>, ConnectorError> {
         let key = self.key_of(path)?;
-        let headers: [(&str, &str); 0] = [];
         let url = Self::sign(
             self.bucket.get_object(Some(&self.credentials), &key),
-            &headers,
+            &NO_COMPRESSION,
         );
-        let mut response = self.send("GET", &url, &headers, ())?;
+        let mut response = self.send("GET", &url, &NO_COMPRESSION, ())?;
         let status = response.status().as_u16();
         if status == 404 {
             return Ok(None);
@@ -663,12 +662,11 @@ impl Connector for S3Bucket {
 
     fn stat(&self, path: &str) -> Result<Option<ListedFile>, ConnectorError> {
         let key = self.key_of(path)?;
-        let headers: [(&str, &str); 0] = [];
         let url = Self::sign(
             self.bucket.head_object(Some(&self.credentials), &key),
-            &headers,
+            &NO_COMPRESSION,
         );
-        let response = self.send("HEAD", &url, &headers, ())?;
+        let response = self.send("HEAD", &url, &NO_COMPRESSION, ())?;
         if response.status().as_u16() == 404 {
             return Ok(None);
         }
@@ -750,6 +748,12 @@ fn agent(policy: &NetPolicy) -> ureq::Agent {
 fn stamp_of(etag: &str, size: u64) -> Stamp {
     Stamp::new(format!("{etag}|{size}"))
 }
+
+/// The headers of a read and a stat. With no `Accept-Encoding`, the HTTP
+/// client asks for gzip. R2 then compresses a feed and gives a weak ETag,
+/// and a weak ETag does not agree with `If-Match`. The version must be the
+/// strong ETag of the stored object.
+const NO_COMPRESSION: [(&str, &str); 1] = [("accept-encoding", "identity")];
 
 /// The `ETag` header of a response.
 fn etag_of<B>(response: &ureq::http::Response<B>) -> Option<String> {
@@ -1071,6 +1075,20 @@ mod tests {
         let text = format!("{bucket:?} {:?}", credentials());
         assert!(!text.contains("wJalrXUtnFEMI"), "{text}");
         assert!(text.contains("S3Bucket"));
+    }
+
+    #[test]
+    fn a_read_gives_the_strong_etag_so_a_write_with_it_passes() {
+        let server = FakeS3::start("bk");
+        let bucket = connector(&server, "");
+        let v1 = bucket.write("f.xml", b"one", &Expected::Absent).unwrap();
+        let read = bucket.read("f.xml").unwrap().unwrap();
+        assert_eq!(read.version, v1);
+        let stat = bucket.stat("f.xml").unwrap().unwrap();
+        assert_eq!(stat.stamp.as_str(), format!("{v1}|3"));
+        bucket
+            .write("f.xml", b"two", &Expected::Version(read.version))
+            .unwrap();
     }
 
     #[test]

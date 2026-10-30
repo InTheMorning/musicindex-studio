@@ -306,6 +306,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Task 049 review checklist, 2026-10-28](reviews/2026-10-28-task-049-review-checklist.md)
 - [UI feed rule audit, 2026-10-27](reviews/2026-10-27-ui-feed-rule-audit.md)
 - [Host coverage review, 2026-10-29](reviews/2026-10-29-host-coverage-review.md)
+- [Task 028 human test, 2026-10-29](reviews/2026-10-29-task-028-human-test.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 

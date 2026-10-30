@@ -476,7 +476,7 @@ fn route(bucket: &str, state: &mut State, request: &Request) -> Reply {
             (Some(number), Some(id)) => upload_part(state, request, id, number),
             _ => put(state, request, key),
         },
-        ("GET" | "HEAD", false) => get(state, key),
+        ("GET" | "HEAD", false) => get(state, request, key),
         ("DELETE", false) => match upload {
             Some(id) => abort(state, id),
             None => delete(state, request, key),
@@ -545,16 +545,27 @@ fn put(state: &mut State, request: &Request, key: &str) -> Reply {
     Reply::empty(200).with_etag(&etag)
 }
 
-fn get(state: &State, key: &str) -> Reply {
+/// A read that accepts gzip gets a weak ETag, as R2 behind Cloudflare gives
+/// for a compressed response. A weak ETag does not agree with `If-Match`.
+/// The body stays uncompressed, so the client reads it as it is.
+fn get(state: &State, request: &Request, key: &str) -> Reply {
     let Some(object) = state.objects.get(key) else {
         return Reply::error(404, "NoSuchKey", "The specified key does not exist");
+    };
+    let gzip = request
+        .header("accept-encoding")
+        .is_some_and(|value| value.contains("gzip"));
+    let etag = if gzip {
+        format!("W/{}", object.etag)
+    } else {
+        object.etag.clone()
     };
     Reply {
         status: 200,
         headers: vec![("Content-Type", object.content_type.clone())],
         body: object.bytes.clone(),
     }
-    .with_etag(&object.etag)
+    .with_etag(&etag)
 }
 
 fn delete(state: &mut State, request: &Request, key: &str) -> Reply {
@@ -808,13 +819,15 @@ mod tests {
         let put = signed("PUT", &url, &[("Content-Type", "text/xml")], b"abc");
         assert_eq!(put.status, 200);
         assert_eq!(put.header("etag"), "\"900150983cd24fb0d6963f7d28e17f72\"");
-        let get = signed("GET", &url, &[], b"");
+        let get = signed("GET", &url, &[("Accept-Encoding", "identity")], b"");
         assert_eq!(get.status, 200);
         assert_eq!(get.body, b"abc");
         assert_eq!(get.header("etag"), put.header("etag"));
+        let gzip = signed("GET", &url, &[("Accept-Encoding", "gzip")], b"");
+        assert_eq!(gzip.header("etag"), format!("W/{}", put.header("etag")));
         assert_eq!(get.header("content-type"), "text/xml");
         assert_eq!(get.header("content-length"), "3");
-        let head = signed("HEAD", &url, &[], b"");
+        let head = signed("HEAD", &url, &[("Accept-Encoding", "identity")], b"");
         assert_eq!(head.status, 200);
         assert_eq!(head.body.len(), 0);
         assert_eq!(head.header("etag"), put.header("etag"));
@@ -1012,7 +1025,12 @@ mod tests {
         assert!(done.text().contains(&xml_escape(&expected)));
         assert_eq!(two.status, 200);
         assert_eq!(server.object("big").as_deref(), Some(&b"hello world"[..]));
-        let get = signed("GET", &address(&server, "bk/big"), &[], b"");
+        let get = signed(
+            "GET",
+            &address(&server, "bk/big"),
+            &[("Accept-Encoding", "identity")],
+            b"",
+        );
         assert_eq!(get.body, b"hello world");
         assert_eq!(get.header("etag"), expected);
         assert_eq!(server.open_uploads(), 0);

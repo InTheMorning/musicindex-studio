@@ -94,6 +94,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0088: The left panel shows the levels of the publisher feeds](adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
 - [ADR 0089: The left panel shows the art of each publisher feed](adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md)
 - [ADR 0090: Studio names the feeds that it does not edit](adr/0090-studio-names-the-feeds-that-it-does-not-edit.md)
+- [ADR 0091: A change set edits one recipient in many feeds](adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md)
+- [ADR 0092: File hosts and the destination icons](adr/0092-file-hosts-and-the-destination-icons.md)
 
 ## Plans
 
@@ -277,6 +279,13 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 053: A new album from an album](tasks/studio-v1-task-053-album-from-album.md)
 - [Studio v1 task 053a: The copy in the core and the route](tasks/studio-v1-task-053a-copy-in-the-core.md)
 - [Studio v1 task 053b: "Start from" in the form](tasks/studio-v1-task-053b-start-from.md)
+- [Studio v1 task 054: Recipient change sets](tasks/studio-v1-task-054-recipient-change-sets.md)
+- [Studio v1 task 054a: The operations and the change set in the core](tasks/studio-v1-task-054a-change-set-core.md)
+- [Studio v1 task 054b: The routes of a change set](tasks/studio-v1-task-054b-change-set-routes.md)
+- [Studio v1 task 054c: The Recipients page and the review of a change set](tasks/studio-v1-task-054c-recipients-page.md)
+- [Studio v1 task 056: File hosts and the destination icons](tasks/studio-v1-task-056-file-hosts-and-icons.md)
+- [Studio v1 task 056a: The destination icons](tasks/studio-v1-task-056a-destination-icons.md)
+- [Studio v1 task 056b: The name "File hosts"](tasks/studio-v1-task-056b-file-hosts-name.md)
 
 ## Reviews
 

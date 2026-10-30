@@ -17,6 +17,8 @@
 - Amended: 2026-10-28 by operator decision. [ADR 0072](0072-add-a-feed-opens-from-releases.md) removes Add a feed from items 1, 5 and 11. It opens from a button on Releases.
 - Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 6 with one row "Add tracks".
 - Amended: 2026-10-30 by operator decision. [ADR 0085](0085-each-artist-and-label-is-a-destination.md) adds a destination below Releases for each publisher feed in items 1 and 11. Releases no longer lists the publisher feeds (item 2).
+- Amended: 2026-10-30 by operator decision. [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 adds the destination "Recipients" before Hosts in items 1, 5 and 11.
+- Amended: 2026-10-30 by operator decision. [ADR 0092](0092-file-hosts-and-the-destination-icons.md) renames Hosts to "File hosts" in items 1, 5 and 11, and gives each fixed destination an icon. No destination row shows a type dot.
 
 ## Context
 

@@ -7,8 +7,13 @@ import { liveKey, isLiveItem, statusLabel } from './live.js';
 import { coverOf } from './cover.js';
 
 // The eight roles of a publisher feed, in the sequence of musicindex ADR
-// 0012 item 5 (ADR 0082 item 1).
-export const ROLES = ['artist', 'label', 'host', 'author', 'producer', 'network', 'hosting', 'sponsor'];
+// 0036 R-ROLE-1 (ADR 0083 item 1).
+export const ROLES = ['artist', 'label', 'hosting', 'producer', 'host', 'author', 'network', 'sponsor'];
+
+// The first-class roles, which the Role menu and the form of a new
+// publisher feed offer (musicindex ADR 0036 R-ROLE-2, ADR 0083 items 2
+// and 3).
+export const FIRST_CLASS_ROLES = ['artist', 'label', 'hosting'];
 
 // The word of a role, for example "Artist".
 export const roleWord = (role) => role.charAt(0).toUpperCase() + role.slice(1);
@@ -36,11 +41,11 @@ export function feedKind(feed) {
 }
 
 // The choice of the Role menu for a set of roles: "artist", "label",
-// "custom", or "" for no role (ADR 0082 item 7).
+// "hosting", "custom", or "" for no role (ADR 0083 item 2).
 export function roleChoice(roles) {
   const set = roles || [];
   if (set.length === 0) return '';
-  if (set.length === 1 && (set[0] === 'artist' || set[0] === 'label')) return set[0];
+  if (set.length === 1 && FIRST_CLASS_ROLES.includes(set[0])) return set[0];
   return 'custom';
 }
 

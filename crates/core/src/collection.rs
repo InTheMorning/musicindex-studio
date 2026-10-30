@@ -421,7 +421,8 @@ pub struct ConnectorRow {
 }
 
 /// A role of a publisher feed (ADR 0082 item 1). The variants are in the
-/// sequence of musicindex ADR 0012 item 5, so a sort gives that sequence.
+/// sequence of musicindex ADR 0036 R-ROLE-1, so a sort gives that sequence
+/// (ADR 0083 item 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PublisherRole {
@@ -429,16 +430,16 @@ pub enum PublisherRole {
     Artist,
     /// The publisher feed of a label.
     Label,
+    /// A hosting service.
+    Hosting,
+    /// A producer.
+    Producer,
     /// A host.
     Host,
     /// An author.
     Author,
-    /// A producer.
-    Producer,
     /// A network.
     Network,
-    /// A hosting service.
-    Hosting,
     /// A sponsor.
     Sponsor,
 }
@@ -448,11 +449,11 @@ impl PublisherRole {
     pub const ALL: [Self; 8] = [
         Self::Artist,
         Self::Label,
+        Self::Hosting,
+        Self::Producer,
         Self::Host,
         Self::Author,
-        Self::Producer,
         Self::Network,
-        Self::Hosting,
         Self::Sponsor,
     ];
 

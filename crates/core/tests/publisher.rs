@@ -323,9 +323,9 @@ fn inferred_roles_read_each_rel_as_a_set_of_roles() {
         [
             PublisherRole::Artist,
             PublisherRole::Label,
+            PublisherRole::Producer,
             PublisherRole::Host,
-            PublisherRole::Author,
-            PublisherRole::Producer
+            PublisherRole::Author
         ]
     );
     // A comma list, other cases, a word that is not a role, and a
@@ -354,6 +354,15 @@ fn rel_of_writes_the_roles_in_their_sequence() {
     assert_eq!(
         roles_from_rel("producer,artist"),
         [PublisherRole::Artist, PublisherRole::Producer]
+    );
+    // Hosting comes third (musicindex ADR 0036 R-ROLE-1, ADR 0083).
+    assert_eq!(
+        rel_of(&[
+            PublisherRole::Host,
+            PublisherRole::Hosting,
+            PublisherRole::Label
+        ]),
+        "label hosting host"
     );
 }
 

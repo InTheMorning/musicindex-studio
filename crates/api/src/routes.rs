@@ -1409,14 +1409,24 @@ pub(crate) async fn new_album_feed(
         // The role is checked before any change, so a refusal changes
         // nothing.
         let role = if publisher {
+            // The form offers the first-class roles (ADR 0083 item 3).
             let text = body.role.as_deref().unwrap_or_default();
-            Some(PublisherRole::parse(text).ok_or_else(|| {
-                ApiError::new(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    "invalid_feed",
-                    "give the role of the publisher feed: artist or label",
-                )
-            })?)
+            Some(
+                PublisherRole::parse(text)
+                    .filter(|role| {
+                        matches!(
+                            role,
+                            PublisherRole::Artist | PublisherRole::Label | PublisherRole::Hosting
+                        )
+                    })
+                    .ok_or_else(|| {
+                        ApiError::new(
+                            StatusCode::UNPROCESSABLE_ENTITY,
+                            "invalid_feed",
+                            "give the role of the publisher feed: artist, label or hosting",
+                        )
+                    })?,
+            )
         } else {
             None
         };
@@ -2188,7 +2198,7 @@ pub(crate) async fn set_publisher_role(
                 ApiError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "invalid_feed",
-                    "give one or more roles: artist, label, host, author, producer, network, hosting or sponsor",
+                    "give one or more roles: artist, label, hosting, producer, host, author, network or sponsor",
                 )
             })?;
         let publisher_id = FeedId(id);

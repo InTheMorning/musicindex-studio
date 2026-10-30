@@ -17,7 +17,7 @@ import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
 import {
-  mediumKind, feedKind, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
+  mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
@@ -1207,7 +1207,7 @@ function MakeFeedForm({ connectors, feeds, startType, onAdded }) {
     ${fields.authorLabel !== null && html`<${Field} id="make-author" label=${fields.authorLabel} required
       value=${author} onInput=${(e) => { setAuthorTyped(true); setAuthor(e.target.value); }} />`}
     ${fields.role && html`<${ChoiceSelect} id="make-role" label="Role" value=${role ?? ''} placeholder="Select a role"
-      options=${[['artist', 'Artist'], ['label', 'Label']]} onChange=${(value) => setRole(value || null)} />`}
+      options=${FIRST_CLASS_ROLES.map((r) => [r, roleWord(r)])} onChange=${(value) => setRole(value || null)} />`}
     <div class="group"><details class="disclosure" open=${pathOpen} onToggle=${(e) => setPathOpen(e.currentTarget.open)}>
       <summary class="link-row"><span class="label">Feed file</span>
         <span class="summary">${path || 'From the title'}</span></summary>

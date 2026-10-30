@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
-import { feedKind, ROLES, roleWord, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -2882,7 +2882,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   };
   const choose = (value) => {
     setCustom(value === 'custom');
-    if (value === 'artist' || value === 'label') setRoles([value]);
+    if (FIRST_CLASS_ROLES.includes(value)) setRoles([value]);
   };
   const addRelease = async () => {
     const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links`, {
@@ -2934,8 +2934,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
           <div class="field-body">
             <select id="pub-role" value=${choice} disabled=${roleAction.busy || readOnly} onChange=${(e) => choose(e.target.value)}>
               ${choice === '' && html`<option value="" disabled>Select a role</option>`}
-              <option value="artist">Artist</option>
-              <option value="label">Label</option>
+              ${FIRST_CLASS_ROLES.map((role) => html`<option value=${role}>${roleWord(role)}</option>`)}
               <option value="custom">Custom</option>
             </select>
             ${readOnly && html`<span class="hint">To change the roles, connect the folder that holds this feed in Hosts.</span>`}

@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
 - Changes: [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 1, 4 and 11, which give one role, `artist` or `label`.
+- Amended: 2026-10-29 by operator decision. [ADR 0083](0083-hosting-is-a-first-class-role.md) gives the sequence of musicindex ADR 0036 to item 1. It adds "Hosting" to the menu of item 7 and to the form of item 9.
 - Uses: musicindex ADR 0011 item 1 (`rel` is a set of role words), musicindex ADR 0012 items 5 and 8 (the sequence and the color of the roles, and the hollow dot), musicindex ADR 0033 R-WORD-3 and musicindex ADR 0035 R-WORD-6 (the label).
 
 ## Context

@@ -751,6 +751,20 @@ async fn a_publisher_feed_is_made_with_its_role_and_a_bad_medium_or_role_gives_4
         "publisher"
     );
 
+    // Hosting is a first-class role of the form (ADR 0083 item 3).
+    let hosting = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "hosting.xml",
+            "Host",
+            Some("publisher"),
+            Some("hosting"),
+        ),
+    )
+    .await;
+    assert_eq!(hosting["publisher_roles"], json!(["hosting"]));
+
     // A music feed ignores the role.
     let music = make_feed(
         &app,
@@ -763,6 +777,7 @@ async fn a_publisher_feed_is_made_with_its_role_and_a_bad_medium_or_role_gives_4
     for (path, medium, role) in [
         ("p1.xml", Some("publisher"), None),
         ("p2.xml", Some("publisher"), Some("band")),
+        ("p5.xml", Some("publisher"), Some("producer")),
         ("p3.xml", Some("video"), None),
     ] {
         let body = new_feed_body(connector, path, "Label", medium, role);

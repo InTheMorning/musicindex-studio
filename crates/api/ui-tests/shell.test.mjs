@@ -434,6 +434,9 @@ test('the Role menu gives Artist, Label or Custom for a set of roles', () => {
   assert.equal(roleChoice(['label']), 'label');
   assert.equal(roleChoice(['artist', 'host']), 'custom');
   assert.equal(roleChoice(['producer']), 'custom');
+  // ADR 0083 item 2.
+  assert.equal(roleChoice(['hosting']), 'hosting');
+  assert.equal(roleChoice(['hosting', 'producer']), 'custom');
 });
 
 test('a check box adds or removes a role, and keeps one or more roles', () => {

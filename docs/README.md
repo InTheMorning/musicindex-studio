@@ -86,6 +86,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0080: The season of a track is an experimental disc setting](adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md)
 - [ADR 0081: A position menu sets the sequence of a list](adr/0081-a-position-menu-sets-the-sequence-of-a-list.md)
 - [ADR 0082: A publisher feed has a set of roles](adr/0082-a-publisher-feed-has-a-set-of-roles.md)
+- [ADR 0083: Hosting is a first-class role](adr/0083-hosting-is-a-first-class-role.md)
 
 ## Plans
 

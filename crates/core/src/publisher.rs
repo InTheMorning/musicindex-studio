@@ -339,15 +339,15 @@ pub struct Catalog {
     pub parents: Vec<FeedId>,
 }
 
-/// The rank of a publisher feed in the hierarchy (ADR 0088 item 1):
-/// hosting, then label, then each other feed at the rank of an artist.
+/// The rank of a publisher feed in the hierarchy (ADR 0088 item 1). The
+/// first role of the set decides: hosting, then label, then each other
+/// role at the rank of an artist. A feed with the roles artist and label
+/// is one feed at the rank of an artist.
 fn rank(roles: &[PublisherRole]) -> u8 {
-    if roles.contains(&PublisherRole::Hosting) {
-        3
-    } else if roles.contains(&PublisherRole::Label) {
-        2
-    } else {
-        1
+    match roles.iter().min() {
+        Some(PublisherRole::Hosting) => 3,
+        Some(PublisherRole::Label) => 2,
+        _ => 1,
     }
 }
 

@@ -278,8 +278,8 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
 // ---- The levels of the hierarchy (ADR 0088) ----
 
 // The role headings of the levels, in their sequence (ADR 0088 item 4). A
-// feed is below the heading of its rank: hosting, label or artist. A feed
-// with none of these roles is below the heading of its first role.
+// feed is below the heading of its first role, so a feed with the roles
+// artist and label is one feed in Artists.
 const HEADINGS = [
   ['hosting', 'Hosting'], ['label', 'Labels'], ['artist', 'Artists'], ['producer', 'Producers'],
   ['host', 'Hosts'], ['author', 'Authors'], ['network', 'Networks'], ['sponsor', 'Sponsors'],
@@ -287,9 +287,6 @@ const HEADINGS = [
 
 function headingIndex(feed) {
   const roles = feed.publisher_roles || [];
-  for (const rank of ['hosting', 'label', 'artist']) {
-    if (roles.includes(rank)) return HEADINGS.findIndex(([role]) => role === rank);
-  }
   const first = ROLES.find((role) => roles.includes(role));
   return first ? HEADINGS.findIndex(([role]) => role === first) : HEADINGS.length;
 }

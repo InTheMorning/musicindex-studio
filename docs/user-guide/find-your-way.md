@@ -44,6 +44,7 @@ Select **Add a Feed**. See [Add feeds that you already have](add-feeds.md).
 Studio puts each feed with roles on a level. Hosting is first, then a label, then an artist.
 A label shows below a hosting feed when the two feeds share a release.
 An artist shows below a label for the same cause. An artist on two labels shows below each label.
+The first role of a feed gives its level. Thus an artist feed that also has the role label is on the level of an artist.
 A producer, a host, an author, a network or a sponsor is on the level of an artist.
 
 Select a feed in the left panel. The panel then shows its level:

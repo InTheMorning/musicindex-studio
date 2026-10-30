@@ -560,3 +560,10 @@ test('the note of a release leaves out the feeds above and below the level', () 
   const list = releasesList({ feeds: [host, labelA, labelB, artistX, beatLab, labelC, shared, album2], connectors: [], sort: 'order', view: 'rows', group: 41 });
   assert.deepEqual(list.rows.map((r) => r.note), ['Also on Label C'], message);
 });
+
+test('a feed with the roles artist and label is in Artists', () => {
+  const message = 'ADR 0088 item 4: the first role gives the heading. Use headingIndex of crates/api/ui/shell.js.';
+  const own = { id: 60, title: 'HeyCitizen', medium: 'publisher', publisher_roles: ['artist', 'label', 'producer'], roles_confirmed: true, release_ids: [], child_ids: [], parent_ids: [] };
+  const panel = leftPanel({ view: { name: 'releases' }, feeds: [own], model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Releases', undefined], ['HeyCitizen', 'Artists']], message);
+});

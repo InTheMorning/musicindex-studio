@@ -635,3 +635,37 @@ fn the_levels_follow_the_rank_and_the_shared_releases() {
     assert_eq!(of(artist_z).parents, vec![host], "{message}");
     assert_eq!(of(albums[0]).children, Vec::new());
 }
+
+#[test]
+fn a_feed_with_the_roles_artist_and_label_is_one_feed_at_the_artist_rank() {
+    let mut s = setup();
+    let own = new_feed(&mut s, "own.xml", "Own", "publisher");
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    s.collection
+        .set_publisher_roles(own, &[PublisherRole::Artist, PublisherRole::Label], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], true)
+        .unwrap();
+    let album = new_feed(&mut s, "album.xml", "Album", "music");
+    publisher::link(&s.collection, own, album).unwrap();
+    publisher::link(&s.collection, label, album).unwrap();
+
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            let feed = model(&s, row.id);
+            (row, Some(feed))
+        })
+        .collect();
+    let catalogs = publisher::catalogs(&feeds);
+    let index = |id: FeedId| feeds.iter().position(|(row, _)| row.id == id).unwrap();
+    let message =
+        "ADR 0088 item 1: the first role decides the rank, so the feed is below the label";
+    assert_eq!(catalogs[index(label)].children, vec![own], "{message}");
+    assert_eq!(catalogs[index(own)].parents, vec![label], "{message}");
+    assert_eq!(catalogs[index(own)].children, Vec::new(), "{message}");
+}

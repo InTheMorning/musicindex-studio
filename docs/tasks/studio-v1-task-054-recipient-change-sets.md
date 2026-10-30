@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Recipient Batch Edits, File Hosts And Dates".
 Decisions: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0027](../adr/0027-the-recipient-picker.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0088](../adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md).
 
-Status: Complete, with its screenshot visual check. The human test is open. Open defect: the Recipients page counts the feeds from their written state, and the page of a recipient also counts a feed that has only a draft. Thus the two numbers can differ.
+Status: Complete, with its screenshot visual check. The human test is open.
 
 ## Goal
 
@@ -16,6 +16,7 @@ The packets go in this sequence. Each packet uses the result of the packet befor
 1. [054a: the operations and the change set in the core](studio-v1-task-054a-change-set-core.md).
 2. [054b: the routes of a change set](studio-v1-task-054b-change-set-routes.md).
 3. [054c: the Recipients page and the review of a change set](studio-v1-task-054c-recipients-page.md).
+4. [054d: one count of the uses, and Discard of the saved recipient](studio-v1-task-054d-uses-count-and-saved-recipient.md). The visual check of 054c found the defect of the count.
 
 ## Constraints
 

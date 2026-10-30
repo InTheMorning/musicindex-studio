@@ -4672,7 +4672,118 @@ pub(crate) fn pending_library_file(
 /// Each recipient that Studio knows: from a feed of the collection, or
 /// from a save by the user. The list has each recipient one time.
 pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
-    blocking(shared, |w| to_json(w.collection.known_recipients()?)).await
+    blocking(shared, |w| {
+        let mut known = w.collection.known_recipients()?;
+        // The count of feeds comes from the model of each feed, as in
+        // `recipient_uses`. A recipient that only a draft has is added.
+        let mut counts: std::collections::HashMap<(String, String, String), UsedRecipient> =
+            std::collections::HashMap::new();
+        for (row, feed) in feed_models(w)? {
+            for recipient in recipient_places(&feed).all() {
+                let Some(address) = recipient.address.as_deref().filter(|a| !a.is_empty()) else {
+                    continue;
+                };
+                let identity = (
+                    address.to_owned(),
+                    recipient.custom_key.clone().unwrap_or_default(),
+                    recipient.custom_value.clone().unwrap_or_default(),
+                );
+                let used = counts.entry(identity).or_insert_with(|| UsedRecipient {
+                    name: recipient.name.clone(),
+                    recipient_type: recipient.recipient_type.clone(),
+                    feeds: std::collections::HashSet::new(),
+                });
+                used.feeds.insert(row.id);
+            }
+        }
+        for entry in &mut known {
+            let identity = (
+                entry.address.clone(),
+                entry.custom_key.clone().unwrap_or_default(),
+                entry.custom_value.clone().unwrap_or_default(),
+            );
+            entry.feeds = counts.remove(&identity).map_or(0, |used| used.feeds.len());
+        }
+        for ((address, custom_key, custom_value), used) in counts {
+            known.push(studio_core::collection::KnownRecipient {
+                name: used.name,
+                recipient_type: used.recipient_type,
+                address,
+                custom_key: Some(custom_key).filter(|k| !k.is_empty()),
+                custom_value: Some(custom_value).filter(|v| !v.is_empty()),
+                feeds: used.feeds.len(),
+                saved_id: None,
+            });
+        }
+        known.sort_by(|a, b| {
+            let a_name = a.name.as_deref().unwrap_or_default().to_lowercase();
+            let b_name = b.name.as_deref().unwrap_or_default().to_lowercase();
+            a_name.cmp(&b_name).then_with(|| a.address.cmp(&b.address))
+        });
+        to_json(known)
+    })
+    .await
+}
+
+/// A recipient that a feed model has, with the feeds that use it.
+struct UsedRecipient {
+    name: Option<String>,
+    recipient_type: Option<String>,
+    feeds: std::collections::HashSet<FeedId>,
+}
+
+/// The feeds of the collection with their models: the draft, or else the
+/// library copy. A feed with no model is not in the list (ADR 0091 item 2).
+fn feed_models(w: &Workspace) -> Result<Vec<(studio_core::collection::FeedRow, Feed)>, ApiError> {
+    let mut models = Vec::new();
+    for row in w.collection.feeds()? {
+        if let Some(feed) = files_feed(w, row.id).ok().flatten() {
+            models.push((row, feed));
+        }
+    }
+    Ok(models)
+}
+
+/// The recipients of the value blocks of one feed model, by place: the
+/// channel, each track and each live item. A recipient of a value time
+/// split is not in the list (ADR 0091 item 10).
+struct RecipientPlaces<'a> {
+    channel: Vec<&'a Recipient>,
+    items: Vec<Vec<&'a Recipient>>,
+    live_items: Vec<Vec<&'a Recipient>>,
+}
+
+impl<'a> RecipientPlaces<'a> {
+    /// Each recipient of each place.
+    fn all(&self) -> impl Iterator<Item = &'a Recipient> + '_ {
+        self.channel
+            .iter()
+            .chain(self.items.iter().flatten())
+            .chain(self.live_items.iter().flatten())
+            .copied()
+    }
+}
+
+fn recipient_places(feed: &Feed) -> RecipientPlaces<'_> {
+    fn of_blocks(blocks: &[Entry<studio_core::feed::ValueBlock>]) -> Vec<&Recipient> {
+        blocks
+            .iter()
+            .flat_map(|block| block.value.recipients.iter().map(|r| &r.value))
+            .collect()
+    }
+    RecipientPlaces {
+        channel: of_blocks(&feed.values),
+        items: feed
+            .items
+            .iter()
+            .map(|item| of_blocks(&item.value.values))
+            .collect(),
+        live_items: feed
+            .live_items
+            .iter()
+            .map(|live| of_blocks(&live.value.item.values))
+            .collect(),
+    }
 }
 
 /// Save a recipient, in the field names of the UI model (ADR 0027 item 5).
@@ -4711,27 +4822,13 @@ pub(crate) async fn recipient_uses(
     Json(key): Json<RecipientKey>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        let uses_key = |blocks: &[Entry<studio_core::feed::ValueBlock>]| {
-            blocks
-                .iter()
-                .any(|block| block.value.recipients.iter().any(|r| key.matches(&r.value)))
-        };
         let mut rows = Vec::new();
-        for row in w.collection.feeds()? {
-            let Some(feed) = files_feed(w, row.id).ok().flatten() else {
-                continue;
-            };
-            let channel = uses_key(&feed.values);
-            let items = feed
-                .items
-                .iter()
-                .filter(|item| uses_key(&item.value.values))
-                .count();
-            let live_items = feed
-                .live_items
-                .iter()
-                .filter(|live| uses_key(&live.value.item.values))
-                .count();
+        for (row, feed) in feed_models(w)? {
+            let places = recipient_places(&feed);
+            let uses = |list: &Vec<&Recipient>| list.iter().any(|r| key.matches(r));
+            let channel = uses(&places.channel);
+            let items = places.items.iter().filter(|list| uses(list)).count();
+            let live_items = places.live_items.iter().filter(|list| uses(list)).count();
             if !channel && items == 0 && live_items == 0 {
                 continue;
             }
@@ -4836,8 +4933,8 @@ pub(crate) struct NewChangeSet {
 
 /// Make a change set. The core puts the change in the draft of each feed
 /// of the scope. This route writes nothing to a file host (ADR 0091
-/// items 17 to 19). A change of the address or of the name also changes
-/// the saved recipient (item 12).
+/// items 17 to 19). The core also changes the saved recipient for a change
+/// of the address or of the name (item 12).
 pub(crate) async fn make_change_set(
     State(shared): State<Shared>,
     Json(body): Json<NewChangeSet>,
@@ -4878,34 +4975,6 @@ pub(crate) async fn make_change_set(
                 &feed_ids,
             )?
         };
-        let old = (
-            body.recipient.address.as_str(),
-            body.recipient.custom_key.as_deref().unwrap_or_default(),
-            body.recipient.custom_value.as_deref().unwrap_or_default(),
-        );
-        match &body.operation {
-            RecipientOperation::ChangeAddress {
-                address,
-                custom_key,
-                custom_value,
-                recipient_type,
-            } => {
-                w.collection.change_saved_recipient(
-                    old,
-                    Some((
-                        address,
-                        custom_key.as_deref().unwrap_or_default(),
-                        custom_value.as_deref().unwrap_or_default(),
-                        recipient_type.as_deref(),
-                    )),
-                    None,
-                )?;
-            }
-            RecipientOperation::Rename { name } => {
-                w.collection.change_saved_recipient(old, None, Some(name))?;
-            }
-            _ => {}
-        }
         Ok((StatusCode::CREATED, Json(change_set_json(w, &set))))
     })
     .await

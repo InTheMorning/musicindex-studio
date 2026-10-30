@@ -7,8 +7,9 @@ use studio_core::change_set::{
     self, Cause, Outcome, RecipientKey, RecipientOperation, discard_change_set, level_feeds,
     make_change_set,
 };
-use studio_core::collection::{Collection, FeedId};
+use studio_core::collection::{Collection, FeedId, KnownRecipient};
 use studio_core::connector::{self, Connector, Expected, LocalFolder};
+use studio_core::feed::Recipient;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::pipeline::{self, AddressCheck};
@@ -354,4 +355,111 @@ fn a_discarded_draft_closes_its_row_so_discard_keeps_it_away() {
     discard_change_set(&s.collection, set.id).unwrap();
     assert!(s.collection.draft(one).unwrap().is_none());
     assert_eq!(s.collection.draft(two).unwrap().unwrap(), before_two);
+}
+
+fn saved(collection: &Collection) -> Vec<KnownRecipient> {
+    collection
+        .known_recipients()
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.saved_id.is_some())
+        .collect()
+}
+
+fn save(collection: &Collection, name: &str, custom: Option<(&str, &str)>) {
+    collection
+        .save_recipient(&Recipient {
+            name: Some(name.into()),
+            recipient_type: Some("lnaddress".into()),
+            address: Some("old".into()),
+            custom_key: custom.map(|c| c.0.into()),
+            custom_value: custom.map(|c| c.1.into()),
+            ..Recipient::default()
+        })
+        .unwrap();
+}
+
+#[test]
+fn rename_changes_the_saved_recipient_and_discard_puts_back_its_name() {
+    let s = setup();
+    save(&s.collection, "Old name", None);
+    let before = saved(&s.collection);
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &key(),
+        &RecipientOperation::Rename {
+            name: "New name".into(),
+        },
+        &s.feeds,
+    )
+    .unwrap();
+    assert_eq!(saved(&s.collection)[0].name.as_deref(), Some("New name"));
+    discard_change_set(&s.collection, set.id).unwrap();
+    assert_eq!(saved(&s.collection), before);
+}
+
+#[test]
+fn change_address_changes_the_saved_recipient_and_discard_puts_back_its_identity() {
+    let s = setup();
+    save(&s.collection, "Old name", Some(("k", "v")));
+    let before = saved(&s.collection);
+    let old_key = RecipientKey {
+        address: "old".into(),
+        custom_key: Some("k".into()),
+        custom_value: Some("v".into()),
+    };
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &old_key,
+        &RecipientOperation::ChangeAddress {
+            address: "new".into(),
+            custom_key: Some("k2".into()),
+            custom_value: Some("v2".into()),
+            recipient_type: Some("node".into()),
+        },
+        &s.feeds,
+    )
+    .unwrap();
+    let changed = saved(&s.collection);
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].address, "new");
+    assert_eq!(changed[0].custom_key.as_deref(), Some("k2"));
+    assert_eq!(changed[0].custom_value.as_deref(), Some("v2"));
+    assert_eq!(changed[0].recipient_type.as_deref(), Some("node"));
+    discard_change_set(&s.collection, set.id).unwrap();
+    assert_eq!(saved(&s.collection), before);
+    assert_eq!(before[0].address, "old");
+    assert_eq!(before[0].custom_key.as_deref(), Some("k"));
+    assert_eq!(before[0].custom_value.as_deref(), Some("v"));
+    assert_eq!(before[0].recipient_type.as_deref(), Some("lnaddress"));
+}
+
+#[test]
+fn discard_of_a_change_set_with_no_saved_recipient_keeps_the_saved_recipients() {
+    let s = setup();
+    // A different recipient is saved. The key of the change set is not.
+    s.collection
+        .save_recipient(&Recipient {
+            name: Some("Other".into()),
+            address: Some("other".into()),
+            ..Recipient::default()
+        })
+        .unwrap();
+    let before = saved(&s.collection);
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &key(),
+        &change_address(),
+        &s.feeds,
+    )
+    .unwrap();
+    assert_eq!(saved(&s.collection), before);
+    discard_change_set(&s.collection, set.id).unwrap();
+    assert_eq!(saved(&s.collection), before);
 }

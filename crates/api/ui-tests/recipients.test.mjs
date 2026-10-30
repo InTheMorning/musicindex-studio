@@ -16,6 +16,8 @@ test('the summary line of a saved recipient that no feed uses says so', () => {
   const row = recipientRow({ name: 'Cara', recipient_type: 'node', address: '02ab', feeds: 0, saved_id: 4 });
   assert.equal(row.text, 'Saved, not used');
   assert.equal(row.type, 'node (keysend)');
+  assert.equal(recipientRow({ name: 'Dan', address: '03cd', feeds: 0, saved_id: null }).text, '0 feeds',
+    'ADR 0091 item 2: only a saved recipient shows "Saved, not used". Give the number of feeds for each other recipient.');
 });
 
 test('the list is A to Z by name, and a recipient with no name uses its address', () => {

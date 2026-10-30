@@ -2,7 +2,7 @@
 
 Parent: [task 054](studio-v1-task-054-recipient-change-sets.md). Decision: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 1 to 4, 8, 9 and 21 to 24.
 
-Status: Complete, with its screenshot visual check. The Recipients page also lists the open change sets, so that the user can go back to a review. The check did not show a feed with `read_only_no_host`. An API test of 054b examines it.
+Status: Complete, with its screenshot visual check. The Recipients page also lists the open change sets, so that the user can go back to a review. A second check on 2026-10-30 showed a feed with `read_only_no_host`.
 
 ## Goal
 

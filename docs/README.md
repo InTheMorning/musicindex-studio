@@ -284,6 +284,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 054a: The operations and the change set in the core](tasks/studio-v1-task-054a-change-set-core.md)
 - [Studio v1 task 054b: The routes of a change set](tasks/studio-v1-task-054b-change-set-routes.md)
 - [Studio v1 task 054c: The Recipients page and the review of a change set](tasks/studio-v1-task-054c-recipients-page.md)
+- [Studio v1 task 054d: One count of the uses, and Discard of the saved recipient](tasks/studio-v1-task-054d-uses-count-and-saved-recipient.md)
 - [Studio v1 task 056: File hosts and the destination icons](tasks/studio-v1-task-056-file-hosts-and-icons.md)
 - [Studio v1 task 056a: The destination icons](tasks/studio-v1-task-056a-destination-icons.md)
 - [Studio v1 task 056b: The name "File hosts"](tasks/studio-v1-task-056b-file-hosts-name.md)

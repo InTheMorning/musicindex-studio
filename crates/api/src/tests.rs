@@ -9965,6 +9965,106 @@ async fn rename_and_change_address_change_the_saved_recipient() {
     assert_eq!(saved_row(&list)["address"], "anna@new.example");
 }
 
+/// Add a recipient to the draft of the feed with the ID `id`. The recipient
+/// is then only in the draft, not in the written feed.
+async fn add_draft_only_recipient(app: &App, id: i64, name: &str, address: &str) {
+    {
+        let (status, set) = call(
+            app,
+            "POST",
+            "/api/v1/change-sets",
+            Some(json!({
+                "recipient": { "address": address },
+                "operation": {
+                    "kind": "add",
+                    "name": name,
+                    "recipient_type": "lnaddress",
+                    "address": address,
+                    "custom_key": null,
+                    "custom_value": null,
+                    "percent": 5,
+                },
+                "feed_ids": [id],
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{set}");
+    }
+}
+
+#[tokio::test]
+async fn the_list_and_the_uses_count_a_recipient_in_the_same_feeds() {
+    let (app, connector) = publisher_app().await;
+    let a = add_paid_feed(
+        &app,
+        connector,
+        "a.xml",
+        &paid_feed("A", "ga", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    let b = add_paid_feed(
+        &app,
+        connector,
+        "b.xml",
+        &paid_feed("B", "gb", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    let c = add_paid_feed(
+        &app,
+        connector,
+        "c.xml",
+        &paid_feed("C", "gc", &[BOB], &[], ""),
+    )
+    .await;
+    add_draft_only_recipient(&app, c, "Ann", "ann@example.com").await;
+
+    let (status, uses) = call(&app, "POST", "/api/v1/recipients/uses", Some(ann_key())).await;
+    assert_eq!(status, StatusCode::OK, "{uses}");
+    let ids: Vec<i64> = uses["feeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["feed_id"].as_i64().unwrap())
+        .collect();
+    assert_eq!(ids, vec![a, b, c], "{uses}");
+
+    let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let ann = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["address"] == "ann@example.com")
+        .unwrap();
+    assert_eq!(ann["feeds"], 3, "{list}");
+}
+
+#[tokio::test]
+async fn a_recipient_that_only_a_draft_has_is_in_the_list() {
+    let (app, connector) = publisher_app().await;
+    let c = add_paid_feed(
+        &app,
+        connector,
+        "c.xml",
+        &paid_feed("C", "gc", &[BOB], &[], ""),
+    )
+    .await;
+    add_draft_only_recipient(&app, c, "Dan", "dan@example.com").await;
+
+    let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let dan = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["address"] == "dan@example.com")
+        .unwrap_or_else(|| panic!("the list has no Dan: {list}"));
+    assert_eq!(dan["name"], "Dan");
+    assert_eq!(dan["recipient_type"], "lnaddress");
+    assert_eq!(dan["feeds"], 1);
+    assert_eq!(dan["saved_id"], Value::Null);
+}
+
 #[tokio::test]
 async fn the_level_of_a_publisher_feed_gives_its_releases_and_an_album_gives_422() {
     let (app, connector) = publisher_app().await;

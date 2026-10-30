@@ -10,7 +10,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::address::{self, Address, AddressSource};
@@ -315,6 +315,9 @@ CREATE TABLE change_set_feeds (
     written_at INTEGER,
     PRIMARY KEY (change_set_id, feed_id)
 );
+",
+    r"
+ALTER TABLE change_sets ADD COLUMN saved_before TEXT;
 ",
 ];
 
@@ -2798,6 +2801,113 @@ impl Collection {
         Ok(true)
     }
 
+    /// The saved recipient with the identity `identity`, or `None`.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn saved_recipient_row(
+        &self,
+        identity: (&str, &str, &str),
+    ) -> Result<Option<SavedRecipientRow>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT id, address, custom_key, custom_value, name, recipient_type, saved_at
+                 FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3",
+                params![identity.0, identity.1, identity.2],
+                |r| {
+                    Ok(SavedRecipientRow {
+                        id: r.get(0)?,
+                        address: r.get(1)?,
+                        custom_key: r.get(2)?,
+                        custom_value: r.get(3)?,
+                        name: r.get(4)?,
+                        recipient_type: r.get(5)?,
+                        saved_at: r.get(6)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Put back a saved recipient as it was (ADR 0091 item 20). The row
+    /// with the same ID changes back. When it does not exist, Studio adds
+    /// it again. A row that another saved recipient blocks stays as it is.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn restore_saved_recipient(&self, row: &SavedRecipientRow) -> Result<(), CollectionError> {
+        let changed = self.db.execute(
+            "UPDATE OR IGNORE saved_recipients
+             SET address = ?2, custom_key = ?3, custom_value = ?4, name = ?5,
+                 recipient_type = ?6, saved_at = ?7
+             WHERE id = ?1",
+            params![
+                row.id,
+                row.address,
+                row.custom_key,
+                row.custom_value,
+                row.name,
+                row.recipient_type,
+                row.saved_at
+            ],
+        )?;
+        if changed == 0 {
+            self.db.execute(
+                "INSERT OR IGNORE INTO saved_recipients
+                     (id, address, custom_key, custom_value, name, recipient_type, saved_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    row.id,
+                    row.address,
+                    row.custom_key,
+                    row.custom_value,
+                    row.name,
+                    row.recipient_type,
+                    row.saved_at
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Keep the saved recipient from before a change set, as JSON text.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_change_set_saved_before(
+        &self,
+        id: i64,
+        saved_before: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE change_sets SET saved_before = ?2 WHERE id = ?1",
+            params![id, saved_before],
+        )?;
+        Ok(())
+    }
+
+    /// The saved recipient from before a change set, as JSON text. `None`
+    /// when no saved recipient changed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn change_set_saved_before(&self, id: i64) -> Result<Option<String>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT saved_before FROM change_sets WHERE id = ?1",
+                [id],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten())
+    }
+
     /// Remove a saved recipient. The `feed_recipients` rows do not
     /// change.
     ///
@@ -2820,6 +2930,26 @@ impl Collection {
     pub(crate) fn db(&self) -> &Connection {
         &self.db
     }
+}
+
+/// A row of `saved_recipients`. A change set keeps it as JSON (ADR 0091
+/// item 20).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedRecipientRow {
+    /// The ID.
+    pub id: i64,
+    /// The payment address.
+    pub address: String,
+    /// `customKey`, or empty text.
+    pub custom_key: String,
+    /// `customValue`, or empty text.
+    pub custom_value: String,
+    /// The name.
+    pub name: Option<String>,
+    /// The recipient type.
+    pub recipient_type: Option<String>,
+    /// The Unix time of the save.
+    pub saved_at: i64,
 }
 
 /// A row of `change_sets` (ADR 0091 item 19).

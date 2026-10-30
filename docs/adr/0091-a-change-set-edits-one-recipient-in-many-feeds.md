@@ -23,7 +23,7 @@
 ### The Recipients Page
 
 1. The left panel gets the destination "Recipients" at its bottom, before File hosts. The sequence at the bottom is Recipients, File hosts, Settings, then Lock Studio. The names and the icons of the bottom group are in [ADR 0092](0092-file-hosts-and-the-destination-icons.md). This changes ADR 0039 items 1, 5 and 11.
-2. The Recipients page lists each recipient one time, with the identity of ADR 0027. A row shows the name, the type, and the number of feeds that use the recipient. A saved recipient that no feed uses shows the text "Saved, not used".
+2. The Recipients page lists each recipient one time, with the identity of ADR 0027. A row shows the name, the type, and the number of feeds that use the recipient. A saved recipient that no feed uses shows the text "Saved, not used". The number comes from the same model of each feed as the list of item 3: the draft of the feed, or else its library copy. Thus the two pages give the same number. The planning model added this rule on 2026-10-30, after the visual check of task 054c.
 3. A row opens the page of the recipient. That page lists each feed that uses the recipient, with its places: "Channel", the number of tracks, and the number of live items. Each feed has a checkbox, and each checkbox starts selected.
 4. The page of a recipient has four operations: Change address, Rename, Remove, and Add to a level.
 
@@ -36,7 +36,7 @@
 9. Add to a level adds the recipient to each value block of each feed of a level. A level is a publisher feed and each feed below it, through `child_ids` (ADR 0088). The user selects the level, then the core lists its feeds with checkboxes, and each checkbox starts selected. The user gives a percentage from 1 to 99.
 10. An operation changes each value block of the channel, of each item and of each live item. It does not change a value time split.
 11. A publisher feed is in a scope as each other feed. Studio copies no recipient from a publisher feed to its releases, or from a release to its publisher feed ([ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) item 4).
-12. A change of the address or of the name of a saved recipient also changes the saved recipient.
+12. A change of the address or of the name of a saved recipient also changes the saved recipient. The core makes this change with the change set, and keeps the saved recipient from before the change.
 
 ### The Splits
 
@@ -54,7 +54,7 @@
     - **Not changed** also applies when the feed has a change of an open change set that is not written. Thus a discard of one change set cannot put back a draft over the change of a different change set. The planning model added this rule on 2026-10-30, at the review of task 054a.
 18. The core puts the change in the open draft of the feed, if the feed has one. If the feed has no draft, the core makes a draft.
 19. The collection keeps each change set until each changed feed is written or the user discards the change set. The change set keeps the draft of each feed before the change.
-20. "Discard" on a change set puts back the draft of each feed from before the change. A feed that had no draft then has no draft. A feed written after the change does not change. When the user discarded the draft of a feed after the change, that feed also does not change. The planning model added this rule on 2026-10-30, at the review of task 054a.
+20. "Discard" on a change set puts back the draft of each feed from before the change. A feed that had no draft then has no draft. A feed written after the change does not change. When the user discarded the draft of a feed after the change, that feed also does not change. The planning model added this rule on 2026-10-30, at the review of task 054a. Discard also puts back the saved recipient of item 12. The operator selected this rule on 2026-10-30.
 
 ### The Review And The Write
 
@@ -104,6 +104,8 @@ Mechanical:
 - Core tests for items 17 to 20: an open draft gets the change, an outcome gives its cause, and Discard puts back each draft byte for byte.
 - A core test: Add to a level gives each feed of the level, through `child_ids`.
 - A core test: the write of a change set writes the other feeds after a conflict in one feed.
+- A core test: Discard puts back the saved recipient of item 12.
+- An API test: the number of feeds of a recipient in the list of item 2 is the number of feeds of item 3, also for a feed that has only a draft.
 - A Node test: the bottom of the left panel gives Recipients, File hosts, Settings, then Lock Studio.
 - The UI has no copy of the rules of items 10 and 13 to 15. A test cannot tell a feed rule from an edit aid. Thus the review of each UI packet examines each new UI function that changes the model (ADR 0065).
 

@@ -866,9 +866,11 @@ textarea:focus { background: var(--fill); }
   white-space: nowrap;
 }
 
-/* A host card on the Hosts screen. */
+/* A file host card on the File hosts screen. With no room, the buttons go
+   below the label, and stay in one row. */
 .host { gap: 10px; }
-.host-head { display: flex; align-items: center; justify-content: space-between; }
+.host-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.host-head .actions { flex-wrap: nowrap; }
 .host h2 { font-size: 1.4rem; font-weight: 700; letter-spacing: -.02em; }
 
 /* One feed on each line, with its type dot. */

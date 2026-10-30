@@ -12,7 +12,8 @@ use std::hash::BuildHasher;
 use serde::{Deserialize, Serialize};
 
 use crate::collection::{
-    ChangeSetFeedRow, Collection, CollectionError, CollectionErrorKind, FeedId, now,
+    ChangeSetFeedRow, Collection, CollectionError, CollectionErrorKind, FeedId, SavedRecipientRow,
+    now,
 };
 use crate::feed::{Entry, Feed, Recipient, ValueBlock};
 use crate::pipeline::{self, PipelineError};
@@ -504,6 +505,7 @@ pub fn make_change_set(
 ) -> Result<ChangeSet, PipelineError> {
     let made_at = now();
     let id = collection.add_change_set(&to_json(operation)?, &to_json(key)?, made_at)?;
+    change_saved_recipient(collection, id, key, operation)?;
     let mut seen = HashSet::new();
     let busy: HashSet<FeedId> = change_sets(collection)?
         .iter()
@@ -546,6 +548,42 @@ pub fn make_change_set(
         )?;
     }
     change_set(collection, id)
+}
+
+/// Change the saved recipient for Change address and Rename, and keep the
+/// saved recipient from before the change in the change set (ADR 0091
+/// item 12). Other operations, and a recipient that is not saved, change
+/// nothing.
+fn change_saved_recipient(
+    collection: &Collection,
+    id: i64,
+    key: &RecipientKey,
+    operation: &RecipientOperation,
+) -> Result<(), PipelineError> {
+    let (new_identity, name) = match operation {
+        RecipientOperation::ChangeAddress {
+            address,
+            custom_key,
+            custom_value,
+            recipient_type,
+        } => (
+            Some((
+                address.as_str(),
+                custom_key.as_deref().unwrap_or_default(),
+                custom_value.as_deref().unwrap_or_default(),
+                recipient_type.as_deref(),
+            )),
+            None,
+        ),
+        RecipientOperation::Rename { name } => (None, Some(name.as_str())),
+        RecipientOperation::Remove | RecipientOperation::Add { .. } => return Ok(()),
+    };
+    let Some(before) = collection.saved_recipient_row(key.parts())? else {
+        return Ok(());
+    };
+    collection.set_change_set_saved_before(id, &to_json(&before)?)?;
+    collection.change_saved_recipient(key.parts(), new_identity, name)?;
+    Ok(())
 }
 
 /// Change the draft of one feed. Gives the outcome.
@@ -626,7 +664,8 @@ pub fn change_sets(collection: &Collection) -> Result<Vec<ChangeSet>, PipelineEr
     Ok(open)
 }
 
-/// Put back the draft of each feed from before the change, byte for byte.
+/// Put back the draft of each feed from before the change, byte for byte,
+/// and the saved recipient from before the change.
 /// A feed that had no draft then has no draft. A feed that Studio wrote
 /// after the change does not change. Then the change set goes (ADR 0091
 /// items 19 and 20).
@@ -645,6 +684,9 @@ pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), Pipeli
             Some(before) if row.had_draft => collection.save_draft(row.feed_id, &before)?,
             _ => remove_new_draft(collection, row.feed_id)?,
         }
+    }
+    if let Some(text) = collection.change_set_saved_before(id)? {
+        collection.restore_saved_recipient(&from_json::<SavedRecipientRow>(&text)?)?;
     }
     collection.delete_change_set(id)?;
     Ok(())

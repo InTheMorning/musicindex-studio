@@ -31,13 +31,14 @@ export function sortRecipients(list) {
 }
 
 // The summary line of a recipient: the name, the type, and "N feeds" or
-// "Saved, not used" (ADR 0091 item 2).
+// "Saved, not used" (ADR 0091 item 2). A recipient that is not saved and that
+// no feed model uses now shows "0 feeds".
 export function recipientRow(recipient) {
-  const used = recipient.feeds > 0;
+  const unusedSaved = !(recipient.feeds > 0) && recipient.saved_id != null;
   return {
     title: recipientTitle(recipient),
     type: typeLabel(recipient.recipient_type),
-    text: used ? plural(recipient.feeds, 'feed', 'feeds') : 'Saved, not used',
+    text: unusedSaved ? 'Saved, not used' : plural(recipient.feeds || 0, 'feed', 'feeds'),
   };
 }
 

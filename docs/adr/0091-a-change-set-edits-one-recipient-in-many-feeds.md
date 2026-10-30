@@ -51,9 +51,10 @@
     - **Changed.** The core put the change in the draft of the feed.
     - **Not changed.** The core gives the cause. For example, the block has the recipient before the change, or the block has the new address.
     - **Not changed** also applies when the feed has no value block, or when each split of the block is a fee.
+    - **Not changed** also applies when the feed has a change of an open change set that is not written. Thus a discard of one change set cannot put back a draft over the change of a different change set. The planning model added this rule on 2026-10-30, at the review of task 054a.
 18. The core puts the change in the open draft of the feed, if the feed has one. If the feed has no draft, the core makes a draft.
 19. The collection keeps each change set until each changed feed is written or the user discards the change set. The change set keeps the draft of each feed before the change.
-20. "Discard" on a change set puts back the draft of each feed from before the change. A feed that had no draft then has no draft. A feed written after the change does not change.
+20. "Discard" on a change set puts back the draft of each feed from before the change. A feed that had no draft then has no draft. A feed written after the change does not change. When the user discarded the draft of a feed after the change, that feed also does not change. The planning model added this rule on 2026-10-30, at the review of task 054a.
 
 ### The Review And The Write
 

@@ -2,7 +2,7 @@
 
 Parent: [task 054](studio-v1-task-054-recipient-change-sets.md). Decision: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 5 to 7, 9, 10 and 13 to 20.
 
-Status: Not started.
+Status: Complete. The review added `Cause::InOpenChangeSet`, and `discard_draft` closes the rows of its feed (ADR 0091 items 17 and 20).
 
 ## Goal
 

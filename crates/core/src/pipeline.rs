@@ -2833,6 +2833,10 @@ pub fn write_draft_signed(
     // scan does not lose them (ADR 0052 item 13).
     announce::queue(collection, id, &announcements, &Timing::DEFAULT, now)?;
 
+    // The feed is written, so each open change set row of the feed is done
+    // (ADR 0091 item 19).
+    collection.mark_change_set_written(id, i64::try_from(now).unwrap_or(i64::MAX))?;
+
     for connector_id in touched {
         inventory::scan(collection, hosts, connector_id)?;
     }
@@ -3608,6 +3612,10 @@ pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), Pipeline
     collection.remove_draft_feed_move(id)?;
     collection.remove_signing_plan(id)?;
     collection.remove_draft_grants(id)?;
+    // The draft is gone, so each open change set row of the feed is closed
+    // and a later Discard of the change set does not put back an old draft
+    // (ADR 0091 item 20).
+    collection.mark_change_set_written(id, crate::collection::now())?;
     Ok(())
 }
 

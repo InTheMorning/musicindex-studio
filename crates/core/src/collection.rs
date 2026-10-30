@@ -297,6 +297,25 @@ ALTER TABLE feeds ADD COLUMN roles_confirmed INTEGER NOT NULL DEFAULT 0;
 UPDATE feeds SET publisher_roles = publisher_role, roles_confirmed = 1 WHERE publisher_role IS NOT NULL;
 ALTER TABLE feeds DROP COLUMN publisher_role;
 ",
+    r"
+CREATE TABLE change_sets (
+    id INTEGER PRIMARY KEY,
+    operation TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    made_at INTEGER NOT NULL
+);
+CREATE TABLE change_set_feeds (
+    change_set_id INTEGER NOT NULL REFERENCES change_sets(id) ON DELETE CASCADE,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    outcome TEXT NOT NULL,
+    before_xml BLOB,
+    before_base_xml BLOB,
+    before_base_version TEXT,
+    had_draft INTEGER NOT NULL,
+    written_at INTEGER,
+    PRIMARY KEY (change_set_id, feed_id)
+);
+",
 ];
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
@@ -2749,6 +2768,200 @@ impl Collection {
     }
 }
 
+/// A row of `change_sets` (ADR 0091 item 19).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangeSetRow {
+    /// The ID.
+    pub id: i64,
+    /// The operation, as JSON text.
+    pub operation: String,
+    /// The recipient key, as JSON text.
+    pub recipient: String,
+    /// The Unix time when the user made the change set.
+    pub made_at: i64,
+}
+
+/// A row of `change_set_feeds`: the outcome for one feed, and the draft of
+/// the feed from before the change (ADR 0091 items 19 and 20).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangeSetFeedRow {
+    /// The feed.
+    pub feed_id: FeedId,
+    /// The outcome, as JSON text.
+    pub outcome: String,
+    /// The draft from before the change. `None` when the feed had no draft
+    /// or the outcome is not a change.
+    pub before: Option<DraftRow>,
+    /// True when the feed had a draft before the change.
+    pub had_draft: bool,
+    /// The Unix time when Studio wrote the feed after the change.
+    pub written_at: Option<i64>,
+}
+
+impl Collection {
+    /// Add a change set. Gives its ID.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_change_set(
+        &self,
+        operation: &str,
+        recipient: &str,
+        made_at: i64,
+    ) -> Result<i64, CollectionError> {
+        self.db.execute(
+            "INSERT INTO change_sets (operation, recipient, made_at) VALUES (?1, ?2, ?3)",
+            params![operation, recipient, made_at],
+        )?;
+        Ok(self.db.last_insert_rowid())
+    }
+
+    /// Add the row of one feed to a change set.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_change_set_feed(
+        &self,
+        change_set: i64,
+        row: &ChangeSetFeedRow,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO change_set_feeds
+                 (change_set_id, feed_id, outcome, before_xml, before_base_xml,
+                  before_base_version, had_draft, written_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                change_set,
+                row.feed_id.0,
+                row.outcome,
+                row.before.as_ref().map(|d| d.draft_xml.as_slice()),
+                row.before.as_ref().map(|d| d.base_xml.as_slice()),
+                row.before
+                    .as_ref()
+                    .and_then(|d| d.base_version.as_ref().map(Version::as_str)),
+                row.had_draft,
+                row.written_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Each change set, the oldest first.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn change_set_rows(&self) -> Result<Vec<ChangeSetRow>, CollectionError> {
+        let mut statement = self
+            .db
+            .prepare("SELECT id, operation, recipient, made_at FROM change_sets ORDER BY id")?;
+        let rows = statement
+            .query_map([], |r| {
+                Ok(ChangeSetRow {
+                    id: r.get(0)?,
+                    operation: r.get(1)?,
+                    recipient: r.get(2)?,
+                    made_at: r.get(3)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(rows)
+    }
+
+    /// The row of one change set, or `None`.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn change_set_row(&self, id: i64) -> Result<Option<ChangeSetRow>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT id, operation, recipient, made_at FROM change_sets WHERE id = ?1",
+                [id],
+                |r| {
+                    Ok(ChangeSetRow {
+                        id: r.get(0)?,
+                        operation: r.get(1)?,
+                        recipient: r.get(2)?,
+                        made_at: r.get(3)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// The feed rows of a change set, in the sequence of the feed IDs.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn change_set_feed_rows(
+        &self,
+        change_set: i64,
+    ) -> Result<Vec<ChangeSetFeedRow>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT feed_id, outcome, before_xml, before_base_xml, before_base_version,
+                    had_draft, written_at
+             FROM change_set_feeds WHERE change_set_id = ?1 ORDER BY feed_id",
+        )?;
+        let rows = statement
+            .query_map([change_set], |r| {
+                let before_xml: Option<Vec<u8>> = r.get(2)?;
+                let before_base_xml: Option<Vec<u8>> = r.get(3)?;
+                let before_base_version: Option<String> = r.get(4)?;
+                Ok(ChangeSetFeedRow {
+                    feed_id: FeedId(r.get(0)?),
+                    outcome: r.get(1)?,
+                    before: before_xml.map(|draft_xml| DraftRow {
+                        base_version: before_base_version.map(Version::new),
+                        base_xml: before_base_xml.unwrap_or_default(),
+                        draft_xml,
+                    }),
+                    had_draft: r.get(5)?,
+                    written_at: r.get(6)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(rows)
+    }
+
+    /// Mark each feed row of an open change set as written. A row that is
+    /// marked already does not change. Gives the number of rows.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn mark_change_set_written(
+        &self,
+        feed: FeedId,
+        written_at: i64,
+    ) -> Result<usize, CollectionError> {
+        Ok(self.db.execute(
+            "UPDATE change_set_feeds SET written_at = ?2
+             WHERE feed_id = ?1 AND written_at IS NULL",
+            params![feed.0, written_at],
+        )?)
+    }
+
+    /// Remove a change set and its feed rows.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn delete_change_set(&self, id: i64) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM change_set_feeds WHERE change_set_id = ?1",
+            [id],
+        )?;
+        self.db
+            .execute("DELETE FROM change_sets WHERE id = ?1", [id])?;
+        Ok(())
+    }
+}
+
 /// One recipient identity. [`Collection::known_recipients`] uses it to
 /// combine the rows of the two recipient tables.
 struct RecipientAgg {
@@ -3652,7 +3865,10 @@ mod tests {
     #[test]
     fn a_recorded_role_becomes_a_confirmed_set_of_one_role() {
         // The collection before ADR 0082 kept one role (ADR 0082 item 10).
-        let before = MIGRATIONS.len() - 1;
+        let before = MIGRATIONS
+            .iter()
+            .position(|m| m.contains("ADD COLUMN publisher_roles"))
+            .unwrap();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();

@@ -8,6 +8,7 @@
 pub mod address;
 pub mod announce;
 pub mod apps;
+pub mod change_set;
 pub mod collection;
 pub mod connector;
 pub mod datetime;

@@ -19,6 +19,7 @@ import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from 
 import { isLiveItem } from './live.js';
 import { CONFIRMS } from './confirms.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
+import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf, coverNote } from './cover.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
@@ -385,6 +386,36 @@ export function DateTimeField({ id, label, value, onChange, required = false, so
       ${!required && html`<button class="button" type="button" disabled=${!value} onClick=${() => onChange(null)}>Clear</button>`}
     </div>
   <//>`;
+}
+
+// The field "Duration" of a track (ADR 0094). `value` is the number of
+// seconds, or null. `sourceText` is the `itunes:duration` text that the core
+// cannot read. `notice` is a hint that replaces the other hints. The field
+// keeps the typed text while the user types, and shows `value` again when it
+// loses the focus.
+export function DurationField({ id, value, onChange, sourceText = null, notice = null }) {
+  const [typed, setTyped] = useState(null);
+  const [error, setError] = useState(null);
+  let hint = 'Minutes and seconds, for example 4:21.';
+  if (notice) hint = notice;
+  else if (value == null && sourceText) hint = unreadDurationHint(sourceText);
+  return html`<${Field} id=${id} label="Duration" type="text" autocomplete="off"
+    value=${typed == null ? durationText(value) : typed} hint=${hint} error=${error}
+    onInput=${(e) => {
+      const text = e.target.value;
+      setTyped(text);
+      if (text.trim() === '') { setError(null); onChange(null); return; }
+      const seconds = readDuration(text);
+      if (seconds == null) { setError(DURATION_ERROR); return; }
+      setError(null);
+      onChange(seconds);
+    }}
+    onBlur=${() => {
+      // Text that is not a duration stays with its error, so that the user
+      // sees it. Correct text shows again in the form of the model.
+      if (error) return;
+      setTyped(null);
+    }} />`;
 }
 
 // The eye button of a secret value (ADR 0078 item 3). `name` completes

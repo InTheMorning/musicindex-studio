@@ -4,7 +4,7 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { api, askConfirm, sendInParts, DateTimeField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
+import { api, askConfirm, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
@@ -22,7 +22,8 @@ import { isExplicit } from './explicit.js';
 import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
-import { shortType as formatLabel, propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
+import { readDuration, durationText } from './duration.js';
+import { shortType as formatLabel, propertiesSummary, propertiesOpen, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -293,7 +294,7 @@ function AudioPlayer({ id, url, pick }) {
     const element = e.currentTarget;
     setLength(element.duration);
     if (resume.current > 0) { element.currentTime = resume.current; resume.current = 0; }
-    if (reading) pick.metadataDone(durationFromSeconds(element.duration));
+    if (reading) pick.metadataDone(Number.isFinite(element.duration) ? Math.floor(element.duration) : null);
   };
   const onError = (e) => {
     // An element with no address gives no error of its own.
@@ -394,6 +395,7 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
       pub_date: null,
       pub_date_time: null,
       duration: null,
+      duration_seconds: null,
       episode: null,
       itunes_episode: null,
       image: null,
@@ -586,7 +588,8 @@ function withNewAudio(item, facts, readsMetadata) {
     ],
     // A file that only the host holds has no duration yet. The player reads
     // it from the metadata (ADR 0062 item 16), so the old duration goes.
-    duration: readsMetadata ? null : facts.duration || item.duration,
+    // The core ignores `duration` (ADR 0094 item 2).
+    duration_seconds: readsMetadata ? null : readDuration(facts.duration) ?? item.duration_seconds,
   };
 }
 
@@ -1140,7 +1143,8 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
       alternate_enclosures: row.facts.alternate_enclosures || [],
       pub_date: null,
       pub_date_time: null,
-      duration: row.facts.duration || null,
+      duration: null,
+      duration_seconds: readDuration(row.facts.duration),
       episode: null,
       itunes_episode: null,
       image: imageFor(row.id),
@@ -2053,7 +2057,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
             onMove=${(to) => update((m) => set(m, 'items', moveTo(m.items, i, to)))} />
           <button class="link-row" type="button" onClick=${() => openPage({ page: 'track', track: trackKey(item) })}>
             <span class="title">${item.title || 'Untitled track'}</span>
-            ${item.duration && html`<span class="dur">${item.duration}</span>`}
+            ${(item.duration_seconds != null ? durationText(item.duration_seconds) : item.duration) && html`<span class="dur">${item.duration_seconds != null ? durationText(item.duration_seconds) : item.duration}</span>`}
             <span class="go" aria-hidden="true">›</span>
           </button>
         </div>`)}
@@ -2462,7 +2466,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
     'track-audio',
     item,
     (_address, facts, source) => editItem((i) => withNewAudio(i, facts, needsMetadataRead(source))),
-    (duration) => editItem((i) => set(i, 'duration', duration)),
+    (duration) => editItem((i) => set(i, 'duration_seconds', duration)),
   );
   // The season is `null` when both fields are empty.
   // The season number is a text in the model, so an empty number is an
@@ -2504,8 +2508,8 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
         ${showEach(s.fields, {
           title: () => html`<${TextField} id=${`${id}-title`} label="Title" value=${item.title} onChange=${change('title')} />`,
           audio: () => html`<${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio} />`,
-          duration: () => html`<${TextField} id=${`${id}-duration`} label="Duration" hint=${pickAudio.metadataFailed && !item.duration ? DURATION_NOTICE : 'Seconds, or HH:MM:SS.'}
-            value=${item.duration} onChange=${change('duration')} />`,
+          duration: () => html`<${DurationField} id=${`${id}-duration`} value=${item.duration_seconds} sourceText=${item.duration}
+            notice=${pickAudio.metadataFailed && item.duration_seconds == null ? DURATION_NOTICE : null} onChange=${change('duration_seconds')} />`,
           alternates: () => html`<${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />`,
           artwork: () => html`<${ArtworkRow} summary=${artworkSummary(item, 'track')} onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} />`,
           description: () => html`<${TextArea} id=${`${id}-description`} label="Description" value=${item.description} onChange=${change('description')} />`,
@@ -2679,7 +2683,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     'recording',
     recordingBefore,
     (_address, facts, source) => editLive((l) => set(l, 'item', withNewAudio(l.item, facts, needsMetadataRead(source)))),
-    (duration) => editLive((l) => set(l, 'item', set(l.item, 'duration', duration))),
+    (duration) => editLive((l) => set(l, 'item', set(l.item, 'duration_seconds', duration))),
   );
   const stream = live.item.enclosure || { url: null, length: null, media_type: null };
   const streamField = (name) => (text) => {

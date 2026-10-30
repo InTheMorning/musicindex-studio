@@ -1,7 +1,7 @@
 // The rules of the audio section (ADR 0062 items 16 and 23 to 29, ADR 0042).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { propertiesSummary, propertiesOpen, durationFromSeconds, needsMetadataRead, clockText, shortType } from '../ui/audio.js';
+import { propertiesSummary, propertiesOpen, needsMetadataRead, clockText, shortType } from '../ui/audio.js';
 
 test('propertiesSummary gives the size in MB with one decimal and the short type', () => {
   assert.equal(propertiesSummary({ length: '3984588', media_type: 'audio/mpeg' }), '3.8 MB · MP3');
@@ -40,20 +40,6 @@ test('propertiesOpen is true when the size or the type has an error', () => {
   assert.equal(propertiesOpen(full, ['length']), true);
   assert.equal(propertiesOpen(full, ['media_type']), true);
   assert.equal(propertiesOpen(full, ['url']), false);
-});
-
-test('durationFromSeconds gives HH:MM:SS, rounded to the nearest second', () => {
-  assert.equal(durationFromSeconds(1), '00:00:01');
-  assert.equal(durationFromSeconds(59.6), '00:01:00');
-  assert.equal(durationFromSeconds(225.4), '00:03:45');
-  assert.equal(durationFromSeconds(3725), '01:02:05');
-  assert.equal(durationFromSeconds(100000), '27:46:40');
-});
-
-test('durationFromSeconds gives null for a value that is no duration', () => {
-  for (const value of [0, -3, 0.2, NaN, Infinity, null, undefined, '12']) {
-    assert.equal(durationFromSeconds(value), null, String(value));
-  }
 });
 
 test('needsMetadataRead is true for This release and File hosts, and false for an upload', () => {

@@ -59,7 +59,7 @@ To go back to the files on your computer, select **Choose files from this comput
 Select a track in the outline or on the album page.
 The track page has these sections:
 
-- **Track**. Fields: **Title**, **Description**, **Publication date** and **Duration**. Some apps sort the tracks by the publication date. Write the date like this: `Thu, 22 Oct 2026 12:00:00 GMT`.
+- **Track**. Fields: **Title**, **Description**, **Publication date** and **Duration**. Some apps sort the tracks by the publication date. Select the date and the time with the picker of your system, in your local time. Type the duration as minutes and seconds, for example `4:21`, or as hours, minutes and seconds, for example `1:02:03`.
 - **Audio file**. The field **Audio file address** with **Choose…**, a player and the disclosure **Properties**. Alternative files show as lines with **Remove**.
 - **Value routes**. See [Value routes](value-routes.md).
 - **More**. **Track image** sets an image for this track. Use **Choose…** to pick the image file. **Identity** shows the track number and the track GUID. Studio gives a GUID when it saves a new track.

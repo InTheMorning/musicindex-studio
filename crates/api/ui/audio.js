@@ -35,16 +35,6 @@ export function propertiesOpen(enclosure, errors) {
 
 const pad = (number) => String(number).padStart(2, '0');
 
-// The duration of a track as the duration field shows it, `HH:MM:SS`, from a
-// number of seconds. A number that is not finite, or that rounds to 0 or less,
-// gives `null`, the value of an empty field.
-export function durationFromSeconds(seconds) {
-  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return null;
-  const total = Math.round(seconds);
-  if (total <= 0) return null;
-  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
-}
-
 // Must the player read the duration from the file? It must after a selection
 // from "This release" or "Hosts", because the library records no duration for
 // them. An upload gives false, because the import reads the duration from

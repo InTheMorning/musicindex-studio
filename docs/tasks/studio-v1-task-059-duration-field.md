@@ -2,7 +2,7 @@
 
 Decision: [ADR 0094](../adr/0094-a-duration-is-edited-as-minutes-and-seconds.md). Also [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md).
 
-Status: In progress. Packet 059a is complete. Packet 059b starts after the commit of 059a. Task 058 also changes `editor.js`, so 059b and 058 do not occur at the same time.
+Status: Complete, with its screenshot visual check on 2026-10-30. The field has no `inputmode`, because the number keypad of a phone has no ":". Text that is not a duration stays with its error after the field loses the focus. Task 058 also changes `editor.js`, so 059b and 058 do not occur at the same time.
 
 ## Goal
 

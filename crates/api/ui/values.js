@@ -2,7 +2,8 @@
 // each track. The editor does not change a value time split.
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
-import { api, Field, ErrorNotice, useAction } from './app.js';
+import { CONFIRMS } from './confirms.js';
+import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
 // ---- Shares and percentages ----
 // A split is a number of shares, not a percentage. A fee recipient
@@ -517,8 +518,8 @@ export function TrackPayments({ id, item, albumBlocks, onChange, noun = 'track' 
   const blocks = item.values;
   const shown = blocks.length > 0 ? blocks : albumBlocks;
   const copy = () => onChange(withCids(fresh(albumBlocks.length > 0 ? [albumBlocks[0]] : [BLANK_BLOCK]).map((b) => ({ ...b, time_splits: [] }))));
-  const useAlbum = () => {
-    if (confirm(`Remove the recipients of this ${noun}? The ${noun} then uses the album recipients.`)) onChange([]);
+  const useAlbum = async () => {
+    if (await askConfirm(CONFIRMS.removeRecipients(noun))) onChange([]);
   };
   return html`<section class="page-section">
     <div class="section-head"><h2>Value routes</h2>

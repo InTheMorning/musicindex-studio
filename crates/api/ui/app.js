@@ -6,7 +6,7 @@ import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSign
 import {
   recipientKey, recipientTitle, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
   outcomeText, blockedText, operationTitle, operationLine, changeSetRow, nameOf, writableIds, initialStatuses, startWrite,
-  finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed, DISCARD_ASK,
+  finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods, accountName, deleteConfirmation,
@@ -17,6 +17,7 @@ import {
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
+import { CONFIRMS } from './confirms.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { coverOf, coverNote } from './cover.js';
 import { SignerConnect } from './signer.js';
@@ -1753,9 +1754,9 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
   const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
-  const remove = () => {
+  const remove = async () => {
     const name = feed.title || feed.path || 'this feed';
-    if (!confirm(`Remove “${name}” from your collection? The feed file on the file host does not change.`)) return;
+    if (!await askConfirm(CONFIRMS.removeFeed(name))) return;
     run(async () => {
       await api(`/feeds/${feed.id}`, { method: 'DELETE' });
       onRemoved();
@@ -2076,8 +2077,8 @@ function ConnectedAppsPanel() {
       await load();
     });
   };
-  const remove = (app) => {
-    if (!confirm(`Remove the app “${app.name}”? Its token stops working.`)) return;
+  const remove = async (app) => {
+    if (!await askConfirm(CONFIRMS.removeApp(app.name))) return;
     run(async () => {
       await api(`/apps/${app.id}`, { method: 'DELETE' });
       if (made && made.id === app.id) setMade(null);
@@ -2086,8 +2087,8 @@ function ConnectedAppsPanel() {
   };
   // An app from before the app key has no key. "Connect again" removes it
   // and makes a new app with the same name and a new token (ADR 0058 item 15).
-  const connectAgain = (app) => {
-    if (!confirm(`Connect the app “${app.name}” again? Its old token stops working.`)) return;
+  const connectAgain = async (app) => {
+    if (!await askConfirm(CONFIRMS.newAppToken(app.name))) return;
     run(async () => {
       await api(`/apps/${app.id}`, { method: 'DELETE' });
       const result = await api('/apps', { method: 'POST', body: { name: app.name } });
@@ -2329,8 +2330,8 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
   useEffect(() => {
     if (linked && resultRef.current) resultRef.current.scrollIntoView({ block: 'start' });
   }, [linked]);
-  const remove = (connector) => {
-    if (!confirm(`Remove the file host “${connector.name}”? The files in it do not change.`)) return;
+  const remove = async (connector) => {
+    if (!await askConfirm(CONFIRMS.removeFileHost(connector.name))) return;
     run(async () => {
       await api(`/connectors/${connector.id}`, { method: 'DELETE' });
       onChanged();
@@ -2715,8 +2716,8 @@ function ChangeSetPage({ id, go, onChanged }) {
     await onChanged();
     try { setSet(await api(`/change-sets/${id}`)); } catch (_) { /* The set closes when each feed is written. */ }
   };
-  const discard = () => {
-    if (hasWrittenFeed(set, statuses) && !confirm(DISCARD_ASK)) return;
+  const discard = async () => {
+    if (hasWrittenFeed(set, statuses) && !await askConfirm(CONFIRMS.discardChangeSet())) return;
     run(async () => {
       await api(`/change-sets/${id}`, { method: 'DELETE' });
       await onChanged();
@@ -3961,6 +3962,62 @@ function Studio({ epoch }) {
   return html`<${Shell} vault=${status.vault} onLock=${load} />`;
 }
 
+// Ask the user to confirm an action with a sheet of Studio (musicindex ADR
+// 0023 R-CONFIRM-1). `entry` is the result of an entry of `CONFIRMS`. The
+// promise gives true for the action button, and false for each other close.
+let showConfirm = null;
+export function askConfirm(entry) {
+  return new Promise((resolve) => {
+    if (showConfirm) showConfirm({ entry, resolve });
+    else resolve(false);
+  });
+}
+
+// The sheet of `askConfirm`. It is a modal `dialog`, so it shows above an
+// open sheet. The focus starts on "Cancel".
+function ConfirmHost() {
+  const [ask, setAsk] = useState(null);
+  const ref = useRef(null);
+  const cancelRef = useRef(null);
+  const result = useRef(false);
+  const current = useRef(null);
+  useEffect(() => {
+    showConfirm = (next) => {
+      // A new question ends a pending question with "no".
+      if (current.current) current.current.resolve(false);
+      current.current = next;
+      result.current = false;
+      setAsk(next);
+    };
+    return () => { showConfirm = null; };
+  }, []);
+  useEffect(() => {
+    if (!ask || !ref.current) return;
+    if (!ref.current.open) ref.current.showModal();
+    if (cancelRef.current) cancelRef.current.focus();
+  }, [ask]);
+  const onClose = () => {
+    const done = current.current;
+    if (!done) return;
+    current.current = null;
+    done.resolve(result.current);
+    setAsk(null);
+  };
+  if (!ask) return null;
+  const { title, text, action, role } = ask.entry;
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="confirm-title" onClose=${onClose}>
+    <header>
+      <h2 id="confirm-title">${title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body"><p>${text}</p></div>
+    <footer>
+      <button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>Cancel</button>
+      <button class=${`button ${role}`} type="button" onClick=${() => { result.current = true; ref.current.close(); }}>${action}</button>
+    </footer>
+  </dialog>`;
+}
+
 function App() {
   const [session, setSession] = useState(null);
   const [bootError, setBootError] = useState(null);
@@ -4012,7 +4069,7 @@ function App() {
     setUnlockAsk(null);
     if (ok) setEpoch((n) => n + 1);
   };
-  return html`${body}${unlockAsk && view === 'shell' && html`<${UnlockSheet} session=${session} onDone=${closeUnlock} />`}`;
+  return html`${body}<${ConfirmHost} />${unlockAsk && view === 'shell' && html`<${UnlockSheet} session=${session} onDone=${closeUnlock} />`}`;
 }
 
 render(html`<${App} />`, document.getElementById('app'));

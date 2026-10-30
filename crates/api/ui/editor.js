@@ -3,7 +3,8 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
-import { api, sendInParts, DateTimeField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
+import { CONFIRMS } from './confirms.js';
+import { api, askConfirm, sendInParts, DateTimeField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
@@ -1466,8 +1467,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
     ref.current.close();
   });
-  const discard = () => {
-    if (!confirm('Discard the draft? Each change that you did not write goes out. The hosted file does not change.')) return;
+  const discard = async () => {
+    if (!await askConfirm(CONFIRMS.discardDraft())) return;
     run(async () => {
       await api(`/feeds/${feedId}/draft`, { method: 'DELETE' });
       setDiff(null);
@@ -1475,8 +1476,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       await draft.load();
     });
   };
-  const startAgain = () => {
-    if (!confirm('Start again from the hosted file? Each change in the draft goes out.')) return;
+  const startAgain = async () => {
+    if (!await askConfirm(CONFIRMS.startAgain())) return;
     run(async () => {
       await api(`/feeds/${feedId}/draft`, { method: 'DELETE' });
       setDiff(null);
@@ -1587,8 +1588,8 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
     setList(null);
     api(`/feeds/${feedId}/snapshots`).then(setList, () => setList([]));
   }, [feedId, open]);
-  const restore = (snapshot) => {
-    if (draft.changed && !confirm('Replace the draft with this earlier version? Each change in the draft goes out.')) return;
+  const restore = async (snapshot) => {
+    if (draft.changed && !await askConfirm(CONFIRMS.replaceDraft())) return;
     run(async () => {
       await draft.flush();
       draft.show(await api(`/feeds/${feedId}/snapshots/${snapshot.id}/draft`, { method: 'POST' }));
@@ -1684,9 +1685,9 @@ function FeedFacts({ feed, onRemoved }) {
   const announcementText = announcements
     ? announceStatus(announcements, (seconds) => new Date(seconds * 1000).toLocaleString())
     : 'Not loaded yet.';
-  const remove = () => {
+  const remove = async () => {
     const name = feed.title || feed.path || 'this feed';
-    if (!confirm(`Remove “${name}” from your collection? The feed file on the file host does not change.`)) return;
+    if (!await askConfirm(CONFIRMS.removeFeed(name))) return;
     run(async () => {
       await api(`/feeds/${feed.id}`, { method: 'DELETE' });
       onRemoved();
@@ -2480,12 +2481,14 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
     const next = withTrackCredits(i, model.persons);
     return set(next, 'persons', next.persons.length > 0 ? withCids(next.persons) : addOpen([], BLANK_PERSON));
   });
-  const changeCredits = (e) => {
-    if (e.target.value === 'track') { useTrackCredits(); return; }
-    if (confirm('Remove the credits of this track? The track then uses the album credits.')) {
+  const changeCredits = async (e) => {
+    // The event target is not valid after the wait, so keep the select.
+    const select = e.target;
+    if (select.value === 'track') { useTrackCredits(); return; }
+    if (await askConfirm(CONFIRMS.removeTrackCredits())) {
       editItem(withAlbumCredits);
     } else {
-      e.target.value = 'track';
+      select.value = 'track';
     }
   };
   const openTrack = (i) => go({ name: 'feed', id: feed.id, page: 'track', track: trackKey(items[i]) });
@@ -2706,8 +2709,8 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
   const grant = (grants || []).find((g) => g.item_guid === guid) || null;
   const nowSeconds = Date.now() / 1000;
   const grantText = (seconds) => new Date(seconds * 1000).toLocaleString();
-  const stopGrant = () => {
-    if (!confirm('Stop the grant? Connected apps can no longer change this show.')) return;
+  const stopGrant = async () => {
+    if (!await askConfirm(CONFIRMS.stopGrant())) return;
     action.run(async () => {
       await api(`/feeds/${feed.id}/grants/${encodeURIComponent(guid)}/end`, { method: 'POST' });
       await loadGrants();
@@ -3124,14 +3127,13 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDo
   const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
   // A copy or a move of a remote file asks first (ADR 0038 item 12). The
   // size comes from the row.
-  const askFirst = () => file.local || confirm(
-    `Studio downloads this file first${file.size > 0 ? ` (${fileSize(file.size)})` : ''}. `
-    + 'The copy goes into the draft now, and the write waits for the download.');
-  const copyTo = (connectorId) => {
-    if (askFirst()) onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
+  const askFirst = async () => file.local
+    || await askConfirm(CONFIRMS.downloadFirst(file.size > 0 ? fileSize(file.size) : null));
+  const copyTo = async (connectorId) => {
+    if (await askFirst()) onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
   };
-  const moveTo = (from, to) => {
-    if (askFirst()) onOperation({ op: 'move', file: file.id, from, to });
+  const moveTo = async (from, to) => {
+    if (await askFirst()) onOperation({ op: 'move', file: file.id, from, to });
   };
   const sizeDiffers = file.local && file.length_in_feed != null && file.length_in_feed > 0
     && file.length_in_feed !== file.size;

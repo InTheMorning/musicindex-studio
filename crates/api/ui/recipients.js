@@ -240,5 +240,3 @@ export function hasWrittenFeed(changeSet, statuses) {
 export function isWriting(statuses) {
   return Object.values(statuses).some((status) => status.state === 'writing');
 }
-
-export const DISCARD_ASK = 'Discard this change set? Each feed that you did not write goes back to its draft from before the change. A feed that you wrote does not change.';

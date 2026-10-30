@@ -2525,7 +2525,7 @@ function LeftPanelFooter({ panel, go, onLock }) {
       ? html`<button class="row" type="button" aria-current=${currentAttr(item)}
           onClick=${() => { if (!item.current) go({ name: 'settings' }); }}>${item.label}</button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
-          onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}><span class="dot hosting"></span>${item.label}</button>`))}
+          onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}>${item.label}</button>`))}
   </footer>`;
 }
 

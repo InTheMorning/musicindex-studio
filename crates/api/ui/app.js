@@ -2198,7 +2198,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   const mismatch = accept.error && accept.error.code === 'host_key_mismatch';
   return html`<article class="panel host">
     <header class="host-head">
-      <span class="eyebrow"><span class="dot hosting"></span>${isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : isNsite ? 'nsite site' : isBlossom ? 'Blossom server' : 'Folder on this computer'}</span>
+      <span class="eyebrow">${isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : isNsite ? 'nsite site' : isBlossom ? 'Blossom server' : 'Folder on this computer'}</span>
       ${!editing && html`<div class="actions">
         <button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>
         <button class="button destructive" type="button" disabled=${removeBusy}
@@ -2246,9 +2246,11 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
                   : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
             ${!isNostr && html`<dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>`}
-            <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
+            <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<details class="disclosure host-feeds">
+              <summary>${written.length} ${written.length === 1 ? 'feed' : 'feeds'}</summary>
+              <ul class="feed-list">
               ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
-                <span class=${`dot ${feedKind(f).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
+                <span class=${`dot ${feedKind(f).dot}`}></span>${f.title || f.path}</button></li>`)}</ul></details>`}</dd>
             ${disagreeing.length > 0 && html`<dt>Different addresses</dt><dd>
               These feeds have an address that does not agree with the folder.
               <ul class="address-list">

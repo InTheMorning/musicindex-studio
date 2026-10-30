@@ -873,6 +873,10 @@ textarea:focus { background: var(--fill); }
 .host-head .actions { flex-wrap: nowrap; }
 .host h2 { font-size: 1.4rem; font-weight: 700; letter-spacing: -.02em; }
 
+/* The feeds of a file host start collapsed, with the number of feeds as the
+   summary line (ADR 0028). The summary is on the line of the term "Feeds". */
+.host-feeds > summary { gap: 6px; margin-block: calc((1lh - var(--target)) / 2); }
+.host-feeds[open] > .feed-list { margin-top: 6px; }
 /* One feed on each line, with its type dot. */
 .feed-list { list-style: none; display: grid; }
 .feed-list .button.link {

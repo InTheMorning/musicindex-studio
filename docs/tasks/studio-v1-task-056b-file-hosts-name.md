@@ -12,7 +12,7 @@ The destination, its page and each UI text that names a connector say "file host
 
 Inspect: each file in `crates/api/ui/`, `crates/api/ui-tests/words.test.mjs` and `docs/user-guide/`. Also inspect the error messages of `crates/api/src/routes.rs` and `crates/core/src/pipeline.rs` that reach the UI.
 
-Change: the UI files with a text that names a connector, `crates/api/src/routes.rs` and `crates/core/src/pipeline.rs` for their messages, the Node tests that give a changed text, and `docs/user-guide/` pages that name the destination.
+Change: the UI files with a text that names a connector, and the messages of `crates/api/src/routes.rs` and `crates/core/src/pipeline.rs`. Also change the Node tests that give a changed text, and the `docs/user-guide/` pages that name the destination.
 
 Do not change: a code name, a route, an API field, a test of the role `host`, the ADRs.
 

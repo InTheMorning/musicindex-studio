@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
 Decisions: [ADR 0093](../adr/0093-dates-and-times-use-a-picker-in-local-time.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: Not started.
+Status: Not started. It starts after task 056. The plan gives the sequence.
 
 ## Goal
 

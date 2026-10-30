@@ -2,7 +2,7 @@
 
 Parent: [task 054](studio-v1-task-054-recipient-change-sets.md). Decision: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 1 to 4, 8, 9 and 21 to 24.
 
-Status: Not started. It needs task 054b. When task 056a is complete, the Recipients row also gets its icon.
+Status: Not started. It needs task 054b and task 056.
 
 ## Goal
 
@@ -12,7 +12,7 @@ The user opens Recipients, opens one recipient, selects an operation and its fee
 
 Inspect: `crates/api/ui/shell.js` (`leftPanel`), `crates/api/ui/app.js` (`LeftPanelFooter`, `RootPage`, the views, `Bar`, `useSheet`), `crates/api/ui/editor.js` (`ReviewSheet`, `DiffView`, the signer flow), `crates/api/ui/signing.js`, `crates/api/ui/values.js`, `crates/api/ui/pages.js`, `crates/api/ui-tests/shell.test.mjs`.
 
-Change: a new model module `crates/api/ui/recipients.js`, `crates/api/ui/shell.js`, `crates/api/ui/app.js`, `crates/api/ui/pages.js`, `crates/api/ui/styles.css`, and the Node tests.
+Change: a new model module `crates/api/ui/recipients.js`, `crates/api/src/ui.rs` (it serves `recipients.js` as it serves `op3.js`), `crates/api/ui/shell.js`, `crates/api/ui/app.js`, `crates/api/ui/pages.js`, `crates/api/ui/styles.css`, and the Node tests.
 
 Do not change: the core, the API, the ADRs.
 
@@ -20,7 +20,7 @@ Do not change: the core, the API, the ADRs.
 
 These choices are fixed. Do not change them.
 
-1. `leftPanel` gives the bottom entries `recipients`, `hosts`, `settings`, then `lock` or `unlock`. The views are `recipients`, `recipient` and `change-set`.
+1. `leftPanel` gives the bottom entries `recipients`, `hosts`, `settings`, then `lock` or `unlock`. The `recipients` entry has the icon `wallet` of task 056a. The views are `recipients`, `recipient` and `change-set`.
 2. The Recipients page lists each recipient of `GET /recipients` in one summary line: the name, the type, and "N feeds" or "Saved, not used" (ADR 0028). The list is A to Z by name.
 3. The page of a recipient gets its feeds from `recipients/uses`. Each feed is one row with a checkbox, its title and its places, for example "Channel · 12 tracks". Each checkbox starts selected.
 4. The page has four action buttons: "Change address", "Rename", "Remove" and "Add to a level". Each one opens a sheet. "Remove" is destructive (ADR 0037).
@@ -41,6 +41,7 @@ These choices are fixed. Do not change them.
 ## Constraints
 
 - No feed rule in the UI (ADR 0065). The UI does not calculate a split, and does not find a place.
+- A text names a connector "file host" (ADR 0092). The word test of task 056b examines the new texts.
 - Each labeled button has a role (ADR 0037).
 - Each control has the target size of its profile.
 - Each UI text is in ASD-STE100 Simplified Technical English.

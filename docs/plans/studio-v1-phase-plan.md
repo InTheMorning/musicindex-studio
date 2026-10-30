@@ -223,6 +223,15 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Visual check: the visual criteria of tasks 050 to 053.
 - Status on 2026-10-28: tasks 050 to 053 are complete. The mechanical checks pass, and the screenshot visual checks passed. The human tests of the four tasks are open.
 
+### Recipient Batch Edits, File Hosts And Dates
+
+- Decisions: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) (a change set edits one recipient in many feeds), [ADR 0092](../adr/0092-file-hosts-and-the-destination-icons.md) (file hosts and the destination icons) and [ADR 0093](../adr/0093-dates-and-times-use-a-picker-in-local-time.md) (dates and times).
+- Packets, in this sequence: 056a, 056b, 055a, 055b, 054a, 054b, then 054c ([task 054](../tasks/studio-v1-task-054-recipient-change-sets.md), [task 055](../tasks/studio-v1-task-055-date-time-fields.md), [task 056](../tasks/studio-v1-task-056-file-hosts-and-icons.md)).
+- Task 056 is first. The word test of 056b then examines the new texts of tasks 054 and 055. Also, 054c uses the `Icon` component of 056a.
+- The packets share files. 055b, 056a and 054c change `app.js` and `styles.css`. 055a, 054a and 056b change `pipeline.rs`. 054b and 056b change `routes.rs`. Thus one packet starts after the commit of the packet before it.
+- Two pairs share no file, and each pair can run at the same time: 056a with 055a, and 055b with 054a.
+- Status on 2026-10-30: no packet is started.
+
 ### Phase 13: Desktop Shell
 
 - Package the Tauri app for Linux, macOS and Windows.

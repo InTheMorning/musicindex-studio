@@ -21,7 +21,7 @@ Do not change: the core, the API, the ADRs, an icon of `musicindex-assets` other
 These choices are fixed. Do not change them.
 
 1. First, a commit in `../musicindex-assets` adds `icons/lucide/lock-open.svg` from the npm package `lucide-static` 1.43.0, as for the other icons. Remove the license comment and the class attribute. Run `python3 scripts/check.py write`, `python3 scripts/check.py verify` and `python3 scripts/preview.py` in that commit.
-2. Each fixed entry of `leftPanel` gets `icon`: `library` (`releases`), `wallet` (`recipients`), `hard-drive` (`hosts`), `settings`, `lock` and `lock-open` (`unlock`). A publisher feed entry gets no `icon`.
+2. Each fixed entry of `leftPanel` gets `icon`: `library` (`releases`), `hard-drive` (`hosts`), `settings`, `lock` and `lock-open` (`unlock`). The map of item 3 also has `wallet`, for the Recipients row of task 054c. A publisher feed entry gets no `icon`.
 3. A new component `Icon({ name })` in `app.js` draws the elements of each icon in `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`. One object maps each name to its elements, copied from `musicindex-assets`. A comment names musicindex ADR 0022 and the source file of each icon. `Chevron` stays as it is.
 4. The rows of `LeftPanelFooter`, `RootPage` and the Releases row put `Icon` before the label.
 5. In `styles.css`, `.row .icon` has `flex: none`, a width and a height of `1lh` (the line height of the row text), and `color: inherit`. `.row[aria-current="page"]` gets `color: var(--accent)`. Check the accent token name in `styles.css` before the change.

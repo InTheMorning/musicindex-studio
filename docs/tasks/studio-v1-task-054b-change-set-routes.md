@@ -38,6 +38,7 @@ These choices are fixed. Do not change them.
 
 - No write to a host in a change set route.
 - No secret in a response.
+- A message that names a connector uses "file host" (ADR 0092).
 - Each comment and each test message is in ASD-STE100 Simplified Technical English.
 - Follow the Pragmatic Rust Guidelines of the `rust-dev` skill.
 
@@ -64,5 +65,5 @@ tools/node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation
 
-- Stop and report when `ensure_draft` of a feed needs a host that is not connected, and that is not a read-only feed.
+- Stop and report when `ensure_draft` of a feed needs a file host that is not connected. A read-only feed is not this condition.
 - Stop and report when the server shell needs a different route for the vault check.

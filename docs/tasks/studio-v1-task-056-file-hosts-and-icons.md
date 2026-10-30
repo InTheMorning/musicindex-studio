@@ -1,6 +1,6 @@
 # Studio v1 Task 056: File Hosts And The Destination Icons
 
-Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "MSP 2.0 Parity".
+Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Recipient Batch Edits, File Hosts And Dates".
 Decisions: [ADR 0092](../adr/0092-file-hosts-and-the-destination-icons.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0018](../adr/0018-passphrase-strength-and-error-color.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md). Shared: musicindex ADR 0022, ADR 0025 R-ICON-1 and ADR 0032 R-DOT-1.
 
 Status: Not started. Commit `b13c30c` removed the type dot from the Hosts row before this task.
@@ -16,7 +16,7 @@ The two packets change different parts of the UI. They go in this sequence, beca
 1. [056a: the destination icons](studio-v1-task-056a-destination-icons.md).
 2. [056b: the name "File hosts"](studio-v1-task-056b-file-hosts-name.md).
 
-Task 054c adds the Recipients row. When task 054c is complete before task 056a, task 056a gives that row its icon. When task 056a is complete first, task 054c gives the icon.
+Task 056 is the first task of the sequence in the plan. Task 054c adds the Recipients row later, with the `Icon` component of 056a.
 
 ## Constraints
 

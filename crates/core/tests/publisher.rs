@@ -555,3 +555,83 @@ fn a_role_that_the_two_sides_of_a_link_give_is_linked() {
     assert!(!linked(label), "{message}");
     assert!(!linked(album), "{message}");
 }
+
+#[test]
+fn the_levels_follow_the_rank_and_the_shared_releases() {
+    let mut s = setup();
+    let feed = |s: &mut Setup, name: &str, roles: &[PublisherRole]| {
+        let id = new_feed(s, &format!("{name}.xml"), name, "publisher");
+        s.collection.set_publisher_roles(id, roles, true).unwrap();
+        id
+    };
+    let host = feed(&mut s, "host", &[PublisherRole::Hosting]);
+    let label_a = feed(&mut s, "label-a", &[PublisherRole::Label]);
+    let label_b = feed(&mut s, "label-b", &[PublisherRole::Label]);
+    let artist_x = feed(&mut s, "artist-x", &[PublisherRole::Artist]);
+    let artist_y = feed(&mut s, "artist-y", &[PublisherRole::Artist]);
+    let producer = feed(&mut s, "beat-lab", &[PublisherRole::Producer]);
+    let artist_z = feed(&mut s, "artist-z", &[PublisherRole::Artist]);
+    let albums: Vec<FeedId> = (1..=7)
+        .map(|n| {
+            new_feed(
+                &mut s,
+                &format!("album-{n}.xml"),
+                &format!("Album {n}"),
+                "music",
+            )
+        })
+        .collect();
+    let link = |s: &Setup, publisher: FeedId, numbers: &[usize]| {
+        for &n in numbers {
+            publisher::link(&s.collection, publisher, albums[n - 1]).unwrap();
+        }
+    };
+    link(&s, host, &[1, 2, 3, 4, 5, 6, 7]);
+    link(&s, label_a, &[1, 2, 3]);
+    link(&s, label_b, &[4, 5, 6]);
+    link(&s, artist_x, &[1, 2]);
+    link(&s, artist_y, &[3, 4]);
+    link(&s, producer, &[1]);
+    link(&s, artist_z, &[7]);
+
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            let feed = model(&s, row.id);
+            (row, Some(feed))
+        })
+        .collect();
+    let catalogs = publisher::catalogs(&feeds);
+    let of = |id: FeedId| {
+        let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
+        let mut catalog = catalogs[index].clone();
+        catalog.children.sort_by_key(|id| id.0);
+        catalog.parents.sort_by_key(|id| id.0);
+        catalog
+    };
+    let message = "ADR 0088 items 1 and 2: a feed is directly below a feed of a higher rank that shares a release";
+    // The artists of the labels are below the labels, not again below the
+    // hosting feed. Artist Z has no label, so it is directly below it.
+    assert_eq!(
+        of(host).children,
+        vec![label_a, label_b, artist_z],
+        "{message}"
+    );
+    assert_eq!(of(host).parents, Vec::new(), "{message}");
+    assert_eq!(
+        of(label_a).children,
+        vec![artist_x, artist_y, producer],
+        "{message}"
+    );
+    assert_eq!(of(label_b).children, vec![artist_y], "{message}");
+    assert_eq!(of(label_a).parents, vec![host], "{message}");
+    // An artist on two labels is below each label.
+    assert_eq!(of(artist_y).parents, vec![label_a, label_b], "{message}");
+    // A producer has the rank of an artist.
+    assert_eq!(of(producer).parents, vec![label_a], "{message}");
+    assert_eq!(of(artist_z).parents, vec![host], "{message}");
+    assert_eq!(of(albums[0]).children, Vec::new());
+}

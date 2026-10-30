@@ -459,10 +459,10 @@ const catalog = [artist, label, first, shared, mixtape];
 
 test('the destinations below Releases are each feed with roles A to Z, then Not linked', () => {
   const message = 'ADR 0085 items 1 and 3: list each feed with roles A to Z, then "Not linked". Use groupDestinations of crates/api/ui/shell.js.';
-  const panel = leftPanel({ view: { name: 'releases', group: 30 }, feeds: catalog, model: null, vaultOpen: false });
+  const panel = leftPanel({ view: { name: 'releases', group: 'none' }, feeds: catalog, model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.id, e.label, e.count]),
     [['releases', 'Releases', undefined], ['group-30', 'Acme', 1], ['group-20', 'Zed', 2], ['group-none', 'Not linked', 1]], message);
-  assert.deepEqual(panel.top.map((e) => e.current), [false, true, false, false], message);
+  assert.deepEqual(panel.top.map((e) => e.current), [false, false, false, true], message);
   assert.equal(panel.top[0].opens, true, 'ADR 0085 item 1: on a destination below Releases, the row Releases opens Releases.');
   assert.deepEqual(panel.top.map((e) => e.dot), [undefined, 'label hollow', 'artist', null], message);
   const linked = leftPanel({ view: { name: 'releases' }, feeds: [artist, first], model: null, vaultOpen: false });
@@ -495,4 +495,68 @@ test('Not linked gives the releases with no link, and Releases gives each releas
 test('a destination below Releases is a page of the root at narrow width', () => {
   const view = { name: 'releases', group: 20 };
   assert.deepEqual(narrowStack(view), [{ name: 'root' }, view], 'ADR 0085 item 7: the root page opens the destination.');
+});
+
+// ---- The levels of the hierarchy (ADR 0088) ----
+
+const host = { id: 40, title: 'Some Host', medium: 'publisher', publisher_roles: ['hosting'], roles_confirmed: true, release_ids: [51, 52], child_ids: [41, 42], parent_ids: [] };
+const labelA = { id: 41, title: 'Label A', medium: 'publisher', publisher_roles: ['label'], roles_confirmed: true, release_ids: [51], child_ids: [43, 44], parent_ids: [40] };
+const labelB = { id: 42, title: 'Label B', medium: 'publisher', publisher_roles: ['label'], roles_confirmed: true, release_ids: [52], child_ids: [], parent_ids: [40] };
+const artistX = { id: 43, title: 'Artist X', medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true, release_ids: [51], child_ids: [], parent_ids: [41] };
+const beatLab = { id: 44, title: 'Beat Lab', medium: 'publisher', publisher_roles: ['producer'], roles_confirmed: true, release_ids: [51], child_ids: [], parent_ids: [41] };
+const album1 = { id: 51, title: 'Album 1', medium: 'music', publisher_ids: [40, 41, 43, 44], added_at: 1, draft_state: 'none' };
+const album2 = { id: 52, title: 'Album 2', medium: 'music', publisher_ids: [40, 42], added_at: 2, draft_state: 'none' };
+const tree = [host, labelA, labelB, artistX, beatLab, album1, album2];
+
+test('level 0 gives only the top feeds, under their role headings', () => {
+  const message = 'ADR 0088 items 3 and 4: level 0 lists each feed with no feed above it, under its role heading. Use groupDestinations of crates/api/ui/shell.js.';
+  const panel = leftPanel({ view: { name: 'releases' }, feeds: [...tree, { ...artistX, id: 45, title: 'Alone', parent_ids: [] }], model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.label, e.heading]),
+    [['Releases', undefined], ['Some Host', 'Hosting'], ['Alone', 'Artists']], message);
+});
+
+test('a level gives the way up, the head, the feeds below and the releases', () => {
+  const message = 'ADR 0088 item 5: a level gives "‹" to the level above, the head, the feeds directly below under their headings, then the releases. Use feedLevel of crates/api/ui/shell.js.';
+  const level = leftPanel({ view: { name: 'releases', group: 41, trail: [40] }, feeds: tree, model: null, vaultOpen: false });
+  assert.equal(level.kind, 'level', message);
+  assert.equal(level.back.label, 'Some Host', message);
+  assert.deepEqual(level.back.view, { name: 'releases', group: 40, trail: [], marked: 41 }, message);
+  assert.equal(level.head.title, 'Label A', message);
+  assert.deepEqual(level.sections.map((s) => [s.heading, s.items.map((i) => i.label)]),
+    [['Artists', ['Artist X']], ['Producers', ['Beat Lab']]], message);
+  assert.deepEqual(level.sections[0].items[0].view, { name: 'releases', group: 43, trail: [40, 41] }, message);
+  assert.deepEqual(level.releases.map((r) => [r.title, r.from]), [['Album 1', { group: 41, trail: [40] }]], message);
+  const top = leftPanel({ view: { name: 'releases', group: 40 }, feeds: tree, model: null, vaultOpen: false });
+  assert.equal(top.back.label, 'Releases', message);
+  assert.deepEqual(top.back.view, { name: 'releases', marked: 40 }, message);
+});
+
+test('a feed opened from a level goes back to that level', () => {
+  const message = 'ADR 0088 item 6: the first outline row names the level. Use outlineItems of crates/api/ui/shell.js.';
+  const from = { group: 41, trail: [40] };
+  const panel = leftPanel({ view: { name: 'feed', id: 51, from }, feeds: tree, model: null, vaultOpen: false });
+  const up = panel.items.find((i) => i.id === 'releases');
+  assert.equal(up.label, 'Label A', message);
+  assert.deepEqual(up.target, { name: 'releases', group: 41, trail: [40], marked: 51 }, message);
+  const plain = leftPanel({ view: { name: 'feed', id: 51 }, feeds: tree, model: null, vaultOpen: false });
+  assert.equal(plain.items.find((i) => i.id === 'releases').label, 'Releases');
+});
+
+test('each level is a page of the narrow stack', () => {
+  const message = 'ADR 0088 item 7: the levels above are pages below. Use narrowStack of crates/api/ui/shell.js.';
+  const root = { name: 'root' };
+  const level = { name: 'releases', group: 43, trail: [40, 41] };
+  assert.deepEqual(narrowStack(level), [root, { name: 'releases', group: 40, trail: [] }, { name: 'releases', group: 41, trail: [40] }, level], message);
+  const from = { group: 41, trail: [40] };
+  const feed = { name: 'feed', id: 51, from };
+  assert.deepEqual(narrowStack(feed), [root, { name: 'releases', group: 40, trail: [] }, { name: 'releases', group: 41, trail: [40] }, { name: 'outline', id: 51, from }, feed], message);
+  assert.deepEqual(openFeedView(51, true, from), { name: 'outline', id: 51, from });
+});
+
+test('the note of a release leaves out the feeds above and below the level', () => {
+  const message = 'ADR 0088 item 8: "Also on" names only the feeds that are not above or below the level. Use relatedLevels of crates/api/ui/shell.js.';
+  const labelC = { id: 46, title: 'Label C', medium: 'publisher', publisher_roles: ['label'], roles_confirmed: true, release_ids: [51], child_ids: [], parent_ids: [] };
+  const shared = { ...album1, publisher_ids: [40, 41, 43, 44, 46] };
+  const list = releasesList({ feeds: [host, labelA, labelB, artistX, beatLab, labelC, shared, album2], connectors: [], sort: 'order', view: 'rows', group: 41 });
+  assert.deepEqual(list.rows.map((r) => r.note), ['Also on Label C'], message);
 });

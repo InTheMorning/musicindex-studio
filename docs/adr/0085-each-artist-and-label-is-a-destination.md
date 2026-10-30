@@ -13,6 +13,7 @@
 - The operator wants an artist, a label or a hosting service to see its feeds in a hierarchy. On 2026-10-30 the operator decided on one level: each publisher feed, then its releases.
 - [ADR 0041](0041-publisher-feeds-and-two-way-links.md) links a publisher feed and a release. [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release.
 - musicindex ADR 0033 R-WORD-4 permits the word "publisher" only as an RSS name. Thus the interface cannot use the words "No publisher" or "Publisher order".
+- Amended: 2026-10-30 by operator decision. [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) shows only the top feeds at level 0, with role headings, and gives each feed a level (items 1 and 3). It leaves the feeds above and below out of the note of item 5.
 
 ## Decision
 

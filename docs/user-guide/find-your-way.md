@@ -5,7 +5,7 @@
 Studio has a left panel with these entries:
 
 - **Releases**
-- Each artist feed, label feed or other feed with roles, with the number of its releases
+- Each hosting, label or artist feed that has no feed above it, in its role heading, with the number of its releases
 - **Not linked**, when a release has no artist or label
 - **Hosts** (at the bottom)
 - **Settings** (at the bottom)
@@ -39,14 +39,30 @@ Studio remembers the sort and the view in the address of the page.
 If you have no feeds, the page shows "No releases yet."
 Select **Add a Feed**. See [Add feeds that you already have](add-feeds.md).
 
+## The levels of your artists and labels
+
+Studio puts each feed with roles on a level. Hosting is first, then a label, then an artist.
+A label shows below a hosting feed when the two feeds share a release.
+An artist shows below a label for the same cause. An artist on two labels shows below each label.
+A producer, a host, an author, a network or a sponsor is on the level of an artist.
+
+Select a feed in the left panel. The panel then shows its level:
+
+- **‹** and the name of the level above. Select it to go up one level.
+- The feed. Select it to edit the feed.
+- The feeds below it, in the headings **Labels**, **Artists**, **Producers** and so on.
+- Its releases.
+
+When you open a release from a level, the first row of its outline names that level. Select it to go back.
+
 ## The releases of an artist or a label
 
-Select an artist feed or a label feed in the left panel. The page shows its releases.
+The page on the right shows the releases of the feed that you selected.
 The line below the title shows each role of the feed.
 
 The sort is **Feed order** at first. This is the sequence of the releases in the feed. You can also select **Newest** or **A to Z**.
 
-A release of two feeds shows on the page of each feed. The row names the other feed, for example "Also on Some Label".
+A release of two feeds shows on the page of each feed. The row names the other feed, for example "Also on Some Label". The row does not name a feed above or below the feed of the page.
 Select **Open the feed** to edit the artist feed or the label feed.
 
 **Not linked** lists the releases that have no artist or label in your collection.
@@ -95,7 +111,7 @@ They move through the pages that you opened.
 
 When the window is 760 pixels wide or less, Studio shows one page at a time. It opens on **Releases**.
 Select the back button to go to the first page.
-The first page lists **Releases**, each artist and label, **Hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
+The first page lists **Releases**, the top artists and labels, **Hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
 When you open a release, you see its outline first. Select a page in the outline to open it.
 Use the back button to go back.
 

@@ -2346,6 +2346,11 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
 // page and the outline page of the stack (ADR 0039 item 11, musicindex ADR
 // 0030 R-SHELL-2).
 function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onLock }) {
+  if (panel.kind === 'level') {
+    return html`<header><${Brand} /><${ThemeToggle} /></header>
+      <div class="sidebar-scroll"><${Level} panel=${panel} go=${go} back /></div>
+      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
+  }
   if (panel.kind === 'destinations') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
       <div class="sidebar-scroll">${destinationRows(panel.top, go)}</div>
@@ -2380,7 +2385,44 @@ function destinationRows(top, go) {
   </button>`;
   const groups = top.filter((item) => item.group !== undefined);
   return html`${top.filter((item) => item.group === undefined).map(row)}
-    ${groups.length > 0 && html`<div class="destination-group">${groups.map(row)}</div>`}`;
+    ${groups.length > 0 && html`<div class="destination-group">${groups.map((item) => html`
+      ${item.heading && html`<h2 class="panel-heading">${item.heading}</h2>`}${row(item)}`)}</div>`}`;
+}
+
+// One level of the hierarchy (ADR 0088 item 5): "‹" to the level above when
+// `back` is true, the head of the feed, the feeds directly below it under
+// their role headings, then its releases. The head opens the feed page, and
+// a release opens its outline at narrow width.
+function Level({ panel, go, back }) {
+  const narrow = useNarrow();
+  const head = panel.head;
+  return html`${back && html`<button class="row" type="button" onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
+    <button class="outline-feed" type="button" aria-label=${`${head.title}, ${head.typeLabel}`}
+      onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
+      <${ImageThumb} url=${head.image} glow=${head.glow} className="outline-cover" always />
+      <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
+    </button>
+    ${panel.sections.map((section) => html`<div class="destination-group">
+      <h2 class="panel-heading">${section.heading}</h2>
+      ${section.items.map((item) => html`<button class="row" type="button"
+        aria-label=${`${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`} onClick=${() => go(item.view)}>
+        <span class=${`dot ${item.dot}`} aria-hidden="true"></span><span class="row-label">${item.label}</span>
+        <span class="count" aria-hidden="true">${item.count}</span></button>`)}
+    </div>`)}
+    ${panel.releases.length > 0 && html`<div class="destination-group">
+      <h2 class="panel-heading">Releases</h2>
+      ${panel.releases.map((item) => html`<button class="row" type="button" onClick=${() => go(openFeedView(item.id, narrow, item.from))}>
+        <span class="row-label">${item.title}</span></button>`)}
+    </div>`}`;
+}
+
+// A level as a page of a narrow window (ADR 0088 item 7). Back opens the
+// page below it in the stack.
+function LevelPage({ panel, go }) {
+  return html`<div class="panel-page">
+    <${Bar}><span class="bar-title">${panel.head.title}</span><//>
+    <section class="section outline-page"><${Level} panel=${panel} go=${go} back=${false} /></section>
+  </div>`;
 }
 
 // The outline of an open feed (ADR 0039 item 6): the cover, the title and the
@@ -2392,7 +2434,9 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   const releases = panel.items.find((item) => item.id === 'releases');
   const rest = panel.items.filter((item) => item.id !== 'releases');
   const hasBadAddress = (number) => draft.bad.some((b) => b.field.startsWith(`items/${number - 1}/`));
-  return html`${releases && html`<button class="row" type="button" onClick=${() => showReleases(feed.id)}><${Chevron} direction="back" />${releases.label}</button>`}
+  // A feed opened from a level goes back to that level (ADR 0088 item 6).
+  const up = () => (releases.target ? go(releases.target) : showReleases(feed.id));
+  return html`${releases && html`<button class="row" type="button" onClick=${up}><${Chevron} direction="back" />${releases.label}</button>`}
     <button class="outline-feed" type="button" aria-current=${currentAttr(feed)}
       aria-label=${changedFeeds.has(feed.id) ? `${feed.label}, changes in the library folder` : feed.label}
       onClick=${() => { if (!feed.current) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
@@ -2624,8 +2668,13 @@ function Shell({ vault, onLock }) {
     setNavState(next);
   };
   // A new view, or with `replace`, the current view changes.
-  const go = (next, { replace = false } = {}) => {
+  const go = (target, { replace = false } = {}) => {
     const base = withScroll();
+    // A page of the same feed keeps the level that the feed came from
+    // (ADR 0088 item 6).
+    const current = base.entries[base.index];
+    const next = isFeedView(target) && current && isFeedView(current) && current.id === target.id
+      && current.from && !target.from ? { ...target, from: current.from } : target;
     if (replace) {
       const entries = base.entries.slice();
       entries[base.index] = next;
@@ -2805,12 +2854,17 @@ function Shell({ vault, onLock }) {
       onListChanged=${() => load()}
       onRemoved=${async () => { await load(); go({ name: 'releases' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
+  } else if (narrow && panel.kind === 'level') {
+    main = html`<${LevelPage} panel=${panel} go=${go} />`;
   } else {
+    // A release of a level goes back to that level (ADR 0088 item 6).
+    const from = view.name === 'releases' && typeof view.group === 'number'
+      ? { group: view.group, trail: view.trail || [] } : undefined;
     main = html`<${ReleasesPage} feeds=${feeds} connectors=${connectors} marked=${view.marked} list=${list}
       group=${view.name === 'releases' ? view.group : undefined} groupSort=${view.sort}
       onGroupSort=${(sort) => go({ ...view, sort }, { replace: true })}
       changedFeeds=${changedFeeds} onQuery=${changeList}
-      onOpen=${(id) => go(openFeedView(id, narrow))} onAddFeed=${() => go({ name: 'add-feed' })} />`;
+      onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${() => go({ name: 'add-feed' })} />`;
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward };

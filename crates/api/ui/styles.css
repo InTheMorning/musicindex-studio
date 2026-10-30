@@ -529,6 +529,18 @@ textarea.masked { -webkit-text-security: disc; }
 /* The destinations below Releases (ADR 0085 item 1): the dot, the name and
    the number of releases. */
 .destination-group { display: grid; gap: 2px; }
+/* A role heading of a level, as the headings of the outline (ADR 0088
+   item 4). */
+.panel-heading,
+.sidebar h2.panel-heading,
+.section h2.panel-heading {
+  padding: 10px 10px 2px;
+  color: var(--muted);
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
 .row .row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .count { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
 .row .dot-space { width: var(--dot-size); flex: none; }

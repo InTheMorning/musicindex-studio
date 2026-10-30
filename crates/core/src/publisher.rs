@@ -331,6 +331,24 @@ pub struct Catalog {
     /// The two sides of the link then give the role (ADR 0087 item 1,
     /// musicindex ADR 0033 R-WORD-3 item 3).
     pub roles_linked: bool,
+    /// For a publisher feed: the publisher feeds directly below it (ADR 0088
+    /// items 1 and 2), in the sequence of the collection.
+    pub children: Vec<FeedId>,
+    /// For a publisher feed: the publisher feeds directly above it. A feed
+    /// with none is a top feed (ADR 0088 item 3).
+    pub parents: Vec<FeedId>,
+}
+
+/// The rank of a publisher feed in the hierarchy (ADR 0088 item 1):
+/// hosting, then label, then each other feed at the rank of an artist.
+fn rank(roles: &[PublisherRole]) -> u8 {
+    if roles.contains(&PublisherRole::Hosting) {
+        3
+    } else if roles.contains(&PublisherRole::Label) {
+        2
+    } else {
+        1
+    }
 }
 
 /// The catalog of each feed of the collection (ADR 0085 items 2 and 5).
@@ -406,7 +424,45 @@ pub fn catalogs(feeds: &[(FeedRow, Option<Feed>)]) -> Vec<Catalog> {
         }
         result[release].publishers = named.iter().map(|&index| feeds[index].0.id).collect();
     }
+    link_levels(feeds, &mut result);
     result
+}
+
+/// Set the feeds directly below and above each publisher feed (ADR 0088
+/// items 1 and 2). Feed B is below feed A when B has a lower rank and the
+/// two share a release. B is directly below A when no feed C is below A
+/// with B below C.
+fn link_levels(feeds: &[(FeedRow, Option<Feed>)], result: &mut [Catalog]) {
+    let publishers: Vec<usize> = (0..feeds.len())
+        .filter(|&index| feeds[index].0.medium.as_deref() == Some("publisher"))
+        .collect();
+    let rank_of = |index: usize| rank(&feeds[index].0.publisher_roles);
+    let below = |lower: usize, upper: usize| {
+        rank_of(lower) < rank_of(upper)
+            && result[lower]
+                .releases
+                .iter()
+                .any(|release| result[upper].releases.contains(release))
+    };
+    let mut links = Vec::new();
+    for &upper in &publishers {
+        for &lower in &publishers {
+            if !below(lower, upper) {
+                continue;
+            }
+            let between = publishers
+                .iter()
+                .any(|&middle| below(middle, upper) && below(lower, middle));
+            if !between {
+                links.push((upper, lower));
+            }
+        }
+    }
+    for (upper, lower) in links {
+        let (upper_id, lower_id) = (feeds[upper].0.id, feeds[lower].0.id);
+        result[upper].children.push(lower_id);
+        result[lower].parents.push(upper_id);
+    }
 }
 
 /// What a link needs from one feed.

@@ -13,6 +13,7 @@
 On 2026-10-27 the operator examined the outline of an album, and found these defects:
 
 - The function of the row "Album" is not easy to see. The head above it names the album, but the user cannot select the head.
+- Amended: 2026-10-30 by operator decision. [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 6: a feed that opens from a level has "‹" with the name of that level. It does not have "‹ Releases".
 - The link "Releases" does not show that it opens the list of all releases, one level higher.
 
 musicindex ADR 0028 R-PAGE-1 gives the outline of an editor in this sequence: the item, its tracks, the value routes, then the credits. A head that opens the page of the item agrees with this rule. musicindex ADR 0027 R-NAV-2 item 5 says that a destination link in the outline is not a back control. musicindex.org and v4vmm have no outline (musicindex ADR 0027 R-SHELL-1 item 4).

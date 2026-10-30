@@ -11,11 +11,11 @@ When Studio finds the roles in the feed, the dot is hollow until you select the 
 
 ## Make an artist feed or a label feed
 
-You need a host with a public address. See [Connect a host](hosts.md).
+You need a file host with a public address. See [Connect a file host](hosts.md).
 
 1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
 2. On the page **Add feeds**, select **Artist or label** in the group **Make a new feed**. A sheet opens.
-3. Select the host in **Host** if you have more than one.
+3. Select the file host in **File host** if you have more than one.
 4. Type the name in **Name**.
 5. Under **Role**, select **Artist**, **Label** or **Hosting**.
 6. Select **Make the feed**.
@@ -23,7 +23,7 @@ You need a host with a public address. See [Connect a host](hosts.md).
 Studio gives the feed file from the name. To change it, open the row **Feed file**.
 
 Studio opens the new feed as a draft.
-Select **Review** and **Write to the host** to make the file. See [Review and write your changes](review-and-write.md).
+Select **Review** and **Write to the file host** to make the file. See [Review and write your changes](review-and-write.md).
 
 ## The pages of the feed
 
@@ -36,7 +36,7 @@ The page **Artist** or **Label** has these sections:
 - **Details**. Two rows: **Value routes** and **Credits and links**. They open the same pages as the details of an album.
 - **Role**. Select **Artist**, **Label**, **Hosting** or **Custom**. **Custom** shows a check box for each role. Select one or more roles.
   - When Studio finds the roles in the feed, it names them. Select the roles to keep them.
-  - On a read-only feed, connect the folder that holds the feed in Hosts before you change the roles.
+  - On a read-only feed, connect the folder that holds the feed in File hosts before you change the roles.
 
 ## Add a value route or a funding link
 
@@ -53,7 +53,7 @@ Studio does not put these recipients into the releases of the feed.
 2. In **Releases**, select a release in the field **Release**.
 3. Select **Add the Release**.
 
-The list shows only releases from your collection that have a host. A release is an album or a playlist.
+The list shows only releases from your collection that have a file host. A release is an album or a playlist.
 Each row says "In the collection" or "Not in the collection".
 Select a number in the position menu of a row to move the release. Use **Remove** to remove it.
 

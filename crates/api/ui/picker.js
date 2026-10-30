@@ -62,7 +62,7 @@ export function sources(field, connectors) {
     SOURCE_RELEASE,
     {
       id: 'hosts',
-      label: 'Hosts',
+      label: 'File hosts',
       hosts: (connectors || []).map((c) => ({ connectorId: c.id, name: c.name })),
     },
     { ...SOURCE_COMPUTER, accept: ACCEPT[kind] || '' },

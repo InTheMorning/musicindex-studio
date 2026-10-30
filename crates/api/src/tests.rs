@@ -9024,7 +9024,7 @@ async fn an_upload_for_a_feed_with_no_host_gives_409_read_only() {
     assert_eq!(body["error"]["code"], "read_only");
     assert_eq!(
         body["error"]["message"],
-        "choose a host for this feed first, in Review"
+        "choose a file host for this feed first, in Review"
     );
 }
 

@@ -40,12 +40,12 @@ You give a grant when you write a planned show.
 1. Open the page of a planned show. See [Live shows](live-shows.md).
 2. Select **Review** in the toolbar.
 3. Select the check box "Let connected apps start and end this show, and set its live value".
-4. Select **Write to the host**.
+4. Select **Write to the file host**.
 
 If you have no connected app, the sheet shows "No app is connected. Connect an app in Settings."
 
-A host that uses **My signer** cannot do a granted write. During a granted write, no person can use the signer.
-If the feed file is on such a host, the check box is disabled.
+A file host that uses **My signer** cannot do a granted write. During a granted write, no person can use the signer.
+If the feed file is on such a file host, the check box is disabled.
 
 ## What a grant allows
 
@@ -67,7 +67,7 @@ A granted change is refused in these cases:
 - The grant ended.
 
 A granted write works while the vault is locked.
-Each grant has a small grant vault. It holds a copy of the secrets of the host of the feed file only.
+Each grant has a small grant vault. It holds a copy of the secrets of the file host of the feed file only.
 
 ## See what a grant did
 

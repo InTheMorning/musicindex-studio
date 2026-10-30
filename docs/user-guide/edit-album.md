@@ -30,7 +30,7 @@ You can type or paste an address, or you can choose a file.
 1. Select **Choose…** adjacent to **Cover image address**.
 2. Select a source in the sheet:
    - **This release**. The image files of this release.
-   - **Hosts**. The image files on your connected hosts. You can only select a file that has a public address.
+   - **File hosts**. The image files on your connected file hosts. You can only select a file that has a public address.
    - **This computer**. You send one image file from your computer.
 3. Select the image file.
 
@@ -141,7 +141,7 @@ Open **Feed facts** to see these facts:
 
 - **Address source**. Where Studio found the public address of the feed.
 - **Feed GUID**. The identity of the feed. Studio keeps it the same.
-- **File**. The path of the feed file on the host.
+- **File**. The path of the feed file on the file host.
 - **Version**. The version of the file that Studio read.
 - **Announcement**. The state of the last announcement. See [Announcements](announcements.md).
 

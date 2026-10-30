@@ -2,7 +2,7 @@
 
 Parent: [task 056](studio-v1-task-056-file-hosts-and-icons.md). Decision: [ADR 0092](../adr/0092-file-hosts-and-the-destination-icons.md) items 1 to 4.
 
-Status: Not started. It needs task 056a.
+Status: Complete, with its screenshot visual check. The check had no feed with the role `host`. A Node test examines the two labels.
 
 ## Goal
 

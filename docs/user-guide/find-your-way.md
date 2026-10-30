@@ -7,7 +7,7 @@ Studio has a left panel with these entries:
 - **Releases**
 - Each hosting, label or artist feed that has no feed above it, in its role heading, with the number of its releases
 - **Not linked**, when a release has no artist or label
-- **Hosts** (at the bottom)
+- **File hosts** (at the bottom)
 - **Settings** (at the bottom)
 - **Lock Studio** (at the bottom, when the vault is open)
 - **Unlock Studio** (at the bottom, on a server with a locked vault)
@@ -17,8 +17,8 @@ Studio starts on **Releases**.
 ## The Releases page
 
 The page lists each album and each playlist in your collection.
-Each row shows the cover, the title, the type and the host.
-A feed with no host shows "Read-only".
+Each row shows the cover, the title, the type and the file host.
+A feed with no file host shows "Read-only".
 The row also tells you the draft state:
 
 - "New, not written"
@@ -116,7 +116,7 @@ They move through the pages that you opened.
 
 When the window is 760 pixels wide or less, Studio shows one page at a time. It opens on **Releases**.
 Select the back button to go to the first page.
-The first page lists **Releases**, the top artists and labels, **Hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
+The first page lists **Releases**, the top artists and labels, **File hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
 When you open a release, you see its outline first. Select a page in the outline to open it.
 Use the back button to go back.
 

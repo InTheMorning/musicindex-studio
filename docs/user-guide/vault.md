@@ -64,7 +64,7 @@ The desktop app does not lock the vault by itself.
 
 On a server, a session and an open vault are two different states.
 With a locked vault, you can read your collection and edit a draft.
-A step that needs a secret, such as a write to a host, needs an open vault.
+A step that needs a secret, such as a write to a file host, needs an open vault.
 
 The server locks the vault in these cases:
 

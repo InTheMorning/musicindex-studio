@@ -128,7 +128,7 @@ test('the grant box is disabled for a host with My signer, with the reason', () 
   assert.equal(state.disabled, true);
   assert.equal(
     state.note,
-    'Connected apps cannot write to a host with My signer, because no person is present to sign.',
+    'Connected apps cannot write to a file host with My signer, because no person is present to sign.',
   );
   assert.deepEqual(grantBoxState(false), { disabled: false, note: null });
 });

@@ -5,11 +5,11 @@ Studio keeps only the links to the tracks. It does not copy the audio.
 
 ## Make a playlist
 
-You need a host with a public address. See [Connect a host](hosts.md).
+You need a file host with a public address. See [Connect a file host](hosts.md).
 
 1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
 2. On the page **Add feeds**, select **Playlist** in the group **Make a new feed**. A sheet opens.
-3. Select the host in **Host** if you have more than one.
+3. Select the file host in **File host** if you have more than one.
 4. Type the name in **Playlist name**.
 5. Type the author in **Author**.
 6. Select **Make the playlist**.

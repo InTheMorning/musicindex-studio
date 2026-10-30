@@ -56,7 +56,7 @@ test('durationFromSeconds gives null for a value that is no duration', () => {
   }
 });
 
-test('needsMetadataRead is true for This release and Hosts, and false for an upload', () => {
+test('needsMetadataRead is true for This release and File hosts, and false for an upload', () => {
   assert.equal(needsMetadataRead('release'), true);
   assert.equal(needsMetadataRead('hosts'), true);
   assert.equal(needsMetadataRead('computer'), false);

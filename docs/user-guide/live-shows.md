@@ -11,7 +11,7 @@ To keep your shows in their own feed, make a show feed.
 
 1. Select **Releases** in the left panel. Then select **＋ Add a feed**.
 2. On the page **Add feeds**, select **Show** in the group **Make a new feed**. A sheet opens.
-3. Select the host in **Host** if you have more than one.
+3. Select the file host in **File host** if you have more than one.
 4. Type the name in **Show feed title**.
 5. Type the name of the artist in **Artist**.
 6. Select **Make the show feed**.
@@ -53,10 +53,10 @@ The status section tells you what is missing: "This show has no start time." or 
 1. Open the page of the show.
 2. Select **Go live**.
 3. Studio changes the draft and opens the review sheet.
-4. Select **Write to the host**.
+4. Select **Write to the file host**.
 
 When the show is over, select **End the show** and write in the same way.
-Neither button changes the host until you write.
+Neither button changes the file host until you write.
 See [Review and write your changes](review-and-write.md).
 
 ## Add the recording
@@ -64,7 +64,7 @@ See [Review and write your changes](review-and-write.md).
 After a show ends, the page has the section **Recording**.
 
 1. Select **Choose…** adjacent to **Recording**.
-2. Select a source in the sheet: **This release**, **Hosts** or **This computer**.
+2. Select a source in the sheet: **This release**, **File hosts** or **This computer**.
 3. Select the audio file.
 
 You can also drop one audio file on the field.

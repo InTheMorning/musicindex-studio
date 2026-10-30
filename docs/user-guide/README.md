@@ -1,7 +1,7 @@
 # Studio user guide
 
 Music Index Studio helps you edit your Podcasting 2.0 music feeds.
-You change a feed in Studio. Studio then writes the new feed file to the host.
+You change a feed in Studio. Studio then writes the new feed file to the file host.
 
 This guide has one page for each task.
 It describes the desktop app and Studio on a server.
@@ -23,7 +23,7 @@ Most steps are the same in the two. A page tells you when a step is different.
 ## Keep your keys safe
 
 - [Passphrase, unlock and lock](vault.md)
-- [Connect a host](hosts.md)
+- [Connect a file host](hosts.md)
 
 ## Get your feeds into Studio
 

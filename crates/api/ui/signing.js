@@ -92,7 +92,7 @@ const SIGN_MESSAGES = {
   changed_event: 'Your signer changed an event. Studio wrote nothing.',
   signer_refused: 'Your signer did not sign. Studio wrote nothing.',
   plan_expired: 'The plan of this write expired. Examine the changes again, then write.',
-  signer_key_differs: 'The connected signer has a different key than this host. Studio asked for no signature. Connect the signer of the host.',
+  signer_key_differs: 'The connected signer has a different key than this file host. Studio asked for no signature. Connect the signer of the file host.',
   signer_not_connected: 'No signer is connected. Connect a signer, then write.',
   signer_timeout: 'The signer gave no answer in time. Open the signer app and try again.',
   signer_unavailable: 'Studio cannot reach the relay of the signer. Try again later.',

@@ -179,7 +179,7 @@ export function grantBoxState(feedHostSigner) {
   if (feedHostSigner) {
     return {
       disabled: true,
-      note: 'Connected apps cannot write to a host with My signer, because no person is present to sign.',
+      note: 'Connected apps cannot write to a file host with My signer, because no person is present to sign.',
     };
   }
   return { disabled: false, note: null };

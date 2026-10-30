@@ -3726,7 +3726,7 @@ fn a_public_draft_refuses_a_feed_with_a_host_and_a_different_release_folder_xml(
     let s = setup();
     let error = pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
-    assert!(error.to_string().contains("has a host"));
+    assert!(error.to_string().contains("has a file host"));
 
     let p = public_setup();
     p.library
@@ -3757,7 +3757,7 @@ fn the_write_of_a_public_draft_with_no_host_choice_refuses_with_read_only() {
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let error = public_write(&mut s, &diff.id).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
-    assert!(error.to_string().contains("choose a host"));
+    assert!(error.to_string().contains("choose a file host"));
     let error = pipeline::write_draft(
         &mut s.collection,
         &s.hosts,

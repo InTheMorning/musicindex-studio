@@ -135,3 +135,49 @@ test('a role that the two sides of a link give has a filled dot', () => {
   assert.equal(feedKind({ ...base, roles_linked: false }).dot, 'artist hollow', message);
   assert.equal(feedKind({ ...base, roles_confirmed: true }).dot, 'artist', message);
 });
+
+// ADR 0092 item 2: a UI text that names a connector says "file host". The
+// word "host" alone in a UI text is the role `host`, or a network name.
+// Each permitted text is a piece of a string that holds the word "host".
+const HOST_ALLOWED = [
+  // The role `host` of a publisher feed and of a person.
+  "['host', 'Hosts']",
+  "p.role || 'host'",
+  'Empty means host.',
+  // The network names of a server (ADR 0092 item 4).
+  'Studio uses the host name when you leave this empty.',
+  'Studio uses the host name of the first server when you leave this empty.',
+  'Host key fingerprint',
+  'Host key</dt>',
+  'The server gives a new host key.',
+  'Virtual host style',
+  // A web site or a verb, not a connector.
+  "feed.host || 'Unknown host'",
+  'edits them where you host them.',
+  // A CSS class.
+  'class="panel host"',
+  'class="host-head"',
+];
+
+test('no UI text names a connector with the word host alone', () => {
+  const found = [];
+  for (const name of sources) {
+    if (!name.endsWith('.js')) continue;
+    const source = readFileSync(new URL(name, uiDir), 'utf8');
+    const lines = source.split('\n');
+    for (const seg of textSegments(source, false)) {
+      for (const match of seg.text.matchAll(/hosts?(?![\w$-])/gi)) {
+        const before = seg.text.slice(0, match.index);
+        if (/file $/i.test(before) || /[\w$./-]$/.test(before)) continue;
+        if (seg.text === match[0]) continue;
+        const line = seg.line + before.split('\n').length - 1;
+        const lineText = lines[line - 1] || '';
+        if (HOST_ALLOWED.some((allowed) => seg.text.includes(allowed) || lineText.includes(allowed))) continue;
+        found.push(`crates/api/ui/${name}:${line}`);
+      }
+    }
+  }
+  assert.deepEqual(found, [],
+    `ADR 0092 item 2: a UI text names a connector with the word "host" alone. Write "file host" or "file hosts". `
+    + `If the text names the role host or a network name, add it to HOST_ALLOWED in crates/api/ui-tests/words.test.mjs. Found: ${found.join(', ')}`);
+});

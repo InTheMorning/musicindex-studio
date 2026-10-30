@@ -10,7 +10,7 @@ To make a new feed, see [Make a new release](new-release.md).
 ## Find feeds by address or name
 
 Select the row **By address or name**. A sheet opens.
-Feeds that you add this way are read-only until you connect the host that holds them.
+Feeds that you add this way are read-only until you connect the file host that holds them.
 
 1. Type one feed address on each line in **Feed addresses**. An artist feed or a label feed brings all of its releases.
 2. Or type an artist name or a feed name in **Or search musicindex by name** and select **Search**.
@@ -24,15 +24,15 @@ Studio stops at 100 feeds. Add the rest in a second search.
 
 A feed that is in your collection shows "in your collection".
 
-To edit a feed that you found, connect its folder. See [Connect a host](hosts.md).
-Some hosts are services where Studio can only read the feeds.
+To edit a feed that you found, connect its folder. See [Connect a file host](hosts.md).
+Some file hosts are services where Studio can only read the feeds.
 The page tells you which.
 
-## From a host folder
+## From a file host folder
 
-If you connected a host, select the row **From a host folder**. A sheet opens.
+If you connected a file host, select the row **From a file host folder**. A sheet opens.
 
-1. If you have more than one host, select it in **Host**.
+1. If you have more than one file host, select it in **File host**.
 2. Under **Feeds in this folder**, select a feed. Studio lists the feed files that it finds, with the type.
 3. Select **Add the feed**.
 
@@ -57,9 +57,9 @@ If you have no vault, Studio asks you to make one. See [Passphrase, unlock and l
 
 Open the feed. Open **Feed facts** on the album page and select **Remove from collection**.
 For a read-only feed, select **Remove from collection** on its page.
-Studio asks you to confirm. The feed file on the host does not change.
+Studio asks you to confirm. The feed file on the file host does not change.
 
 ## Read a feed again
 
 Select **Read again** on the page of the feed.
-Studio reads the feed file from its address or its host.
+Studio reads the feed file from its address or its file host.

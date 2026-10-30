@@ -7,7 +7,7 @@ It does not change the publication dates.
 ## Add tracks
 
 Use this method to add audio files from your computer.
-Studio puts the files in the release folder. It sends them to the host when you write.
+Studio puts the files in the release folder. It sends them to the file host when you write.
 
 1. Select **Add tracks** in the outline or on the album page.
 2. Select **＋ Choose music and image files**. You can select many files.
@@ -31,14 +31,14 @@ Studio accepts MP3, M4A, FLAC, OGG, Opus and WAV audio files.
 - A FLAC file: Studio makes an MP3 file. The track keeps the FLAC file as an alternative.
 - A GIF image: Apple Podcasts asks for JPEG or PNG art. Other apps show the GIF image.
 
-If you reuse a file that is on the host, the row says "On the host already".
+If you reuse a file that is on the file host, the row says "On the file host already".
 To remove a row, select **Remove**. To close the sheet, select **Cancel**. Studio then removes the files that it sent.
 
 Studio can show these errors:
 
 - "Studio does not read this kind of file."
-- "A file with this name exists on the host already."
-- "This host has no public address. Give it one in Hosts."
+- "A file with this name exists on the file host already."
+- "This file host has no public address. Give it one in File hosts."
 
 ## The audio is already online
 
@@ -48,7 +48,7 @@ Studio does not keep the file.
 1. Select **Add tracks** in the outline or on the album page.
 2. Select **The audio is already online**. The sheet **Add a track from an address** opens.
 3. Type a **Title** if you want.
-4. Type the web address of the audio file in **Audio file address**. Studio asks the host for the size and the type.
+4. Type the web address of the audio file in **Audio file address**. Studio asks the file host for the size and the type.
 5. Examine the row **Properties**. Its summary shows the size and the type. If Studio could not find them, the row opens. Type **Audio file size in bytes** and **Audio file type**.
 6. Select **＋ Add the track**.
 
@@ -71,18 +71,18 @@ The two arrow buttons in the header open the track before and the track after th
 
 1. Open the track page.
 2. Select **Choose…** adjacent to **Audio file address**.
-3. Select a source in the sheet: **This release**, **Hosts** or **This computer**.
+3. Select a source in the sheet: **This release**, **File hosts** or **This computer**.
 4. Select the new audio file.
 
 You can also drop one audio file on the field.
 The track keeps its GUID and its other values.
 A file from **This computer** goes in the release folder.
-A file from **This release** or **Hosts** is not copied. Studio uses its public address.
+A file from **This release** or **File hosts** is not copied. Studio uses its public address.
 
-Studio reads the duration from a file that you select from **This release** or **Hosts**.
+Studio reads the duration from a file that you select from **This release** or **File hosts**.
 If Studio cannot read it, the field **Duration** asks you to type it.
 
-When you write, Studio deletes the file from before on the host.
+When you write, Studio deletes the file from before on the file host.
 The review lists that deletion.
 Studio does not delete a file that another feed uses.
 Select **Undo** in the review to keep the file.

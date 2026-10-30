@@ -314,7 +314,7 @@ const FIELD_MESSAGES = {
   invalid_feed: 'This file is not a feed that Studio can read.',
   invalid_config: 'Give the full path of the folder, for example /home/me/feeds.',
   folder_not_found: 'Studio did not find this folder on this computer.',
-  no_public_address: 'Give this host a public address first, in Hosts.',
+  no_public_address: 'Give this file host a public address first, in File hosts.',
   file_exists: 'A file exists at this path already.',
   invalid_address: 'Give a full address. Start it with https:// or http://.',
 };
@@ -1122,14 +1122,14 @@ function BlossomHostForm({ onAdded }) {
   const ready = nk.ready && servers.length > 0;
   const errors = nostrFormErrors(add.error, ['servers', 'secret_key']);
   return add.gate(html`<form class="form" onSubmit=${submit}>
-    <p class="hint">A Blossom host keeps media only. The feed XML needs a different host.</p>
+    <p class="hint">A Blossom file host keeps media only. The feed XML needs a different file host.</p>
     <${SigningStep} nk=${nk} idPrefix="blossom" keyError=${errors.fields.secret_key} />
     <${Field} id="blossom-name" label="Name (optional)" hint="Studio uses the host name of the first server when you leave this empty."
       value=${values.name} onInput=${set('name')} />
     <${AreaField} id="blossom-servers" label="Blossom servers" error=${errors.fields.servers}
       value=${values.servers} onInput=${set('servers')} />
     ${errors.notice}
-    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? 'Adding…' : 'Add the Blossom host'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? 'Adding…' : 'Add the Blossom File Host'}</button></div>
   </form>`);
 }
 
@@ -1154,7 +1154,7 @@ function ChoiceSelect({ id, label, value, options, placeholder, onChange }) {
 function AddHostForm({ feeds, onAdded }) {
   const [type, setType] = useState(serverMode ? 's3' : 'local');
   return html`<div class="form">
-    <${ChoiceSelect} id="host-type" label="Type of host" value=${type} onChange=${setType} options=${[
+    <${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${[
       ...(serverMode ? [] : [['local', 'Folder on this computer']]),
       ['s3', 'S3 or R2 bucket'],
       ['sftp', 'SFTP server'],
@@ -1229,7 +1229,7 @@ function MakeFeedForm({ connectors, feeds, startType, onAdded }) {
     <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${changeType} />
     ${showFrom && html`<${ChoiceSelect} id="make-from" label="Start from" value=${from} options=${starts.slice(1)}
       placeholder=${starts[0][1]} onChange=${changeFrom} />`}
-    ${connectors.length > 1 && html`<div class="field"><label for="make-host">Host</label>
+    ${connectors.length > 1 && html`<div class="field"><label for="make-host">File host</label>
       <select id="make-host" class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
@@ -1245,7 +1245,7 @@ function MakeFeedForm({ connectors, feeds, startType, onAdded }) {
         <span class="summary">${path || 'From the title'}</span></summary>
       <div class="form">
         <${Field} id="make-path" label="Path" required
-          hint="The path of the new feed file in the folder of the host."
+          hint="The path of the new feed file in the folder of the file host."
           error=${formError.field} value=${path} onInput=${(e) => setTypedPath(e.target.value)} />
       </div>
     </details></div>
@@ -1294,12 +1294,12 @@ function AddFeedForm({ connectors, onAdded }) {
     });
   };
   if (connectors.length === 0) {
-    return html`<div class="notice">Add a host first. Studio writes each feed through its host.</div>`;
+    return html`<div class="notice">Add a file host first. Studio writes each feed through its file host.</div>`;
   }
   const feedError = splitError(error, ['not_found', 'invalid_path', 'invalid_feed']);
   const available = found ? found.feeds.filter((f) => !f.in_collection) : [];
   return html`<form class="form" onSubmit=${submit}>
-    ${connectors.length > 1 && html`<div class="field"><label for="feed-host">Host</label>
+    ${connectors.length > 1 && html`<div class="field"><label for="feed-host">File host</label>
       <select id="feed-host" class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
@@ -1323,7 +1323,7 @@ function AddFeedForm({ connectors, onAdded }) {
     </div>`}
     ${typing
       ? html`<${Field} id="feed-path" label="Feed file" required placeholder="album/feed.xml"
-          hint="The path of the feed file in the folder of the host."
+          hint="The path of the feed file in the folder of the file host."
           error=${feedError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />`
       : html`<button class="button link" type="button" onClick=${() => setTyping(true)}>The feed is not in the list</button>`}
     ${typing && available.length > 0 && html`<button class="button link" type="button" onClick=${() => setTyping(false)}>Select from the list</button>`}
@@ -1527,11 +1527,11 @@ function Wizard({ onFinish }) {
     const own = added.groups.filter((g) => !g.service).map((g) => g.host);
     body = html`<div class="form"><div><h1>Studio is ready</h1>
       <p>Studio added ${added.result.added.length} feed${added.result.added.length === 1 ? '' : 's'} to your collection.</p></div>
-      ${own.length > 0 && html`<p>To edit the feeds on ${own.join(', ')}, connect the folder that holds them in Hosts.</p>`}
+      ${own.length > 0 && html`<p>To edit the feeds on ${own.join(', ')}, connect the folder that holds them in File hosts.</p>`}
       <div class="actions"><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
   } else if (step === 'new') {
     body = html`<div class="form"><div><h1>Welcome</h1>
-      <p>To make a new release, connect the folder that your web server publishes in Hosts. Then select “Album” in Add a feed.</p></div>
+      <p>To make a new release, connect the folder that your web server publishes in File hosts. Then select “Album” in Add a feed.</p></div>
       <div class="actions"><${BackButton} /><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
   } else {
     // A reload lost the wizard memory. Start again at the question.
@@ -1599,7 +1599,7 @@ function Unlock({ onUnlocked }) {
   const unlockError = splitError(error, ['wrong_key']);
   return html`<main class="center"><form class="card" onSubmit=${submit}>
     <${Brand} />
-    <div><h1>Unlock Studio</h1><p>Your passphrase opens the vault with the keys of your hosts.</p></div>
+    <div><h1>Unlock Studio</h1><p>Your passphrase opens the vault with the keys of your file hosts.</p></div>
     <${SecretField} id="unlock" label="Passphrase" autocomplete="current-password" required autofocus
       error=${unlockError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
     <${ErrorNotice} error=${unlockError.other} />
@@ -1694,7 +1694,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const remove = () => {
     const name = feed.title || feed.path || 'this feed';
-    if (!confirm(`Remove “${name}” from your collection? The feed file on the host does not change.`)) return;
+    if (!confirm(`Remove “${name}” from your collection? The feed file on the file host does not change.`)) return;
     run(async () => {
       await api(`/feeds/${feed.id}`, { method: 'DELETE' });
       onRemoved();
@@ -1725,7 +1725,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
       <dl class="facts">
         <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
-        <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
+        <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in File hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
       </dl>
       ${feed.connector_id && html`<p class="hint">The editor for this feed type comes in a later phase.</p>`}
@@ -1799,7 +1799,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       </header>
       <${ErrorNotice} error=${error} />
       ${feed.last_version === null && html`<div class="notice" role="status">
-        <strong>The host has no file for this ${feed.medium === 'publisher' ? 'feed' : 'release'} yet.</strong>
+        <strong>The file host has no file for this ${feed.medium === 'publisher' ? 'feed' : 'release'} yet.</strong>
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
@@ -2170,7 +2170,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
       ${!editing && html`<div class="actions">
         <button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>
         <button class="button destructive" type="button" disabled=${removeBusy}
-          aria-label=${`Remove the host ${connector.name}`} onClick=${onRemove}>Remove</button>
+          aria-label=${`Remove the file host ${connector.name}`} onClick=${onRemove}>Remove</button>
       </div>`}
     </header>
     ${editing
@@ -2265,7 +2265,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     if (linked && resultRef.current) resultRef.current.scrollIntoView({ block: 'start' });
   }, [linked]);
   const remove = (connector) => {
-    if (!confirm(`Remove the host “${connector.name}”? The files in it do not change.`)) return;
+    if (!confirm(`Remove the file host “${connector.name}”? The files in it do not change.`)) return;
     run(async () => {
       await api(`/connectors/${connector.id}`, { method: 'DELETE' });
       onChanged();
@@ -2286,16 +2286,16 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     cards: () => html`${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} feeds=${feeds} removeBusy=${busy}
         onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}`,
     add: () => (showForm
-      ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first host' : 'Add a host'}</h2>
+      ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first file host' : 'Add a file host'}</h2>
           <${AddHostForm} feeds=${feeds} onAdded=${added} />
           ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
-      : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a host</button></div>`),
+      : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a File Host</button></div>`),
   };
   return html`<div>
-    <${Bar}><span class="bar-title">Hosts</span><//>
+    <${Bar}><span class="bar-title">File hosts</span><//>
     <section class="section">
       ${error && error.code === 'in_use'
-        ? html`<div class="notice error" role="alert"><strong>Feeds use this host.</strong>Remove those feeds from your collection first.</div>`
+        ? html`<div class="notice error" role="alert"><strong>Feeds use this file host.</strong>Remove those feeds from your collection first.</div>`
         : html`<${ErrorNotice} error=${error} />`}
       ${linked && html`<div ref=${resultRef}></div>`}
       ${linked && linked.feeds.length > 0 && html`<div class="notice" role="status">
@@ -2307,7 +2307,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
       </div>`}
       ${linked && linked.folder && linked.folder.state === 'different' && html`<div class="notice" role="status">
         <strong>The feeds in “${linked.connector.name}” give different public addresses.</strong>
-        Studio did not set a public address for the folder. The host card lists the feeds.
+        Studio did not set a public address for the folder. The file host card lists the feeds.
       </div>`}
       ${linked && html`<${FolderFeeds} key=${linked.connector.id} connector=${linked.connector} onAdded=${onChanged} />`}
       ${pageSequence('hosts').map((section) => sections[section.id]())}
@@ -2378,8 +2378,8 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
   const title = makeRow ? 'Make a new feed' : (rows.find((row) => row.id === open) || {}).title || '';
   return html`<div><${Bar}><span class="bar-title">Add feeds</span><//><section class="section">
     ${groups.map((group) => html`<section key=${group.id} class="page-section"><h2>${group.label}</h2>
-      ${group.connect && html`<p class="hint">Studio puts the files of a release on a host. Connect a host first.</p>
-        <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a Host</button></div>`}
+      ${group.connect && html`<p class="hint">Studio puts the files of a release on a file host. Connect a file host first.</p>
+        <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a File Host</button></div>`}
       ${group.rows.length > 0 && html`<div class="group">
         ${group.rows.map((row) => html`<button key=${row.id} class="link-row" type="button" onClick=${() => setOpen(row.id)}>
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
@@ -3342,7 +3342,7 @@ function SignUpPage({ signup, onDone, onSignIn }) {
   return html`<main class="center"><form class="card" onSubmit=${submit} noValidate>
     <${Brand} />
     <div><h1>Make an account</h1>
-      <p>Your passphrase opens the vault with the keys of your hosts.</p></div>
+      <p>Your passphrase opens the vault with the keys of your file hosts.</p></div>
     <${Field} id="sign-up-email" label="Email address" type="email" autocomplete="username" required autofocus
       error=${emailError} value=${email} onInput=${(e) => setEmail(e.target.value)} />
     ${needInvite && html`<${Field} id="sign-up-invite" label="Invite code" autocomplete="off" required

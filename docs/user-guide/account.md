@@ -45,5 +45,5 @@ Your drafts stay on the server.
 4. If the vault is locked, unlock it.
 
 Studio removes your feeds, your vault and your library files from the server. You cannot get them back.
-Studio does not change the feed files on your hosts.
+Studio does not change the feed files on your file hosts.
 To stop, select **Cancel**.

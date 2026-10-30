@@ -689,7 +689,7 @@ pub(crate) async fn nostr_lists(
 /// scheme gives 422 `invalid_address`.
 fn clean_servers(servers: &[String]) -> Result<Vec<String>, ApiError> {
     if servers.is_empty() {
-        return Err(invalid_config("the host needs one server"));
+        return Err(invalid_config("the file host needs one server"));
     }
     servers
         .iter()
@@ -788,7 +788,7 @@ fn check_host_key(host: &NostrHost<'_>) -> Result<HostKey, ApiError> {
         }
         NewSigning::Signer => {
             if host.secret_key.is_some() {
-                return Err(invalid_config("a signer host takes no secret key"));
+                return Err(invalid_config("a signer file host takes no secret key"));
             }
             let public_key =
                 given.ok_or_else(|| invalid_config("the public key must not be empty"))?;
@@ -987,7 +987,7 @@ pub(crate) async fn connector_site(State(shared): State<Shared>, Path(id): Path<
     blocking(shared, move |w| {
         let row = w.collection.connector(ConnectorId(id))?;
         if row.kind != studio_core::connector::NsiteHost::KIND {
-            return Err(invalid_config("only an nsite host has a site state"));
+            return Err(invalid_config("only an nsite file host has a site state"));
         }
         if row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
@@ -1030,13 +1030,15 @@ fn changed_nostr_config(
     let is_nsite = row.kind == NsiteHost::KIND;
     let is_blossom = row.kind == BlossomHost::KIND;
     if body.relays.is_some() && !is_nsite {
-        return Err(invalid_config("only an nsite host has relays"));
+        return Err(invalid_config("only an nsite file host has relays"));
     }
     if body.gateway.is_some() && !is_nsite {
-        return Err(invalid_config("only an nsite host has a gateway"));
+        return Err(invalid_config("only an nsite file host has a gateway"));
     }
     if body.servers.is_some() && !(is_nsite || is_blossom) {
-        return Err(invalid_config("only an nsite or Blossom host has servers"));
+        return Err(invalid_config(
+            "only an nsite or Blossom file host has servers",
+        ));
     }
     if body.relays.is_none() && body.gateway.is_none() && body.servers.is_none() {
         return Ok(None);
@@ -1080,7 +1082,7 @@ pub(crate) async fn add_connector(
                 // computer (ADR 0055 item 24).
                 if w.rules.is_some() {
                     return Err(not_on_server(
-                        "a local folder host is not available on the server",
+                        "a local folder file host is not available on the server",
                     ));
                 }
                 (name, root, base_url)
@@ -1201,7 +1203,7 @@ fn accept_host_key(w: &mut Workspace, row: &ConnectorRow, host_key: &str) -> Res
     let invalid =
         |message: &str| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_config", message);
     if row.kind != SftpHost::KIND {
-        return Err(invalid("only an SFTP host has a host key"));
+        return Err(invalid("only an SFTP file host has a host key"));
     }
     let host_key = host_key.trim();
     if !host_key.starts_with("SHA256:") {
@@ -1970,7 +1972,7 @@ fn give_linked_feed_folder(w: &Workspace, made: &dyn connector::Connector, id: F
         let read = made
             .read(path)
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("{path} does not exist on the host"))?;
+            .ok_or_else(|| format!("{path} does not exist on the file host"))?;
         library::give_published_folder(&w.collection, &library, id, &read.bytes)
             .map_err(|e| e.to_string())?;
         let doc =
@@ -2459,7 +2461,7 @@ pub(crate) async fn delete_draft(
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 "no_hosted_file",
-                "This release has no file on the host yet. To remove it, remove it from the collection.",
+                "This release has no file on the file host yet. To remove it, remove it from the collection.",
             ));
         }
         pipeline::discard_draft(&w.collection, id)?;
@@ -3296,7 +3298,7 @@ pub(crate) async fn set_feed_host(
                 return Err(ApiError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "invalid_body",
-                    "a feed with a host needs a connector_id",
+                    "a feed with a file host needs a connector_id",
                 ));
             }
             None => {
@@ -3403,7 +3405,7 @@ fn reference_url(
             ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "no_public_address",
-                "the host gives no public address for this file",
+                "the file host gives no public address for this file",
             )
         })
 }
@@ -3775,7 +3777,7 @@ fn check_download(w: &Workspace, hosts: &Hosts, file: &LibraryFile) -> Result<bo
             StatusCode::UNPROCESSABLE_ENTITY,
             "no_source",
             format!(
-                "{} has no copy on a host and no address, so Studio cannot download it",
+                "{} has no copy on a file host and no address, so Studio cannot download it",
                 file.path
             ),
         ));
@@ -4104,7 +4106,7 @@ pub(crate) async fn library_changes(
                         StatusCode::CONFLICT,
                         "no_copy",
                         format!(
-                            "No connected host has a copy of the recorded bytes of {}.",
+                            "No connected file host has a copy of the recorded bytes of {}.",
                             file.path
                         ),
                     ));
@@ -4182,7 +4184,7 @@ fn use_new_file(
             ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "no_public_address",
-                "the host gives no public address for this file",
+                "the file host gives no public address for this file",
             )
         })?)
     };
@@ -4305,7 +4307,7 @@ pub(crate) async fn import_file(
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 "read_only",
-                "choose a host for this feed first, in Review",
+                "choose a file host for this feed first, in Review",
             ));
         }
         Ok(())

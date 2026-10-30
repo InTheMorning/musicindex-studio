@@ -26,7 +26,7 @@ This step is for the desktop only.
 
 ## Answer the first question
 
-Studio asks "Do you already have a feed?" when your collection is empty and you have no host.
+Studio asks "Do you already have a feed?" when your collection is empty and you have no file host.
 
 ### I have feeds
 
@@ -37,14 +37,14 @@ Studio asks "Do you already have a feed?" when your collection is empty and you 
 5. Select **Open Studio**.
 
 A feed that you add by address is read-only.
-To edit it, connect the folder that holds the feed files. See [Connect a host](hosts.md).
+To edit it, connect the folder that holds the feed files. See [Connect a file host](hosts.md).
 
 ### I am new
 
 1. Select **No, I am new**.
 2. Read the page "Welcome". Then select **Open Studio**.
 
-To make a new release, first connect a host. Then select **Album** on the page **Add a feed**.
+To make a new release, first connect a file host. Then select **Album** on the page **Add a feed**.
 See [Make a new release](new-release.md).
 
 ### I used MSP 2.0
@@ -59,6 +59,6 @@ On a server, the vault exists from the sign-up. If it is locked, Studio asks you
 ## Open Studio later
 
 On the next start, Studio opens the Releases page.
-If your collection is empty and you have no host, Studio asks "Do you already have a feed?" again.
+If your collection is empty and you have no file host, Studio asks "Do you already have a feed?" again.
 On the desktop, if you made a vault, Studio asks for your passphrase first.
 On a server, you sign in first.

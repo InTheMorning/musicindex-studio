@@ -477,7 +477,7 @@ pub fn refresh(
     let file = connector.read(path)?.ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NotFound,
-            format!("{path} does not exist on the host"),
+            format!("{path} does not exist on the file host"),
         )
     })?;
     let feed = Feed::read(&Document::parse_bytes(&file.bytes)?)?;
@@ -532,7 +532,7 @@ pub fn start_draft(
     let file = connector.read(path)?.ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NotFound,
-            format!("{path} does not exist on the host"),
+            format!("{path} does not exist on the file host"),
         )
     })?;
     let draft = DraftRow {
@@ -570,7 +570,10 @@ pub fn start_public_draft(
     if row.connector_id.is_some() {
         return Err(PipelineError::new(
             PipelineErrorKind::Conflict,
-            format!("feed {} has a host; start the draft from the host", id.0),
+            format!(
+                "feed {} has a file host; start the draft from the file host",
+                id.0
+            ),
         ));
     }
     let (Some(folder), Some(file_name)) = (row.folder.as_deref(), public_file_name(&row)) else {
@@ -708,7 +711,7 @@ pub fn new_feed(
     let address = connector.public_url(path).ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NoPublicAddress,
-            format!("{path} has no public address; give the host a public address first"),
+            format!("{path} has no public address; give the file host a public address first"),
         )
     })?;
     if connector.read(path)?.is_some() {
@@ -769,7 +772,7 @@ pub fn copy_feed(
     let address = connector.public_url(path).ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NoPublicAddress,
-            format!("{path} has no public address; give the host a public address first"),
+            format!("{path} has no public address; give the file host a public address first"),
         )
     })?;
     if connector.read(path)?.is_some() {
@@ -1721,20 +1724,20 @@ pub fn set_feed_host(
     if draft.base_version.is_none() {
         return Err(PipelineError::new(
             PipelineErrorKind::NotFound,
-            format!("{path} is not on its host yet, so there is no feed XML to move"),
+            format!("{path} is not on its file host yet, so there is no feed XML to move"),
         ));
     }
     if collection.host_file(target, path)?.is_some() {
         return Err(PipelineError::new(
             PipelineErrorKind::FileExists,
-            format!("a file exists at {path} on the new host already"),
+            format!("a file exists at {path} on the new file host already"),
         ));
     }
     let url = hosts.get(target)?.public_url(path).ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NoPublicAddress,
             format!(
-                "{path} has no public address on the new host; give the host a public address first"
+                "{path} has no public address on the new file host; give the file host a public address first"
             ),
         )
     })?;
@@ -1781,7 +1784,7 @@ pub fn clear_feed_host(collection: &Collection, id: FeedId) -> Result<(), Pipeli
         return Err(PipelineError::new(
             PipelineErrorKind::Conflict,
             format!(
-                "feed {} has a host; choose its host with set_feed_host",
+                "feed {} has a file host; choose its file host with set_feed_host",
                 id.0
             ),
         ));
@@ -2594,7 +2597,7 @@ pub fn write_draft_signed(
         let target = public_target(collection, &row)?.ok_or_else(|| {
             PipelineError::new(
                 PipelineErrorKind::ReadOnly,
-                "choose a host for this feed first",
+                "choose a file host for this feed first",
             )
         })?;
         if public.is_none() {
@@ -2689,7 +2692,7 @@ pub fn write_draft_signed(
         if live_version != draft.base_version.as_ref() {
             return Err(PipelineError::new(
                 PipelineErrorKind::Conflict,
-                format!("{path} changed on the host after the draft started"),
+                format!("{path} changed on the file host after the draft started"),
             ));
         }
         live
@@ -2702,7 +2705,7 @@ pub fn write_draft_signed(
         if connector.read(&path)?.is_some() {
             return Err(PipelineError::new(
                 PipelineErrorKind::FileExists,
-                format!("a file exists at {path} on the new host already"),
+                format!("a file exists at {path} on the new file host already"),
             ));
         }
         None
@@ -3194,13 +3197,13 @@ fn put_moved_feed_file(
     let live_file = live.ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NotFound,
-            format!("{} does not exist on the host", old.path),
+            format!("{} does not exist on the file host", old.path),
         )
     })?;
     let new_url = moved.url.as_deref().ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NoPublicAddress,
-            format!("{} has no public address on the new host", moved.path),
+            format!("{} has no public address on the new file host", moved.path),
         )
     })?;
     let new_host = hosts.get(moved.connector_id)?;
@@ -3215,7 +3218,10 @@ fn put_moved_feed_file(
                 _ => {
                     return Err(PipelineError::new(
                         PipelineErrorKind::FileExists,
-                        format!("a file exists at {} on the new host already", moved.path),
+                        format!(
+                            "a file exists at {} on the new file host already",
+                            moved.path
+                        ),
                     ));
                 }
             }
@@ -3290,7 +3296,7 @@ fn put_public_feed_file(
         Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
             return Err(PipelineError::new(
                 PipelineErrorKind::FileExists,
-                format!("a file exists at {path} on the new host already"),
+                format!("a file exists at {path} on the new file host already"),
             ));
         }
         Err(error) => return Err(error.into()),
@@ -3373,7 +3379,7 @@ fn put_uploads_and_copies(
         let listed = target.stat(&operation.path)?.ok_or_else(|| {
             PipelineError::new(
                 PipelineErrorKind::Connector,
-                format!("{} is not on the host after the write", operation.path),
+                format!("{} is not on the file host after the write", operation.path),
             )
         })?;
         collection.put_host_file(
@@ -3447,12 +3453,12 @@ fn confirm_new_addresses(
         let listed = target.stat(&operation.path)?;
         match listed {
             None => {
-                failed.push(format!("{} is not on its host", operation.path));
+                failed.push(format!("{} is not on its file host", operation.path));
                 continue;
             }
             Some(file) if file.size != operation.size => {
                 failed.push(format!(
-                    "{} has {} bytes on its host, not {}",
+                    "{} has {} bytes on its file host, not {}",
                     operation.path, file.size, operation.size
                 ));
                 continue;
@@ -3576,7 +3582,7 @@ fn delete_each_operation(
             Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
                 return Err(PipelineError::new(
                     PipelineErrorKind::Conflict,
-                    format!("{} changed on the host after the scan", operation.path),
+                    format!("{} changed on the file host after the scan", operation.path),
                 ));
             }
             Err(error) => return Err(error.into()),

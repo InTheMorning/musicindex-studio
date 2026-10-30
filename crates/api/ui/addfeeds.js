@@ -5,7 +5,7 @@ import { feedKind } from './shell.js';
 
 // The rows of the Add feeds page, in two groups. With no connected host, the
 // group "Make a new feed" has no rows and the flag `connect`. The row
-// "From a host folder" needs a host, so it goes out too.
+// "From a file host folder" needs a file host, so it goes out too.
 export function addChoices({ hasHost }) {
   const make = [
     { id: 'album', title: 'Album', text: 'A release with its tracks' },
@@ -15,7 +15,7 @@ export function addChoices({ hasHost }) {
   ];
   const have = [
     { id: 'find', title: 'By address or name', text: 'Search musicindex, or give a feed address' },
-    { id: 'folder', title: 'From a host folder', text: 'A feed file on a connected host' },
+    { id: 'folder', title: 'From a file host folder', text: 'A feed file on a connected file host' },
     { id: 'msp', title: 'From MSP 2.0 backups', text: 'The .json files that MSP 2.0 saved' },
   ];
   return [

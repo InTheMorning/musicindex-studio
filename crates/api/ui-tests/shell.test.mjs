@@ -93,7 +93,7 @@ test('the row Releases is current on the view add-feed (ADR 0072 item 5)', () =>
 
 test('Unlock Studio takes the place of Lock Studio on a server with a locked vault', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: false, vaultLocked: true });
-  assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['hosts', 'Hosts'], ['settings', 'Settings'], ['unlock', 'Unlock Studio']]);
+  assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['hosts', 'File hosts'], ['settings', 'Settings'], ['unlock', 'Unlock Studio']]);
 });
 
 test('Lock Studio shows only when the vault is open', () => {

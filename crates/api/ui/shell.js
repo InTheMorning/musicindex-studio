@@ -241,7 +241,7 @@ export function isFeedView(view) {
 // the place of "Lock Studio" (ADR 0039 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false }) {
   const bottom = [
-    { id: 'hosts', label: 'Hosts', icon: 'hard-drive', current: view.name === 'hosts' },
+    { id: 'hosts', label: 'File hosts', icon: 'hard-drive', current: view.name === 'hosts' },
     { id: 'settings', label: 'Settings', icon: 'settings', current: view.name === 'settings' },
   ];
   if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', icon: 'lock', current: false });
@@ -481,7 +481,7 @@ const DRAFT_LABELS = {
 function hostOf(feed, connectors) {
   if (!feed.connector_id) return 'Read-only';
   const connector = (connectors || []).find((c) => c.id === feed.connector_id);
-  return connector ? connector.name : 'Unknown host';
+  return connector ? connector.name : 'Unknown file host';
 }
 
 // The letter of a row in the A to Z sort. A title that does not start with

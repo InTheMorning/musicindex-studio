@@ -397,10 +397,10 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
     });
   };
   const FACTS = {
-    reading: 'Studio asks the host for the size and the type of the file…',
-    found: 'Studio found the size and the type on the host. You can change them.',
-    partial: 'The host did not give all the facts. Type the missing ones.',
-    failed: 'Studio could not read the facts from the host. Type the size and the type.',
+    reading: 'Studio asks the file host for the size and the type of the file…',
+    found: 'Studio found the size and the type on the file host. You can change them.',
+    partial: 'The file host did not give all the facts. Type the missing ones.',
+    failed: 'Studio could not read the facts from the file host. Type the size and the type.',
   };
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-track-title" onClose=${onClose}>
     <header>
@@ -411,7 +411,7 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
       <div class="group rows">
         <${Field} id="new-track-title" label="Title" value=${title} onInput=${(e) => setTitle(e.target.value)} />
         <${Field} id="new-track-url" label="Audio file address" type="url" required
-          hint="Studio does not keep audio files. Give the address where your host keeps the file."
+          hint="Studio does not keep audio files. Give the address where your file host keeps the file."
           error=${facts.state === 'invalid' && facts.for === url.trim() ? BAD_ADDRESS : null}
           value=${url} onInput=${(e) => setUrl(e.target.value)} onBlur=${readFacts} />
         ${FACTS[facts.state] && html`<p class="hint" role="status">${FACTS[facts.state]}</p>`}
@@ -746,7 +746,7 @@ function PickerList({ path, kind, byName, onSelect }) {
   const files = byName ? list.files.map((f) => ({ ...f, path: f.name })) : list.files;
   if (files.length === 0) return html`<p class="hint">No file of this kind is here.</p>`;
   return html`<div class="group"><${PickerTree} node=${hostTree(files)} kind=${kind} onSelect=${onSelect} /></div>
-    ${list.truncated && html`<p class="hint">The list stops at the limit of Studio. The host has more files.</p>`}`;
+    ${list.truncated && html`<p class="hint">The list stops at the limit of Studio. The file host has more files.</p>`}`;
 }
 
 // The sheet of the picker (ADR 0062 item 2). It has the three sources as
@@ -779,9 +779,9 @@ function FilePicker({ pick }) {
           onClick=${() => setSource(s.id)}>${s.label}</button>`)}
       </div>
       ${source === 'release' && html`<${PickerList} path=${path} kind=${pick.kind} byName onSelect=${(file) => pick.choose(file, 'release')} />`}
-      ${source === 'hosts' && hosts.length === 0 && html`<p class="hint">No host is connected.</p>`}
+      ${source === 'hosts' && hosts.length === 0 && html`<p class="hint">No file host is connected.</p>`}
       ${source === 'hosts' && host && html`<div class="field">
-          <label for=${`${inputId}-host`}>Host</label>
+          <label for=${`${inputId}-host`}>File host</label>
           <div class="field-body"><select id=${`${inputId}-host`} value=${host.connectorId} onChange=${(e) => setHostId(Number(e.target.value))}>
             ${hosts.map((h) => html`<option value=${h.connectorId}>${h.name}</option>`)}
           </select></div>
@@ -793,7 +793,7 @@ function FilePicker({ pick }) {
               onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) pick.upload(file); }} />
             <label for=${inputId} class="button action">${pick.busy ? `Sending… ${progressPercent(pick.sent, pick.size)}%` : 'Select a file'}</label>
           </div>
-          <p class="hint">Studio sends the file to the release folder. The host gets the file when you write.</p>
+          <p class="hint">Studio sends the file to the release folder. The file host gets the file when you write.</p>
         </div>`}
       ${pick.errorText && html`<p class="field-error" role="alert">${pick.errorText}</p>`}
     </div>
@@ -886,8 +886,8 @@ function fileSize(bytes) {
 const IMPORT_ERRORS = {
   unsupported_media: 'Studio does not read this kind of file.',
   file_pending: 'A track or an image of this draft uses a file with this name. Remove it from the draft first.',
-  file_exists: 'A file with this name exists on the host already.',
-  no_public_address: 'This host has no public address. Give it one in Hosts.',
+  file_exists: 'A file with this name exists on the file host already.',
+  no_public_address: 'This file host has no public address. Give it one in File hosts.',
   invalid_name: 'This is not a file name that Studio can use.',
 };
 
@@ -921,7 +921,7 @@ function FileRows({ facts, role }) {
       <span class="badge">${formatLabel(file.media_type)}</span>
       <span class="name">
         <span class="file" title=${file.file_name}>${file.file_name}</span>
-        <span class="role">${text}${file.on_host ? ' · On the host already' : ''}</span>
+        <span class="role">${text}${file.on_host ? ' · On the file host already' : ''}</span>
       </span>
       <span class="size">${fileSize(file.size)}</span>
     </li>`)}
@@ -1199,7 +1199,7 @@ function DiffView({ unified }) {
 // word.
 function connectorName(connectors, id) {
   const found = connectors.find((c) => c.id === id);
-  return found ? found.name : 'Host';
+  return found ? found.name : 'File host';
 }
 
 function operationKindLabel(kind) {
@@ -1218,7 +1218,7 @@ const OPERATION_NOTE = {
   upload: 'The feed uses this file.',
   copy: 'A spare copy. The feed does not use it.',
   delete: 'Studio deletes it after the feed is written.',
-  confirm: 'Studio makes sure that the host gives this file.',
+  confirm: 'Studio makes sure that the file host gives this file.',
 };
 
 // One row of a host operation of the diff: its kind, its host, its path
@@ -1506,19 +1506,19 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
       ${choosing && html`<div class="group rows">
-        <p class="hint">Studio cannot write to the host of this feed. Connect that host, or move the feed to a host that you connected.</p>
+        <p class="hint">Studio cannot write to the file host of this feed. Connect that file host, or move the feed to a file host that you connected.</p>
         <div class="actions">
-          <button class="button action" type="button" disabled=${busy} onClick=${() => { ref.current.close(); onOpenHosts(); }}>Connect the Host of This File</button>
+          <button class="button action" type="button" disabled=${busy} onClick=${() => { ref.current.close(); onOpenHosts(); }}>Connect the File Host of This File</button>
         </div>
-        <div class="field"><label for="move-host">Move to a host</label>
+        <div class="field"><label for="move-host">Move to a file host</label>
           ${targets.length === 0
-            ? html`<p class="hint">No host is connected yet. Connect a host in Hosts first.</p>`
+            ? html`<p class="hint">No file host is connected yet. Connect a file host in File hosts first.</p>`
             : html`<select id="move-host" value=${targetId} onChange=${(e) => setTarget(Number(e.target.value))}>
                 ${targets.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
               </select>`}
         </div>
         <div class="actions">
-          <button class="button action" type="button" disabled=${busy || targetId === null} onClick=${() => setHost(targetId)}>Move to This Host</button>
+          <button class="button action" type="button" disabled=${busy || targetId === null} onClick=${() => setHost(targetId)}>Move to This File Host</button>
         </div>
       </div>`}
       ${diff && host.kind === 'move' && html`<div class="notice" role="status">
@@ -1545,7 +1545,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the draft</button>
       ${diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner} onClick=${write}>
-        ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the host'}</button>`}
+        ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the file host'}</button>`}
     </footer>
   </dialog>`;
 }
@@ -1661,7 +1661,7 @@ function FeedFacts({ feed, onRemoved }) {
     : 'Not loaded yet.';
   const remove = () => {
     const name = feed.title || feed.path || 'this feed';
-    if (!confirm(`Remove “${name}” from your collection? The feed file on the host does not change.`)) return;
+    if (!confirm(`Remove “${name}” from your collection? The feed file on the file host does not change.`)) return;
     run(async () => {
       await api(`/feeds/${feed.id}`, { method: 'DELETE' });
       onRemoved();
@@ -1673,7 +1673,7 @@ function FeedFacts({ feed, onRemoved }) {
       <dl class="facts">
         <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
-        <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in Hosts.'}</dd>
+        <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in File hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
         <dt>Announcement</dt><dd>${announcementText.split('\n').map((line, i) => html`${i > 0 && html`<br />`}${line}`)}</dd>
       </dl>
@@ -2722,7 +2722,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
         <${ErrorNotice} error=${action.error} />
         ${next && html`<div class="actions"><button class="button primary" type="button"
           disabled=${action.busy || !live.item.guid} onClick=${() => changeStatus(next.status)}>${next.label}</button></div>`}
-        ${next && html`<p class="hint">The button changes the draft and opens the review sheet. The host does not change until you write.</p>`}
+        ${next && html`<p class="hint">The button changes the draft and opens the review sheet. The file host does not change until you write.</p>`}
       </div>
     </section>
 
@@ -2943,7 +2943,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
               ${FIRST_CLASS_ROLES.map((role) => html`<option value=${role}>${roleWord(role)}</option>`)}
               <option value="custom">Custom</option>
             </select>
-            ${readOnly && html`<span class="hint">To change the roles, connect the folder that holds this feed in Hosts.</span>`}
+            ${readOnly && html`<span class="hint">To change the roles, connect the folder that holds this feed in File hosts.</span>`}
             ${roles.length > 0 && !feed.roles_confirmed && feed.roles_linked && html`<span class="hint">The feed and its releases give the same role.</span>`}
             ${roles.length > 0 && !feed.roles_confirmed && !feed.roles_linked && html`<span class="hint">Studio found ${roles.length === 1 ? 'this role' : 'these roles'} in the feed: ${roles.map(roleWord).join(', ')}.${readOnly ? '' : ' Select the roles to confirm them.'}</span>`}
             ${choice === 'custom' && html`<div class="role-choices" role="group" aria-label="Roles">
@@ -3130,12 +3130,12 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDo
   const copyTargets = connectors.filter((c) => !takenHosts.includes(c.id));
   return html`<${EntryRow} group="library-files" cid=${file.id} summary=${summary}>
     <div class="file-rows">
-      ${!file.local && html`<p class="hint">Not in the library. Studio uses the file on its host.</p>`}
+      ${!file.local && html`<p class="hint">Not in the library. Studio uses the file on its file host.</p>`}
       ${!file.local && html`<${DownloadControls} download=${download} busy=${busy}
         onDownload=${() => onDownload(file.id)} onStop=${() => onStop(file.id)} />`}
       ${sizeDiffers && html`<p class="hint">The feed gives ${fileSize(file.length_in_feed)}. The file is ${fileSize(file.size)}.</p>`}
       ${file.local && file.copies.length === 0 && file.pending_copies.length === 0
-        && html`<p class="hint">Studio sends this file to its host when you write.</p>`}
+        && html`<p class="hint">Studio sends this file to its file host when you write.</p>`}
       ${file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
         connectors=${connectors} busy=${busy} onMoveTo=${moveTo} onReference=${reference} onDelete=${del} onUndo=${onUndo} />`)}
       ${file.pending_copies.map((pending) => html`<div class="copy-row" key=${`pending-${pending.operation_id}`}>
@@ -3150,10 +3150,10 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDo
           onClick=${() => copyTo(c.id)}>Copy to ${c.name}</button>`)}
       </div>`}
       <div class="field">
-        <label for=${`file-host-${file.id}`}>Host of this file</label>
+        <label for=${`file-host-${file.id}`}>File host of this file</label>
         <select id=${`file-host-${file.id}`} class="button" value=${hostValue} disabled=${busy}
           onChange=${(e) => setHost(e.target.value === '' ? null : Number(e.target.value))}>
-          <option value="">Use the default host of the release</option>
+          <option value="">Use the default file host of the release</option>
           ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
         </select>
       </div>
@@ -3231,7 +3231,7 @@ function ChangeRow({ difference, file, busy, onAct }) {
         onClick=${() => act({ action: 'use_new', file: difference.file })}>Use the new file</button>
       <button class="button" type="button" disabled=${off || !hasCopy}
         onClick=${() => act({ action: 'restore', file: difference.file })}>Restore</button>
-      ${!hasCopy && html`<span class="sub">No copy on a host</span>`}`;
+      ${!hasCopy && html`<span class="sub">No copy on a file host</span>`}`;
   }
   return html`<div class="change-row">
     <span class="title">${text}</span>
@@ -3421,7 +3421,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     <section class="page-section"><h2>Files</h2>
       <div class="actions">
         <button class="button action" type="button" disabled=${scan.busy} onClick=${runScan}>
-          ${scan.busy ? 'Scanning…' : 'Scan the hosts'}</button>
+          ${scan.busy ? 'Scanning…' : 'Scan the file hosts'}</button>
         <button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
           Scan the library folder</button>
       </div>
@@ -3429,17 +3429,17 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       <${ErrorNotice} error=${opError} />
     </section>
 
-    <section class="page-section"><h2>Hosts</h2>
+    <section class="page-section"><h2>File hosts</h2>
       <div class="group">
         <div class="field">
-          <label for="files-default-host">Default host of the release files</label>
+          <label for="files-default-host">Default file host of the release files</label>
           <select id="files-default-host" class="button" value=${defaultHost} disabled=${busy}
             onChange=${(e) => setDefaultHost(Number(e.target.value))}>
             ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
           </select>
         </div>
         <div class="field">
-          <label for="files-feed-host">Host of the feed XML</label>
+          <label for="files-feed-host">File host of the feed XML</label>
           <select id="files-feed-host" class="button" value=${feedHost} disabled=${busy}
             onChange=${(e) => setFeedHost(Number(e.target.value))}>
             ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
@@ -3471,7 +3471,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       </div>`}
     </section>
 
-    ${data.other_host_files.length > 0 && html`<section class="page-section"><h2>Other files on the hosts</h2>
+    ${data.other_host_files.length > 0 && html`<section class="page-section"><h2>Other files on the file hosts</h2>
       <div class="group">
         ${data.other_host_files.map((extra) => html`<${OtherFileRow}
           key=${`${extra.connector_id}-${extra.path}`} file=${extra} connectors=${connectors} busy=${busy}

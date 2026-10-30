@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { leftPanel } from '../ui/shell.js';
 
 const appText = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+const shellText = readFileSync(new URL('../ui/shell.js', import.meta.url), 'utf8');
 
 const panel = (extra) => leftPanel({
   view: { name: 'releases' }, feeds: [], model: null, vaultOpen: false, ...extra,
@@ -36,4 +37,25 @@ test('a destination row of app.js shows no type dot', () => {
     assert.ok(!/\bdot\b/.test(source),
       `ADR 0092 item 9: a destination row shows no type dot. Use the icon of its leftPanel entry (${name}).`);
   }
+});
+
+test('no destination label is the same as a role heading', () => {
+  const headings = [...shellText.matchAll(/\['[a-z]+', '([A-Za-z ]+)'\]/g)].map((m) => m[1]);
+  assert.ok(headings.includes('Hosting'),
+    'ADR 0092 item 1: this test cannot find the role headings in shell.js. Update the pattern of this test.');
+  const labels = [
+    ...panel({ vaultOpen: true }).top,
+    ...panel({ vaultOpen: true }).bottom,
+    ...panel({ vaultLocked: true }).bottom,
+  ].map((item) => item.label);
+  for (const label of labels) {
+    assert.ok(!headings.includes(label),
+      `ADR 0092 item 1: the destination "${label}" has the name of a role heading. Rename the destination, for example "File hosts" in the place of "Hosts".`);
+  }
+});
+
+test('the hosts entry of leftPanel has the label "File hosts"', () => {
+  const entry = panel({ vaultOpen: true }).bottom.find((item) => item.id === 'hosts');
+  assert.equal(entry && entry.label, 'File hosts',
+    'ADR 0092 item 1: the destination "hosts" must have the label "File hosts". Set label in leftPanel of crates/api/ui/shell.js.');
 });

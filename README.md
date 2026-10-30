@@ -1,6 +1,6 @@
 # Music Index Studio
 
-Music Index Studio edits hosted Podcasting 2.0 music feeds. An artist keeps each release in one place and writes each change to the feed host.
+Music Index Studio edits hosted Podcasting 2.0 music feeds. An artist keeps each release in one place and writes each change to the file host.
 
 ## User guide
 
@@ -9,7 +9,7 @@ Music Index Studio edits hosted Podcasting 2.0 music feeds. An artist keeps each
 - [Start Studio on your computer](docs/user-guide/start-on-desktop.md)
 - [Set up Studio for the first time](docs/user-guide/first-run.md)
 - [Passphrase, unlock and lock](docs/user-guide/vault.md)
-- [Connect a host](docs/user-guide/hosts.md)
+- [Connect a file host](docs/user-guide/hosts.md)
 - [Add feeds that you already have](docs/user-guide/add-feeds.md)
 - [Make a new release](docs/user-guide/new-release.md)
 - [Artist and label feeds](docs/user-guide/artist-and-label-feeds.md)

@@ -1,9 +1,9 @@
 # Manage the files of a release
 
 Open a release. Select **Files** in the outline.
-This page shows the files of the release and the hosts that hold them.
-Use this page to keep copies on more than one host.
-You can also move a release to a different host.
+This page shows the files of the release and the file hosts that hold them.
+Use this page to keep copies on more than one file host.
+You can also move a release to a different file host.
 
 Each button of this page also works on a server.
 On a server, the library folder is in your account on the server. It is not on your computer.
@@ -12,13 +12,13 @@ On a server, the library folder is in your account on the server. It is not on y
 
 - **Changes in the library folder**. This section shows only when Studio finds a difference.
 - **Files**. The buttons to scan.
-- **Hosts**. The host settings of the release.
+- **File hosts**. The file host settings of the release.
 - **Library files**. Each file of the release, with its copies.
-- **Other files on the hosts**. Files in the release folder on a host that are not copies of a library file.
+- **Other files on the file hosts**. Files in the release folder on a file host that are not copies of a library file.
 
 ## Scan for changes
 
-- Select **Scan the hosts** to read the release folders on the hosts.
+- Select **Scan the file hosts** to read the release folders on the file hosts.
 - Select **Scan the library folder** to look for changes in the library folder on your computer.
 
 ## Changes in the library folder
@@ -29,12 +29,12 @@ Each difference is one row. Select a button to decide:
 | --- | --- |
 | New file | **Add to the library** |
 | Missing file | **Download again** (when Studio has a source), **Forget the file** |
-| Changed file | **Use the new file**, **Restore** (when a host holds a copy) |
+| Changed file | **Use the new file**, **Restore** (when a file host holds a copy) |
 
-## Choose the hosts
+## Choose the file hosts
 
-- **Default host of the release files**. New files go to this host.
-- **Host of the feed XML**. If you select a different host, the feed file moves when you write. The address from before gets a redirect or a pointer file with the new address. The page tells you which.
+- **Default file host of the release files**. New files go to this file host.
+- **File host of the feed XML**. If you select a different file host, the feed file moves when you write. The address from before gets a redirect or a pointer file with the new address. The page tells you which.
 
 To undo a move before you write, use **Undo** in the review sheet. See [Review and write your changes](review-and-write.md).
 
@@ -43,11 +43,11 @@ To undo a move before you write, use **Undo** in the review sheet. See [Review a
 Each file is one line with its format, its path, "In use" or "Not in use", and the number of copies.
 Select a line to open it.
 
-- **Copy to** a host. Studio sends a spare copy when you write.
-- **Reference**. The feed uses the copy on this host.
-- **Delete**. Studio deletes the copy on that host when you write.
-- **Move to** a host. The feed uses the file on that host. Studio copies it there when you write.
-- **Host of this file**. Select a host for this file, or **Use the default host of the release**.
+- **Copy to** a file host. Studio sends a spare copy when you write.
+- **Reference**. The feed uses the copy on this file host.
+- **Delete**. Studio deletes the copy on that file host when you write.
+- **Move to** a file host. The feed uses the file on that file host. Studio copies it there when you write.
+- **File host of this file**. Select a file host for this file, or **Use the default file host of the release**.
 - **Undo**. Takes a pending copy or deletion out of the draft.
 
 The copy that the feed uses has no **Delete** button.
@@ -73,8 +73,8 @@ When the account is full, a download fails with "storage_full: the storage limit
 An import of a music file then shows "the storage limit of this account is reached".
 Remove files that you do not use, or get a larger limit from the operator.
 
-## Other files on the hosts
+## Other files on the file hosts
 
-Select **Delete** to remove a file from a host. Studio deletes it when you write.
+Select **Delete** to remove a file from a file host. Studio deletes it when you write.
 A file that the feed uses has a disabled **Delete** button. Remove it from the feed first.
 The feed file itself has no **Delete** button.

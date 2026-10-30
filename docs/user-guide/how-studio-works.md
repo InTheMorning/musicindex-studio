@@ -16,12 +16,12 @@ Studio opens these feed types for editing:
 
 Studio can read other feeds, but it cannot edit them.
 
-## Host
+## File host
 
-A host is a location where your files are.
-Studio does not host files. It connects to your hosts.
+A file host is a location where your files are.
+Studio does not host files. It connects to your file hosts.
 
-Studio can connect to these hosts:
+Studio can connect to these file hosts:
 
 - A folder on this computer (desktop only)
 - An S3 or R2 bucket
@@ -29,8 +29,8 @@ Studio can connect to these hosts:
 - A Blossom server
 - An nsite site
 
-A feed that Studio can write has a host. A feed with no host is read-only.
-See [Connect a host](hosts.md).
+A feed that Studio can write has a file host. A feed with no file host is read-only.
+See [Connect a file host](hosts.md).
 
 ## Collection
 
@@ -51,7 +51,7 @@ Studio keeps your changes in a draft. Studio saves the draft for you.
 
 The hosted file changes only when you write.
 Before you write, you open **Review** and examine each change.
-Then you select **Write to the host**.
+Then you select **Write to the file host**.
 See [Review and write your changes](review-and-write.md).
 
 Before each write, Studio keeps the file that the write replaces. This file is an earlier version.

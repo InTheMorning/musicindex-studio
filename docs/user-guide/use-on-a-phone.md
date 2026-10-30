@@ -14,7 +14,7 @@ These methods are easy on a phone:
 
 On a phone, Studio shows one page at a time. It opens on **Releases**.
 Select the back button to go to the first page.
-The first page lists **Releases**, the top artists and labels, **Hosts**, **Settings**, and **Lock Studio** or **Unlock Studio**.
+The first page lists **Releases**, the top artists and labels, **File hosts**, **Settings**, and **Lock Studio** or **Unlock Studio**.
 When you open a release, you see its outline first. Select a page in the outline to open it.
 Use the back button to go back.
 See [Find and open a release](find-your-way.md).
@@ -35,9 +35,9 @@ See [Add, import and change tracks](tracks.md).
 
 ## Sign with the signer on your phone
 
-A host with **My signer** needs a signature for each write.
+A file host with **My signer** needs a signature for each write.
 If the browser has no signer extension, the review sheet shows **Connect a signer**.
-Connect Amber or a bunker as for a sign-in. Then select **Write to the host**.
+Connect Amber or a bunker as for a sign-in. Then select **Write to the file host**.
 See [Review and write your changes](review-and-write.md).
 
 ## Put Studio on the home screen

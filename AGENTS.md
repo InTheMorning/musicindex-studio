@@ -19,7 +19,7 @@ On 2026-10-26, Phase 0 to Phase 11 are complete. The human tests of Phase 9 and 
 
 The UI starts on Releases and shows the outline of an open feed. Below Releases, the left panel shows the levels of the publisher feeds: hosting, labels, then artists. At narrow width it is one stack.
 
-- Decisions: `docs/adr/0001` to `docs/adr/0092`. All are accepted.
+- Decisions: `docs/adr/0001` to `docs/adr/0093`. All are accepted.
 - Plan: [Studio v1 phase plan](docs/plans/studio-v1-phase-plan.md). Phase 5 (album editor), Phase 6 (new releases) and Phase 7 (the release library of [ADR 0035](docs/adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](docs/adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](docs/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)) are complete, with their visual checks. Phase 8 (publisher feeds, [ADR 0041](docs/adr/0041-publisher-feeds-and-two-way-links.md)) is complete, with its visual check, and task 026 built the shell of ADR 0039. Phase 9 (remaining connectors, [ADR 0043](docs/adr/0043-phase-9-connectors-and-the-interface-change.md) and [ADR 0044](docs/adr/0044-the-nsite-signer.md)) is complete. The plan and the visual checks of milestone 7a, task 022, milestone 7b and Phase 8 list the open items.
 - Phase 10 (announce, [ADR 0052](docs/adr/0052-announcements-through-the-podcast-index-hub.md)) is complete with [task 031](docs/tasks/studio-v1-task-031-announce.md), and its human test passed on 2026-10-27. After each write, Studio tells the Podcast Index hub, with a podping. Phase 11 (other feed types) is complete.
 - Phase 11 has two milestones. 11a, the playlists of [ADR 0053](docs/adr/0053-playlists-are-musicl-feeds-with-remote-items.md), is [task 032](docs/tasks/studio-v1-task-032-playlists.md). 11b, the live items, connected apps and show grants of [ADR 0054](docs/adr/0054-live-items-connected-apps-and-show-grants.md), is [task 033](docs/tasks/studio-v1-task-033-live-items.md). Both milestones are complete, with their visual checks. The human test of 11b with a real host and the other app is open.
@@ -136,6 +136,7 @@ Situational rules:
 - A position menu sets the sequence of the album tracks, the playlist tracks and the releases of a publisher feed. A move changes no track number in the UI ([ADR 0081](docs/adr/0081-a-position-menu-sets-the-sequence-of-a-list.md)).
 - The track page shows `podcast:season` as "Disc", in a collapsed entry with the Experimental badge of musicindex ADR 0034 ([ADR 0080](docs/adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md)).
 - A copy of an album keeps no feed GUID and no item GUID of its source ([ADR 0077](docs/adr/0077-a-new-album-can-start-from-an-album.md)).
+- Each date and time field is a `DateTimeField` of `app.js`, in the local time of the browser. The UI sends RFC 3339 text with the local offset. The core writes `pubDate` from `pub_date_time`, and a `pubDate` that the user does not change keeps its bytes ([ADR 0093](docs/adr/0093-dates-and-times-use-a-picker-in-local-time.md)).
 - Do not copy code from `../mi-studio`. Use it as reference only ([ADR 0001](docs/adr/0001-one-core-with-desktop-and-server-shells.md)).
 
 Documentation:

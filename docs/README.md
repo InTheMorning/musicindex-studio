@@ -96,6 +96,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0090: Studio names the feeds that it does not edit](adr/0090-studio-names-the-feeds-that-it-does-not-edit.md)
 - [ADR 0091: A change set edits one recipient in many feeds](adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md)
 - [ADR 0092: File hosts and the destination icons](adr/0092-file-hosts-and-the-destination-icons.md)
+- [ADR 0093: Dates and times use a picker in local time](adr/0093-dates-and-times-use-a-picker-in-local-time.md)
 
 ## Plans
 
@@ -286,6 +287,9 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 056: File hosts and the destination icons](tasks/studio-v1-task-056-file-hosts-and-icons.md)
 - [Studio v1 task 056a: The destination icons](tasks/studio-v1-task-056a-destination-icons.md)
 - [Studio v1 task 056b: The name "File hosts"](tasks/studio-v1-task-056b-file-hosts-name.md)
+- [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
+- [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
+- [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)
 
 ## Reviews
 

@@ -9547,3 +9547,496 @@ async fn from_with_a_publisher_feed_or_a_playlist_gives_422() {
         assert_eq!(response["error"]["code"], "invalid_feed", "{path}");
     }
 }
+
+// ---- Change sets (ADR 0091, task 054b) ----
+
+/// A feed XML with value blocks. `channel` and `item` give the recipients
+/// of the channel block and of the block of the one track, each as
+/// (name, address, split). `extra` goes into the channel block.
+fn paid_feed(
+    title: &str,
+    guid: &str,
+    channel: &[(&str, &str, &str)],
+    item: &[(&str, &str, &str)],
+    extra: &str,
+) -> String {
+    use std::fmt::Write as _;
+    let recipients = |list: &[(&str, &str, &str)]| -> String {
+        if list.is_empty() {
+            return String::new();
+        }
+        let mut inner = String::new();
+        for (name, address, split) in list {
+            let _ = write!(
+                inner,
+                "<podcast:valueRecipient name=\"{name}\" address=\"{address}\" \
+                 split=\"{split}\" type=\"lnaddress\"/>"
+            );
+        }
+        format!("<podcast:value type=\"lightning\" method=\"keysend\">{inner}</podcast:value>")
+    };
+    format!(
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+         <title>{title}</title><podcast:guid>{guid}</podcast:guid>\
+         <podcast:medium>music</podcast:medium>{channel_value}{extra}\
+         <item><guid>{guid}-t1</guid><title>Track</title>{item_value}</item>\
+         </channel></rss>",
+        channel_value = recipients(channel),
+        item_value = recipients(item),
+    )
+}
+
+/// Add a feed file to the connected folder and to the collection. Gives
+/// the feed ID.
+async fn add_paid_feed(app: &App, connector: i64, path: &str, xml: &str) -> i64 {
+    std::fs::write(app.feeds.path().join(path), xml).unwrap();
+    let (status, feed) = call(
+        app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector, "path": path })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    let id = feed["id"].as_i64().unwrap();
+    // The first read gives the feed its release folder.
+    let (status, body) = call(app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    id
+}
+
+fn ann_key() -> Value {
+    json!({ "address": "ann@example.com" })
+}
+
+/// The row of a feed in the response of a change set.
+fn change_row(set: &Value, id: i64) -> Value {
+    set["feeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["feed_id"] == id)
+        .unwrap_or_else(|| panic!("feed {id} is not in {set}"))
+        .clone()
+}
+
+const ANN: (&str, &str, &str) = ("Ann", "ann@example.com", "90");
+const BOB: (&str, &str, &str) = ("Bob", "bob@example.com", "10");
+
+#[tokio::test]
+async fn recipient_uses_gives_the_places_of_a_recipient_and_not_a_value_time_split() {
+    let (app, connector) = publisher_app().await;
+    let split = "<podcast:value type=\"lightning\" method=\"keysend\">\
+        <podcast:valueRecipient name=\"Bob\" address=\"bob@example.com\" split=\"100\" type=\"lnaddress\"/>\
+        <podcast:valueTimeSplit startTime=\"0\" duration=\"10\">\
+        <podcast:valueRecipient name=\"Ann\" address=\"ann@example.com\" split=\"100\" type=\"lnaddress\"/>\
+        </podcast:valueTimeSplit></podcast:value>";
+    let a = add_paid_feed(
+        &app,
+        connector,
+        "a.xml",
+        &paid_feed("A", "ga", &[ANN, BOB], &[ANN, BOB], ""),
+    )
+    .await;
+    let b = add_paid_feed(
+        &app,
+        connector,
+        "b.xml",
+        &paid_feed("B", "gb", &[], &[ANN, BOB], ""),
+    )
+    .await;
+    let c = add_paid_feed(
+        &app,
+        connector,
+        "c.xml",
+        &paid_feed("C", "gc", &[], &[], split),
+    )
+    .await;
+
+    let (status, body) = call(&app, "POST", "/api/v1/recipients/uses", Some(ann_key())).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let feeds = body["feeds"].as_array().unwrap();
+    assert_eq!(feeds.len(), 2, "{body}");
+    let row = |id: i64| feeds.iter().find(|r| r["feed_id"] == id).unwrap().clone();
+    assert_eq!(row(a)["channel"], true);
+    assert_eq!(row(a)["items"], 1);
+    assert_eq!(row(a)["live_items"], 0);
+    assert_eq!(row(a)["writable"], true);
+    assert_eq!(row(a)["title"], "A");
+    assert_eq!(row(b)["channel"], false);
+    assert_eq!(row(b)["items"], 1);
+    assert!(feeds.iter().all(|r| r["feed_id"] != c), "{body}");
+}
+
+#[tokio::test]
+async fn a_change_set_gives_a_changed_feed_a_not_changed_feed_and_a_read_only_feed() {
+    let (app, connector) = publisher_app().await;
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set(
+        "/ro.xml",
+        200,
+        paid_feed("Read only", "gro", &[ANN, BOB], &[], "").into_bytes(),
+    );
+    let changed = add_paid_feed(
+        &app,
+        connector,
+        "a.xml",
+        &paid_feed("A", "ga", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    let same = add_paid_feed(
+        &app,
+        connector,
+        "b.xml",
+        &paid_feed("B", "gb", &[BOB], &[], ""),
+    )
+    .await;
+    let read_only = {
+        let mut collection =
+            studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+                .unwrap();
+        let id = collection
+            .add_feed(Some(&server.url("/ro.xml")), None)
+            .unwrap();
+        studio_core::pipeline::refresh_public(&mut collection, &studio_core::web::Web::new(), id)
+            .unwrap();
+        collection.set_feed_folder(id, "ro").unwrap();
+        let library = studio_core::library::Library::open(app.data.path().join("library")).unwrap();
+        library
+            .write_feed_xml(
+                "ro",
+                "ro.xml",
+                paid_feed("Read only", "gro", &[ANN, BOB], &[], "").as_bytes(),
+            )
+            .unwrap();
+        id.0
+    };
+
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [changed, same, read_only],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    assert_eq!(set["open"], true);
+    assert_eq!(set["operation"]["kind"], "rename");
+    let row = change_row(&set, changed);
+    assert_eq!(row["outcome"]["outcome"], "changed");
+    assert_eq!(row["outcome"]["channel"], true);
+    assert_eq!(row["blocked"], Value::Null);
+    let row = change_row(&set, same);
+    assert_eq!(row["outcome"]["outcome"], "not_changed");
+    assert_eq!(row["outcome"]["cause"]["cause"], "no_recipient");
+    assert_eq!(row["blocked"], Value::Null);
+    let row = change_row(&set, read_only);
+    assert_eq!(row["outcome"]["outcome"], "changed");
+    assert_eq!(row["blocked"], "read_only_no_host");
+    // The unchanged feed has no draft. The changed feeds have one.
+    let collection = collection_of(&app);
+    assert!(
+        collection
+            .draft(studio_core::collection::FeedId(same))
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        collection
+            .draft(studio_core::collection::FeedId(changed))
+            .unwrap()
+            .is_some()
+    );
+    let draft = draft_model(&app, changed).await;
+    assert_eq!(draft["values"][0]["recipients"][0]["name"], "Anna");
+
+    // The list and the detail route give the same set.
+    let (_, list) = call(&app, "GET", "/api/v1/change-sets", None).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    let id = set["id"].as_i64().unwrap();
+    let (status, detail) = call(&app, "GET", &format!("/api/v1/change-sets/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detail, set);
+    let (status, body) = call(&app, "GET", "/api/v1/change-sets/9999", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
+#[tokio::test]
+async fn the_write_of_a_changed_feed_gives_its_written_at_in_the_change_set() {
+    let (app, connector) = publisher_app().await;
+    let a = add_paid_feed(
+        &app,
+        connector,
+        "a.xml",
+        &paid_feed("A", "ga", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    let b = add_paid_feed(
+        &app,
+        connector,
+        "b.xml",
+        &paid_feed("B", "gb", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    let (_, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [a, b],
+        })),
+    )
+    .await;
+    let id = set["id"].as_i64().unwrap();
+    assert_eq!(change_row(&set, a)["written_at"], Value::Null);
+
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{a}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{a}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (_, set) = call(&app, "GET", &format!("/api/v1/change-sets/{id}"), None).await;
+    assert!(change_row(&set, a)["written_at"].is_i64(), "{set}");
+    assert_eq!(change_row(&set, b)["written_at"], Value::Null);
+    assert_eq!(set["open"], true);
+}
+
+#[tokio::test]
+async fn discard_puts_back_the_draft_byte_for_byte_and_a_feed_with_no_draft_has_none() {
+    let (app, connector) = publisher_app().await;
+    let with_draft = add_paid_feed(
+        &app,
+        connector,
+        "a.xml",
+        &paid_feed("A", "ga", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    let without = add_paid_feed(
+        &app,
+        connector,
+        "b.xml",
+        &paid_feed("B", "gb", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    // An earlier edit makes the draft of the first feed.
+    let draft_path = format!("/api/v1/feeds/{with_draft}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["title"] = json!("A (edited)");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let before = collection_of(&app)
+        .draft(studio_core::collection::FeedId(with_draft))
+        .unwrap()
+        .unwrap()
+        .draft_xml;
+
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "remove" },
+            "feed_ids": [with_draft, without],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    let id = set["id"].as_i64().unwrap();
+    let collection = collection_of(&app);
+    assert_ne!(
+        collection
+            .draft(studio_core::collection::FeedId(with_draft))
+            .unwrap()
+            .unwrap()
+            .draft_xml,
+        before
+    );
+    assert!(
+        collection
+            .draft(studio_core::collection::FeedId(without))
+            .unwrap()
+            .is_some()
+    );
+
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/change-sets/{id}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let collection = collection_of(&app);
+    assert_eq!(
+        collection
+            .draft(studio_core::collection::FeedId(with_draft))
+            .unwrap()
+            .unwrap()
+            .draft_xml,
+        before
+    );
+    assert!(
+        collection
+            .draft(studio_core::collection::FeedId(without))
+            .unwrap()
+            .is_none()
+    );
+    let (status, _) = call(&app, "GET", &format!("/api/v1/change-sets/{id}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/change-sets/{id}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn rename_and_change_address_change_the_saved_recipient() {
+    let (app, connector) = publisher_app().await;
+    let a = add_paid_feed(
+        &app,
+        connector,
+        "a.xml",
+        &paid_feed("A", "ga", &[ANN, BOB], &[], ""),
+    )
+    .await;
+    let (_, saved) = call(
+        &app,
+        "POST",
+        "/api/v1/recipients/saved",
+        Some(json!({ "name": "Ann", "recipient_type": "lnaddress", "address": "ann@example.com" })),
+    )
+    .await;
+    let saved_id = saved["id"].as_i64().unwrap();
+    let saved_row = |list: &Value| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["saved_id"] == saved_id)
+            .unwrap()
+            .clone()
+    };
+
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [a],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(saved_row(&list)["name"], "Anna");
+
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": {
+                "kind": "change_address",
+                "address": "anna@new.example",
+                "custom_key": null,
+                "custom_value": null,
+                "recipient_type": "lnaddress",
+            },
+            "feed_ids": [a],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(saved_row(&list)["address"], "anna@new.example");
+}
+
+#[tokio::test]
+async fn the_level_of_a_publisher_feed_gives_its_releases_and_an_album_gives_422() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let release = make_feed(
+        &app,
+        new_feed_body(connector, "release.xml", "Release", None, None),
+    )
+    .await;
+    let label_id = label["id"].as_i64().unwrap();
+    let release_id = release["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{label_id}/links"),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, level) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{label_id}/level"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{level}");
+    assert_eq!(level["feed_ids"], json!([label_id, release_id]));
+
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{release_id}/level"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "not_publisher");
+}
+
+#[tokio::test]
+async fn each_change_set_route_needs_the_token() {
+    let app = app();
+    let routes = [
+        ("POST", "/api/v1/recipients/uses"),
+        ("POST", "/api/v1/change-sets"),
+        ("GET", "/api/v1/change-sets"),
+        ("GET", "/api/v1/change-sets/1"),
+        ("DELETE", "/api/v1/change-sets/1"),
+        ("GET", "/api/v1/feeds/1/level"),
+    ];
+    for (method, path) in routes {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::HOST, HOST)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from("{}"))
+            .unwrap();
+        let (status, value, _) = send(&app, request).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
+        assert_eq!(value["error"]["code"], "token_required", "{method} {path}");
+    }
+}

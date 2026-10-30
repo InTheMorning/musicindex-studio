@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use studio_core::address::AddressSource;
 use studio_core::announce;
 use studio_core::apps::{self, ConnectedApp};
+use studio_core::change_set::{self, RecipientKey, RecipientOperation};
 use studio_core::collection::{
     Collection, CollectionErrorKind, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId,
     DraftOperationKind, FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
@@ -4695,6 +4696,263 @@ pub(crate) async fn remove_saved_recipient(
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
         w.collection.remove_saved_recipient(id)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+// ---- Change sets (ADR 0091) ----
+
+/// The feeds that use a recipient: the channel, the tracks and the live
+/// items. A recipient of a value time split does not count (ADR 0091
+/// item 10).
+pub(crate) async fn recipient_uses(
+    State(shared): State<Shared>,
+    Json(key): Json<RecipientKey>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let uses_key = |blocks: &[Entry<studio_core::feed::ValueBlock>]| {
+            blocks
+                .iter()
+                .any(|block| block.value.recipients.iter().any(|r| key.matches(&r.value)))
+        };
+        let mut rows = Vec::new();
+        for row in w.collection.feeds()? {
+            let Some(feed) = files_feed(w, row.id).ok().flatten() else {
+                continue;
+            };
+            let channel = uses_key(&feed.values);
+            let items = feed
+                .items
+                .iter()
+                .filter(|item| uses_key(&item.value.values))
+                .count();
+            let live_items = feed
+                .live_items
+                .iter()
+                .filter(|live| uses_key(&live.value.item.values))
+                .count();
+            if !channel && items == 0 && live_items == 0 {
+                continue;
+            }
+            rows.push(json!({
+                "feed_id": row.id.0,
+                "title": feed.title.clone().or(row.title.clone()),
+                "medium": row.medium,
+                "channel": channel,
+                "items": items,
+                "live_items": live_items,
+                "writable": row.connector_id.is_some(),
+            }));
+        }
+        Ok(Json(json!({ "recipient": key, "feeds": rows })))
+    })
+    .await
+}
+
+/// The feeds of the level of a publisher feed: the feed, each feed below
+/// it and the releases of these feeds (ADR 0091 item 9). A feed that is
+/// not a publisher feed gives 422 `not_publisher`.
+pub(crate) async fn feed_level(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        if w.collection.feed(id)?.medium.as_deref() != Some("publisher") {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "not_publisher",
+                format!("feed {} is not a publisher feed", id.0),
+            ));
+        }
+        let mut feeds = Vec::new();
+        for row in w.collection.feeds()? {
+            let model = files_feed(w, row.id).ok().flatten();
+            feeds.push((row, model));
+        }
+        let catalogs: std::collections::HashMap<FeedId, publisher::Catalog> = feeds
+            .iter()
+            .map(|(row, _)| row.id)
+            .zip(publisher::catalogs(&feeds))
+            .collect();
+        let ids: Vec<i64> = change_set::level_feeds(&catalogs, id)
+            .into_iter()
+            .map(|feed| feed.0)
+            .collect();
+        Ok(Json(json!({ "feed_ids": ids })))
+    })
+    .await
+}
+
+/// Why Studio cannot write a changed feed now (ADR 0091 item 22).
+fn change_blocked(w: &Workspace, id: FeedId) -> Option<&'static str> {
+    let row = w.collection.feed(id).ok()?;
+    let Some(connector_id) = row.connector_id else {
+        return Some("read_only_no_host");
+    };
+    let connector = w.collection.connector(connector_id).ok()?;
+    (connector.secret_ref.is_some() && w.vault.is_none()).then_some("vault_locked")
+}
+
+/// The JSON of a change set: the operation, the recipient and each feed
+/// with its outcome. `blocked` is the cause why Studio cannot write a
+/// changed feed now, or null.
+fn change_set_json(w: &Workspace, set: &change_set::ChangeSet) -> Value {
+    let feeds: Vec<Value> = set
+        .feeds
+        .iter()
+        .map(|feed| {
+            let row = w.collection.feed(feed.feed_id).ok();
+            let blocked = if feed.outcome.is_changed() && feed.written_at.is_none() {
+                change_blocked(w, feed.feed_id)
+            } else {
+                None
+            };
+            json!({
+                "feed_id": feed.feed_id.0,
+                "title": row.as_ref().and_then(|r| r.title.clone()),
+                "medium": row.as_ref().and_then(|r| r.medium.clone()),
+                "outcome": feed.outcome,
+                "had_draft": feed.had_draft,
+                "written_at": feed.written_at,
+                "blocked": blocked,
+            })
+        })
+        .collect();
+    json!({
+        "id": set.id,
+        "made_at": set.made_at,
+        "recipient": set.recipient,
+        "operation": set.operation,
+        "open": set.is_open(),
+        "feeds": feeds,
+    })
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NewChangeSet {
+    recipient: RecipientKey,
+    operation: RecipientOperation,
+    feed_ids: Vec<i64>,
+}
+
+/// Make a change set. The core puts the change in the draft of each feed
+/// of the scope. This route writes nothing to a file host (ADR 0091
+/// items 17 to 19). A change of the address or of the name also changes
+/// the saved recipient (item 12).
+pub(crate) async fn make_change_set(
+    State(shared): State<Shared>,
+    Json(body): Json<NewChangeSet>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let invalid = |message: &str| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_change_set",
+                message,
+            )
+        };
+        if body.feed_ids.is_empty() {
+            return Err(invalid("a change set needs at least one feed"));
+        }
+        let new_address = match &body.operation {
+            RecipientOperation::ChangeAddress { address, .. }
+            | RecipientOperation::Add { address, .. } => Some(address),
+            _ => None,
+        };
+        if new_address.is_some_and(|a| a.trim().is_empty()) {
+            return Err(invalid("the new recipient needs an address"));
+        }
+        if body.recipient.address.trim().is_empty() {
+            return Err(invalid("the recipient needs an address"));
+        }
+        let feed_ids: Vec<FeedId> = body.feed_ids.iter().map(|&id| FeedId(id)).collect();
+        for &id in &feed_ids {
+            w.collection.feed(id)?;
+        }
+        let set = {
+            let workspace: &Workspace = w;
+            change_set::make_change_set(
+                &workspace.collection,
+                &mut |id| ensure_draft(workspace, id).map_err(|e| e.coded()),
+                &body.recipient,
+                &body.operation,
+                &feed_ids,
+            )?
+        };
+        let old = (
+            body.recipient.address.as_str(),
+            body.recipient.custom_key.as_deref().unwrap_or_default(),
+            body.recipient.custom_value.as_deref().unwrap_or_default(),
+        );
+        match &body.operation {
+            RecipientOperation::ChangeAddress {
+                address,
+                custom_key,
+                custom_value,
+                recipient_type,
+            } => {
+                w.collection.change_saved_recipient(
+                    old,
+                    Some((
+                        address,
+                        custom_key.as_deref().unwrap_or_default(),
+                        custom_value.as_deref().unwrap_or_default(),
+                        recipient_type.as_deref(),
+                    )),
+                    None,
+                )?;
+            }
+            RecipientOperation::Rename { name } => {
+                w.collection.change_saved_recipient(old, None, Some(name))?;
+            }
+            _ => {}
+        }
+        Ok((StatusCode::CREATED, Json(change_set_json(w, &set))))
+    })
+    .await
+}
+
+/// The open change sets, the oldest first.
+pub(crate) async fn list_change_sets(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        let sets: Vec<Value> = change_set::change_sets(&w.collection)?
+            .iter()
+            .map(|set| change_set_json(w, set))
+            .collect();
+        Ok(Json(json!(sets)))
+    })
+    .await
+}
+
+/// A change set that exists, or 404.
+fn existing_change_set(w: &Workspace, id: i64) -> Result<change_set::ChangeSet, ApiError> {
+    if w.collection.change_set_row(id)?.is_none() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            format!("change set {id} does not exist"),
+        ));
+    }
+    Ok(change_set::find_change_set(&w.collection, id)?)
+}
+
+/// One change set, open or not.
+pub(crate) async fn get_change_set(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let set = existing_change_set(w, id)?;
+        Ok(Json(change_set_json(w, &set)))
+    })
+    .await
+}
+
+/// Discard a change set: the draft of each unwritten feed goes back to its
+/// state from before the change (ADR 0091 item 20).
+pub(crate) async fn discard_change_set(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        existing_change_set(w, id)?;
+        change_set::discard_change_set(&w.collection, id)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

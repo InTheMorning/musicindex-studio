@@ -576,6 +576,17 @@ fn change_feed(
     Ok(outcome)
 }
 
+/// One change set by its ID, open or not. A change set stays in the
+/// collection after the write of its last feed, until the user discards it.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the change set does not exist, when the
+/// collection fails or when a stored row is not valid.
+pub fn find_change_set(collection: &Collection, id: i64) -> Result<ChangeSet, PipelineError> {
+    change_set(collection, id)
+}
+
 fn change_set(collection: &Collection, id: i64) -> Result<ChangeSet, PipelineError> {
     let row = collection
         .change_set_row(id)?

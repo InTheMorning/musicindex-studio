@@ -139,6 +139,16 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/media/tickets", post(media::make_ticket))
         .route("/search", get(routes::search))
         .route("/recipients", get(routes::list_recipients))
+        .route("/recipients/uses", post(routes::recipient_uses))
+        .route(
+            "/change-sets",
+            get(routes::list_change_sets).post(routes::make_change_set),
+        )
+        .route(
+            "/change-sets/{id}",
+            get(routes::get_change_set).delete(routes::discard_change_set),
+        )
+        .route("/feeds/{id}/level", get(routes::feed_level))
         .route("/recipients/saved", post(routes::save_recipient))
         .route(
             "/recipients/saved/{id}",

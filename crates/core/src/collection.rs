@@ -2744,6 +2744,60 @@ impl Collection {
         )?)
     }
 
+    /// Change the saved recipient with the identity `old` (ADR 0091 item
+    /// 12). `new_identity` is the new identity and type, or `None` to keep
+    /// them. `name` is the new name, or `None` to keep it. When the new
+    /// identity is already saved, that row stays and the old row goes out.
+    /// Gives true when a saved row with the old identity existed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn change_saved_recipient(
+        &self,
+        old: (&str, &str, &str),
+        new_identity: Option<(&str, &str, &str, Option<&str>)>,
+        name: Option<&str>,
+    ) -> Result<bool, CollectionError> {
+        let found: Option<i64> = self
+            .db
+            .query_row(
+                "SELECT id FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3",
+                params![old.0, old.1, old.2],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(id) = found else {
+            return Ok(false);
+        };
+        if let Some(name) = name {
+            self.db.execute(
+                "UPDATE saved_recipients SET name = ?2, saved_at = ?3 WHERE id = ?1",
+                params![id, name, now()],
+            )?;
+        }
+        if let Some((address, custom_key, custom_value, recipient_type)) = new_identity {
+            let taken: Option<i64> = self
+                .db
+                .query_row(
+                    "SELECT id FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3 AND id != ?4",
+                    params![address, custom_key, custom_value, id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if taken.is_some() {
+                self.db
+                    .execute("DELETE FROM saved_recipients WHERE id = ?1", [id])?;
+            } else {
+                self.db.execute(
+                    "UPDATE saved_recipients SET address = ?2, custom_key = ?3, custom_value = ?4, recipient_type = ?5, saved_at = ?6 WHERE id = ?1",
+                    params![id, address, custom_key, custom_value, recipient_type, now()],
+                )?;
+            }
+        }
+        Ok(true)
+    }
+
     /// Remove a saved recipient. The `feed_recipients` rows do not
     /// change.
     ///

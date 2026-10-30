@@ -15,6 +15,7 @@ pub mod datetime;
 mod digest;
 pub mod discover;
 pub mod download;
+pub mod duration;
 pub mod feed;
 pub mod folder_scan;
 pub mod grant;

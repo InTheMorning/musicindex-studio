@@ -940,6 +940,7 @@ pub fn replace_model(
     keep_explicit_form(&current, &mut sent);
     apply_op3(&current, &mut sent);
     apply_pub_date_time(&current, &mut sent).map_err(invalid)?;
+    apply_duration_seconds(&current, &mut sent);
     keep_key_form(&current, &mut sent);
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
@@ -1009,6 +1010,42 @@ fn apply_pub_date_time(current: &Feed, sent: &mut Feed) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Write `itunes:duration` from `duration_seconds` (ADR 0094 item 2). The
+/// step compares the sent `duration_seconds` with the value that the core
+/// reads from the draft `itunes:duration`. A sent value that is equal keeps
+/// the draft `itunes:duration`, byte for byte, and a new item gets none. A
+/// different number becomes `HH:MM:SS` text. A sent null removes
+/// `itunes:duration` when the draft text has a value that the core reads.
+/// A draft text that the core cannot read stays. The step ignores the sent
+/// `duration`. It applies to each item and to the item of each live item.
+fn apply_duration_seconds(current: &Feed, sent: &mut Feed) {
+    let items = sent
+        .items
+        .iter_mut()
+        .map(|e| {
+            (
+                e.key().and_then(|k| current.items.get(k)).map(|c| &c.value),
+                &mut e.value,
+            )
+        })
+        .chain(sent.live_items.iter_mut().map(|e| {
+            (
+                e.key()
+                    .and_then(|k| current.live_items.get(k))
+                    .map(|c| &c.item),
+                &mut e.value.item,
+            )
+        }));
+    for (before, item) in items {
+        let expected = before.and_then(|c| c.duration_seconds);
+        item.duration = if item.duration_seconds == expected {
+            before.and_then(|c| c.duration.clone())
+        } else {
+            item.duration_seconds.map(crate::duration::format_duration)
+        };
+    }
 }
 
 /// Keep the form of the cover when the sent `image` is a new address

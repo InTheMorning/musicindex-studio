@@ -542,7 +542,7 @@ fn a_new_track_puts_its_alternate_enclosures_before_its_duration() {
             length: Some("20".to_owned()),
             media_type: Some("audio/mpeg".to_owned()),
         }),
-        duration: Some("00:02:00".to_owned()),
+        duration_seconds: Some(120),
         alternate_enclosures: vec![Entry::new(AlternateEnclosure {
             media_type: Some("audio/flac".to_owned()),
             title: Some("Lossless (FLAC)".to_owned()),

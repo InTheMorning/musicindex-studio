@@ -502,6 +502,13 @@ pub struct Item {
     pub pub_date_time: Option<String>,
     /// `itunes:duration`, as the source wrote it.
     pub duration: Option<String>,
+    /// The `itunes:duration` as a number of seconds, or none when the text
+    /// is absent or [`crate::duration::parse_duration`] cannot read it
+    /// (ADR 0094). [`Feed::read`] computes it. [`Feed::write_hosted`]
+    /// ignores it. The pipeline writes `itunes:duration` from a changed
+    /// value at the draft save.
+    #[serde(default)]
+    pub duration_seconds: Option<u64>,
     /// `itunes:explicit`, as the source wrote it (ADR 0064).
     #[serde(default)]
     pub explicit: Option<String>,
@@ -538,6 +545,7 @@ pub struct Item {
 impl Item {
     fn read_fields(element: &Element) -> Self {
         let pub_date = read_text(element, Ns::None, "pubDate");
+        let duration = read_text(element, Ns::Itunes, "duration");
         Self {
             title: read_text(element, Ns::None, "title"),
             description: read_text(element, Ns::None, "description"),
@@ -549,7 +557,10 @@ impl Item {
                 .as_deref()
                 .and_then(crate::datetime::parse_rfc2822)
                 .map(crate::datetime::format_rfc3339),
-            duration: read_text(element, Ns::Itunes, "duration"),
+            duration_seconds: duration
+                .as_deref()
+                .and_then(crate::duration::parse_duration),
+            duration,
             explicit: read_text(element, Ns::Itunes, "explicit"),
             season: read_one(element),
             episode: read_text(element, Ns::Podcast, "episode"),

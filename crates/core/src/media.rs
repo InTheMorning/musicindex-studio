@@ -634,11 +634,7 @@ fn file_name_with_extension(name: &str, extension: &str) -> String {
 
 /// The duration as `HH:MM:SS`.
 fn format_duration(duration: Duration) -> String {
-    let total_seconds = duration.as_secs();
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    format!("{hours:02}:{minutes:02}:{seconds:02}")
+    crate::duration::format_duration(duration.as_secs())
 }
 
 /// The size of the file at `path`, in bytes.

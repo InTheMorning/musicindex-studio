@@ -4580,3 +4580,85 @@ fn a_pub_date_time_with_no_zone_gives_invalid_model_and_the_draft_stays() {
     assert_eq!(error.kind(), PipelineErrorKind::InvalidModel);
     assert_eq!(draft_xml(&s), before);
 }
+
+/// A feed with one track whose `itunes:duration` is `text`.
+fn timed_feed(text: &str) -> String {
+    FEED.replace(
+        "xmlns:podcast=",
+        "xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" xmlns:podcast=",
+    )
+    .replace(
+        "<guid>track-1</guid>",
+        &format!("<guid>track-1</guid>\n      <itunes:duration>{text}</itunes:duration>"),
+    )
+}
+
+#[test]
+fn the_same_duration_seconds_keeps_the_bytes_of_itunes_duration() {
+    for text in ["261", "4:21", "00:04:21", "261.9"] {
+        let s = save_keys(&timed_feed(text), |f| {
+            assert_eq!(f.items[0].duration_seconds, Some(261));
+            f.title = Some("Album 2".into());
+            // The sent `duration` does not count.
+            f.items[0].duration = Some("9:99".into());
+        });
+        let xml = draft_xml(&s);
+        assert!(
+            xml.contains(&format!("<itunes:duration>{text}</itunes:duration>")),
+            "{xml}"
+        );
+    }
+}
+
+#[test]
+fn a_new_duration_seconds_writes_hh_mm_ss() {
+    let s = save_keys(&timed_feed("4:21"), |f| {
+        f.items[0].duration_seconds = Some(3723);
+    });
+    let xml = draft_xml(&s);
+    assert!(
+        xml.contains("<itunes:duration>01:02:03</itunes:duration>"),
+        "{xml}"
+    );
+}
+
+#[test]
+fn a_null_duration_seconds_removes_itunes_duration() {
+    let s = save_keys(&timed_feed("4:21"), |f| {
+        f.items[0].duration_seconds = None;
+    });
+    assert!(!draft_xml(&s).contains("itunes:duration"));
+}
+
+#[test]
+fn a_new_track_gets_itunes_duration_from_the_sent_seconds_or_none() {
+    let s = save_keys(&timed_feed("4:21"), |f| {
+        f.items.push(Entry::new(Item {
+            title: Some("Two".into()),
+            duration: Some("ignored".into()),
+            duration_seconds: Some(5),
+            ..Item::default()
+        }));
+        f.items.push(Entry::new(Item {
+            title: Some("Three".into()),
+            duration: Some("ignored".into()),
+            ..Item::default()
+        }));
+    });
+    let xml = draft_xml(&s);
+    assert!(
+        xml.contains("<itunes:duration>00:00:05</itunes:duration>"),
+        "{xml}"
+    );
+    assert_eq!(xml.matches("itunes:duration>").count(), 4, "{xml}");
+    assert!(!xml.contains("ignored"));
+}
+
+#[test]
+fn a_duration_that_is_not_readable_stays_when_the_sent_seconds_are_null() {
+    let s = save_keys(&timed_feed("soon"), |f| {
+        assert_eq!(f.items[0].duration_seconds, None);
+        f.title = Some("Album 2".into());
+    });
+    assert!(draft_xml(&s).contains("<itunes:duration>soon</itunes:duration>"));
+}

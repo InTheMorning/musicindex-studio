@@ -229,3 +229,22 @@ fn a_changed_content_link_changes_only_that_element() {
     assert_ne!(expected, before);
     assert_eq!(doc.write(), expected);
 }
+
+#[test]
+fn parse_duration_reads_each_itunes_duration_of_the_corpus() {
+    let mut read = 0;
+    for (name, bytes) in corpus() {
+        let feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
+        for item in feed.items.iter().map(|i| &i.value) {
+            let Some(text) = &item.duration else { continue };
+            assert!(
+                studio_core::duration::parse_duration(text).is_some(),
+                "ADR 0094 item 1: {name} has the itunes:duration {text:?}, and \
+                 parse_duration cannot read it. Add its form to parse_duration."
+            );
+            assert!(item.duration_seconds.is_some(), "{name}: {text:?}");
+            read += 1;
+        }
+    }
+    assert!(read > 0, "the corpus has no itunes:duration");
+}

@@ -2,7 +2,12 @@
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { pageSequence } from './pages.js';
 import { failedLine } from './failures.js';
-import { AlbumEditor, DraftToolbar, useSheet } from './editor.js';
+import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
+import {
+  recipientKey, recipientTitle, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
+  outcomeText, blockedText, operationTitle, operationLine, changeSetRow, nameOf, writableIds, initialStatuses, startWrite,
+  finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed, DISCARD_ASK,
+} from './recipients.js';
 import {
   bootView, signInEvent, normalEmail, authErrorText, unlockMethods, accountName, deleteConfirmation,
   recoveryAccount, addMethodChoices, recoveryErrorText,
@@ -24,6 +29,7 @@ import {
   isFeedView, openFeedView, navAtWidth,
 } from './shell.js';
 import {
+  eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
 } from './signing.js';
 
@@ -2417,6 +2423,313 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
   </section></div>`;
 }
 
+// ---- Recipients (ADR 0091) ----
+
+// The Recipients page: one summary line for each recipient, A to Z (ADR 0091
+// item 2). A row opens the page of the recipient. The open change sets show
+// above the list, so that the user can go back to a review.
+function RecipientsPage({ go }) {
+  const [list, setList] = useState(null);
+  const [sets, setSets] = useState([]);
+  const { error, run } = useAction();
+  useEffect(() => {
+    run(async () => {
+      setList(await api('/recipients'));
+      setSets(await api('/change-sets'));
+    });
+  }, []);
+  const rows = sortRecipients(list);
+  return html`<div><${Bar}><span class="bar-title">Recipients</span><//><section class="section">
+    <${ErrorNotice} error=${error} />
+    ${sets.length > 0 && html`<section class="page-section recipient-sets"><h2>Open change sets</h2>
+      <div class="group">${sets.map((set) => {
+        const row = changeSetRow(set, list);
+        return html`<button key=${set.id} class="link-row" type="button" onClick=${() => go({ name: 'change-set', id: set.id })}>
+          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
+        </button>`;
+      })}</div></section>`}
+    <section class="page-section"><h2>Recipients</h2>
+      ${list === null && !error && html`<p class="empty" role="status">Loading the recipients…</p>`}
+      ${list !== null && rows.length === 0 && html`<p class="empty">Studio found no recipient in your feeds yet.</p>`}
+      ${rows.length > 0 && html`<div class="group">${rows.map((recipient) => {
+        const row = recipientRow(recipient);
+        return html`<button key=${JSON.stringify(recipientKey(recipient))} class="link-row" type="button"
+          onClick=${() => go({ name: 'recipient', recipient })}>
+          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.type} · ${row.text}</span></span><span class="go">›</span>
+        </button>`;
+      })}</div>`}
+    </section>
+  </section></div>`;
+}
+
+// A checkbox row of a feed, with its title and its places (ADR 0091 item 3).
+function FeedCheckRow({ title, text, checked, onChange }) {
+  return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onChange} />
+    <span class="text"><span class="label">${title}</span>${text && html`<span class="summary">${text}</span>`}</span></label>`;
+}
+
+// The sheet of one operation. The sheet sends `POST /change-sets` and opens
+// the review (task 054c item 6). The core makes the change and gives the
+// outcome of each feed, so the form holds only the values to send.
+function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
+  const key = recipientKey(recipient);
+  const [address, setAddress] = useState(recipient.address || '');
+  const [customKey, setCustomKey] = useState(recipient.custom_key || '');
+  const [customValue, setCustomValue] = useState(recipient.custom_value || '');
+  const [type, setType] = useState(recipient.recipient_type || '');
+  const [name, setName] = useState(recipient.name || '');
+  const [percent, setPercent] = useState('');
+  const [levelOwner, setLevelOwner] = useState('');
+  const [level, setLevel] = useState(null);
+  const [levelSelected, setLevelSelected] = useState(new Set());
+  const { busy, error, run } = useAction();
+  const owners = (feeds || []).filter(isPublisher)
+    .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }));
+  // The core lists the feeds of a level. Each starts selected.
+  const chooseOwner = (value) => {
+    setLevelOwner(value);
+    setLevel(null);
+    if (!value) return;
+    run(async () => {
+      const result = await api(`/feeds/${value}/level`);
+      setLevel(result.feed_ids);
+      setLevelSelected(new Set(result.feed_ids));
+    });
+  };
+  const titleOf = (id) => {
+    const found = (feeds || []).find((f) => f.id === id);
+    return found && found.title ? found.title : 'Untitled feed';
+  };
+  const ids = kind === 'add' ? (level || []).filter((id) => levelSelected.has(id)) : selectedIds(uses, selected);
+  const optional = (text) => (text.trim() === '' ? null : text.trim());
+  const operation = () => {
+    switch (kind) {
+      case 'change_address':
+        return { kind, address: address.trim(), custom_key: optional(customKey), custom_value: optional(customValue), recipient_type: type || null };
+      case 'rename': return { kind, name };
+      case 'remove': return { kind };
+      default:
+        return {
+          kind, name: optional(name), recipient_type: type || null, address: address.trim(),
+          custom_key: optional(customKey), custom_value: optional(customValue), percent: Number(percent),
+        };
+    }
+  };
+  const ready = ids.length > 0
+    && (kind === 'rename' || kind === 'remove' || address.trim() !== '')
+    && (kind !== 'add' || percent !== '');
+  const submit = () => run(async () => {
+    onCreated(await api('/change-sets', { method: 'POST', body: { recipient: key, operation: operation(), feed_ids: ids } }));
+  });
+  const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${type} onChange=${setType}
+    placeholder=${kind === 'add' ? 'Not set' : 'Keep the type'} options=${[['node', 'node (keysend)'], ['lnaddress', 'lnaddress']]} />`;
+  const label = kind === 'change_address' ? `Change in ${feedCount(ids.length)}`
+    : kind === 'rename' ? `Rename in ${feedCount(ids.length)}`
+    : kind === 'remove' ? `Remove from ${feedCount(ids.length)}` : `Add to ${feedCount(ids.length)}`;
+  return html`<div class="body">
+      ${kind === 'remove' && html`<p>Studio removes ${recipientTitle(recipient)} from each value block of the selected feeds. Studio changes the splits of the other recipients, and their total does not change.</p>`}
+      ${kind === 'rename' && html`<div class="group rows"><${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} /></div>`}
+      ${(kind === 'change_address' || kind === 'add') && html`<div class="group rows">
+        ${kind === 'add' && html`<${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} />`}
+        <${Field} id="op-address" label="Address" required value=${address} onInput=${(e) => setAddress(e.target.value)} />
+        ${typeMenu}
+        <${Field} id="op-custom-key" label="Custom key" value=${customKey} onInput=${(e) => setCustomKey(e.target.value)} />
+        <${Field} id="op-custom-value" label="Custom value" value=${customValue} onInput=${(e) => setCustomValue(e.target.value)} />
+      </div>`}
+      ${kind === 'add' && html`<div class="group rows">
+        ${owners.length === 0
+          ? html`<p class="hint">Studio found no artist or label feed in your collection.</p>`
+          : html`<${ChoiceSelect} id="op-level" label="Level" value=${levelOwner} onChange=${chooseOwner}
+              placeholder="Select an artist or label" options=${owners.map((f) => [String(f.id), f.title || 'Untitled feed'])} />`}
+        <${Field} id="op-percent" label="Percentage" type="number" min="1" max="99" step="1" required
+          hint="The share of the new recipient, from 1 to 99." value=${percent} onInput=${(e) => setPercent(e.target.value)} />
+      </div>`}
+      ${kind === 'add' && level && html`<div class="group rows">${level.map((id) => html`<${FeedCheckRow} key=${id} title=${titleOf(id)}
+        checked=${levelSelected.has(id)} onChange=${() => setLevelSelected(toggled(levelSelected, id))} />`)}</div>`}
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class=${`button ${kind === 'remove' ? 'destructive' : 'primary'}`} type="button" disabled=${busy || !ready} onClick=${submit}>
+        ${busy ? 'Making the change set…' : label}</button>
+    </footer>`;
+}
+
+const OPERATION_TITLES = { change_address: 'Change address', rename: 'Rename', remove: 'Remove', add: 'Add to a level' };
+
+function OperationSheet({ kind, recipient, uses, selected, feeds, onCreated, onClose }) {
+  const ref = useSheet(kind !== null);
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="operation-title" onClose=${onClose}>
+    <header>
+      <h2 id="operation-title">${kind ? OPERATION_TITLES[kind] : ''}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    ${kind && html`<${OperationForm} key=${kind} kind=${kind} recipient=${recipient} uses=${uses} selected=${selected}
+      feeds=${feeds} onCreated=${onCreated} />`}
+  </dialog>`;
+}
+
+// The page of one recipient: its feeds with checkboxes, and the four
+// operations (ADR 0091 items 3 and 4).
+function RecipientPage({ recipient, feeds, go }) {
+  const [uses, setUses] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [open, setOpen] = useState(null);
+  const { error, run } = useAction();
+  useEffect(() => {
+    run(async () => {
+      const result = await api('/recipients/uses', { method: 'POST', body: recipientKey(recipient) });
+      setUses(result.feeds);
+      setSelected(allSelected(result.feeds));
+    });
+  }, []);
+  const count = uses ? selectedIds(uses, selected).length : 0;
+  const created = (set) => { setOpen(null); go({ name: 'change-set', id: set.id }); };
+  const row = recipientRow(recipient);
+  return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
+    <${ErrorNotice} error=${error} />
+    <header class="recipient-head"><h1>${row.title}</h1>
+      <p class="hint"><span class="mono">${recipient.address}</span> · ${row.type}</p></header>
+    <div class="actions recipient-actions">
+      <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change address</button>
+      <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('rename')}>Rename</button>
+      <button class="button destructive" type="button" disabled=${count === 0} onClick=${() => setOpen('remove')}>Remove</button>
+      <button class="button action" type="button" onClick=${() => setOpen('add')}>Add to a level</button>
+    </div>
+    <section class="page-section"><h2>Feeds${uses ? ` · ${count} of ${uses.length} selected` : ''}</h2>
+      ${uses === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}
+      ${uses !== null && uses.length === 0 && html`<p class="empty">No feed uses this recipient. Add to a level puts it in feeds.</p>`}
+      ${uses && uses.length > 0 && html`<div class="group">${uses.map((use) => {
+        const line = useRow(use);
+        return html`<${FeedCheckRow} key=${use.feed_id} title=${line.title} text=${line.text}
+          checked=${selected.has(use.feed_id)} onChange=${() => setSelected(toggled(selected, use.feed_id))} />`;
+      })}</div>`}
+    </section>
+    <${OperationSheet} kind=${open} recipient=${recipient} uses=${uses || []} selected=${selected} feeds=${feeds}
+      onCreated=${created} onClose=${() => setOpen(null)} />
+  </section></div>`;
+}
+
+// Write one feed of a change set: the diff, the signer, then the write
+// (ADR 0091 item 23, task 054c item 8). A plan that expired gets one new try.
+async function writeChangeSetFeed(feedId) {
+  for (let attempt = 0; ; attempt++) {
+    const diff = await api(`/feeds/${feedId}/diff`);
+    const toSign = eventsToSign(diff);
+    const choice = await currentSignerChoice(toSign);
+    const signedEvents = await signPlanned(toSign, choice, () => {});
+    try {
+      await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
+      return;
+    } catch (e) {
+      if (e.code !== 'plan_expired' || attempt > 0) throw e;
+    }
+  }
+}
+
+// The text of a failed write of one feed.
+function writeFailText(e) {
+  if (e.code === 'conflict') return 'The hosted file changed after the draft started. Studio did not write this feed.';
+  return signErrorText(e.code) || e.message || 'Studio did not write this feed.';
+}
+
+// The review of a change set and its write (ADR 0091 items 21 to 24).
+function ChangeSetPage({ id, go, onChanged }) {
+  const [set, setSet] = useState(null);
+  const [known, setKnown] = useState([]);
+  const [statuses, setStatuses] = useState({});
+  const [openId, setOpenId] = useState(null);
+  const [diffs, setDiffs] = useState({});
+  const [writing, setWriting] = useState(false);
+  const { busy, error, run } = useAction();
+  useEffect(() => {
+    run(async () => {
+      const loaded = await api(`/change-sets/${id}`);
+      setSet(loaded);
+      setStatuses(initialStatuses(loaded));
+      setKnown(await api('/recipients'));
+    });
+  }, [id]);
+  // A feed opens its diff in a closed entry. One entry is open at a time.
+  const toggle = (feedId, isOpen) => {
+    setOpenId((current) => (isOpen ? feedId : current === feedId ? null : current));
+    if (isOpen && !diffs[feedId]) {
+      api(`/feeds/${feedId}/diff`).then(
+        (diff) => setDiffs((all) => ({ ...all, [feedId]: { diff } })),
+        (e) => setDiffs((all) => ({ ...all, [feedId]: { error: e } })),
+      );
+    }
+  };
+  const order = set ? writableIds(set) : [];
+  const pending = Object.values(statuses).filter((s) => s.state === 'waiting' || s.state === 'failed').length;
+  const writeAll = async () => {
+    setWriting(true);
+    let current = retryStatuses(statuses);
+    setStatuses(current);
+    for (let feedId = nextToWrite(current, order); feedId !== null; feedId = nextToWrite(current, order)) {
+      current = startWrite(current, feedId);
+      setStatuses(current);
+      let failure = null;
+      try {
+        await writeChangeSetFeed(feedId);
+        window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
+      } catch (e) {
+        failure = writeFailText(e);
+      }
+      current = finishWrite(current, feedId, failure);
+      setStatuses(current);
+    }
+    setWriting(false);
+    await onChanged();
+    try { setSet(await api(`/change-sets/${id}`)); } catch (_) { /* The set closes when each feed is written. */ }
+  };
+  const discard = () => {
+    if (hasWrittenFeed(set, statuses) && !confirm(DISCARD_ASK)) return;
+    run(async () => {
+      await api(`/change-sets/${id}`, { method: 'DELETE' });
+      await onChanged();
+      go({ name: 'recipients' }, { replace: true });
+    });
+  };
+  const notFound = error && error.status === 404;
+  return html`<div><${Bar}><span class="bar-title">Review of the change</span><//><section class="section">
+    ${notFound
+      ? html`<div class="notice" role="status"><strong>Studio did not find this change set.</strong>It is written or discarded.
+          <div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'recipients' })}>Open Recipients</button></div></div>`
+      : html`<${ErrorNotice} error=${error} />`}
+    ${set === null && !error && html`<p class="empty" role="status">Loading the change set…</p>`}
+    ${set && html`<header class="recipient-head"><h1>${operationTitle(set.operation)}</h1>
+      <p class="hint">${operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
+      <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
+        const outcome = outcomeText(feed.outcome);
+        const blocked = blockedText(feed.blocked);
+        const status = statuses[feed.feed_id];
+        const cause = [blocked, statusError(status)].filter(Boolean);
+        const summary = html`<span class="text"><span class="label">${feed.title || 'Untitled feed'}</span>
+            <span class="summary">${outcome.text}</span>
+            ${cause.map((text) => html`<span class="summary field-error">${text}</span>`)}</span>
+          ${status && html`<span class=${`status ${status.state}`} role="status">${statusText(status)}</span>`}`;
+        if (!outcome.changed) return html`<div key=${feed.feed_id} class="link-row static">${summary}</div>`;
+        const shown = diffs[feed.feed_id];
+        return html`<details key=${feed.feed_id} class="disclosure" open=${openId === feed.feed_id}
+          onToggle=${(e) => toggle(feed.feed_id, e.currentTarget.open)}>
+          <summary class="link-row">${summary}</summary>
+          <div class="change-diff">
+            ${!shown && html`<p class="hint" role="status">Loading the changes…</p>`}
+            ${shown && shown.error && html`<${ErrorNotice} error=${shown.error} />`}
+            ${shown && shown.diff && (shown.diff.changed
+              ? html`<${DiffView} unified=${shown.diff.unified} />`
+              : html`<p class="hint">The draft is the same as the hosted file.</p>`)}
+          </div>
+        </details>`;
+      })}</div></section>
+      <div class="actions">
+        ${pending > 0 && html`<button class="button primary" type="button" disabled=${writing || busy} onClick=${writeAll}>
+          ${writing ? 'Writing…' : writeLabel(pending)}</button>`}
+        <button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>
+      </div>`}
+  </section></div>`;
+}
+
 // The left panel (ADR 0039 items 1, 5 and 6). It shows the destinations, or
 // the outline of the open feed, and Hosts, Settings and Lock Studio at the
 // bottom. `panel` is the value of `leftPanel()`. Only the scroll area scrolls,
@@ -2557,7 +2870,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     </ul>`;
 }
 
-// The footer of the left panel and of the root page: Hosts, Settings, and Lock
+// The footer of the left panel and of the root page: Recipients, File hosts, Settings, and Lock
 // Studio when the vault is open. On a server with a locked vault, Unlock Studio
 // opens the unlock sheet.
 function LeftPanelFooter({ panel, go, onLock }) {
@@ -2566,11 +2879,8 @@ function LeftPanelFooter({ panel, go, onLock }) {
       ? html`<button class="row" type="button" onClick=${onLock}><${Icon} name=${item.icon} />Lock Studio</button>`
       : item.id === 'unlock'
       ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}><${Icon} name=${item.icon} />Unlock Studio</button>`
-      : item.id === 'settings'
-      ? html`<button class="row" type="button" aria-current=${currentAttr(item)}
-          onClick=${() => { if (!item.current) go({ name: 'settings' }); }}><${Icon} name=${item.icon} />${item.label}</button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
-          onClick=${() => { if (!item.current) go({ name: 'hosts' }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}
+          onClick=${() => { if (item.opens ?? !item.current) go({ name: item.id }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}
   </footer>`;
 }
 
@@ -2924,6 +3234,12 @@ function Shell({ vault, onLock }) {
       onOpen=${(id) => go({ name: 'feed', id })} />`;
   } else if (view.name === 'settings') {
     main = html`<${SettingsPage} />`;
+  } else if (view.name === 'recipients') {
+    main = html`<${RecipientsPage} go=${go} />`;
+  } else if (view.name === 'recipient') {
+    main = html`<${RecipientPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
+  } else if (view.name === 'change-set') {
+    main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} onChanged=${() => load()} />`;
   } else if (view.name === 'add-feed') {
     main = html`<${AddFeeds} connectors=${connectors} feeds=${feeds} go=${go}
       onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); }} />`;

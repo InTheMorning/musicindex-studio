@@ -77,7 +77,7 @@ test('with no open feed, the left panel gives Releases at the top', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
   assert.equal(panel.kind, 'destinations');
   assert.equal(panel.top[0].id, 'releases');
-  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings', 'lock']);
+  assert.deepEqual(panel.bottom.map((e) => e.id), ['recipients', 'hosts', 'settings', 'lock']);
   assert.equal(panel.top[0].current, true);
   assert.equal(JSON.stringify(panel).includes('Select a feed'), false);
 });
@@ -93,13 +93,13 @@ test('the row Releases is current on the view add-feed (ADR 0072 item 5)', () =>
 
 test('Unlock Studio takes the place of Lock Studio on a server with a locked vault', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: false, vaultLocked: true });
-  assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['hosts', 'File hosts'], ['settings', 'Settings'], ['unlock', 'Unlock Studio']]);
+  assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['recipients', 'Recipients'], ['hosts', 'File hosts'], ['settings', 'Settings'], ['unlock', 'Unlock Studio']]);
 });
 
 test('Lock Studio shows only when the vault is open', () => {
   const panel = leftPanel({ view: { name: 'hosts' }, feeds: [], model: null, vaultOpen: false });
-  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings']);
-  assert.equal(panel.bottom[0].current, true);
+  assert.deepEqual(panel.bottom.map((e) => e.id), ['recipients', 'hosts', 'settings']);
+  assert.equal(panel.bottom[1].current, true);
 });
 
 test('an open album gives the outline in the sequence of ADR 0039 item 6', () => {
@@ -303,6 +303,7 @@ test('the narrow stack gives the root page below each view (ADR 0039 item 11)', 
   const releases = { name: 'releases' };
   assert.deepEqual(narrowStack({ name: 'root' }), [root]);
   assert.deepEqual(narrowStack({ name: 'releases' }), [root, releases]);
+  assert.deepEqual(narrowStack({ name: 'change-set', id: 3 }), [root, { name: 'recipients' }, { name: 'change-set', id: 3 }]);
   assert.deepEqual(narrowStack({ name: 'hosts' }), [root, { name: 'hosts' }]);
   assert.deepEqual(narrowStack({ name: 'add-feed' }), [root, releases, { name: 'add-feed' }]);
   assert.deepEqual(narrowStack({ name: 'outline', id: 1 }), [root, releases, { name: 'outline', id: 1 }]);
@@ -328,11 +329,11 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
   assert.equal(wide.items[0].id, 'releases');
 });
 
-test('the root page has no current destination, and gives Hosts and Settings at the bottom', () => {
+test('the root page has no current destination, and gives Recipients, File hosts and Settings at the bottom', () => {
   const panel = leftPanel({ view: { name: 'root' }, feeds: [album], model: null, vaultOpen: false });
   assert.equal(panel.kind, 'destinations');
   assert.equal(panel.top.every((e) => e.current === false), true);
-  assert.deepEqual(panel.bottom.map((e) => e.id), ['hosts', 'settings']);
+  assert.deepEqual(panel.bottom.map((e) => e.id), ['recipients', 'hosts', 'settings']);
 });
 
 test('Back from the outline marks the feed on Releases, and Back from a part keeps no mark', () => {
@@ -426,7 +427,17 @@ test('releasesView gives the scroll of the nearest Releases entry and does not c
 
 test('Settings is current on the view settings', () => {
   const panel = leftPanel({ view: { name: 'settings' }, feeds: [], model: null, vaultOpen: true });
-  assert.deepEqual(panel.bottom.map((e) => [e.id, e.current]), [['hosts', false], ['settings', true], ['lock', false]]);
+  assert.deepEqual(panel.bottom.map((e) => [e.id, e.current]), [['recipients', false], ['hosts', false], ['settings', true], ['lock', false]]);
+});
+
+test('Recipients is current on its three views (ADR 0091 item 1)', () => {
+  for (const name of ['recipients', 'recipient', 'change-set']) {
+    const panel = leftPanel({ view: { name }, feeds: [], model: null, vaultOpen: true });
+    assert.equal(panel.bottom.find((e) => e.id === 'recipients').current, true, `ADR 0091 item 1: Recipients is current on the view ${name}.`);
+  }
+  const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: true });
+  assert.deepEqual(panel.bottom.map((e) => e.id), ['recipients', 'hosts', 'settings', 'lock'],
+    'ADR 0091 item 1: the bottom is Recipients, File hosts, Settings, then Lock Studio.');
 });
 
 test('the Role menu gives Artist, Label or Custom for a set of roles', () => {

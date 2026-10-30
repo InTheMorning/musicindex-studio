@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Recipient Batch Edits, File Hosts And Dates".
 Decisions: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0027](../adr/0027-the-recipient-picker.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0088](../adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md).
 
-Status: In progress. Packets 054a and 054b are complete. The plan gives the sequence.
+Status: Complete, with its screenshot visual check. The human test is open. Open defect: the Recipients page counts the feeds from their written state, and the page of a recipient also counts a feed that has only a draft. Thus the two numbers can differ.
 
 ## Goal
 

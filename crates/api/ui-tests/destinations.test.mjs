@@ -18,7 +18,7 @@ test('each fixed destination of leftPanel has its icon', () => {
     ...panel({ vaultLocked: true }).bottom,
   ];
   const expected = {
-    releases: 'library', hosts: 'hard-drive', settings: 'settings', lock: 'lock', unlock: 'lock-open',
+    releases: 'library', recipients: 'wallet', hosts: 'hard-drive', settings: 'settings', lock: 'lock', unlock: 'lock-open',
   };
   for (const [id, icon] of Object.entries(expected)) {
     const entry = entries.find((item) => item.id === id);

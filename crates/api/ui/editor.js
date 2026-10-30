@@ -1184,7 +1184,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
 
 // ---- The diff, the write and the snapshots, in sheets (ADR 0029) ----
 
-function DiffView({ unified }) {
+export function DiffView({ unified }) {
   const lines = unified.split('\n');
   return html`<pre class="diff" tabindex="0" aria-label="Changes between the hosted file and the draft">${lines.map((line) => {
     const kind = line.startsWith('+') && !line.startsWith('+++') ? 'add'
@@ -1330,7 +1330,7 @@ function GrantChecks({ feedId, model, diff, apps, busy, signerHost, onDiff, run 
 
 // The name of the event that tells the feed page to load the announcements
 // again, such as after a write.
-const ANNOUNCE_RELOAD = 'studio-announce-reload';
+export const ANNOUNCE_RELOAD = 'studio-announce-reload';
 
 // A page sends this window event to open the review sheet, for example after
 // "Go live". `DraftToolbar` listens to it.
@@ -1348,6 +1348,30 @@ export function useSheet(open) {
     else if (dialog.open) dialog.close();
   }, [open]);
   return ref;
+}
+
+// Sign the planned events of a diff with the signer of the user. `choice` is
+// the result of `signerChoice`. With no signer, nothing goes to the host. The
+// review sheet and the write of a change set use this function.
+export async function signPlanned(toSign, choice, onProgress) {
+  if (toSign.length === 0) return [];
+  if (choice.kind === 'differs') throw new SignError('signer_key_differs', signErrorText('signer_key_differs'));
+  let signer = window.nostr;
+  if (!signer && choice.kind === 'remote') {
+    signer = remoteSigner((event) => api('/signer/sign', { method: 'POST', body: { event } }));
+  }
+  if (!signer) throw new SignError('no_signer', signErrorText('no_signer'));
+  return signAll(toSign, signer, onProgress);
+}
+
+// The signer choice for the planned events of a diff, with the state of the
+// NIP-46 signer from the API when the browser has no NIP-07 signer.
+export async function currentSignerChoice(toSign) {
+  const hasNip07 = !!window.nostr;
+  const remote = hasNip07 || toSign.length === 0
+    ? null
+    : await api('/signer').catch(() => ({ state: 'none', pubkey: null }));
+  return signerChoice({ hasNip07, remote, events: toSign });
 }
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
@@ -1411,17 +1435,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     let feed;
     let signedEvents = [];
     try {
-      if (toSign.length > 0) {
-        // The signer of the user signs the planned events before the write.
-        // With no signer, nothing goes to the host.
-        let signer = window.nostr;
-        if (!signer && choice.kind === 'remote') {
-          signer = remoteSigner((event) => api('/signer/sign', { method: 'POST', body: { event } }));
-        }
-        if (!signer) throw new SignError('no_signer', signErrorText('no_signer'));
-        setProgress({ done: 0, total: toSign.length });
-        signedEvents = await signAll(toSign, signer, (done, total) => setProgress({ done, total }));
-      }
+      if (toSign.length > 0) setProgress({ done: 0, total: toSign.length });
+      signedEvents = await signPlanned(toSign, choice, (done, total) => setProgress({ done, total }));
       feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
     } catch (e) {
       // After a conflict, the diff is not against the hosted file. Hide it

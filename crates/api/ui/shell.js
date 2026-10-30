@@ -241,6 +241,14 @@ export function isFeedView(view) {
 // the place of "Lock Studio" (ADR 0039 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false }) {
   const bottom = [
+    // The Recipients destination holds the page of a recipient and the review
+    // of a change set (ADR 0091 item 1).
+    {
+      id: 'recipients', label: 'Recipients', icon: 'wallet',
+      current: ['recipients', 'recipient', 'change-set'].includes(view.name),
+      // A click on the row opens the list from the page of a recipient.
+      opens: view.name !== 'recipients',
+    },
     { id: 'hosts', label: 'File hosts', icon: 'hard-drive', current: view.name === 'hosts' },
     { id: 'settings', label: 'Settings', icon: 'settings', current: view.name === 'settings' },
   ];
@@ -697,6 +705,8 @@ export function narrowStack(view) {
     // Each level above a level is a page below it (ADR 0088 item 7).
     case 'releases': return view.group === undefined ? [root, releases] : [root, ...levelPages(view.trail), view];
     case 'add-feed': return [root, releases, view];
+    case 'recipient':
+    case 'change-set': return [root, { name: 'recipients' }, view];
     case 'outline': return view.from ? [root, ...levelPages([...view.from.trail, view.from.group]), view] : [root, releases, view];
     case 'feed': return view.from
       ? [root, ...levelPages([...view.from.trail, view.from.group]), { name: 'outline', id: view.id, from: view.from }, view]

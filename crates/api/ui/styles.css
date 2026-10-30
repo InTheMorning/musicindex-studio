@@ -1712,3 +1712,21 @@ button.outline-feed {
   -webkit-mask: var(--mark-mask) center / contain no-repeat;
   mask: var(--mark-mask) center / contain no-repeat;
 }
+
+/* Recipients and the review of a change set (ADR 0091). A feed row has a
+   check box and two lines of text. A row of the review has its outcome and
+   its status. The diff of a changed feed opens below its summary. */
+.recipient-head { display: grid; gap: 4px; padding: 0 4px; }
+.recipient-head h1 { overflow-wrap: anywhere; }
+.recipient-head .hint { overflow-wrap: anywhere; }
+.recipient-actions { padding: 0 4px; }
+.use-row { cursor: pointer; }
+.use-row input { flex: none; width: 20px; height: 20px; accent-color: var(--accent); }
+.link-row.static { cursor: default; }
+.link-row.static:hover { background: none; }
+.link-row .status { flex: none; color: var(--muted); font-size: .9rem; }
+.link-row .status.writing { color: var(--accent); }
+.link-row .status.failed { color: var(--error); font-weight: 500; }
+.link-row .summary.field-error { overflow-wrap: anywhere; }
+.change-diff { padding: 4px 16px 12px; position: relative; }
+.change-diff .diff { margin: 0; }

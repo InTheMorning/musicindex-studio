@@ -98,11 +98,10 @@ It holds **Audio file size in bytes** and **Audio file type**.
 
 ## Change the order or remove a track
 
-On the track page, use these buttons at the bottom:
+Each track has a position menu. Select a number, and the track moves to that position. The tracks between the two positions move one position. Studio then sets the track numbers again.
 
-- **Move up**
-- **Move down**
-- **Remove the track**
+- On the album page, the menu is at the start of each row in **Tracks**.
+- On the track page, the menu **Position** is at the bottom, adjacent to **Remove the track**.
 
 **Remove the track** does not ask you to confirm.
 It removes the track from the draft.

@@ -8,7 +8,8 @@ import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './va
 import { withCids, STATUS } from './draft.js';
 import { mediumKind, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
-import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, moveTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
+import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
+import { moveTo, moveAmong } from './order.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { npubOf, eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
@@ -65,6 +66,15 @@ function move(list, index, by) {
   const copy = [...list];
   [copy[index], copy[target]] = [copy[target], copy[index]];
   return copy;
+}
+
+// The position menu of one entry of a list (ADR 0081). A selection moves the
+// entry to that position. `name` completes "Position of …".
+export function PositionSelect({ id, index, count, name, disabled, onMove }) {
+  return html`<select id=${id} class="position" aria-label=${`Position of ${name}`} value=${String(index)}
+    disabled=${disabled || count < 2} onChange=${(e) => onMove(Number(e.target.value))}>
+    ${Array.from({ length: count }, (_, i) => html`<option value=${String(i)}>${i + 1}</option>`)}
+  </select>`;
 }
 
 // The buttons that move or remove one entry of a list (ADR 0037 item 1).
@@ -2008,13 +2018,15 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
     </section>`,
     tracks: () => html`<section class="page-section"><h2>Tracks</h2>
       <div class="group">
-        ${model.items.map((item, i) => html`<button key=${trackKey(item)} class="link-row" type="button"
-          onClick=${() => openPage({ page: 'track', track: trackKey(item) })}>
-          <span class="num">${i + 1}</span>
-          <span class="title">${item.title || 'Untitled track'}</span>
-          ${item.duration && html`<span class="dur">${item.duration}</span>`}
-          <span class="go" aria-hidden="true">›</span>
-        </button>`)}
+        ${model.items.map((item, i) => html`<div key=${trackKey(item)} class="order-row">
+          <${PositionSelect} id=${`track-position-${i}`} index=${i} count=${model.items.length} name=${item.title || 'Untitled track'}
+            onMove=${(to) => update((m) => set(m, 'items', moveTo(m.items, i, to)))} />
+          <button class="link-row" type="button" onClick=${() => openPage({ page: 'track', track: trackKey(item) })}>
+            <span class="title">${item.title || 'Untitled track'}</span>
+            ${item.duration && html`<span class="dur">${item.duration}</span>`}
+            <span class="go" aria-hidden="true">›</span>
+          </button>
+        </div>`)}
         <button class="link-row add" type="button" onClick=${() => onImporting(true)}>
           <span class="num">＋</span><span class="title">Add tracks</span>
         </button>
@@ -2058,13 +2070,13 @@ function PlaylistTracksPage({ feed, model, update }) {
         ${items.map((item, i) => {
           const row = trackRow(item);
           return html`<div class="release-row" key=${item._cid}>
-            <span class="title">${row.title}</span>
+            <div class="order-line">
+              <${PositionSelect} id=${`playlist-position-${i}`} index=${i} count=${items.length} name=${row.title}
+                onMove=${(to) => change((list) => moveTo(list, i, to))} />
+              <span class="title">${row.title}</span>
+            </div>
             <span class="sub mono">${row.sub}</span>
             <div class="actions">
-              <button class="button" type="button" disabled=${i === 0}
-                aria-label=${`Move ${row.title} up`} onClick=${() => change((list) => moveTrack(list, i, -1))}>Move up</button>
-              <button class="button" type="button" disabled=${i === items.length - 1}
-                aria-label=${`Move ${row.title} down`} onClick=${() => change((list) => moveTrack(list, i, 1))}>Move down</button>
               <button class="button destructive" type="button"
                 aria-label=${`Remove ${row.title}`} onClick=${() => change((list) => removeTrack(list, i))}>Remove</button>
             </div>
@@ -2541,8 +2553,9 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
     ${showSections(pageSequence('track'), shown)}
 
     <div class="actions">
-      <button class="button" type="button" disabled=${trackIndex === 0} onClick=${() => changeItems(move(items, trackIndex, -1))}>Move up</button>
-      <button class="button" type="button" disabled=${trackIndex === items.length - 1} onClick=${() => changeItems(move(items, trackIndex, 1))}>Move down</button>
+      <label class="position-field" for="track-position">Position
+        <${PositionSelect} id="track-position" index=${trackIndex} count=${items.length} name=${item.title || 'Untitled track'}
+          onMove=${(to) => changeItems(moveTo(items, trackIndex, to))} /></label>
       <button class="button destructive" type="button" onClick=${removeTrack}>Remove the track</button>
     </div>`;
 }
@@ -2885,18 +2898,11 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     }
     twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links/${row.match.id}`, { method: 'DELETE' })).changed);
   };
-  // Swap a release with the release above or below it (ADR 0041 item 10).
-  // Other entries of the list keep their place.
-  const moveRow = (position, by) => {
-    const target = position + by;
-    if (target < 0 || target >= rows.length) return;
-    const a = rows[position].index;
-    const b = rows[target].index;
-    update((m) => set(m, 'remote_items', m.remote_items.map((e, i) => {
-      if (i === a) return m.remote_items[b];
-      if (i === b) return m.remote_items[a];
-      return e;
-    })));
+  // Move a release to a position among the releases (ADR 0041 item 10,
+  // ADR 0081 item 5). The other entries of the list keep their index.
+  const moveRow = (position, to) => {
+    const slots = rows.map((row) => row.index);
+    update((m) => set(m, 'remote_items', moveAmong(m.remote_items, slots, position, to)));
   };
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   const shown = {
@@ -2939,15 +2945,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       <div class="group">
         ${rows.length === 0 && html`<p class="hint">No releases yet.</p>`}
         ${rows.map((row, position) => html`<div class="release-row" key=${row.entry._cid}>
-          <span class="title">${row.entry.title || row.entry.feed_url}</span>
+          <div class="order-line">
+            <${PositionSelect} id=${`release-position-${position}`} index=${position} count=${rows.length}
+              name=${row.entry.title || 'this release'} disabled=${linkAction.busy} onMove=${(to) => moveRow(position, to)} />
+            <span class="title">${row.entry.title || row.entry.feed_url}</span>
+          </div>
           <span class="sub">${row.match ? 'In the collection' : 'Not in the collection'}</span>
           <div class="actions">
-            <button class="button" type="button" disabled=${position === 0 || linkAction.busy}
-              aria-label=${`Move ${row.entry.title || 'this release'} up`}
-              onClick=${() => moveRow(position, -1)}>Move up</button>
-            <button class="button" type="button" disabled=${position === rows.length - 1 || linkAction.busy}
-              aria-label=${`Move ${row.entry.title || 'this release'} down`}
-              onClick=${() => moveRow(position, 1)}>Move down</button>
             <button class="button destructive" type="button" disabled=${linkAction.busy}
               aria-label=${`Remove ${row.entry.title || 'this release'}`}
               onClick=${() => removeRow(row)}>Remove</button>

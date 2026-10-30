@@ -1063,6 +1063,25 @@ select option { background: var(--level-3); color: var(--text); }
    window shows all of it (ADR 0073 item 2). */
 .link-row .text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .link-row .text .summary { white-space: normal; overflow: visible; }
+/* A row with a position menu (ADR 0081). The menu replaces the number at
+   the start of the row, and the rest of the row is the link. */
+.order-row { display: flex; align-items: center; padding-inline-start: 16px; }
+.order-row > .link-row { flex: 1; min-width: 0; padding-inline-start: 12px; }
+.order-line { display: flex; align-items: center; gap: 12px; min-width: 0; }
+select.position {
+  flex: none;
+  min-width: 4.5em;
+  min-height: var(--target);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+select.position:focus { background: var(--fill); }
+.position-field { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
 .link-row .num { flex: none; width: 2ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .link-row .dur { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .9rem; }
 .link-row.add { color: var(--accent); font-weight: 600; }

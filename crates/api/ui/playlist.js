@@ -47,18 +47,6 @@ export function addTrack(remoteItems, item) {
   return hasTrack(remoteItems, item) ? remoteItems : [...remoteItems, item];
 }
 
-// A new list with the entry at `index` moved by `delta` (-1 or 1). A move
-// out of the list gives the list with no change.
-export function moveTrack(remoteItems, index, delta) {
-  const target = index + delta;
-  if (index < 0 || index >= remoteItems.length || target < 0 || target >= remoteItems.length) {
-    return remoteItems;
-  }
-  const next = remoteItems.slice();
-  [next[index], next[target]] = [next[target], next[index]];
-  return next;
-}
-
 // A new list without the entry at `index`.
 export function removeTrack(remoteItems, index) {
   return remoteItems.filter((_, i) => i !== index);

@@ -42,7 +42,7 @@ The sheet stays open after each **Add**, so you can add many tracks.
 
 ## Change the playlist
 
-On the page **Tracks**, each track has the buttons **Move up**, **Move down** and **Remove**.
+On the page **Tracks**, each track has a position menu and the button **Remove**. Select a number in the menu to move the track to that position.
 The page also shows a summary of the tracks.
 
 Then write the playlist. See [Review and write your changes](review-and-write.md).

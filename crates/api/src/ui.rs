@@ -32,6 +32,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/playlist.js"),
     ),
     (
+        "order.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/order.js"),
+    ),
+    (
         "upload.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/upload.js"),

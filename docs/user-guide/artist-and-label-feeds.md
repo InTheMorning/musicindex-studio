@@ -51,7 +51,7 @@ Studio does not put these recipients into the releases of the feed.
 
 The list shows only releases from your collection that have a host.
 Each row says "In the collection" or "Not in the collection".
-Use **Move up**, **Move down** and **Remove** to change the list.
+Select a number in the position menu of a row to move the release. Use **Remove** to remove it.
 
 A link changes two drafts: the draft of the artist feed or label feed, and the draft of the release.
 Studio then shows a notice such as "Studio also changed the draft of ...".

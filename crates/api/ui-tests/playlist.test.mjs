@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pickKey, pickFromIndex, remoteItemFromPick, addTrack, hasTrack,
-  moveTrack, removeTrack, trackRow, tracksSummary,
+  removeTrack, trackRow, tracksSummary,
 } from '../ui/playlist.js';
 
 const a = { _cid: 1, feed_guid: 'f1', item_guid: 'i1', feed_url: 'https://x.example/a.xml', medium: 'music', title: 'One' };
@@ -42,20 +42,6 @@ test('add puts a new track last and ignores a track with the same key', () => {
 test('has track compares the pick keys', () => {
   assert.equal(hasTrack([a, b], { feed_guid: 'f1', item_guid: 'i2', title: 'x' }), true);
   assert.equal(hasTrack([a, b], { feed_guid: 'f2', item_guid: 'i2', title: 'x' }), false);
-});
-
-test('move swaps an entry with its neighbor and keeps the entry keys', () => {
-  const list = [a, b, c];
-  assert.deepEqual(moveTrack(list, 1, -1).map((x) => x._cid), [2, 1, 3]);
-  assert.deepEqual(moveTrack(list, 1, 1).map((x) => x._cid), [1, 3, 2]);
-  assert.deepEqual(list.map((x) => x._cid), [1, 2, 3]);
-});
-
-test('a move out of the list gives the list with no change', () => {
-  const list = [a, b];
-  assert.equal(moveTrack(list, 0, -1), list);
-  assert.equal(moveTrack(list, 1, 1), list);
-  assert.equal(moveTrack(list, 5, -1), list);
 });
 
 test('remove drops one entry and keeps the others', () => {

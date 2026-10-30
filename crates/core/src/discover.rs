@@ -4,6 +4,7 @@ use std::collections::{HashSet, VecDeque};
 
 use serde::Serialize;
 
+use crate::collection::{PublisherRole, inferred_roles};
 use crate::connector::{Connector, ConnectorError, Version};
 use crate::digest::content_version;
 use crate::feed::{Feed, RemoteItem};
@@ -135,6 +136,9 @@ pub struct Found {
     pub title: Option<String>,
     /// `podcast:medium`.
     pub medium: Option<String>,
+    /// The roles that the links of a publisher feed give. Studio infers
+    /// them, so nothing confirms them (ADR 0082 item 4).
+    pub publisher_roles: Vec<PublisherRole>,
     /// `podcast:guid`.
     pub podcast_guid: Option<String>,
     /// How discovery found the feed.
@@ -457,6 +461,11 @@ pub fn from_sources(
             url,
             title: feed.title.clone(),
             medium: feed.medium.clone(),
+            publisher_roles: if feed.medium.as_deref() == Some("publisher") {
+                inferred_roles(&feed)
+            } else {
+                Vec::new()
+            },
             podcast_guid: feed.podcast_guid.clone(),
             via,
             feed,

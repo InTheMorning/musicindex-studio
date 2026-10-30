@@ -6,20 +6,49 @@
 import { liveKey, isLiveItem, statusLabel } from './live.js';
 import { coverOf } from './cover.js';
 
+// The eight roles of a publisher feed, in the sequence of musicindex ADR
+// 0012 item 5 (ADR 0082 item 1).
+export const ROLES = ['artist', 'label', 'host', 'author', 'producer', 'network', 'hosting', 'sponsor'];
+
+// The word of a role, for example "Artist".
+export const roleWord = (role) => role.charAt(0).toUpperCase() + role.slice(1);
+
 // The kind of a medium: its dot class and its label. A publisher feed shows
-// its role, and "Feed" with a hollow dot when the collection has no role
-// (musicindex ADR 0033 R-WORD-3). Studio cannot make the test of R-WORD-3
-// item 3, so it does not use the label of that item.
-export function mediumKind(medium, role) {
+// its first role (musicindex ADR 0035 R-WORD-6). The dot is hollow while
+// nothing confirms the roles (musicindex ADR 0033 R-WORD-3 item 3, ADR 0082
+// item 6). A feed with no role shows "Feed" with a hollow dot.
+export function mediumKind(medium, roles = [], confirmed = false) {
   switch ((medium || '').toLowerCase()) {
-    case 'publisher':
-      if (role === 'artist') return { dot: 'artist', label: 'Artist' };
-      if (role === 'label') return { dot: 'label', label: 'Label' };
-      return { dot: 'feed hollow', label: 'Feed' };
+    case 'publisher': {
+      const first = ROLES.find((role) => (roles || []).includes(role));
+      if (!first) return { dot: 'feed hollow', label: 'Feed' };
+      return { dot: confirmed ? first : `${first} hollow`, label: roleWord(first) };
+    }
     case 'musicl': return { dot: 'playlist', label: 'Playlist' };
     case 'music': return { dot: 'feed', label: 'Album' };
     default: return { dot: 'feed', label: 'Feed' };
   }
+}
+
+// The kind of a feed of the collection or of a discovery.
+export function feedKind(feed) {
+  return mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed);
+}
+
+// The choice of the Role menu for a set of roles: "artist", "label",
+// "custom", or "" for no role (ADR 0082 item 7).
+export function roleChoice(roles) {
+  const set = roles || [];
+  if (set.length === 0) return '';
+  if (set.length === 1 && (set[0] === 'artist' || set[0] === 'label')) return set[0];
+  return 'custom';
+}
+
+// The set after a change of one check box. The set keeps one or more
+// roles, so a change that clears the last role gives the set as it is.
+export function toggleRole(roles, role, checked) {
+  const next = ROLES.filter((r) => (r === role ? checked : (roles || []).includes(r)));
+  return next.length > 0 ? next : roles;
 }
 
 // The color of the logo shape of a feed with no cover: the entity color of
@@ -27,7 +56,7 @@ export function mediumKind(medium, role) {
 // color.
 export function kindGlow(kind) {
   const dot = kind.dot.split(' ')[0];
-  return `var(--c-${['playlist', 'artist', 'label'].includes(dot) ? dot : 'feed'})`;
+  return `var(--c-${['playlist', ...ROLES].includes(dot) ? dot : 'feed'})`;
 }
 
 // Is this feed a publisher feed (ADR 0041 item 1)?
@@ -210,12 +239,12 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       id: feed.id,
       title: displayTitle(feed),
       image: feedCover(feed),
-      glow: kindGlow(mediumKind(feed.medium, feed.publisher_role)),
-      typeLabel: mediumKind(feed.medium, feed.publisher_role).label,
+      glow: kindGlow(feedKind(feed)),
+      typeLabel: feedKind(feed).label,
       // The head opens the first page (ADR 0069).
       page: 'album',
       current: isCurrentPage(view, 'album'),
-      label: `${displayTitle(feed)}, ${mediumKind(feed.medium, feed.publisher_role).label}`,
+      label: `${displayTitle(feed)}, ${feedKind(feed).label}`,
     },
     items: outlineItems(feed, view, model, narrow),
     bottom,
@@ -288,8 +317,8 @@ export function releasesList({ feeds, connectors, sort, view, marked }) {
   const rows = sorted.map((feed) => ({
     id: feed.id,
     title: displayTitle(feed),
-    typeLabel: mediumKind(feed.medium, feed.publisher_role).label,
-    glow: kindGlow(mediumKind(feed.medium, feed.publisher_role)),
+    typeLabel: feedKind(feed).label,
+    glow: kindGlow(feedKind(feed)),
     host: hostOf(feed, connectors),
     image: feedCover(feed),
     draftLabel: DRAFT_LABELS[feed.draft_state] || 'No changes',

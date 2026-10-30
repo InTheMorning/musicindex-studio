@@ -8,8 +8,10 @@
 
 use std::fmt;
 
-use crate::collection::{Collection, CollectionError, FeedId, FeedRow, PublisherRole};
-use crate::feed::{Entry, Feed, Publisher, RemoteItem};
+use crate::collection::{
+    Collection, CollectionError, FeedId, FeedRow, PublisherRole, inferred_roles, rel_of,
+};
+use crate::feed::{Entry, Publisher, RemoteItem};
 use crate::pipeline::{self, PipelineError};
 
 /// The kind of a [`PublisherError`].
@@ -87,55 +89,39 @@ impl From<CollectionError> for PublisherError {
     }
 }
 
-/// The role that the channel `remoteItem` elements with `medium="music"`
-/// give. It is `artist` or `label`, when each such item has the same
-/// `rel`. Gives none when a feed has no such item, when an item has no
-/// `rel`, or when two items differ (ADR 0041 item 4).
-#[must_use]
-pub fn inferred_role(feed: &Feed) -> Option<PublisherRole> {
-    let mut found = None;
-    for item in feed
-        .remote_items
-        .iter()
-        .filter(|item| item.medium.as_deref() == Some("music"))
-    {
-        let text = item.rel.as_deref()?.trim().to_ascii_lowercase();
-        let role = PublisherRole::parse(&text)?;
-        match found {
-            None => found = Some(role),
-            Some(earlier) if earlier == role => {}
-            Some(_) => return None,
-        }
-    }
-    found
-}
-
-/// The role of a publisher feed. The recorded role comes first. With no
-/// recorded role, Studio takes the inferred role of the draft and records
-/// it (ADR 0041 item 4).
+/// The roles of a publisher feed for a change of a link. Confirmed roles
+/// come first. Studio then takes the roles that the draft gives, and
+/// confirms them (ADR 0041 item 4, ADR 0082 items 4 and 5).
 ///
 /// # Errors
 ///
 /// Gives [`PublisherErrorKind::NotPublisher`] when the feed is not a
 /// publisher feed, and [`PublisherErrorKind::NoRole`] when neither the
 /// record nor the draft gives a role.
-pub fn role(collection: &Collection, publisher: FeedId) -> Result<PublisherRole, PublisherError> {
+pub fn roles(
+    collection: &Collection,
+    publisher: FeedId,
+) -> Result<Vec<PublisherRole>, PublisherError> {
     let row = check_publisher(collection, publisher)?;
-    if let Some(role) = row.publisher_role {
-        return Ok(role);
+    if row.roles_confirmed && !row.publisher_roles.is_empty() {
+        return Ok(row.publisher_roles);
     }
     let (feed, _) = pipeline::draft_model(collection, publisher)?;
-    let role = inferred_role(&feed).ok_or_else(|| {
-        PublisherError::new(
+    let mut roles = inferred_roles(&feed);
+    if roles.is_empty() {
+        roles = row.publisher_roles;
+    }
+    if roles.is_empty() {
+        return Err(PublisherError::new(
             PublisherErrorKind::NoRole,
             format!(
                 "feed {} has no role, and its music items give none; select a role first",
                 publisher.0
             ),
-        )
-    })?;
-    collection.set_publisher_role(publisher, Some(role))?;
-    Ok(role)
+        ));
+    }
+    collection.set_publisher_roles(publisher, &roles, true)?;
+    Ok(roles)
 }
 
 /// The music feeds that the draft of a publisher feed links to.
@@ -191,14 +177,14 @@ pub fn link(
     let release_party = party(collection, &release_row)?;
     check_named(&publisher_party, "publisher")?;
     check_named(&release_party, "release")?;
-    let publisher_role = role(collection, publisher)?;
+    let rel = rel_of(&roles(collection, publisher)?);
 
     let channel_link = RemoteItem {
         medium: Some("music".to_owned()),
         feed_guid: release_party.guid.clone(),
         feed_url: release_party.url.clone(),
         title: release_party.title.clone(),
-        rel: Some(publisher_role.as_str().to_owned()),
+        rel: Some(rel.clone()),
         ..RemoteItem::default()
     };
     pipeline::edit_draft(collection, publisher, |feed| {
@@ -210,7 +196,7 @@ pub fn link(
         feed_guid: publisher_party.guid.clone(),
         feed_url: publisher_party.url.clone(),
         title: publisher_party.title.clone(),
-        rel: Some(publisher_role.as_str().to_owned()),
+        rel: Some(rel.clone()),
         ..RemoteItem::default()
     };
     pipeline::edit_draft(collection, release, |feed| {
@@ -270,27 +256,35 @@ pub fn unlink(
     Ok(())
 }
 
-/// Record the role of a publisher feed. The `rel` of each music item of
-/// its draft changes, and so does the `rel` of its link in each linked
-/// release (ADR 0041 item 11).
+/// Record and confirm the roles of a publisher feed. The `rel` of each
+/// music item of its draft changes, and so does the `rel` of its link in
+/// each linked release (ADR 0041 item 11, ADR 0082 item 8).
 ///
 /// # Errors
 ///
 /// Gives [`PublisherErrorKind::NotPublisher`] when the feed is not a
-/// publisher feed, and a [`PublisherError`] when a draft is missing.
-pub fn set_role(
+/// publisher feed, [`PublisherErrorKind::NoRole`] when `roles` is empty,
+/// and a [`PublisherError`] when a draft is missing.
+pub fn set_roles(
     collection: &Collection,
     publisher: FeedId,
-    role: PublisherRole,
+    roles: &[PublisherRole],
 ) -> Result<(), PublisherError> {
     let row = check_publisher(collection, publisher)?;
+    if roles.is_empty() {
+        return Err(PublisherError::new(
+            PublisherErrorKind::NoRole,
+            "select one or more roles",
+        ));
+    }
     let publisher_party = party(collection, &row)?;
-    collection.set_publisher_role(publisher, Some(role))?;
+    collection.set_publisher_roles(publisher, roles, true)?;
+    let rel = rel_of(roles);
 
     pipeline::edit_draft(collection, publisher, |feed| {
         for item in &mut feed.remote_items {
             if item.medium.as_deref() == Some("music") {
-                item.rel = Some(role.as_str().to_owned());
+                item.rel = Some(rel.clone());
             }
         }
     })?;
@@ -299,7 +293,7 @@ pub fn set_role(
             if let Some(links) = feed.publisher.as_mut() {
                 for item in &mut links.remote_items {
                     if names(&item.value, &publisher_party) {
-                        item.rel = Some(role.as_str().to_owned());
+                        item.rel = Some(rel.clone());
                     }
                 }
             }

@@ -65,7 +65,7 @@ test('startChoices uses the address of a feed with no title', () => {
 
 test('startChoices leaves out a publisher feed and a playlist', () => {
   const feeds = [
-    { id: 1, medium: 'publisher', publisher_role: 'artist', title: 'Band' },
+    { id: 1, medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true, title: 'Band' },
     { id: 2, medium: 'musicL', title: 'Mix' },
     { id: 3, medium: 'music', title: 'Album' },
   ];

@@ -291,6 +291,12 @@ CREATE TABLE uploads (
     r"
 ALTER TABLE connected_apps ADD COLUMN app_pubkey TEXT;
 ",
+    r"
+ALTER TABLE feeds ADD COLUMN publisher_roles TEXT;
+ALTER TABLE feeds ADD COLUMN roles_confirmed INTEGER NOT NULL DEFAULT 0;
+UPDATE feeds SET publisher_roles = publisher_role, roles_confirmed = 1 WHERE publisher_role IS NOT NULL;
+ALTER TABLE feeds DROP COLUMN publisher_role;
+",
 ];
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
@@ -414,35 +420,113 @@ pub struct ConnectorRow {
     pub secret_ref: Option<String>,
 }
 
-/// The role of a publisher feed (ADR 0041 item 1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// A role of a publisher feed (ADR 0082 item 1). The variants are in the
+/// sequence of musicindex ADR 0012 item 5, so a sort gives that sequence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PublisherRole {
     /// The publisher feed of an artist.
     Artist,
     /// The publisher feed of a label.
     Label,
+    /// A host.
+    Host,
+    /// An author.
+    Author,
+    /// A producer.
+    Producer,
+    /// A network.
+    Network,
+    /// A hosting service.
+    Hosting,
+    /// A sponsor.
+    Sponsor,
 }
 
 impl PublisherRole {
+    /// The eight roles, in their sequence.
+    pub const ALL: [Self; 8] = [
+        Self::Artist,
+        Self::Label,
+        Self::Host,
+        Self::Author,
+        Self::Producer,
+        Self::Network,
+        Self::Hosting,
+        Self::Sponsor,
+    ];
+
     /// The text of the role in the collection and in the `rel` of a link.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Artist => "artist",
             Self::Label => "label",
+            Self::Host => "host",
+            Self::Author => "author",
+            Self::Producer => "producer",
+            Self::Network => "network",
+            Self::Hosting => "hosting",
+            Self::Sponsor => "sponsor",
         }
     }
 
     /// The role for its text. Gives none for another text.
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
-        match text {
-            "artist" => Some(Self::Artist),
-            "label" => Some(Self::Label),
-            _ => None,
-        }
+        Self::ALL.into_iter().find(|role| role.as_str() == text)
     }
+}
+
+/// The roles of a `rel` value, in their sequence, each one time (ADR 0082
+/// item 3, musicindex ADR 0011 item 1). A value with a comma is a comma
+/// list, and each other value is a list separated by white space. A word
+/// that is not a role is not in the result.
+#[must_use]
+pub fn roles_from_rel(text: &str) -> Vec<PublisherRole> {
+    let words: Vec<&str> = if text.contains(',') {
+        text.split(',').collect()
+    } else {
+        text.split_whitespace().collect()
+    };
+    let mut roles: Vec<PublisherRole> = words
+        .iter()
+        .filter_map(|word| PublisherRole::parse(&word.trim().to_ascii_lowercase()))
+        .collect();
+    roles.sort_unstable();
+    roles.dedup();
+    roles
+}
+
+/// The roles that the channel `remoteItem` elements with `medium="music"`
+/// of a publisher feed give: each role of each `rel`, in their sequence
+/// (ADR 0082 item 4).
+#[must_use]
+pub fn inferred_roles(feed: &Feed) -> Vec<PublisherRole> {
+    let mut roles: Vec<PublisherRole> = feed
+        .remote_items
+        .iter()
+        .filter(|item| item.medium.as_deref() == Some("music"))
+        .filter_map(|item| item.rel.as_deref())
+        .flat_map(roles_from_rel)
+        .collect();
+    roles.sort_unstable();
+    roles.dedup();
+    roles
+}
+
+/// The `rel` value of a set of roles: the roles in their sequence, with
+/// one space between two roles (ADR 0082 item 8).
+#[must_use]
+pub fn rel_of(roles: &[PublisherRole]) -> String {
+    let mut sorted = roles.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    sorted
+        .iter()
+        .map(|role| role.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// A feed as the collection keeps it.
@@ -475,9 +559,12 @@ pub struct FeedRow {
     /// the write pipeline still decides a default elsewhere (ADR 0036
     /// item 4 and item 8).
     pub files_connector_id: Option<ConnectorId>,
-    /// The role of a publisher feed (ADR 0041 item 1). `None` for a feed
-    /// that has no recorded role.
-    pub publisher_role: Option<PublisherRole>,
+    /// The roles of a publisher feed, in their sequence (ADR 0082 item 1).
+    /// Empty for a feed that has no recorded role.
+    pub publisher_roles: Vec<PublisherRole>,
+    /// True when the user or a link confirmed the roles. False when Studio
+    /// inferred them from the feed (ADR 0082 items 4 and 5).
+    pub roles_confirmed: bool,
     /// The time that the feed joined the collection, in seconds since the
     /// Unix epoch. A feed that joins later has a greater or equal value.
     pub added_at: i64,
@@ -934,20 +1021,22 @@ impl Collection {
         Ok(())
     }
 
-    /// Record the role of a publisher feed, or remove it with `None`
-    /// (ADR 0041 item 1).
+    /// Record the roles of a publisher feed, and whether they are confirmed
+    /// (ADR 0082 items 2 and 5). An empty set removes the roles.
     ///
     /// # Errors
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn set_publisher_role(
+    pub fn set_publisher_roles(
         &self,
         id: FeedId,
-        role: Option<PublisherRole>,
+        roles: &[PublisherRole],
+        confirmed: bool,
     ) -> Result<(), CollectionError> {
+        let text = (!roles.is_empty()).then(|| rel_of(roles));
         self.db.execute(
-            "UPDATE feeds SET publisher_role = ?2 WHERE id = ?1",
-            params![id.0, role.map(PublisherRole::as_str)],
+            "UPDATE feeds SET publisher_roles = ?2, roles_confirmed = ?3 WHERE id = ?1",
+            params![id.0, text, confirmed && !roles.is_empty()],
         )?;
         Ok(())
     }
@@ -1050,6 +1139,15 @@ impl Collection {
         )?;
         choose_address(&tx, id)?;
         put_recipients(&tx, id, feed.recipients())?;
+        // A publisher feed with no confirmed roles gets the roles that its
+        // links give (ADR 0082 item 4).
+        if feed.medium.as_deref() == Some("publisher") {
+            let roles = rel_of(&inferred_roles(feed));
+            tx.execute(
+                "UPDATE feeds SET publisher_roles = NULLIF(?2, '') WHERE id = ?1 AND roles_confirmed = 0",
+                params![id.0, roles],
+            )?;
+        }
         tx.commit()?;
         Ok(())
     }
@@ -2706,7 +2804,7 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_role, created_at FROM feeds";
+const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_roles, roles_confirmed, created_at FROM feeds";
 
 /// Keep or remove the address of one source. An empty address is no address.
 fn put_address(
@@ -2863,11 +2961,13 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
         address_differences: Vec::new(),
         folder: r.get(9)?,
         files_connector_id: r.get::<_, Option<i64>>(10)?.map(ConnectorId),
-        publisher_role: r
+        publisher_roles: r
             .get::<_, Option<String>>(11)?
             .as_deref()
-            .and_then(PublisherRole::parse),
-        added_at: r.get(12)?,
+            .map(roles_from_rel)
+            .unwrap_or_default(),
+        roles_confirmed: r.get(12)?,
+        added_at: r.get(13)?,
     })
 }
 
@@ -3549,39 +3649,54 @@ mod tests {
     }
 
     #[test]
-    fn a_database_at_schema_version_6_opens_and_gets_the_publisher_role() {
+    fn a_recorded_role_becomes_a_confirmed_set_of_one_role() {
+        // The collection before ADR 0082 kept one role (ADR 0082 item 10).
+        let before = MIGRATIONS.len() - 1;
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        for migration in &MIGRATIONS[..6] {
+        for migration in &MIGRATIONS[..before] {
             db.execute_batch(migration).unwrap();
         }
-        db.pragma_update(None, "user_version", 6).unwrap();
+        db.pragma_update(None, "user_version", i64::try_from(before).unwrap())
+            .unwrap();
         db.execute_batch(
-            "INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0);",
+            "INSERT INTO feeds (id, public_url, publisher_role, created_at) VALUES (1, 'https://example.com/a.xml', 'label', 0);
+             INSERT INTO feeds (id, public_url, created_at) VALUES (2, 'https://example.com/b.xml', 0);",
         )
         .unwrap();
         drop(db);
 
         let collection = Collection::open(&path).unwrap();
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
-        assert_eq!(collection.feed(FeedId(1)).unwrap().publisher_role, None);
+        let label = collection.feed(FeedId(1)).unwrap();
+        assert_eq!(label.publisher_roles, [PublisherRole::Label]);
+        assert!(label.roles_confirmed);
+        let none = collection.feed(FeedId(2)).unwrap();
+        assert_eq!(none.publisher_roles, Vec::new());
+        assert!(!none.roles_confirmed);
+
         collection
-            .set_publisher_role(FeedId(1), Some(PublisherRole::Label))
+            .set_publisher_roles(
+                FeedId(2),
+                &[PublisherRole::Producer, PublisherRole::Artist],
+                false,
+            )
+            .unwrap();
+        let set = collection.feed(FeedId(2)).unwrap();
+        assert_eq!(
+            set.publisher_roles,
+            [PublisherRole::Artist, PublisherRole::Producer]
+        );
+        assert!(!set.roles_confirmed);
+        collection
+            .set_publisher_roles(FeedId(2), &[], true)
             .unwrap();
         assert_eq!(
-            collection.feed(FeedId(1)).unwrap().publisher_role,
-            Some(PublisherRole::Label)
+            collection.feed(FeedId(2)).unwrap().publisher_roles,
+            Vec::new()
         );
-        collection.set_publisher_role(FeedId(1), None).unwrap();
-        assert_eq!(collection.feed(FeedId(1)).unwrap().publisher_role, None);
-        // The schema accepts only the two roles.
-        assert!(
-            collection
-                .db
-                .execute("UPDATE feeds SET publisher_role = 'band' WHERE id = 1", [])
-                .is_err()
-        );
+        assert!(!collection.feed(FeedId(2)).unwrap().roles_confirmed);
     }
 
     #[test]

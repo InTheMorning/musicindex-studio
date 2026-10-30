@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mediumKind, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView,
@@ -21,7 +21,7 @@ const model = {
 const labels = (items) => items.map((item) => item.label);
 
 test('the medium kind gives the dot and the label', () => {
-  assert.deepEqual(mediumKind('publisher', 'label'), { dot: 'label', label: 'Label' });
+  assert.deepEqual(mediumKind('publisher', ['label'], true), { dot: 'label', label: 'Label' });
   assert.deepEqual(mediumKind('MUSIC'), { dot: 'feed', label: 'Album' });
   assert.deepEqual(mediumKind('musicL'), { dot: 'playlist', label: 'Playlist' });
   assert.deepEqual(mediumKind(undefined), { dot: 'feed', label: 'Feed' });
@@ -167,7 +167,7 @@ test('an open album before its draft loads gives the Releases link and Files', (
 
 test('a publisher feed gives Feed settings and Files, and a feed that the editor does not open gives no page', () => {
   // musicindex ADR 0033 R-WORD-3: the page has the role word.
-  const label = { ...publisher, publisher_role: 'label' };
+  const label = { ...publisher, publisher_roles: ['label'], roles_confirmed: true };
   const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [label], model: null, vaultOpen: false });
   assert.deepEqual(labels(pub.items), ['Releases', 'Feed settings', 'Files']);
   const noRole = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: null, vaultOpen: false });
@@ -425,4 +425,20 @@ test('releasesView gives the scroll of the nearest Releases entry and does not c
 test('Settings is current on the view settings', () => {
   const panel = leftPanel({ view: { name: 'settings' }, feeds: [], model: null, vaultOpen: true });
   assert.deepEqual(panel.bottom.map((e) => [e.id, e.current]), [['hosts', false], ['settings', true], ['lock', false]]);
+});
+
+test('the Role menu gives Artist, Label or Custom for a set of roles', () => {
+  // ADR 0082 item 7.
+  assert.equal(roleChoice([]), '');
+  assert.equal(roleChoice(['artist']), 'artist');
+  assert.equal(roleChoice(['label']), 'label');
+  assert.equal(roleChoice(['artist', 'host']), 'custom');
+  assert.equal(roleChoice(['producer']), 'custom');
+});
+
+test('a check box adds or removes a role, and keeps one or more roles', () => {
+  assert.deepEqual(toggleRole(['label'], 'artist', true), ['artist', 'label']);
+  assert.deepEqual(toggleRole(['artist', 'label'], 'artist', false), ['label']);
+  const last = ['host'];
+  assert.equal(toggleRole(last, 'host', false), last);
 });

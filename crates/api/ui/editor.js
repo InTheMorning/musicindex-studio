@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { api, sendInParts, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
 import { withCids, STATUS } from './draft.js';
-import { mediumKind, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
+import { feedKind, ROLES, roleWord, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, startToIso, isoToLocalInput, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -2804,15 +2804,6 @@ function mediumOf(feed) {
   return (feed.medium || '').toLowerCase();
 }
 
-// The role that the music items give (ADR 0041 item 4). Studio takes the
-// role when each music item gives the same `rel`. Otherwise it gives none.
-function inferredRole(items) {
-  const rels = items.filter((entry) => entry.medium === 'music').map((entry) => entry.rel);
-  if (rels.length === 0) return null;
-  const [first] = rels;
-  return rels.every((rel) => rel === first) && (first === 'artist' || first === 'label') ? first : null;
-}
-
 // The feed of the list that a release entry names, by its feed GUID or its
 // public address (ADR 0041, the releases of a publisher feed).
 function linkedFeed(feeds, entry) {
@@ -2873,14 +2864,25 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     .filter((row) => row.entry.medium === 'music');
   const linkedIds = new Set(rows.filter((row) => row.match).map((row) => row.match.id));
   const candidates = feeds.filter((f) => f.connector_id && mediumOf(f) === 'music' && !linkedIds.has(f.id));
-  const inferred = inferredRole(items);
-  const shownRole = feed.publisher_role || inferred || '';
+  const roles = feed.publisher_roles || [];
+  // "Custom" shows the check boxes also before the first change (ADR 0082
+  // item 7).
+  const [custom, setCustom] = useState(false);
+  const choice = custom ? 'custom' : roleChoice(roles);
+  // A role change writes the links, so it needs the host of the feed, as a
+  // link does (ADR 0041 item 5).
+  const readOnly = !feed.connector_id;
 
   // The steps of this page for one change of two drafts.
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
-  const setRole = (role) => {
-    if (!role) return;
-    twoDrafts(roleAction, async () => (await api(`/feeds/${feed.id}/role`, { method: 'PUT', body: { role } })).changed);
+  // Save and confirm a set of roles (ADR 0082 items 5 and 8).
+  const setRoles = (next) => {
+    if (next.length === 0) return;
+    twoDrafts(roleAction, async () => (await api(`/feeds/${feed.id}/role`, { method: 'PUT', body: { roles: next } })).changed);
+  };
+  const choose = (value) => {
+    setCustom(value === 'custom');
+    if (value === 'artist' || value === 'label') setRoles([value]);
   };
   const addRelease = async () => {
     const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links`, {
@@ -2906,7 +2908,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   };
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   const shown = {
-    channel: (s) => html`<section class="page-section"><h2>${mediumKind(feed.medium, feed.publisher_role).label}</h2>
+    channel: (s) => html`<section class="page-section"><h2>${feedKind(feed).label}</h2>
       <div class="group">
         ${showEach(s.fields, {
           title: () => html`<${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />`,
@@ -2930,12 +2932,20 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         <div class="field">
           <label for="pub-role">Role</label>
           <div class="field-body">
-            <select id="pub-role" value=${shownRole} disabled=${roleAction.busy} onChange=${(e) => setRole(e.target.value)}>
-              ${shownRole === '' && html`<option value="" disabled>Select a role</option>`}
+            <select id="pub-role" value=${choice} disabled=${roleAction.busy || readOnly} onChange=${(e) => choose(e.target.value)}>
+              ${choice === '' && html`<option value="" disabled>Select a role</option>`}
               <option value="artist">Artist</option>
               <option value="label">Label</option>
+              <option value="custom">Custom</option>
             </select>
-            ${!feed.publisher_role && inferred && html`<span class="hint">Studio found this role in the feed.</span>`}
+            ${readOnly && html`<span class="hint">To change the roles, connect the folder that holds this feed in Hosts.</span>`}
+            ${roles.length > 0 && !feed.roles_confirmed && html`<span class="hint">Studio found ${roles.length === 1 ? 'this role' : 'these roles'} in the feed: ${roles.map(roleWord).join(', ')}.${readOnly ? '' : ' Select the roles to confirm them.'}</span>`}
+            ${choice === 'custom' && html`<div class="role-choices" role="group" aria-label="Roles">
+              ${ROLES.map((role) => html`<label class="check"><input type="checkbox" id=${`pub-role-${role}`}
+                checked=${roles.includes(role)} disabled=${roleAction.busy || readOnly || (roles.length === 1 && roles[0] === role)}
+                onChange=${(e) => setRoles(toggleRole(roles, role, e.target.checked))} /> ${roleWord(role)}</label>`)}
+            </div>
+            <span class="hint">The first role in this list gives the type of the feed. A feed has one or more roles.</span>`}
           </div>
         </div>
         <${ErrorNotice} error=${publisherError(roleAction.error, PUBLISHER_ROLE_TEXT)} />

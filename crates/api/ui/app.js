@@ -17,7 +17,7 @@ import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
 import {
-  mediumKind, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
+  mediumKind, feedKind, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
@@ -1283,7 +1283,7 @@ function AddFeedForm({ connectors, onAdded }) {
           onChange=${(e) => setSelected(e.target.value)}>
           <option value="">Choose a feed file</option>
           ${found.feeds.map((f) => html`<option value=${f.path} disabled=${f.in_collection}>
-            ${f.title || f.path} · ${mediumKind(f.medium, f.publisher_role).label}${f.blocked ? ' · blocked' : ''} · ${f.path}${f.in_collection ? ' · in your collection' : ''}</option>`)}
+            ${f.title || f.path} · ${feedKind(f).label}${f.blocked ? ' · blocked' : ''} · ${f.path}${f.in_collection ? ' · in your collection' : ''}</option>`)}
         </select>`}
         ${found && found.truncated && html`<p class="hint">The folder has more files than Studio lists. Type the path of a feed that is not in the list.</p>`}
         ${feedError.field && html`<span class="field-error" id="feed-choice-error">${feedError.field}</span>`}
@@ -1376,7 +1376,7 @@ function FoundFeeds({ found, onAdded, onNothingToAdd }) {
       <legend>${g.host}</legend>
       <p class="hint">${hostLabel(g)}</p>
       ${g.feeds.map((f) => {
-        const kind = mediumKind(f.medium, f.publisher_role);
+        const kind = feedKind(f);
         return html`<label class=${`choice${f.in_collection ? ' taken' : ''}`}>
           <input type="checkbox" disabled=${f.in_collection} checked=${f.in_collection || chosen.includes(f.url)}
             onChange=${() => toggle(f.url)} />
@@ -1640,7 +1640,7 @@ function Bar({ back = true, children }) {
 // before ADR 0029.
 function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
-  const kind = mediumKind(feed.medium, feed.publisher_role);
+  const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const remove = () => {
     const name = feed.title || feed.path || 'this feed';
@@ -1707,7 +1707,7 @@ function Crumb({ feed, view, draft }) {
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
-  const kind = mediumKind(feed.medium, feed.publisher_role);
+  const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const glow = kindGlow(kind);
   // A host operation can change the draft XML, and `draft.changed` from
@@ -1805,7 +1805,7 @@ function FolderFeeds({ connector, onAdded }) {
     <h2>Studio also found these feeds in this folder</h2>
     <fieldset class="choices"><legend class="visually-hidden">Feeds to add</legend>
       ${found.map((f) => {
-        const kind = mediumKind(f.medium, f.publisher_role);
+        const kind = feedKind(f);
         return html`<label class="choice">
           <input type="checkbox" checked=${chosen.includes(f.path)} onChange=${() => toggle(f.path)} />
           <span class=${`dot ${kind.dot}`}></span>
@@ -2163,7 +2163,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>`}
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<ul class="feed-list">
               ${written.map((f) => html`<li><button class="button link" type="button" onClick=${() => onOpen(f.id)}>
-                <span class=${`dot ${mediumKind(f.medium, f.publisher_role).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
+                <span class=${`dot ${feedKind(f).dot}`}></span>${f.title || f.path}</button></li>`)}</ul>`}</dd>
             ${disagreeing.length > 0 && html`<dt>Different addresses</dt><dd>
               These feeds have an address that does not agree with the folder.
               <ul class="address-list">

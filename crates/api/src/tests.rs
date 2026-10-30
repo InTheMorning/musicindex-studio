@@ -744,7 +744,8 @@ async fn a_publisher_feed_is_made_with_its_role_and_a_bad_medium_or_role_gives_4
     )
     .await;
     assert_eq!(label["medium"], "publisher");
-    assert_eq!(label["publisher_role"], "label");
+    assert_eq!(label["publisher_roles"], json!(["label"]));
+    assert_eq!(label["roles_confirmed"], true);
     assert_eq!(
         draft_model(&app, label["id"].as_i64().unwrap()).await["medium"],
         "publisher"
@@ -757,7 +758,7 @@ async fn a_publisher_feed_is_made_with_its_role_and_a_bad_medium_or_role_gives_4
     )
     .await;
     assert_eq!(music["medium"], "music");
-    assert_eq!(music["publisher_role"], Value::Null);
+    assert_eq!(music["publisher_roles"], json!([]));
 
     for (path, medium, role) in [
         ("p1.xml", Some("publisher"), None),
@@ -846,7 +847,13 @@ async fn a_link_changes_both_drafts_and_a_role_change_and_a_removal_follow_it() 
     assert_eq!(release_item["feed_url"], "https://music.example/label.xml");
 
     let role_path = format!("/api/v1/feeds/{label_id}/role");
-    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "role": "artist" }))).await;
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &role_path,
+        Some(json!({ "roles": ["artist"] })),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
         body["changed"],
@@ -859,6 +866,19 @@ async fn a_link_changes_both_drafts_and_a_role_change_and_a_removal_follow_it() 
     assert_eq!(
         draft_model(&app, release_id).await["publisher"]["remote_items"][0]["rel"],
         "artist"
+    );
+    // A custom set writes its roles in their sequence (ADR 0082 item 8).
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &role_path,
+        Some(json!({ "roles": ["producer", "artist"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        draft_model(&app, release_id).await["publisher"]["remote_items"][0]["rel"],
+        "artist producer"
     );
 
     let (status, body) = call(
@@ -877,10 +897,10 @@ async fn a_link_changes_both_drafts_and_a_role_change_and_a_removal_follow_it() 
     assert!(draft_model(&app, release_id).await["publisher"].is_null());
 
     // A role of a feed with no link changes no other draft.
-    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "role": "label" }))).await;
+    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "roles": ["label"] }))).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["changed"], json!([]));
-    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "role": "band" }))).await;
+    let (status, body) = call(&app, "PUT", &role_path, Some(json!({ "roles": ["band"] }))).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["error"]["code"], "invalid_feed");
 }
@@ -978,7 +998,7 @@ async fn a_link_gives_422_for_a_music_feed_and_409_for_a_read_only_feed() {
         &app,
         "PUT",
         &format!("/api/v1/feeds/{music_id}/role"),
-        Some(json!({ "role": "artist" })),
+        Some(json!({ "roles": ["artist"] })),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
@@ -1009,7 +1029,7 @@ async fn each_publisher_route_needs_the_token() {
         (
             "PUT",
             "/api/v1/feeds/1/role",
-            Some(json!({ "role": "label" })),
+            Some(json!({ "roles": ["label"] })),
         ),
     ];
     for (method, path, body) in routes {

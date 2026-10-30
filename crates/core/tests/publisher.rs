@@ -1,7 +1,9 @@
 //! The publisher feeds and their links, over the local folder connector
 //! (ADR 0041).
 
-use studio_core::collection::{Collection, ConnectorId, FeedId, PublisherRole};
+use studio_core::collection::{
+    Collection, ConnectorId, FeedId, PublisherRole, inferred_roles, rel_of, roles_from_rel,
+};
 use studio_core::connector::{self, Connector, LocalFolder};
 use studio_core::feed::{Entry, Feed, Publisher, RemoteItem};
 use studio_core::pipeline;
@@ -73,7 +75,7 @@ fn a_new_publisher_feed_is_a_publisher_row_with_no_role() {
     assert_eq!(model(&s, publisher).medium.as_deref(), Some("publisher"));
     let row = s.collection.feed(publisher).unwrap();
     assert_eq!(row.medium.as_deref(), Some("publisher"));
-    assert_eq!(row.publisher_role, None);
+    assert_eq!(row.publisher_roles, Vec::new());
 }
 
 #[test]
@@ -81,7 +83,7 @@ fn link_writes_one_item_in_each_draft_with_the_same_rel() {
     let mut s = setup();
     let (publisher, release) = pair(&mut s);
     s.collection
-        .set_publisher_role(publisher, Some(PublisherRole::Label))
+        .set_publisher_roles(publisher, &[PublisherRole::Label], true)
         .unwrap();
     publisher::link(&s.collection, publisher, release).unwrap();
 
@@ -109,8 +111,8 @@ fn link_writes_one_item_in_each_draft_with_the_same_rel() {
 
     // The role is recorded by the first link.
     assert_eq!(
-        s.collection.feed(publisher).unwrap().publisher_role,
-        Some(PublisherRole::Label)
+        s.collection.feed(publisher).unwrap().publisher_roles,
+        [PublisherRole::Label]
     );
     assert_eq!(
         publisher::linked_releases(&s.collection, publisher).unwrap(),
@@ -123,7 +125,7 @@ fn a_second_link_of_the_same_feeds_adds_no_item() {
     let mut s = setup();
     let (publisher, release) = pair(&mut s);
     s.collection
-        .set_publisher_role(publisher, Some(PublisherRole::Artist))
+        .set_publisher_roles(publisher, &[PublisherRole::Artist], true)
         .unwrap();
     publisher::link(&s.collection, publisher, release).unwrap();
     publisher::link(&s.collection, publisher, release).unwrap();
@@ -136,7 +138,7 @@ fn a_new_link_goes_last_after_the_links_of_the_release() {
     let mut s = setup();
     let (publisher, release) = pair(&mut s);
     s.collection
-        .set_publisher_role(publisher, Some(PublisherRole::Label))
+        .set_publisher_roles(publisher, &[PublisherRole::Label], true)
         .unwrap();
     pipeline::edit_draft(&s.collection, release, |feed| {
         feed.publisher = Some(Publisher {
@@ -163,7 +165,7 @@ fn unlink_removes_the_link_and_keeps_an_item_that_names_no_feed_of_the_collectio
     let mut s = setup();
     let (publisher, release) = pair(&mut s);
     s.collection
-        .set_publisher_role(publisher, Some(PublisherRole::Label))
+        .set_publisher_roles(publisher, &[PublisherRole::Label], true)
         .unwrap();
     // A link to a feed that is not in the collection, first in the list.
     pipeline::edit_draft(&s.collection, publisher, |feed| {
@@ -190,7 +192,7 @@ fn unlink_keeps_the_other_publisher_links_of_a_release() {
     let mut s = setup();
     let (publisher, release) = pair(&mut s);
     s.collection
-        .set_publisher_role(publisher, Some(PublisherRole::Label))
+        .set_publisher_roles(publisher, &[PublisherRole::Label], true)
         .unwrap();
     pipeline::edit_draft(&s.collection, release, |feed| {
         feed.publisher = Some(Publisher {
@@ -213,15 +215,15 @@ fn unlink_keeps_the_other_publisher_links_of_a_release() {
 }
 
 #[test]
-fn set_role_changes_the_rel_in_the_publisher_draft_and_in_each_linked_release() {
+fn set_roles_changes_the_rel_in_the_publisher_draft_and_in_each_linked_release() {
     let mut s = setup();
     let (publisher, release) = pair(&mut s);
     s.collection
-        .set_publisher_role(publisher, Some(PublisherRole::Artist))
+        .set_publisher_roles(publisher, &[PublisherRole::Artist], true)
         .unwrap();
     publisher::link(&s.collection, publisher, release).unwrap();
 
-    publisher::set_role(&s.collection, publisher, PublisherRole::Label).unwrap();
+    publisher::set_roles(&s.collection, publisher, &[PublisherRole::Label]).unwrap();
 
     assert_eq!(
         model(&s, publisher).remote_items[0].rel.as_deref(),
@@ -234,13 +236,13 @@ fn set_role_changes_the_rel_in_the_publisher_draft_and_in_each_linked_release() 
         Some("label")
     );
     assert_eq!(
-        s.collection.feed(publisher).unwrap().publisher_role,
-        Some(PublisherRole::Label)
+        s.collection.feed(publisher).unwrap().publisher_roles,
+        [PublisherRole::Label]
     );
 }
 
 #[test]
-fn role_records_the_inferred_role_of_the_draft() {
+fn roles_records_and_confirms_the_inferred_roles_of_the_draft() {
     let mut s = setup();
     let (publisher, _release) = pair(&mut s);
     pipeline::edit_draft(&s.collection, publisher, |feed| {
@@ -254,17 +256,17 @@ fn role_records_the_inferred_role_of_the_draft() {
     })
     .unwrap();
     assert_eq!(
-        publisher::role(&s.collection, publisher).unwrap(),
-        PublisherRole::Label
+        publisher::roles(&s.collection, publisher).unwrap(),
+        [PublisherRole::Label]
     );
     assert_eq!(
-        s.collection.feed(publisher).unwrap().publisher_role,
-        Some(PublisherRole::Label)
+        s.collection.feed(publisher).unwrap().publisher_roles,
+        [PublisherRole::Label]
     );
 }
 
 #[test]
-fn role_gives_no_role_for_items_with_no_rel() {
+fn roles_gives_no_role_for_items_with_no_rel() {
     let mut s = setup();
     let (publisher, _release) = pair(&mut s);
     pipeline::edit_draft(&s.collection, publisher, |feed| {
@@ -277,7 +279,7 @@ fn role_gives_no_role_for_items_with_no_rel() {
         )));
     })
     .unwrap();
-    let error = publisher::role(&s.collection, publisher).unwrap_err();
+    let error = publisher::roles(&s.collection, publisher).unwrap_err();
     assert_eq!(error.kind(), PublisherErrorKind::NoRole);
 }
 
@@ -305,25 +307,88 @@ fn link_gives_the_error_kinds_of_its_checks() {
 }
 
 #[test]
-fn inferred_role_needs_one_valid_rel_for_each_music_item() {
+fn inferred_roles_read_each_rel_as_a_set_of_roles() {
     let mut feed = Feed::default();
-    assert_eq!(publisher::inferred_role(&feed), None);
+    assert_eq!(inferred_roles(&feed), Vec::new());
+    // The HeyCitizen artist feed of 2026-10-29 (ADR 0082).
     feed.remote_items.push(Entry::new(remote(
         "music",
         "a",
         "https://x/a.xml",
         "A",
-        Some("artist"),
+        Some("artist host author label producer"),
     )));
-    assert_eq!(publisher::inferred_role(&feed), Some(PublisherRole::Artist));
+    assert_eq!(
+        inferred_roles(&feed),
+        [
+            PublisherRole::Artist,
+            PublisherRole::Label,
+            PublisherRole::Host,
+            PublisherRole::Author,
+            PublisherRole::Producer
+        ]
+    );
+    // A comma list, other cases, a word that is not a role, and a
+    // repeated role. Each role of each music item counts one time.
     feed.remote_items.push(Entry::new(remote(
         "music",
         "b",
         "https://x/b.xml",
         "B",
-        Some("label"),
+        Some("Sponsor, band, HOST"),
     )));
-    assert_eq!(publisher::inferred_role(&feed), None);
-    feed.remote_items[1].rel = Some("band".to_owned());
-    assert_eq!(publisher::inferred_role(&feed), None);
+    assert_eq!(inferred_roles(&feed).last(), Some(&PublisherRole::Sponsor));
+    assert_eq!(inferred_roles(&feed).len(), 6);
+}
+
+#[test]
+fn rel_of_writes_the_roles_in_their_sequence() {
+    assert_eq!(
+        rel_of(&[
+            PublisherRole::Producer,
+            PublisherRole::Artist,
+            PublisherRole::Artist
+        ]),
+        "artist producer"
+    );
+    assert_eq!(
+        roles_from_rel("producer,artist"),
+        [PublisherRole::Artist, PublisherRole::Producer]
+    );
+}
+
+#[test]
+fn a_read_records_inferred_roles_and_keeps_confirmed_roles() {
+    let mut s = setup();
+    let (publisher, _release) = pair(&mut s);
+    let mut feed = Feed {
+        medium: Some("publisher".to_owned()),
+        ..Feed::default()
+    };
+    feed.remote_items.push(Entry::new(remote(
+        "music",
+        "a",
+        "https://x/a.xml",
+        "A",
+        Some("artist host author label producer"),
+    )));
+    let version = connector::Version::new("v1");
+    s.collection
+        .record_state(publisher, &feed, &version)
+        .unwrap();
+    let row = s.collection.feed(publisher).unwrap();
+    assert_eq!(row.publisher_roles.first(), Some(&PublisherRole::Artist));
+    assert_eq!(row.publisher_roles.len(), 5);
+    assert!(!row.roles_confirmed);
+
+    // A confirmed set does not change at the next read (ADR 0082 item 4).
+    s.collection
+        .set_publisher_roles(publisher, &[PublisherRole::Label], true)
+        .unwrap();
+    s.collection
+        .record_state(publisher, &feed, &version)
+        .unwrap();
+    let row = s.collection.feed(publisher).unwrap();
+    assert_eq!(row.publisher_roles, [PublisherRole::Label]);
+    assert!(row.roles_confirmed);
 }

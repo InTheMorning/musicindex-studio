@@ -92,10 +92,16 @@ test('no interface text in the UI uses the word publisher', () => {
   assert.deepEqual(found, [], `${MESSAGE}\nFound: ${found.join(', ')}`);
 });
 
-test('a publisher feed shows its role, or Feed with a hollow dot', () => {
-  assert.deepEqual(mediumKind('publisher', 'artist'), { dot: 'artist', label: 'Artist' }, MESSAGE);
-  assert.deepEqual(mediumKind('publisher', 'label'), { dot: 'label', label: 'Label' }, MESSAGE);
-  assert.deepEqual(mediumKind('publisher', null), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);
+test('a publisher feed shows its first role, or Feed with a hollow dot', () => {
+  // musicindex ADR 0035 R-WORD-6 and ADR 0033 R-WORD-3 item 3, ADR 0082.
+  assert.deepEqual(mediumKind('publisher', ['artist'], true), { dot: 'artist', label: 'Artist' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['label'], true), { dot: 'label', label: 'Label' }, MESSAGE);
+  // The HeyCitizen feed of 2026-10-29, with roles that Studio inferred.
+  assert.deepEqual(mediumKind('publisher', ['artist', 'label', 'host', 'author', 'producer'], false),
+    { dot: 'artist hollow', label: 'Artist' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['producer', 'label'], true), { dot: 'label', label: 'Label' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['sponsor'], true), { dot: 'sponsor', label: 'Sponsor' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', [], true), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher'), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);
 });
 
@@ -103,8 +109,9 @@ test('a feed with no cover shows the logo shape in the color of its kind', () =>
   // musicindex ADR 0021 R-ART-2 and ADR 0033 R-WORD-3 item 1.
   const glow = (feed) => releasesList({ feeds: [feed], connectors: [], sort: 'newest', view: 'rows' }).rows[0].glow;
   const base = { id: 1, title: 'A', connector_id: 'c1', path: 'a', added_at: 1, draft_state: 'none', image: null };
-  assert.equal(glow({ ...base, medium: 'publisher', publisher_role: 'artist' }), 'var(--c-artist)');
-  assert.equal(glow({ ...base, medium: 'publisher', publisher_role: 'label' }), 'var(--c-label)');
+  assert.equal(glow({ ...base, medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true }), 'var(--c-artist)');
+  assert.equal(glow({ ...base, medium: 'publisher', publisher_roles: ['label'], roles_confirmed: false }), 'var(--c-label)');
+  assert.equal(glow({ ...base, medium: 'publisher', publisher_roles: ['host'], roles_confirmed: true }), 'var(--c-host)');
   assert.equal(glow({ ...base, medium: 'publisher' }), 'var(--c-feed)');
   assert.equal(glow({ ...base, medium: 'musicL' }), 'var(--c-playlist)');
   assert.equal(glow({ ...base, medium: 'music' }), 'var(--c-feed)');

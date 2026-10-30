@@ -1458,7 +1458,7 @@ pub(crate) async fn new_album_feed(
             )?
         };
         if let Some(role) = role {
-            w.collection.set_publisher_role(id, Some(role))?;
+            w.collection.set_publisher_roles(id, &[role], true)?;
         }
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
     })
@@ -2127,7 +2127,7 @@ pub(crate) struct LinkBody {
 
 #[derive(Deserialize)]
 pub(crate) struct RoleBody {
-    role: String,
+    roles: Vec<String>,
 }
 
 /// Link a publisher feed to a release. Both drafts change (ADR 0041
@@ -2169,21 +2169,28 @@ pub(crate) async fn remove_link(
     .await
 }
 
-/// Change the role of a publisher feed. The `rel` of each link changes in
-/// its draft and in each linked release (ADR 0041 item 11).
+/// Change and confirm the roles of a publisher feed. The `rel` of each link
+/// changes in its draft and in each linked release (ADR 0041 item 11, ADR
+/// 0082 items 7 and 8).
 pub(crate) async fn set_publisher_role(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
     Json(body): Json<RoleBody>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        let role = PublisherRole::parse(&body.role).ok_or_else(|| {
-            ApiError::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "invalid_feed",
-                "give the role of the publisher feed: artist or label",
-            )
-        })?;
+        let roles = body
+            .roles
+            .iter()
+            .map(|text| PublisherRole::parse(text))
+            .collect::<Option<Vec<_>>>()
+            .filter(|roles| !roles.is_empty())
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_feed",
+                    "give one or more roles: artist, label, host, author, producer, network, hosting or sponsor",
+                )
+            })?;
         let publisher_id = FeedId(id);
         check_mediums(w, publisher_id, None)?;
         ensure_draft(w, publisher_id)?;
@@ -2196,7 +2203,7 @@ pub(crate) async fn set_publisher_role(
         feeds.extend(&releases);
         feeds.sort_by_key(|feed| feed.0);
         let before = before_change(w, &feeds)?;
-        publisher::set_role(&w.collection, publisher_id, role)?;
+        publisher::set_roles(&w.collection, publisher_id, &roles)?;
         changed_json(w, &before)
     })
     .await

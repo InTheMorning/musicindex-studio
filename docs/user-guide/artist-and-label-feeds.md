@@ -4,8 +4,9 @@ An artist feed lists the releases of an artist. A label feed lists the releases 
 Each release can link back to its artist feed or its label feed.
 Studio keeps both links correct when you add or remove a link.
 
-In RSS, the two types of feed have the medium `publisher`. Studio shows the role of the feed: **Artist** or **Label**.
-A feed with no role shows **Feed** with a hollow dot.
+In RSS, the two types of feed have the medium `publisher`. Studio shows the first role of the feed, for example **Artist** or **Label**.
+A feed can have more than one role. The sequence is artist, label, host, author, producer, network, hosting and sponsor.
+When Studio finds the roles in the feed, the dot is hollow until you select the roles in the field **Role**. A feed with no role shows **Feed** with a hollow dot.
 
 ## Make an artist feed or a label feed
 
@@ -32,7 +33,9 @@ The page **Artist** or **Label** has these sections:
 - **Artist** or **Label**. Fields: **Title**, **Name**, **Description**, **Cover image address** and **Website**. Select **Choose…** to pick an image file. See [Edit the album details](edit-album.md).
 - **Releases**. The releases of this artist or this label.
 - **Details**. Two rows: **Value routes** and **Credits and links**. They open the same pages as the details of an album.
-- **Role**. Select **Artist** or **Label**. Studio can find the role in the feed. Then it shows "Studio found this role in the feed."
+- **Role**. Select **Artist**, **Label** or **Custom**. **Custom** shows a check box for each role. Select one or more roles.
+  - When Studio finds the roles in the feed, it names them. Select the roles to keep them.
+  - On a read-only feed, connect the folder that holds the feed in Hosts before you change the roles.
 
 ## Add a value route or a funding link
 

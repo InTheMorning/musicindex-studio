@@ -6,7 +6,7 @@ import {
   mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
-  narrowStack, openFeedView, navAtWidth, widthNav, wideView,
+  narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells,
 } from '../ui/shell.js';
 
 const album = { id: 1, title: 'Night Songs', medium: 'music', connector_id: 'c1', path: 'night', added_at: 100, draft_state: 'none', image: null };
@@ -566,4 +566,22 @@ test('a feed with the roles artist and label is in Artists', () => {
   const own = { id: 60, title: 'HeyCitizen', medium: 'publisher', publisher_roles: ['artist', 'label', 'producer'], roles_confirmed: true, release_ids: [], child_ids: [], parent_ids: [] };
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [own], model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Releases', undefined], ['HeyCitizen', 'Artists']], message);
+});
+
+test('a publisher feed shows its cover, then the mosaic of its releases, then the logo shape', () => {
+  const message = 'musicindex ADR 0021 R-ART-3 item 2: own image, then a mosaic of the album covers, then the placeholder. Use publisherArt of crates/api/ui/shell.js.';
+  const a = { id: 71, medium: 'music', image: 'https://e.x/a.jpg' };
+  const b = { id: 72, medium: 'music', image: 'https://e.x/b.jpg' };
+  const same = { id: 73, medium: 'music', image: 'https://e.x/a.jpg' };
+  const bare = { id: 74, medium: 'music', image: null };
+  const pub = { id: 70, medium: 'publisher', image: null, release_ids: [71, 72, 73, 74] };
+  const feeds = [pub, a, b, same, bare];
+  assert.deepEqual(publisherArt({ ...pub, image: 'https://e.x/own.jpg' }, feeds), ['https://e.x/own.jpg'], message);
+  assert.deepEqual(publisherArt(pub, feeds), ['https://e.x/a.jpg', 'https://e.x/b.jpg'], message);
+  assert.deepEqual(publisherArt({ ...pub, release_ids: [74] }, feeds), [], message);
+  assert.deepEqual(mosaicCells(['1', '2']), ['1', '2', '2', '1']);
+  assert.deepEqual(mosaicCells(['1', '2', '3']), ['1', '2', '3', '1']);
+  assert.deepEqual(mosaicCells(['1', '2', '3', '4', '5']), ['1', '2', '3', '4']);
+  const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.find((e) => e.group === 70).art, ['https://e.x/a.jpg', 'https://e.x/b.jpg'], 'musicindex ADR 0038 R-DOT-3 item 6: a destination row has the art of its feed.');
 });

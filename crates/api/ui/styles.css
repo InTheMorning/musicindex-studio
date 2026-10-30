@@ -543,7 +543,52 @@ textarea.masked { -webkit-text-security: disc; }
 }
 .row .row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .count { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
-.row .dot-space { width: var(--dot-size); flex: none; }
+/* The art of a publisher feed in the left panel, with the type dot on its
+   bottom right corner (musicindex ADR 0038 R-DOT-3). The dot has a 2 px
+   ring in the color of the surface behind the art, so the ring extends
+   2 px out of the art box. A hollow dot has that color in its ring. */
+.panel-art { position: relative; width: 28px; height: 28px; flex: none; --art-surface: var(--sidebar); }
+.row[aria-current="page"] .panel-art { --art-surface: var(--gloss-bottom); }
+.panel-art .dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  box-shadow: 0 0 0 2px var(--art-surface);
+}
+.panel-art .dot.hollow {
+  background: var(--art-surface);
+  box-shadow: inset 0 0 0 var(--dot-ring) var(--dot, var(--c-feed)), 0 0 0 2px var(--art-surface);
+}
+.row .art-space { width: 28px; flex: none; }
+/* The box of the art. A mosaic of 2 by 2 shows in the logo shape, as on
+   musicindex.org (musicindex ADR 0021 R-ART-3 item 2). */
+.art-box {
+  width: 100%;
+  height: 100%;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--level-2);
+  display: grid;
+  place-items: center;
+}
+.art-box img, .art-box .art-empty { width: 100%; height: 100%; object-fit: cover; display: block; }
+.art-box.mosaic {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  background: transparent;
+  border-radius: 0;
+  -webkit-mask: var(--mark-mask) center / contain no-repeat;
+  mask: var(--mark-mask) center / contain no-repeat;
+}
+.art-box .mark {
+  width: 55%;
+  aspect-ratio: 735 / 681;
+  background: var(--glow, var(--c-feed));
+  -webkit-mask: var(--mark-mask) center / contain no-repeat;
+  mask: var(--mark-mask) center / contain no-repeat;
+}
+.outline-cover .art-box { border-radius: 10px; }
+.outline-cover .art-box.mosaic { border-radius: 0; }
 .row .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .sub { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar footer { margin-top: auto; display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--sep); }

@@ -18,7 +18,7 @@ import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText,
+  leftPanel, releasesList, listQuery, queryText, mosaicCells,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
 } from './shell.js';
@@ -236,6 +236,28 @@ export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = fa
     </div>`;
   if (!onOpen) return box;
   return html`<button type="button" class="cover-button" aria-label=${label} title="Change the artwork" onClick=${onOpen}>${box}</button>`;
+}
+
+// The art of a publisher feed in the left panel (musicindex ADR 0021 R-ART-3
+// item 2, musicindex ADR 0038 R-DOT-3). One image shows as it is. More
+// images show as a mosaic in the logo shape. No image shows the logo shape
+// in `glow`. `dot` puts the type dot on the bottom right corner.
+function FeedArt({ art, glow, dot, className = 'panel-art' }) {
+  const cells = mosaicCells(art || []);
+  return html`<span class=${className} aria-hidden="true">
+    <span class=${`art-box${cells.length > 1 ? ' mosaic' : ''}`}>
+      ${cells.length === 0
+        ? html`<span class="mark" style=${{ '--glow': glow }}></span>`
+        : cells.map((url, i) => html`<${ArtCell} key=${i} url=${url} />`)}
+    </span>
+    ${dot && html`<span class=${`dot ${dot}`}></span>`}
+  </span>`;
+}
+
+// One image of FeedArt. An image that Studio cannot read leaves the fill.
+function ArtCell({ url }) {
+  const { src } = useImage(url);
+  return src ? html`<img src=${src} alt="" />` : html`<span class="art-empty"></span>`;
 }
 
 // ---- Small parts ----
@@ -2379,7 +2401,9 @@ function destinationRows(top, go) {
   const row = (item) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
     aria-label=${item.group === undefined ? undefined : `${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`}
     onClick=${() => open(item)}>
-    ${item.group !== undefined && html`<span class=${item.dot ? `dot ${item.dot}` : 'dot-space'} aria-hidden="true"></span>`}
+    ${item.group !== undefined && (item.art
+      ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
+      : html`<span class="art-space" aria-hidden="true"></span>`)}
     <span class="row-label">${item.label}</span>
     ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.count}</span>`}
   </button>`;
@@ -2399,14 +2423,14 @@ function Level({ panel, go, back }) {
   return html`${back && html`<button class="row" type="button" onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
     <button class="outline-feed" type="button" aria-label=${`${head.title}, ${head.typeLabel}`}
       onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
-      <${ImageThumb} url=${head.image} glow=${head.glow} className="outline-cover" always />
+      <${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" />
       <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
     </button>
     ${panel.sections.map((section) => html`<div class="destination-group">
       <h2 class="panel-heading">${section.heading}</h2>
       ${section.items.map((item) => html`<button class="row" type="button"
         aria-label=${`${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`} onClick=${() => go(item.view)}>
-        <span class=${`dot ${item.dot}`} aria-hidden="true"></span><span class="row-label">${item.label}</span>
+        <${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} /><span class="row-label">${item.label}</span>
         <span class="count" aria-hidden="true">${item.count}</span></button>`)}
     </div>`)}
     ${panel.releases.length > 0 && html`<div class="destination-group">

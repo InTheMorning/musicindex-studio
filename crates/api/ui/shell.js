@@ -306,6 +306,26 @@ function headed(list, item) {
   return sections;
 }
 
+// The art of a publisher feed (musicindex ADR 0021 R-ART-3 item 2): its own
+// cover, or else the different covers of its releases for the mosaic. An
+// empty list gives the logo shape.
+export function publisherArt(feed, feeds) {
+  const own = feedCover(feed);
+  if (own) return [own];
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
+  const covers = (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean).map(feedCover).filter(Boolean);
+  return [...new Set(covers)];
+}
+
+// The cells of a mosaic of 2 by 2, as musicindex.org search.html gives them.
+// One image is not a mosaic.
+export function mosaicCells(images) {
+  if (images.length >= 4) return images.slice(0, 4);
+  if (images.length === 3) return [images[0], images[1], images[2], images[0]];
+  if (images.length === 2) return [images[0], images[1], images[1], images[0]];
+  return images;
+}
+
 // The publisher feed of a level view, or null. A level view is Releases
 // with the ID of a publisher feed as its group.
 function levelFeed(view, feeds) {
@@ -340,7 +360,7 @@ function feedLevel(owner, view, feeds) {
     head: {
       id: owner.id,
       title: displayTitle(owner),
-      image: feedCover(owner),
+      art: publisherArt(owner, feeds),
       glow: kindGlow(feedKind(owner)),
       typeLabel: feedKind(owner).label,
       from,
@@ -349,6 +369,8 @@ function feedLevel(owner, view, feeds) {
       id: feed.id,
       label: displayTitle(feed),
       dot: feedKind(feed).dot,
+      glow: kindGlow(feedKind(feed)),
+      art: publisherArt(feed, feeds),
       count: (feed.release_ids || []).length,
       view: { name: 'releases', group: feed.id, trail: [...trail, owner.id] },
     })),
@@ -373,6 +395,8 @@ export function groupDestinations(feeds, view) {
     group: feed.id,
     label: displayTitle(feed),
     dot: feedKind(feed).dot,
+    glow: kindGlow(feedKind(feed)),
+    art: publisherArt(feed, list),
     count: (feed.release_ids || []).length,
     current: shown(feed.id),
     opens: !shown(feed.id),

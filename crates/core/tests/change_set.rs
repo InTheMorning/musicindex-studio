@@ -403,13 +403,11 @@ fn rename_changes_the_saved_recipient_and_discard_puts_back_its_name() {
 #[test]
 fn change_address_changes_the_saved_recipient_and_discard_puts_back_its_identity() {
     let s = setup();
-    save(&s.collection, "Old name", Some(("k", "v")));
+    // The test feeds have the recipient "old" with no custom pair. A change
+    // set changes the saved recipient only when a feed changes.
+    save(&s.collection, "Old name", None);
     let before = saved(&s.collection);
-    let old_key = RecipientKey {
-        address: "old".into(),
-        custom_key: Some("k".into()),
-        custom_value: Some("v".into()),
-    };
+    let old_key = key();
     let mut starter = start(&s);
     let set = make_change_set(
         &s.collection,
@@ -433,8 +431,8 @@ fn change_address_changes_the_saved_recipient_and_discard_puts_back_its_identity
     discard_change_set(&s.collection, set.id).unwrap();
     assert_eq!(saved(&s.collection), before);
     assert_eq!(before[0].address, "old");
-    assert_eq!(before[0].custom_key.as_deref(), Some("k"));
-    assert_eq!(before[0].custom_value.as_deref(), Some("v"));
+    assert_eq!(before[0].custom_key, None);
+    assert_eq!(before[0].custom_value, None);
     assert_eq!(before[0].recipient_type.as_deref(), Some("lnaddress"));
 }
 
@@ -462,4 +460,88 @@ fn discard_of_a_change_set_with_no_saved_recipient_keeps_the_saved_recipients() 
     assert_eq!(saved(&s.collection), before);
     discard_change_set(&s.collection, set.id).unwrap();
     assert_eq!(saved(&s.collection), before);
+}
+
+#[test]
+fn a_change_set_with_no_changed_feed_keeps_the_saved_recipient_and_goes_at_the_next_one() {
+    let s = setup();
+    save(&s.collection, "Old name", Some(("k", "v")));
+    let before = saved(&s.collection);
+    // No test feed has this key, so no feed changes.
+    let other = RecipientKey {
+        address: "old".into(),
+        custom_key: Some("k".into()),
+        custom_value: Some("v".into()),
+    };
+    let first = {
+        let mut starter = start(&s);
+        make_change_set(
+            &s.collection,
+            &mut starter,
+            &other,
+            &RecipientOperation::Rename {
+                name: "New name".into(),
+            },
+            &s.feeds,
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        saved(&s.collection),
+        before,
+        "ADR 0091 item 12: a change set with no changed feed must not change the saved recipient."
+    );
+    assert!(
+        change_set::find_change_set(&s.collection, first.id).is_ok(),
+        "The review must find the change set before the next change set."
+    );
+    let mut starter = start(&s);
+    make_change_set(
+        &s.collection,
+        &mut starter,
+        &key(),
+        &change_address(),
+        &s.feeds,
+    )
+    .unwrap();
+    // SQLite can give the new change set the ID of the deleted one, so the
+    // test examines the operation of each row.
+    let rows = s.collection.change_set_rows().unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "ADR 0091 item 19: a closed change set must go at the next change set."
+    );
+    assert!(rows[0].operation.contains("change_address"));
+}
+
+#[test]
+fn the_write_of_the_last_changed_feed_deletes_the_change_set() {
+    let mut s = setup();
+    let one = s.feeds[0];
+    let set = {
+        let mut starter = start(&s);
+        make_change_set(
+            &s.collection,
+            &mut starter,
+            &key(),
+            &change_address(),
+            &[one],
+        )
+        .unwrap()
+    };
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, one).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        one,
+        &diff.id,
+    )
+    .unwrap();
+    assert!(
+        change_set::find_change_set(&s.collection, set.id).is_err(),
+        "ADR 0091 item 19: the write of the last changed feed must delete the change set."
+    );
 }

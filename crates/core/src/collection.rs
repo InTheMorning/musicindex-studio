@@ -3130,6 +3130,23 @@ impl Collection {
         )?)
     }
 
+    /// Remove each closed change set: a change set with no changed feed
+    /// that is not written (ADR 0091 item 19). The feed rows go with it,
+    /// through the foreign key. Gives the number of change sets.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn delete_closed_change_sets(&self) -> Result<usize, CollectionError> {
+        Ok(self.db.execute(
+            "DELETE FROM change_sets WHERE NOT EXISTS (
+                 SELECT 1 FROM change_set_feeds f
+                 WHERE f.change_set_id = change_sets.id AND f.written_at IS NULL
+                   AND json_extract(f.outcome, '$.outcome') = 'changed')",
+            [],
+        )?)
+    }
+
     /// Remove a change set and its feed rows.
     ///
     /// # Errors

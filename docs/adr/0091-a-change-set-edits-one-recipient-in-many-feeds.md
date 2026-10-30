@@ -36,7 +36,7 @@
 9. Add to a level adds the recipient to each value block of each feed of a level. A level is a publisher feed and each feed below it, through `child_ids` (ADR 0088). The user selects the level, then the core lists its feeds with checkboxes, and each checkbox starts selected. The user gives a percentage from 1 to 99.
 10. An operation changes each value block of the channel, of each item and of each live item. It does not change a value time split.
 11. A publisher feed is in a scope as each other feed. Studio copies no recipient from a publisher feed to its releases, or from a release to its publisher feed ([ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) item 4).
-12. A change of the address or of the name of a saved recipient also changes the saved recipient. The core makes this change with the change set, and keeps the saved recipient from before the change.
+12. A change of the address or of the name of a saved recipient also changes the saved recipient. The core makes this change with the change set, and keeps the saved recipient from before the change. A change set in which no feed changed does not change the saved recipient.
 
 ### The Splits
 
@@ -53,7 +53,7 @@
     - **Not changed** also applies when the feed has no value block, or when each split of the block is a fee.
     - **Not changed** also applies when the feed has a change of an open change set that is not written. Thus a discard of one change set cannot put back a draft over the change of a different change set. The planning model added this rule on 2026-10-30, at the review of task 054a.
 18. The core puts the change in the open draft of the feed, if the feed has one. If the feed has no draft, the core makes a draft.
-19. The collection keeps each change set until each changed feed is written or the user discards the change set. The change set keeps the draft of each feed before the change.
+19. The collection keeps each change set until each changed feed is written or the user discards the change set. The change set keeps the draft of each feed before the change. Thus the core deletes a change set after the write of its last changed feed. A change set is closed when it has no changed feed that is not written. The core deletes each closed change set at the start of the next change set. The planning model added these three sentences on 2026-10-30, before `0.1.0-rc.5`.
 20. "Discard" on a change set puts back the draft of each feed from before the change. A feed that had no draft then has no draft. A feed written after the change does not change. When the user discarded the draft of a feed after the change, that feed also does not change. The planning model added this rule on 2026-10-30, at the review of task 054a. Discard also puts back the saved recipient of item 12. The operator selected this rule on 2026-10-30.
 
 ### The Review And The Write

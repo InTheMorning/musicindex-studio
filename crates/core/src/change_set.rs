@@ -503,10 +503,12 @@ pub fn make_change_set(
     operation: &RecipientOperation,
     feeds: &[FeedId],
 ) -> Result<ChangeSet, PipelineError> {
+    // A closed change set has no more work (ADR 0091 item 19).
+    collection.delete_closed_change_sets()?;
     let made_at = now();
     let id = collection.add_change_set(&to_json(operation)?, &to_json(key)?, made_at)?;
-    change_saved_recipient(collection, id, key, operation)?;
     let mut seen = HashSet::new();
+    let mut changed = false;
     let busy: HashSet<FeedId> = change_sets(collection)?
         .iter()
         .flat_map(|set| &set.feeds)
@@ -535,6 +537,7 @@ pub fn make_change_set(
         let before = collection.draft(feed_id)?;
         let had_draft = before.is_some();
         let outcome = change_feed(collection, start, key, operation, feed_id, had_draft)?;
+        changed |= outcome.is_changed();
         let kept = if outcome.is_changed() { before } else { None };
         collection.add_change_set_feed(
             id,
@@ -546,6 +549,11 @@ pub fn make_change_set(
                 written_at: None,
             },
         )?;
+    }
+    // A change set with no changed feed does not change the saved
+    // recipient. Thus it holds nothing that Discard must put back.
+    if changed {
+        change_saved_recipient(collection, id, key, operation)?;
     }
     change_set(collection, id)
 }

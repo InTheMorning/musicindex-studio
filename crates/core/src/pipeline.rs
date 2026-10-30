@@ -2833,9 +2833,10 @@ pub fn write_draft_signed(
     // scan does not lose them (ADR 0052 item 13).
     announce::queue(collection, id, &announcements, &Timing::DEFAULT, now)?;
 
-    // The feed is written, so each open change set row of the feed is done
-    // (ADR 0091 item 19).
+    // The feed is written, so each open change set row of the feed is done.
+    // A change set with no more work goes (ADR 0091 item 19).
     collection.mark_change_set_written(id, i64::try_from(now).unwrap_or(i64::MAX))?;
+    collection.delete_closed_change_sets()?;
 
     for connector_id in touched {
         inventory::scan(collection, hosts, connector_id)?;

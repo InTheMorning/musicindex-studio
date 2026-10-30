@@ -9942,6 +9942,18 @@ async fn rename_and_change_address_change_the_saved_recipient() {
     assert_eq!(status, StatusCode::CREATED, "{set}");
     let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
     assert_eq!(saved_row(&list)["name"], "Anna");
+    // The feed is in the open change set. Discard it, so that the next
+    // change set can change the feed. Discard puts back the name.
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/change-sets/{}", set["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(saved_row(&list)["name"], "Ann");
 
     let (status, set) = call(
         &app,

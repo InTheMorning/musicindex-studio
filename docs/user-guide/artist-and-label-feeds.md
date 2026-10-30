@@ -4,7 +4,8 @@ An artist feed lists the releases of an artist. A label feed lists the releases 
 Each release can link back to its artist feed or its label feed.
 Studio keeps both links correct when you add or remove a link.
 
-In RSS, the two types of feed have the medium `publisher`. Studio shows the first role of the feed, for example **Artist** or **Label**.
+In RSS, the two types of feed have the medium `publisher`. Studio shows each role of the feed, for example **Artist** or **Artist · Label**. The dot has the color of the first role.
+
 A feed can have more than one role. The sequence is artist, label, hosting, producer, host, author, network and sponsor.
 When Studio finds the roles in the feed, the dot is hollow until you select the roles in the field **Role**. A feed with no role shows **Feed** with a hollow dot.
 

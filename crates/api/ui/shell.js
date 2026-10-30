@@ -18,16 +18,17 @@ export const FIRST_CLASS_ROLES = ['artist', 'label', 'hosting'];
 // The word of a role, for example "Artist".
 export const roleWord = (role) => role.charAt(0).toUpperCase() + role.slice(1);
 
-// The kind of a medium: its dot class and its label. A publisher feed shows
-// its first role (musicindex ADR 0035 R-WORD-6). The dot is hollow while
-// nothing confirms the roles (musicindex ADR 0033 R-WORD-3 item 3, ADR 0082
-// item 6). A feed with no role shows "Feed" with a hollow dot.
+// The kind of a medium: its dot class and its label. A publisher feed lists
+// each of its roles, and its dot has the color of the first one (musicindex
+// ADR 0037 R-WORD-7, ADR 0084). The dot is hollow while nothing confirms the
+// roles (musicindex ADR 0033 R-WORD-3 item 3, ADR 0082 item 6). A feed with
+// no role shows "Feed" with a hollow dot.
 export function mediumKind(medium, roles = [], confirmed = false) {
   switch ((medium || '').toLowerCase()) {
     case 'publisher': {
-      const first = ROLES.find((role) => (roles || []).includes(role));
-      if (!first) return { dot: 'feed hollow', label: 'Feed' };
-      return { dot: confirmed ? first : `${first} hollow`, label: roleWord(first) };
+      const own = ROLES.filter((role) => (roles || []).includes(role));
+      if (own.length === 0) return { dot: 'feed hollow', label: 'Feed' };
+      return { dot: confirmed ? own[0] : `${own[0]} hollow`, label: own.map(roleWord).join(' · ') };
     }
     case 'musicl': return { dot: 'playlist', label: 'Playlist' };
     case 'music': return { dot: 'feed', label: 'Album' };

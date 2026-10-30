@@ -92,17 +92,17 @@ test('no interface text in the UI uses the word publisher', () => {
   assert.deepEqual(found, [], `${MESSAGE}\nFound: ${found.join(', ')}`);
 });
 
-test('a publisher feed shows its first role, or Feed with a hollow dot', () => {
-  // musicindex ADR 0035 R-WORD-6 and ADR 0033 R-WORD-3 item 3, ADR 0082.
+test('a publisher feed lists each role, or shows Feed with a hollow dot', () => {
+  // musicindex ADR 0037 R-WORD-7 and ADR 0033 R-WORD-3 item 3, ADR 0084.
   assert.deepEqual(mediumKind('publisher', ['artist'], true), { dot: 'artist', label: 'Artist' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', ['label'], true), { dot: 'label', label: 'Label' }, MESSAGE);
   // The HeyCitizen feed of 2026-10-29, with roles that Studio inferred.
   assert.deepEqual(mediumKind('publisher', ['artist', 'label', 'host', 'author', 'producer'], false),
-    { dot: 'artist hollow', label: 'Artist' }, MESSAGE);
-  assert.deepEqual(mediumKind('publisher', ['producer', 'label'], true), { dot: 'label', label: 'Label' }, MESSAGE);
+    { dot: 'artist hollow', label: 'Artist · Label · Producer · Host · Author' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['producer', 'label'], true), { dot: 'label', label: 'Label · Producer' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', ['sponsor'], true), { dot: 'sponsor', label: 'Sponsor' }, MESSAGE);
   // Hosting comes before producer and host (musicindex ADR 0036 R-ROLE-1).
-  assert.deepEqual(mediumKind('publisher', ['host', 'producer', 'hosting'], true), { dot: 'hosting', label: 'Hosting' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['host', 'producer', 'hosting'], true), { dot: 'hosting', label: 'Hosting · Producer · Host' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', [], true), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher'), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);
 });

@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
 - Changes: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) items 1, 7 and 9.
+- Amended: 2026-10-29 by operator decision. [ADR 0084](0084-the-label-of-a-feed-lists-each-role.md) replaces the label of item 1. The label lists each role.
 - Uses: musicindex ADR 0036 R-ROLE-1 (the sequence of the roles) and R-ROLE-2 (the first-class roles).
 
 ## Context

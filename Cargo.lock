@@ -2294,7 +2294,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "studio-api"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "axum",
  "directories",
@@ -2315,7 +2315,7 @@ dependencies = [
 
 [[package]]
 name = "studio-core"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -2350,7 +2350,7 @@ dependencies = [
 
 [[package]]
 name = "studio-desktop"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "directories",
  "studio-api",
@@ -2359,7 +2359,7 @@ dependencies = [
 
 [[package]]
 name = "studio-server"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "axum",
  "base64 0.23.1",

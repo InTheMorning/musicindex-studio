@@ -92,6 +92,18 @@ export function isEditable(feed) {
   return mediumKind(feed.medium).label === 'Album' || isPublisher(feed) || isPlaylist(feed);
 }
 
+// Is this feed a release: an album or a playlist (ADR 0085 item 6, ADR 0086
+// item 1)?
+export function isRelease(feed) {
+  return mediumKind(feed.medium).label === 'Album' || isPlaylist(feed);
+}
+
+// The hint of a feed that the editor does not open (ADR 0090 item 1).
+export function otherFeedText(feed) {
+  const medium = feed.medium ? `the type “${feed.medium}”` : 'no type';
+  return `This feed has ${medium}. Studio edits albums, playlists, and artist and label feeds, so it shows only the facts of this feed.`;
+}
+
 // Is this feed read-only? A feed with no connector has no host that Studio
 // can write to (ADR 0067 item 1).
 export function isReadOnly(feed) {
@@ -297,7 +309,8 @@ function headed(list, item) {
   const sections = [];
   for (const feed of list.slice().sort((a, b) => headingIndex(a) - headingIndex(b) || compareAz(a, b))) {
     const index = headingIndex(feed);
-    const heading = index < HEADINGS.length ? HEADINGS[index][1] : 'Other feeds';
+    // A feed with no role is in "No role" (ADR 0090 item 2).
+    const heading = index < HEADINGS.length ? HEADINGS[index][1] : 'No role';
     if (sections.length === 0 || sections[sections.length - 1].heading !== heading) {
       sections.push({ heading, items: [] });
     }
@@ -408,7 +421,21 @@ export function groupDestinations(feeds, view) {
       count: unlinked, current: shown('none'), opens: !shown('none'),
     });
   }
+  // The feeds that the editor does not open (ADR 0090 item 2).
+  const other = otherFeeds(list).length;
+  if (other > 0) {
+    groups.push({
+      id: 'group-other', group: 'other', label: 'Other feeds', dot: null,
+      count: other, current: shown('other'), opens: !shown('other'),
+    });
+  }
   return groups;
+}
+
+// The feeds that are not a publisher feed and not a release (ADR 0090
+// item 2).
+function otherFeeds(feeds) {
+  return feeds.filter((feed) => !isPublisher(feed) && !isRelease(feed));
 }
 
 // The IDs of each feed above and below `owner`, from the levels that the
@@ -430,13 +457,13 @@ function relatedLevels(feeds, owner) {
 
 // The releases with no artist or label in the collection (ADR 0085 item 3).
 function unlinkedReleases(feeds) {
-  return feeds.filter((feed) => !isPublisher(feed) && (feed.publisher_ids || []).length === 0);
+  return feeds.filter((feed) => isRelease(feed) && (feed.publisher_ids || []).length === 0);
 }
 
 // The cover of a feed row. The row has the `itunes:image` as `image` and
 // the address of the RSS image as `rss_image_url`. The cover rule is in
 // `cover.js` (ADR 0060). A feed with no cover gives `null`.
-function feedCover(feed) {
+export function feedCover(feed) {
   const rssImage = feed.rss_image_url ? { url: feed.rss_image_url } : null;
   return coverOf({ image: feed.image ?? null, rss_image: rssImage }) || null;
 }
@@ -517,9 +544,12 @@ export function releasesList({ feeds, connectors, sort, view, marked, group }) {
     };
   } else if (group === 'none') {
     chosen = unlinkedReleases(list);
-    head = { id: null, title: 'Not linked', typeLabel: null, dot: null };
+    head = { id: null, title: 'Not linked', typeLabel: null, dot: null, note: 'These releases have no link to an artist or a label.' };
+  } else if (group === 'other') {
+    chosen = otherFeeds(list);
+    head = { id: null, title: 'Other feeds', typeLabel: null, dot: null, note: 'Studio edits albums, playlists, and artist and label feeds. It shows only the facts of these feeds.' };
   } else {
-    chosen = list.filter((feed) => !isPublisher(feed));
+    chosen = list.filter(isRelease);
   }
   const sorts = owner ? GROUP_SORTS : ALL_SORTS;
   const sortKey = sorts.includes(sort) ? sort : sorts[0];

@@ -2,7 +2,7 @@
 // rule of the channel cover.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { coverOf, coverForm, coverConflict, withSavedCover } from '../ui/cover.js';
+import { coverOf, coverForm, coverConflict, withSavedCover, coverNote } from '../ui/cover.js';
 
 const A = 'https://m.example/a.jpg';
 const B = 'https://m.example/b.jpg';
@@ -52,4 +52,10 @@ test('withSavedCover keeps the local cover when the user changed it during the s
   const local = { title: 'T', image: A, rss_image: null };
   const saved = { title: 'T', image: B, rss_image: null };
   assert.equal(withSavedCover(local, sent, saved), local);
+});
+
+test('a cover above the limit of the image route gives its reason', () => {
+  assert.equal(coverNote('too_large'), 'The cover is larger than 10 MB, so Studio does not show it.', 'ADR 0090 item 3: give the reason for the code too_large. Use coverNote of crates/api/ui/cover.js.');
+  assert.equal(coverNote('not_image'), null);
+  assert.equal(coverNote(undefined), null);
 });

@@ -45,3 +45,9 @@ export function withSavedCover(local, sent, saved) {
   if (a !== c || b !== d) return local;
   return { ...local, image: saved.image ?? null, rss_image: saved.rss_image ?? null };
 }
+
+// The hint for a cover that Studio does not show, from the error code of the
+// image route (ADR 0090 item 3). Another code gives no hint.
+export function coverNote(code) {
+  return code === 'too_large' ? 'The cover is larger than 10 MB, so Studio does not show it.' : null;
+}

@@ -14,6 +14,7 @@
 - ADR 0085 gave each publisher feed one destination below Releases, A to Z. A hosting service can host many labels, and a label can have many artists. An artist can be on two labels. A flat list does not show this.
 - The namespace gives one level: a publisher feed and its feeds (`docs/examples/publishers/publishers.md`). `podcast:publisher` holds "exactly one" item (`docs/tags/publisher.md`).
 - Amended: 2026-10-30 by operator decision. [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) shows the art of each feed of a level, with the dot on the art (item 5).
+- Amended: 2026-10-30 by operator decision. [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) puts a publisher feed with no role in the heading "No role" (item 4).
 - Stophammer ADR 0069 rejected a direct link from a label feed to an artist feed: "An artist feed can name only one publisher, so an artist with releases on two labels cannot confirm both." Stophammer finds the artists of a label, and the labels of an artist, through their shared releases (`co_credited_feeds`).
 
 ## Decision

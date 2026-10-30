@@ -730,13 +730,26 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   align-items: end;
 }
 .hero > * { position: relative; z-index: 1; }
-.hero .art {
+/* The cover of a feed that the editor does not open (ADR 0090 item 3). With
+   no cover, it shows the logo shape in the color of the feed. */
+.hero .hero-cover {
   width: clamp(120px, 16vw, 200px);
   aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.hero .hero-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero .hero-cover .mark {
+  width: 100%;
+  aspect-ratio: 735 / 681;
   background: var(--glow, var(--c-feed));
   -webkit-mask: var(--mark-mask) center / contain no-repeat;
   mask: var(--mark-mask) center / contain no-repeat;
 }
+.cover-note { margin-top: 4px; }
 .hero h1 {
   font-size: clamp(2rem, 4.4vw, 4.5rem);
   font-weight: 800;

@@ -6,7 +6,7 @@ import {
   mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
-  narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells,
+  narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
 } from '../ui/shell.js';
 
 const album = { id: 1, title: 'Night Songs', medium: 'music', connector_id: 'c1', path: 'night', added_at: 100, draft_state: 'none', image: null };
@@ -584,4 +584,27 @@ test('a publisher feed shows its cover, then the mosaic of its releases, then th
   assert.deepEqual(mosaicCells(['1', '2', '3', '4', '5']), ['1', '2', '3', '4']);
   const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: false });
   assert.deepEqual(panel.top.find((e) => e.group === 70).art, ['https://e.x/a.jpg', 'https://e.x/b.jpg'], 'musicindex ADR 0038 R-DOT-3 item 6: a destination row has the art of its feed.');
+});
+
+test('a feed that the editor does not open is only in Other feeds', () => {
+  const message = 'ADR 0090 item 2: Releases and "Not linked" hold only albums and playlists, and "Other feeds" holds each other feed. Use isRelease of crates/api/ui/shell.js.';
+  const show = { id: 80, title: 'A Podcast', medium: 'podcast', publisher_ids: [], added_at: 5, draft_state: 'none' };
+  const single = { id: 81, title: 'A Single', medium: 'music', publisher_ids: [], added_at: 4, draft_state: 'none' };
+  const feeds = [show, single];
+  assert.deepEqual(releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows' }).rows.map((r) => r.id), [81], message);
+  assert.deepEqual(releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows', group: 'none' }).rows.map((r) => r.id), [81], message);
+  const other = releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows', group: 'other' });
+  assert.deepEqual(other.rows.map((r) => r.id), [80], message);
+  assert.equal(other.head.title, 'Other feeds', message);
+  const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.label, e.count]), [['Releases', undefined], ['Not linked', 1], ['Other feeds', 1]], message);
+  assert.equal(otherFeedText(show), 'This feed has the type “podcast”. Studio edits albums, playlists, and artist and label feeds, so it shows only the facts of this feed.', 'ADR 0090 item 1: the page gives the type of the feed.');
+  assert.match(otherFeedText({ medium: null }), /^This feed has no type\./);
+});
+
+test('a publisher feed with no role is in the heading No role', () => {
+  const message = 'ADR 0090 item 2: "Other feeds" names only the feeds that the editor does not open. Use headed of crates/api/ui/shell.js.';
+  const bare = { id: 90, title: 'Bare', medium: 'publisher', publisher_roles: [], release_ids: [], child_ids: [], parent_ids: [] };
+  const panel = leftPanel({ view: { name: 'releases' }, feeds: [bare], model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Releases', undefined], ['Bare', 'No role']], message);
 });

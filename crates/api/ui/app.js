@@ -12,13 +12,13 @@ import {
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
-import { coverOf } from './cover.js';
+import { coverOf, coverNote } from './cover.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, mosaicCells,
+  leftPanel, releasesList, listQuery, queryText, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth,
 } from './shell.js';
@@ -207,12 +207,14 @@ export function useImage(url) {
       imageResults.set(url, found);
       if (current) setResult(found);
     };
+    // A failure keeps the error code, so a page can give the reason
+    // (ADR 0090 item 3).
     api(`/images?url=${encodeURIComponent(url)}`, { raw: true }).then((blob) => {
       const reader = new FileReader();
       reader.onload = () => finish({ src: reader.result, failed: false });
       reader.onerror = () => finish({ src: null, failed: true });
       reader.readAsDataURL(blob);
-    }, () => finish({ src: null, failed: true }));
+    }, (error) => finish({ src: null, failed: true, code: error && error.code }));
     return () => { current = false; };
   }, [url]);
   return result || { src: null, failed: false };
@@ -227,11 +229,11 @@ export function useImage(url) {
 // `onOpen`, the box is the content of a button with the name `label` (ADR
 // 0070 items 1 to 3).
 export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = false, onOpen, label }) {
-  const { src, failed } = useImage(url);
+  const { src, failed, code } = useImage(url);
   if (!url && !always) return null;
   const box = src
     ? html`<div class=${className}><img src=${src} alt="" /></div>`
-    : html`<div class=${className} title=${failed ? url : undefined}>
+    : html`<div class=${className} title=${failed ? coverNote(code) || url : undefined}>
       <span class="mark" style=${{ '--glow': glow }}></span>
     </div>`;
   if (!onOpen) return box;
@@ -258,6 +260,14 @@ function FeedArt({ art, glow, dot, className = 'panel-art' }) {
 function ArtCell({ url }) {
   const { src } = useImage(url);
   return src ? html`<img src=${src} alt="" />` : html`<span class="art-empty"></span>`;
+}
+
+// The reason why a cover does not show, below the head of a page
+// (ADR 0090 item 3). It shows nothing when the cover loads or has no reason.
+function CoverNote({ url }) {
+  const { code } = useImage(url);
+  const note = url ? coverNote(code) : null;
+  return note ? html`<p class="hint cover-note">${note}</p>` : null;
 }
 
 // ---- Small parts ----
@@ -1676,11 +1686,13 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   return html`<div>
     <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span><//>
     <section class="hero" style=${{ '--glow': glow }}>
-      <div class="art" aria-hidden="true"></div>
+      <${ImageThumb} url=${feedCover(feed)} glow=${glow} className="hero-cover" always />
       <div>
         <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}${feed.connector_id ? '' : ' · read-only'}</span>
         <h1>${feed.title || 'Untitled feed'}</h1>
         <p class="summary">${feed.public_url || 'This feed has no public address yet.'}</p>
+        <p class="hint">${otherFeedText(feed)}</p>
+        <${CoverNote} url=${feedCover(feed)} />
         <div class="actions">
           <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read again'}</button>
@@ -1762,6 +1774,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}${isReadOnly(feed) ? ' · read-only' : ''}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>
           <p class="sub mono">${feed.public_url || 'This feed has no public address yet.'}</p>
+          <${CoverNote} url=${draft.model && coverOf(draft.model)} />
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
           ${busy ? 'Reading…' : 'Read again'}</button>`}
@@ -2609,7 +2622,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
         </div>`}
       </div>
       ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
-      ${head && head.id === null && html`<p class="hint releases-roles">These releases have no link to an artist or a label.</p>`}
+      ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
       ${releases.letters && html`<nav class="letters" aria-label="Letters">
         ${releases.letters.map((g) => html`<button class="button letter" type="button" onClick=${() => showLetter(g.firstId)}>${g.letter}</button>`)}
       </nav>`}

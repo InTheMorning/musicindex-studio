@@ -69,6 +69,8 @@ A release of two feeds shows on the page of each feed. The row names the other f
 Select **Open the feed** to edit the artist feed or the label feed.
 
 **Not linked** lists the releases that have no artist or label in your collection.
+
+**Other feeds** lists the feeds that Studio does not edit, for example a podcast. Their page shows only the facts of the feed.
 To add a link, see [Artist and label feeds](artist-and-label-feeds.md).
 
 ## The outline of a release

@@ -93,6 +93,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0087: The two sides of a link confirm a role](adr/0087-the-two-sides-of-a-link-confirm-a-role.md)
 - [ADR 0088: The left panel shows the levels of the publisher feeds](adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
 - [ADR 0089: The left panel shows the art of each publisher feed](adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md)
+- [ADR 0090: Studio names the feeds that it does not edit](adr/0090-studio-names-the-feeds-that-it-does-not-edit.md)
 
 ## Plans
 

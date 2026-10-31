@@ -335,6 +335,67 @@ pub fn members<S: BuildHasher>(
         .collect()
 }
 
+/// Node keys that many Lightning addresses share, with the domain of the
+/// provider. The evidence is in
+/// `docs/research/2026-10-31-keysend-and-lightning-address-recipients.md`.
+/// An entry needs a lookup or a graph alias as evidence.
+pub const SHARED_NODES: &[(&str, &str)] = &[
+    (
+        "03b6f613e88bd874177c28c6ad83b3baba43c4c656f56be1f8df84669556054b79",
+        "fountain.fm",
+    ),
+    (
+        "030a58b8653d32b99200a2334cfe913e51dc7d155aa0116c176657a4f1722677a3",
+        "getalby.com",
+    ),
+];
+
+/// The provider of the node `pubkey`. The key is compared in lowercase.
+///
+/// The table [`SHARED_NODES`] gives the domain first. Else the function
+/// reads each `Found` lookup of the key. A domain with two or more
+/// different custom pairs names the node. With two or more such domains,
+/// the result is the domains from A to Z, with `, ` between them. Else the
+/// result is `None`.
+#[must_use]
+pub fn provider_of<S: BuildHasher>(
+    pubkey: &str,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Option<String> {
+    let pubkey = pubkey.trim().to_lowercase();
+    if let Some((_, domain)) = SHARED_NODES.iter().find(|(key, _)| *key == pubkey) {
+        return Some((*domain).to_owned());
+    }
+    let mut pairs: HashMap<&str, HashSet<(&str, &str)>> = HashMap::new();
+    for lookup in lookups.values() {
+        let named = lookup.status == LookupStatus::Found
+            && lookup
+                .pubkey
+                .as_deref()
+                .is_some_and(|key| key.trim().to_lowercase() == pubkey);
+        let Some((_, domain)) = lookup.address.rsplit_once('@') else {
+            continue;
+        };
+        if named {
+            pairs.entry(domain).or_default().insert((
+                lookup.custom_key.as_deref().unwrap_or_default(),
+                lookup.custom_value.as_deref().unwrap_or_default(),
+            ));
+        }
+    }
+    let mut domains: Vec<&str> = pairs
+        .into_iter()
+        .filter(|(_, set)| set.len() >= 2)
+        .map(|(domain, _)| domain)
+        .collect();
+    domains.sort_unstable();
+    if domains.is_empty() {
+        None
+    } else {
+        Some(domains.join(", "))
+    }
+}
+
 /// The key of the wallet of `key` and its members.
 #[must_use]
 pub fn wallet_of<S: BuildHasher>(
@@ -488,5 +549,48 @@ mod tests {
         let (lonely, list) = wallet_of(&key("c@h.example"), &lookups);
         assert_eq!(lonely, key("c@h.example"));
         assert_eq!(list, vec![key("c@h.example")]);
+    }
+
+    #[test]
+    fn provider_of_names_a_node_by_table_or_by_lookups() {
+        let found = |address: &str, value: &str| Lookup {
+            address: address.to_owned(),
+            pubkey: Some("02abc".into()),
+            custom_key: Some("696969".into()),
+            custom_value: Some(value.into()),
+            status: LookupStatus::Found,
+            checked_at: 0,
+        };
+        let empty: HashMap<String, Lookup> = HashMap::new();
+        let fountain = SHARED_NODES[0].0;
+        assert_eq!(
+            provider_of(fountain, &empty).as_deref(),
+            Some("fountain.fm")
+        );
+        assert_eq!(
+            provider_of(&fountain.to_uppercase(), &empty).as_deref(),
+            Some("fountain.fm")
+        );
+
+        let mut lookups = HashMap::new();
+        lookups.insert(
+            "a@fountain.example".to_owned(),
+            found("a@fountain.example", "1"),
+        );
+        assert_eq!(provider_of("02abc", &lookups), None);
+        lookups.insert(
+            "b@fountain.example".to_owned(),
+            found("b@fountain.example", "2"),
+        );
+        assert_eq!(
+            provider_of("02ABC", &lookups).as_deref(),
+            Some("fountain.example")
+        );
+        assert_eq!(provider_of("02def", &lookups), None);
+
+        let mut same = HashMap::new();
+        same.insert("a@h.example".to_owned(), found("a@h.example", "1"));
+        same.insert("b@h.example".to_owned(), found("b@h.example", "1"));
+        assert_eq!(provider_of("02abc", &same), None);
     }
 }

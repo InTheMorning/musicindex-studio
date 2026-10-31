@@ -4823,6 +4823,11 @@ fn group_wallets(
                     "lookup": lookups
                         .get(&m.address.trim().to_lowercase())
                         .map(|l| l.status.as_str()),
+                    "provider": if m.recipient_type.as_deref() == Some("node") {
+                        keysend::provider_of(&m.address, lookups)
+                    } else {
+                        None
+                    },
                 })
             })
             .collect();

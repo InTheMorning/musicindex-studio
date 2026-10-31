@@ -10262,6 +10262,40 @@ async fn a_node_and_its_lightning_address_are_one_recipient() {
 }
 
 #[tokio::test]
+async fn a_node_address_gives_the_provider_when_two_addresses_share_its_key() {
+    let (app, connector, server) = wallet_app(Some("http")).await;
+    wallet_feeds(&app, connector, &server).await;
+    let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    let addresses = &list[0]["addresses"];
+    assert_eq!(addresses[0]["provider"], Value::Null, "one address: {list}");
+
+    let domain = format!("127.0.0.1:{}", server.port());
+    server.set(
+        "/.well-known/keysend/dan",
+        200,
+        br#"{"status":"OK","tag":"keysend","pubkey":"02abc","customData":[{"customKey":"696969","customValue":"x2"}]}"#.to_vec(),
+    );
+    add_paid_feed(
+        &app,
+        connector,
+        "dan.xml",
+        &wallet_feed("gd", "lnaddress", &format!("dan@{domain}"), ""),
+    )
+    .await;
+    let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    let wallet = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["custom_value"] == "x1")
+        .unwrap();
+    let addresses = wallet["addresses"].as_array().unwrap();
+    assert_eq!(addresses[0]["address"], "02abc");
+    assert_eq!(addresses[0]["provider"], domain.as_str(), "{list}");
+    assert_eq!(addresses[1]["provider"], Value::Null, "{list}");
+}
+
+#[tokio::test]
 async fn with_no_lookup_scheme_the_same_feeds_give_two_recipients() {
     let (app, connector, server) = wallet_app(None).await;
     wallet_feeds(&app, connector, &server).await;

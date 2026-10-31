@@ -114,13 +114,14 @@ const wallet = {
 test('a wallet of two addresses gives its title, row and lines', () => {
   assert.equal(recipientTitle(wallet), 'tj@getalby.com');
   assert.deepEqual(addressLines(wallet), [
-    { address: 'tj@getalby.com', type: 'lnaddress' }, { address: '02ab12cd34ef5678', type: 'node (keysend)' }]);
+    { address: 'tj@getalby.com', type: 'lnaddress', custom: null },
+    { address: '02ab12cd34ef5678', type: 'node (keysend)', custom: '01abc' }]);
   assert.equal(lnaddressOf(wallet), 'tj@getalby.com');
   assert.equal(nodeOf(wallet), '02ab12cd34ef5678');
-  assert.equal(recipientRow({ ...wallet, name: 'TJ Doerfel' }).text, 'tj@getalby.com · 02ab12cd…5678 · 7 feeds',
-    'ADR 0095 item 7: the row shows each address of the wallet, then the feeds.');
+  assert.equal(recipientRow({ ...wallet, name: 'TJ Doerfel' }).text, 'tj@getalby.com · 02ab12cd…5678 · 01abc · 7 feeds',
+    'ADR 0095 item 7: the row shows each address of the wallet, a node key with its custom value, then the feeds.');
   const keyFirst = { ...wallet, addresses: [wallet.addresses[1], wallet.addresses[0]] };
-  assert.equal(recipientRow(keyFirst).text, 'tj@getalby.com · 02ab12cd…5678 · 7 feeds',
+  assert.equal(recipientRow(keyFirst).text, 'tj@getalby.com · 02ab12cd…5678 · 01abc · 7 feeds',
     'ADR 0095 item 7: the Lightning address is first in the row.');
 });
 
@@ -142,7 +143,7 @@ test('the operation form starts at the member of the wallet with the type of the
 test('an entry with no addresses gives one line', () => {
   const entry = { name: null, address: '03cd', recipient_type: 'node' };
   assert.equal(recipientTitle(entry), '03cd');
-  assert.deepEqual(addressLines(entry), [{ address: '03cd', type: 'node (keysend)' }]);
+  assert.deepEqual(addressLines(entry), [{ address: '03cd', type: 'node (keysend)', custom: null }]);
   assert.equal(lnaddressOf(entry), null);
   assert.equal(nodeOf(entry), null);
 });

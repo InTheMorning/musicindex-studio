@@ -2676,7 +2676,7 @@ function RecipientPage({ recipient, feeds, go }) {
   return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
     <${ErrorNotice} error=${error} />
     <header class="recipient-head"><h1>${row.title}</h1>
-      ${walletLines(recipient).map((line) => html`<p class="hint" key=${line.address}><span class="mono">${line.address}</span> · ${line.type}</p>`)}</header>
+      ${walletLines(recipient).map((line) => html`<p class="hint" key=${line.address}><span class="mono">${line.address}</span> · ${line.type}${line.custom && ` · ${line.custom}`}</p>`)}</header>
     <div class="actions recipient-actions">
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change Address</button>
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('rename')}>Rename</button>

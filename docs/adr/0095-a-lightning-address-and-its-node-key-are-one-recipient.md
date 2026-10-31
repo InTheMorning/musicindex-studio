@@ -31,8 +31,8 @@
 ### The Recipients Page
 
 6. `GET /recipients` gives one entry for each wallet, with the name from the most recent read or save and the key of the wallet. An entry also has the number of feeds that use an address of the wallet, and the list of its addresses. Each address has its type, and the ID of its saved recipient when the user saved it. A Lightning address also has the status of its lookup. This changes ADR 0091 item 2. The recipient picker lists each address of each entry, so its rows do not change (ADR 0027 item 3).
-7. A row of the Recipients page shows the name, each address of the wallet and the number of feeds. A Lightning address is before a node key, and it shows in full. A node key shows its first 8 and its last 4 characters, for example "TJ Doerfel · tj@getalby.com · 02ab12cd…24bf · 7 feeds". The row shows no type word, because the shape of each address shows its type.
-8. The page of a recipient shows each address under the name. It lists each feed that uses an address of the wallet, with its places (ADR 0091 item 3).
+7. A row of the Recipients page shows the name, each address of the wallet and the number of feeds. A Lightning address is before a node key, and it shows in full. A node key shows its first 8 and its last 4 characters, then its custom value when it has one, for example "TJ Doerfel · tj@getalby.com · 02ab12cd…24bf · 01abc · 7 feeds". The accounts of one shared node differ only in the custom value. The row shows no type word, because the shape of each address shows its type.
+8. The page of a recipient shows each address below the name, with its type and its custom value. It lists each feed that uses an address of the wallet, with its places (ADR 0091 item 3).
 
 ### The Operations
 

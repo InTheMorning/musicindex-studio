@@ -30,11 +30,11 @@ export function typeLabel(type) {
   return TYPE_LABELS[type] || (type ? type : 'Type not set');
 }
 
-// One line for each member of a wallet, for the header of its page.
+// One line for each member of a wallet, for the header of its page: the
+// address, its type and its custom value, or null.
 export function addressLines(entry) {
-  const members = entry.addresses || [];
-  if (members.length === 0) return [{ address: entry.address, type: typeLabel(entry.recipient_type) }];
-  return members.map((m) => ({ address: m.address, type: typeLabel(m.recipient_type) }));
+  const members = (entry.addresses || []).length > 0 ? entry.addresses : [entry];
+  return members.map((m) => ({ address: m.address, type: typeLabel(m.recipient_type), custom: m.custom_value || null }));
 }
 
 const memberOfType = (entry, type) => (entry.addresses || []).find((m) => m.recipient_type === type) || null;
@@ -98,8 +98,13 @@ export function sortRecipients(list) {
   return (list || []).slice().sort((a, b) => recipientTitle(a).localeCompare(recipientTitle(b), undefined, { sensitivity: 'base' }));
 }
 
-// A node key in its short form. Each other address shows in full.
-const shortAddress = (member) => (member.recipient_type === 'node' ? shortKey(member.address) : member.address);
+// A node key in its short form, then its custom value when it has one: the
+// accounts of one shared node differ only in the value. Each other address
+// shows in full.
+const shortAddress = (member) => {
+  const address = member.recipient_type === 'node' ? shortKey(member.address) : member.address;
+  return member.custom_value ? `${address} · ${member.custom_value}` : address;
+};
 
 // The summary line of a recipient: the name, then each address of the
 // wallet with the Lightning addresses first, then "N feeds" or "Saved, not

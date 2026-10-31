@@ -22,6 +22,7 @@ pub mod grant;
 pub mod grant_vault;
 pub mod guid;
 pub mod inventory;
+pub mod keysend;
 pub mod library;
 pub mod live;
 pub mod media;

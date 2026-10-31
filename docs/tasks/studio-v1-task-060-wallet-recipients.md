@@ -249,7 +249,7 @@ Mechanical:
 
 ### Escalation
 
-- Stop and report when `GET /recipients` with no due lookup is slower than 1 second with the corpus feeds in a test collection.
+- Stop and report when `GET /recipients` with no due lookup is slower than 1 second. Measure it with the corpus feeds in a test collection.
 
 ### Prompt for lower-context coding model
 

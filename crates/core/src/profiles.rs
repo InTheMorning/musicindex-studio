@@ -326,7 +326,7 @@ fn contains_ignore_case(name: &str, text: &str) -> bool {
 
 /// Run `work` on a new thread and wait at most `limit` for the result. A
 /// late result is dropped. The thread ends with its own network time limit.
-fn within<T: Send + 'static>(
+pub(crate) fn within<T: Send + 'static>(
     limit: Duration,
     work: impl FnOnce() -> T + Send + 'static,
 ) -> Option<T> {

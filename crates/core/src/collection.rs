@@ -17,6 +17,7 @@ use crate::address::{self, Address, AddressSource};
 use crate::announce::{Announcement, AnnouncementState};
 use crate::connector::{KeptBlob, Stamp, Version};
 use crate::feed::{Feed, Recipient};
+use crate::keysend::{Lookup, LookupStatus};
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
 /// to version `n + 1` (ADR 0014).
@@ -318,6 +319,16 @@ CREATE TABLE change_set_feeds (
 ",
     r"
 ALTER TABLE change_sets ADD COLUMN saved_before TEXT;
+",
+    r"
+CREATE TABLE keysend_lookups (
+    address TEXT PRIMARY KEY,
+    pubkey TEXT,
+    custom_key TEXT NOT NULL DEFAULT '',
+    custom_value TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    checked_at INTEGER NOT NULL
+);
 ",
 ];
 
@@ -907,6 +918,71 @@ impl Collection {
             tx.pragma_update(None, "user_version", version)?;
             tx.commit()?;
         }
+        Ok(())
+    }
+
+    /// Each stored keysend lookup (ADR 0095 item 2).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn keysend_lookups(&self) -> Result<Vec<Lookup>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT address, pubkey, custom_key, custom_value, status, checked_at
+             FROM keysend_lookups ORDER BY address",
+        )?;
+        let rows = statement.query_map([], |r| {
+            let custom_key: String = r.get(2)?;
+            let custom_value: String = r.get(3)?;
+            let status: String = r.get(4)?;
+            Ok(Lookup {
+                address: r.get(0)?,
+                pubkey: r.get(1)?,
+                custom_key: Some(custom_key).filter(|t| !t.is_empty()),
+                custom_value: Some(custom_value).filter(|t| !t.is_empty()),
+                status: LookupStatus::parse(&status).unwrap_or(LookupStatus::Failed),
+                checked_at: r.get(5)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Insert or replace the keysend lookup of an address.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_keysend_lookup(&self, lookup: &Lookup) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT OR REPLACE INTO keysend_lookups
+             (address, pubkey, custom_key, custom_value, status, checked_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                lookup.address,
+                lookup.pubkey,
+                lookup.custom_key.as_deref().unwrap_or(""),
+                lookup.custom_value.as_deref().unwrap_or(""),
+                lookup.status.as_str(),
+                lookup.checked_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Change only the check time of a stored keysend lookup.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn touch_keysend_lookup(
+        &self,
+        address: &str,
+        checked_at: i64,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE keysend_lookups SET checked_at = ?2 WHERE address = ?1",
+            params![address, checked_at],
+        )?;
         Ok(())
     }
 

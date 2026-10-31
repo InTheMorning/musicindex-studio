@@ -15,6 +15,7 @@ Each step is done on 2026-10-27:
 - 2026-10-28: the operator deployed `0.1.0-rc.3` with `tools/deploy-server.sh`. The file `/ui/app.js` that `studio.musicindex.org` gives is the same as at `9e0eb5f`, the commit of the tag `v0.1.0-rc.3`. The human tests of tasks 046 and 047 use this version.
 - 2026-10-28: the operator deployed `0.1.0-rc.4` with `tools/deploy-server.sh`. The file `/ui/app.js` that `studio.musicindex.org` gives is the same as at `3767bd2`, the commit of the tag `v0.1.0-rc.4`. The human tests of tasks 048 to 053 use this version.
 - 2026-10-30: the operator made a backup of the rc.4 data folder, and deployed `0.1.0-rc.5` with `tools/deploy-server.sh`. The file `/ui/app.js` that `studio.musicindex.org` gives is the same as at `c9580b7`, the commit of the tag `v0.1.0-rc.5`. The human tests of tasks 054, 055 and 056, and test 3 of task 028, use this version.
+- 2026-10-31: the operator copied the rc.5 data folder, and the integrity check of each copied database passed. The operator deployed `0.1.0-rc.6` with `tools/deploy-server.sh`. The files `/ui/app.js`, `/ui/recipients.js` and `/ui/values.js` that `studio.musicindex.org` gives are the same as at `6c94f63`, the commit of the tag `v0.1.0-rc.6`. The human test of task 060 uses this version.
 - From outside, `/` and the manifest gave 200, and `/auth/v1/session` gave the server mode with sign-up by invite code. A `PUT` of 5 MB got 403 from Studio, not 413 from nginx.
 - The operator made one invite code.
 

@@ -33,6 +33,8 @@ Human test, open until the operator can use a real bucket:
 
 - The operator adds an R2 bucket with a custom domain. Studio writes a new release to it, and a podcast app plays a track from the public address.
 
+The [human test review](../reviews/2026-10-29-task-028-human-test.md) records the steps. The bucket and the write passed on 2026-10-31 on `0.1.0-rc.5`. The play in a podcast app is not recorded.
+
 ## Out Of Scope
 
 - A per-object redirect ([ADR 0046](../adr/0046-the-s3-and-r2-connector.md), Alternatives Considered).

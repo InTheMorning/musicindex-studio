@@ -104,3 +104,4 @@ The check against R2 with the correction is test 3 on `0.1.0-rc.5`.
 | 1. Make an R2 API token with access to one bucket | 2026-10-29 | Done |
 | 2. Add the bucket as an S3 or R2 host. The provider test passes. | 2026-10-29 | Passed. The host card `heycitizen` shows. The probe deleted its test key, so **Object Read & Write** permits a delete. Studio found `feed.xml` in the bucket as "HeyCitizen's Test Feed". |
 | 3. Write a feed to the bucket through Studio | 2026-10-29 | Failed. A false conflict from a weak ETag. See the section "A False Conflict From A Weak ETag". |
+| 3. Write a feed to the bucket through Studio, again with the correction | 2026-10-31 | Passed on `0.1.0-rc.5`. |

@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Recipient Batch Edits, File Hosts And Dates".
 Decisions: [ADR 0092](../adr/0092-file-hosts-and-the-destination-icons.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0018](../adr/0018-passphrase-strength-and-error-color.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md). Shared: musicindex ADR 0022, ADR 0025 R-ICON-1 and ADR 0032 R-DOT-1.
 
-Status: Complete, with its screenshot visual check. The human test is open. Commit `b13c30c` removed the type dot from the Hosts row before this task.
+Status: Complete, with its screenshot visual check. The human test passed on 2026-10-31 on `0.1.0-rc.5`. Commit `b13c30c` removed the type dot from the Hosts row before this task.
 
 ## Goal
 

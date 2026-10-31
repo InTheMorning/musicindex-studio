@@ -231,7 +231,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - The packets share files. 055b, 056a and 054c change `app.js` and `styles.css`. 055a, 054a and 056b change `pipeline.rs`. 054b and 056b change `routes.rs`. Thus one packet starts after the commit of the packet before it.
 - Two pairs share no file, and each pair can run at the same time: 056a with 055a, and 055b with 054a.
 - Status on 2026-10-30: each packet is complete. The human tests of tasks 054, 055 and 056 passed on 2026-10-31.
-- [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) makes a Lightning address and its node key one recipient. [Task 060](../tasks/studio-v1-task-060-wallet-recipients.md) gives the work in four packets: 060a with 060b at the same time, then 060c, then 060d.
+- [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) makes a Lightning address and its node key one recipient. [Task 060](../tasks/studio-v1-task-060-wallet-recipients.md) gives the work in four packets: 060a with 060b at the same time, then 060c, then 060d. Each packet is complete on 2026-10-31, with the screenshot visual check. The human test is open.
 
 ### Phase 13: Desktop Shell
 

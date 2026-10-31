@@ -3,6 +3,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
+import { pickerRows, lookupHint } from './recipients.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
 // ---- Shares and percentages ----
@@ -107,6 +108,25 @@ const TYPES = [
   { value: 'lnaddress', label: 'lnaddress', hint: 'A Lightning address, for example name@example.com.' },
 ];
 
+// One load of `GET /recipients` for the page. Each `Recipients` shares it. The
+// map goes from the lowercase address to its keysend lookup. A failed load
+// gives an empty map, and the editor makes no lookup (ADR 0095).
+let lookupsPromise = null;
+function loadLookups() {
+  if (!lookupsPromise) {
+    lookupsPromise = api('/recipients').then((list) => {
+      const map = new Map();
+      for (const entry of list || []) {
+        for (const m of entry.addresses || []) {
+          if (m.address) map.set(m.address.toLowerCase(), m.lookup || null);
+        }
+      }
+      return map;
+    }).catch(() => new Map());
+  }
+  return lookupsPromise;
+}
+
 function Choice({ id, label, value, options, onChange }) {
   const known = options.some((o) => o.value === value);
   return html`<div class="field">
@@ -128,6 +148,8 @@ function Choice({ id, label, value, options, onChange }) {
 // fee "true" is in "Fees". The model keeps the sequence of the recipients.
 function Recipients({ id, recipients, defaultType, onChange }) {
   const percent = percentages(recipients);
+  const [lookups, setLookups] = useState(null);
+  useEffect(() => { loadLookups().then(setLookups); }, []);
   const blank = { name: null, recipient_type: defaultType, address: null, split: '', custom_key: null, custom_value: null, fee: null };
   // The picker sheet (task 013c, ADR 0027). It only adds a recipient. It
   // does not replace or remove a recipient of this list.
@@ -153,7 +175,9 @@ function Recipients({ id, recipients, defaultType, onChange }) {
           <${TextField} id=${`${rid}-name`} label="Name" value=${r.name} onChange=${change('name')} />
           <${Choice} id=${`${rid}-type`} label="Type" value=${r.recipient_type} options=${TYPES} onChange=${change('recipient_type')} />
         </div>
-        <${TextField} id=${`${rid}-address`} label="Address" hint=${type ? type.hint : 'A node public key, or a Lightning address.'}
+        <${TextField} id=${`${rid}-address`} label="Address"
+          hint=${r.recipient_type === 'lnaddress' && r.address && lookups && lookups.get(r.address.trim().toLowerCase()) === 'none'
+            ? lookupHint(r.address.trim()) : type ? type.hint : 'A node public key, or a Lightning address.'}
           value=${r.address} onChange=${change('address')} />
         ${r.recipient_type !== 'lnaddress' && html`<div class="grid2">
           <${TextField} id=${`${rid}-key`} label="Custom key" hint="For a node that many people share." value=${r.custom_key} onChange=${change('custom_key')} />
@@ -261,7 +285,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
   });
   const removeSaved = (savedId) => yours.run(async () => {
     await api(`/recipients/saved/${savedId}`, { method: 'DELETE' });
-    setList(await api('/recipients'));
+    setList(pickerRows(await api('/recipients')));
   });
   const q = filter.trim().toLowerCase();
   const shownYours = (list || []).filter(
@@ -336,7 +360,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     setTrackData(null);
     setIndexSelected(new Map());
     setList(null);
-    yours.run(async () => setList(await api('/recipients')));
+    yours.run(async () => setList(pickerRows(await api('/recipients'))));
   }, [open]);
 
   const total = yoursSelected.size + indexSelected.size;

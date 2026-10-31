@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   recipientRow, sortRecipients, placesText, useRow, outcomeText, causeText, blockedText,
-  initialStatuses, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
+  initialStatuses, typesText, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, operationTitle, operationLine, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
 } from '../ui/recipients.js';
 
 test('the summary line of a used recipient gives the name, the type and the feeds', () => {
@@ -37,7 +37,7 @@ test('the places text of a feed with only live items', () => {
 
 test('the outcome text of each cause of task 054a', () => {
   const causes = ['no_recipient', 'has_recipient', 'has_new_address', 'no_value_block', 'only_fees',
-    'split_not_number', 'bad_percent', 'in_open_change_set'];
+    'split_not_number', 'bad_percent', 'in_open_change_set', 'no_node_recipient'];
   const seen = new Set();
   for (const cause of causes) {
     const text = causeText({ cause });
@@ -101,4 +101,56 @@ test('a change set names its recipient by name, or by address when no recipient 
   assert.equal(changeSetRow(set, list).title, 'Remove · Ann',
     'ADR 0091 item 21: the review names the recipient. Find the name with nameOf of recipients.js.');
   assert.equal(nameOf([], set.recipient), 'ann@example.com');
+});
+
+const wallet = {
+  name: null, address: '02ab', recipient_type: 'node', feeds: 7,
+  addresses: [
+    { address: 'tj@getalby.com', recipient_type: 'lnaddress', name: null },
+    { address: '02ab', recipient_type: 'node', name: 'TJ node' },
+  ],
+};
+
+test('a wallet of two addresses gives its title, types and lines', () => {
+  assert.equal(recipientTitle(wallet), 'tj@getalby.com');
+  assert.equal(typesText(wallet), 'lnaddress · node (keysend)');
+  assert.deepEqual(addressLines(wallet), [
+    { address: 'tj@getalby.com', type: 'lnaddress' }, { address: '02ab', type: 'node (keysend)' }]);
+  assert.equal(lnaddressOf(wallet), 'tj@getalby.com');
+  assert.equal(nodeOf(wallet), '02ab');
+  assert.equal(recipientRow({ ...wallet, name: 'TJ Doerfel' }).type, 'lnaddress · node (keysend)');
+});
+
+test('an entry with no addresses gives one line', () => {
+  const entry = { name: null, address: '03cd', recipient_type: 'node' };
+  assert.equal(recipientTitle(entry), '03cd');
+  assert.equal(typesText(entry), 'node (keysend)');
+  assert.deepEqual(addressLines(entry), [{ address: '03cd', type: 'node (keysend)' }]);
+  assert.equal(lnaddressOf(entry), null);
+  assert.equal(nodeOf(entry), null);
+});
+
+test('the picker gives one row for each address, with the name of the entry', () => {
+  const rows = pickerRows([{ ...wallet, name: 'TJ Doerfel' }]);
+  assert.deepEqual(rows.map((r) => [r.address, r.name]), [['tj@getalby.com', 'TJ Doerfel'], ['02ab', 'TJ node']]);
+});
+
+test('the keysend hint names the domain', () => {
+  assert.match(lookupHint('chadf@getalby.com'), /getalby\.com/);
+});
+
+test('the new operation and the new cause have texts', () => {
+  assert.equal(operationTitle({ kind: 'use_lnaddress' }), 'Use the Lightning address');
+  assert.equal(operationLine({ kind: 'use_lnaddress', address: 'a@b.c' }, 'TJ'),
+    'Studio replaces the node key of TJ with a@b.c in the selected feeds.');
+  assert.equal(causeText({ cause: 'no_node_recipient' }), 'Each value block has the Lightning address already.');
+});
+
+test('the type menu of the operation sheet has no placeholder', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const start = text.indexOf('id="op-type"');
+  const element = text.slice(start, text.indexOf('/>', start));
+  assert.ok(!element.includes('placeholder'),
+    'ADR 0095 item 14: the Type menu of the operation sheet has no placeholder. Remove it.');
 });

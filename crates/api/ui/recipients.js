@@ -14,15 +14,73 @@ export function recipientKey(recipient) {
   };
 }
 
-// The name of a row: the name, or else the address.
+// The name of a row: the name, or else the address of the first member of the
+// wallet, or else the address (ADR 0095).
 export function recipientTitle(recipient) {
-  return recipient.name && recipient.name.trim() !== '' ? recipient.name : recipient.address;
+  if (recipient.name && recipient.name.trim() !== '') return recipient.name;
+  const first = (recipient.addresses || [])[0];
+  return first ? first.address : recipient.address;
 }
 
 const TYPE_LABELS = { node: 'node (keysend)', lnaddress: 'lnaddress' };
 
 export function typeLabel(type) {
   return TYPE_LABELS[type] || (type ? type : 'Type not set');
+}
+
+// The different types of the members of a wallet, "lnaddress" first.
+export function typesText(entry) {
+  const members = entry.addresses || [];
+  if (members.length === 0) return typeLabel(entry.recipient_type);
+  const types = [...new Set(members.map((m) => m.recipient_type))];
+  types.sort((a, b) => (b === 'lnaddress') - (a === 'lnaddress'));
+  return types.map(typeLabel).join(' · ');
+}
+
+// One line for each member of a wallet, for the header of its page.
+export function addressLines(entry) {
+  const members = entry.addresses || [];
+  if (members.length === 0) return [{ address: entry.address, type: typeLabel(entry.recipient_type) }];
+  return members.map((m) => ({ address: m.address, type: typeLabel(m.recipient_type) }));
+}
+
+const memberOfType = (entry, type) => (entry.addresses || []).find((m) => m.recipient_type === type) || null;
+
+// The first Lightning address of a wallet, or null.
+export function lnaddressOf(entry) {
+  const found = memberOfType(entry, 'lnaddress');
+  return found ? found.address : null;
+}
+
+// The first node key of a wallet, or null.
+export function nodeOf(entry) {
+  const found = memberOfType(entry, 'node');
+  return found ? found.address : null;
+}
+
+export function hasNode(entry) {
+  return nodeOf(entry) !== null;
+}
+
+// The start value of a type menu. The user can change it (an edit aid only).
+export function defaultType(address) {
+  return (address || '').includes('@') ? 'lnaddress' : 'node';
+}
+
+// One picker row for each member of each wallet. A member with no name gets
+// the name of its wallet (ADR 0027 item 3).
+export function pickerRows(list) {
+  return (list || []).flatMap((entry) => {
+    const members = entry.addresses || [];
+    if (members.length === 0) return [entry];
+    return members.map((m) => ({ ...m, name: m.name || entry.name }));
+  });
+}
+
+// The hint of a Lightning address that has no keysend data.
+export function lookupHint(address) {
+  const domain = (address || '').split('@').slice(1).join('@');
+  return `Studio found no keysend data at ${domain}. An app that pays only with keysend cannot pay this address.`;
 }
 
 // The recipients A to Z by name (ADR 0091 item 2 and task 054c item 2).
@@ -37,7 +95,7 @@ export function recipientRow(recipient) {
   const unusedSaved = !(recipient.feeds > 0) && recipient.saved_id != null;
   return {
     title: recipientTitle(recipient),
-    type: typeLabel(recipient.recipient_type),
+    type: typesText(recipient),
     text: unusedSaved ? 'Saved, not used' : plural(recipient.feeds || 0, 'feed', 'feeds'),
   };
 }
@@ -93,6 +151,7 @@ const CAUSES = {
   only_fees: 'Each split of the value block is a fee.',
   split_not_number: 'A split of the value block is not a number.',
   bad_percent: 'The percentage must be a number from 1 to 99.',
+  no_node_recipient: 'Each value block has the Lightning address already.',
   in_open_change_set: 'The feed has a change in a different change set that is not written.',
 };
 
@@ -129,6 +188,7 @@ export function operationTitle(operation) {
     case 'rename': return 'Rename';
     case 'remove': return 'Remove';
     case 'add': return 'Add to a level';
+    case 'use_lnaddress': return 'Use the Lightning address';
     default: return 'Change set';
   }
 }
@@ -141,6 +201,7 @@ export function operationLine(operation, recipientName) {
     case 'rename': return `Rename ${who} to ${operation.name}.`;
     case 'remove': return `Remove ${who}.`;
     case 'add': return `Add ${who} with ${operation.percent}%.`;
+    case 'use_lnaddress': return `Studio replaces the node key of ${who} with ${operation.address} in the selected feeds.`;
     default: return '';
   }
 }

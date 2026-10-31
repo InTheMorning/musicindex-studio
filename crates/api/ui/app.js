@@ -4,7 +4,7 @@ import { pageSequence } from './pages.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
-  recipientKey, recipientTitle, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
+  recipientKey, recipientTitle, addressLines as walletLines, lnaddressOf, hasNode, defaultType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
   outcomeText, blockedText, operationTitle, operationLine, changeSetRow, nameOf, writableIds, initialStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
@@ -2538,10 +2538,14 @@ function FeedCheckRow({ title, text, checked, onChange }) {
 // outcome of each feed, so the form holds only the values to send.
 function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
   const key = recipientKey(recipient);
-  const [address, setAddress] = useState(recipient.address || '');
+  const lnStart = lnaddressOf(recipient) || '';
+  const [address, setAddress] = useState(
+    kind === 'use_lnaddress' ? lnStart : kind === 'add' ? lnStart || recipient.address || '' : recipient.address || '');
   const [customKey, setCustomKey] = useState(recipient.custom_key || '');
   const [customValue, setCustomValue] = useState(recipient.custom_value || '');
-  const [type, setType] = useState(recipient.recipient_type || '');
+  const [type, setType] = useState(kind === 'add'
+    ? defaultType(lnStart || recipient.address)
+    : recipient.recipient_type || defaultType(recipient.address));
   const [name, setName] = useState(recipient.name || '');
   const [percent, setPercent] = useState('');
   const [levelOwner, setLevelOwner] = useState('');
@@ -2573,6 +2577,7 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
         return { kind, address: address.trim(), custom_key: optional(customKey), custom_value: optional(customValue), recipient_type: type || null };
       case 'rename': return { kind, name };
       case 'remove': return { kind };
+      case 'use_lnaddress': return { kind, address: address.trim() };
       default:
         return {
           kind, name: optional(name), recipient_type: type || null, address: address.trim(),
@@ -2587,13 +2592,16 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
     onCreated(await api('/change-sets', { method: 'POST', body: { recipient: key, operation: operation(), feed_ids: ids } }));
   });
   const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${type} onChange=${setType}
-    placeholder=${kind === 'add' ? 'Not set' : 'Keep the type'} options=${[['node', 'node (keysend)'], ['lnaddress', 'lnaddress']]} />`;
+    options=${[['node', 'node (keysend)'], ['lnaddress', 'lnaddress']]} />`;
   const label = kind === 'change_address' ? `Change in ${feedCount(ids.length)}`
     : kind === 'rename' ? `Rename in ${feedCount(ids.length)}`
-    : kind === 'remove' ? `Remove from ${feedCount(ids.length)}` : `Add to ${feedCount(ids.length)}`;
+    : kind === 'remove' ? `Remove from ${feedCount(ids.length)}`
+    : kind === 'use_lnaddress' ? `Use in ${feedCount(ids.length)}` : `Add to ${feedCount(ids.length)}`;
   return html`<div class="body">
       ${kind === 'remove' && html`<p>Studio removes ${recipientTitle(recipient)} from each value block of the selected feeds. Studio changes the splits of the other recipients, and their total does not change.</p>`}
       ${kind === 'rename' && html`<div class="group rows"><${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} /></div>`}
+      ${kind === 'use_lnaddress' && html`<div class="group rows"><${Field} id="op-address" label="Lightning address" required
+        hint="The address must pay the same wallet. Studio checks it." value=${address} onInput=${(e) => setAddress(e.target.value)} /></div>`}
       ${(kind === 'change_address' || kind === 'add') && html`<div class="group rows">
         ${kind === 'add' && html`<${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} />`}
         <${Field} id="op-address" label="Address" required value=${address} onInput=${(e) => setAddress(e.target.value)} />
@@ -2619,7 +2627,7 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
     </footer>`;
 }
 
-const OPERATION_TITLES = { change_address: 'Change address', rename: 'Rename', remove: 'Remove', add: 'Add to a level' };
+const OPERATION_TITLES = { change_address: 'Change address', rename: 'Rename', remove: 'Remove', add: 'Add to a level', use_lnaddress: 'Use the Lightning address' };
 
 function OperationSheet({ kind, recipient, uses, selected, feeds, onCreated, onClose }) {
   const ref = useSheet(kind !== null);
@@ -2653,12 +2661,13 @@ function RecipientPage({ recipient, feeds, go }) {
   return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
     <${ErrorNotice} error=${error} />
     <header class="recipient-head"><h1>${row.title}</h1>
-      <p class="hint"><span class="mono">${recipient.address}</span> · ${row.type}</p></header>
+      ${walletLines(recipient).map((line) => html`<p class="hint" key=${line.address}><span class="mono">${line.address}</span> · ${line.type}</p>`)}</header>
     <div class="actions recipient-actions">
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change Address</button>
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('rename')}>Rename</button>
-      <button class="button destructive" type="button" disabled=${count === 0} onClick=${() => setOpen('remove')}>Remove</button>
+      ${hasNode(recipient) && html`<button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('use_lnaddress')}>Use the Lightning Address</button>`}
       <button class="button action" type="button" onClick=${() => setOpen('add')}>Add to a Level</button>
+      <button class="button destructive" type="button" disabled=${count === 0} onClick=${() => setOpen('remove')}>Remove</button>
     </div>
     <section class="page-section"><h2>Feeds${uses ? ` · ${count} of ${uses.length} selected` : ''}</h2>
       ${uses === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}

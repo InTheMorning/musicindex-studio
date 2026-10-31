@@ -32,7 +32,10 @@ pub struct RecipientKey {
 }
 
 impl RecipientKey {
-    fn parts(&self) -> (&str, &str, &str) {
+    /// The address, the custom key and the custom value, with empty text for
+    /// a missing custom key or custom value.
+    #[must_use]
+    pub fn parts(&self) -> (&str, &str, &str) {
         (
             &self.address,
             self.custom_key.as_deref().unwrap_or(""),
@@ -52,7 +55,41 @@ impl RecipientKey {
     }
 }
 
-/// One operation on a recipient (ADR 0091 items 5 to 7 and 9).
+/// The members of one wallet (ADR 0095 items 1 and 5). An operation acts on
+/// each recipient that a member matches.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Wallet {
+    /// The key of the wallet. The change set keeps it as its recipient.
+    pub key: RecipientKey,
+    /// The keys that name the wallet: the key itself, and each Lightning
+    /// address whose lookup gives the key.
+    pub members: Vec<RecipientKey>,
+}
+
+impl Wallet {
+    /// A wallet whose only member is `key`.
+    #[must_use]
+    pub fn single(key: RecipientKey) -> Self {
+        Self {
+            members: vec![key.clone()],
+            key,
+        }
+    }
+
+    /// True when a member matches `recipient`.
+    #[must_use]
+    pub fn matches(&self, recipient: &Recipient) -> bool {
+        self.members.iter().any(|m| m.matches(recipient))
+    }
+
+    /// True when a member is equal to `key`.
+    #[must_use]
+    pub fn has(&self, key: &RecipientKey) -> bool {
+        self.members.iter().any(|m| m.parts() == key.parts())
+    }
+}
+
+/// One operation on a recipient (ADR 0091 items 5 to 7 and 9, ADR 0095).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecipientOperation {
@@ -89,6 +126,12 @@ pub enum RecipientOperation {
         /// The split of the new recipient, from 1 to 99.
         percent: u64,
     },
+    /// Replace each `node` recipient of the wallet with an `lnaddress`
+    /// recipient (ADR 0095 item 11).
+    UseLnaddress {
+        /// The Lightning address.
+        address: String,
+    },
 }
 
 /// The reason why a feed does not change (ADR 0091 item 17).
@@ -97,6 +140,10 @@ pub enum RecipientOperation {
 pub enum Cause {
     /// No value block has the recipient.
     NoRecipient,
+    /// A value block has a recipient of the wallet, but no recipient of the
+    /// wallet that is not an `lnaddress` recipient (Use the Lightning
+    /// address).
+    NoNodeRecipient,
     /// Each value block has the recipient before the change (Add).
     HasRecipient,
     /// A value block has the new address before the change.
@@ -217,12 +264,28 @@ fn set_splits(block: &mut ValueBlock, positions: &[usize], splits: &[u64], old: 
     }
 }
 
+/// Write `method="lnaddress"` on a block that an operation changed, when
+/// its method is none or `keysend` (ADR 0095 item 13).
+fn set_lnaddress_method(block: &mut ValueBlock) {
+    if block
+        .method
+        .as_deref()
+        .is_none_or(|m| m.eq_ignore_ascii_case("keysend"))
+    {
+        block.method = Some("lnaddress".to_owned());
+    }
+}
+
+fn is_lnaddress_type(recipient_type: Option<&str>) -> bool {
+    recipient_type == Some("lnaddress")
+}
+
 fn apply_block(
     block: &mut ValueBlock,
-    key: &RecipientKey,
+    wallet: &Wallet,
     operation: &RecipientOperation,
 ) -> BlockResult {
-    let has_key = |block: &ValueBlock| block.recipients.iter().any(|e| key.matches(&e.value));
+    let has_wallet = |block: &ValueBlock| block.recipients.iter().any(|e| wallet.matches(&e.value));
     match operation {
         RecipientOperation::ChangeAddress {
             address,
@@ -230,7 +293,7 @@ fn apply_block(
             custom_value,
             recipient_type,
         } => {
-            if !has_key(block) {
+            if !has_wallet(block) {
                 return BlockResult::Skipped(Cause::NoRecipient);
             }
             let new_key = RecipientKey {
@@ -238,37 +301,42 @@ fn apply_block(
                 custom_key: custom_key.clone(),
                 custom_value: custom_value.clone(),
             };
-            if new_key.parts() != key.parts()
-                && block.recipients.iter().any(|e| new_key.matches(&e.value))
+            if block
+                .recipients
+                .iter()
+                .any(|e| new_key.matches(&e.value) && !wallet.matches(&e.value))
             {
                 return BlockResult::Skipped(Cause::HasNewAddress);
             }
             for entry in &mut block.recipients {
-                if key.matches(&entry.value) {
+                if wallet.matches(&entry.value) {
                     entry.value.address = Some(address.clone());
                     entry.value.custom_key = non_empty(custom_key.as_ref());
                     entry.value.custom_value = non_empty(custom_value.as_ref());
                     entry.value.recipient_type.clone_from(recipient_type);
                 }
             }
+            if is_lnaddress_type(recipient_type.as_deref()) {
+                set_lnaddress_method(block);
+            }
             BlockResult::Changed
         }
         RecipientOperation::Rename { name } => {
-            if !has_key(block) {
+            if !has_wallet(block) {
                 return BlockResult::Skipped(Cause::NoRecipient);
             }
             for entry in &mut block.recipients {
-                if key.matches(&entry.value) {
+                if wallet.matches(&entry.value) {
                     entry.value.name = Some(name.clone());
                 }
             }
             BlockResult::Changed
         }
         RecipientOperation::Remove => {
-            if !has_key(block) {
+            if !has_wallet(block) {
                 return BlockResult::Skipped(Cause::NoRecipient);
             }
-            remove_from_block(block, key)
+            remove_from_block(block, wallet)
         }
         RecipientOperation::Add {
             name,
@@ -278,7 +346,7 @@ fn apply_block(
             custom_value,
             percent,
         } => {
-            if has_key(block) {
+            if has_wallet(block) {
                 return BlockResult::Skipped(Cause::HasRecipient);
             }
             let added = Recipient {
@@ -290,14 +358,49 @@ fn apply_block(
                 custom_value: non_empty(custom_value.as_ref()),
                 fee: None,
             };
-            add_to_block(block, added, *percent)
+            let result = add_to_block(block, added, *percent);
+            if matches!(result, BlockResult::Changed)
+                && is_lnaddress_type(recipient_type.as_deref())
+            {
+                set_lnaddress_method(block);
+            }
+            result
+        }
+        RecipientOperation::UseLnaddress { address } => {
+            use_lnaddress_in_block(block, wallet, address)
         }
     }
 }
 
+/// Replace each recipient of the wallet that is not an `lnaddress`
+/// recipient (ADR 0095 item 11).
+fn use_lnaddress_in_block(block: &mut ValueBlock, wallet: &Wallet, address: &str) -> BlockResult {
+    let to_change = |e: &Entry<Recipient>| {
+        wallet.matches(&e.value) && !is_lnaddress_type(e.value.recipient_type.as_deref())
+    };
+    if !block.recipients.iter().any(to_change) {
+        let has_wallet = block.recipients.iter().any(|e| wallet.matches(&e.value));
+        return BlockResult::Skipped(if has_wallet {
+            Cause::NoNodeRecipient
+        } else {
+            Cause::NoRecipient
+        });
+    }
+    for entry in &mut block.recipients {
+        if to_change(entry) {
+            entry.value.recipient_type = Some("lnaddress".to_owned());
+            entry.value.address = Some(address.to_owned());
+            entry.value.custom_key = None;
+            entry.value.custom_value = None;
+        }
+    }
+    set_lnaddress_method(block);
+    BlockResult::Changed
+}
+
 /// Remove the recipient. The other non-fee splits scale to the non-fee
 /// total before the change (ADR 0091 item 14).
-fn remove_from_block(block: &mut ValueBlock, key: &RecipientKey) -> BlockResult {
+fn remove_from_block(block: &mut ValueBlock, wallet: &Wallet) -> BlockResult {
     let mut total = 0_u64;
     let mut positions = Vec::new();
     let mut splits = Vec::new();
@@ -310,7 +413,7 @@ fn remove_from_block(block: &mut ValueBlock, key: &RecipientKey) -> BlockResult 
             return BlockResult::Skipped(Cause::SplitNotNumber);
         };
         total = total.saturating_add(split);
-        if key.matches(&entry.value) {
+        if wallet.matches(&entry.value) {
             removes_share = true;
         } else {
             positions.push(position);
@@ -322,7 +425,7 @@ fn remove_from_block(block: &mut ValueBlock, key: &RecipientKey) -> BlockResult 
     }
     let scaled = scale(&splits, total);
     set_splits(block, &positions, &scaled, &splits);
-    block.recipients.retain(|e| !key.matches(&e.value));
+    block.recipients.retain(|e| !wallet.matches(&e.value));
     BlockResult::Changed
 }
 
@@ -364,6 +467,7 @@ fn pick_cause(causes: &[Cause], operation: &RecipientOperation) -> Cause {
         Cause::OnlyFees,
         Cause::HasRecipient,
         Cause::HasNewAddress,
+        Cause::NoNodeRecipient,
     ] {
         if causes.contains(&wanted) {
             return wanted;
@@ -378,7 +482,7 @@ fn pick_cause(causes: &[Cause], operation: &RecipientOperation) -> Cause {
 /// (ADR 0091 items 5 to 10).
 ///
 /// When no block changes, the feed does not change.
-pub fn apply(feed: &mut Feed, key: &RecipientKey, operation: &RecipientOperation) -> Outcome {
+pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -> Outcome {
     if let RecipientOperation::Add { percent, .. } = operation
         && !(1..=99).contains(percent)
     {
@@ -390,7 +494,7 @@ pub fn apply(feed: &mut Feed, key: &RecipientKey, operation: &RecipientOperation
         for entry in blocks {
             // Add reports the blocks that have the key. The other
             // operations report only the blocks that can name a cause.
-            match apply_block(&mut entry.value, key, operation) {
+            match apply_block(&mut entry.value, wallet, operation) {
                 BlockResult::Changed => changed = true,
                 BlockResult::Skipped(cause) => causes.push(cause),
             }
@@ -499,14 +603,15 @@ fn remove_new_draft(collection: &Collection, id: FeedId) -> Result<(), PipelineE
 pub fn make_change_set(
     collection: &Collection,
     start: &mut dyn FnMut(FeedId) -> Result<(), String>,
-    key: &RecipientKey,
+    wallet: &Wallet,
     operation: &RecipientOperation,
     feeds: &[FeedId],
 ) -> Result<ChangeSet, PipelineError> {
+    check_operation(operation)?;
     // A closed change set has no more work (ADR 0091 item 19).
     collection.delete_closed_change_sets()?;
     let made_at = now();
-    let id = collection.add_change_set(&to_json(operation)?, &to_json(key)?, made_at)?;
+    let id = collection.add_change_set(&to_json(operation)?, &to_json(&wallet.key)?, made_at)?;
     let mut seen = HashSet::new();
     let mut changed = false;
     let busy: HashSet<FeedId> = change_sets(collection)?
@@ -536,7 +641,7 @@ pub fn make_change_set(
         }
         let before = collection.draft(feed_id)?;
         let had_draft = before.is_some();
-        let outcome = change_feed(collection, start, key, operation, feed_id, had_draft)?;
+        let outcome = change_feed(collection, start, wallet, operation, feed_id, had_draft)?;
         changed |= outcome.is_changed();
         let kept = if outcome.is_changed() { before } else { None };
         collection.add_change_set_feed(
@@ -553,19 +658,47 @@ pub fn make_change_set(
     // A change set with no changed feed does not change the saved
     // recipient. Thus it holds nothing that Discard must put back.
     if changed {
-        change_saved_recipient(collection, id, key, operation)?;
+        change_saved_recipient(collection, id, wallet, operation)?;
     }
     change_set(collection, id)
 }
 
-/// Change the saved recipient for Change address and Rename, and keep the
-/// saved recipient from before the change in the change set (ADR 0091
-/// item 12). Other operations, and a recipient that is not saved, change
-/// nothing.
+/// Refuse an operation that has no type or no address (ADR 0095 items 12
+/// and 14).
+fn check_operation(operation: &RecipientOperation) -> Result<(), PipelineError> {
+    match operation {
+        RecipientOperation::ChangeAddress { recipient_type, .. }
+        | RecipientOperation::Add { recipient_type, .. }
+            if recipient_type
+                .as_deref()
+                .is_none_or(|t| t.trim().is_empty()) =>
+        {
+            Err(invalid("the recipient needs a type"))
+        }
+        RecipientOperation::UseLnaddress { address } if address.trim().is_empty() => {
+            Err(invalid("the Lightning address is empty"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The saved recipients from before a change set, as the column
+/// `saved_before` keeps them. A row from before ADR 0095 holds one object.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SavedBefore {
+    Many(Vec<SavedRecipientRow>),
+    One(SavedRecipientRow),
+}
+
+/// Change the saved recipient of each member for Change address and Rename,
+/// and keep the saved recipients from before the change in the change set
+/// (ADR 0091 item 12, ADR 0095 item 9). Other operations, and a member that
+/// is not saved, change nothing.
 fn change_saved_recipient(
     collection: &Collection,
     id: i64,
-    key: &RecipientKey,
+    wallet: &Wallet,
     operation: &RecipientOperation,
 ) -> Result<(), PipelineError> {
     let (new_identity, name) = match operation {
@@ -584,13 +717,29 @@ fn change_saved_recipient(
             None,
         ),
         RecipientOperation::Rename { name } => (None, Some(name.as_str())),
-        RecipientOperation::Remove | RecipientOperation::Add { .. } => return Ok(()),
+        RecipientOperation::Remove
+        | RecipientOperation::Add { .. }
+        | RecipientOperation::UseLnaddress { .. } => return Ok(()),
     };
-    let Some(before) = collection.saved_recipient_row(key.parts())? else {
+    let mut before = Vec::new();
+    for member in &wallet.members {
+        if let Some(row) = collection.saved_recipient_row(member.parts())?
+            && !before.contains(&row)
+        {
+            before.push(row);
+        }
+    }
+    if before.is_empty() {
         return Ok(());
-    };
+    }
     collection.set_change_set_saved_before(id, &to_json(&before)?)?;
-    collection.change_saved_recipient(key.parts(), new_identity, name)?;
+    for row in &before {
+        collection.change_saved_recipient(
+            (&row.address, &row.custom_key, &row.custom_value),
+            new_identity,
+            name,
+        )?;
+    }
     Ok(())
 }
 
@@ -598,7 +747,7 @@ fn change_saved_recipient(
 fn change_feed(
     collection: &Collection,
     start: &mut dyn FnMut(FeedId) -> Result<(), String>,
-    key: &RecipientKey,
+    wallet: &Wallet,
     operation: &RecipientOperation,
     feed_id: FeedId,
     had_draft: bool,
@@ -611,10 +760,10 @@ fn change_feed(
     // Calculate the outcome before the edit, so that an unchanged draft
     // keeps its bytes.
     let (mut model, _) = pipeline::draft_model(collection, feed_id)?;
-    let outcome = apply(&mut model, key, operation);
+    let outcome = apply(&mut model, wallet, operation);
     if outcome.is_changed() {
         pipeline::edit_draft(collection, feed_id, |feed| {
-            apply(feed, key, operation);
+            apply(feed, wallet, operation);
         })?;
     } else if !had_draft {
         remove_new_draft(collection, feed_id)?;
@@ -694,7 +843,13 @@ pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), Pipeli
         }
     }
     if let Some(text) = collection.change_set_saved_before(id)? {
-        collection.restore_saved_recipient(&from_json::<SavedRecipientRow>(&text)?)?;
+        let rows = match from_json::<SavedBefore>(&text)? {
+            SavedBefore::Many(rows) => rows,
+            SavedBefore::One(row) => vec![row],
+        };
+        for row in rows.iter().rev() {
+            collection.restore_saved_recipient(row)?;
+        }
     }
     collection.delete_change_set(id)?;
     Ok(())
@@ -775,6 +930,10 @@ mod tests {
         }
     }
 
+    fn wallet(address: &str) -> Wallet {
+        Wallet::single(key(address))
+    }
+
     /// A feed with a channel block, an item block, a live item block and
     /// a value time split. Each block has the recipient "a".
     fn feed() -> Feed {
@@ -845,7 +1004,7 @@ mod tests {
             custom_value: Some("v".into()),
             recipient_type: Some("lnaddress".into()),
         };
-        let outcome = apply(&mut feed, &key("a"), &operation);
+        let outcome = apply(&mut feed, &wallet("a"), &operation);
         assert_eq!(
             outcome,
             Outcome::Changed {
@@ -884,7 +1043,7 @@ mod tests {
         let mut feed = feed();
         let before = feed.clone();
         let operation = RecipientOperation::Rename { name: "Ann".into() };
-        assert!(apply(&mut feed, &key("a"), &operation).is_changed());
+        assert!(apply(&mut feed, &wallet("a"), &operation).is_changed());
         let mut expected = before;
         expected.values[0].value.recipients[0].value.name = Some("Ann".into());
         expected.items[0].value.values[0].value.recipients[0]
@@ -908,7 +1067,7 @@ mod tests {
             ])],
             ..Feed::default()
         };
-        let outcome = apply(&mut feed, &key("a"), &RecipientOperation::Remove);
+        let outcome = apply(&mut feed, &wallet("a"), &RecipientOperation::Remove);
         assert_eq!(
             outcome,
             Outcome::Changed {
@@ -943,7 +1102,7 @@ mod tests {
             ],
             ..Feed::default()
         };
-        assert!(apply(&mut feed, &key("n"), &add(10)).is_changed());
+        assert!(apply(&mut feed, &wallet("n"), &add(10)).is_changed());
         assert_eq!(
             splits(&feed.values[0]),
             [pair("x", "45"), pair("y", "45"), pair("n", "10")]
@@ -961,7 +1120,7 @@ mod tests {
     fn each_cause_has_a_test() {
         let rename = RecipientOperation::Rename { name: "z".into() };
         let none =
-            |feed: &mut Feed, op: &RecipientOperation, k: &str| match apply(feed, &key(k), op) {
+            |feed: &mut Feed, op: &RecipientOperation, k: &str| match apply(feed, &wallet(k), op) {
                 Outcome::NotChanged { cause } => cause,
                 Outcome::Changed { .. } => panic!("the feed must not change"),
             };
@@ -1030,8 +1189,95 @@ mod tests {
             ],
             ..Feed::default()
         };
-        assert!(apply(&mut feed, &key("n"), &add(10)).is_changed());
+        assert!(apply(&mut feed, &wallet("n"), &add(10)).is_changed());
         assert_eq!(splits(&feed.values[0]), [pair("x", "90"), pair("n", "10")]);
         assert_eq!(splits(&feed.values[1]), [pair("n", "50"), pair("x", "50")]);
+    }
+
+    fn wallet_of_two() -> Wallet {
+        Wallet {
+            key: key("a"),
+            members: vec![key("a"), key("b")],
+        }
+    }
+
+    #[test]
+    fn an_operation_acts_on_each_member_of_a_wallet() {
+        let mut feed = Feed {
+            values: vec![block(vec![
+                recipient("a", "30"),
+                recipient("b", "20"),
+                recipient("c", "50"),
+            ])],
+            ..Feed::default()
+        };
+        let remove = apply(&mut feed, &wallet_of_two(), &RecipientOperation::Remove);
+        assert!(remove.is_changed());
+        assert_eq!(splits(&feed.values[0]), [pair("c", "100")]);
+    }
+
+    #[test]
+    fn use_lnaddress_replaces_the_node_recipients_and_sets_the_method() {
+        let mut ln = recipient("b", "20");
+        ln.value.recipient_type = Some("lnaddress".into());
+        let mut node = recipient("a", "30");
+        node.value.custom_key = Some("k".into());
+        node.value.custom_value = Some("v".into());
+        node.value.fee = Some("false".into());
+        let mut feed = Feed {
+            values: vec![block(vec![node, ln, recipient("c", "50")])],
+            ..Feed::default()
+        };
+        let operation = RecipientOperation::UseLnaddress {
+            address: "b".into(),
+        };
+        let wallet = Wallet {
+            key: RecipientKey {
+                address: "a".into(),
+                custom_key: Some("k".into()),
+                custom_value: Some("v".into()),
+            },
+            members: vec![
+                RecipientKey {
+                    address: "a".into(),
+                    custom_key: Some("k".into()),
+                    custom_value: Some("v".into()),
+                },
+                key("b"),
+            ],
+        };
+        assert!(apply(&mut feed, &wallet, &operation).is_changed());
+        let block = &feed.values[0].value;
+        assert_eq!(block.method.as_deref(), Some("lnaddress"));
+        let first = &block.recipients[0].value;
+        assert_eq!(first.recipient_type.as_deref(), Some("lnaddress"));
+        assert_eq!(first.address.as_deref(), Some("b"));
+        assert_eq!(first.custom_key, None);
+        assert_eq!(first.custom_value, None);
+        assert_eq!(first.name.as_deref(), Some("name a"));
+        assert_eq!(first.split.as_deref(), Some("30"));
+        assert_eq!(first.fee.as_deref(), Some("false"));
+        // A second run has no node recipient of the wallet.
+        let cause = apply(&mut feed, &wallet, &operation);
+        assert_eq!(
+            cause,
+            Outcome::NotChanged {
+                cause: Cause::NoNodeRecipient
+            }
+        );
+    }
+
+    #[test]
+    fn a_block_with_method_lnaddress_keeps_its_method() {
+        let mut feed = Feed {
+            values: vec![block(vec![recipient("a", "100")])],
+            ..Feed::default()
+        };
+        feed.values[0].value.method = Some("lnaddress".into());
+        let operation = RecipientOperation::UseLnaddress {
+            address: "x@y.z".into(),
+        };
+        assert!(apply(&mut feed, &wallet("a"), &operation).is_changed());
+        assert_eq!(feed.values[0].value.method.as_deref(), Some("lnaddress"));
     }
 }

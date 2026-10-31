@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 
 use studio_core::change_set::{
-    self, Cause, Outcome, RecipientKey, RecipientOperation, discard_change_set, level_feeds,
-    make_change_set,
+    self, Cause, Outcome, RecipientKey, RecipientOperation, Wallet, discard_change_set,
+    level_feeds, make_change_set,
 };
 use studio_core::collection::{Collection, FeedId, KnownRecipient};
 use studio_core::connector::{self, Connector, Expected, LocalFolder};
@@ -33,6 +33,26 @@ const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 </rss>
 ";
 
+/// A feed whose value block holds the two members of one wallet.
+const WALLET_FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">
+  <channel>
+    <title>Album</title>
+    <podcast:guid>917393e3-1b1e-5cef-ace4-edaa54e1f810</podcast:guid>
+    <podcast:medium>music</podcast:medium>
+    <podcast:value type=\"lightning\" method=\"keysend\">
+      <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"node-key\" split=\"40\"/>
+      <podcast:valueRecipient name=\"Ann\" type=\"lnaddress\" address=\"ann@example.com\" split=\"20\"/>
+      <podcast:valueRecipient name=\"Other\" type=\"node\" address=\"other\" split=\"40\"/>
+    </podcast:value>
+    <item>
+      <title>Track One</title>
+      <guid>track-1</guid>
+    </item>
+  </channel>
+</rss>
+";
+
 struct PassAll;
 
 impl AddressCheck for PassAll {
@@ -51,6 +71,10 @@ struct Setup {
 }
 
 fn setup() -> Setup {
+    setup_with(FEED)
+}
+
+fn setup_with(xml: &str) -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let folder = LocalFolder::new(dir.path(), Some("https://music.example".into()));
     let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
@@ -62,7 +86,7 @@ fn setup() -> Setup {
     let mut feeds = Vec::new();
     for name in ["one.xml", "two.xml"] {
         folder
-            .write(name, FEED.as_bytes(), &Expected::Absent)
+            .write(name, xml.as_bytes(), &Expected::Absent)
             .unwrap();
         let feed = collection
             .add_feed(
@@ -86,12 +110,16 @@ fn setup() -> Setup {
     }
 }
 
-fn key() -> RecipientKey {
+fn plain(address: &str) -> RecipientKey {
     RecipientKey {
-        address: "old".into(),
+        address: address.into(),
         custom_key: None,
         custom_value: None,
     }
+}
+
+fn key() -> Wallet {
+    Wallet::single(plain("old"))
 }
 
 fn change_address() -> RecipientOperation {
@@ -149,11 +177,7 @@ fn a_feed_that_does_not_change_keeps_its_draft_bytes_and_makes_no_draft() {
     pipeline::start_draft(&s.collection, s.connector.as_ref(), one).unwrap();
     let before = s.collection.draft(one).unwrap().unwrap();
     let operation = RecipientOperation::Rename { name: "X".into() };
-    let nobody = RecipientKey {
-        address: "nobody".into(),
-        custom_key: None,
-        custom_value: None,
-    };
+    let nobody = Wallet::single(plain("nobody"));
     let mut starter = start(&s);
     let set = make_change_set(
         &s.collection,
@@ -305,11 +329,7 @@ fn a_feed_in_an_open_change_set_is_not_changed_by_a_second_one() {
     assert!(first.feeds[0].outcome.is_changed());
     let kept = s.collection.draft(one).unwrap().unwrap();
     let second_operation = RecipientOperation::Rename { name: "X".into() };
-    let new_key = RecipientKey {
-        address: "new".into(),
-        custom_key: None,
-        custom_value: None,
-    };
+    let new_key = Wallet::single(plain("new"));
     let second = {
         let mut starter = start(&s);
         make_change_set(
@@ -468,11 +488,11 @@ fn a_change_set_with_no_changed_feed_keeps_the_saved_recipient_and_goes_at_the_n
     save(&s.collection, "Old name", Some(("k", "v")));
     let before = saved(&s.collection);
     // No test feed has this key, so no feed changes.
-    let other = RecipientKey {
+    let other = Wallet::single(RecipientKey {
         address: "old".into(),
         custom_key: Some("k".into()),
         custom_value: Some("v".into()),
-    };
+    });
     let first = {
         let mut starter = start(&s);
         make_change_set(
@@ -544,4 +564,286 @@ fn the_write_of_the_last_changed_feed_deletes_the_change_set() {
         change_set::find_change_set(&s.collection, set.id).is_err(),
         "ADR 0091 item 19: the write of the last changed feed must delete the change set."
     );
+}
+
+fn two_member_wallet() -> Wallet {
+    Wallet {
+        key: plain("node-key"),
+        members: vec![plain("node-key"), plain("ann@example.com")],
+    }
+}
+
+fn wallet_splits(collection: &Collection, id: FeedId) -> Vec<(String, String)> {
+    let (feed, _) = pipeline::draft_model(collection, id).unwrap();
+    feed.recipients()
+        .iter()
+        .map(|r| {
+            (
+                r.address.clone().unwrap_or_default(),
+                r.split.clone().unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn rename_and_change_address_change_each_member_of_a_wallet_in_one_feed() {
+    let s = setup_with(WALLET_FEED);
+    let one = s.feeds[0];
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &two_member_wallet(),
+        &RecipientOperation::Rename {
+            name: "Anna".into(),
+        },
+        &[one],
+    )
+    .unwrap();
+    assert!(set.feeds[0].outcome.is_changed());
+    let (feed, _) = pipeline::draft_model(&s.collection, one).unwrap();
+    let names: Vec<_> = feed.recipients().iter().map(|r| r.name.clone()).collect();
+    assert_eq!(
+        names,
+        [
+            Some("Anna".into()),
+            Some("Anna".into()),
+            Some("Other".into())
+        ],
+        "ADR 0095 item 9: Rename must act on each member of the wallet."
+    );
+    discard_change_set(&s.collection, set.id).unwrap();
+    let mut starter = start(&s);
+    make_change_set(
+        &s.collection,
+        &mut starter,
+        &two_member_wallet(),
+        &RecipientOperation::ChangeAddress {
+            address: "new".into(),
+            custom_key: None,
+            custom_value: None,
+            recipient_type: Some("lnaddress".into()),
+        },
+        &[one],
+    )
+    .unwrap();
+    assert_eq!(
+        addresses(&s.collection, one),
+        ["new", "new", "other"],
+        "ADR 0095 item 9: Change address must act on each member of the wallet."
+    );
+}
+
+#[test]
+fn remove_scales_the_other_splits_by_the_total_of_the_members() {
+    let s = setup_with(WALLET_FEED);
+    let one = s.feeds[0];
+    let mut starter = start(&s);
+    make_change_set(
+        &s.collection,
+        &mut starter,
+        &two_member_wallet(),
+        &RecipientOperation::Remove,
+        &[one],
+    )
+    .unwrap();
+    assert_eq!(
+        wallet_splits(&s.collection, one),
+        [("other".to_owned(), "100".to_owned())]
+    );
+}
+
+#[test]
+fn use_lnaddress_writes_the_attributes_and_the_method() {
+    let mut s = setup_with(WALLET_FEED);
+    let one = s.feeds[0];
+    let set = {
+        let mut starter = start(&s);
+        make_change_set(
+            &s.collection,
+            &mut starter,
+            &two_member_wallet(),
+            &RecipientOperation::UseLnaddress {
+                address: "ann@example.com".into(),
+            },
+            &[one],
+        )
+        .unwrap()
+    };
+    assert!(set.feeds[0].outcome.is_changed());
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, one).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        one,
+        &diff.id,
+    )
+    .unwrap();
+    let written = fs::read_to_string(s.dir.path().join("one.xml")).unwrap();
+    assert!(written.contains("method=\"lnaddress\""), "{written}");
+    assert!(!written.contains("node-key"), "{written}");
+    assert!(written.contains("type=\"lnaddress\""), "{written}");
+}
+
+#[test]
+fn use_lnaddress_with_no_node_recipient_gives_the_cause_and_keeps_the_bytes() {
+    let xml = WALLET_FEED.replace(
+        "      <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"node-key\" split=\"40\"/>\n",
+        "",
+    );
+    let s = setup_with(&xml);
+    let one = s.feeds[0];
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &two_member_wallet(),
+        &RecipientOperation::UseLnaddress {
+            address: "ann@example.com".into(),
+        },
+        &[one],
+    )
+    .unwrap();
+    assert_eq!(
+        set.feeds[0].outcome,
+        Outcome::NotChanged {
+            cause: Cause::NoNodeRecipient
+        }
+    );
+    assert!(s.collection.draft(one).unwrap().is_none());
+}
+
+#[test]
+fn change_address_sets_the_method_only_for_the_type_lnaddress() {
+    let method_after = |recipient_type: &str| {
+        let s = setup();
+        let one = s.feeds[0];
+        let mut starter = start(&s);
+        make_change_set(
+            &s.collection,
+            &mut starter,
+            &key(),
+            &RecipientOperation::ChangeAddress {
+                address: "new@example.com".into(),
+                custom_key: None,
+                custom_value: None,
+                recipient_type: Some(recipient_type.into()),
+            },
+            &[one],
+        )
+        .unwrap();
+        let (feed, _) = pipeline::draft_model(&s.collection, one).unwrap();
+        feed.values[0].value.method.clone()
+    };
+    assert_eq!(method_after("lnaddress").as_deref(), Some("lnaddress"));
+    assert_eq!(method_after("node").as_deref(), Some("keysend"));
+}
+
+#[test]
+fn an_operation_with_no_type_is_refused_and_leaves_no_change_set() {
+    let s = setup();
+    for recipient_type in [None, Some("  ".to_owned())] {
+        let change = RecipientOperation::ChangeAddress {
+            address: "new".into(),
+            custom_key: None,
+            custom_value: None,
+            recipient_type: recipient_type.clone(),
+        };
+        let add = RecipientOperation::Add {
+            name: None,
+            recipient_type,
+            address: "n".into(),
+            custom_key: None,
+            custom_value: None,
+            percent: 10,
+        };
+        for operation in [change, add] {
+            let mut starter = start(&s);
+            let error = make_change_set(&s.collection, &mut starter, &key(), &operation, &s.feeds)
+                .unwrap_err();
+            assert!(
+                format!("{error:?}").contains("needs a type"),
+                "ADR 0095 item 14: an operation with no type must give the error invalid."
+            );
+            assert_eq!(s.collection.change_set_rows().unwrap().len(), 0);
+        }
+    }
+}
+
+#[test]
+fn change_address_of_a_wallet_with_two_saved_rows_merges_them_and_discard_puts_back_both() {
+    let s = setup_with(WALLET_FEED);
+    for (name, address, kind) in [
+        ("Ann", "node-key", "node"),
+        ("Ann LN", "ann@example.com", "lnaddress"),
+    ] {
+        s.collection
+            .save_recipient(&Recipient {
+                name: Some(name.into()),
+                recipient_type: Some(kind.into()),
+                address: Some(address.into()),
+                ..Recipient::default()
+            })
+            .unwrap();
+    }
+    let before = saved(&s.collection);
+    assert_eq!(before.len(), 2);
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &two_member_wallet(),
+        &RecipientOperation::ChangeAddress {
+            address: "new@example.com".into(),
+            custom_key: None,
+            custom_value: None,
+            recipient_type: Some("lnaddress".into()),
+        },
+        &s.feeds,
+    )
+    .unwrap();
+    let merged = saved(&s.collection);
+    assert_eq!(
+        merged.len(),
+        1,
+        "ADR 0095 item 9: the saved rows must merge."
+    );
+    assert_eq!(merged[0].address, "new@example.com");
+    discard_change_set(&s.collection, set.id).unwrap();
+    let mut after = saved(&s.collection);
+    let mut expected = before;
+    after.sort_by(|a, b| a.address.cmp(&b.address));
+    expected.sort_by(|a, b| a.address.cmp(&b.address));
+    assert_eq!(after, expected);
+}
+
+#[test]
+fn discard_reads_a_saved_before_with_one_object() {
+    let s = setup();
+    save(&s.collection, "Old name", None);
+    let before = saved(&s.collection);
+    let id = s
+        .collection
+        .saved_recipient_row(("old", "", ""))
+        .unwrap()
+        .unwrap();
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &key(),
+        &RecipientOperation::Rename { name: "New".into() },
+        &s.feeds,
+    )
+    .unwrap();
+    assert_eq!(saved(&s.collection)[0].name.as_deref(), Some("New"));
+    // The format from before ADR 0095 is one object, not a list.
+    s.collection
+        .set_change_set_saved_before(set.id, &serde_json::to_string(&id).unwrap())
+        .unwrap();
+    discard_change_set(&s.collection, set.id).unwrap();
+    assert_eq!(saved(&s.collection), before);
 }

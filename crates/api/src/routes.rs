@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use studio_core::address::AddressSource;
 use studio_core::announce;
 use studio_core::apps::{self, ConnectedApp};
-use studio_core::change_set::{self, RecipientKey, RecipientOperation};
+use studio_core::change_set::{self, RecipientKey, RecipientOperation, Wallet};
 use studio_core::collection::{
     Collection, CollectionErrorKind, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId,
     DraftOperationKind, FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
@@ -4970,7 +4970,7 @@ pub(crate) async fn make_change_set(
             change_set::make_change_set(
                 &workspace.collection,
                 &mut |id| ensure_draft(workspace, id).map_err(|e| e.coded()),
-                &body.recipient,
+                &Wallet::single(body.recipient.clone()),
                 &body.operation,
                 &feed_ids,
             )?

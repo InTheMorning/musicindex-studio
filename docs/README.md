@@ -98,6 +98,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0092: File hosts and the destination icons](adr/0092-file-hosts-and-the-destination-icons.md)
 - [ADR 0093: Dates and times use a picker in local time](adr/0093-dates-and-times-use-a-picker-in-local-time.md)
 - [ADR 0094: A duration is edited as minutes and seconds](adr/0094-a-duration-is-edited-as-minutes-and-seconds.md)
+- [ADR 0095: A Lightning address and its node key are one recipient](adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md)
 
 ## Plans
 
@@ -292,6 +293,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 057: Confirmation sheets](tasks/studio-v1-task-057-confirmation-sheets.md)
 - [Studio v1 task 058: Title case on buttons](tasks/studio-v1-task-058-title-case-buttons.md)
 - [Studio v1 task 059: The duration field](tasks/studio-v1-task-059-duration-field.md)
+- [Studio v1 task 060: Wallet recipients](tasks/studio-v1-task-060-wallet-recipients.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)
@@ -352,3 +354,4 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio baseline research, 2026-10-22](research/2026-10-22-studio-baseline-research.md)
 - [Phase 12 authentication research, 2026-10-26](research/2026-10-26-phase-12-auth-research.md)
 - [MSP 2.0 parity and Nostr identities, 2026-10-28](research/2026-10-28-msp-parity-and-nostr-identities.md)
+- [Keysend and Lightning address recipients, 2026-10-31](research/2026-10-31-keysend-and-lightning-address-recipients.md)

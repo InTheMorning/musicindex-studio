@@ -4,6 +4,7 @@
 - Date: 2026-10-30
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
+- Changed by: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md). Items 2 to 8 and 12: an operation acts on each address of one wallet, and the page of a recipient has a fifth operation.
 - Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, for the destinations at the bottom of the left panel. [ADR 0030](0030-an-added-recipient-gets-no-split.md), for a recipient that a change set adds.
 - Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the levels, and [ADR 0007](0007-draft-diff-write-and-announce.md) for the review and the write.
 

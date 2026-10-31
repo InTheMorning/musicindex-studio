@@ -50,6 +50,11 @@ fn app() -> App {
 
 /// An app whose musicindex API is at `index`. Port 9 answers nothing.
 fn app_with_index(index: &str) -> App {
+    app_with_keysend(index, None)
+}
+
+/// An app with a scheme for the keysend lookups. `None` sends no lookup.
+fn app_with_keysend(index: &str, keysend: Option<&'static str>) -> App {
     let data = tempfile::tempdir().unwrap();
     let feeds = tempfile::tempdir().unwrap();
     std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
@@ -57,6 +62,7 @@ fn app_with_index(index: &str) -> App {
         .unwrap()
         .with_musicindex(index)
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(keysend)
         .with_address_check(std::sync::Arc::new(PassAll));
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
@@ -74,6 +80,7 @@ fn app_with_rules(storage_limit: u64) -> App {
         .unwrap()
         .with_musicindex("http://127.0.0.1:9")
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(None)
         .with_address_check(std::sync::Arc::new(PassAll))
         .with_server_rules(crate::ServerRules {
             storage_limit,
@@ -10151,4 +10158,207 @@ async fn each_change_set_route_needs_the_token() {
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
         assert_eq!(value["error"]["code"], "token_required", "{method} {path}");
     }
+}
+
+// ---- Wallet recipients (ADR 0095, task 060c) ----
+
+const WALLET_KEYSEND: &str = r#"{"status":"OK","tag":"keysend","pubkey":"02abc","customData":[{"customKey":"696969","customValue":"x1"}]}"#;
+const OTHER_KEYSEND: &str = r#"{"status":"OK","tag":"keysend","pubkey":"02def"}"#;
+
+/// A feed XML whose channel has one recipient of the given type.
+fn wallet_feed(guid: &str, recipient_type: &str, address: &str, custom: &str) -> String {
+    format!(
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+         <title>{guid}</title><podcast:guid>{guid}</podcast:guid>\
+         <podcast:medium>music</podcast:medium>\
+         <podcast:value type=\"lightning\" method=\"keysend\">\
+         <podcast:valueRecipient name=\"Ann\" address=\"{address}\" split=\"100\" \
+         type=\"{recipient_type}\" {custom}/></podcast:value>\
+         <item><guid>{guid}-t1</guid><title>Track</title></item>\
+         </channel></rss>"
+    )
+}
+
+/// An app with a connector, a keysend scheme and the test server of the
+/// wallet. The server answers for `ann`, `bob` and `cy`.
+async fn wallet_app(keysend: Option<&'static str>) -> (App, i64, studio_core::testing::TestServer) {
+    let app = app_with_keysend("http://127.0.0.1:9", keysend);
+    let root = app.feeds.path().to_str().unwrap().to_owned();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    set_library_root(&app);
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set(
+        "/.well-known/keysend/ann",
+        200,
+        WALLET_KEYSEND.as_bytes().to_vec(),
+    );
+    server.set(
+        "/.well-known/keysend/bob",
+        200,
+        OTHER_KEYSEND.as_bytes().to_vec(),
+    );
+    server.set("/.well-known/keysend/cy", 404, b"no".to_vec());
+    (app, connector["id"].as_i64().unwrap(), server)
+}
+
+/// Two feeds: one pays the node key of the wallet, one pays the Lightning
+/// address of the wallet. Gives the two feed IDs and the address.
+async fn wallet_feeds(
+    app: &App,
+    connector: i64,
+    server: &studio_core::testing::TestServer,
+) -> (i64, i64, String) {
+    let address = format!("ann@127.0.0.1:{}", server.port());
+    let node = add_paid_feed(
+        app,
+        connector,
+        "node.xml",
+        &wallet_feed(
+            "gn",
+            "node",
+            "02abc",
+            "customKey=\"696969\" customValue=\"x1\"",
+        ),
+    )
+    .await;
+    let ln = add_paid_feed(
+        app,
+        connector,
+        "ln.xml",
+        &wallet_feed("gl", "lnaddress", &address, ""),
+    )
+    .await;
+    (node, ln, address)
+}
+
+fn wallet_key_json() -> Value {
+    json!({ "address": "02abc", "custom_key": "696969", "custom_value": "x1" })
+}
+
+#[tokio::test]
+async fn a_node_and_its_lightning_address_are_one_recipient() {
+    let (app, connector, server) = wallet_app(Some("http")).await;
+    let (_, _, address) = wallet_feeds(&app, connector, &server).await;
+    let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    let list = list.as_array().unwrap();
+    assert_eq!(list.len(), 1, "{list:?}");
+    assert_eq!(list[0]["feeds"], 2);
+    assert_eq!(list[0]["address"], "02abc");
+    assert_eq!(list[0]["custom_key"], "696969");
+    let addresses = list[0]["addresses"].as_array().unwrap();
+    assert_eq!(addresses.len(), 2);
+    assert_eq!(addresses[0]["address"], "02abc");
+    assert_eq!(addresses[0]["lookup"], Value::Null);
+    assert_eq!(addresses[1]["address"], address.as_str());
+    assert_eq!(addresses[1]["lookup"], "found");
+}
+
+#[tokio::test]
+async fn with_no_lookup_scheme_the_same_feeds_give_two_recipients() {
+    let (app, connector, server) = wallet_app(None).await;
+    wallet_feeds(&app, connector, &server).await;
+    let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(list.as_array().unwrap().len(), 2, "{list}");
+    let rows = collection_of(&app).keysend_lookups().unwrap();
+    assert_eq!(rows.len(), 0);
+}
+
+#[tokio::test]
+async fn recipient_uses_and_a_rename_act_on_each_member_of_the_wallet() {
+    let (app, connector, server) = wallet_app(Some("http")).await;
+    let (node, ln, _) = wallet_feeds(&app, connector, &server).await;
+    call(&app, "GET", "/api/v1/recipients", None).await;
+    let (status, uses) = call(
+        &app,
+        "POST",
+        "/api/v1/recipients/uses",
+        Some(wallet_key_json()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{uses}");
+    assert_eq!(uses["feeds"].as_array().unwrap().len(), 2, "{uses}");
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": wallet_key_json(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [node, ln],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    assert_eq!(change_row(&set, node)["outcome"]["outcome"], "changed");
+    assert_eq!(change_row(&set, ln)["outcome"]["outcome"], "changed");
+    assert_eq!(
+        draft_model(&app, ln).await["values"][0]["recipients"][0]["name"],
+        "Anna"
+    );
+}
+
+#[tokio::test]
+async fn use_lnaddress_checks_the_lookup_of_the_address() {
+    let (app, connector, server) = wallet_app(Some("http")).await;
+    let (node, _, _) = wallet_feeds(&app, connector, &server).await;
+    let port = server.port();
+    let try_address = |address: String| {
+        let app = &app;
+        async move {
+            call(
+                app,
+                "POST",
+                "/api/v1/change-sets",
+                Some(json!({
+                    "recipient": wallet_key_json(),
+                    "operation": { "kind": "use_lnaddress", "address": address },
+                    "feed_ids": [node],
+                })),
+            )
+            .await
+        }
+    };
+    let (status, body) = try_address(format!("bob@127.0.0.1:{port}")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "lnaddress_mismatch");
+    let (status, body) = try_address(format!("cy@127.0.0.1:{port}")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "lnaddress_no_keysend");
+    let (status, body) = try_address("no-at-sign".to_owned()).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_recipient");
+    let (status, set) = try_address(format!("ann@127.0.0.1:{port}")).await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    let draft = draft_model(&app, node).await;
+    let recipient = &draft["values"][0]["recipients"][0];
+    assert_eq!(recipient["recipient_type"], "lnaddress");
+    assert_eq!(draft["values"][0]["method"], "lnaddress");
+}
+
+#[tokio::test]
+async fn change_address_with_no_type_gives_422() {
+    let (app, connector, server) = wallet_app(None).await;
+    let (node, _, _) = wallet_feeds(&app, connector, &server).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": wallet_key_json(),
+            "operation": { "kind": "change_address", "address": "new@example.com" },
+            "feed_ids": [node],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_recipient");
 }

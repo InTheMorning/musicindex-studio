@@ -556,6 +556,10 @@ pub struct Workspace {
     pub(crate) lookup_relays: Vec<String>,
     /// The scheme of a NIP-05 request: `https`. A test sets `http`.
     pub(crate) nip05_scheme: &'static str,
+    /// The scheme of a keysend lookup: `Some("https")`. `None` means that
+    /// Studio sends no lookup (ADR 0095 item 3). A test sets `None` or
+    /// `Some("http")`.
+    pub(crate) keysend_scheme: Option<&'static str>,
     /// The feeds of the last discovery, by address, so that an import does
     /// not read them again.
     pub(crate) discovered: HashMap<String, Found>,
@@ -660,6 +664,7 @@ impl Workspace {
             index: MusicIndex::new(Web::new(), DEFAULT_API),
             lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
             nip05_scheme: "https",
+            keysend_scheme: Some("https"),
             discovered: HashMap::new(),
             images: ImageCache::default(),
             tickets: crate::media::Tickets::default(),
@@ -790,6 +795,15 @@ impl Workspace {
     #[must_use]
     pub(crate) fn with_plain_nip05(mut self) -> Self {
         self.nip05_scheme = "http";
+        self
+    }
+
+    /// Set the scheme of the keysend lookups. `None` sends no lookup, so
+    /// that a test sends no request outside the computer (ADR 0045).
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_keysend(mut self, scheme: Option<&'static str>) -> Self {
+        self.keysend_scheme = scheme;
         self
     }
 

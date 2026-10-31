@@ -1,5 +1,6 @@
 //! The JSON routes of the local API.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -27,6 +28,7 @@ use studio_core::feed::{Entry, Feed, Recipient};
 use studio_core::folder_scan;
 use studio_core::grant;
 use studio_core::inventory::{self, Hosts};
+use studio_core::keysend::{self, Lookup, LookupStatus};
 use studio_core::library::{self, Library};
 use studio_core::live::{self, LiveStatus};
 use studio_core::media;
@@ -4669,15 +4671,37 @@ pub(crate) fn pending_library_file(
 
 // ---- Recipients (ADR 0027) ----
 
+/// The key of a recipient as a tuple, with empty text for a missing custom
+/// key or custom value.
+type KeyParts = (String, String, String);
+
+fn key_parts(key: &RecipientKey) -> KeyParts {
+    let (address, custom_key, custom_value) = key.parts();
+    (
+        address.to_owned(),
+        custom_key.to_owned(),
+        custom_value.to_owned(),
+    )
+}
+
+/// The stored keysend lookups, by lowercase address.
+fn keysend_map(w: &Workspace) -> Result<HashMap<String, Lookup>, ApiError> {
+    Ok(w.collection
+        .keysend_lookups()?
+        .into_iter()
+        .map(|lookup| (lookup.address.clone(), lookup))
+        .collect())
+}
+
 /// Each recipient that Studio knows: from a feed of the collection, or
-/// from a save by the user. The list has each recipient one time.
+/// from a save by the user. The list has one entry for each wallet
+/// (ADR 0095 items 1 to 3).
 pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         let mut known = w.collection.known_recipients()?;
         // The count of feeds comes from the model of each feed, as in
         // `recipient_uses`. A recipient that only a draft has is added.
-        let mut counts: std::collections::HashMap<(String, String, String), UsedRecipient> =
-            std::collections::HashMap::new();
+        let mut counts: HashMap<KeyParts, UsedRecipient> = HashMap::new();
         for (row, feed) in feed_models(w)? {
             for recipient in recipient_places(&feed).all() {
                 let Some(address) = recipient.address.as_deref().filter(|a| !a.is_empty()) else {
@@ -4696,6 +4720,10 @@ pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
                 used.feeds.insert(row.id);
             }
         }
+        let mut feed_sets: HashMap<KeyParts, std::collections::HashSet<FeedId>> = counts
+            .iter()
+            .map(|(identity, used)| (identity.clone(), used.feeds.clone()))
+            .collect();
         for entry in &mut known {
             let identity = (
                 entry.address.clone(),
@@ -4715,14 +4743,112 @@ pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
                 saved_id: None,
             });
         }
-        known.sort_by(|a, b| {
-            let a_name = a.name.as_deref().unwrap_or_default().to_lowercase();
-            let b_name = b.name.as_deref().unwrap_or_default().to_lowercase();
-            a_name.cmp(&b_name).then_with(|| a.address.cmp(&b.address))
-        });
-        to_json(known)
+        if let Some(scheme) = w.keysend_scheme {
+            let addresses: Vec<String> = known.iter().map(|k| k.address.clone()).collect();
+            keysend::refresh(&w.collection, &w.web, scheme, &addresses, now_seconds())?;
+        }
+        let lookups = keysend_map(w)?;
+        to_json(group_wallets(known, &mut feed_sets, &lookups))
     })
     .await
+}
+
+/// Group the recipients by wallet (ADR 0095 items 2 and 3). The list is by
+/// name, then by address.
+fn group_wallets(
+    known: Vec<studio_core::collection::KnownRecipient>,
+    feed_sets: &mut HashMap<KeyParts, std::collections::HashSet<FeedId>>,
+    lookups: &HashMap<String, Lookup>,
+) -> Vec<Value> {
+    let mut groups: HashMap<
+        KeyParts,
+        (RecipientKey, Vec<studio_core::collection::KnownRecipient>),
+    > = HashMap::new();
+    for entry in known {
+        let key = RecipientKey {
+            address: entry.address.clone(),
+            custom_key: entry.custom_key.clone(),
+            custom_value: entry.custom_value.clone(),
+        };
+        let wallet = keysend::wallet_key(&key, lookups);
+        groups
+            .entry(key_parts(&wallet))
+            .or_insert_with(|| (wallet, Vec::new()))
+            .1
+            .push(entry);
+    }
+    let mut wallets: Vec<(String, String, Value)> = Vec::new();
+    for (parts, (wallet, mut members)) in groups {
+        // The key first, then A to Z by address.
+        members.sort_by(|a, b| {
+            let is_key = |m: &studio_core::collection::KnownRecipient| {
+                (
+                    m.address.clone(),
+                    m.custom_key.clone().unwrap_or_default(),
+                    m.custom_value.clone().unwrap_or_default(),
+                ) == parts
+            };
+            is_key(b)
+                .cmp(&is_key(a))
+                .then_with(|| a.address.cmp(&b.address))
+        });
+        let mut feeds = std::collections::HashSet::new();
+        for member in &members {
+            let identity = (
+                member.address.clone(),
+                member.custom_key.clone().unwrap_or_default(),
+                member.custom_value.clone().unwrap_or_default(),
+            );
+            if let Some(set) = feed_sets.get(&identity) {
+                feeds.extend(set.iter().copied());
+            }
+        }
+        let first = |pick: fn(&studio_core::collection::KnownRecipient) -> Option<String>| {
+            members.iter().find_map(pick)
+        };
+        let name = first(|m| m.name.clone().filter(|n| !n.is_empty()));
+        let recipient_type = first(|m| m.recipient_type.clone().filter(|t| !t.is_empty()));
+        let saved_id = members.iter().find_map(|m| m.saved_id);
+        let addresses: Vec<Value> = members
+            .iter()
+            .map(|m| {
+                json!({
+                    "address": m.address,
+                    "custom_key": m.custom_key,
+                    "custom_value": m.custom_value,
+                    "recipient_type": m.recipient_type,
+                    "name": m.name,
+                    "feeds": m.feeds,
+                    "saved_id": m.saved_id,
+                    "lookup": lookups
+                        .get(&m.address.trim().to_lowercase())
+                        .map(|l| l.status.as_str()),
+                })
+            })
+            .collect();
+        let sort_name = name.clone().unwrap_or_default().to_lowercase();
+        wallets.push((
+            sort_name,
+            wallet.address.clone(),
+            json!({
+                "name": name,
+                "recipient_type": recipient_type,
+                "address": wallet.address,
+                "custom_key": wallet.custom_key,
+                "custom_value": wallet.custom_value,
+                "feeds": feeds.len(),
+                "saved_id": saved_id,
+                "addresses": addresses,
+            }),
+        ));
+    }
+    wallets.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    wallets.into_iter().map(|(_, _, value)| value).collect()
+}
+
+/// The time of the computer in seconds, for the keysend lookups.
+fn now_seconds() -> i64 {
+    i64::try_from(unix_now()).unwrap_or(i64::MAX)
 }
 
 /// A recipient that a feed model has, with the feeds that use it.
@@ -4822,10 +4948,12 @@ pub(crate) async fn recipient_uses(
     Json(key): Json<RecipientKey>,
 ) -> ApiResult {
     blocking(shared, move |w| {
+        let (key, members) = keysend::wallet_of(&key, &keysend_map(w)?);
+        let wallet = Wallet { key, members };
         let mut rows = Vec::new();
         for (row, feed) in feed_models(w)? {
             let places = recipient_places(&feed);
-            let uses = |list: &Vec<&Recipient>| list.iter().any(|r| key.matches(r));
+            let uses = |list: &Vec<&Recipient>| list.iter().any(|r| wallet.matches(r));
             let channel = uses(&places.channel);
             let items = places.items.iter().filter(|list| uses(list)).count();
             let live_items = places.live_items.iter().filter(|list| uses(list)).count();
@@ -4842,7 +4970,7 @@ pub(crate) async fn recipient_uses(
                 "writable": row.connector_id.is_some(),
             }));
         }
-        Ok(Json(json!({ "recipient": key, "feeds": rows })))
+        Ok(Json(json!({ "recipient": wallet.key, "feeds": rows })))
     })
     .await
 }
@@ -4961,16 +5089,37 @@ pub(crate) async fn make_change_set(
         if body.recipient.address.trim().is_empty() {
             return Err(invalid("the recipient needs an address"));
         }
+        // The core refuses an operation with no type too (ADR 0095 item 14).
+        // The core error has no code for the route, so the route checks the
+        // type first to give 422.
+        if let RecipientOperation::ChangeAddress { recipient_type, .. }
+        | RecipientOperation::Add { recipient_type, .. } = &body.operation
+            && recipient_type
+                .as_deref()
+                .is_none_or(|t| t.trim().is_empty())
+        {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_recipient",
+                "the recipient needs a type",
+            ));
+        }
         let feed_ids: Vec<FeedId> = body.feed_ids.iter().map(|&id| FeedId(id)).collect();
         for &id in &feed_ids {
             w.collection.feed(id)?;
         }
+        let mut lookups = keysend_map(w)?;
+        if let RecipientOperation::UseLnaddress { address } = &body.operation {
+            check_lnaddress(w, &body.recipient, address, &mut lookups)?;
+        }
+        let (key, members) = keysend::wallet_of(&body.recipient, &lookups);
+        let wallet = Wallet { key, members };
         let set = {
             let workspace: &Workspace = w;
             change_set::make_change_set(
                 &workspace.collection,
                 &mut |id| ensure_draft(workspace, id).map_err(|e| e.coded()),
-                &Wallet::single(body.recipient.clone()),
+                &wallet,
                 &body.operation,
                 &feed_ids,
             )?
@@ -4978,6 +5127,63 @@ pub(crate) async fn make_change_set(
         Ok((StatusCode::CREATED, Json(change_set_json(w, &set))))
     })
     .await
+}
+
+/// Check the Lightning address of a Use Lightning address operation before
+/// the core runs (ADR 0095 items 11 to 13). `lookups` gets the new lookup.
+fn check_lnaddress(
+    w: &Workspace,
+    recipient: &RecipientKey,
+    address: &str,
+    lookups: &mut HashMap<String, Lookup>,
+) -> Result<(), ApiError> {
+    let refused = |code: &'static str, message: String| {
+        ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, code, message)
+    };
+    let address = address.trim().to_lowercase();
+    if keysend::lookup_url(w.keysend_scheme.unwrap_or("https"), &address).is_none() {
+        return Err(refused(
+            "invalid_recipient",
+            "the Lightning address needs the form name@domain".to_owned(),
+        ));
+    }
+    let wallet = keysend::wallet_key(recipient, lookups);
+    if wallet.address.contains('@') {
+        return Err(refused(
+            "invalid_recipient",
+            "the recipient has no node key".to_owned(),
+        ));
+    }
+    if let Some(scheme) = w.keysend_scheme
+        && keysend::is_due(lookups.get(&address), now_seconds())
+    {
+        let fresh = keysend::refresh(
+            &w.collection,
+            &w.web,
+            scheme,
+            std::slice::from_ref(&address),
+            now_seconds(),
+        )?;
+        lookups.extend(fresh);
+    }
+    let found = lookups
+        .get(&address)
+        .filter(|lookup| lookup.status == LookupStatus::Found)
+        .and_then(Lookup::key);
+    let Some(found) = found else {
+        let domain = address.split_once('@').map_or("", |(_, d)| d);
+        return Err(refused(
+            "lnaddress_no_keysend",
+            format!("Studio found no keysend data at {domain}"),
+        ));
+    };
+    if key_parts(&found) != key_parts(&wallet) {
+        return Err(refused(
+            "lnaddress_mismatch",
+            format!("the Lightning address {address} pays a different wallet"),
+        ));
+    }
+    Ok(())
 }
 
 /// The open change sets, the oldest first.

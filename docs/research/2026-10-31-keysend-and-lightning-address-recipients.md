@@ -16,6 +16,8 @@ The report was composed in STE. This report does not claim full STE compliance.
 | The corpus of Studio | `crates/core/tests/corpus/`, 28 feeds | 2026-10-31 |
 | MSP 2.0 | `../MSP-2.0/src/utils/xmlGenerator.ts` | 2026-10-31 |
 | The keysend and LNURL-pay endpoints of each corpus Lightning address | HTTPS requests with `curl` | 2026-10-31 |
+| The keysend path of `zbd.gg`, `blink.sv`, `coinos.io`, `stacker.news`, `primal.net`, `speed.app` and `minibits.cash`, for the name `hello` | HTTPS requests with `curl` | 2026-10-31 |
+| The alias and the channel count of a node in the Lightning network graph | `https://mempool.space/api/v1/lightning/nodes/{pubkey}` | 2026-10-31 |
 
 ## Findings
 
@@ -46,6 +48,17 @@ The corpus has 30 different Lightning addresses on five domains. Studio requeste
 - 23 of 30 addresses gave keysend data. The three failures on Fountain and Alby are `malachi@fountain.fm`, `guest@getalby.com` and `msp@getalby.com`. The cause was not examined.
 - Strike and Wallet of Satoshi give only LNURL-pay. An app can pay those addresses with an invoice, but not with keysend.
 - A custom domain that sends LNURL-pay to Alby (`phafe.com`) does not also send the keysend lookup.
+
+#### The Nodes Behind The Addresses
+
+A second check on 2026-10-31 examined the nodes that the lookups give, for the names of the nodes on the Recipients page:
+
+- Each `fountain.fm` address with keysend data gives the same node key, `03b6f613…54b79`, with the custom key `906608` and one custom value for each address. The corpus has 16 `node` recipients on that key, in 2 feeds. The alias of the node in the Lightning network graph is `klnd0`, so the alias does not name the provider.
+- Each `getalby.com` address with keysend data gives a different node key, with the custom key `696969` and a small custom value. `chadf` gives `032870…`, `ericpp` gives `02c7bb…`, `steven` gives `035ad2…`, and `sirtjthewrathful` gives `031ce2…` with the value `1`. These are personal Alby Hub nodes. The corpus feed `kolomona-podcast-v4vmusic-live.xml` names `031ce2…` with the custom key `696969` and the value `1` as the `node` recipient "TJ Doerfel". Thus the lookup and the feed agree.
+- The corpus has 7 `node` recipients on the key `030a58b8…677a3` with the custom key `696969`, in 1 feed. Its alias in the graph is `getalby.com`, and it had 0 open channels (`active_channel_count`) on 2026-10-31. No address of the corpus resolves to it at this time. It is the shared Alby node from before Alby Hub.
+- `zbd.gg`, `coinos.io` and `stacker.news` have the name `hello` for LNURL-pay, but give 404 on the keysend path. `primal.net` and `blink.sv` give an HTML page on the keysend path. `speed.app` and `minibits.cash` give no keysend data for the name `hello`. None of these is a shared node with evidence.
+
+Thus two shared nodes have evidence: the Fountain node and the Alby node from before Alby Hub. A `getalby.com` address names a personal node. A domain names a shared node only when two or more addresses of the domain resolve to the same key.
 
 ### The Feeds
 

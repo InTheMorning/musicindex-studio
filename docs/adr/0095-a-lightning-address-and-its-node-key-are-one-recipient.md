@@ -17,6 +17,7 @@
 - The operation form of task 054c has the choice "Keep the type" in its Type menu. The core replaces the type (ADR 0091 item 5), so the empty choice removes the `type` attribute. The operator found this on 2026-10-31.
 - The operator asked for this decision on 2026-10-31, after the research.
 - On 2026-10-31, on `0.1.0-rc.6`, the operator found two defects. A row that showed the name and the types did not tell a node recipient with a name such as "deltaog@getalby.com" from a Lightning address. The form of Change address started at the key of the wallet. For a Lightning address with a `found` lookup, that key is a node key that no feed has. The form showed that key with the type `lnaddress`. Items 7 and 14 changed on that day.
+- Also on 2026-10-31, the operator found two more defects. A row did not tell a node key from an account on it, and a name can look like a Lightning address. The [research note](../research/2026-10-31-keysend-and-lightning-address-recipients.md) then examined the nodes behind the addresses. Each `fountain.fm` address resolves to one shared node, and each `getalby.com` address resolves to a personal Alby Hub node. The shared Alby node `030a58b8…` is from before Alby Hub, and the alias of the Fountain node in the network graph is `klnd0`. Items 7 and 8 changed again, and items 16 to 18 are new.
 
 ## Decision
 
@@ -31,8 +32,12 @@
 ### The Recipients Page
 
 6. `GET /recipients` gives one entry for each wallet, with the name from the most recent read or save and the key of the wallet. An entry also has the number of feeds that use an address of the wallet, and the list of its addresses. Each address has its type, and the ID of its saved recipient when the user saved it. A Lightning address also has the status of its lookup. This changes ADR 0091 item 2. The recipient picker lists each address of each entry, so its rows do not change (ADR 0027 item 3).
-7. A row of the Recipients page shows the name, each address of the wallet and the number of feeds. A Lightning address is before a node key, and it shows in full. A node key shows its first 8 and its last 4 characters, then its custom value when it has one, for example "TJ Doerfel · tj@getalby.com · 02ab12cd…24bf · 01abc · 7 feeds". The accounts of one shared node differ only in the custom value. The row shows no type word, because the shape of each address shows its type.
-8. The page of a recipient shows each address below the name, with its type and its custom value. It lists each feed that uses an address of the wallet, with its places (ADR 0091 item 3).
+7. A row of the Recipients page shows the name as its title. The number of feeds, or "Saved, not used", is at the right of the title. Below the title, the row has one line for each address of the wallet, the Lightning addresses first:
+    - A Lightning address line reads "Lightning address {address}".
+    - A node line reads "{provider} node · account {custom value}" when the core gives a provider (item 16), else "Node {key} · account {custom value}". The key shows its first 8 and its last 4 characters. A node with no custom value has no account part. The accounts of one shared node differ only in the custom value.
+    - Thus a name is not an address. An address is only on a line that names its type.
+    - The row is a navigation row to the page of the recipient, not an entry of an editor list. The one summary line of ADR 0028 item 1 does not apply to it.
+8. The page of a recipient shows the lines of item 7 below the name, with the full node key. It lists each feed that uses an address of the wallet, with its places (ADR 0091 item 3).
 
 ### The Operations
 
@@ -53,6 +58,12 @@
 
 15. In the value editor, an `lnaddress` recipient with the status `none` shows the hint "Studio found no keysend data at {domain}. An app that pays only with keysend cannot pay this address." The status comes from `GET /recipients`. The editor makes no lookup.
 
+### The Provider Of A Node
+
+16. The core names the provider of a node by a domain, for the lines of items 7 and 8. A domain names a node when two or more Lightning addresses of that domain in the collection resolve to the key, with different custom values. `GET /recipients` gives the provider of each `node` address, or null.
+17. A table of shared nodes in the core also names a key: the Fountain node `03b6f613e88bd874177c28c6ad83b3baba43c4c656f56be1f8df84669556054b79` as `fountain.fm`, and the Alby node `030a58b8653d32b99200a2334cfe913e51dc7d155aa0116c176657a4f1722677a3` from before Alby Hub as `getalby.com`. An entry goes into the table only with the evidence of the research note: a lookup, or the alias of the node in the network graph.
+18. One address that resolves to a node does not name the node, because a `getalby.com` address resolves to a personal Alby Hub node. That node and its address are one wallet (item 4), and the row shows the address. The alias of a node in the network graph is not a name: the Fountain node is `klnd0`.
+
 ## Alternatives Considered
 
 - A second address on one recipient, as a fallback. Not chosen: the specification has no attribute for it, discussion 576 of the podcast namespace did not decide it, and no app reads it.
@@ -64,6 +75,8 @@
 - An operation that replaces a Lightning address with its node key. Not chosen: Change address covers it, and the node key breaks when the provider changes its node.
 - A row with the type words, "lnaddress · node (keysend)". Replaced on 2026-10-31: two wallets with the same types showed the same row, and the shape of an address shows its type.
 - An address field that starts at the key of the wallet. Replaced on 2026-10-31: for a Lightning address with a `found` lookup, the key is a node key that no feed has.
+- The alias of a node from the Lightning network graph, through an explorer API. Not chosen: the alias of the Fountain node is `klnd0`, and it is one more request that goes through the network policy (ADR 0057).
+- A domain from one lookup as the name of a node. Not chosen: a `getalby.com` address resolves to a personal Alby Hub node, and "getalby.com node" would name a node of the user.
 
 ## Consequences
 
@@ -82,7 +95,8 @@
 - A core test: Change address and Add to a level with no type are refused.
 - A Node test: the Type menu has no empty choice, and it is before the address field.
 - A Node test: the start values of a form come from the members of the wallet.
-- A Node test: the row of a wallet with two addresses gives the text of item 7.
+- A Node test: the lines of a row of item 7 for a wallet with two addresses, a provider node and a node with no custom value.
+- A core test: the provider of a node comes from the table, or from two addresses of one domain with different custom values. One address of a domain gives no provider.
 - The corpus tests pass with no change.
 - No test sends a request to a host outside the computer (ADR 0045).
 
@@ -98,6 +112,6 @@
 
 Mechanical: the invariants above, and the four commit checks.
 
-Visual: the Recipients page with a wallet of two addresses, and the page of that recipient. Also the sheet "Use the Lightning address", the sheet "Change address" with each type, and the hint of item 15. In the two themes, and at 390 px.
+Visual: the Recipients page with a wallet of two addresses, a provider node and a node with no provider, and the page of that wallet. Also the sheet "Use the Lightning address", the sheet "Change address" with each type, and the hint of item 15. In the two themes, and at 390 px.
 
 Human, on `studio.musicindex.org`: a Fountain address and an Alby address each join their node recipient in one entry. A Strike address stays its own entry. Use the Lightning address writes one feed, and the feed on its file host has `type="lnaddress"` and `method="lnaddress"`.

@@ -294,6 +294,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 058: Title case on buttons](tasks/studio-v1-task-058-title-case-buttons.md)
 - [Studio v1 task 059: The duration field](tasks/studio-v1-task-059-duration-field.md)
 - [Studio v1 task 060: Wallet recipients](tasks/studio-v1-task-060-wallet-recipients.md)
+- [Studio v1 task 061: Node providers and address lines](tasks/studio-v1-task-061-node-providers.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

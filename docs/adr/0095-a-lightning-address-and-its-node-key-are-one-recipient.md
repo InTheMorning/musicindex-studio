@@ -16,6 +16,7 @@
 - Five corpus feeds mix the two recipient types in one value block, in both directions of `method`. Thus an app cannot select the recipients by the method alone.
 - The operation form of task 054c has the choice "Keep the type" in its Type menu. The core replaces the type (ADR 0091 item 5), so the empty choice removes the `type` attribute. The operator found this on 2026-10-31.
 - The operator asked for this decision on 2026-10-31, after the research.
+- On 2026-10-31, on `0.1.0-rc.6`, the operator found two defects. A row that showed the name and the types did not tell a node recipient with a name such as "deltaog@getalby.com" from a Lightning address. The form of Change address started at the key of the wallet. For a Lightning address with a `found` lookup, that key is a node key that no feed has. The form showed that key with the type `lnaddress`. Items 7 and 14 changed on that day.
 
 ## Decision
 
@@ -30,7 +31,7 @@
 ### The Recipients Page
 
 6. `GET /recipients` gives one entry for each wallet, with the name from the most recent read or save and the key of the wallet. An entry also has the number of feeds that use an address of the wallet, and the list of its addresses. Each address has its type, and the ID of its saved recipient when the user saved it. A Lightning address also has the status of its lookup. This changes ADR 0091 item 2. The recipient picker lists each address of each entry, so its rows do not change (ADR 0027 item 3).
-7. A row of the Recipients page shows the name, each type and the number of feeds, for example "TJ Doerfel · lnaddress · node (keysend) · 7 feeds".
+7. A row of the Recipients page shows the name, each address of the wallet and the number of feeds. A Lightning address is before a node key, and it shows in full. A node key shows its first 8 and its last 4 characters, for example "TJ Doerfel · tj@getalby.com · 02ab12cd…24bf · 7 feeds". The row shows no type word, because the shape of each address shows its type.
 8. The page of a recipient shows each address under the name. It lists each feed that uses an address of the wallet, with its places (ADR 0091 item 3).
 
 ### The Operations
@@ -40,7 +41,13 @@
 11. The page of a recipient gets a fifth operation, "Use the Lightning address". In each selected feed, it replaces each `node` recipient of the wallet with an `lnaddress` recipient: `type="lnaddress"`, the Lightning address as `address`, and no `customKey` and no `customValue`. The `name`, the `split` and `fee` stay. A feed with no `node` recipient of the wallet is "Not changed".
 12. The form of item 11 starts with the Lightning address of the wallet. When the wallet has none, the user types one. The core accepts the address only when its lookup gives the node key and the custom pair of the wallet. Otherwise the core refuses the change set with the cause, and the user can use Change address.
 13. When an operation puts an `lnaddress` recipient into a value block with `method="keysend"` or with no method, the core writes `method="lnaddress"` on that block. This is the form of the specification example and of MSP 2.0. A block that the operation does not change keeps its bytes. An edit in the editor does not change the method.
-14. Change address and Add to a level need a type. The core refuses an operation with no type. The Type menu of the form has no empty choice. It starts at the type of the recipient, or for Add to a level at `lnaddress` when the address has "@", else at `node`. The start value is an edit aid.
+14. Change address and Add to a level need a type. The core refuses an operation with no type. The Type menu is the first field of the form, and it has no empty choice. The fields below it follow the type. They start at the member of the wallet with that type, not at the key of the wallet:
+    - For `node`: "Node address", "Custom key" and "Custom value".
+    - For `lnaddress`: "Lightning address" alone.
+    - Change address starts at the node key when the wallet has one, else at the Lightning address.
+    - Add to a level starts at the Lightning address when the wallet has one, else at the node key.
+    - A change of the type puts the member of the new type in the fields, when the user did not change the address.
+    - Each start value is an edit aid.
 
 ### The Editor
 
@@ -55,6 +62,8 @@
 - A setting that stops the lookups. Not chosen: each address is public in a feed, and the request carries no user data.
 - The UI groups a flat list of recipients. Not chosen: the number of feeds of a wallet is a union over the feed models, and the UI does not have the models (ADR 0042, ADR 0065).
 - An operation that replaces a Lightning address with its node key. Not chosen: Change address covers it, and the node key breaks when the provider changes its node.
+- A row with the type words, "lnaddress · node (keysend)". Replaced on 2026-10-31: two wallets with the same types showed the same row, and the shape of an address shows its type.
+- An address field that starts at the key of the wallet. Replaced on 2026-10-31: for a Lightning address with a `found` lookup, the key is a node key that no feed has.
 
 ## Consequences
 
@@ -71,7 +80,9 @@
 - A core test: Rename, Remove and Change address act on each recipient of a wallet in one feed.
 - A core test: Use the Lightning address writes the attributes of item 11 and the method of item 13. A block with no `node` recipient of the wallet keeps its bytes. A Lightning address whose result gives a different key is refused.
 - A core test: Change address and Add to a level with no type are refused.
-- A Node test: the Type menu has no empty choice, and the row of a wallet with two types gives the text of item 7.
+- A Node test: the Type menu has no empty choice, and it is before the address field.
+- A Node test: the start values of a form come from the members of the wallet.
+- A Node test: the row of a wallet with two addresses gives the text of item 7.
 - The corpus tests pass with no change.
 - No test sends a request to a host outside the computer (ADR 0045).
 
@@ -87,6 +98,6 @@
 
 Mechanical: the invariants above, and the four commit checks.
 
-Visual: the Recipients page with a wallet of two addresses, the page of that recipient, the sheet "Use the Lightning address", and the hint of item 15. In the two themes, and at 390 px.
+Visual: the Recipients page with a wallet of two addresses, and the page of that recipient. Also the sheet "Use the Lightning address", the sheet "Change address" with each type, and the hint of item 15. In the two themes, and at 390 px.
 
 Human, on `studio.musicindex.org`: a Fountain address and an Alby address each join their node recipient in one entry. A Strike address stays its own entry. Use the Lightning address writes one feed, and the feed on its file host has `type="lnaddress"` and `method="lnaddress"`.

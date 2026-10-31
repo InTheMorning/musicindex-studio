@@ -3,6 +3,8 @@
 // `app.js` shows the pages. They give texts and states only. The core
 // calculates each split and finds each place (ADR 0065).
 
+import { shortKey } from './nostrkey.js';
+
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // The key that the routes use to name a recipient (ADR 0027).
@@ -26,15 +28,6 @@ const TYPE_LABELS = { node: 'node (keysend)', lnaddress: 'lnaddress' };
 
 export function typeLabel(type) {
   return TYPE_LABELS[type] || (type ? type : 'Type not set');
-}
-
-// The different types of the members of a wallet, "lnaddress" first.
-export function typesText(entry) {
-  const members = entry.addresses || [];
-  if (members.length === 0) return typeLabel(entry.recipient_type);
-  const types = [...new Set(members.map((m) => m.recipient_type))];
-  types.sort((a, b) => (b === 'lnaddress') - (a === 'lnaddress'));
-  return types.map(typeLabel).join(' · ');
 }
 
 // One line for each member of a wallet, for the header of its page.
@@ -62,9 +55,26 @@ export function hasNode(entry) {
   return nodeOf(entry) !== null;
 }
 
-// The start value of a type menu. The user can change it (an edit aid only).
-export function defaultType(address) {
-  return (address || '').includes('@') ? 'lnaddress' : 'node';
+// The start values of the address fields of an operation form for one type:
+// the first member of the wallet with that type, or empty texts (ADR 0095
+// item 14). The key of the wallet is not a start value: for a Lightning
+// address with a found lookup, it is a node key that no feed has. The user
+// can change the values (an edit aid only).
+export function memberStart(entry, type) {
+  const found = memberOfType(entry, type);
+  return {
+    address: found ? found.address || '' : '',
+    custom_key: found ? found.custom_key || '' : '',
+    custom_value: found ? found.custom_value || '' : '',
+  };
+}
+
+// The start type of an operation form. Change address starts at the node
+// key when the wallet has one. Add to a level starts at the Lightning
+// address when the wallet has one (ADR 0095 items 10 and 14).
+export function startType(entry, kind) {
+  const [first, second] = kind === 'add' ? ['lnaddress', 'node'] : ['node', 'lnaddress'];
+  return memberOfType(entry, first) ? first : second;
 }
 
 // One picker row for each member of each wallet. A member with no name gets
@@ -88,15 +98,21 @@ export function sortRecipients(list) {
   return (list || []).slice().sort((a, b) => recipientTitle(a).localeCompare(recipientTitle(b), undefined, { sensitivity: 'base' }));
 }
 
-// The summary line of a recipient: the name, the type, and "N feeds" or
-// "Saved, not used" (ADR 0091 item 2). A recipient that is not saved and that
-// no feed model uses now shows "0 feeds".
+// A node key in its short form. Each other address shows in full.
+const shortAddress = (member) => (member.recipient_type === 'node' ? shortKey(member.address) : member.address);
+
+// The summary line of a recipient: the name, then each address of the
+// wallet with the Lightning addresses first, then "N feeds" or "Saved, not
+// used" (ADR 0095 item 7 and ADR 0091 item 2). A recipient that is not saved
+// and that no feed model uses now shows "0 feeds".
 export function recipientRow(recipient) {
   const unusedSaved = !(recipient.feeds > 0) && recipient.saved_id != null;
+  const members = ((recipient.addresses || []).length > 0 ? recipient.addresses : [recipient])
+    .slice().sort((a, b) => (b.recipient_type === 'lnaddress') - (a.recipient_type === 'lnaddress'));
+  const feeds = unusedSaved ? 'Saved, not used' : plural(recipient.feeds || 0, 'feed', 'feeds');
   return {
     title: recipientTitle(recipient),
-    type: typesText(recipient),
-    text: unusedSaved ? 'Saved, not used' : plural(recipient.feeds || 0, 'feed', 'feeds'),
+    text: [...members.map(shortAddress), feeds].join(' · '),
   };
 }
 

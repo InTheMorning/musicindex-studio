@@ -4,7 +4,7 @@ import { pageSequence } from './pages.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
-  recipientKey, recipientTitle, addressLines as walletLines, lnaddressOf, hasNode, defaultType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
+  recipientKey, recipientTitle, addressLines as walletLines, lnaddressOf, hasNode, memberStart, startType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
   outcomeText, blockedText, operationTitle, operationLine, changeSetRow, nameOf, writableIds, initialStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
@@ -2520,7 +2520,7 @@ function RecipientsPage({ go }) {
         const row = recipientRow(recipient);
         return html`<button key=${JSON.stringify(recipientKey(recipient))} class="link-row" type="button"
           onClick=${() => go({ name: 'recipient', recipient })}>
-          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.type} · ${row.text}</span></span><span class="go">›</span>
+          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
         </button>`;
       })}</div>`}
     </section>
@@ -2538,14 +2538,25 @@ function FeedCheckRow({ title, text, checked, onChange }) {
 // outcome of each feed, so the form holds only the values to send.
 function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
   const key = recipientKey(recipient);
-  const lnStart = lnaddressOf(recipient) || '';
-  const [address, setAddress] = useState(
-    kind === 'use_lnaddress' ? lnStart : kind === 'add' ? lnStart || recipient.address || '' : recipient.address || '');
-  const [customKey, setCustomKey] = useState(recipient.custom_key || '');
-  const [customValue, setCustomValue] = useState(recipient.custom_value || '');
-  const [type, setType] = useState(kind === 'add'
-    ? defaultType(lnStart || recipient.address)
-    : recipient.recipient_type || defaultType(recipient.address));
+  // The address fields start at the member of the wallet with the type of
+  // the menu, not at the key of the wallet (ADR 0095 item 14).
+  const firstType = startType(recipient, kind);
+  const start = memberStart(recipient, firstType);
+  const [type, setType] = useState(firstType);
+  const [address, setAddress] = useState(kind === 'use_lnaddress' ? lnaddressOf(recipient) || '' : start.address);
+  const [customKey, setCustomKey] = useState(start.custom_key);
+  const [customValue, setCustomValue] = useState(start.custom_value);
+  // A change of the type puts the member of the new type in the fields,
+  // when the user did not change the address.
+  const changeType = (next) => {
+    if (address === memberStart(recipient, type).address) {
+      const member = memberStart(recipient, next);
+      setAddress(member.address);
+      setCustomKey(member.custom_key);
+      setCustomValue(member.custom_value);
+    }
+    setType(next);
+  };
   const [name, setName] = useState(recipient.name || '');
   const [percent, setPercent] = useState('');
   const [levelOwner, setLevelOwner] = useState('');
@@ -2571,18 +2582,19 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
   };
   const ids = kind === 'add' ? (level || []).filter((id) => levelSelected.has(id)) : selectedIds(uses, selected);
   const optional = (text) => (text.trim() === '' ? null : text.trim());
+  // A Lightning address has no custom pair (ADR 0095 item 11).
+  const custom = type === 'lnaddress'
+    ? { custom_key: null, custom_value: null }
+    : { custom_key: optional(customKey), custom_value: optional(customValue) };
   const operation = () => {
     switch (kind) {
       case 'change_address':
-        return { kind, address: address.trim(), custom_key: optional(customKey), custom_value: optional(customValue), recipient_type: type || null };
+        return { kind, address: address.trim(), ...custom, recipient_type: type || null };
       case 'rename': return { kind, name };
       case 'remove': return { kind };
       case 'use_lnaddress': return { kind, address: address.trim() };
       default:
-        return {
-          kind, name: optional(name), recipient_type: type || null, address: address.trim(),
-          custom_key: optional(customKey), custom_value: optional(customValue), percent: Number(percent),
-        };
+        return { kind, name: optional(name), recipient_type: type || null, address: address.trim(), ...custom, percent: Number(percent) };
     }
   };
   const ready = ids.length > 0
@@ -2591,7 +2603,9 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
   const submit = () => run(async () => {
     onCreated(await api('/change-sets', { method: 'POST', body: { recipient: key, operation: operation(), feed_ids: ids } }));
   });
-  const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${type} onChange=${setType}
+  // The type is the first field, and the fields below it follow the type
+  // (ADR 0095 item 14).
+  const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${type} onChange=${changeType}
     options=${[['node', 'node (keysend)'], ['lnaddress', 'lnaddress']]} />`;
   const label = kind === 'change_address' ? `Change in ${feedCount(ids.length)}`
     : kind === 'rename' ? `Rename in ${feedCount(ids.length)}`
@@ -2603,11 +2617,12 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
       ${kind === 'use_lnaddress' && html`<div class="group rows"><${Field} id="op-address" label="Lightning address" required
         hint="The address must pay the same wallet. Studio checks it." value=${address} onInput=${(e) => setAddress(e.target.value)} /></div>`}
       ${(kind === 'change_address' || kind === 'add') && html`<div class="group rows">
-        ${kind === 'add' && html`<${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} />`}
-        <${Field} id="op-address" label="Address" required value=${address} onInput=${(e) => setAddress(e.target.value)} />
         ${typeMenu}
-        <${Field} id="op-custom-key" label="Custom key" value=${customKey} onInput=${(e) => setCustomKey(e.target.value)} />
-        <${Field} id="op-custom-value" label="Custom value" value=${customValue} onInput=${(e) => setCustomValue(e.target.value)} />
+        ${kind === 'add' && html`<${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} />`}
+        <${Field} id="op-address" label=${type === 'lnaddress' ? 'Lightning address' : 'Node address'} required
+          value=${address} onInput=${(e) => setAddress(e.target.value)} />
+        ${type !== 'lnaddress' && html`<${Field} id="op-custom-key" label="Custom key" value=${customKey} onInput=${(e) => setCustomKey(e.target.value)} />
+          <${Field} id="op-custom-value" label="Custom value" value=${customValue} onInput=${(e) => setCustomValue(e.target.value)} />`}
       </div>`}
       ${kind === 'add' && html`<div class="group rows">
         ${owners.length === 0

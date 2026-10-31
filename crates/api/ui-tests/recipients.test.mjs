@@ -3,20 +3,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   recipientRow, sortRecipients, placesText, useRow, outcomeText, causeText, blockedText,
-  initialStatuses, typesText, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, operationTitle, operationLine, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
+  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationTitle, operationLine, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
 } from '../ui/recipients.js';
 
-test('the summary line of a used recipient gives the name, the type and the feeds', () => {
+test('the summary line of a used recipient gives the name, the address and the feeds', () => {
   const row = recipientRow({ name: 'Ann', recipient_type: 'lnaddress', address: 'ann@example.com', feeds: 3, saved_id: null });
-  assert.deepEqual(row, { title: 'Ann', type: 'lnaddress', text: '3 feeds' });
-  assert.equal(recipientRow({ name: 'Ann', address: 'a', feeds: 1 }).text, '1 feed');
+  assert.deepEqual(row, { title: 'Ann', text: 'ann@example.com · 3 feeds' });
+  assert.equal(recipientRow({ name: 'Ann', address: 'a', feeds: 1 }).text, 'a · 1 feed');
 });
 
 test('the summary line of a saved recipient that no feed uses says so', () => {
-  const row = recipientRow({ name: 'Cara', recipient_type: 'node', address: '02ab', feeds: 0, saved_id: 4 });
-  assert.equal(row.text, 'Saved, not used');
-  assert.equal(row.type, 'node (keysend)');
-  assert.equal(recipientRow({ name: 'Dan', address: '03cd', feeds: 0, saved_id: null }).text, '0 feeds',
+  const row = recipientRow({ name: 'Cara', recipient_type: 'node', address: '02ab12cd34ef5678', feeds: 0, saved_id: 4 });
+  assert.equal(row.text, '02ab12cd…5678 · Saved, not used',
+    'ADR 0095 item 7: a node key shows its first 8 and its last 4 characters.');
+  assert.equal(recipientRow({ name: 'Dan', address: '03cd', feeds: 0, saved_id: null }).text, '03cd · 0 feeds',
     'ADR 0091 item 2: only a saved recipient shows "Saved, not used". Give the number of feeds for each other recipient.');
 });
 
@@ -104,27 +104,44 @@ test('a change set names its recipient by name, or by address when no recipient 
 });
 
 const wallet = {
-  name: null, address: '02ab', recipient_type: 'node', feeds: 7,
+  name: null, address: '02ab12cd34ef5678', recipient_type: 'node', custom_key: '906608', custom_value: '01abc', feeds: 7,
   addresses: [
-    { address: 'tj@getalby.com', recipient_type: 'lnaddress', name: null },
-    { address: '02ab', recipient_type: 'node', name: 'TJ node' },
+    { address: 'tj@getalby.com', recipient_type: 'lnaddress', name: null, custom_key: null, custom_value: null },
+    { address: '02ab12cd34ef5678', recipient_type: 'node', name: 'TJ node', custom_key: '906608', custom_value: '01abc' },
   ],
 };
 
-test('a wallet of two addresses gives its title, types and lines', () => {
+test('a wallet of two addresses gives its title, row and lines', () => {
   assert.equal(recipientTitle(wallet), 'tj@getalby.com');
-  assert.equal(typesText(wallet), 'lnaddress · node (keysend)');
   assert.deepEqual(addressLines(wallet), [
-    { address: 'tj@getalby.com', type: 'lnaddress' }, { address: '02ab', type: 'node (keysend)' }]);
+    { address: 'tj@getalby.com', type: 'lnaddress' }, { address: '02ab12cd34ef5678', type: 'node (keysend)' }]);
   assert.equal(lnaddressOf(wallet), 'tj@getalby.com');
-  assert.equal(nodeOf(wallet), '02ab');
-  assert.equal(recipientRow({ ...wallet, name: 'TJ Doerfel' }).type, 'lnaddress · node (keysend)');
+  assert.equal(nodeOf(wallet), '02ab12cd34ef5678');
+  assert.equal(recipientRow({ ...wallet, name: 'TJ Doerfel' }).text, 'tj@getalby.com · 02ab12cd…5678 · 7 feeds',
+    'ADR 0095 item 7: the row shows each address of the wallet, then the feeds.');
+  const keyFirst = { ...wallet, addresses: [wallet.addresses[1], wallet.addresses[0]] };
+  assert.equal(recipientRow(keyFirst).text, 'tj@getalby.com · 02ab12cd…5678 · 7 feeds',
+    'ADR 0095 item 7: the Lightning address is first in the row.');
+});
+
+test('the operation form starts at the member of the wallet with the type of the menu', () => {
+  assert.equal(startType(wallet, 'change_address'), 'node');
+  assert.equal(startType(wallet, 'add'), 'lnaddress');
+  assert.deepEqual(memberStart(wallet, 'node'), { address: '02ab12cd34ef5678', custom_key: '906608', custom_value: '01abc' });
+  assert.deepEqual(memberStart(wallet, 'lnaddress'), { address: 'tj@getalby.com', custom_key: '', custom_value: '' });
+  // A Lightning address with a found lookup: the key of the wallet is a node
+  // key that no feed has, so the form starts at the Lightning address.
+  const looked = { name: null, address: '03cd', recipient_type: 'lnaddress', custom_key: '906608', custom_value: '01xyz', feeds: 1,
+    addresses: [{ address: 'm@fountain.fm', recipient_type: 'lnaddress', name: null, custom_key: null, custom_value: null, lookup: 'found' }] };
+  assert.equal(startType(looked, 'change_address'), 'lnaddress',
+    'ADR 0095 item 14: the start values come from the members of the wallet, not from its key.');
+  assert.deepEqual(memberStart(looked, 'lnaddress'), { address: 'm@fountain.fm', custom_key: '', custom_value: '' });
+  assert.deepEqual(memberStart(looked, 'node'), { address: '', custom_key: '', custom_value: '' });
 });
 
 test('an entry with no addresses gives one line', () => {
   const entry = { name: null, address: '03cd', recipient_type: 'node' };
   assert.equal(recipientTitle(entry), '03cd');
-  assert.equal(typesText(entry), 'node (keysend)');
   assert.deepEqual(addressLines(entry), [{ address: '03cd', type: 'node (keysend)' }]);
   assert.equal(lnaddressOf(entry), null);
   assert.equal(nodeOf(entry), null);
@@ -132,7 +149,7 @@ test('an entry with no addresses gives one line', () => {
 
 test('the picker gives one row for each address, with the name of the entry', () => {
   const rows = pickerRows([{ ...wallet, name: 'TJ Doerfel' }]);
-  assert.deepEqual(rows.map((r) => [r.address, r.name]), [['tj@getalby.com', 'TJ Doerfel'], ['02ab', 'TJ node']]);
+  assert.deepEqual(rows.map((r) => [r.address, r.name]), [['tj@getalby.com', 'TJ Doerfel'], ['02ab12cd34ef5678', 'TJ node']]);
 });
 
 test('the keysend hint names the domain', () => {
@@ -153,4 +170,7 @@ test('the type menu of the operation sheet has no placeholder', async () => {
   const element = text.slice(start, text.indexOf('/>', start));
   assert.ok(!element.includes('placeholder'),
     'ADR 0095 item 14: the Type menu of the operation sheet has no placeholder. Remove it.');
+  const form = text.slice(text.indexOf('<div class="group rows">', text.indexOf("kind === 'change_address' || kind === 'add'")));
+  assert.ok(form.indexOf('${typeMenu}') < form.indexOf('id="op-address"'),
+    'ADR 0095 item 14: the Type menu is the first field of the operation sheet. Put it before the address field.');
 });

@@ -5,6 +5,8 @@ Decisions: [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-r
 
 Status: Complete, with its screenshot visual check on 2026-10-31. The human test is open. Two notes from the reviews: the route `make_change_set` checks the type before the core, because the core error has no 422 code (a core error kind can replace it later). The lookups run with the workspace lock. Thus a listing of the recipients with due lookups blocks the other API calls for a maximum of 5 seconds. The planning model also moved "Remove" to the last place of the buttons (musicindex ADR 0020 R-ACT-3).
 
+Changed on 2026-10-31, on `0.1.0-rc.6`: a row did not tell a node recipient from a Lightning address. The form of Change address started at the key of the wallet. ADR 0095 items 7 and 14 changed. A row shows each address. The Type menu is the first field, and the fields follow the type. The start values come from the members of the wallet: `memberStart` and `startType` replace `typesText` and `defaultType`.
+
 ## Goal
 
 A `node` recipient and an `lnaddress` recipient of the same wallet are one recipient on the Recipients page. A change set acts on each address of the wallet. A new operation replaces the node key with the Lightning address. The core refuses an operation with no type.

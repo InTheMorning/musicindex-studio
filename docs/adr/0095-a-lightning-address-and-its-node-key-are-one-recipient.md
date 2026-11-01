@@ -4,6 +4,7 @@
 - Date: 2026-10-31
 - Owner: operator
 - Accepted: 2026-10-31 by the operator.
+- Changed by: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md). Items 6 to 8, 10 to 12, 14 and 15: the words of the rows, the menus and the hint, and the pages of People. [ADR 0098](0098-the-people-module.md): a person holds more than one wallet.
 - Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2 to 8 and 12. An operation acts on each address of one wallet, and the page of a recipient has a fifth operation.
 - Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, and [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy. Also [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules, and [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the test servers.
 

@@ -234,6 +234,14 @@ A phase gets task files in `docs/tasks/` before work starts.
 - [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) makes a Lightning address and its node key one recipient. [Task 060](../tasks/studio-v1-task-060-wallet-recipients.md) gives the work in four packets: 060a with 060b at the same time, then 060c, then 060d. Each packet is complete on 2026-10-31, with the screenshot visual check. The human test is open.
 - [Task 061](../tasks/studio-v1-task-061-node-providers.md) names the provider of a shared node and gives each address its own line (ADR 0095 items 7, 8 and 16 to 18), in two packets: 061a, then 061b. The two packets are complete on 2026-10-31, with the screenshot visual check. The human test is open.
 
+### The People Module
+
+- Decisions: [ADR 0098](../adr/0098-the-people-module.md) (the People module) and [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) (the People destination and the page of a person). The [design note](../research/2026-11-01-people-module-design-note.md) gives the jobs and the answers of the operator.
+- The mockups are in `.studio-dev/mockup-098/site/`: `people.html` for the accepted screens, and `versions.html` for the current screens with their proposed words.
+- The work starts after the human tests of Phase 12. The tasks do not exist now.
+- A possible sequence: first the core module, the credit index, the migration and the suggestions. Then the operations of a person and the export. Then the People destination, the page of a person and the sheets. Then the pickers.
+- Open in other repositories: musicindex ADR 0023 R-WORD-2 item 3 names the Studio page "Recipients", which ADR 0099 removes. The display of the support links in musicindex.org and v4vmm needs a decision in each of those repositories.
+
 ### Phase 13: Desktop Shell
 
 - Package the Tauri app for Linux, macOS and Windows.

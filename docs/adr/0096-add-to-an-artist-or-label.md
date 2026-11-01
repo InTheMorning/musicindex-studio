@@ -4,6 +4,7 @@
 - Date: 2026-10-31
 - Owner: operator
 - Accepted: 2026-10-31 by the operator.
+- Changed by: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md). Item 18: the operation is "Add to All Releases".
 - Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 4 and 9, and [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) items 10 and 14, for the name of the operation "Add to a level".
 - Uses: musicindex ADR 0023 R-CASE-1 (title case on a button) and musicindex ADR 0033 R-WORD-3 (the role words).
 

@@ -4,6 +4,7 @@
 - Date: 2026-10-22
 - Owner: operator
 - Changed by: [ADR 0030](0030-an-added-recipient-gets-no-split.md). Item 7: an added recipient gets no split.
+- Changed by: [ADR 0098](0098-the-people-module.md). Items 2 and 5: the saved recipients become people. [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md). Items 1 to 3 and 7: the picker shows people first.
 
 ## Context
 

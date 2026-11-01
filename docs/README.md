@@ -104,6 +104,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0098: The People module](adr/0098-the-people-module.md)
 - [ADR 0099: The People destination and the page of a person](adr/0099-the-people-destination-and-the-page-of-a-person.md)
 - [ADR 0100: Each release candidate has a notes file](adr/0100-each-release-candidate-has-a-notes-file.md)
+- [ADR 0101: A suggestion groups the items of one name](adr/0101-a-suggestion-groups-the-items-of-one-name.md)
+- [ADR 0102: Delete a person changes no feed](adr/0102-delete-a-person-changes-no-feed.md)
 
 ## Plans
 
@@ -305,6 +307,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 064: The operations of a person](tasks/studio-v1-task-064-person-operations.md)
 - [Studio v1 task 065: The People screens](tasks/studio-v1-task-065-people-screens.md)
 - [Studio v1 task 066: The People pickers](tasks/studio-v1-task-066-people-pickers.md)
+- [Studio v1 task 067: The findings of the first People test](tasks/studio-v1-task-067-people-test-findings.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

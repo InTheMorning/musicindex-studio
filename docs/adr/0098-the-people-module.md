@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
 - Changes: [ADR 0027](0027-the-recipient-picker.md) items 2 and 5 (the saved recipients become people). [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md), its non-goal for `lud16`. [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md), its non-goal "A link of two addresses by hand", for the wallets of one person.
+- Changed by: [ADR 0101](0101-a-suggestion-groups-the-items-of-one-name.md). Item 12: a suggestion groups the items of one name.
 - Uses: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change sets, [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules, [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy, and [ADR 0014](0014-collection-in-sqlite.md) for the collection.
 - Screens: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md).
 

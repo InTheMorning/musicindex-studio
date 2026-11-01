@@ -5,7 +5,9 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { api, askConfirm, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
-import { AlbumPayments, TrackPayments, ShareStack, recipientSummary } from './values.js';
+import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
+import { PersonArt } from './peoplepages.js';
+import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
@@ -142,9 +144,69 @@ function PersonPicture({ url }) {
   return src ? html`<div class="person-picture"><img src=${src} alt="" /></div>` : null;
 }
 
+// The sheet "Pick From Your People" of the credits and of the support links
+// (ADR 0099 items 20 and 21). It only adds. `load` turns the list of people
+// into rows, and `noun` gives the footer words. A new entry gets its client
+// ID from `addOpen`, in the caller (ADR 0022).
+function PeoplePickerSheet({ open, load, hint, one, many, art, onAdd, onClose }) {
+  const ref = useSheet(open);
+  const [people, setPeople] = useState(null);
+  const [filter, setFilter] = useState('');
+  const [selected, setSelected] = useState(new Set());
+  const loading = useAction();
+  useEffect(() => {
+    if (!open) return;
+    setFilter('');
+    setSelected(new Set());
+    setPeople(null);
+    loading.run(async () => setPeople(await api('/people')));
+  }, [open]);
+  const rows = people === null ? [] : load(people);
+  const shown = filterRows(rows, filter);
+  const toggle = (id) => setSelected((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const total = rows.filter((r) => selected.has(r.id) && !r.taken).length;
+  const add = () => onAdd(rows.filter((r) => selected.has(r.id) && !r.taken));
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="people-picker-title" onClose=${onClose}>
+    <header>
+      <h2 id="people-picker-title">Pick From Your People</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <section class="page-section">
+        <${Field} id="people-picker-filter" label="Filter" value=${filter} placeholder="Name or address"
+          onInput=${(e) => setFilter(e.target.value)} />
+        <${ErrorNotice} error=${loading.error} />
+        ${people === null
+          ? html`<p class="hint" role="status">Loading your people…</p>`
+          : html`<div class="group">
+              ${shown.length === 0 && html`<p class="hint">${rows.length === 0 ? 'You have nothing to pick yet.' : 'Nothing matches this filter.'}</p>`}
+              ${shown.map((r) => html`<${PickRow} key=${r.id} name=${r.name} line=${r.line}
+                lead=${art ? html`<${PersonArt} person=${r.person} />` : null}
+                checked=${selected.has(r.id)} taken=${r.taken} onToggle=${() => toggle(r.id)} />`)}
+            </div>`}
+        <p class="hint">${hint}</p>
+      </section>
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
+        ${addPickLabel(total, one, many)}</button>
+    </footer>
+  </dialog>`;
+}
+
 function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
   const blank = BLANK_PERSON;
   const { feedId } = useContext(PickerContext) || {};
+  const [picking, setPicking] = useState(false);
+  const addPicked = (rows) => {
+    setPicking(false);
+    onChange(rows.reduce((list, row) => addOpen(list, row.credit), persons));
+  };
   return html`${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
     ${persons.map((p, i) => {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
@@ -169,11 +231,22 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
     })}
     <button class="link-row add" type="button" onClick=${() => onChange(addOpen(persons, blank))}>
       <span class="num">＋</span><span class="title">Add a person</span>
-    </button>`;
+    </button>
+    <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
+      <span class="num">＋</span><span class="title">Pick from your people</span>
+    </button>
+    <${PeoplePickerSheet} open=${picking} load=${(people) => creditPickRows(people, persons)} art=${true}
+      hint="Each person comes with the usual role, the picture and the Nostr key. You can change them in the credit."
+      one="Person" many="People" onAdd=${addPicked} onClose=${() => setPicking(false)} />`;
 }
 
 function Fundings({ fundings, onChange, bad }) {
   const blank = { label: '', url: null };
+  const [picking, setPicking] = useState(false);
+  const addPicked = (rows) => {
+    setPicking(false);
+    onChange(rows.reduce((list, row) => addOpen(list, row.funding), fundings));
+  };
   return html`${fundings.length === 0 && html`<p class="hint">No support links yet.</p>`}
     ${fundings.map((f, i) => {
       const change = (name) => (value) => onChange(setAt(fundings, i, set(f, name, value)));
@@ -188,7 +261,13 @@ function Fundings({ fundings, onChange, bad }) {
     })}
     <button class="link-row add" type="button" onClick=${() => onChange(addOpen(fundings, blank))}>
       <span class="num">＋</span><span class="title">Add a support link</span>
-    </button>`;
+    </button>
+    <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
+      <span class="num">＋</span><span class="title">Pick from your people</span>
+    </button>
+    <${PeoplePickerSheet} open=${picking} load=${(people) => supportPickRows(people, fundings)} art=${false}
+      hint="Each support link comes with its text and its address. You can change them in the support link."
+      one="Support Link" many="Support Links" onAdd=${addPicked} onClose=${() => setPicking(false)} />`;
 }
 
 // The license fields, returned with no wrapper, so that they sit as two

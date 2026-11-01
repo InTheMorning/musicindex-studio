@@ -632,3 +632,50 @@ export function filterPickRows(rows, query) {
   if (q === '') return rows;
   return rows.filter((r) => `${r.name || ''} ${r.recipient.address || ''}`.toLowerCase().includes(q));
 }
+
+// ---- The pickers of the credits and the support links (ADR 0099 items 20 and 21) ----
+
+const lowerName = (name) => String(name ?? '').trim().toLowerCase();
+const firstKey = (person) => ((person.keys || []).find((k) => k.npub) || {}).npub || null;
+
+// The new credit from a person: a start value. An empty value gives no
+// attribute. The credit has no group (ADR 0098 item 3).
+export function creditFromPerson(person) {
+  const text = (value) => (value && String(value).trim() !== '' ? value : null);
+  return { name: person.name, role: text(person.usual_role), group: null, img: text(person.img), href: text(person.href), npub: firstKey(person) };
+}
+
+// The rows of the credits picker. A row is taken when the list has a credit
+// with the same Nostr key or the same name.
+export function creditPickRows(people, persons) {
+  const keys = new Set((persons || []).map((p) => p.npub).filter(Boolean));
+  const names = new Set((persons || []).map((p) => lowerName(p.name)).filter((n) => n !== ''));
+  return (people || []).map((person) => {
+    const credit = creditFromPerson(person);
+    const parts = [credit.role, credit.npub ? shortKey(credit.npub) : null].filter(Boolean);
+    const taken = (credit.npub !== null && keys.has(credit.npub)) || names.has(lowerName(person.name));
+    return { id: person.id, name: person.name, line: parts.join(' · '), taken, credit, person };
+  });
+}
+
+// The new support link from a link of a person: a start value.
+export const fundingFromLink = (link) => ({ label: link.label ?? '', url: link.url ?? null });
+
+// The rows of the support links picker: one row for each support link of
+// each person. A row is taken when the list has the same address.
+export function supportPickRows(people, fundings) {
+  const urls = new Set((fundings || []).map((f) => String(f.url ?? '').trim()).filter((u) => u !== ''));
+  return (people || []).flatMap((person) => (person.support_links || []).map((link) => ({
+    id: `${person.id}-${link.id ?? link.url}`, name: link.label || link.url, line: `${person.name} · ${link.url}`,
+    taken: urls.has(String(link.url ?? '').trim()), funding: fundingFromLink(link), person,
+  })));
+}
+
+// The footer button of a picker. `one` and `many` are the nouns.
+export const addPickLabel = (n, one, many) => `Add ${n} ${n === 1 ? one : many}`;
+
+// The rows that match the filter text, by name and line. A display filter.
+export function filterRows(rows, query) {
+  const q = lowerName(query);
+  return q === '' ? rows : rows.filter((r) => `${r.name || ''} ${r.line || ''}`.toLowerCase().includes(q));
+}

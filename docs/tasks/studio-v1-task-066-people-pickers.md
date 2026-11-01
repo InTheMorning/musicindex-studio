@@ -3,9 +3,10 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) items 14 and 19 to 21, [ADR 0098](../adr/0098-the-people-module.md) item 3, [ADR 0027](../adr/0027-the-recipient-picker.md), [ADR 0030](../adr/0030-an-added-recipient-gets-no-split.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: In progress. Packet 066a is complete. Notes from the reviews:
+Status: Complete, in two packets, with their screenshot visual checks. The human test is open. Notes from the reviews:
 
 - 066a: `peoplepages.js` exports `PersonArt`, and `values.js` imports it. `pickerRows` of `recipients.js` is deleted. The planning model made four changes after the review and the visual check. `recipientFromPerson` gives a start type when the default address is not a wallet row: `lnaddress` for an address with "@", else `node`, as the core does in task 064b. The picker shows People, then the payees, then "From musicindex" (ADR 0099 item 19). A row line with words uses the normal font, and only an address alone uses the monospace font. The add row reads "Pick from your people", and the sheet title is "Pick From Your People". "Add to People" also shows for a recipient of a person, and then it changes nothing. That is open as a possible improvement.
+- 066b: `values.js` exports `PickRow`, and one component `PeoplePickerSheet` of `editor.js` serves the two pickers. The support links picker has the hint "Each support link comes with its text and its address. You can change them in the support link." Only the first Nostr key of a person goes into a credit. The visual check added a credit and a support link on the album page, and opened the credits picker of a track with its own credits.
 
 ## Goal
 

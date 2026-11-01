@@ -434,3 +434,41 @@ test('a default address that is not a wallet row gets the type of its form', () 
   const node = { name: 'Bo', default_address: { address: '03cd' }, wallets: [] };
   assert.equal(recipientFromPerson(node).recipient_type, 'node');
 });
+
+import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel } from '../ui/people.js';
+
+const CREDIT_SRC = [
+  { id: 1, name: 'Mary Kate', usual_role: 'Vocals', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1mku7abcdefghijklmnopq2xh' }, { npub: 'npub1second' }],
+    support_links: [{ id: 4, label: 'Support Mary Kate', url: 'https://x/support' }] },
+  { id: 2, name: 'Jo Keys', usual_role: '', img: '', href: null, keys: [], support_links: [] },
+];
+
+test('creditFromPerson gives the start values of a credit', () => {
+  assert.deepEqual(creditFromPerson(CREDIT_SRC[0]), { name: 'Mary Kate', role: 'Vocals', group: null, img: 'https://x/mk.jpg', href: 'https://x', npub: 'npub1mku7abcdefghijklmnopq2xh' });
+  assert.deepEqual(creditFromPerson(CREDIT_SRC[1]), { name: 'Jo Keys', role: null, group: null, img: null, href: null, npub: null });
+});
+
+test('creditPickRows gives the role and key line and marks a person in the list', () => {
+  const rows = creditPickRows(CREDIT_SRC, []);
+  assert.equal(rows.length, 2);
+  assert.match(rows[0].line, /^Vocals · /);
+  assert.equal(rows[1].line, '');
+  assert.equal(rows[0].taken, false);
+  assert.equal(creditPickRows(CREDIT_SRC, [{ name: 'other', npub: 'npub1mku7abcdefghijklmnopq2xh' }])[0].taken, true);
+  assert.equal(creditPickRows(CREDIT_SRC, [{ name: ' jo keys ', npub: null }])[1].taken, true);
+});
+
+test('supportPickRows gives each support link and marks an address in the list', () => {
+  const rows = supportPickRows(CREDIT_SRC, []);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].name, 'Support Mary Kate');
+  assert.equal(rows[0].line, 'Mary Kate · https://x/support');
+  assert.equal(rows[0].taken, false);
+  assert.equal(supportPickRows(CREDIT_SRC, [{ label: 'a', url: 'https://x/support' }])[0].taken, true);
+  assert.deepEqual(fundingFromLink(CREDIT_SRC[0].support_links[0]), { label: 'Support Mary Kate', url: 'https://x/support' });
+});
+
+test('addPickLabel uses title case and the plural', () => {
+  assert.equal(addPickLabel(1, 'Person', 'People'), 'Add 1 Person');
+  assert.equal(addPickLabel(2, 'Person', 'People'), 'Add 2 People');
+});

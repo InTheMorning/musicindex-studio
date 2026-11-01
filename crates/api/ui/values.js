@@ -256,7 +256,7 @@ const identityOf = recipientIdentity;
 // One row of a part of the picker: a checkbox, the name, the address and a
 // status word. The checkbox sits in its own label of one target size
 // (musicindex ADR 0029 R-SCALE-3). `lead` is a picture before the name.
-function PickRow({ name, address, line, status, checked, taken, onToggle, lead }) {
+export function PickRow({ name, address, line, status, checked, taken, onToggle, lead }) {
   const label = taken ? 'Already in this list' : status;
   return html`<div class="link-row pick-row">
     <label class="pick-box"><input type="checkbox" checked=${checked || taken} disabled=${taken}

@@ -39,7 +39,7 @@ test('a section with no data is left out, but people always shows', () => {
 
 test('the page person has the sections of ADR 0099 item 4 in tier sequence', () => {
   const sections = pageSequence('person');
-  assert.deepEqual(sections.map((s) => s.id), ['profile', 'actions', 'where', 'payment', 'credits', 'support']);
+  assert.deepEqual(sections.map((s) => s.id), ['profile', 'actions', 'where', 'payment', 'credits', 'support', 'delete']);
   assert.equal(tierError('person', sections), null);
   assert.ok(!sections.some((s) => /feeds|check/.test(s.id)),
     'ADR 0099 item 6: the page of a person has no feed list with check boxes. Remove the section from crates/api/ui/pages.js.');
@@ -242,7 +242,13 @@ const KEY = (address, custom_value = null) => ({ address, custom_key: null, cust
 const MK = {
   id: 7, name: 'Mary Kate', usual_role: 'Vocals', img: '', href: '', members: [3],
   default_address: KEY('mk@x.example'),
-  wallets: [{ id: 1, key: KEY('02ab', 'acct1'), recipient_type: 'node' }],
+  wallets: [{
+    id: 1, key: KEY('02ab', 'acct1'), recipient_type: 'node',
+    members: [
+      { key: KEY('02ab', 'acct1'), recipient_type: 'node' },
+      { key: KEY('mk@x.example'), recipient_type: 'lnaddress' },
+    ],
+  }],
   support_links: [{ id: 4, label: 'Support Mary', url: 'https://x.example/s' }],
   pays: [1, 2], credited: [2, 5], feeds: 3,
 };
@@ -275,7 +281,7 @@ test('a wallet gives its addresses, the Lightning addresses first', () => {
   assert.equal(groups.length, 1);
   assert.deepEqual(groups[0].members.map((m) => m.key.address), ['mk@x.example', '02ab']);
   assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['Lightning address mk@x.example', 'fountain.fm node · account acct1']);
-  const alone = walletGroups(MK, []);
+  const alone = walletGroups({ ...MK, wallets: [{ id: 1, key: KEY('02ab'), recipient_type: 'node' }] }, []);
   assert.deepEqual(alone[0].members.map((m) => m.key.address), ['02ab']);
 });
 
@@ -493,4 +499,91 @@ test('personKeys gives each address of each wallet of a person, and no payee', a
   assert.ok(keys.has(recipientIdentity({ address: 'ann@example.com' })));
   assert.ok(keys.has(recipientIdentity({ address: '02ab', custom_value: 'acct' })));
   assert.ok(!keys.has(recipientIdentity({ address: '03cd' })));
+});
+
+// ---- Task 067d: profiles, members and delete ----
+import {
+  resolveBody, profileMap, keyRow, keyWarning, withProfiles, profileAddressNote, keyItemRow, NO_PROFILE, NIP05_OK,
+} from '../ui/people.js';
+import { CONFIRMS } from '../ui/confirms.js';
+
+const NPUB = 'npub1abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrs';
+const profilesOf = (profile) => profileMap([{ npub: NPUB, picture: null, nip05: null, nip05_ok: false, ...profile }]);
+
+test('resolveBody sends each key one time, 50 keys at most', () => {
+  assert.deepEqual(resolveBody(['a', 'a', null, 'b']), { npubs: ['a', 'b'] });
+  assert.equal(resolveBody(Array.from({ length: 80 }, (_, i) => `k${i}`)).npubs.length, 50);
+});
+
+test('a key row shows the profile name, the short key and NIP-05 checked', () => {
+  const row = keyRow(NPUB, profilesOf({ name: 'Mary Kate', nip05_ok: true }), 'Mary Kate');
+  assert.equal(row.title, 'Mary Kate');
+  assert.equal(row.lines.length, 2);
+  assert.equal(row.lines[1], NIP05_OK);
+  assert.equal(row.warning, null);
+  assert.deepEqual(keyRow(NPUB, profilesOf({ name: 'Mary Kate' }), 'Mary Kate').lines.slice(1), []);
+});
+
+test('a key row shows the short key while the profiles load or when they fail', () => {
+  const row = keyRow(NPUB, null, 'Mary Kate');
+  assert.equal(row.title, NPUB.length > 14 ? row.title : NPUB);
+  assert.deepEqual(row.lines, []);
+  assert.equal(row.warning, null);
+});
+
+test('a key with no profile says so and has no warning', () => {
+  const row = keyRow(NPUB, profilesOf({ name: null }), 'Mary Kate');
+  assert.deepEqual(row.lines, [NO_PROFILE]);
+  assert.equal(row.warning, null);
+  assert.equal(NO_PROFILE, 'No Nostr profile found');
+});
+
+test('the warning of ADR 0103 item 18 shows for a different profile name only', () => {
+  assert.equal(keyWarning(NPUB, profilesOf({ name: 'Someone Else' }), 'Mary Kate'),
+    'The profile name is not "Mary Kate". Check this key.');
+  assert.equal(keyWarning(NPUB, profilesOf({ name: 'Mary Kate Ultra Official' }), 'mary  kate ultra'), null);
+  assert.equal(keyWarning(NPUB, profilesOf({ name: null }), 'Mary Kate'), null);
+  assert.equal(keyWarning(NPUB, null, 'Mary Kate'), null);
+});
+
+test('Make a Person starts a key with a warning not selected', () => {
+  const suggestion = { ...SUGGESTION, credits: [{ name: 'Mary Kate Ultra', href: '', npub: NPUB, same_name: true }] };
+  assert.equal(makePersonStart(suggestion).keys[0].checked, true);
+  assert.equal(makePersonStart(suggestion, profilesOf({ name: 'Someone Else' })).keys[0].checked, false);
+  assert.equal(makePersonStart(suggestion, profilesOf({ name: 'Mary Kate Ultra' })).keys[0].checked, true);
+  assert.equal(withProfiles(makePersonStart(suggestion), profilesOf({ name: 'Someone Else' })).keys[0].checked, false);
+  assert.equal(keyItemRow(NPUB, profilesOf({ name: 'Someone Else' }), 'Mary Kate').warning !== null, true);
+});
+
+test('the Lightning address line names the profile and the key', () => {
+  const short = keyRow(NPUB, null).title;
+  assert.equal(profileAddressNote(NPUB, profilesOf({ name: 'Mary Kate' })), `From the Nostr profile Mary Kate (${short}) · keysend checked`);
+  assert.equal(profileAddressNote(NPUB, null), `From the Nostr profile ${short} · keysend checked`);
+  assert.equal(profileAddressNote(NPUB, profilesOf({ name: null })), `From the Nostr profile ${short} · keysend checked`);
+});
+
+test('a wallet gives each member, and the menu offers each one', () => {
+  const alby = {
+    ...MK,
+    wallets: [{
+      id: 2, key: KEY('02cd'), recipient_type: 'node',
+      members: [{ key: KEY('02cd'), recipient_type: 'node' }, { key: KEY('a@getalby.com'), recipient_type: 'lnaddress' }],
+    }],
+  };
+  const groups = walletGroups(alby, [{ addresses: [{ address: '02cd', custom_key: null, custom_value: null, provider: 'Alby', feeds: 2 }] }]);
+  assert.deepEqual(groups[0].members.map((m) => m.key.address), ['a@getalby.com', '02cd']);
+  assert.equal(groups[0].members[1].member.provider, 'Alby');
+  assert.equal(groups[0].members[1].count, 2);
+  assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['Lightning address a@getalby.com', 'Alby node']);
+});
+
+test('ADR 0102: the person page ends with the delete, the confirmation and the sheet title', () => {
+  const sections = pageSequence('person');
+  assert.deepEqual(sections[sections.length - 1], { id: 'delete', tier: 'limits' });
+  const confirm = CONFIRMS.deletePerson('Mary Kate');
+  assert.equal(confirm.title, 'Delete Mary Kate from People?');
+  assert.equal(confirm.text, 'Studio deletes this person and its links. Studio changes no feed.');
+  assert.equal(confirm.action, 'Delete the Person');
+  assert.equal(confirm.role, 'destructive');
+  assert.equal(SHEET_TITLES.remove, 'Remove from Feeds');
 });

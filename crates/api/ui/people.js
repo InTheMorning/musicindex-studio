@@ -101,16 +101,26 @@ export function personRow(person, feedTitles) {
 
 // The start state of the sheet "Make a Person" (ADR 0099 item 3). An item
 // with a different name starts not selected. The sheet has `memberOf` as text.
-export function makePersonStart(suggestion) {
+// `profiles` is the result of `profileMap`, or null before it is known. A key
+// whose profile name differs from the name starts not selected (ADR 0103
+// item 18).
+export function makePersonStart(suggestion, profiles = null) {
   const npubs = [...new Set((suggestion.credits || []).map((c) => c.npub).filter(Boolean))];
   return {
     name: suggestion.name,
     credits: (suggestion.credits || []).map((item) => ({ item, checked: item.same_name !== false })),
     recipients: (suggestion.recipients || []).map((item) => ({ item, checked: item.same_name !== false })),
-    keys: npubs.map((item) => ({ item, checked: true })),
+    keys: npubs.map((item) => ({ item, checked: keyWarning(item, profiles, suggestion.name) === null })),
     memberOf: '',
   };
 }
+
+// The state of the sheet after the profiles arrive. A key with a warning is
+// not selected. The other keys keep their state.
+export const withProfiles = (state, profiles) => ({
+  ...state,
+  keys: state.keys.map((r) => (keyWarning(r.item, profiles, state.name) === null ? r : { ...r, checked: false })),
+});
 
 // The body of `POST /people/suggestions/make`. Only the checked items go in.
 export function makePersonBody(state) {
@@ -282,6 +292,58 @@ export function memberChoices(feeds) {
     .map((f) => [String(f.id), f.title || 'Untitled feed']);
 }
 
+// ---- The profiles of Nostr keys (ADR 0099 item 3, ADR 0103 items 17 and 18) ----
+
+export const NO_PROFILE = 'No Nostr profile found';
+export const NIP05_OK = 'NIP-05 checked';
+
+// The body of `POST /nostr/resolve`: each key one time, 50 keys at most.
+export const resolveBody = (npubs) => ({ npubs: [...new Set((npubs || []).filter(Boolean))].slice(0, 50) });
+
+// A Map from key to profile, from the answer of `POST /nostr/resolve`.
+export const profileMap = (profiles) => new Map((profiles || []).map((p) => [p.npub, p]));
+
+const nameKey = (text) => String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+// The profile of a key from `profileMap`, or null before the answer or when
+// the answer failed.
+const profileOf = (npub, profiles) => (profiles instanceof Map ? profiles.get(npub) || null : null);
+
+// The profile name of a key, or '' with no profile name.
+export const profileName = (npub, profiles) => ((profileOf(npub, profiles) || {}).name || '').trim();
+
+// The warning of ADR 0103 item 18 for a key, or null. A key with no profile
+// name has no warning, and a profile name that contains the name has none.
+export function keyWarning(npub, profiles, name) {
+  const found = profileName(npub, profiles);
+  const wanted = nameKey(name);
+  if (found === '' || wanted === '' || nameKey(found).includes(wanted)) return null;
+  return `The profile name is not "${name}". Check this key.`;
+}
+
+// The row of a Nostr key: the profile name and the short key, or the short
+// key only while the profiles load or when they failed (ADR 0099 item 3).
+// `picture` is the address of the profile picture, or null. `short` is the
+// short key, which the row keeps on one line.
+export function keyRow(npub, profiles, name = '') {
+  const short = shortKey(npub);
+  const profile = profileOf(npub, profiles);
+  if (!profile) return { title: short, short, mono: true, picture: null, lines: [], warning: null };
+  if (!profileName(npub, profiles)) {
+    return { title: short, short, mono: true, picture: profile.picture || null, lines: [NO_PROFILE], warning: null };
+  }
+  const lines = [short];
+  if (profile.nip05_ok) lines.push(NIP05_OK);
+  return { title: profile.name.trim(), short, mono: false, picture: profile.picture || null, lines, warning: keyWarning(npub, profiles, name) };
+}
+
+// The note of a suggested Lightning address of a profile (task 067d item 4).
+export function profileAddressNote(npub, profiles) {
+  const short = shortKey(npub);
+  const name = profileName(npub, profiles);
+  return `From the Nostr profile ${name ? `${name} (${short})` : short} · keysend checked`;
+}
+
 // The title of the sheet "Make a Person".
 export const makeSheetTitle = (name) => `Make a Person: ${name}`;
 
@@ -306,7 +368,10 @@ export function payeeItemRow(item) {
 }
 
 // The row of a Nostr key in the sheet "Make a Person".
-export const keyItemRow = (npub) => ({ title: shortKey(npub), lines: ['In a credit of the feeds'] });
+export const keyItemRow = (npub, profiles = null, name = '') => {
+  const row = keyRow(npub, profiles, name);
+  return { ...row, lines: [...row.lines, 'In a credit of the feeds'] };
+};
 
 // A copy of the state of the sheet with one item turned over. `group` is
 // `credits`, `recipients` or `keys`.
@@ -356,21 +421,25 @@ export function memberText(member) {
 const sameParts = (a, b) => a.address === b.address && (a.custom_key || '') === (b.custom_key || '')
   && (a.custom_value || '') === (b.custom_value || '');
 
-// The wallets of a person, each with its addresses. `recipients` is the list
-// of `GET /recipients`, which gives each address of a wallet with its
-// provider and its feeds. A wallet that the list does not have gives its own
-// key as its one address.
+// The wallets of a person, each with its addresses. A wallet gives its
+// `members` (ADR 0095 item 5). `recipients` is the list of `GET /recipients`.
+// It gives the provider and the feed count of an address. A wallet with no
+// `members` gives its own key as its one address.
 export function walletGroups(person, recipients) {
+  const listed = (recipients || []).flatMap((r) => r.addresses || []);
   return (person.wallets || []).map((wallet) => {
-    const entry = (recipients || []).find((r) => (r.addresses || []).some((m) => sameParts(m, wallet.key)));
-    const members = entry
-      ? entry.addresses.map((m) => ({
-        key: { address: m.address, custom_key: m.custom_key ?? null, custom_value: m.custom_value ?? null },
-        member: m,
-        count: m.feeds || 0,
-      }))
-      : [{ key: wallet.key, member: { ...wallet.key, recipient_type: wallet.recipient_type }, count: 0 }];
-    members.sort((a, b) => isLnaddress(b.member) - isLnaddress(a.member));
+    const given = wallet.members && wallet.members.length > 0
+      ? wallet.members
+      : [{ key: wallet.key, recipient_type: wallet.recipient_type }];
+    const members = given.map((m) => {
+      const entry = listed.find((l) => sameParts(l, m.key));
+      const key = { address: m.key.address, custom_key: m.key.custom_key ?? null, custom_value: m.key.custom_value ?? null };
+      const member = { ...key, recipient_type: m.recipient_type };
+      if (entry && entry.provider) member.provider = entry.provider;
+      if (entry && entry.fee) member.fee = entry.fee;
+      return { key, member, count: entry ? entry.feeds || 0 : 0 };
+    });
+    members.sort((x, y) => isLnaddress(y.member) - isLnaddress(x.member));
     return { id: wallet.id, members };
   });
 }
@@ -431,7 +500,7 @@ export const SHEET_TITLES = {
   use_address: 'Use This Address',
   rename: 'Rename',
   add_to_releases: 'Add to All Releases',
-  remove: 'Remove',
+  remove: 'Remove from Feeds',
 };
 
 export const addIntro = (name) => `Studio adds ${name} to each release of the artist or label that you select.`;

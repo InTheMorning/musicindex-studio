@@ -3,18 +3,18 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md), [ADR 0102](../adr/0102-delete-a-person-changes-no-feed.md), [ADR 0098](../adr/0098-the-people-module.md) items 6, 7 and 17 to 19, [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) items 3, 4 and 15, [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 12 to 15, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md) and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
 
-Status: In progress. Packets 067a to 067c are complete.
+Status: In progress. Packets 067a to 067d are complete, with the screenshot visual check of 067d.
 
 ## Goal
 
 The operator tested `0.1.0-rc.9` on `studio.musicindex.org` on 2026-11-01 and found six gaps. This task closes them, and ADR 0103 adds the ways to collect one person:
 
-- a. One artist gave three suggestions "HeyCitizen", and a suggestion could only make a new person. ADR 0103 makes one suggestion of each name, and adds "Add to a Person", "More from your feeds" and "Merge With a Person".
+- a. One artist gave three suggestions "HeyCitizen", and a suggestion could only make a new person. ADR 0103 makes one suggestion of each name, and adds "Add to a Person", "More from your feeds" and "Merge with a Person".
 - b. Studio shows a Nostr key and an address in a short form, with no way to copy them.
 - c. The suggestion of a `lud16` says "Suggested from the Nostr profile", but not which profile.
 - d. The menu "Default address" did not offer the keysend form of an Alby wallet. A wallet lists only the addresses that a feed uses.
 - e. A Nostr key of a person shows "Added by you", not its profile. ADR 0099 item 4 asks for the result of its check, and the accepted mockup shows the profile name.
-- f. The operator could not delete a person from People. The page has only "Remove", which removes the person from feeds. ADR 0102 adds "Delete Person" and renames the operation to "Remove From Feeds".
+- f. The operator could not delete a person from People. The page has only "Remove", which removes the person from feeds. ADR 0102 adds "Delete Person" and renames the operation to "Remove from Feeds".
 
 ## Packets
 
@@ -24,7 +24,7 @@ The planning model examines each packet before its commit. The packets go in thi
 2. 067b: the add to a person, the items that match a person, and the merge of two people (core and API).
 3. 067c: the profiles of the keys, and the key of each `lud16` suggestion (core and API).
 4. 067d: the UI of items b to f, and the warning of ADR 0103 item 18.
-5. 067e: the UI of "Add to a Person", "More from your feeds" and "Merge With a Person".
+5. 067e: the UI of "Add to a Person", "More from your feeds" and "Merge with a Person".
 
 Visual check of 067d and 067e, by the planning model, before each commit. It uses the method of task 065, and the screens of `.studio-dev/mockup-101/site/merge.html` are the reference.
 
@@ -34,7 +34,7 @@ Human test, by the operator, on `studio.musicindex.org` after the deploy:
 2. The key of "City Radio" shows its warning. Remove it. Each key shows its profile name, and a copy button copies the full `npub`.
 3. The menu "Default address" offers the keysend form of the Alby wallet. Select it.
 4. In People, a suggestion "HeyCitizen" with items that the person does not have goes to the person with "Add to a Person".
-5. Make a second person, then merge it into "HeyCitizen" with "Merge With a Person". Then delete a test person with "Delete Person". No feed gets a draft.
+5. Make a second person, then merge it into "HeyCitizen" with "Merge with a Person". Then delete a test person with "Delete Person". No feed gets a draft.
 6. A `lud16` suggestion names its profile and its key.
 
 ## Words
@@ -289,7 +289,7 @@ These choices are fixed. Do not change them.
 3. The page of a person and the sheet "Make a Person" send `POST /nostr/resolve` with their keys. A key row shows the picture and the profile name, the short key, and "NIP-05 checked" when `nip05_ok` is true. While the request runs, and when it fails, the row shows the short key only. A key with no profile shows "No Nostr profile found". A key whose profile name does not contain the normal name of the person or of the suggestion shows the warning of ADR 0103 item 18. In "Make a Person" that key starts not selected.
 4. A `lud16` suggestion reads "From the Nostr profile {name} ({short key}) · keysend checked", with the name from item 3. With no name it reads "From the Nostr profile {short key} · keysend checked".
 5. A wallet group lists each member of `members` of `GET /people/{id}`, with the address lines of ADR 0099 item 15. The menu "Default address" lists each member of each wallet. `walletGroups` uses `members` and keeps the provider names from `GET /recipients` when an address is there.
-6. The page `person` of `pages.js` gets the last section `delete` with the tier `limits`. It holds "Delete Person" (destructive), with the confirmation of ADR 0102 item 2 in `confirms.js`. After the confirmation, the page sends `DELETE /people/{id}` and opens the People page. The operation "Remove" reads "Remove From Feeds" on its button and as its sheet title (ADR 0102 item 4).
+6. The page `person` of `pages.js` gets the last section `delete` with the tier `limits`. It holds "Delete Person" (destructive), with the confirmation of ADR 0102 item 2 in `confirms.js`. After the confirmation, the page sends `DELETE /people/{id}` and opens the People page. The operation "Remove" reads "Remove from Feeds" on its button and as its sheet title (ADR 0102 item 4).
 7. The model functions of items 3 to 6 are in `people.js`, with Node tests. No feed rule is in the UI (ADR 0065).
 
 ### Acceptance Criteria
@@ -369,7 +369,7 @@ These choices are fixed. Do not change them.
 1. The sheet "Make a Person" gets "Add to a Person" (action) between "Not This Person" and "Make the Person" (ADR 0103 item 8). It opens the sheet "Add to a Person: {name}" with the select menu "Person" of each person, A to Z.
 2. That sheet lists each item of the suggestion (ADR 0103 item 9). An item that the selected person has already shows "Already in {person}" with no check box. Each other item shows "New", with the start selection of "Make a Person". The button reads "Add 1 Item" or "Add N Items" and sends `POST /people/{id}/items`. Then the page of the person opens.
 3. The page `person` of `pages.js` gets the section `more` with the tier `content`, before `payment` (ADR 0103 item 11). It shows `GET /people/{id}/more`. Each row gives the item, its feeds and its cause, with "Add" (action), which sends `POST /people/{id}/items` with that one item. With no item, the section does not show.
-4. The last section of the page gets "Merge With a Person" (normal) before "Delete Person" (ADR 0103 item 14). It opens the sheet "Merge With {name}": the select menu "Person to merge", the links of the selected person, the result line, and the button "Merge the People" (primary). The button sends `POST /people/{id}/merge`, then reloads the page.
+4. The last section of the page gets "Merge with a Person" (normal) before "Delete Person" (ADR 0103 item 14). It opens the sheet "Merge with {name}": the select menu "Person to merge", the links of the selected person, the result line, and the button "Merge the People" (primary). The button sends `POST /people/{id}/merge`, then reloads the page.
 5. The key rows of these sheets and of the section use the profile row and the warning of packet 067d.
 6. The model functions are in `people.js`, with Node tests: the rows of "Add to a Person" with "New" and "Already in", the body of `POST /people/{id}/items`, the rows and the cause texts of "More from your feeds", and the links and the result line of the merge sheet. No feed rule is in the UI (ADR 0065).
 
@@ -383,7 +383,7 @@ Mechanical:
 
 Visual, by the planning model, before the commit:
 
-- The four screens of the mockups: "Make a Person" with "Add to a Person", "Add to a Person", the page of a person with "More from your feeds", and "Merge With a Person".
+- The four screens of the mockups: "Make a Person" with "Add to a Person", "Add to a Person", the page of a person with "More from your feeds", and "Merge with a Person".
 
 ### Prompt for lower-context coding model
 
@@ -399,7 +399,7 @@ Read:
 - The files that the Files section of packet 067e names.
 
 Goal:
-- The user collects one person from many suggestions: "Add to a Person", "More from your feeds" and "Merge With a Person".
+- The user collects one person from many suggestions: "Add to a Person", "More from your feeds" and "Merge with a Person".
 
 Constraints:
 - Follow the Architecture section of packet 067e fully.

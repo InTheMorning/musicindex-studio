@@ -1758,7 +1758,7 @@ button.outline-feed {
 .link-row .status { flex: none; color: var(--muted); font-size: var(--text-callout); }
 .link-row .status.writing { color: var(--accent); }
 .link-row .status.failed { color: var(--error); font-weight: 500; }
-.link-row .summary.field-error { overflow-wrap: anywhere; }
+.link-row .summary.field-error { color: var(--error); white-space: normal; overflow-wrap: anywhere; }
 .change-diff { padding: 4px 16px 12px; position: relative; }
 .change-diff .diff { margin: 0; }
 
@@ -1791,6 +1791,17 @@ button.outline-feed {
 .person-head h1 { overflow-wrap: anywhere; }
 .person-head .hint { overflow-wrap: anywhere; }
 .person-head .button.link { display: inline; padding: 0; min-height: 0; }
+/* Task 067d: a key or an address with a copy button. */
+.key-row { display: flex; align-items: center; }
+.key-row > .link-row { flex: 1; min-width: 0; width: auto; }
+.key-line { gap: 12px; }
+.key-line .text, .key-row .text { min-width: 0; }
+.key-line .summary, .key-row .summary { white-space: normal; }
+.copy-button { flex: none; color: var(--muted); }
+.copy-button .icon { display: block; width: 16px; height: 16px; }
+.key-hint { display: flex; align-items: center; gap: 4px; }
+.key-hint-text { min-width: 0; }
+.key-text, .link-row .text .key-text { white-space: nowrap; }
 .link-row .address-text { overflow-wrap: anywhere; word-break: break-all; }
 
 /* musicindex ADR 0024 R-TYPE-1: with Touch, a field has the Body size of 17 px.

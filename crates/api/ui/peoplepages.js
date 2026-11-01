@@ -3,7 +3,8 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
-import { api, Bar, ChoiceSelect, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { api, askConfirm, Bar, ChoiceSelect, CopyButton, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
 import {
@@ -18,7 +19,7 @@ import {
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions,
   usedText, keyEvidenceText, whereRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
-  linkReady, personFieldsBody, profileLine,
+  linkReady, personFieldsBody, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
 } from './people.js';
 
 // The round picture of a person. A person with no picture, or a picture that
@@ -29,6 +30,39 @@ export function PersonArt({ person, large = false }) {
 }
 
 // One row of a list: a button with the lines of its model.
+// The profiles of Nostr keys, from `POST /nostr/resolve`. The value is null
+// while the request runs and when it fails, so that a row shows the short key
+// only (task 067d item 3).
+function useProfiles(npubs) {
+  const [profiles, setProfiles] = useState(null);
+  const list = [...new Set(npubs.filter(Boolean))];
+  const signature = list.join(',');
+  useEffect(() => {
+    if (list.length === 0) { setProfiles(null); return undefined; }
+    let live = true;
+    api('/nostr/resolve', { method: 'POST', body: resolveBody(list) })
+      .then((r) => { if (live) setProfiles(profileMap(r.profiles)); }, () => { if (live) setProfiles(null); });
+    return () => { live = false; };
+  }, [signature]);
+  return profiles;
+}
+
+// The text of a key row: the profile name or the short key, the other lines
+// and the warning.
+function KeyText({ row }) {
+  return html`<span class="text"><span class=${row.mono ? 'label mono key-text' : 'label'}>${row.title}</span>
+    ${row.lines.map((line, i) => html`<span class=${line === row.short ? 'summary key-text' : 'summary'} key=${i}>${line}</span>`)}
+    ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</span>`;
+}
+
+// A Nostr key with its profile, a copy button and an optional action.
+function KeyRowView({ npub, profiles, name, action, note }) {
+  const row = keyRow(npub, profiles, name);
+  return html`<div class="link-row static key-line"><${PersonArt} person=${{ img: row.picture, name: row.title }} />
+    <${KeyText} row=${{ ...row, lines: note ? [...row.lines, note] : row.lines }} />
+    <${CopyButton} text=${npub} label="the Nostr key" />${action}</div>`;
+}
+
 function ListRow({ title, lines, count, lead, onClick }) {
   return html`<button class="link-row" type="button" onClick=${onClick}>${lead}
     <span class="text"><span class="label">${title}</span>${lines.map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span>
@@ -125,6 +159,8 @@ function MakePersonSheet({ suggestion, feeds, titles, go, onClose, onDismissed }
 
 function MakePersonForm({ suggestion, feeds, titles, go, onCancel, onDismissed }) {
   const [state, setState] = useState(() => makePersonStart(suggestion));
+  const profiles = useProfiles(state.keys.map((r) => r.item));
+  useEffect(() => { if (profiles) setState((current) => withProfiles(current, profiles)); }, [profiles]);
   const { busy, error, run } = useAction();
   const make = () => run(async () => {
     const made = await api('/people/suggestions/make', { method: 'POST', body: makePersonBody(state) });
@@ -140,6 +176,14 @@ function MakePersonForm({ suggestion, feeds, titles, go, onCancel, onDismissed }
       return html`<${FeedCheckRow} key=${i} title=${row.title} text=${row.lines.join(' · ')} checked=${r.checked}
         onChange=${() => setState(toggledItem(state, name, i))} />`;
     })}</div></section>`;
+  const keyGroup = () => state.keys.length > 0 && html`<section class="page-section"><h2>Nostr key</h2>
+    <div class="group rows">${state.keys.map((r, i) => {
+      const row = keyItemRow(r.item, profiles, suggestion.name);
+      return html`<div class="key-row" key=${r.item}><label class="link-row use-row">
+          <input type="checkbox" checked=${r.checked} onChange=${() => setState(toggledItem(state, 'keys', i))} />
+          <${PersonArt} person=${{ img: row.picture, name: row.title }} /><${KeyText} row=${row} /></label>
+        <${CopyButton} text=${r.item} label="the Nostr key" /></div>`;
+    })}</div></section>`;
   return html`<header>
       <h2 id="make-person-title">${makeSheetTitle(suggestion.name)}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
@@ -148,7 +192,7 @@ function MakePersonForm({ suggestion, feeds, titles, go, onCancel, onDismissed }
       <p class="hint">${makeSheetHint(suggestion.name)}</p>
       ${group('Credits', 'credits', state.credits, (item) => creditItemRow(item, titles))}
       ${group('Payment addresses', 'recipients', state.recipients, payeeItemRow)}
-      ${group('Nostr key', 'keys', state.keys, keyItemRow)}
+      ${keyGroup()}
       <section class="page-section"><h2>Artist or label</h2><div class="group rows">
         <${ChoiceSelect} id="make-member" label="Member of" value=${state.memberOf} placeholder="None"
           hint="The artist or label feed where this person is a member." options=${memberChoices(feeds)}
@@ -202,7 +246,8 @@ function AddressRow({ member, count, note, action }) {
       ${address && html`<span class="summary mono address-text">${address}</span>`}
       ${account && html`<span class="summary">Account ${account}</span>`}
       ${note && html`<span class="summary">${note}</span>`}</span>
-    ${count && html`<span class="count">${count}</span>`}${action}</div>`;
+    ${count && html`<span class="count">${count}</span>`}
+    ${member.address && html`<${CopyButton} text=${member.address} label="the address" />`}${action}</div>`;
 }
 
 // A row that adds something: a plus sign and a title.
@@ -377,6 +422,12 @@ export function PersonPage({ id, feeds, go }) {
   const [linking, setLinking] = useState(null);
   const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => setSuggestions(r.suggestions || []), () => setSuggestions([]));
   useEffect(() => { loadSuggestions(); }, [id]);
+  const known = data ? data.person : null;
+  const profiles = useProfiles([
+    ...(known ? known.keys.map((k) => k.npub) : []),
+    ...(known ? known.credit_names.map((c) => c.npub) : []),
+    ...suggestions.map((s) => s.npub),
+  ]);
   // Each change of a link reads the person again (task 065 item 5).
   const act = (work) => run(async () => { try { await work(); } finally { await reload(); } });
   if (!data) {
@@ -392,18 +443,25 @@ export function PersonPage({ id, feeds, go }) {
   const removeButton = (kind, linkId, label) => html`<button class="button" type="button" aria-label=${label}
     onClick=${() => remove(kind, linkId)}>Remove</button>`;
   const open = (kind) => setSheet(kind);
+  // The delete changes no feed (ADR 0102). Then the People page opens.
+  const deletePerson = () => run(async () => {
+    if (!await askConfirm(CONFIRMS.deletePerson(person.name))) return;
+    await api(`/people/${id}`, { method: 'DELETE' });
+    go({ name: 'people' });
+  });
   const sections = {
     profile: () => html`<header class="person-head"><${PersonArt} person=${person} large />
       <div class="text"><h1>${person.name}</h1>
         ${(profile.role || profile.members.length > 0) && html`<p class="hint">${profile.role}${profile.role && profile.members.length > 0 && ' · '}${profile.members.map((m, i) =>
           html`${i > 0 && ', '}Member of <button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>`)}</p>`}
-        ${person.keys.map((k) => html`<p class="hint" key=${k.id}>Nostr <span class="mono">${shortKey(k.npub)}</span> · ${keyEvidenceText(k.evidence)}</p>`)}
+        ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span> · ${keyEvidenceText(k.evidence)}</span>
+          <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
       </div></header>`,
     actions: () => html`<div class="actions recipient-actions">
       <button class="button action" type="button" onClick=${() => open('use_address')}>Use This Address</button>
       <button class="button action" type="button" onClick=${() => open('rename')}>Rename</button>
       <button class="button action" type="button" onClick=${() => open('add_to_releases')}>Add to All Releases</button>
-      <button class="button destructive" type="button" onClick=${() => open('remove')}>Remove</button></div>`,
+      <button class="button destructive" type="button" onClick=${() => open('remove')}>Remove from Feeds</button></div>`,
     where: () => html`<div class="group"><${ListRow} title=${where.title} lines=${where.lines} count=${where.count}
       onClick=${() => go({ name: 'where-used', id: person.id })} /></div>`,
     payment: () => html`<section class="page-section"><h2>Payment</h2>
@@ -416,7 +474,7 @@ export function PersonPage({ id, feeds, go }) {
           member=${m.member} count=${usedText(m.count)} />`)}
         <div class="actions"><button class="button" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${suggestions.map((s) => html`<div class="group" key=${s.address}><${AddressRow} member=${{ address: s.address, recipient_type: 'lnaddress' }}
-        note="Suggested from the Nostr profile · keysend checked"
+        note=${profileAddressNote(s.npub, profiles)}
         action=${html`<button class="button action" type="button" onClick=${() => act(async () => {
           await api(`/people/${id}/profile-addresses`, { method: 'POST', body: { address: s.address } });
           await loadSuggestions();
@@ -427,10 +485,10 @@ export function PersonPage({ id, feeds, go }) {
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<div class="group">
         ${person.credit_names.map((c) => html`<div class="link-row static" key=${`c${c.id}`}><span class="text"><span class="label">Credit name</span>
           ${c.name && html`<span class="summary">${c.name}</span>`}${c.href && html`<span class="summary">${c.href}</span>`}${c.npub && html`<span class="summary mono">${shortKey(c.npub)}</span>`}</span>
+          ${c.npub && html`<${CopyButton} text=${c.npub} label="the Nostr key" />`}
           ${removeButton('credit-names', c.id, `Remove the credit name ${c.name}`)}</div>`)}
-        ${person.keys.map((k) => html`<div class="link-row static" key=${`k${k.id}`}><span class="text"><span class="label">Nostr key</span>
-          <span class="summary mono">${shortKey(k.npub)}</span><span class="summary">${keyEvidenceText(k.evidence)}</span></span>
-          ${removeButton('keys', k.id, `Remove the Nostr key ${shortKey(k.npub)}`)}</div>`)}</div>`}
+        ${person.keys.map((k) => html`<${KeyRowView} key=${`k${k.id}`} npub=${k.npub} profiles=${profiles} name=${person.name}
+          note=${keyEvidenceText(k.evidence)} action=${removeButton('keys', k.id, `Remove the Nostr key ${shortKey(k.npub)}`)} />`)}</div>`}
       <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => setLinking('credit-names')} />
         <${AddRow} title="Add a Nostr Key" onClick=${() => setLinking('keys')} /></div></section>`,
     support: () => html`<section class="page-section"><h2>Support links</h2>
@@ -438,6 +496,8 @@ export function PersonPage({ id, feeds, go }) {
           <span class="label">${l.label || 'Support link'}</span><span class="summary address-text">${l.url}</span></span>
           ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div>`)}
         <${AddRow} title="Add a Support Link" onClick=${() => setLinking('support-links')} /></div></section>`,
+    delete: () => html`<section class="page-section"><div class="actions">
+      <button class="button destructive" type="button" onClick=${deletePerson}>Delete Person</button></div></section>`,
   };
   return html`<div><${Bar}><span class="bar-title">${person.name}</span><//><section class="section">
     <${ErrorNotice} error=${error} />

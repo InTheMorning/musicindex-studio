@@ -18,7 +18,7 @@
 1. The page of a person gets the button "Delete Person" (destructive) in the last section, with the tier `limits`.
 2. The button opens a confirmation sheet with the title "Delete {name} from People?" and the text "Studio deletes this person and its links. Studio changes no feed." The action button reads "Delete the Person". The text is in `confirms.js`.
 3. After the delete, Studio opens the People page. The items of the person can come back as a suggestion, because they are no longer a link of a person (ADR 0098 item 16).
-4. The operation "Remove" of ADR 0099 items 4 and 11 reads "Remove From Feeds", on its button and as the title of its sheet. Its behavior does not change.
+4. The operation "Remove" of ADR 0099 items 4 and 11 reads "Remove from Feeds", on its button and as the title of its sheet. Its behavior does not change.
 
 ## Alternatives Considered
 
@@ -27,7 +27,7 @@
 
 ## Consequences
 
-- The page of a person has two destructive buttons with different names: "Remove From Feeds" at the top and "Delete Person" at the end.
+- The page of a person has two destructive buttons with different names: "Remove from Feeds" at the top and "Delete Person" at the end.
 - The Node tests of the sheet titles change for item 4.
 
 ## Acceptance Criteria
@@ -36,7 +36,7 @@ Mechanical:
 
 - A Node test: the page sequence of a person ends with a section of the tier `limits` that holds "Delete Person".
 - A Node test: the confirmation of item 2 is in `confirms.js` with its title, its text and its action.
-- A Node test: the operation title of item 4 is "Remove From Feeds".
+- A Node test: the operation title of item 4 is "Remove from Feeds".
 
 Visual: the page of a person with "Delete Person" at its end, and the confirmation sheet.
 

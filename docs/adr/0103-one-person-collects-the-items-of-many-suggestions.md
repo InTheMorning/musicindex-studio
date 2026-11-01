@@ -45,7 +45,7 @@
 
 ### Merge People
 
-14. The last section of the page of a person (ADR 0102 item 1) gets the button "Merge With a Person" (normal), before "Delete Person". It opens the sheet "Merge With {name}", with the select menu "Person to merge", the links of the selected person, and the result.
+14. The last section of the page of a person (ADR 0102 item 1) gets the button "Merge with a Person" (normal), before "Delete Person". It opens the sheet "Merge with {name}", with the select menu "Person to merge", the links of the selected person, and the result.
 15. The core moves each link of the other person to this person, then deletes the other person, in one transaction. The name, the picture, the usual role, the information address and the default address of this person stay. A change set of the other person gets this person.
 16. A merge changes no feed.
 

@@ -1745,7 +1745,9 @@ function Icon({ name }) {
 // The public address of a feed in the header of its page. The link opens
 // the feed in a new tab. A truncated address shows the full address as a
 // tooltip. The button copies the address.
-function FeedAddress({ url }) {
+// An icon button that copies `text` to the clipboard. It shows "Copied" for
+// 2 seconds (task 067d item 1).
+export function CopyButton({ text, label }) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return undefined;
@@ -1754,8 +1756,14 @@ function FeedAddress({ url }) {
   }, [copied]);
   const copy = () => {
     if (!navigator.clipboard) return;
-    navigator.clipboard.writeText(url).then(() => setCopied(true), () => {});
+    navigator.clipboard.writeText(text).then(() => setCopied(true), () => {});
   };
+  return html`<button class="button quiet icon-button copy-button" type="button" aria-label=${`Copy ${label}`} onClick=${copy}>
+      <${Icon} name=${copied ? 'check' : 'copy'} /></button>
+    <span class="visually-hidden" role="status">${copied ? 'Copied' : ''}</span>`;
+}
+
+function FeedAddress({ url }) {
   // The tooltip shows only when the link does not show the full address.
   const showTitle = (e) => {
     const link = e.currentTarget;
@@ -1763,9 +1771,7 @@ function FeedAddress({ url }) {
   };
   return html`<p class="sub feed-address">
     <a class="mono" href=${url} target="_blank" rel="noopener noreferrer" onMouseEnter=${showTitle} onFocus=${showTitle}>${url}</a>
-    <button class="button quiet icon-button" type="button" aria-label="Copy the feed address" onClick=${copy}>
-      <${Icon} name=${copied ? 'check' : 'copy'} /></button>
-    <span class="visually-hidden" role="status">${copied ? 'Copied' : ''}</span>
+    <${CopyButton} text=${url} label="the feed address" />
   </p>`;
 }
 

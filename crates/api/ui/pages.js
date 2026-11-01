@@ -59,6 +59,7 @@ const PAGES = {
     { id: 'payment', tier: 'content' },
     { id: 'credits', tier: 'details' },
     { id: 'support', tier: 'details' },
+    { id: 'delete', tier: 'limits' },
   ],
   'studio-settings': ({ server }) => [
     ...(server ? [{ id: 'account', tier: 'setup' }] : []),

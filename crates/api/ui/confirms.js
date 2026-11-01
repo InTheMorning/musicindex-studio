@@ -51,6 +51,10 @@ export const CONFIRMS = {
     action: 'Download the File',
     role: 'primary',
   }),
+  deletePerson: (name) => destructive(
+    `Delete ${name} from People?`,
+    'Studio deletes this person and its links. Studio changes no feed.',
+    'Delete the Person'),
   removeRecipients: (noun) => destructive(
     `Remove the recipients of this ${noun}?`,
     `The ${noun} then uses the recipients of the album.`,

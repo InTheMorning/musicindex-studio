@@ -4,7 +4,7 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { api, askConfirm, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
+import { api, askConfirm, CopyButton, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
@@ -533,11 +533,12 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
 // true when the core found the key not correct.
 function NostrRow({ label, summary, value, feedId, bad, person, onSet }) {
   const [open, setOpen] = useState(false);
-  return html`<button class="link-row" type="button" onClick=${() => setOpen(true)}>
+  const row = html`<button class="link-row" type="button" onClick=${() => setOpen(true)}>
       <span class="label">${label}</span>
       <span class=${bad ? 'summary field-error' : 'summary'}>${bad ? 'Not a Nostr key' : summary}</span>
       <span class="go" aria-hidden="true">›</span>
-    </button>
+    </button>`;
+  return html`${value ? html`<div class="key-row">${row}<${CopyButton} text=${value} label="the Nostr key" /></div>` : row}
     <${NostrSheet} open=${open} value=${value} feedId=${feedId} person=${person} onSet=${onSet} onClose=${() => setOpen(false)} />`;
 }
 

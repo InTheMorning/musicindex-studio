@@ -56,6 +56,7 @@ const PAGES = {
     { id: 'profile', tier: 'identity' },
     { id: 'actions', tier: 'identity' },
     { id: 'where', tier: 'identity' },
+    { id: 'more', tier: 'content' },
     { id: 'payment', tier: 'content' },
     { id: 'credits', tier: 'details' },
     { id: 'support', tier: 'details' },

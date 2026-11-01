@@ -94,3 +94,12 @@ test('nostr follows author on the three feed pages', () => {
       'ADR 0074 item 19: the row nostr must follow author. Fix FEED_FIELDS in crates/api/ui/pages.js.');
   }
 });
+
+test('the person page has more with the tier content before payment (ADR 0103 item 11)', () => {
+  const seq = pageSequence('person');
+  const more = seq.findIndex((s) => s.id === 'more');
+  assert.ok(more >= 0 && seq[more].tier === 'content');
+  assert.equal(seq[more + 1].id, 'payment',
+    'ADR 0103 item 11: more comes before payment. Fix the page person in crates/api/ui/pages.js.');
+  assert.equal(tierError('person', seq), null);
+});

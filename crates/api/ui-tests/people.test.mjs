@@ -39,7 +39,7 @@ test('a section with no data is left out, but people always shows', () => {
 
 test('the page person has the sections of ADR 0099 item 4 in tier sequence', () => {
   const sections = pageSequence('person');
-  assert.deepEqual(sections.map((s) => s.id), ['profile', 'actions', 'where', 'payment', 'credits', 'support', 'delete']);
+  assert.deepEqual(sections.map((s) => s.id), ['profile', 'actions', 'where', 'more', 'payment', 'credits', 'support', 'delete']);
   assert.equal(tierError('person', sections), null);
   assert.ok(!sections.some((s) => /feeds|check/.test(s.id)),
     'ADR 0099 item 6: the page of a person has no feed list with check boxes. Remove the section from crates/api/ui/pages.js.');
@@ -586,4 +586,92 @@ test('ADR 0102: the person page ends with the delete, the confirmation and the s
   assert.equal(confirm.action, 'Delete the Person');
   assert.equal(confirm.role, 'destructive');
   assert.equal(SHEET_TITLES.remove, 'Remove from Feeds');
+});
+
+// ---- Add to a person, more from your feeds and merge (task 067e) ----
+import {
+  personChoices, hasItem, addToRows, addSelectedCount, addItemsBody, addItemsLabel, moreRows, moreItemBody, causeText,
+  mergeLinks, mergeResult, mergeBody, mergeTitle, addToTitle,
+} from '../ui/people.js';
+
+const KEYP = (address, custom_key = null, custom_value = null) => ({ address, custom_key, custom_value });
+const HAVING = {
+  id: 7,
+  name: 'Sir HeyCitizen',
+  credit_names: [{ id: 1, identity: 'i1', name: 'Mary Kate Ultra', href: '', npub: 'npub1a' }],
+  keys: [{ id: 2, npub: 'npub1k' }],
+  wallets: [{ id: 3, key: KEYP('a@x.example'), recipient_type: 'lnaddress', members: [{ key: KEYP('02ab', 'k', 'v') }] }],
+  support_links: [{ id: 4, label: 'Tip', url: 'https://t.example' }],
+};
+
+test('personChoices sorts A to Z and leaves one person out', () => {
+  const list = [{ id: 2, name: 'beta' }, { id: 1, name: 'Alpha' }, { id: 3, name: 'Gamma' }];
+  assert.deepEqual(personChoices(list), [['1', 'Alpha'], ['2', 'beta'], ['3', 'Gamma']]);
+  assert.deepEqual(personChoices(list, 2), [['1', 'Alpha'], ['3', 'Gamma']]);
+});
+
+test('the rows of Add to a Person give New and Already in, with no check for Already in', () => {
+  const state = {
+    name: 'Mary Kate Ultra',
+    credits: [
+      { item: { name: 'Mary Kate Ultra', href: '', npub: 'npub1a', roles: [], feeds: [] }, checked: true },
+      { item: { name: 'MK', href: '', npub: '', roles: ['vocals'], feeds: [] }, checked: true },
+    ],
+    recipients: [{ item: { key: KEYP('02ab', 'k', 'v'), recipient_type: 'node', feeds: [] }, checked: true }],
+    keys: [{ item: 'npub1k', checked: true }, { item: 'npub1z', checked: false }],
+  };
+  const groups = addToRows(state, HAVING);
+  const flat = groups.flatMap((g) => g.rows);
+  assert.deepEqual(flat.map((r) => [r.group, r.already, r.checked]), [
+    ['credits', true, false], ['credits', false, true], ['recipients', true, false], ['keys', true, false], ['keys', false, false],
+  ]);
+  assert.ok(flat[0].lines.includes('Already in Sir HeyCitizen'));
+  assert.ok(flat[1].lines.includes('New'));
+  assert.equal(hasItem(HAVING, 'recipients', { key: KEYP('a@x.example') }), true);
+  assert.equal(addSelectedCount(state, HAVING), 1);
+  assert.deepEqual(addItemsBody(state, HAVING), { credits: [['MK', '', '']], recipients: [], keys: [] });
+  assert.equal(addItemsLabel(1), 'Add 1 Item');
+  assert.equal(addItemsLabel(3), 'Add 3 Items');
+  assert.equal(addToTitle('X'), 'Add to a Person: X');
+});
+
+test('the rows of More from your feeds give the item, its feeds and its cause', () => {
+  const items = [
+    { kind: 'credit', name: 'Hey', href: '', npub: 'npub1k', roles: ['vocals'], feeds: [1, 2], cause: 'same_npub' },
+    { kind: 'payee', key: KEYP('a@x.example'), name: 'Hey', recipient_type: 'lnaddress', feeds: [1], cause: 'same_wallet' },
+  ];
+  const rows = moreRows(items, new Map([[1, 'One'], [2, 'Two']]));
+  // With no profile, a credit with a key shows the short key.
+  assert.equal(rows[0].title, 'npub1k');
+  assert.ok(rows[0].lines.includes('Nostr key in the credit vocals'));
+  // With a profile, it shows the profile name and the warning of ADR 0103 item 18.
+  const named = moreRows(items, null, new Map([['npub1k', { npub: 'npub1k', name: 'City Radio' }]]), 'Hey')[0];
+  assert.equal(named.title, 'City Radio');
+  assert.equal(named.warning, 'The profile name is not "Hey". Check this key.');
+  assert.equal(moreRows([{ ...items[0], npub: '' }])[0].title, 'vocals');
+  assert.ok(rows[0].lines.includes('One, Two'));
+  assert.ok(rows[0].lines.includes(causeText('same_npub')));
+  assert.equal(rows[1].title, 'Lightning address a@x.example');
+  assert.ok(rows[1].lines.includes('The wallet is a wallet of this person'));
+  assert.deepEqual(rows[0].body, { credits: [['Hey', '', 'npub1k']], recipients: [], keys: [] });
+  assert.deepEqual(moreItemBody(items[1]), { credits: [], recipients: [[KEYP('a@x.example'), 'lnaddress']], keys: [] });
+  for (const c of ['same_name', 'same_credit_name', 'same_npub', 'same_wallet']) assert.notEqual(causeText(c), '');
+  assert.notEqual(new Set(rows.map((r) => r.key)).size, 1);
+});
+
+test('the merge sheet gives the links of the other person and the result line', () => {
+  const other = {
+    id: 9, name: 'Other', keys: [{ id: 5, npub: 'npub1k' }, { id: 6, npub: 'npub1m' }],
+    wallets: [{ id: 8, key: KEYP('b@x.example'), recipient_type: 'lnaddress' }],
+    credit_names: [{ id: 10, identity: 'i2', name: 'Vox' }], support_links: [],
+  };
+  const links = mergeLinks(other);
+  assert.deepEqual(links.map((l) => l.lines[0] || 'wallet'), ['wallet', 'Nostr key', 'Nostr key', 'Credit name']);
+  assert.deepEqual(mergeLinks(null), []);
+  const result = mergeResult(HAVING, other);
+  assert.equal(result.title, 'Sir HeyCitizen');
+  assert.equal(result.lines[0], '2 Nostr keys · 2 wallets · 2 credit names · 1 support link');
+  assert.match(result.lines[1], /stay as in Sir HeyCitizen/);
+  assert.deepEqual(mergeBody('9'), { other: 9 });
+  assert.equal(mergeTitle('X'), 'Merge with X');
 });

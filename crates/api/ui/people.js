@@ -765,3 +765,151 @@ export function personKeys(recipients) {
   }
   return keys;
 }
+
+// ---- Add to a person, more from your feeds and merge (ADR 0103 items 8 to 16, task 067e) ----
+
+// The choices of a select menu of people, A to Z. `exceptId` leaves out one
+// person, such as the person that keeps the merge.
+export function personChoices(people, exceptId = null) {
+  return (people || [])
+    .filter((p) => p.id !== exceptId)
+    .slice()
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }))
+    .map((p) => [String(p.id), p.name]);
+}
+
+export const addToTitle = (name) => `Add to a Person: ${name}`;
+export const ADD_TO_HINT = 'Studio adds the selected items to the person. Studio changes no feed.';
+export const NO_PERSON_TEXT = 'No person yet. Make a person first.';
+export const addItemsLabel = (n) => addPickLabel(n, 'Item', 'Items');
+
+const trimmed = (text) => String(text ?? '').trim();
+const sameCreditName = (c, item) => trimmed(c.name).toLowerCase() === trimmed(item.name).toLowerCase()
+  && trimmed(c.href) === trimmed(item.href) && trimmed(c.npub).toLowerCase() === trimmed(item.npub).toLowerCase();
+const keyParts = (k) => `${k.address || ''}\u0000${k.custom_key || ''}\u0000${k.custom_value || ''}`;
+
+// The keys that a person has for payment: each wallet key and each member
+// of each wallet. This is a display check only. The core adds each item once.
+const walletKeys = (person) => new Set((person.wallets || []).flatMap((w) => [
+  keyParts(w.key || {}),
+  ...(w.members || []).map((m) => keyParts(m.key || m)),
+]));
+
+// Whether the person has an item of the group `credits`, `recipients` or
+// `keys` already.
+export function hasItem(person, group, item) {
+  if (!person) return false;
+  if (group === 'credits') return (person.credit_names || []).some((c) => sameCreditName(c, item));
+  if (group === 'keys') return (person.keys || []).some((k) => k.npub === item);
+  return walletKeys(person).has(keyParts(item.key || {}));
+}
+
+// The rows of the sheet "Add to a Person". Each row has its group and
+// its index in the state, `already` with the name of the person, and
+// `checked`. A row that the person has already has no check box.
+export function addToRows(state, person, titles = null, profiles = null) {
+  const status = (group, r, i, row) => {
+    const already = hasItem(person, group, r.item);
+    const flag = already ? `Already in ${person.name}` : 'New';
+    return { group, index: i, already, checked: !already && r.checked, ...row, lines: [...row.lines, flag] };
+  };
+  return [
+    ['credits', 'Credits', (item) => creditItemRow(item, titles)],
+    ['recipients', 'Payment addresses', payeeItemRow],
+    ['keys', 'Nostr key', (npub) => keyItemRow(npub, profiles, state.name)],
+  ].map(([group, title, rowOf]) => ({
+    group, title, rows: (state[group] || []).map((r, i) => status(group, r, i, rowOf(r.item))),
+  })).filter((g) => g.rows.length > 0);
+}
+
+// The number of items that the button adds: the checked items that the
+// person does not have.
+export const addSelectedCount = (state, person) => ['credits', 'recipients', 'keys']
+  .reduce((n, group) => n + state[group].filter((r) => r.checked && !hasItem(person, group, r.item)).length, 0);
+
+// The body of `POST /people/{id}/items` from the sheet "Add to a Person".
+export function addItemsBody(state, person) {
+  const chosen = (group) => state[group].filter((r) => r.checked && !hasItem(person, group, r.item));
+  return {
+    credits: chosen('credits').map((r) => [r.item.name, r.item.href, r.item.npub]),
+    recipients: chosen('recipients').map((r) => [r.item.key, r.item.recipient_type]),
+    keys: chosen('keys').map((r) => r.item),
+  };
+}
+
+export const MORE_HINT = 'Studio found these items with the name, a wallet or a Nostr key of this person. Add the items that are this person.';
+
+const CAUSES = {
+  same_name: 'The name is the name of this person',
+  same_credit_name: 'The name is a credit name of this person',
+  same_npub: 'The Nostr key is a key of this person',
+  same_wallet: 'The wallet is a wallet of this person',
+};
+export const causeText = (cause) => CAUSES[cause] || '';
+
+// The rows of the section "More from your feeds" from `GET /people/{id}/more`.
+// `key` is the stable key of the row, and `body` is the body of the Add. A
+// credit with a Nostr key shows the profile of the key (ADR 0103 item 17),
+// with the warning of item 18 for the name `name` of the person.
+export function moreRows(items, titles = null, profiles = null, name = '') {
+  return (items || []).map((item) => {
+    const feeds = (item.feeds || []).map((id) => titleOf(titles, id)).join(', ');
+    if (item.kind === 'credit') {
+      const roles = (item.roles || []).length > 0 ? item.roles.join(', ') : 'Credit';
+      const key = `c\u0000${item.name}\u0000${item.href}\u0000${item.npub}`;
+      const nameLine = item.name ? [`The name in that credit is "${item.name}"`] : [];
+      if (item.npub) {
+        const row = keyRow(item.npub, profiles, name);
+        const lines = [...row.lines, `Nostr key in the credit ${roles}`, ...nameLine, feeds || feedCount(0), causeText(item.cause)];
+        return { ...row, key, lines, npub: item.npub, body: moreItemBody(item) };
+      }
+      const lines = [...nameLine, feeds || feedCount(0), causeText(item.cause)];
+      return { key, title: roles, lines, npub: null, body: moreItemBody(item) };
+    }
+    const lines = [...(item.name ? [`The name in that feed is "${item.name}"`] : []), feeds || feedCount(0), causeText(item.cause)];
+    return { key: `p${keyParts(item.key)}`, title: addressText(item.key, item.recipient_type), lines, npub: null, body: moreItemBody(item) };
+  });
+}
+
+// The body of `POST /people/{id}/items` for one item of "More from your feeds".
+export function moreItemBody(item) {
+  if (item.kind === 'credit') return { credits: [[item.name, item.href, item.npub]], recipients: [], keys: [] };
+  return { credits: [], recipients: [[item.key, item.recipient_type]], keys: [] };
+}
+
+// ---- The sheet "Merge with a Person" ----
+
+export const mergeTitle = (name) => `Merge with ${name}`;
+export const mergeHint = (name) => `Studio moves each item of the selected person to ${name}, then deletes that person. Studio changes no feed.`;
+export const NO_OTHER_TEXT = 'No other person yet. Make a second person first.';
+
+// The links of the selected person: wallets, Nostr keys, credit names and
+// support links, one row each.
+export function mergeLinks(other, profiles = null) {
+  if (!other) return [];
+  return [
+    ...(other.wallets || []).map((w) => ({ key: `w${w.id}`, title: addressText(w.key, w.recipient_type), lines: [] })),
+    ...(other.keys || []).map((k) => ({ key: `k${k.id}`, npub: k.npub, title: keyRow(k.npub, profiles).title, mono: keyRow(k.npub, profiles).mono, lines: ['Nostr key'] })),
+    ...(other.credit_names || []).map((c) => ({ key: `c${c.id}`, title: c.name || 'Credit name', lines: ['Credit name'] })),
+    ...(other.support_links || []).map((l) => ({ key: `s${l.id}`, title: l.label || l.url, lines: ['Support link'] })),
+  ];
+}
+
+// The result line of the merge: the counts of the links that the person
+// has after the merge. This is a display count. The core merges the links.
+export function mergeResult(keep, other) {
+  const union = (listOf, idOf) => new Set([...listOf(keep), ...listOf(other)].map(idOf)).size;
+  const counts = [
+    [union((p) => p.keys || [], (k) => k.npub), 'Nostr key', 'Nostr keys'],
+    [union((p) => p.wallets || [], (w) => keyParts(w.key || {})), 'wallet', 'wallets'],
+    [union((p) => p.credit_names || [], (c) => c.identity), 'credit name', 'credit names'],
+    [union((p) => p.support_links || [], (l) => `${l.label}\u0000${l.url}`), 'support link', 'support links'],
+  ].filter(([n]) => n > 0).map(([n, one, many]) => plural(n, one, many));
+  return {
+    title: keep.name,
+    lines: [...(counts.length > 0 ? [counts.join(' · ')] : []), `Name, picture and default address stay as in ${keep.name}`],
+  };
+}
+
+// The body of `POST /people/{id}/merge`.
+export const mergeBody = (otherId) => ({ other: Number(otherId) });

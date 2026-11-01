@@ -3,7 +3,12 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md), [ADR 0102](../adr/0102-delete-a-person-changes-no-feed.md), [ADR 0098](../adr/0098-the-people-module.md) items 6, 7 and 17 to 19, [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) items 3, 4 and 15, [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 12 to 15, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md) and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
 
-Status: In progress. Packets 067a to 067d are complete, with the screenshot visual check of 067d.
+Status: Complete, in five packets, with the screenshot visual checks of 067d and 067e. The human test is open. Notes from the reviews:
+
+- 067a: a wallet row with no type gets the type of its address.
+- 067b: "More from your feeds" lists a credit that holds a key of this person, with the cause `same_npub`. It leaves out a credit with a key that is in a different person.
+- 067d: the button labels "Remove from Feeds" and "Merge with a Person" follow musicindex ADR 0023 R-CASE-1. The planning model kept each short key on one line and gave the warning the error color.
+- 067e: the planning model gave a credit with a key in "More from your feeds" the profile row and the copy button of ADR 0103 item 17. The visual check did not show an "Already in" row. The Node tests cover it.
 
 ## Goal
 

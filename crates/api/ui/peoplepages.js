@@ -20,6 +20,8 @@ import {
   usedText, keyEvidenceText, whereRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, personFieldsBody, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
+  personChoices, addToTitle, ADD_TO_HINT, NO_PERSON_TEXT, addItemsLabel, addToRows, addSelectedCount, addItemsBody, MORE_HINT,
+  moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody,
 } from './people.js';
 
 // The round picture of a person. A person with no picture, or a picture that
@@ -161,6 +163,7 @@ function MakePersonForm({ suggestion, feeds, titles, go, onCancel, onDismissed }
   const [state, setState] = useState(() => makePersonStart(suggestion));
   const profiles = useProfiles(state.keys.map((r) => r.item));
   useEffect(() => { if (profiles) setState((current) => withProfiles(current, profiles)); }, [profiles]);
+  const [adding, setAdding] = useState(false);
   const { busy, error, run } = useAction();
   const make = () => run(async () => {
     const made = await api('/people/suggestions/make', { method: 'POST', body: makePersonBody(state) });
@@ -201,7 +204,72 @@ function MakePersonForm({ suggestion, feeds, titles, go, onCancel, onDismissed }
     </div>
     <footer>
       <button class="button" type="button" disabled=${busy} onClick=${dismiss}>Not This Person</button>
+      <button class="button action" type="button" disabled=${busy} onClick=${() => setAdding(true)}>Add to a Person</button>
       <button class="button primary" type="button" disabled=${busy} onClick=${make}>${busy ? 'Making the Person…' : 'Make the Person'}</button>
+    </footer>
+    <${AddToPersonSheet} open=${adding} suggestion=${suggestion} profiles=${profiles} titles=${titles} go=${go}
+      onClose=${() => setAdding(false)} />`;
+}
+
+// The sheet "Add to a Person: {name}" (ADR 0103 items 8 to 10). It opens over
+// the sheet "Make a Person". The core adds the items, and then the page of
+// the person opens.
+function AddToPersonSheet({ open, suggestion, profiles, titles, go, onClose }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="add-to-title" onClose=${onClose}>
+    ${open && html`<${AddToPersonForm} suggestion=${suggestion} profiles=${profiles} titles=${titles} go=${go}
+      onCancel=${() => ref.current.close()} />`}
+  </dialog>`;
+}
+
+function AddToPersonForm({ suggestion, profiles, titles, go, onCancel }) {
+  const [people, setPeople] = useState(null);
+  const [personId, setPersonId] = useState('');
+  const [state, setState] = useState(() => makePersonStart(suggestion, profiles));
+  const { busy, error, run } = useAction();
+  useEffect(() => {
+    run(async () => {
+      const list = await api('/people');
+      setPeople(list);
+      const first = personChoices(list)[0];
+      if (first) setPersonId(first[0]);
+    });
+  }, []);
+  useEffect(() => { if (profiles) setState((current) => withProfiles(current, profiles)); }, [profiles]);
+  const person = (people || []).find((p) => String(p.id) === personId) || null;
+  const groups = person ? addToRows(state, person, titles, profiles) : [];
+  const count = person ? addSelectedCount(state, person) : 0;
+  const add = () => run(async () => {
+    await api(`/people/${person.id}/items`, { method: 'POST', body: addItemsBody(state, person) });
+    go({ name: 'person', id: person.id });
+  });
+  const rowView = (row) => {
+    const text = html`<span class="text"><span class=${row.mono ? 'label mono key-text' : 'label'}>${row.title}</span>
+      ${row.lines.map((line, i) => html`<span class=${line === row.short ? 'summary key-text' : 'summary'} key=${i}>${line}</span>`)}
+      ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</span>`;
+    const lead = row.group === 'keys' ? html`<${PersonArt} person=${{ img: row.picture, name: row.title }} />` : null;
+    const copy = row.group === 'keys' ? html`<${CopyButton} text=${state.keys[row.index].item} label="the Nostr key" />` : null;
+    const key = `${row.group}${row.index}`;
+    if (row.already) return html`<div class=${copy ? 'key-row' : ''} key=${key}><div class="link-row static">${lead}${text}</div>${copy}</div>`;
+    return html`<div class=${copy ? 'key-row' : ''} key=${key}><label class="link-row use-row">
+      <input type="checkbox" checked=${row.checked} onChange=${() => setState(toggledItem(state, row.group, row.index))} />${lead}${text}</label>${copy}</div>`;
+  };
+  return html`<header>
+      <h2 id="add-to-title">${addToTitle(suggestion.name)}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
+    </header>
+    <div class="body">
+      ${people && people.length === 0 && html`<p class="empty">${NO_PERSON_TEXT}</p>`}
+      ${people && people.length > 0 && html`<div class="group rows"><${ChoiceSelect} id="add-to-person" label="Person" value=${personId}
+        hint="The person that gets the selected items." options=${personChoices(people)} onChange=${setPersonId} /></div>`}
+      ${groups.map((g) => html`<section class="page-section" key=${g.group}><h2>${g.title}</h2>
+        <div class="group rows">${g.rows.map(rowView)}</div></section>`)}
+      ${person && html`<p class="hint">${ADD_TO_HINT}</p>`}
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${onCancel}>Cancel</button>
+      <button class="button primary" type="button" disabled=${busy || count === 0} onClick=${add}>${busy ? 'Adding the Items…' : addItemsLabel(count)}</button>
     </footer>`;
 }
 
@@ -420,6 +488,10 @@ export function PersonPage({ id, feeds, go }) {
   const [suggestions, setSuggestions] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [linking, setLinking] = useState(null);
+  const [more, setMore] = useState([]);
+  const [merging, setMerging] = useState(false);
+  const loadMore = () => api(`/people/${id}/more`).then((r) => setMore(r.items || []), () => setMore([]));
+  useEffect(() => { loadMore(); }, [id]);
   const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => setSuggestions(r.suggestions || []), () => setSuggestions([]));
   useEffect(() => { loadSuggestions(); }, [id]);
   const known = data ? data.person : null;
@@ -427,6 +499,7 @@ export function PersonPage({ id, feeds, go }) {
     ...(known ? known.keys.map((k) => k.npub) : []),
     ...(known ? known.credit_names.map((c) => c.npub) : []),
     ...suggestions.map((s) => s.npub),
+    ...more.map((m) => m.npub),
   ]);
   // Each change of a link reads the person again (task 065 item 5).
   const act = (work) => run(async () => { try { await work(); } finally { await reload(); } });
@@ -464,6 +537,13 @@ export function PersonPage({ id, feeds, go }) {
       <button class="button destructive" type="button" onClick=${() => open('remove')}>Remove from Feeds</button></div>`,
     where: () => html`<div class="group"><${ListRow} title=${where.title} lines=${where.lines} count=${where.count}
       onClick=${() => go({ name: 'where-used', id: person.id })} /></div>`,
+    more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>
+      <p class="hint">${MORE_HINT}</p>
+      <div class="group">${moreRows(more, titles, profiles, person.name).map((row) => html`<div class="link-row static key-line" key=${row.key}>
+          ${row.npub && html`<${PersonArt} person=${{ img: row.picture, name: row.title }} />`}<${KeyText} row=${row} />
+          ${row.npub && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}
+          <button class="button action" type="button" aria-label=${`Add ${row.title}`}
+            onClick=${() => act(async () => { await api(`/people/${id}/items`, { method: 'POST', body: row.body }); await loadMore(); })}>Add</button></div>`)}</div></section>`,
     payment: () => html`<section class="page-section"><h2>Payment</h2>
       ${groups.length > 0 && html`<div class="group rows"><${ChoiceSelect} id="person-default" label="Default address"
         value=${person.default_address ? keyValue(person.default_address) : ''} options=${addressOptions(groups)}
@@ -497,6 +577,7 @@ export function PersonPage({ id, feeds, go }) {
           ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div>`)}
         <${AddRow} title="Add a Support Link" onClick=${() => setLinking('support-links')} /></div></section>`,
     delete: () => html`<section class="page-section"><div class="actions">
+      <button class="button" type="button" onClick=${() => setMerging(true)}>Merge with a Person</button>
       <button class="button destructive" type="button" onClick=${deletePerson}>Delete Person</button></div></section>`,
   };
   return html`<div><${Bar}><span class="bar-title">${person.name}</span><//><section class="section">
@@ -506,7 +587,60 @@ export function PersonPage({ id, feeds, go }) {
   <${OperationSheet} kind=${sheet} person=${person} groups=${groups} rows=${feedRows(person.places, feeds)} feeds=${feeds}
     go=${go} onClose=${() => setSheet(null)} />
   <${LinkSheet} kind=${linking} personId=${person.id} onClose=${() => setLinking(null)}
-    onAdded=${() => { reload(); loadSuggestions(); }} /></div>`;
+    onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />
+  <${MergeSheet} open=${merging} person=${person} onClose=${() => setMerging(false)}
+    onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} /></div>`;
+}
+
+// The sheet "Merge with {name}" (ADR 0103 items 14 to 16). The core moves the
+// links and deletes the other person. No feed changes.
+function MergeSheet({ open, person, onClose, onMerged }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="merge-title" onClose=${onClose}>
+    ${open && html`<${MergeForm} person=${person} onCancel=${() => ref.current.close()} onMerged=${onMerged} />`}
+  </dialog>`;
+}
+
+function MergeForm({ person, onCancel, onMerged }) {
+  const [people, setPeople] = useState(null);
+  const [otherId, setOtherId] = useState('');
+  const { busy, error, run } = useAction();
+  useEffect(() => {
+    run(async () => {
+      const list = await api('/people');
+      setPeople(list);
+      const first = personChoices(list, person.id)[0];
+      if (first) setOtherId(first[0]);
+    });
+  }, []);
+  const other = (people || []).find((p) => String(p.id) === otherId) || null;
+  const profiles = useProfiles(other ? other.keys.map((k) => k.npub) : []);
+  const links = mergeLinks(other, profiles);
+  const result = other ? mergeResult(person, other) : null;
+  const merge = () => run(async () => {
+    await api(`/people/${person.id}/merge`, { method: 'POST', body: mergeBody(otherId) });
+    onMerged();
+  });
+  return html`<header>
+      <h2 id="merge-title">${mergeTitle(person.name)}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
+    </header>
+    <div class="body">
+      ${people && personChoices(people, person.id).length === 0 && html`<p class="empty">${NO_OTHER_TEXT}</p>`}
+      ${other && html`<div class="group rows"><${ChoiceSelect} id="merge-person" label="Person to merge" value=${otherId}
+        hint=${mergeHint(person.name)} options=${personChoices(people, person.id)} onChange=${setOtherId} /></div>`}
+      ${other && html`<section class="page-section"><h2>${`${other.name} has`}</h2>
+        ${links.length === 0 && html`<p class="empty">This person has no link.</p>`}
+        ${links.length > 0 && html`<div class="group rows">${links.map((l) => html`<div class="link-row static" key=${l.key}><span class="text">
+          <span class=${l.mono ? 'label mono key-text' : 'label'}>${l.title}</span>${l.lines.map((line, i) => html`<span class="summary" key=${i}>${line}</span>`)}</span></div>`)}</div>`}</section>`}
+      ${result && html`<section class="page-section"><h2>After the merge</h2><div class="group rows"><div class="link-row static"><span class="text">
+        <span class="label">${result.title}</span>${result.lines.map((line, i) => html`<span class="summary" key=${i}>${line}</span>`)}</span></div></div></section>`}
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${onCancel}>Cancel</button>
+      <button class="button primary" type="button" disabled=${busy || !other} onClick=${merge}>${busy ? 'Merging the People…' : 'Merge the People'}</button>
+    </footer>`;
 }
 
 // The page "Where used" (ADR 0099 item 5): each feed of the person, with no

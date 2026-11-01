@@ -302,6 +302,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 062: Field text on touch](tasks/studio-v1-task-062-field-text-on-touch.md)
 - [Studio v1 task 063: The People core](tasks/studio-v1-task-063-people-core.md)
 - [Studio v1 task 064: The operations of a person](tasks/studio-v1-task-064-person-operations.md)
+- [Studio v1 task 065: The People screens](tasks/studio-v1-task-065-people-screens.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

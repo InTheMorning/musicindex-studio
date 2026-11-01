@@ -18,13 +18,14 @@ Each step is done on 2026-10-27:
 - 2026-10-31: the operator copied the rc.5 data folder, and the integrity check of each copied database passed. The operator deployed `0.1.0-rc.6` with `tools/deploy-server.sh`. The files `/ui/app.js`, `/ui/recipients.js` and `/ui/values.js` that `studio.musicindex.org` gives are the same as at `6c94f63`, the commit of the tag `v0.1.0-rc.6`. The human test of task 060 uses this version.
 - From outside, `/` and the manifest gave 200, and `/auth/v1/session` gave the server mode with sign-up by invite code. A `PUT` of 5 MB got 403 from Studio, not 413 from nginx.
 - The operator made one invite code.
+- 2026-11-01: `studio.musicindex.org` runs `0.1.0-rc.8`. Its file `/ui/app.js` is the same as at the tag `v0.1.0-rc.8`. `/auth/v1/session` gives the server mode with sign-up by invite code. The Phase 12 human tests from this date use this version.
 
 ## Results
 
 | Test | Device and browser | Date | Result |
 | --- | --- | --- | --- |
-| 1. Deploy on `studio.musicindex.org`. Sign up with an invite code and an email address. | | | Open |
-| 2. Passkey on an iPhone with Safari and iCloud Keychain: add, sign out, sign in, write. Sign in on a second Apple device. | | | Open |
+| 1. Deploy on `studio.musicindex.org`. Sign up with an invite code and an email address. | Not recorded | 2026-11-01 | Pass, on `0.1.0-rc.8` |
+| 2. Passkey on an iPhone with Safari and iCloud Keychain: add, sign out, sign in, write. Sign in on a second Apple device. | iPhone, Safari, iCloud Keychain | 2026-11-01 | Partly passed. On the iPhone, the operator added a passkey, signed out and signed in with it. Then the operator added the R2 host `heycitizen` and wrote a change to "HeyCitizen's Test Feed". The sign-in on a second Apple device is open. |
 | 3. Passkey on an Android phone with Chrome and Google Password Manager: the same steps. | | | Open |
 | 4. NIP-46 with Amber on Android: sign up, sign in, open the vault, write to an nsite test host with "My signer". | | | Open |
 | 5. NIP-46 on an iPhone with a signer of the operator, if one works. | | | Open |

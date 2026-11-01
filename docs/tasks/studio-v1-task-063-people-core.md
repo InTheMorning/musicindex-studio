@@ -3,11 +3,13 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0098](../adr/0098-the-people-module.md), [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md), [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0027](../adr/0027-the-recipient-picker.md), [ADR 0014](../adr/0014-collection-in-sqlite.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: In progress. Packets 063a and 063b are complete. Notes from the review of 063b:
+Status: In progress. Packets 063a, 063b and 063c are complete. Notes from the reviews:
 
 - The SQL of the people is in `people.rs` through `Collection::db`, as in `apps.rs` and `grant.rs`. Only the migration, `known_recipients` and the refill pass are in `collection.rs`.
 - The functions that change a person take `&Collection`, because `make_change_set` has only a `&Collection`. Each `add_*` function gives the row ID, and a second add of the same link gives the same ID.
 - The planning model changed `known_recipients`: a wallet of a person always gives the name of the person, also after a newer read of a feed.
+- `MakePerson.recipients` is a list of pairs: the recipient key and its type. The most frequent name of a group counts the distinct feeds of each name.
+- The planning model changed the suggestions for a credit with only an `npub`. Such a credit gives no name to its group. A group with no name uses its `npub` as its name, and no recipient joins it by name. A credit with no name starts selected (`same_name` is true).
 
 ## Goal
 

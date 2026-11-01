@@ -5,7 +5,7 @@
 //! no feed, and it keeps no secret. A value from a person is a start value
 //! in a feed (ADR 0098 item 3).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::BuildHasher;
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -994,6 +994,515 @@ pub fn save_recipient(
     Ok(id)
 }
 
+/// How a recipient joined a suggestion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoinedBy {
+    /// The normal name of the recipient is the normal name of the group.
+    Name,
+    /// The wallet key of the recipient is the wallet key of a recipient
+    /// that joined by name.
+    Wallet,
+}
+
+/// The reason to join an item to a suggestion (ADR 0098 item 13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Evidence {
+    /// The identity of the suggestion is an `npub`.
+    SameNpub,
+    /// A recipient joined by name.
+    SameName,
+    /// A recipient joined by wallet.
+    SameWallet,
+}
+
+/// A distinct credit `(name, href, npub)` of a suggestion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestedCredit {
+    /// The trimmed name.
+    pub name: String,
+    /// The trimmed `href`, or empty text.
+    pub href: String,
+    /// The trimmed `npub`, or empty text.
+    pub npub: String,
+    /// The first `img` that is not empty, or empty text.
+    pub img: String,
+    /// The distinct raw roles that are not empty, A to Z.
+    pub roles: Vec<String>,
+    /// The feeds that have the credit, by ID.
+    pub feeds: Vec<FeedId>,
+    /// False when the normal name is not the normal name of the suggestion.
+    pub same_name: bool,
+}
+
+/// A distinct recipient key of a suggestion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestedRecipient {
+    /// The key of the recipient.
+    pub key: RecipientKey,
+    /// The name from the most recent read, or empty text.
+    pub name: String,
+    /// The recipient type from the most recent read, or empty text.
+    pub recipient_type: String,
+    /// The feeds that have the recipient, by ID.
+    pub feeds: Vec<FeedId>,
+    /// False when the normal name is not the normal name of the suggestion.
+    pub same_name: bool,
+    /// How the recipient joined.
+    pub joined_by: JoinedBy,
+}
+
+/// The items of the feeds that can be one person (ADR 0098 items 12 and 13).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestion {
+    /// [`Identity::key`] of the group.
+    pub identity: String,
+    /// The most frequent name of the credits.
+    pub name: String,
+    /// The credits, A to Z.
+    pub credits: Vec<SuggestedCredit>,
+    /// The recipients, A to Z by key.
+    pub recipients: Vec<SuggestedRecipient>,
+    /// The number of distinct feeds of the credits.
+    pub credit_feeds: usize,
+    /// The number of distinct feeds of the recipients.
+    pub payee_feeds: usize,
+    /// `SameNpub`, `SameName` and `SameWallet`, in this sequence.
+    pub evidence: Vec<Evidence>,
+    /// The key of each item, for [`dismiss`].
+    pub item_keys: Vec<String>,
+}
+
+/// The items that the user selects to make a person (ADR 0098 item 14).
+#[derive(Debug, Clone, Default)]
+pub struct MakePerson {
+    /// The name of the person.
+    pub name: String,
+    /// The selected credits: name, `href` and `npub`.
+    pub credits: Vec<(String, String, String)>,
+    /// The selected recipients, each with its recipient type.
+    pub recipients: Vec<(RecipientKey, String)>,
+    /// The selected Nostr keys, more than the keys of the credits.
+    pub keys: Vec<String>,
+    /// The publisher feed of which the person is a member.
+    pub member_of: Option<FeedId>,
+}
+
+const SEP: char = '\u{1f}';
+
+fn credit_item_key(name: &str, href: &str, npub: &str) -> String {
+    format!("credit:{name}{SEP}{href}{SEP}{npub}")
+}
+
+fn recipient_item_key(key: &RecipientKey) -> String {
+    let (address, custom_key, custom_value) = key.parts();
+    format!("recipient:{address}{SEP}{custom_key}{SEP}{custom_value}")
+}
+
+fn strings(db: &Connection, sql: &str) -> Result<Vec<String>, CollectionError> {
+    let mut statement = db.prepare(sql)?;
+    Ok(statement
+        .query_map([], |r| r.get(0))?
+        .collect::<Result<_, _>>()?)
+}
+
+fn feed_ids(feeds: &BTreeSet<i64>) -> Vec<FeedId> {
+    feeds.iter().copied().map(FeedId).collect()
+}
+
+#[derive(Default)]
+struct CreditAgg {
+    img: String,
+    roles: BTreeSet<String>,
+    feeds: BTreeSet<i64>,
+}
+
+struct Group {
+    identity: Identity,
+    credits: BTreeMap<(String, String, String), CreditAgg>,
+    /// The feeds of each name, for the most frequent name.
+    names: BTreeMap<String, BTreeSet<i64>>,
+}
+
+struct RecipientAgg {
+    key: RecipientKey,
+    name: String,
+    recipient_type: String,
+    seen_at: i64,
+    feeds: BTreeSet<i64>,
+    wallet: (String, String, String),
+}
+
+fn recipient_aggs<S: BuildHasher>(
+    db: &Connection,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<Vec<RecipientAgg>, CollectionError> {
+    let mut statement = db.prepare(
+        "SELECT feed_id, address, custom_key, custom_value, name, recipient_type, seen_at
+         FROM feed_recipients ORDER BY address, custom_key, custom_value, feed_id",
+    )?;
+    let rows = statement.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, Option<String>>(4)?,
+            r.get::<_, Option<String>>(5)?,
+            r.get::<_, i64>(6)?,
+        ))
+    })?;
+    let mut found: BTreeMap<(String, String, String), RecipientAgg> = BTreeMap::new();
+    for row in rows {
+        let (feed_id, address, custom_key, custom_value, name, recipient_type, seen_at) = row?;
+        let id = (address.clone(), custom_key.clone(), custom_value.clone());
+        let agg = found.entry(id).or_insert_with(|| {
+            let key = RecipientKey {
+                address,
+                custom_key: Some(custom_key).filter(|t| !t.is_empty()),
+                custom_value: Some(custom_value).filter(|t| !t.is_empty()),
+            };
+            RecipientAgg {
+                wallet: parts(&keysend::wallet_key(&key, lookups)),
+                key,
+                name: String::new(),
+                recipient_type: String::new(),
+                seen_at: i64::MIN,
+                feeds: BTreeSet::new(),
+            }
+        });
+        agg.feeds.insert(feed_id);
+        if seen_at >= agg.seen_at {
+            agg.seen_at = seen_at;
+            name.unwrap_or_default().trim().clone_into(&mut agg.name);
+            recipient_type
+                .unwrap_or_default()
+                .trim()
+                .clone_into(&mut agg.recipient_type);
+        }
+    }
+    Ok(found.into_values().collect())
+}
+
+fn owned_wallets<S: BuildHasher>(
+    db: &Connection,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<HashSet<(String, String, String)>, CollectionError> {
+    let mut statement =
+        db.prepare("SELECT address, custom_key, custom_value FROM person_wallets")?;
+    let rows = statement.query_map([], |r| {
+        let custom_key: String = r.get(1)?;
+        let custom_value: String = r.get(2)?;
+        Ok(RecipientKey {
+            address: r.get(0)?,
+            custom_key: Some(custom_key).filter(|t| !t.is_empty()),
+            custom_value: Some(custom_value).filter(|t| !t.is_empty()),
+        })
+    })?;
+    let mut set = HashSet::new();
+    for row in rows {
+        set.insert(parts(&keysend::wallet_key(&row?, lookups)));
+    }
+    Ok(set)
+}
+
+fn dismissals(db: &Connection) -> Result<HashMap<String, HashSet<String>>, CollectionError> {
+    let mut statement = db.prepare("SELECT identity, items FROM person_dismissals")?;
+    let rows = statement.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+    let mut map = HashMap::new();
+    for row in rows {
+        let (identity, items) = row?;
+        // A row that is not a list of texts dismisses nothing.
+        let items: Vec<String> = serde_json::from_str(&items).unwrap_or_default();
+        map.insert(identity, items.into_iter().collect());
+    }
+    Ok(map)
+}
+
+fn credit_groups(
+    collection: &Collection,
+    known_identities: &HashSet<String>,
+    known_keys: &HashSet<String>,
+) -> Result<BTreeMap<String, Group>, CollectionError> {
+    let mut groups: BTreeMap<String, Group> = BTreeMap::new();
+    for row in collection.feed_credits()? {
+        let Some(identity) = Identity::of(&row.name, &row.href, &row.npub) else {
+            continue;
+        };
+        let key = identity.key();
+        if known_identities.contains(&key)
+            || matches!(&identity, Identity::Npub(npub) if known_keys.contains(npub))
+        {
+            continue;
+        }
+        let group = groups.entry(key).or_insert_with(|| Group {
+            identity,
+            credits: BTreeMap::new(),
+            names: BTreeMap::new(),
+        });
+        // A credit with only an `npub` gives no name to its group.
+        if !row.name.trim().is_empty() {
+            group
+                .names
+                .entry(row.name.trim().to_owned())
+                .or_default()
+                .insert(row.feed_id.0);
+        }
+        let credit = group
+            .credits
+            .entry((row.name, row.href, row.npub))
+            .or_default();
+        if credit.img.is_empty() {
+            credit.img = row.img;
+        }
+        if !row.role.is_empty() {
+            credit.roles.insert(row.role);
+        }
+        credit.feeds.insert(row.feed_id.0);
+    }
+    Ok(groups)
+}
+
+/// The recipients that join a group: first by name, then by the wallet key
+/// of a recipient that joined by name.
+fn join_recipients(recipients: &[RecipientAgg], group_name: &str) -> Vec<SuggestedRecipient> {
+    // A group with no name gets no recipient by name, so also none by wallet.
+    let by_name: Vec<bool> = recipients
+        .iter()
+        .map(|r| !group_name.is_empty() && normal_name(&r.name) == group_name)
+        .collect();
+    let name_wallets: HashSet<&(String, String, String)> = recipients
+        .iter()
+        .zip(&by_name)
+        .filter(|(_, joined)| **joined)
+        .map(|(r, _)| &r.wallet)
+        .collect();
+    let mut joined = Vec::new();
+    for (agg, by_name) in recipients.iter().zip(&by_name) {
+        let joined_by = if *by_name {
+            JoinedBy::Name
+        } else if name_wallets.contains(&agg.wallet) {
+            JoinedBy::Wallet
+        } else {
+            continue;
+        };
+        joined.push(SuggestedRecipient {
+            key: agg.key.clone(),
+            name: agg.name.clone(),
+            recipient_type: agg.recipient_type.clone(),
+            feeds: feed_ids(&agg.feeds),
+            same_name: normal_name(&agg.name) == group_name,
+            joined_by,
+        });
+    }
+    joined
+}
+
+/// The suggestions of people from the credits and the recipients of the
+/// feeds (ADR 0098 items 12 to 16). This function makes no person and no
+/// link.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn suggestions<S: BuildHasher>(
+    collection: &Collection,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<Vec<Suggestion>, CollectionError> {
+    let db = collection.db();
+    let known_identities: HashSet<String> =
+        strings(db, "SELECT identity FROM person_credit_names")?
+            .into_iter()
+            .collect();
+    let known_keys: HashSet<String> = strings(db, "SELECT npub FROM person_keys")?
+        .into_iter()
+        .collect();
+    let owned_wallets = owned_wallets(db, lookups)?;
+    let dismissed = dismissals(db)?;
+    let groups = credit_groups(collection, &known_identities, &known_keys)?;
+
+    let recipients: Vec<RecipientAgg> = recipient_aggs(db, lookups)?
+        .into_iter()
+        .filter(|r| !owned_wallets.contains(&r.wallet))
+        .collect();
+
+    let mut list = Vec::new();
+    for (identity_key, group) in groups {
+        // The most frequent name. With a tie, the first name A to Z. A group
+        // of credits with only an `npub` uses the `npub` as its name.
+        let name = group
+            .names
+            .iter()
+            .max_by(|a, b| a.1.len().cmp(&b.1.len()).then_with(|| b.0.cmp(a.0)))
+            .map(|(name, _)| name.clone());
+        let group_name = name.as_deref().map(normal_name).unwrap_or_default();
+        let name = name.unwrap_or_else(|| match &group.identity {
+            Identity::Npub(npub) => npub.clone(),
+            Identity::NameHref { name, .. } | Identity::Name(name) => name.clone(),
+        });
+
+        let joined = join_recipients(&recipients, &group_name);
+
+        let mut credit_feeds = BTreeSet::new();
+        let mut credits = Vec::new();
+        for ((name, href, npub), agg) in group.credits {
+            credit_feeds.extend(agg.feeds.iter().copied());
+            credits.push(SuggestedCredit {
+                same_name: name.trim().is_empty() || normal_name(&name) == group_name,
+                name,
+                href,
+                npub,
+                img: agg.img,
+                roles: agg.roles.into_iter().collect(),
+                feeds: feed_ids(&agg.feeds),
+            });
+        }
+        let payee_feeds: BTreeSet<i64> = joined
+            .iter()
+            .flat_map(|r| r.feeds.iter().map(|f| f.0))
+            .collect();
+
+        let item_keys: Vec<String> = credits
+            .iter()
+            .map(|c| credit_item_key(&c.name, &c.href, &c.npub))
+            .chain(joined.iter().map(|r| recipient_item_key(&r.key)))
+            .collect();
+        if let Some(items) = dismissed.get(&identity_key)
+            && item_keys.iter().all(|k| items.contains(k))
+        {
+            continue;
+        }
+
+        let mut evidence = Vec::new();
+        if matches!(group.identity, Identity::Npub(_)) {
+            evidence.push(Evidence::SameNpub);
+        }
+        if joined.iter().any(|r| r.joined_by == JoinedBy::Name) {
+            evidence.push(Evidence::SameName);
+        }
+        if joined.iter().any(|r| r.joined_by == JoinedBy::Wallet) {
+            evidence.push(Evidence::SameWallet);
+        }
+        list.push(Suggestion {
+            identity: identity_key,
+            name,
+            credits,
+            recipients: joined,
+            credit_feeds: credit_feeds.len(),
+            payee_feeds: payee_feeds.len(),
+            evidence,
+            item_keys,
+        });
+    }
+    list.sort_by(|a, b| {
+        (b.credit_feeds + b.payee_feeds)
+            .cmp(&(a.credit_feeds + a.payee_feeds))
+            .then_with(|| normal_name(&a.name).cmp(&normal_name(&b.name)))
+            .then_with(|| a.identity.cmp(&b.identity))
+    });
+    Ok(list)
+}
+
+/// Keep a dismissal of a suggestion (ADR 0098 item 15). `items` are the
+/// item keys of the suggestion. A suggestion with a new item comes back.
+/// A second dismissal of the same identity replaces the first.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn dismiss(
+    collection: &Collection,
+    identity: &str,
+    items: &[String],
+) -> Result<(), CollectionError> {
+    let items = serde_json::to_string(items)
+        .map_err(|e| CollectionError::invalid(format!("the items cannot be kept: {e}")))?;
+    collection.db().execute(
+        "INSERT OR REPLACE INTO person_dismissals (identity, items, dismissed_at)
+         VALUES (?1, ?2, ?3)",
+        params![identity, items, now()],
+    )?;
+    Ok(())
+}
+
+/// Make a person from the items that the user selected (ADR 0098 item 14).
+/// One transaction makes the person and each link. A conflict of one link
+/// makes no person.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] for a name of only spaces or an
+/// item that cannot be a link, and [`CollectionErrorKind::Conflict`] when a
+/// different person has a link already.
+pub fn make_person<S: BuildHasher>(
+    collection: &Collection,
+    request: &MakePerson,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<PersonId, CollectionError> {
+    let tx = collection.db().unchecked_transaction()?;
+    let id = insert_person(
+        &tx,
+        &PersonFields {
+            name: request.name.clone(),
+            ..PersonFields::default()
+        },
+    )?;
+
+    let mut npubs: BTreeSet<String> = BTreeSet::new();
+    for (name, href, npub) in &request.credits {
+        insert_credit_name(&tx, id, name, href, npub)?;
+        if !npub.trim().is_empty() {
+            npubs.insert(npub.trim().to_lowercase());
+        }
+    }
+    npubs.extend(request.keys.iter().map(|k| k.trim().to_lowercase()));
+    for npub in &npubs {
+        insert_key(&tx, id, npub)?;
+    }
+    for (key, recipient_type) in &request.recipients {
+        insert_wallet(&tx, id, key, recipient_type, lookups)?;
+    }
+
+    // The most frequent role of the selected credits. With a tie, the first
+    // role A to Z. `img` and `href` come from the first selected credit
+    // that has one.
+    let rows = collection.feed_credits()?;
+    let mut roles: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut img = String::new();
+    let mut href = String::new();
+    for (name, credit_href, npub) in &request.credits {
+        let selected = (name.trim(), credit_href.trim(), npub.trim());
+        if href.is_empty() {
+            selected.1.clone_into(&mut href);
+        }
+        for row in rows
+            .iter()
+            .filter(|r| (r.name.as_str(), r.href.as_str(), r.npub.as_str()) == selected)
+        {
+            if !row.role.is_empty() {
+                *roles.entry(row.role.as_str()).or_default() += 1;
+            }
+            if img.is_empty() {
+                img.clone_from(&row.img);
+            }
+        }
+    }
+    let usual_role = roles
+        .iter()
+        .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
+        .map(|(role, _)| (*role).to_owned())
+        .unwrap_or_default();
+    tx.execute(
+        "UPDATE people SET usual_role = ?2, img = ?3, href = ?4 WHERE id = ?1",
+        params![id.0, usual_role, img, href],
+    )?;
+
+    if let Some(feed) = request.member_of {
+        add_member(collection, id, feed)?;
+    }
+    tx.commit()?;
+    Ok(id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1292,5 +1801,315 @@ mod tests {
         };
         let zed = save_recipient(&collection, &nameless).unwrap();
         assert_eq!(person(&collection, zed).unwrap().name, "zed");
+    }
+
+    fn feed(collection: &Collection, id: i64) {
+        collection
+            .db()
+            .execute(
+                "INSERT OR IGNORE INTO feeds (id, medium, created_at) VALUES (?1, 'music', 0)",
+                [id],
+            )
+            .unwrap();
+    }
+
+    fn credit(
+        collection: &Collection,
+        feed_id: i64,
+        name: &str,
+        role: &str,
+        href: &str,
+        npub: &str,
+    ) {
+        feed(collection, feed_id);
+        collection
+            .db()
+            .execute(
+                "INSERT INTO feed_credits (feed_id, name, role, href, npub, img, seen_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+                params![
+                    feed_id,
+                    name,
+                    role,
+                    href,
+                    npub,
+                    if npub.is_empty() { "" } else { "img.png" }
+                ],
+            )
+            .unwrap();
+    }
+
+    fn payee(collection: &Collection, feed_id: i64, address: &str, name: &str) {
+        feed(collection, feed_id);
+        collection
+            .db()
+            .execute(
+                "INSERT INTO feed_recipients (feed_id, address, name, seen_at)
+                 VALUES (?1, ?2, ?3, 0)",
+                params![feed_id, address, name],
+            )
+            .unwrap();
+    }
+
+    fn suggest(collection: &Collection) -> Vec<Suggestion> {
+        suggestions(collection, &lookup_map(collection).unwrap()).unwrap()
+    }
+
+    fn counts(collection: &Collection) -> (usize, i64) {
+        let links: i64 = [
+            "person_wallets",
+            "person_keys",
+            "person_credit_names",
+            "person_members",
+        ]
+        .iter()
+        .map(|t| {
+            collection
+                .db()
+                .query_row(&format!("SELECT COUNT(*) FROM {t}"), [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .unwrap()
+        })
+        .sum();
+        (people(collection).unwrap().len(), links)
+    }
+
+    #[test]
+    fn credits_with_the_same_npub_make_one_suggestion() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann Lee", "artist", "", "npub1aaa");
+        credit(&collection, 2, "Ann Lee", "artist", "", "npub1aaa");
+        credit(&collection, 3, "A. Lee", "mixer", "", "npub1aaa");
+        let list = suggest(&collection);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "Ann Lee");
+        assert_eq!(list[0].evidence, [Evidence::SameNpub]);
+        let same: Vec<(&str, bool)> = list[0]
+            .credits
+            .iter()
+            .map(|c| (c.name.as_str(), c.same_name))
+            .collect();
+        assert_eq!(same, [("A. Lee", false), ("Ann Lee", true)]);
+        assert_eq!(list[0].credits[1].roles, ["artist"]);
+        assert_eq!(list[0].credits[1].img, "img.png");
+        assert_eq!(list[0].credit_feeds, 3);
+    }
+
+    #[test]
+    fn a_recipient_joins_by_name_and_by_wallet() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Mary Kate Ultra", "artist", "", "");
+        payee(&collection, 2, "node-1", "mary kate  ultra");
+        payee(&collection, 3, "mk@example.com", "M K U");
+        found(&collection, "mk@example.com", "node-1");
+        payee(&collection, 4, "unrelated", "Other");
+        let list = suggest(&collection);
+        assert_eq!(list.len(), 1);
+        let s = &list[0];
+        assert_eq!(s.evidence, [Evidence::SameName, Evidence::SameWallet]);
+        let joined: Vec<(&str, JoinedBy, bool)> = s
+            .recipients
+            .iter()
+            .map(|r| (r.key.address.as_str(), r.joined_by, r.same_name))
+            .collect();
+        // The Lightning address has the wallet key of the node.
+        assert_eq!(
+            joined,
+            [
+                ("mk@example.com", JoinedBy::Wallet, false),
+                ("node-1", JoinedBy::Name, true)
+            ]
+        );
+        assert_eq!((s.credit_feeds, s.payee_feeds), (1, 2));
+    }
+
+    #[test]
+    fn a_credit_with_an_href_and_one_without_make_two_suggestions() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "", "https://ann.example", "");
+        credit(&collection, 2, "Ann", "", "", "");
+        let identities: Vec<String> = suggest(&collection)
+            .into_iter()
+            .map(|s| s.identity)
+            .collect();
+        assert_eq!(identities.len(), 2);
+        assert!(identities.contains(&"name:ann".to_owned()));
+        assert!(identities.contains(&"href:ann\u{1f}https://ann.example".to_owned()));
+    }
+
+    #[test]
+    fn a_credit_with_only_an_npub_gets_its_npub_as_name_and_no_recipient_with_no_name() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "", "", "", "npub1solo");
+        payee(&collection, 2, "node-1", "");
+        let list = suggest(&collection);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "npub1solo");
+        assert_eq!(list[0].recipients, Vec::new());
+        assert!(list[0].credits[0].same_name);
+    }
+
+    #[test]
+    fn a_group_of_recipients_with_no_credit_is_no_suggestion() {
+        let collection = Collection::open_in_memory().unwrap();
+        payee(&collection, 1, "node-1", "Ann");
+        payee(&collection, 2, "node-2", "Ann");
+        assert_eq!(suggest(&collection), Vec::new());
+    }
+
+    #[test]
+    fn the_feed_counts_use_distinct_feeds() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "artist", "", "");
+        credit(&collection, 1, "Ann", "writer", "", "");
+        credit(&collection, 2, "Ann", "artist", "", "");
+        payee(&collection, 1, "node-1", "Ann");
+        payee(&collection, 3, "node-1", "Ann");
+        payee(&collection, 3, "node-2", "Ann");
+        let list = suggest(&collection);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].credits.len(), 1);
+        assert_eq!(list[0].credits[0].roles, ["artist", "writer"]);
+        assert_eq!(list[0].credits[0].feeds, [FeedId(1), FeedId(2)]);
+        assert_eq!((list[0].credit_feeds, list[0].payee_feeds), (2, 2));
+    }
+
+    #[test]
+    fn a_dismissed_suggestion_comes_back_with_a_new_item() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "", "", "");
+        let before = suggest(&collection);
+        dismiss(&collection, &before[0].identity, &before[0].item_keys).unwrap();
+        assert_eq!(suggest(&collection), Vec::new());
+        payee(&collection, 2, "node-1", "ann");
+        let after = suggest(&collection);
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].recipients.len(), 1);
+        // A second dismissal replaces the first.
+        dismiss(&collection, &after[0].identity, &after[0].item_keys).unwrap();
+        assert_eq!(suggest(&collection), Vec::new());
+    }
+
+    #[test]
+    fn the_links_of_a_person_are_not_in_a_suggestion() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "", "", "");
+        credit(&collection, 1, "Bob", "", "", "npub1bob");
+        credit(&collection, 1, "Cy", "", "", "");
+        payee(&collection, 1, "node-1", "Cy");
+        payee(&collection, 1, "node-2", "Cy");
+        let ann = add_person(&collection, &fields("Person")).unwrap();
+        add_credit_name(&collection, ann, "ANN", "", "").unwrap();
+        add_key(&collection, ann, "npub1bob").unwrap();
+        add_wallet(&collection, ann, &key("node-1"), "node").unwrap();
+        let list = suggest(&collection);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "Cy");
+        let addresses: Vec<&str> = list[0]
+            .recipients
+            .iter()
+            .map(|r| r.key.address.as_str())
+            .collect();
+        assert_eq!(addresses, ["node-2"]);
+    }
+
+    #[test]
+    fn suggestions_and_dismissals_make_no_person_and_no_link() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "artist", "", "npub1ann");
+        payee(&collection, 1, "node-1", "Ann");
+        let list = suggest(&collection);
+        dismiss(&collection, &list[0].identity, &list[0].item_keys).unwrap();
+        assert_eq!(counts(&collection), (0, 0));
+    }
+
+    #[test]
+    fn make_person_makes_the_selected_links_only() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(
+            &collection,
+            1,
+            "Ann",
+            "artist",
+            "https://ann.example",
+            "npub1ann",
+        );
+        credit(
+            &collection,
+            2,
+            "Ann",
+            "artist",
+            "https://ann.example",
+            "npub1ann",
+        );
+        credit(
+            &collection,
+            2,
+            "Ann",
+            "mixer",
+            "https://ann.example",
+            "npub1ann",
+        );
+        payee(&collection, 1, "node-1", "Ann");
+        payee(&collection, 1, "node-2", "Ann");
+        collection
+            .db()
+            .execute("UPDATE feeds SET medium = 'publisher' WHERE id = 2", [])
+            .unwrap();
+        let lookups = HashMap::new();
+        let id = make_person(
+            &collection,
+            &MakePerson {
+                name: " Ann Lee ".into(),
+                credits: vec![(
+                    "Ann".into(),
+                    "https://ann.example".into(),
+                    "npub1ann".into(),
+                )],
+                recipients: vec![(key("node-1"), "node".into())],
+                keys: vec!["NPUB1ann".into(), "npub1extra".into()],
+                member_of: Some(FeedId(2)),
+            },
+            &lookups,
+        )
+        .unwrap();
+        let p = person(&collection, id).unwrap();
+        assert_eq!(p.name, "Ann Lee");
+        assert_eq!(p.usual_role, "artist");
+        assert_eq!(p.img, "img.png");
+        assert_eq!(p.href, "https://ann.example");
+        let npubs: Vec<&str> = p.keys.iter().map(|k| k.npub.as_str()).collect();
+        assert_eq!(npubs, ["npub1ann", "npub1extra"]);
+        assert_eq!(p.credit_names.len(), 1);
+        assert_eq!(p.wallets.len(), 1);
+        assert_eq!(p.wallets[0].key, key("node-1"));
+        assert_eq!(p.wallets[0].recipient_type, "node");
+        assert_eq!(p.members, [FeedId(2)]);
+        assert_eq!(suggest(&collection), Vec::new());
+    }
+
+    #[test]
+    fn a_conflict_makes_no_person() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_wallet(&collection, ann, &key("node-2"), "node").unwrap();
+        let before = counts(&collection);
+        let error = make_person(
+            &collection,
+            &MakePerson {
+                name: "Bob".into(),
+                credits: vec![("Bob".into(), String::new(), String::new())],
+                recipients: vec![
+                    (key("node-1"), "node".into()),
+                    (key("node-2"), "node".into()),
+                ],
+                ..MakePerson::default()
+            },
+            &HashMap::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::Conflict);
+        assert_eq!(counts(&collection), before);
     }
 }

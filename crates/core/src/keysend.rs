@@ -4,17 +4,21 @@
 //! a `node` recipient. The host of the address gives the node key and the
 //! custom data at `/.well-known/keysend/<name>`. [`refresh`] requests and
 //! keeps these lookups. [`wallet_of`] groups the addresses of one wallet.
+//! [`suggest`] checks guesses for the Lightning address of a wallet
+//! (ADR 0097).
 
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
 use std::thread;
 use std::time::Duration;
 
+use serde::Serialize;
 use serde_json::Value;
 
-use crate::change_set::RecipientKey;
+use crate::change_set::{RecipientKey, Wallet};
 use crate::collection::{Collection, CollectionError};
-use crate::profiles::within;
+use crate::feed::{Feed, Recipient};
+use crate::profiles::{feed_keys, within};
 use crate::web::{Web, WebErrorKind};
 
 /// The time limit of one lookup request.
@@ -407,6 +411,239 @@ pub fn wallet_of<S: BuildHasher>(
     (wallet, list)
 }
 
+// ---- The suggestions of a Lightning address (ADR 0097) ----
+
+/// The largest number of guesses that [`suggest`] checks (ADR 0097 item 3).
+pub const MAX_GUESSES: usize = 16;
+
+/// The largest number of Nostr keys for the guesses (ADR 0097 item 2).
+pub const MAX_GUESS_KEYS: usize = 8;
+
+/// Where a guess came from, in the sequence of the suggestions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GuessSource {
+    /// A Lightning address of a recipient in the collection with a name of
+    /// the wallet.
+    Collection,
+    /// The `lud16` of a Nostr key of a feed that uses the wallet.
+    Nostr,
+    /// A name of the wallet at the domain of the provider of its node.
+    Provider,
+}
+
+/// A Lightning address that pays the wallet, with the sources that gave it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Suggestion {
+    /// The Lightning address, in lowercase.
+    pub address: String,
+    /// Each source of the address, in the sequence of [`GuessSource`].
+    pub sources: Vec<GuessSource>,
+}
+
+/// The facts of the collection for the guesses of a wallet.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Gathered {
+    /// The names of the recipients of the wallet, each one time.
+    pub names: Vec<String>,
+    /// The collection guesses, in lowercase.
+    pub collection: Vec<String>,
+    /// The Nostr keys of the feeds that use the wallet, as `npub`. A key
+    /// with a name of the wallet comes first.
+    pub npubs: Vec<String>,
+}
+
+/// Each recipient of the channel, the items and the live items of `feed`.
+fn recipients_of(feed: &Feed) -> impl Iterator<Item = &Recipient> {
+    feed.values
+        .iter()
+        .chain(feed.items.iter().flat_map(|item| item.value.values.iter()))
+        .chain(
+            feed.live_items
+                .iter()
+                .flat_map(|live| live.value.item.values.iter()),
+        )
+        .flat_map(|block| block.value.recipients.iter().map(|r| &r.value))
+}
+
+fn is_member(wallet: &Wallet, address: &str) -> bool {
+    wallet
+        .members
+        .iter()
+        .any(|m| m.address.trim().eq_ignore_ascii_case(address.trim()))
+}
+
+/// Read the names, the collection guesses and the Nostr keys of `wallet`
+/// from the feeds of the collection (ADR 0097 item 2).
+#[must_use]
+pub fn gather(feeds: &[Feed], wallet: &Wallet) -> Gathered {
+    let mut names: Vec<String> = Vec::new();
+    let mut paying: Vec<&Feed> = Vec::new();
+    for feed in feeds {
+        let mut uses = false;
+        for recipient in recipients_of(feed).filter(|r| wallet.matches(r)) {
+            uses = true;
+            let name = recipient.name.as_deref().map(str::trim).unwrap_or_default();
+            if !name.is_empty()
+                && !names
+                    .iter()
+                    .any(|n| n.to_lowercase() == name.to_lowercase())
+            {
+                names.push(name.to_owned());
+            }
+        }
+        if uses {
+            paying.push(feed);
+        }
+    }
+    let has_name = |text: &str| {
+        let text = text.trim().to_lowercase();
+        names.iter().any(|n| n.to_lowercase() == text)
+    };
+    let mut collection: Vec<String> = Vec::new();
+    for recipient in feeds.iter().flat_map(recipients_of) {
+        let address = recipient
+            .address
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        if address.contains('@')
+            && recipient.name.as_deref().is_some_and(has_name)
+            && !is_member(wallet, &address)
+            && !collection.contains(&address)
+        {
+            collection.push(address);
+        }
+    }
+    let mut keys: Vec<(String, String)> = Vec::new();
+    for pair in paying.into_iter().flat_map(feed_keys) {
+        if !keys.iter().any(|(_, npub)| *npub == pair.1) {
+            keys.push(pair);
+        }
+    }
+    keys.sort_by_key(|(name, _)| !has_name(name));
+    let npubs = keys
+        .into_iter()
+        .take(MAX_GUESS_KEYS)
+        .map(|(_, npub)| npub)
+        .collect();
+    Gathered {
+        names,
+        collection,
+        npubs,
+    }
+}
+
+/// The local part of a Lightning address for `name`: the name in lowercase,
+/// with only the letters `a` to `z`, the digits and `.`, `_` and `-`. A
+/// name with `@`, such as `ann@fountain.fm`, gives the text before the `@`.
+/// A name with no such character gives `None`.
+#[must_use]
+pub fn local_part(name: &str) -> Option<String> {
+    let name = name.split_once('@').map_or(name, |(local, _)| local);
+    let text: String = name
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        .collect();
+    let text = text.trim_matches('.');
+    (!text.is_empty()).then(|| text.to_owned())
+}
+
+/// Each name at each domain of `provider`, the result of [`provider_of`]
+/// (ADR 0097 item 2).
+#[must_use]
+pub fn provider_guesses(names: &[String], provider: Option<&str>) -> Vec<String> {
+    let Some(provider) = provider else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = Vec::new();
+    for name in names.iter().filter_map(|n| local_part(n)) {
+        for domain in provider
+            .split(", ")
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+        {
+            let address = format!("{name}@{domain}");
+            if !out.contains(&address) {
+                out.push(address);
+            }
+        }
+    }
+    out
+}
+
+/// Request the lookup of each guess, and give each guess that pays
+/// `wallet` (ADR 0097 items 1, 3 and 4). The collection keeps no lookup of
+/// a guess. A guess that is a member of the wallet is not requested. At
+/// most [`MAX_GUESSES`] guesses are requested, the best source first.
+#[must_use]
+pub fn suggest(
+    web: &Web,
+    scheme: &str,
+    wallet: &Wallet,
+    guesses: &[(String, GuessSource)],
+) -> Vec<Suggestion> {
+    let mut merged: Vec<Suggestion> = Vec::new();
+    for (address, source) in guesses {
+        let address = address.trim().to_lowercase();
+        if lookup_url(scheme, &address).is_none() || is_member(wallet, &address) {
+            continue;
+        }
+        if let Some(known) = merged.iter_mut().find(|s| s.address == address) {
+            if !known.sources.contains(source) {
+                known.sources.push(*source);
+                known.sources.sort_unstable();
+            }
+        } else {
+            merged.push(Suggestion {
+                address,
+                sources: vec![*source],
+            });
+        }
+    }
+    merged.sort_by_key(|s| s.sources.first().copied());
+    merged.truncate(MAX_GUESSES);
+    let found: Vec<bool> = thread::scope(|scope| {
+        let handles: Vec<_> = merged
+            .iter()
+            .map(|suggestion| {
+                scope.spawn(move || {
+                    let web = web.clone();
+                    let scheme = scheme.to_owned();
+                    let text = suggestion.address.clone();
+                    let result = within(LOOKUP_LIMIT, move || request(&web, &scheme, &text));
+                    match result {
+                        Some(LookupResult::Found {
+                            pubkey,
+                            custom_key,
+                            custom_value,
+                        }) => {
+                            let found = RecipientKey {
+                                address: pubkey,
+                                custom_key,
+                                custom_value,
+                            };
+                            same_key(&found, &wallet.key)
+                        }
+                        _ => false,
+                    }
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap_or(false))
+            .collect()
+    });
+    merged
+        .into_iter()
+        .zip(found)
+        .filter_map(|(suggestion, pays)| pays.then_some(suggestion))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -592,5 +829,130 @@ mod tests {
         same.insert("a@h.example".to_owned(), found("a@h.example", "1"));
         same.insert("b@h.example".to_owned(), found("b@h.example", "1"));
         assert_eq!(provider_of("02abc", &same), None);
+    }
+
+    // ---- The suggestions (ADR 0097) ----
+
+    const NODE: &str = "03aaa";
+
+    fn spec(custom_value: &str) -> Vec<u8> {
+        format!(r#"{{"status":"OK","tag":"keysend","pubkey":"{NODE}","customData":[{{"customKey":"696969","customValue":"{custom_value}"}}]}}"#).into_bytes()
+    }
+
+    fn node_wallet() -> Wallet {
+        Wallet::single(RecipientKey {
+            address: NODE.to_owned(),
+            custom_key: Some("696969".to_owned()),
+            custom_value: Some("acct1".to_owned()),
+        })
+    }
+
+    fn feed_of(recipients: &[(&str, &str, Option<&str>)]) -> Feed {
+        use crate::feed::{Entry, ValueBlock};
+        let recipients = recipients
+            .iter()
+            .map(|(name, address, value)| {
+                Entry::new(Recipient {
+                    name: Some((*name).to_owned()),
+                    address: Some((*address).to_owned()),
+                    custom_key: value.map(|_| "696969".to_owned()),
+                    custom_value: value.map(str::to_owned),
+                    ..Recipient::default()
+                })
+            })
+            .collect();
+        Feed {
+            values: vec![Entry::new(ValueBlock {
+                recipients,
+                ..ValueBlock::default()
+            })],
+            ..Feed::default()
+        }
+    }
+
+    #[test]
+    fn local_part_keeps_the_letters_of_a_name() {
+        assert_eq!(local_part("Steven B").as_deref(), Some("stevenb"));
+        assert_eq!(
+            local_part("boost_bot-2.0").as_deref(),
+            Some("boost_bot-2.0")
+        );
+        assert_eq!(local_part(".Ann."), Some("ann".to_owned()));
+        assert_eq!(
+            local_part("Malachi@fountain.fm").as_deref(),
+            Some("malachi")
+        );
+        assert_eq!(local_part("☆ ☆"), None);
+        assert_eq!(local_part(""), None);
+    }
+
+    #[test]
+    fn provider_guesses_put_each_name_at_each_domain() {
+        let names = vec!["Steven B".to_owned(), "☆".to_owned()];
+        assert_eq!(
+            provider_guesses(&names, Some("a.example, b.example")),
+            vec!["stevenb@a.example", "stevenb@b.example"]
+        );
+        assert_eq!(provider_guesses(&names, None), Vec::<String>::new());
+    }
+
+    #[test]
+    fn gather_reads_names_collection_guesses_and_keys() {
+        use nostr::nips::nip19::ToBech32;
+        let keys = nostr::prelude::Keys::new(
+            nostr::prelude::SecretKey::from_slice(&[5; 32]).expect("a secret key"),
+        );
+        let npub = keys.public_key().to_bech32().expect("an npub");
+        let mut used = feed_of(&[("Ann", NODE, Some("acct1")), ("Bob", "02bbb", None)]);
+        used.txts = vec![crate::feed::Entry::new(crate::feed::Txt {
+            purpose: Some("npub".to_owned()),
+            value: npub.clone(),
+        })];
+        let other = feed_of(&[
+            ("ann", "Ann@Pay.example", None),
+            ("Carl", "carl@pay.example", None),
+        ]);
+        let gathered = gather(&[used, other], &node_wallet());
+        assert_eq!(gathered.names, vec!["Ann"]);
+        assert_eq!(gathered.collection, vec!["ann@pay.example"]);
+        assert_eq!(gathered.npubs, vec![npub]);
+    }
+
+    #[test]
+    fn suggest_gives_only_guesses_that_pay_the_wallet() {
+        let (_dir, collection) = collection();
+        let server = TestServer::start(vec![
+            ("/.well-known/keysend/ann", 200, spec("acct1")),
+            ("/.well-known/keysend/annie", 200, spec("acct1")),
+            ("/.well-known/keysend/bob", 200, spec("acct2")),
+            ("/.well-known/keysend/member", 200, spec("acct1")),
+        ]);
+        let port = server.port();
+        let at = |name: &str| format!("{name}@127.0.0.1:{port}");
+        let mut wallet = node_wallet();
+        wallet.members.push(key(&at("member")));
+        let guesses = vec![
+            (at("ann"), GuessSource::Provider),
+            (at("bob"), GuessSource::Provider),
+            (at("member"), GuessSource::Collection),
+            (at("nobody"), GuessSource::Provider),
+            (at("annie"), GuessSource::Nostr),
+            (at("ANN"), GuessSource::Collection),
+        ];
+        let found = suggest(&Web::new(), "http", &wallet, &guesses);
+        assert_eq!(
+            found,
+            vec![
+                Suggestion {
+                    address: at("ann"),
+                    sources: vec![GuessSource::Collection, GuessSource::Provider],
+                },
+                Suggestion {
+                    address: at("annie"),
+                    sources: vec![GuessSource::Nostr],
+                },
+            ]
+        );
+        assert_eq!(collection.keysend_lookups().unwrap(), Vec::<Lookup>::new());
     }
 }

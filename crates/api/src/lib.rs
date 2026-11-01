@@ -141,6 +141,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/recipients", get(routes::list_recipients))
         .route("/recipients/uses", post(routes::recipient_uses))
         .route(
+            "/recipients/lnaddress-suggestions",
+            post(routes::lnaddress_suggestions),
+        )
+        .route(
             "/change-sets",
             get(routes::list_change_sets).post(routes::make_change_set),
         )

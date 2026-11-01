@@ -110,6 +110,38 @@ export function pickerRows(list) {
   });
 }
 
+// The value of the option "Other address" of the suggestion menu.
+export const OTHER_ADDRESS = '';
+
+const SOURCE_TEXTS = { collection: 'in your feeds', nostr: 'in a Nostr profile', provider: 'at the node provider' };
+
+// The hint of a suggestion: where Studio found it.
+function sourceHint(sources) {
+  const from = (sources || []).map((k) => SOURCE_TEXTS[k]).filter(Boolean);
+  if (from.length === 0) return 'This address pays the same wallet.';
+  const text = from.length === 1 ? from[0] : `${from.slice(0, -1).join(', ')} and ${from[from.length - 1]}`;
+  return `Studio found this address ${text}. It pays the same wallet.`;
+}
+
+// The Lightning address field of the sheet "Use the Lightning address"
+// (ADR 0097 item 5). With suggestions, a menu starts at the first one and
+// ends with "Other address". The menu shows only the address, and `hints`
+// gives the source of each one. With none, the sheet shows the text field.
+// The core examines the address of the operation in each condition.
+export function suggestionField(suggestions) {
+  const list = suggestions || [];
+  if (list.length === 0) {
+    return { menu: false, options: [], hints: {}, start: '', hint: 'Studio found no Lightning address for this wallet.' };
+  }
+  return {
+    menu: true,
+    options: [...list.map((s) => [s.address, s.address]), [OTHER_ADDRESS, 'Other address']],
+    hints: Object.fromEntries(list.map((s) => [s.address, sourceHint(s.sources)])),
+    start: list[0].address,
+    hint: null,
+  };
+}
+
 // The hint of a Lightning address that has no keysend data.
 export function lookupHint(address) {
   const domain = (address || '').split('@').slice(1).join('@');

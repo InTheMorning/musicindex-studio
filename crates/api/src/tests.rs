@@ -10341,6 +10341,35 @@ async fn recipient_uses_and_a_rename_act_on_each_member_of_the_wallet() {
 }
 
 #[tokio::test]
+async fn lnaddress_suggestions_give_a_checked_address_of_the_wallet() {
+    let (app, connector, server) = wallet_app(Some("http")).await;
+    let (_, _, address) = wallet_feeds(&app, connector, &server).await;
+    let before = collection_of(&app).keysend_lookups().unwrap().len();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/recipients/lnaddress-suggestions",
+        Some(wallet_key_json()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["suggestions"],
+        json!([{ "address": address, "sources": ["collection"] }])
+    );
+    assert_eq!(collection_of(&app).keysend_lookups().unwrap().len(), before);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/recipients/lnaddress-suggestions",
+        Some(json!({ "address": address })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_recipient");
+}
+
+#[tokio::test]
 async fn use_lnaddress_checks_the_lookup_of_the_address() {
     let (app, connector, server) = wallet_app(Some("http")).await;
     let (node, _, _) = wallet_feeds(&app, connector, &server).await;

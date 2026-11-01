@@ -4,7 +4,7 @@ import { pageSequence } from './pages.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
-  recipientKey, recipientTitle, addressLines as walletLines, lnaddressOf, hasNode, memberStart, startType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
+  recipientKey, recipientTitle, addressLines as walletLines, lnaddressOf, hasNode, suggestionField, OTHER_ADDRESS, memberStart, startType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
   outcomeText, blockedText, operationTitle, operationLine, changeSetRow, nameOf, writableIds, initialStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
@@ -1201,11 +1201,12 @@ function BlossomHostForm({ onAdded }) {
 // `options` is a list of [value, label] pairs.
 // A `placeholder` adds a first entry with an empty value, for a setting that
 // has no value yet.
-function ChoiceSelect({ id, label, value, options, placeholder, onChange }) {
+function ChoiceSelect({ id, label, value, options, placeholder, hint, onChange }) {
   return html`<div class="field">
     <label for=${id}>${label}</label>
     <div class="field-body">
-      <select id=${id} value=${value} onChange=${(e) => onChange(e.target.value)}>
+      ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
+      <select id=${id} value=${value} aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.target.value)}>
         ${placeholder && html`<option value="">${placeholder}</option>`}
         ${options.map(([option, text]) => html`<option value=${option}>${text}</option>`)}
       </select>
@@ -2557,6 +2558,29 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
     }
     setType(next);
   };
+  // A wallet with no Lightning address asks the core for suggestions
+  // (ADR 0097 item 5). `null` while the request runs.
+  const asks = kind === 'use_lnaddress' && !lnaddressOf(recipient);
+  const [field, setField] = useState(null);
+  const [choice, setChoice] = useState(OTHER_ADDRESS);
+  useEffect(() => {
+    if (!asks) return undefined;
+    let live = true;
+    api('/recipients/lnaddress-suggestions', { method: 'POST', body: key })
+      .then((result) => result.suggestions, () => [])
+      .then((list) => {
+        if (!live) return;
+        const next = suggestionField(list);
+        setField(next);
+        setChoice(next.start);
+        setAddress(next.start);
+      });
+    return () => { live = false; };
+  }, []);
+  const choose = (value) => {
+    setChoice(value);
+    setAddress(value);
+  };
   const [name, setName] = useState(recipient.name || '');
   const [percent, setPercent] = useState('');
   const [levelOwner, setLevelOwner] = useState('');
@@ -2614,8 +2638,14 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
   return html`<div class="body">
       ${kind === 'remove' && html`<p>Studio removes ${recipientTitle(recipient)} from each value block of the selected feeds. Studio changes the splits of the other recipients, and their total does not change.</p>`}
       ${kind === 'rename' && html`<div class="group rows"><${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} /></div>`}
-      ${kind === 'use_lnaddress' && html`<div class="group rows"><${Field} id="op-address" label="Lightning address" required
-        hint="The address must pay the same wallet. Studio checks it." value=${address} onInput=${(e) => setAddress(e.target.value)} /></div>`}
+      ${kind === 'use_lnaddress' && html`<div class="group rows">
+        ${asks && field === null && html`<p class="hint" role="status">Studio looks for Lightning addresses of this wallet…</p>`}
+        ${field && field.menu && html`<${ChoiceSelect} id="op-suggestion" label="Lightning address" value=${choice}
+          options=${field.options} hint=${field.hints[choice]} onChange=${choose} />`}
+        ${!(field && field.menu && choice !== OTHER_ADDRESS) && html`<${Field} id="op-address" label=${field && field.menu ? 'Other address' : 'Lightning address'} required
+          hint=${field && field.hint ? `${field.hint} The address must pay the same wallet. Studio checks it.` : 'The address must pay the same wallet. Studio checks it.'}
+          value=${address} onInput=${(e) => setAddress(e.target.value)} />`}
+      </div>`}
       ${(kind === 'change_address' || kind === 'add') && html`<div class="group rows">
         ${typeMenu}
         ${kind === 'add' && html`<${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} />`}

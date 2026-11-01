@@ -100,6 +100,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0094: A duration is edited as minutes and seconds](adr/0094-a-duration-is-edited-as-minutes-and-seconds.md)
 - [ADR 0095: A Lightning address and its node key are one recipient](adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md)
 - [ADR 0096: Add to an artist or label](adr/0096-add-to-an-artist-or-label.md)
+- [ADR 0097: Studio suggests the Lightning address of a wallet](adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md)
 
 ## Plans
 

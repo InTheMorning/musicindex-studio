@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, sortRecipients, placesText, useRow, outcomeText, causeText, blockedText,
-  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationTitle, operationLine, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
+  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationTitle, operationLine, suggestionField, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
 } from '../ui/recipients.js';
 
 test('the row of a used recipient gives the title, the count and the lines', () => {
@@ -181,6 +181,28 @@ test('the picker gives one row for each address, with the name of the entry', ()
 
 test('the keysend hint names the domain', () => {
   assert.match(lookupHint('chadf@getalby.com'), /getalby\.com/);
+});
+
+test('the suggestion field gives a menu with suggestions and a text field with none (ADR 0097)', () => {
+  const none = suggestionField([]);
+  assert.equal(none.menu, false);
+  assert.equal(none.start, '');
+  assert.equal(none.hint, 'Studio found no Lightning address for this wallet.');
+  assert.equal(suggestionField(null).menu, false);
+  const some = suggestionField([
+    { address: 'ann@fountain.fm', sources: ['collection', 'provider'] },
+    { address: 'ann@pay.example', sources: ['nostr'] },
+  ]);
+  assert.equal(some.menu, true);
+  assert.equal(some.start, 'ann@fountain.fm');
+  assert.deepEqual(some.options, [
+    ['ann@fountain.fm', 'ann@fountain.fm'],
+    ['ann@pay.example', 'ann@pay.example'],
+    [OTHER_ADDRESS, 'Other address'],
+  ]);
+  assert.equal(some.hints['ann@fountain.fm'], 'Studio found this address in your feeds and at the node provider. It pays the same wallet.');
+  assert.equal(some.hints['ann@pay.example'], 'Studio found this address in a Nostr profile. It pays the same wallet.');
+  assert.equal(some.hints[OTHER_ADDRESS], undefined);
 });
 
 test('the operation add has the name of ADR 0096', () => {

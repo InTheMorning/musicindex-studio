@@ -28,7 +28,7 @@ use studio_core::feed::{Entry, Feed, Recipient};
 use studio_core::folder_scan;
 use studio_core::grant;
 use studio_core::inventory::{self, Hosts};
-use studio_core::keysend::{self, Lookup, LookupStatus};
+use studio_core::keysend::{self, GuessSource, Lookup, LookupStatus};
 use studio_core::library::{self, Library};
 use studio_core::live::{self, LiveStatus};
 use studio_core::media;
@@ -5130,6 +5130,69 @@ pub(crate) async fn make_change_set(
             )?
         };
         Ok((StatusCode::CREATED, Json(change_set_json(w, &set))))
+    })
+    .await
+}
+
+/// The Lightning addresses that pay the wallet of a node recipient
+/// (ADR 0097). The answer is `{ "suggestions": [...] }`. Each suggestion
+/// has its address and its sources. A shell with no keysend scheme gives
+/// no suggestion.
+pub(crate) async fn lnaddress_suggestions(
+    State(shared): State<Shared>,
+    Json(key): Json<RecipientKey>,
+) -> ApiResult {
+    let facts = blocking(shared, move |w| {
+        let lookups = keysend_map(w)?;
+        let (key, members) = keysend::wallet_of(&key, &lookups);
+        if key.address.contains('@') {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_recipient",
+                "the recipient has no node key",
+            ));
+        }
+        let Some(scheme) = w.keysend_scheme else {
+            return Ok(None);
+        };
+        let wallet = Wallet { key, members };
+        let feeds: Vec<Feed> = feed_models(w)?.into_iter().map(|(_, feed)| feed).collect();
+        let gathered = keysend::gather(&feeds, &wallet);
+        let provider = keysend::provider_of(&wallet.key.address, &lookups);
+        Ok(Some((
+            w.web.clone(),
+            w.net_policy.clone(),
+            w.lookup_relays.clone(),
+            scheme,
+            wallet,
+            gathered,
+            provider,
+        )))
+    })
+    .await?;
+    let Some((web, policy, relays, scheme, wallet, gathered, provider)) = facts else {
+        return Ok(Json(json!({ "suggestions": [] })));
+    };
+    blocking_unlocked(move || {
+        let nostr = profiles::lightning_addresses(
+            &relays,
+            &policy,
+            profiles::SOURCE_LIMIT,
+            &gathered.npubs,
+        );
+        let guesses: Vec<(String, GuessSource)> = gathered
+            .collection
+            .into_iter()
+            .map(|a| (a, GuessSource::Collection))
+            .chain(nostr.into_iter().map(|a| (a, GuessSource::Nostr)))
+            .chain(
+                keysend::provider_guesses(&gathered.names, provider.as_deref())
+                    .into_iter()
+                    .map(|a| (a, GuessSource::Provider)),
+            )
+            .collect();
+        let suggestions = keysend::suggest(&web, scheme, &wallet, &guesses);
+        Ok(Json(json!({ "suggestions": suggestions })))
     })
     .await
 }

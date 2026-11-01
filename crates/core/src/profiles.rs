@@ -528,6 +528,18 @@ fn newest_profiles(
     keys: &[PublicKey],
     known: Vec<Event>,
 ) -> HashMap<PublicKey, Event> {
+    newest_metadata(cx.lookup_relays, cx.policy, cx.limit, keys, known)
+}
+
+/// The newest kind 0 event of each key, from `relays` and from `known`
+/// events. A relay that fails gives nothing.
+fn newest_metadata(
+    relays: &[String],
+    policy: &NetPolicy,
+    limit: Duration,
+    keys: &[PublicKey],
+    known: Vec<Event>,
+) -> HashMap<PublicKey, Event> {
     let mut all = known;
     if !keys.is_empty() {
         let filter = Filter::new()
@@ -535,13 +547,12 @@ fn newest_profiles(
             .authors(keys.iter().copied())
             .limit(keys.len() * 2);
         let found: Vec<Vec<Event>> = thread::scope(|scope| {
-            let handles: Vec<_> = cx
-                .lookup_relays
+            let handles: Vec<_> = relays
                 .iter()
                 .map(|relay| {
                     let filter = &filter;
                     scope.spawn(move || {
-                        fetch_until(relay, filter, cx.limit, cx.policy).unwrap_or_default()
+                        fetch_until(relay, filter, limit, policy).unwrap_or_default()
                     })
                 })
                 .collect();
@@ -562,6 +573,39 @@ fn newest_profiles(
         }
     }
     newest
+}
+
+/// The Lightning address in the field `lud16` of the newest kind 0 of each
+/// key (ADR 0097 item 2). A text that is not an `npub` is ignored. The
+/// addresses are in the sequence of the keys, in lowercase, each one time.
+#[must_use]
+pub fn lightning_addresses(
+    relays: &[String],
+    policy: &NetPolicy,
+    limit: Duration,
+    npubs: &[String],
+) -> Vec<String> {
+    let keys: Vec<PublicKey> = npubs.iter().filter_map(|n| key_of(n)).collect();
+    let newest = newest_metadata(relays, policy, limit, &keys, Vec::new());
+    let mut out: Vec<String> = Vec::new();
+    for key in &keys {
+        let Some(event) = newest.get(key) else {
+            continue;
+        };
+        if let Some(address) = lud16_of(event)
+            && !out.contains(&address)
+        {
+            out.push(address);
+        }
+    }
+    out
+}
+
+/// The field `lud16` of a kind 0 event, in lowercase.
+fn lud16_of(event: &Event) -> Option<String> {
+    let content: Value = serde_json::from_str(&event.content).ok()?;
+    let text = content.get("lud16")?.as_str()?.trim().to_lowercase();
+    (!text.is_empty()).then_some(text)
 }
 
 /// The facts of the content of a kind 0 event.
@@ -869,5 +913,36 @@ mod tests {
         assert_eq!(plain.name.as_deref(), Some("mattf"));
         assert_eq!(plain.picture, None);
         assert!(meta_of(&make("not JSON")).name.is_none());
+    }
+
+    #[test]
+    fn lightning_addresses_give_the_lud16_of_the_newest_kind_0() {
+        use nostr::prelude::{Keys, SecretKey, Timestamp, UnsignedEvent};
+        let relay = crate::testing::relay::TestRelay::start();
+        let make = |seed: u8, at: u64, content: &str| {
+            let keys = Keys::new(SecretKey::from_slice(&[seed; 32]).expect("a secret key"));
+            let unsigned = UnsignedEvent::new(
+                keys.public_key(),
+                Timestamp::from(at),
+                Kind::Metadata,
+                Vec::new(),
+                content,
+            );
+            let event = crate::nostr_events::sign_with_keys(unsigned, &keys).expect("an event");
+            (keys.public_key().to_bech32().expect("an npub"), event)
+        };
+        let (ann, old) = make(7, 100, r#"{"lud16":"old@pay.example"}"#);
+        let (_, new) = make(7, 200, r#"{"lud16":" Ann@Pay.example "}"#);
+        let (bob, plain) = make(8, 100, r#"{"name":"bob"}"#);
+        for event in [old, new, plain] {
+            relay.insert(event);
+        }
+        let found = lightning_addresses(
+            &[relay.url()],
+            &NetPolicy::Open,
+            SOURCE_LIMIT,
+            &[ann.clone(), bob, "not a key".to_owned(), ann],
+        );
+        assert_eq!(found, vec!["ann@pay.example"]);
     }
 }

@@ -293,6 +293,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             get(routes::get_announce_settings).put(routes::put_announce_settings),
         )
         .route("/nostr/profiles", get(routes::nostr_profiles))
+        .route("/nostr/resolve", post(routes::nostr_resolve))
         .route(
             "/settings/nostr",
             get(routes::get_nostr_settings).put(routes::put_nostr_settings),

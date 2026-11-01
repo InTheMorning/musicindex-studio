@@ -1761,6 +1761,55 @@ pub(crate) async fn nostr_profiles(
     .await
 }
 
+/// The most keys that one request to `POST /nostr/resolve` can have.
+const MAX_RESOLVE_KEYS: usize = 50;
+
+#[derive(Deserialize)]
+pub(crate) struct ResolveBody {
+    npubs: Vec<String>,
+}
+
+/// Resolve some Nostr keys to their profiles. The route stores nothing. The
+/// request to each relay and to each other server goes through the network
+/// policy, with no lock of the workspace.
+pub(crate) async fn nostr_resolve(
+    State(shared): State<Shared>,
+    Json(body): Json<ResolveBody>,
+) -> ApiResult {
+    if body.npubs.len() > MAX_RESOLVE_KEYS {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_query",
+            "resolve at most 50 keys in one request",
+        ));
+    }
+    let npubs = body.npubs;
+    let (web, policy, lookup_relays, index, scheme) = blocking(shared, move |w| {
+        Ok((
+            w.web.clone(),
+            w.net_policy.clone(),
+            w.lookup_relays.clone(),
+            w.index.clone(),
+            w.nip05_scheme,
+        ))
+    })
+    .await?;
+    blocking_unlocked(move || {
+        let cx = profiles::Context {
+            web: &web,
+            policy: &policy,
+            lookup_relays: &lookup_relays,
+            search_relay: None,
+            index: &index,
+            collection_keys: &[],
+            nip05_scheme: scheme,
+            limit: profiles::SOURCE_LIMIT,
+        };
+        Ok(Json(json!({ "profiles": profiles::resolve(&cx, &npubs) })))
+    })
+    .await
+}
+
 /// The Nostr settings: the search relay (ADR 0074 item 16).
 pub(crate) async fn get_nostr_settings(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {

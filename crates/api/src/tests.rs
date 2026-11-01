@@ -9112,6 +9112,36 @@ async fn profiles(app: &App, query: &str) -> Value {
     body
 }
 
+#[tokio::test]
+async fn resolve_gives_the_profiles_of_the_keys_and_refuses_51_keys() {
+    let relay = studio_core::testing::relay::TestRelay::start();
+    relay.insert(profile_event(1, 100, &json!({ "display_name": "Ann" })));
+    let app = nostr_app("http://127.0.0.1:9", vec![relay.url()], false);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/nostr/resolve",
+        Some(json!({ "npubs": [nostr_npub(1), nostr_npub(2)] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let list = body["profiles"].as_array().unwrap();
+    assert_eq!(list.len(), 2, "{body}");
+    assert_eq!(list[0]["npub"], nostr_npub(1));
+    assert_eq!(list[0]["name"], "Ann");
+    assert_eq!(list[1]["name"], Value::Null);
+    let many: Vec<String> = (0..51).map(|_| nostr_npub(1)).collect();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/nostr/resolve",
+        Some(json!({ "npubs": many })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_query");
+}
+
 async fn set_search_relay(app: &App, relay: &str) {
     let (status, body) = call(
         app,

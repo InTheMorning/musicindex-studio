@@ -2142,6 +2142,8 @@ pub fn merge_people(
 pub struct ProfileAddress {
     /// The Lightning address, in lowercase.
     pub address: String,
+    /// The key, as `npub`, whose profile gave the address.
+    pub npub: String,
     /// The key of the wallet that the lookup gives.
     pub wallet: RecipientKey,
     /// True when `wallet` is the wallet key of a wallet of the person.
@@ -2168,21 +2170,22 @@ pub fn profile_addresses<S: BuildHasher>(
     lookups: &HashMap<String, Lookup, S>,
 ) -> Vec<ProfileAddress> {
     let npubs: Vec<String> = person.keys.iter().map(|k| k.npub.clone()).collect();
-    let wanted: Vec<String> = profiles::lightning_addresses(relays, policy, limit, &npubs)
-        .into_iter()
-        .filter(|address| {
-            let key = RecipientKey {
-                address: address.clone(),
-                custom_key: None,
-                custom_value: None,
-            };
-            !is_member(person, &key, lookups)
-        })
-        .collect();
-    let results: Vec<(&String, LookupResult)> = thread::scope(|scope| {
+    let wanted: Vec<(String, String)> =
+        profiles::lightning_addresses_by_key(relays, policy, limit, &npubs)
+            .into_iter()
+            .filter(|(_, address)| {
+                let key = RecipientKey {
+                    address: address.clone(),
+                    custom_key: None,
+                    custom_value: None,
+                };
+                !is_member(person, &key, lookups)
+            })
+            .collect();
+    let results: Vec<(&String, &String, LookupResult)> = thread::scope(|scope| {
         let handles: Vec<_> = wanted
             .iter()
-            .map(|address| {
+            .map(|(npub, address)| {
                 scope.spawn(move || {
                     let web = web.clone();
                     let scheme = scheme.to_owned();
@@ -2191,7 +2194,7 @@ pub fn profile_addresses<S: BuildHasher>(
                         keysend::request(&web, &scheme, &text)
                     })
                     .unwrap_or(LookupResult::Failed);
-                    (address, result)
+                    (address, npub, result)
                 })
             })
             .collect();
@@ -2207,7 +2210,7 @@ pub fn profile_addresses<S: BuildHasher>(
         .collect();
     results
         .into_iter()
-        .filter_map(|(address, result)| {
+        .filter_map(|(address, npub, result)| {
             let LookupResult::Found {
                 pubkey,
                 custom_key,
@@ -2223,6 +2226,7 @@ pub fn profile_addresses<S: BuildHasher>(
             };
             Some(ProfileAddress {
                 address: address.clone(),
+                npub: npub.clone(),
                 in_person_wallet: owned.contains(&parts(&wallet)),
                 wallet,
             })
@@ -3167,6 +3171,7 @@ mod tests {
         );
         assert_eq!(list.len(), 1, "{list:?}");
         assert_eq!(list[0].address, ann_address);
+        assert_eq!(list[0].npub, npubs[0]);
         assert_eq!(list[0].wallet.address, "node-1");
         assert!(!list[0].in_person_wallet);
         assert_eq!(collection.keysend_lookups().unwrap().len(), 0);

@@ -585,17 +585,34 @@ pub fn lightning_addresses(
     limit: Duration,
     npubs: &[String],
 ) -> Vec<String> {
+    lightning_addresses_by_key(relays, policy, limit, npubs)
+        .into_iter()
+        .map(|(_, address)| address)
+        .collect()
+}
+
+/// Like [`lightning_addresses`], but each result has the `npub` of the key
+/// whose kind 0 gave the address. When two keys give one address, the first
+/// key wins.
+#[must_use]
+pub fn lightning_addresses_by_key(
+    relays: &[String],
+    policy: &NetPolicy,
+    limit: Duration,
+    npubs: &[String],
+) -> Vec<(String, String)> {
     let keys: Vec<PublicKey> = npubs.iter().filter_map(|n| key_of(n)).collect();
     let newest = newest_metadata(relays, policy, limit, &keys, Vec::new());
-    let mut out: Vec<String> = Vec::new();
+    let mut out: Vec<(String, String)> = Vec::new();
     for key in &keys {
         let Some(event) = newest.get(key) else {
             continue;
         };
         if let Some(address) = lud16_of(event)
-            && !out.contains(&address)
+            && !out.iter().any(|(_, known)| *known == address)
+            && let Ok(npub) = key.to_bech32()
         {
-            out.push(address);
+            out.push((npub, address));
         }
     }
     out
@@ -660,6 +677,77 @@ fn order(profiles: &mut [Profile]) {
     });
 }
 
+/// Make the profiles of some candidates, in their sequence: the newest kind
+/// 0 from the lookup relays and from `events`, then the NIP-05 check.
+/// `proved` has the addresses that the caller already checked, and
+/// `query_address` is an address that gave its key. A profile has
+/// `domain_match` only when its NIP-05 domain is `link_host`.
+fn build_profiles(
+    cx: &Context<'_>,
+    candidates: Vec<Candidate>,
+    events: Vec<Event>,
+    mut proved: HashMap<String, Option<String>>,
+    query_address: Option<&(PublicKey, String)>,
+    link_host: Option<&str>,
+) -> Vec<Profile> {
+    let keys: Vec<PublicKey> = candidates.iter().map(|c| c.key).collect();
+    let newest = newest_profiles(cx, &keys, events);
+    let metas: Vec<Meta> = candidates
+        .iter()
+        .map(|c| {
+            let mut meta = newest.get(&c.key).map(meta_of).unwrap_or_default();
+            if meta.nip05.is_none()
+                && let Some((key, address)) = query_address
+                && *key == c.key
+            {
+                meta.nip05 = Some(address.clone());
+            }
+            meta
+        })
+        .collect();
+    let mut to_check: Vec<String> = metas
+        .iter()
+        .filter_map(|m| m.nip05.as_deref())
+        .filter_map(split_address)
+        .map(|(name, domain)| address_text(&name, &domain))
+        .filter(|address| !proved.contains_key(address))
+        .collect();
+    to_check.sort();
+    to_check.dedup();
+    proved.extend(check_addresses(cx, &to_check));
+    candidates
+        .into_iter()
+        .zip(metas)
+        .filter_map(|(candidate, meta)| {
+            let npub = candidate.key.to_bech32().ok()?;
+            let parts = meta.nip05.as_deref().and_then(split_address);
+            let nip05_ok = parts.as_ref().is_some_and(|(name, domain)| {
+                proved
+                    .get(&address_text(name, domain))
+                    .and_then(Option::as_deref)
+                    .is_some_and(|hex| hex == candidate.key.to_hex())
+            });
+            let domain_match = nip05_ok
+                && parts.as_ref().is_some_and(|(_, domain)| {
+                    link_host.is_some()
+                        && bare_host(&format!("{}://{domain}", cx.nip05_scheme)).as_deref()
+                            == link_host
+                });
+            let mut sources = candidate.sources;
+            sources.sort_by_key(Source::rank);
+            Some(Profile {
+                npub,
+                name: meta.name.or(candidate.hint),
+                picture: meta.picture,
+                nip05: meta.nip05,
+                nip05_ok,
+                domain_match,
+                sources,
+            })
+        })
+        .collect()
+}
+
 /// Find the profiles for a query (ADR 0074 items 7 to 17). `feed_link` is
 /// the `link` of the feed that the user edits. A profile whose NIP-05 domain
 /// is the domain of that link has `domain_match`.
@@ -693,64 +781,29 @@ pub fn find(cx: &Context<'_>, query: &Query, feed_link: Option<&str>) -> Found {
     // The keys with more sources come first, so that the limit keeps them.
     candidates.sort_by_key(|c| std::cmp::Reverse(c.sources.len()));
     candidates.truncate(MAX_PROFILES);
-    let keys: Vec<PublicKey> = candidates.iter().map(|c| c.key).collect();
-    let newest = newest_profiles(cx, &keys, events);
-    let metas: Vec<Meta> = candidates
-        .iter()
-        .map(|c| {
-            let mut meta = newest.get(&c.key).map(meta_of).unwrap_or_default();
-            if meta.nip05.is_none()
-                && let Some((key, address)) = &query_address
-                && *key == c.key
-            {
-                meta.nip05 = Some(address.clone());
-            }
-            meta
-        })
-        .collect();
-    let mut to_check: Vec<String> = metas
-        .iter()
-        .filter_map(|m| m.nip05.as_deref())
-        .filter_map(split_address)
-        .map(|(name, domain)| address_text(&name, &domain))
-        .filter(|address| !proved.contains_key(address))
-        .collect();
-    to_check.sort();
-    to_check.dedup();
-    proved.extend(check_addresses(cx, &to_check));
-    let link_host = feed_link.and_then(bare_host);
-    let mut profiles: Vec<Profile> = candidates
-        .into_iter()
-        .zip(metas)
-        .filter_map(|(candidate, meta)| {
-            let npub = candidate.key.to_bech32().ok()?;
-            let parts = meta.nip05.as_deref().and_then(split_address);
-            let nip05_ok = parts.as_ref().is_some_and(|(name, domain)| {
-                proved
-                    .get(&address_text(name, domain))
-                    .and_then(Option::as_deref)
-                    .is_some_and(|hex| hex == candidate.key.to_hex())
-            });
-            let domain_match = nip05_ok
-                && parts.as_ref().is_some_and(|(_, domain)| {
-                    link_host.is_some()
-                        && bare_host(&format!("{}://{domain}", cx.nip05_scheme)) == link_host
-                });
-            let mut sources = candidate.sources;
-            sources.sort_by_key(Source::rank);
-            Some(Profile {
-                npub,
-                name: meta.name.or(candidate.hint),
-                picture: meta.picture,
-                nip05: meta.nip05,
-                nip05_ok,
-                domain_match,
-                sources,
-            })
-        })
-        .collect();
+    let mut profiles = build_profiles(
+        cx,
+        candidates,
+        events,
+        proved,
+        query_address.as_ref(),
+        feed_link.and_then(bare_host).as_deref(),
+    );
     order(&mut profiles);
     Found { profiles, failed }
+}
+
+/// The profile of each valid `npub` of `npubs`, one time each, in the
+/// sequence of the list. A text that is not an `npub` is ignored. A key with
+/// no kind 0 gives a profile with no name. `domain_match` is false and
+/// `sources` is empty, because no feed and no search give the keys.
+#[must_use]
+pub fn resolve(cx: &Context<'_>, npubs: &[String]) -> Vec<Profile> {
+    let mut candidates: Vec<Candidate> = Vec::new();
+    for key in npubs.iter().filter_map(|n| key_of(n)) {
+        add_candidate(&mut candidates, key, None, None);
+    }
+    build_profiles(cx, candidates, Vec::new(), HashMap::new(), None, None)
 }
 
 #[cfg(test)]
@@ -944,5 +997,99 @@ mod tests {
             &[ann.clone(), bob, "not a key".to_owned(), ann],
         );
         assert_eq!(found, vec!["ann@pay.example"]);
+    }
+
+    /// A kind 0 event of the key `seed`.
+    fn kind_0(seed: u8, at: u64, content: &str) -> (String, Event) {
+        use nostr::prelude::{Keys, SecretKey, Timestamp, UnsignedEvent};
+        let keys = Keys::new(SecretKey::from_slice(&[seed; 32]).expect("a secret key"));
+        let unsigned = UnsignedEvent::new(
+            keys.public_key(),
+            Timestamp::from(at),
+            Kind::Metadata,
+            Vec::new(),
+            content,
+        );
+        let event = crate::nostr_events::sign_with_keys(unsigned, &keys).expect("an event");
+        (keys.public_key().to_bech32().expect("an npub"), event)
+    }
+
+    /// The profiles that `resolve` gives for `npubs`, with the lookup relay
+    /// `relay`. NIP-05 requests use `http`.
+    fn resolved(relay: &str, npubs: &[String]) -> Vec<Profile> {
+        let web = Web::new();
+        let index = MusicIndex::new(Web::new(), "http://127.0.0.1:9");
+        let lookup = [relay.to_owned()];
+        let cx = Context {
+            web: &web,
+            policy: &NetPolicy::Open,
+            lookup_relays: &lookup,
+            search_relay: None,
+            index: &index,
+            collection_keys: &[],
+            nip05_scheme: "http",
+            limit: SOURCE_LIMIT,
+        };
+        resolve(&cx, npubs)
+    }
+
+    #[test]
+    fn resolve_gives_the_newest_profile_of_each_key_and_ignores_a_text() {
+        let relay = crate::testing::relay::TestRelay::start();
+        let (ann, old) = kind_0(7, 100, r#"{"name":"old"}"#);
+        let (_, new) = kind_0(
+            7,
+            200,
+            r#"{"display_name":"Ann","picture":"https://x.example/a.png"}"#,
+        );
+        let (bob, _) = kind_0(8, 100, "{}");
+        for event in [old, new] {
+            relay.insert(event);
+        }
+        let found = resolved(
+            &relay.url(),
+            &[
+                bob.clone(),
+                "not a key".to_owned(),
+                ann.clone(),
+                bob.clone(),
+            ],
+        );
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert_eq!(found[0].npub, bob);
+        assert_eq!(found[0].name, None);
+        assert_eq!(found[0].picture, None);
+        assert_eq!(found[0].nip05, None);
+        assert_eq!(found[1].npub, ann);
+        assert_eq!(found[1].name.as_deref(), Some("Ann"));
+        assert_eq!(found[1].picture.as_deref(), Some("https://x.example/a.png"));
+        assert!(
+            found
+                .iter()
+                .all(|p| p.sources.is_empty() && !p.domain_match)
+        );
+    }
+
+    #[test]
+    fn resolve_checks_the_nip05_address_of_each_key() {
+        let relay = crate::testing::relay::TestRelay::start();
+        let (_, good_key) = kind_0(7, 100, "{}");
+        let hex = good_key.pubkey.to_hex();
+        let server = crate::testing::TestServer::start(vec![(
+            "/.well-known/nostr.json",
+            200,
+            serde_json::json!({ "names": { "ann": hex, "bob": "ab".repeat(32) } })
+                .to_string()
+                .into_bytes(),
+        )]);
+        let port = server.port();
+        let (ann, ann_event) = kind_0(7, 100, &format!(r#"{{"nip05":"ann@127.0.0.1:{port}"}}"#));
+        let (bob, bob_event) = kind_0(8, 100, &format!(r#"{{"nip05":"bob@127.0.0.1:{port}"}}"#));
+        relay.insert(ann_event);
+        relay.insert(bob_event);
+        let found = resolved(&relay.url(), &[ann, bob]);
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(found[0].nip05_ok, "{found:?}");
+        assert!(!found[1].nip05_ok, "{found:?}");
     }
 }

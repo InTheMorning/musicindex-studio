@@ -4,7 +4,7 @@ import { pageSequence } from './pages.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
-  recipientKey, recipientTitle, addressLines as walletLines, lnaddressOf, hasNode, suggestionField, OTHER_ADDRESS, memberStart, startType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
+  recipientKey, recipientTitle, breakParts, addressLines as walletLines, lnaddressOf, hasNode, suggestionField, OTHER_ADDRESS, memberStart, startType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
   outcomeText, blockedText, operationTitle, operationLine, changeSetRow, nameOf, writableIds, initialStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
@@ -2705,7 +2705,7 @@ function RecipientPage({ recipient, feeds, go }) {
   const row = recipientRow(recipient);
   return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
     <${ErrorNotice} error=${error} />
-    <header class="recipient-head"><h1>${row.title}</h1>
+    <header class="recipient-head"><h1>${breakParts(row.title).map((part, i) => html`${i > 0 && html`<wbr />`}${part}`)}</h1>
       ${walletLines(recipient).map((line) => html`<p class="hint" key=${line.address || line.label}>${line.label}${line.address && html` <span class="mono">${line.address}</span>`}${line.account && ` · account ${line.account}`}</p>`)}</header>
     <div class="actions recipient-actions">
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change Address</button>

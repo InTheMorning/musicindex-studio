@@ -18,6 +18,13 @@ export function recipientKey(recipient) {
 
 // The name of a row: the name, or else the address of the first member of the
 // wallet, or else the address (ADR 0095).
+// The parts of a title for its line breaks: the text up to and with each
+// "@", then the rest. The page puts a break point between the parts, so a
+// heading wraps an address after its "@", not in its domain.
+export function breakParts(text) {
+  return String(text || '').split(/(?<=@)/);
+}
+
 export function recipientTitle(recipient) {
   if (recipient.name && recipient.name.trim() !== '') return recipient.name;
   const first = (recipient.addresses || [])[0];

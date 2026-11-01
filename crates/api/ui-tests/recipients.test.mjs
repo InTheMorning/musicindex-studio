@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, sortRecipients, placesText, useRow, outcomeText, causeText, blockedText,
-  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationTitle, operationLine, suggestionField, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
+  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationTitle, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
 } from '../ui/recipients.js';
 
 test('the row of a used recipient gives the title, the count and the lines', () => {
@@ -203,6 +203,12 @@ test('the suggestion field gives a menu with suggestions and a text field with n
   assert.equal(some.hints['ann@fountain.fm'], 'Studio found this address in your feeds and at the node provider. It pays the same wallet.');
   assert.equal(some.hints['ann@pay.example'], 'Studio found this address in a Nostr profile. It pays the same wallet.');
   assert.equal(some.hints[OTHER_ADDRESS], undefined);
+});
+
+test('a title breaks after its @', () => {
+  assert.deepEqual(breakParts('empatheyes@fountain.fm'), ['empatheyes@', 'fountain.fm']);
+  assert.deepEqual(breakParts('StevenB'), ['StevenB']);
+  assert.deepEqual(breakParts(null), ['']);
 });
 
 test('the operation add has the name of ADR 0096', () => {

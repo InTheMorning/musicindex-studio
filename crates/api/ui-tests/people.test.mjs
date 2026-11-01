@@ -230,3 +230,134 @@ test('the sheet Make a Person gives its texts, rows and menu', () => {
   assert.deepEqual(dismissBody({ identity: 'i', item_keys: ['k'] }), { identity: 'i', items: ['k'] });
   assert.deepEqual(addPersonBody('  Sam '), { name: 'Sam' });
 });
+
+// ---- Task 065c: the page of a person and its sheets ----
+import {
+  keyValue, keyFromValue, memberLine, memberText, walletGroups, addressOptions, usedText, keyEvidenceText, whereRow,
+  feedRows, levelRows, feedsHeading, SHEET_TITLES, sheetStart, sheetBody, sheetReady, LINK_FORMS, linkFields,
+  linkStart, linkBody, linkReady, personFieldsBody, profileLine, changeLine, addIntro,
+} from '../ui/people.js';
+
+const KEY = (address, custom_value = null) => ({ address, custom_key: null, custom_value });
+const MK = {
+  id: 7, name: 'Mary Kate', usual_role: 'Vocals', img: '', href: '', members: [3],
+  default_address: KEY('mk@x.example'),
+  wallets: [{ id: 1, key: KEY('02ab', 'acct1'), recipient_type: 'node' }],
+  support_links: [{ id: 4, label: 'Support Mary', url: 'https://x.example/s' }],
+  pays: [1, 2], credited: [2, 5], feeds: 3,
+};
+const RECIPIENTS = [{
+  address: '02ab', addresses: [
+    { address: '02ab', custom_key: null, custom_value: 'acct1', recipient_type: 'node', provider: 'fountain.fm', feeds: 4 },
+    { address: 'mk@x.example', custom_key: null, custom_value: null, recipient_type: 'lnaddress', feeds: 2 },
+  ],
+}];
+
+test('a key makes a menu value and back', () => {
+  const key = KEY('02ab', 'acct1');
+  assert.deepEqual(keyFromValue(keyValue(key)), key);
+  assert.deepEqual(keyFromValue(keyValue(KEY('a@x'))), KEY('a@x'));
+});
+
+test('the lines of an address follow ADR 0099 item 15', () => {
+  assert.deepEqual(memberLine({ address: 'a@x.example', recipient_type: 'lnaddress' }),
+    { label: 'Lightning address', address: 'a@x.example', account: null });
+  assert.equal(memberText({ address: '02ab', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'acct1' }), 'fountain.fm node · account acct1');
+  assert.equal(memberText({ address: 'a@x.example' }), 'Lightning address a@x.example');
+  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node' }), 'Lightning node 03d55f4d…aa67');
+  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node', custom_value: 'acct1' }), 'Lightning node 03d55f4d…aa67 · account acct1');
+  assert.equal(usedText(0), 'Not used');
+  assert.equal(usedText(1), '1 feed');
+});
+
+test('a wallet gives its addresses, the Lightning addresses first', () => {
+  const groups = walletGroups(MK, RECIPIENTS);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].members.map((m) => m.key.address), ['mk@x.example', '02ab']);
+  assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['Lightning address mk@x.example', 'fountain.fm node · account acct1']);
+  const alone = walletGroups(MK, []);
+  assert.deepEqual(alone[0].members.map((m) => m.key.address), ['02ab']);
+});
+
+test('the evidence of a key and the row Where used have their texts', () => {
+  assert.equal(keyEvidenceText('user'), 'Added by you');
+  assert.equal(keyEvidenceText('nostr'), 'Found in a Nostr profile');
+  assert.deepEqual(whereRow(MK), { title: 'Where used', lines: ['Pays in 2 feeds · Credited in 2 feeds'], count: '3 feeds' });
+});
+
+test('the feed rows give the type first, each selected', () => {
+  const feeds = [{ id: 2, title: 'Neon Diner', medium: 'music' }];
+  const rows = feedRows([{ feed_id: 2, pays: [KEY('02ab')], roles: ['Vocals'] }], feeds);
+  assert.equal(rows[0].lines[0], 'Album');
+  assert.deepEqual(rows[0].lines.slice(1), ['Pays Lightning node 02ab', 'Credited as Vocals']);
+  assert.ok(rows[0].checked);
+  assert.equal(feedsHeading(rows), 'Feeds · 1 of 1 selected');
+  assert.deepEqual(levelRows([2, 9], feeds).map((r) => [r.title, r.checked]), [['Neon Diner', true], ['Feed 9', true]]);
+  // The artist or label feed of the level is not a release (ADR 0098 item 20).
+  const level = [...feeds, { id: 4, title: 'The Ultras', medium: 'publisher' }];
+  assert.deepEqual(levelRows([4, 2], level).map((r) => r.title), ['Neon Diner']);
+});
+
+test('each sheet starts with its fields and the button counts feeds', () => {
+  const groups = walletGroups(MK, RECIPIENTS);
+  assert.deepEqual(Object.keys(SHEET_TITLES), ['use_address', 'rename', 'add_to_releases', 'remove']);
+  assert.equal(sheetStart('use_address', MK, groups).key, keyValue(KEY('mk@x.example')));
+  assert.deepEqual(sheetStart('rename', MK, groups), { name: 'Mary Kate', payment: true, credit: true });
+  assert.equal(sheetStart('add_to_releases', MK, groups).payee, true);
+  assert.equal(sheetStart('add_to_releases', { ...MK, wallets: [] }, []).payee, false);
+  assert.equal(addIntro('Ann'), 'Studio adds Ann to each release of the artist or label that you select.');
+});
+
+test('the body of a sheet is the body of the operation', () => {
+  assert.deepEqual(sheetBody('use_address', { key: keyValue(KEY('a@x')) }), { kind: 'use_address', key: KEY('a@x') });
+  assert.deepEqual(sheetBody('add_to_releases', { owner: '3', payee: true, percent: '5', credit: false, supportLink: '4' }),
+    { kind: 'add_to_releases', payee_percent: 5, credit: false, support_link: 4 });
+  assert.deepEqual(sheetBody('add_to_releases', { owner: '3', payee: false, percent: '', credit: true, supportLink: '' }),
+    { kind: 'add_to_releases', payee_percent: null, credit: true, support_link: null });
+});
+
+test('the primary button needs a feed and a part', () => {
+  assert.ok(!sheetReady('rename', { name: 'Ann', payment: true, credit: true }, []));
+  assert.ok(sheetReady('rename', { name: 'Ann', payment: false, credit: true }, [1]));
+  assert.ok(!sheetReady('rename', { name: 'Ann', payment: false, credit: false }, [1]));
+  assert.ok(!sheetReady('rename', { name: ' ', payment: true, credit: true }, [1]));
+  assert.ok(!sheetReady('remove', { payee: false, credit: false }, [1]));
+  assert.ok(sheetReady('remove', { payee: true, credit: false }, [1]));
+  assert.ok(!sheetReady('add_to_releases', { payee: true, percent: '', credit: false, supportLink: '' }, [1]));
+  assert.ok(sheetReady('add_to_releases', { payee: true, percent: '5', credit: false, supportLink: '' }, [1]));
+  assert.ok(sheetReady('use_address', { key: 'x' }, [1]));
+  assert.ok(!sheetReady('use_address', { key: '' }, [1]));
+});
+
+test('the forms of a link give the fields and the body', () => {
+  assert.deepEqual(Object.keys(LINK_FORMS), ['wallets', 'credit-names', 'keys', 'support-links']);
+  const start = linkStart('wallets');
+  assert.equal(start.recipient_type, 'lnaddress');
+  assert.deepEqual(linkFields('wallets', start).map((f) => f.id), ['recipient_type', 'address']);
+  assert.deepEqual(linkFields('wallets', { recipient_type: 'node' }).map((f) => f.id), ['recipient_type', 'address', 'custom_key', 'custom_value']);
+  assert.deepEqual(linkBody('wallets', { recipient_type: 'node', address: ' 02ab ', custom_key: '', custom_value: 'a' }),
+    { recipient_type: 'node', address: '02ab', custom_key: null, custom_value: 'a' });
+  assert.ok(!linkReady('keys', { npub: ' ' }));
+  assert.ok(linkReady('support-links', { label: '', url: 'https://x.example' }));
+  assert.deepEqual(linkBody('support-links', { label: ' L ', url: 'u' }), { label: 'L', url: 'u' });
+});
+
+test('a change of one field sends the four fields of the person', () => {
+  assert.deepEqual(personFieldsBody(MK, { usual_role: 'Fiddle' }), { name: 'Mary Kate', usual_role: 'Fiddle', img: '', href: '' });
+  assert.deepEqual(profileLine(MK, { 3: 'The Ultras' }), { role: 'Vocals', members: [{ id: 3, title: 'The Ultras' }] });
+});
+
+test('the review line of a change set of a person names the operation', () => {
+  const feeds = [{}, {}];
+  assert.equal(changeLine({ feeds, operation: { kind: 'rename_person', name: 'Ann Ultra', payment: true, credit: true } }, 'Ann'),
+    'Rename Ann to Ann Ultra in 2 feeds (payment name and credit name)');
+  assert.equal(changeLine({ feeds, operation: { kind: 'rename_person', name: 'Ann Ultra', payment: true, credit: false } }, 'Ann Ultra'),
+    'Rename to Ann Ultra in 2 feeds (payment name)');
+  assert.equal(changeLine({ feeds, operation: { kind: 'use_address', address: 'ann@example.com', recipient_type: 'lnaddress' } }, 'Ann'),
+    'Use Lightning address ann@example.com for Ann');
+  assert.equal(changeLine({ feeds, operation: { kind: 'add_to_releases', payee: { percent: 5 }, credit: {}, support_link: null } }, 'Ann'),
+    'Add Ann as a payee with 5% and a credit in 2 feeds');
+  assert.equal(changeLine({ feeds, operation: { kind: 'remove_person', payee: true, credit: true } }, 'Ann'),
+    'Remove Ann as a payee and a credit from 2 feeds');
+  assert.equal(changeLine({ feeds, operation: { kind: 'merge' } }, 'Ann'), '');
+});

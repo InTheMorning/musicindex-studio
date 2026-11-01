@@ -1784,6 +1784,16 @@ button.outline-feed {
 }
 .person-art img { width: 100%; height: 100%; object-fit: cover; }
 
+/* The page of a person (task 065c, ADR 0099 item 4). The head has a large
+   picture, the name, the role and the Nostr key. */
+.person-art.large { width: 72px; height: 72px; font-size: var(--text-title-2); }
+.person-head { display: flex; gap: 16px; align-items: center; padding: 0 4px; }
+.person-head .text { display: grid; gap: 4px; min-width: 0; }
+.person-head h1 { overflow-wrap: anywhere; }
+.person-head .hint { overflow-wrap: anywhere; }
+.person-head .button.link { display: inline; padding: 0; min-height: 0; }
+.link-row .address-text { overflow-wrap: anywhere; word-break: break-all; }
+
 /* musicindex ADR 0024 R-TYPE-1: with Touch, a field has the Body size of 17 px.
    iOS Safari zooms the page when a field with text under 16 px gets the focus.
    This rule is the last rule of the file, and its selector is as specific as

@@ -18,8 +18,8 @@ import {
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
 import { CONFIRMS } from './confirms.js';
-import { changeTitle, afterDiscard } from './people.js';
-import { PeoplePage, PersonStub } from './peoplepages.js';
+import { changeTitle, afterDiscard, changeLine } from './people.js';
+import { PeoplePage, PersonPage, WhereUsedPage } from './peoplepages.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf, coverNote } from './cover.js';
@@ -2721,6 +2721,7 @@ function writeFailText(e) {
 function ChangeSetPage({ id, go, onChanged }) {
   const [set, setSet] = useState(null);
   const [known, setKnown] = useState([]);
+  const [personName, setPersonName] = useState('');
   const [statuses, setStatuses] = useState({});
   const [openId, setOpenId] = useState(null);
   const [diffs, setDiffs] = useState({});
@@ -2732,6 +2733,10 @@ function ChangeSetPage({ id, go, onChanged }) {
       setSet(loaded);
       setStatuses(initialStatuses(loaded));
       setKnown(await api('/recipients'));
+      if (loaded.person_id != null) {
+        const person = await api(`/people/${loaded.person_id}`).catch(() => null);
+        setPersonName(person ? person.name : '');
+      }
     });
   }, [id]);
   // A feed opens its diff in a closed entry. One entry is open at a time.
@@ -2787,7 +2792,7 @@ function ChangeSetPage({ id, go, onChanged }) {
       : html`<${ErrorNotice} error=${error} />`}
     ${set === null && !error && html`<p class="empty" role="status">Loading the change set…</p>`}
     ${set && html`<header class="recipient-head"><h1>${changeTitle(set.operation)}</h1>
-      <p class="hint">${operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
+      <p class="hint">${set.person_id != null ? changeLine(set, personName) : operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
       <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
         const outcome = outcomeText(feed.outcome);
         const blocked = blockedText(feed.blocked);
@@ -3321,7 +3326,9 @@ function Shell({ vault, onLock }) {
   } else if (view.name === 'people') {
     main = html`<${PeoplePage} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'person') {
-    main = html`<${PersonStub} key=${view.id} id=${view.id} go=${go} />`;
+    main = html`<${PersonPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
+  } else if (view.name === 'where-used') {
+    main = html`<${WhereUsedPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'wallet') {
     main = html`<${RecipientPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'change-set') {

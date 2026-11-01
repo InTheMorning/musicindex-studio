@@ -4,6 +4,7 @@
 // gives each outcome (ADR 0065).
 
 import { shortKey } from './nostrkey.js';
+import { feedKind, isPublisher } from './shell.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const feedCount = (n) => plural(n, 'feed', 'feeds');
@@ -318,3 +319,263 @@ export const dismissBody = (suggestion) => ({ identity: suggestion.identity, ite
 
 // The body of `POST /people` from the sheet "Add a Person".
 export const addPersonBody = (name) => ({ name: String(name ?? '').trim() });
+
+// ---- The page of a person and its sheets (ADR 0099 items 4 to 12, task 065c) ----
+
+// The key of an address as the value of a select menu, and back.
+export const keyValue = (key) => JSON.stringify([key.address, key.custom_key || '', key.custom_value || '']);
+export function keyFromValue(value) {
+  const [address, customKey, customValue] = JSON.parse(value);
+  return { address, custom_key: customKey === '' ? null : customKey, custom_value: customValue === '' ? null : customValue };
+}
+
+// The type of a member of a wallet. An address with "@" is a Lightning
+// address when the member gives no type.
+const isLnaddress = (m) => (m.recipient_type ? m.recipient_type === 'lnaddress' : (m.address || '').includes('@'));
+
+// The parts of the line of one address (ADR 0099 item 15). `full` shows a
+// node key in full. A node of a shared provider names the provider.
+export function memberLine(member, full = true) {
+  const account = member.custom_value || null;
+  if (isLnaddress(member)) return { label: 'Lightning address', address: member.address, account: null };
+  if (member.provider) return { label: `${member.provider} node`, address: full ? member.address : null, account };
+  // The account names the wallet on a shared node, so the line keeps it.
+  return { label: 'Lightning node', address: full ? member.address : shortKey(member.address), account };
+}
+
+// One line of text for an address, for a select menu.
+export function memberText(member) {
+  const { label, address, account } = memberLine(member, false);
+  return `${label}${address ? ` ${address}` : ''}${account ? ` · account ${account}` : ''}`;
+}
+
+const sameParts = (a, b) => a.address === b.address && (a.custom_key || '') === (b.custom_key || '')
+  && (a.custom_value || '') === (b.custom_value || '');
+
+// The wallets of a person, each with its addresses. `recipients` is the list
+// of `GET /recipients`, which gives each address of a wallet with its
+// provider and its feeds. A wallet that the list does not have gives its own
+// key as its one address.
+export function walletGroups(person, recipients) {
+  return (person.wallets || []).map((wallet) => {
+    const entry = (recipients || []).find((r) => (r.addresses || []).some((m) => sameParts(m, wallet.key)));
+    const members = entry
+      ? entry.addresses.map((m) => ({
+        key: { address: m.address, custom_key: m.custom_key ?? null, custom_value: m.custom_value ?? null },
+        member: m,
+        count: m.feeds || 0,
+      }))
+      : [{ key: wallet.key, member: { ...wallet.key, recipient_type: wallet.recipient_type }, count: 0 }];
+    members.sort((a, b) => isLnaddress(b.member) - isLnaddress(a.member));
+    return { id: wallet.id, members };
+  });
+}
+
+// The menu entries for each address of each wallet, as [value, text].
+export const addressOptions = (groups) => groups.flatMap((g) => g.members.map((m) => [keyValue(m.key), memberText(m.member)]));
+
+// The text of the count of feeds of an address.
+export const usedText = (count) => (count > 0 ? feedCount(count) : 'Not used');
+
+// The text for the evidence of a Nostr key of a person.
+export function keyEvidenceText(evidence) {
+  switch (evidence) {
+    case 'keysend': return 'Found in a lookup of a Lightning address';
+    case 'nostr': return 'Found in a Nostr profile';
+    default: return 'Added by you';
+  }
+}
+
+// The lines of the section "Where used" on the page of a person.
+export function whereRow(person) {
+  const pays = (person.pays || []).length;
+  const credited = (person.credited || []).length;
+  return {
+    title: 'Where used',
+    lines: [`Pays in ${feedCount(pays)} · Credited in ${feedCount(credited)}`],
+    count: feedCount(typeof person.feeds === 'number' ? person.feeds : new Set([...(person.pays || []), ...(person.credited || [])]).size),
+  };
+}
+
+// The rows of the feeds of a person: the type, then the places (ADR 0099
+// item 5). `feeds` is the feed list of the shell.
+export function feedRows(places, feeds) {
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
+  const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
+  return sheetFeeds(places, titles).map((row) => {
+    const feed = byId.get(row.id);
+    return feed ? { ...row, lines: [feedKind(feed).label, ...row.lines] } : row;
+  });
+}
+
+// The rows of the releases of an artist or label, for the sheet "Add to All
+// Releases". Each row starts selected.
+export function levelRows(ids, feeds) {
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
+  // Add to All Releases acts on the releases of the level, not on its
+  // artist or label feeds (ADR 0098 item 20).
+  return (ids || []).filter((id) => !(byId.has(id) && isPublisher(byId.get(id)))).map((id) => {
+    const feed = byId.get(id);
+    return { id, title: feed ? feed.title || 'Untitled feed' : `Feed ${id}`, lines: feed ? [feedKind(feed).label] : [], checked: true };
+  });
+}
+
+// The heading of the list of feeds in a sheet.
+export const feedsHeading = (rows) => `Feeds · ${checkedIds(rows).length} of ${rows.length} selected`;
+
+export const SHEET_TITLES = {
+  use_address: 'Use This Address',
+  rename: 'Rename',
+  add_to_releases: 'Add to All Releases',
+  remove: 'Remove',
+};
+
+export const addIntro = (name) => `Studio adds ${name} to each release of the artist or label that you select.`;
+export const useHint = (name) => `Each address of ${name} in the selected feeds changes to this address. The names and the splits do not change.`;
+export const renameHint = 'Studio changes the person and the selected names. You see each feed in the review before Studio writes it.';
+export const removeHint = (name) => `Studio removes ${name} from the selected feeds. Studio changes the splits of the other recipients, and their total does not change.`;
+
+// The start values of the fields of a sheet.
+export function sheetStart(kind, person, groups) {
+  switch (kind) {
+    case 'use_address': {
+      const options = addressOptions(groups);
+      const current = person.default_address ? keyValue(person.default_address) : '';
+      return { key: options.some(([v]) => v === current) ? current : (options[0] || [''])[0] };
+    }
+    case 'rename': return { name: person.name, payment: true, credit: true };
+    case 'add_to_releases': return { owner: '', payee: (person.wallets || []).length > 0, percent: '', credit: true, supportLink: '' };
+    default: return { payee: true, credit: true };
+  }
+}
+
+// The body of the route of a change set, from the fields of a sheet.
+export function sheetBody(kind, fields) {
+  if (kind === 'use_address') return operationBody(kind, { key: keyFromValue(fields.key) });
+  if (kind === 'add_to_releases') {
+    return operationBody(kind, { ...fields, supportLink: fields.supportLink === '' ? null : Number(fields.supportLink) });
+  }
+  return operationBody(kind, fields);
+}
+
+// True when the primary button of a sheet works: one feed is selected, and
+// the sheet has one part (ADR 0099 item 7). The core checks each value.
+export function sheetReady(kind, fields, ids) {
+  if (ids.length === 0) return false;
+  switch (kind) {
+    case 'use_address': return fields.key !== '';
+    case 'rename': return fields.name.trim() !== '' && (fields.payment || fields.credit);
+    case 'add_to_releases': return (fields.payee && String(fields.percent).trim() !== '') || fields.credit || fields.supportLink !== '';
+    default: return fields.payee || fields.credit;
+  }
+}
+
+// The menu of the support links of a person, as [value, text].
+export const supportChoices = (person) => (person.support_links || []).map((l) => [String(l.id), l.label || l.url]);
+
+// The text of the primary button while the request runs.
+export const BUSY_REVIEW = 'Making the Changes…';
+
+// The forms that add a link to a person (ADR 0099 item 4). `fields` gives
+// the id, the label, the kind and the start value of each field.
+export const LINK_FORMS = {
+  wallets: {
+    title: 'Add a Wallet',
+    button: 'Add the Wallet',
+    fields: [
+      { id: 'recipient_type', label: 'Type', select: [['lnaddress', 'Lightning Address'], ['node', 'Lightning Node']], start: 'lnaddress' },
+      { id: 'address', label: 'Address', required: true },
+      { id: 'custom_key', label: 'Custom key', node: true, hint: 'Some nodes need a custom key and an account to find the wallet.' },
+      { id: 'custom_value', label: 'Account', node: true },
+    ],
+  },
+  'credit-names': {
+    title: 'Add a Credit Name',
+    button: 'Add the Credit Name',
+    fields: [
+      { id: 'name', label: 'Name', required: true },
+      { id: 'href', label: 'Information address' },
+      { id: 'npub', label: 'Nostr key' },
+    ],
+  },
+  keys: {
+    title: 'Add a Nostr Key',
+    button: 'Add the Key',
+    fields: [{ id: 'npub', label: 'Nostr key', required: true }],
+  },
+  'support-links': {
+    title: 'Add a Support Link',
+    button: 'Add the Link',
+    fields: [
+      { id: 'label', label: 'Label' },
+      { id: 'url', label: 'Address', required: true },
+    ],
+  },
+};
+
+// The fields of a link form that show, from the type of a wallet.
+export const linkFields = (kind, values) => LINK_FORMS[kind].fields
+  .filter((f) => !f.node || values.recipient_type === 'node');
+
+export const linkStart = (kind) => Object.fromEntries(LINK_FORMS[kind].fields.map((f) => [f.id, f.start ?? '']));
+
+// The body of the POST of a link. An empty custom key or account is none.
+export function linkBody(kind, values) {
+  const body = {};
+  for (const f of linkFields(kind, values)) {
+    const text = String(values[f.id] ?? '').trim();
+    body[f.id] = f.node && text === '' ? null : text;
+  }
+  return body;
+}
+
+export const linkReady = (kind, values) => linkFields(kind, values).every((f) => !f.required || String(values[f.id] ?? '').trim() !== '');
+
+// The body of `PATCH /people/{id}`: the four fields, with one changed.
+export const personFieldsBody = (person, change = {}) => ({
+  name: person.name, usual_role: person.usual_role, img: person.img, href: person.href, ...change,
+});
+
+// The line of the usual role of a person, and the publisher feeds of which
+// the person is a member, as `{ role, members: [{ id, title }] }`.
+export function profileLine(person, titles) {
+  return {
+    role: (person.usual_role || '').trim(),
+    members: (person.members || []).map((id) => ({ id, title: titleOf(titles, id) })),
+  };
+}
+
+const joinList = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
+
+// The line under the title of the review of a change set of a person
+// (ADR 0099 item 12, task 065 item 6). `set` is a change set with a
+// `person_id`, and `name` is the name of the person now.
+export function changeLine(set, name) {
+  const op = set.operation || {};
+  const who = name || 'the person';
+  const n = (set.feeds || []).length;
+  switch (op.kind) {
+    case 'use_address': {
+      const { label, address } = memberLine({ address: op.address, recipient_type: op.recipient_type, custom_value: op.custom_value }, false);
+      const target = op.recipient_type === 'node' && op.custom_value ? `${label} ${address} with account ${op.custom_value}` : `${label} ${address}`;
+      return `Use ${target} for ${who}`;
+    }
+    case 'rename_person': {
+      const parts = [op.payment && 'payment name', op.credit && 'credit name'].filter(Boolean);
+      const to = who === op.name ? `Rename to ${op.name}` : `Rename ${who} to ${op.name}`;
+      return `${to} in ${feedCount(n)}${parts.length > 0 ? ` (${joinList(parts)})` : ''}`;
+    }
+    case 'add_to_releases': {
+      const parts = [];
+      if (op.payee) parts.push(`a payee with ${op.payee.percent}%`);
+      if (op.credit) parts.push('a credit');
+      if (op.support_link) parts.push('a support link');
+      return `Add ${who} as ${joinList(parts)} in ${feedCount(n)}`;
+    }
+    case 'remove_person': {
+      const parts = [op.payee && 'a payee', op.credit && 'a credit'].filter(Boolean);
+      return `Remove ${who} as ${joinList(parts)} from ${feedCount(n)}`;
+    }
+    default: return '';
+  }
+}

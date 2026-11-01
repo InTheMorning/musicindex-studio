@@ -4,7 +4,7 @@ import { pageSequence } from './pages.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
-  recipientKey, recipientTitle, breakParts, addressLines as walletLines, lnaddressOf, hasNode, suggestionField, OTHER_ADDRESS, memberStart, startType, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
+  recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, initialStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
@@ -19,7 +19,7 @@ import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from 
 import { isLiveItem } from './live.js';
 import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
-import { PeoplePage, PersonPage, WhereUsedPage } from './peoplepages.js';
+import { PeoplePage, PersonPage, WhereUsedPage, WalletPage } from './peoplepages.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf, coverNote } from './cover.js';
@@ -2500,200 +2500,6 @@ export function FeedCheckRow({ title, text, checked, onChange }) {
     <span class="text"><span class="label">${title}</span>${text && html`<span class="summary">${text}</span>`}</span></label>`;
 }
 
-// The sheet of one operation. The sheet sends `POST /change-sets` and opens
-// the review (task 054c item 6). The core makes the change and gives the
-// outcome of each feed, so the form holds only the values to send.
-function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
-  const key = recipientKey(recipient);
-  // The address fields start at the member of the wallet with the type of
-  // the menu, not at the key of the wallet (ADR 0095 item 14).
-  const firstType = startType(recipient, kind);
-  const start = memberStart(recipient, firstType);
-  const [type, setType] = useState(firstType);
-  const [address, setAddress] = useState(kind === 'use_lnaddress' ? lnaddressOf(recipient) || '' : start.address);
-  const [customKey, setCustomKey] = useState(start.custom_key);
-  const [customValue, setCustomValue] = useState(start.custom_value);
-  // A change of the type puts the member of the new type in the fields,
-  // when the user did not change the address.
-  const changeType = (next) => {
-    if (address === memberStart(recipient, type).address) {
-      const member = memberStart(recipient, next);
-      setAddress(member.address);
-      setCustomKey(member.custom_key);
-      setCustomValue(member.custom_value);
-    }
-    setType(next);
-  };
-  // A wallet with no Lightning address asks the core for suggestions
-  // (ADR 0097 item 5). `null` while the request runs.
-  const asks = kind === 'use_lnaddress' && !lnaddressOf(recipient);
-  const [field, setField] = useState(null);
-  const [choice, setChoice] = useState(OTHER_ADDRESS);
-  useEffect(() => {
-    if (!asks) return undefined;
-    let live = true;
-    api('/recipients/lnaddress-suggestions', { method: 'POST', body: key })
-      .then((result) => result.suggestions, () => [])
-      .then((list) => {
-        if (!live) return;
-        const next = suggestionField(list);
-        setField(next);
-        setChoice(next.start);
-        setAddress(next.start);
-      });
-    return () => { live = false; };
-  }, []);
-  const choose = (value) => {
-    setChoice(value);
-    setAddress(value);
-  };
-  const [name, setName] = useState(recipient.name || '');
-  const [percent, setPercent] = useState('');
-  const [levelOwner, setLevelOwner] = useState('');
-  const [level, setLevel] = useState(null);
-  const [levelSelected, setLevelSelected] = useState(new Set());
-  const { busy, error, run } = useAction();
-  const owners = (feeds || []).filter(isPublisher)
-    .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }));
-  // The core lists the feeds of a level. Each starts selected.
-  const chooseOwner = (value) => {
-    setLevelOwner(value);
-    setLevel(null);
-    if (!value) return;
-    run(async () => {
-      const result = await api(`/feeds/${value}/level`);
-      setLevel(result.feed_ids);
-      setLevelSelected(new Set(result.feed_ids));
-    });
-  };
-  const titleOf = (id) => {
-    const found = (feeds || []).find((f) => f.id === id);
-    return found && found.title ? found.title : 'Untitled feed';
-  };
-  const ids = kind === 'add' ? (level || []).filter((id) => levelSelected.has(id)) : selectedIds(uses, selected);
-  const optional = (text) => (text.trim() === '' ? null : text.trim());
-  // A Lightning address has no custom pair (ADR 0095 item 11).
-  const custom = type === 'lnaddress'
-    ? { custom_key: null, custom_value: null }
-    : { custom_key: optional(customKey), custom_value: optional(customValue) };
-  const operation = () => {
-    switch (kind) {
-      case 'change_address':
-        return { kind, address: address.trim(), ...custom, recipient_type: type || null };
-      case 'rename': return { kind, name };
-      case 'remove': return { kind };
-      case 'use_lnaddress': return { kind, address: address.trim() };
-      default:
-        return { kind, name: optional(name), recipient_type: type || null, address: address.trim(), ...custom, percent: Number(percent) };
-    }
-  };
-  const ready = ids.length > 0
-    && (kind === 'rename' || kind === 'remove' || address.trim() !== '')
-    && (kind !== 'add' || percent !== '');
-  const submit = () => run(async () => {
-    onCreated(await api('/change-sets', { method: 'POST', body: { recipient: key, operation: operation(), feed_ids: ids } }));
-  });
-  // The type is the first field, and the fields below it follow the type
-  // (ADR 0095 item 14).
-  const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${type} onChange=${changeType}
-    options=${[['node', 'node (keysend)'], ['lnaddress', 'lnaddress']]} />`;
-  const label = kind === 'change_address' ? `Change in ${feedCount(ids.length)}`
-    : kind === 'rename' ? `Rename in ${feedCount(ids.length)}`
-    : kind === 'remove' ? `Remove from ${feedCount(ids.length)}`
-    : kind === 'use_lnaddress' ? `Use in ${feedCount(ids.length)}` : `Add to ${feedCount(ids.length)}`;
-  return html`<div class="body">
-      ${kind === 'remove' && html`<p>Studio removes ${recipientTitle(recipient)} from each value block of the selected feeds. Studio changes the splits of the other recipients, and their total does not change.</p>`}
-      ${kind === 'rename' && html`<div class="group rows"><${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} /></div>`}
-      ${kind === 'use_lnaddress' && html`<div class="group rows">
-        ${asks && field === null && html`<p class="hint" role="status">Studio looks for Lightning addresses of this wallet…</p>`}
-        ${field && field.menu && html`<${ChoiceSelect} id="op-suggestion" label="Lightning address" value=${choice}
-          options=${field.options} hint=${field.hints[choice]} onChange=${choose} />`}
-        ${!(field && field.menu && choice !== OTHER_ADDRESS) && html`<${Field} id="op-address" label=${field && field.menu ? 'Other address' : 'Lightning address'} required
-          hint=${field && field.hint ? `${field.hint} The address must pay the same wallet. Studio checks it.` : 'The address must pay the same wallet. Studio checks it.'}
-          value=${address} onInput=${(e) => setAddress(e.target.value)} />`}
-      </div>`}
-      ${(kind === 'change_address' || kind === 'add') && html`<div class="group rows">
-        ${typeMenu}
-        ${kind === 'add' && html`<${Field} id="op-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} />`}
-        <${Field} id="op-address" label=${type === 'lnaddress' ? 'Lightning address' : 'Node address'} required
-          value=${address} onInput=${(e) => setAddress(e.target.value)} />
-        ${type !== 'lnaddress' && html`<${Field} id="op-custom-key" label="Custom key" value=${customKey} onInput=${(e) => setCustomKey(e.target.value)} />
-          <${Field} id="op-custom-value" label="Custom value" value=${customValue} onInput=${(e) => setCustomValue(e.target.value)} />`}
-      </div>`}
-      ${kind === 'add' && html`<div class="group rows">
-        ${owners.length === 0
-          ? html`<p class="hint">Studio found no artist or label feed in your collection.</p>`
-          : html`<${ChoiceSelect} id="op-level" label="Artist or label" value=${levelOwner} onChange=${chooseOwner}
-              placeholder="Select an artist or label" options=${owners.map((f) => [String(f.id), f.title || 'Untitled feed'])} />`}
-        <${Field} id="op-percent" label="Percentage" type="number" min="1" max="99" step="1" required
-          hint="The share of the new recipient, from 1 to 99." value=${percent} onInput=${(e) => setPercent(e.target.value)} />
-      </div>`}
-      ${kind === 'add' && level && html`<div class="group rows">${level.map((id) => html`<${FeedCheckRow} key=${id} title=${titleOf(id)}
-        checked=${levelSelected.has(id)} onChange=${() => setLevelSelected(toggled(levelSelected, id))} />`)}</div>`}
-      <${ErrorNotice} error=${error} />
-    </div>
-    <footer>
-      <button class=${`button ${kind === 'remove' ? 'destructive' : 'primary'}`} type="button" disabled=${busy || !ready} onClick=${submit}>
-        ${busy ? 'Making the Change Set…' : label}</button>
-    </footer>`;
-}
-
-const OPERATION_TITLES = { change_address: 'Change address', rename: 'Rename', remove: 'Remove', add: 'Add to an artist or label', use_lnaddress: 'Use the Lightning address' };
-
-function OperationSheet({ kind, recipient, uses, selected, feeds, onCreated, onClose }) {
-  const ref = useSheet(kind !== null);
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="operation-title" onClose=${onClose}>
-    <header>
-      <h2 id="operation-title">${kind ? OPERATION_TITLES[kind] : ''}</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
-    </header>
-    ${kind && html`<${OperationForm} key=${kind} kind=${kind} recipient=${recipient} uses=${uses} selected=${selected}
-      feeds=${feeds} onCreated=${onCreated} />`}
-  </dialog>`;
-}
-
-// The page of one recipient: its feeds with checkboxes, and the four
-// operations (ADR 0091 items 3 and 4).
-function RecipientPage({ recipient, feeds, go }) {
-  const [uses, setUses] = useState(null);
-  const [selected, setSelected] = useState(new Set());
-  const [open, setOpen] = useState(null);
-  const { error, run } = useAction();
-  useEffect(() => {
-    run(async () => {
-      const result = await api('/recipients/uses', { method: 'POST', body: recipientKey(recipient) });
-      setUses(result.feeds);
-      setSelected(allSelected(result.feeds));
-    });
-  }, []);
-  const count = uses ? selectedIds(uses, selected).length : 0;
-  const created = (set) => { setOpen(null); go({ name: 'change-set', id: set.id }); };
-  const row = recipientRow(recipient);
-  return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
-    <${ErrorNotice} error=${error} />
-    <header class="recipient-head"><h1>${breakParts(row.title).map((part, i) => html`${i > 0 && html`<wbr />`}${part}`)}</h1>
-      ${walletLines(recipient).map((line) => html`<p class="hint" key=${line.address || line.label}>${line.label}${line.address && html` <span class="mono">${line.address}</span>`}${line.account && ` · account ${line.account}`}</p>`)}</header>
-    <div class="actions recipient-actions">
-      <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change Address</button>
-      <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('rename')}>Rename</button>
-      ${hasNode(recipient) && html`<button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('use_lnaddress')}>Use the Lightning Address</button>`}
-      <button class="button action" type="button" onClick=${() => setOpen('add')}>Add to an Artist or Label</button>
-      <button class="button destructive" type="button" disabled=${count === 0} onClick=${() => setOpen('remove')}>Remove</button>
-    </div>
-    <section class="page-section"><h2>Feeds${uses ? ` · ${count} of ${uses.length} selected` : ''}</h2>
-      ${uses === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}
-      ${uses !== null && uses.length === 0 && html`<p class="empty">No feed uses this recipient. Add to an artist or label puts it in feeds.</p>`}
-      ${uses && uses.length > 0 && html`<div class="group">${uses.map((use) => {
-        const line = useRow(use);
-        return html`<${FeedCheckRow} key=${use.feed_id} title=${line.title} text=${line.text}
-          checked=${selected.has(use.feed_id)} onChange=${() => setSelected(toggled(selected, use.feed_id))} />`;
-      })}</div>`}
-    </section>
-    <${OperationSheet} kind=${open} recipient=${recipient} uses=${uses || []} selected=${selected} feeds=${feeds}
-      onCreated=${created} onClose=${() => setOpen(null)} />
-  </section></div>`;
-}
-
 // Write one feed of a change set: the diff, the signer, then the write
 // (ADR 0091 item 23, task 054c item 8). A plan that expired gets one new try.
 async function writeChangeSetFeed(feedId) {
@@ -2773,7 +2579,7 @@ function ChangeSetPage({ id, go, onChanged }) {
     try { setSet(await api(`/change-sets/${id}`)); } catch (_) { /* The set closes when each feed is written. */ }
   };
   const discard = async () => {
-    if (hasWrittenFeed(set, statuses) && !await askConfirm(CONFIRMS.discardChangeSet())) return;
+    if (hasWrittenFeed(set, statuses) && !await askConfirm(CONFIRMS.discardChanges())) return;
     run(async () => {
       await api(`/change-sets/${id}`, { method: 'DELETE' });
       await onChanged();
@@ -2787,10 +2593,10 @@ function ChangeSetPage({ id, go, onChanged }) {
         ${writing ? 'Writing…' : writeLabel(pending)}</button>`}
       <button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>`}<//><section class="section">
     ${notFound
-      ? html`<div class="notice" role="status"><strong>Studio did not find this change set.</strong>It is written or discarded.
+      ? html`<div class="notice" role="status"><strong>Studio did not find these changes.</strong>It is written or discarded.
           <div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'people' })}>Open People</button></div></div>`
       : html`<${ErrorNotice} error=${error} />`}
-    ${set === null && !error && html`<p class="empty" role="status">Loading the change set…</p>`}
+    ${set === null && !error && html`<p class="empty" role="status">Loading the changes…</p>`}
     ${set && html`<header class="recipient-head"><h1>${changeTitle(set.operation)}</h1>
       <p class="hint">${set.person_id != null ? changeLine(set, personName) : operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
       <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
@@ -3330,7 +3136,7 @@ function Shell({ vault, onLock }) {
   } else if (view.name === 'where-used') {
     main = html`<${WhereUsedPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'wallet') {
-    main = html`<${RecipientPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
+    main = html`<${WalletPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'change-set') {
     main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} onChanged=${() => load()} />`;
   } else if (view.name === 'add-feed') {

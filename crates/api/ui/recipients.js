@@ -4,6 +4,7 @@
 // calculates each split and finds each place (ADR 0065).
 
 import { shortKey } from './nostrkey.js';
+import { memberLine, memberText, reviewLabel, checkedIds } from './people.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -36,34 +37,17 @@ export function recipientTitle(recipient) {
 const membersOf = (entry) => ((entry.addresses || []).length > 0 ? entry.addresses : [entry])
   .slice().sort((a, b) => (b.recipient_type === 'lnaddress') - (a.recipient_type === 'lnaddress'));
 
-// The parts of the line of one member (ADR 0095 items 7 and 8). `full` is
-// true in the header of a page, where a node key shows in full. A node on a
-// shared provider node shows the domain of the provider in its label. In a
-// row, it shows no key. `account` is the custom value, or null.
-export function addressLine(member, full) {
-  const account = member.custom_value || null;
-  if (member.recipient_type === 'lnaddress') {
-    return { label: 'Lightning address', address: member.address, account };
-  }
-  if (member.provider) {
-    return { label: `${member.provider} node`, address: full ? member.address : null, account };
-  }
-  return { label: 'Node', address: full ? member.address : shortKey(member.address), account };
-}
-
-// One line for each member of a wallet, for the header of its page.
+// One line for each member of a wallet, for the header of its page. The
+// lines come from `memberLine` of `people.js`, with a node key in full
+// (ADR 0095 items 7 and 8, ADR 0099 item 15).
 export function addressLines(entry) {
-  return membersOf(entry).map((m) => addressLine(m, true));
+  return membersOf(entry).map((m) => memberLine(m, true));
 }
-
-// The text of a line of a row: the label, the address, then the account.
-const lineText = ({ label, address, account }) =>
-  `${label}${address ? ` ${address}` : ''}${account ? ` · account ${account}` : ''}`;
 
 // The texts of the lines of a row: the Lightning addresses first, then each
-// node (ADR 0095 item 7).
+// node (ADR 0095 item 7). A node key shows in short form.
 export function rowLines(entry) {
-  return membersOf(entry).map((m) => lineText(addressLine(m, false)));
+  return membersOf(entry).map((m) => memberText(m));
 }
 
 const memberOfType = (entry, type) => (entry.addresses || []).find((m) => m.recipient_type === type) || null;
@@ -152,12 +136,7 @@ export function suggestionField(suggestions) {
 // The hint of a Lightning address that has no keysend data.
 export function lookupHint(address) {
   const domain = (address || '').split('@').slice(1).join('@');
-  return `Studio found no keysend data at ${domain}. An app that pays only with keysend cannot pay this address.`;
-}
-
-// The recipients A to Z by name (ADR 0091 item 2 and task 054c item 2).
-export function sortRecipients(list) {
-  return (list || []).slice().sort((a, b) => recipientTitle(a).localeCompare(recipientTitle(b), undefined, { sensitivity: 'base' }));
+  return `Studio found no payment details for this address at ${domain}. Some apps cannot pay it.`;
 }
 
 // The row of a recipient: the name, the count of feeds and one line for each
@@ -193,28 +172,6 @@ export function useRow(use) {
   };
 }
 
-// Each feed of a list is selected at the start (ADR 0091 item 3).
-export function allSelected(feeds) {
-  return new Set((feeds || []).map((feed) => feed.feed_id));
-}
-
-// The selected feeds in the sequence of the list, for the body of a request.
-export function selectedIds(feeds, selected) {
-  return (feeds || []).map((feed) => feed.feed_id).filter((id) => selected.has(id));
-}
-
-export function toggled(selected, id) {
-  const next = new Set(selected);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  return next;
-}
-
-// The text of the sheet button that counts the selected feeds.
-export function feedCount(n) {
-  return plural(n, 'feed', 'feeds');
-}
-
 // The text of each cause that a feed gives when the core does not change it.
 const CAUSES = {
   no_recipient: 'The feed has no value block with this recipient.',
@@ -225,7 +182,7 @@ const CAUSES = {
   split_not_number: 'A split of the value block is not a number.',
   bad_percent: 'The percentage must be a number from 1 to 99.',
   no_node_recipient: 'Each value block has the Lightning address already.',
-  in_open_change_set: 'The feed has a change in a different change set that is not written.',
+  in_open_change_set: 'The feed has other changes that Studio did not write.',
 };
 
 export function causeText(cause) {
@@ -254,18 +211,6 @@ export function blockedText(blocked) {
   return blocked ? (BLOCKED[blocked] || 'Studio cannot write this feed now.') : null;
 }
 
-// The title of a change set: its operation and its recipient.
-export function operationTitle(operation) {
-  switch (operation && operation.kind) {
-    case 'change_address': return 'Change address';
-    case 'rename': return 'Rename';
-    case 'remove': return 'Remove';
-    case 'add': return 'Add to an artist or label';
-    case 'use_lnaddress': return 'Use the Lightning address';
-    default: return 'Change set';
-  }
-}
-
 // The line under the title of the review.
 export function operationLine(operation, recipientName) {
   const who = recipientName || 'the recipient';
@@ -279,7 +224,6 @@ export function operationLine(operation, recipientName) {
   }
 }
 
-// The row of an open change set on the Recipients page.
 // The name of the recipient of a key in a list of recipients, or the
 // address when the list does not have the key.
 export function nameOf(list, key) {
@@ -287,14 +231,6 @@ export function nameOf(list, key) {
   const found = (list || []).find((r) => r.address === key.address
     && same(r.custom_key, key.custom_key) && same(r.custom_value, key.custom_value));
   return found ? recipientTitle(found) : key.address;
-}
-
-export function changeSetRow(set, list = []) {
-  const changed = (set.feeds || []).filter((feed) => feed.outcome && feed.outcome.outcome === 'changed').length;
-  return {
-    title: `${operationTitle(set.operation)} · ${nameOf(list, set.recipient)}`,
-    text: `${plural(changed, 'feed', 'feeds')} changed`,
-  };
 }
 
 // ---- The write of a change set (ADR 0091 items 23 and 24) ----
@@ -371,6 +307,106 @@ export function hasWrittenFeed(changeSet, statuses) {
   return (changeSet.feeds || []).some((feed) => feed.written_at != null || (statuses[feed.feed_id] || {}).state === 'written');
 }
 
-export function isWriting(statuses) {
-  return Object.values(statuses).some((status) => status.state === 'writing');
+// ---- The sheets of a wallet with no person (ADR 0099 items 7 and 10, task 065d) ----
+
+// The operations of the page of a wallet, in sequence, with the role of each
+// button (ADR 0037). A wallet with a node key can use a Lightning address.
+const WALLET_TITLES = {
+  change_address: 'Change Address',
+  rename: 'Rename',
+  use_lnaddress: 'Use the Lightning Address',
+  add: 'Add to All Releases',
+  remove: 'Remove',
+};
+
+export function walletActions(entry) {
+  return Object.entries(WALLET_TITLES)
+    .filter(([kind]) => kind !== 'use_lnaddress' || hasNode(entry))
+    .map(([kind, label]) => ({ kind, label, role: kind === 'remove' ? 'destructive' : 'action' }));
 }
+
+// The menu of the type of an address (ADR 0099 item 14).
+export const WALLET_TYPES = [['node', 'Lightning Node'], ['lnaddress', 'Lightning Address']];
+
+// The hint of the custom key (ADR 0099 item 14).
+export const CUSTOM_KEY_HINT = 'Most wallets do not need it. Copy it from your wallet when it gives one.';
+
+export const removeWalletHint = (title) => `Studio removes ${title} from each value block of the selected feeds. Studio changes the splits of the other recipients, and their total does not change.`;
+
+// The rows of the feeds that use a wallet, from `POST /recipients/uses`.
+// Each row starts selected (ADR 0099 item 7).
+export function walletFeedRows(uses) {
+  return (uses || []).map((use) => {
+    const row = useRow(use);
+    return { id: use.feed_id, title: row.title, lines: row.text ? [row.text] : [], checked: true };
+  });
+}
+
+// The model of the sheet of one operation: its title, the check boxes of the
+// feeds and the text of the primary button. The sheet "Add to All Releases"
+// has no feed until the user selects an artist or label.
+export function walletSheet(kind, uses) {
+  const rows = kind === 'add' ? [] : walletFeedRows(uses);
+  return { title: WALLET_TITLES[kind], rows, button: reviewLabel(checkedIds(rows).length) };
+}
+
+// The start values of the fields of a sheet. The address fields start at the
+// member of the wallet with the type of the menu (ADR 0095 item 14). The
+// user can change the values (an edit aid only).
+export function walletSheetStart(kind, entry) {
+  const type = startType(entry, kind);
+  const start = memberStart(entry, type);
+  return {
+    type,
+    address: kind === 'use_lnaddress' ? lnaddressOf(entry) || '' : start.address,
+    custom_key: start.custom_key,
+    custom_value: start.custom_value,
+    name: entry.name || '',
+    percent: '',
+    owner: '',
+  };
+}
+
+// A change of the type puts the member of the new type in the fields, when
+// the user did not change the address.
+export function walletTypeChange(entry, fields, next) {
+  if (fields.address !== memberStart(entry, fields.type).address) return { ...fields, type: next };
+  const member = memberStart(entry, next);
+  return { ...fields, type: next, address: member.address, custom_key: member.custom_key, custom_value: member.custom_value };
+}
+
+// The summary line of the collapsed entry with the details of the new
+// recipient (ADR 0099 item 10).
+export function walletDetailsLine(fields) {
+  const type = (WALLET_TYPES.find(([value]) => value === fields.type) || [null, ''])[1];
+  const address = fields.address.trim() === '' ? 'No address yet' : fields.type === 'node' ? shortKey(fields.address.trim()) : fields.address.trim();
+  return `${type} · ${address}`;
+}
+
+const optional = (text) => (String(text ?? '').trim() === '' ? null : String(text).trim());
+
+// The `operation` of `POST /change-sets`. A Lightning address has no custom
+// pair (ADR 0095 item 11). The core checks each value.
+export function walletSheetBody(kind, fields) {
+  const custom = fields.type === 'lnaddress'
+    ? { custom_key: null, custom_value: null }
+    : { custom_key: optional(fields.custom_key), custom_value: optional(fields.custom_value) };
+  switch (kind) {
+    case 'change_address':
+      return { kind, address: fields.address.trim(), ...custom, recipient_type: fields.type || null };
+    case 'rename': return { kind, name: fields.name };
+    case 'remove': return { kind };
+    case 'use_lnaddress': return { kind, address: fields.address.trim() };
+    default:
+      return { kind, name: optional(fields.name), recipient_type: fields.type || null, address: fields.address.trim(), ...custom, percent: Number(fields.percent) };
+  }
+}
+
+// True when the primary button works: one feed is selected and the fields
+// that the operation needs have a value.
+export function walletSheetReady(kind, fields, ids) {
+  return ids.length > 0
+    && (kind === 'rename' || kind === 'remove' || fields.address.trim() !== '')
+    && (kind !== 'add' || fields.percent !== '');
+}
+

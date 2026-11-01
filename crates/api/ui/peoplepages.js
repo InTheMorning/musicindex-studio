@@ -6,7 +6,11 @@ import { useSheet } from './editor.js';
 import { api, Bar, ChoiceSelect, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
-import { recipientKey, recipientRow } from './recipients.js';
+import {
+  recipientKey, recipientRow, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES,
+  CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
+  walletSheetReady, recipientTitle,
+} from './recipients.js';
 import {
   peopleSections, PEOPLE_EMPTY, suggestionRow, personRow, makePersonStart, makePersonBody, initials,
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices, makeSheetTitle,
@@ -271,6 +275,16 @@ function OperationSheet({ kind, person, groups, rows, feeds, go, onClose }) {
   </dialog>`;
 }
 
+// The feeds of a sheet with a check box for each. The sheets of a person and
+// of a wallet use it (ADR 0099 item 7).
+function FeedChecks({ rows, setRows, empty }) {
+  if (!rows) return null;
+  if (rows.length === 0) return html`<p class="empty">${empty}</p>`;
+  return html`<section class="page-section"><h2>${feedsHeading(rows)}</h2><div class="group rows">${rows.map((row) =>
+    html`<${FeedCheckRow} key=${row.id} title=${row.title} text=${row.lines.join(' · ')} checked=${row.checked}
+      onChange=${() => setRows(toggledRow(rows, row.id))} />`)}</div></section>`;
+}
+
 function OperationForm({ kind, person, groups, rows: startRows, feeds, go }) {
   const adding = kind === 'add_to_releases';
   const [fields, setFields] = useState(() => sheetStart(kind, person, groups));
@@ -332,10 +346,7 @@ function OperationForm({ kind, person, groups, rows: startRows, feeds, go }) {
         <div class="group rows">${check('payment', 'Payment name')}${check('credit', 'Credit name')}</div>`}
       ${kind === 'remove' && html`<p class="hint">${removeHint(person.name)}</p>
         <div class="group rows">${check('payee', 'Payee')}${check('credit', 'Credit')}</div>`}
-      ${rows && rows.length > 0 && html`<section class="page-section"><h2>${feedsHeading(rows)}</h2><div class="group rows">${rows.map((row) =>
-        html`<${FeedCheckRow} key=${row.id} title=${row.title} text=${row.lines.join(' · ')} checked=${row.checked}
-          onChange=${() => setRows(toggledRow(rows, row.id))} />`)}</div></section>`}
-      ${rows && rows.length === 0 && html`<p class="empty">${adding ? 'This artist or label has no release.' : 'No feed uses this person.'}</p>`}
+      <${FeedChecks} rows=${rows} setRows=${setRows} empty=${adding ? 'This artist or label has no release.' : 'No feed uses this person.'} />
       ${kind === 'rename' && html`<p class="hint">${renameHint}</p>`}
       <${ErrorNotice} error=${error} />
     </div>
@@ -454,5 +465,131 @@ export function WhereUsedPage({ id, feeds, go }) {
       ${rows.length > 0 && html`<div class="group">${rows.map((row) => html`<${ListRow} key=${row.id} title=${row.title} lines=${row.lines}
         onClick=${() => go({ name: 'feed', id: row.id })} />`)}</div>`}
       <p class="hint">${`A feed opens in the editor. To change ${person.name} in many feeds, use the buttons on the page of the person.`}</p>`}
+  </section></div>`;
+}
+
+// ---- The page of a wallet with no person (ADR 0099 items 7 and 10, task 065d) ----
+
+// The sheet of one operation of a wallet. The sheet lists the feeds of the
+// wallet with a check box for each, and sends `POST /change-sets`.
+function WalletSheet({ kind, recipient, uses, feeds, go, onClose }) {
+  const ref = useSheet(kind !== null);
+  return html`<dialog ref=${ref} class=${`sheet${kind === 'add' ? ' small' : ''}`} aria-labelledby="operation-title" onClose=${onClose}>
+    <header>
+      <h2 id="operation-title">${kind ? walletSheet(kind, uses).title : ''}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    ${kind && html`<${WalletForm} key=${kind} kind=${kind} recipient=${recipient} uses=${uses} feeds=${feeds} go=${go} />`}
+  </dialog>`;
+}
+
+function WalletForm({ kind, recipient, uses, feeds, go }) {
+  const key = recipientKey(recipient);
+  const adding = kind === 'add';
+  const [fields, setFields] = useState(() => walletSheetStart(kind, recipient));
+  const [rows, setRows] = useState(adding ? null : walletSheet(kind, uses).rows);
+  const set = (patch) => setFields((current) => ({ ...current, ...patch }));
+  const { busy, error, run } = useAction();
+  // A wallet with no Lightning address asks the core for suggestions
+  // (ADR 0097 item 5). `null` while the request runs.
+  const asks = kind === 'use_lnaddress' && !lnaddressOf(recipient);
+  const [field, setField] = useState(null);
+  const [choice, setChoice] = useState(OTHER_ADDRESS);
+  useEffect(() => {
+    if (!asks) return undefined;
+    let live = true;
+    api('/recipients/lnaddress-suggestions', { method: 'POST', body: key })
+      .then((result) => result.suggestions, () => [])
+      .then((list) => {
+        if (!live) return;
+        const next = suggestionField(list);
+        setField(next);
+        setChoice(next.start);
+        set({ address: next.start });
+      });
+    return () => { live = false; };
+  }, []);
+  const choose = (value) => {
+    setChoice(value);
+    set({ address: value });
+  };
+  // The core lists the releases of the artist or label. Each starts selected.
+  const chooseOwner = (owner) => {
+    set({ owner });
+    setRows(null);
+    if (owner === '') return;
+    run(async () => {
+      const level = await api(`/feeds/${owner}/level`);
+      setRows(levelRows(level.feed_ids, feeds));
+    });
+  };
+  const ids = rows ? checkedIds(rows) : [];
+  const ready = walletSheetReady(kind, fields, ids);
+  const submit = () => run(async () => {
+    const made = await api('/change-sets', { method: 'POST', body: { recipient: key, operation: walletSheetBody(kind, fields), feed_ids: ids } });
+    go({ name: 'change-set', id: made.id });
+  });
+  const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${fields.type}
+    onChange=${(next) => setFields(walletTypeChange(recipient, fields, next))} options=${WALLET_TYPES} />`;
+  const addressFields = html`<${Field} id="op-address" label=${fields.type === 'lnaddress' ? 'Lightning address' : 'Lightning node key'} required
+      value=${fields.address} onInput=${(e) => set({ address: e.target.value })} />
+    ${fields.type !== 'lnaddress' && html`<${Field} id="op-custom-key" label="Custom key" hint=${CUSTOM_KEY_HINT}
+        value=${fields.custom_key} onInput=${(e) => set({ custom_key: e.target.value })} />
+      <${Field} id="op-custom-value" label="Account" value=${fields.custom_value} onInput=${(e) => set({ custom_value: e.target.value })} />`}`;
+  return html`<div class="body">
+      ${kind === 'remove' && html`<p class="hint">${removeWalletHint(recipientTitle(recipient))}</p>`}
+      ${kind === 'rename' && html`<div class="group rows"><${Field} id="op-name" label="Name" value=${fields.name}
+        onInput=${(e) => set({ name: e.target.value })} /></div>`}
+      ${kind === 'use_lnaddress' && html`<div class="group rows">
+        ${asks && field === null && html`<p class="hint" role="status">Studio looks for Lightning addresses of this wallet…</p>`}
+        ${field && field.menu && html`<${ChoiceSelect} id="op-suggestion" label="Lightning address" value=${choice}
+          options=${field.options} hint=${field.hints[choice]} onChange=${choose} />`}
+        ${!(field && field.menu && choice !== OTHER_ADDRESS) && html`<${Field} id="op-address" label=${field && field.menu ? 'Other address' : 'Lightning address'} required
+          hint=${field && field.hint ? `${field.hint} The address must pay the same wallet. Studio checks it.` : 'The address must pay the same wallet. Studio checks it.'}
+          value=${fields.address} onInput=${(e) => set({ address: e.target.value })} />`}
+      </div>`}
+      ${kind === 'change_address' && html`<div class="group rows">${typeMenu}${addressFields}</div>`}
+      ${adding && html`<div class="group rows"><${ChoiceSelect} id="op-owner" label="Artist or label" value=${fields.owner} onChange=${chooseOwner}
+          placeholder="Select an artist or label" options=${memberChoices(feeds)} />
+        <${Field} id="op-percent" label="Percentage" type="number" min="1" max="99" step="1" required
+          hint="The share of the new recipient, from 1 to 99." value=${fields.percent} onInput=${(e) => set({ percent: e.target.value })} /></div>
+        <div class="group"><details class="disclosure">
+          <summary class="link-row"><span class="label">Recipient</span><span class="summary">${walletDetailsLine(fields)}</span></summary>
+          <div class="form">${typeMenu}
+            <${Field} id="op-name" label="Name" value=${fields.name} onInput=${(e) => set({ name: e.target.value })} />
+            ${addressFields}</div>
+        </details></div>`}
+      <${FeedChecks} rows=${rows} setRows=${setRows} empty=${adding ? 'This artist or label has no release.' : 'No feed uses this wallet.'} />
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class="button primary" type="button" disabled=${busy || !ready} onClick=${submit}>${busy ? BUSY_REVIEW : reviewLabel(ids.length)}</button>
+    </footer>`;
+}
+
+// The page of a wallet with no person (ADR 0099 item 7). It has the five
+// operations and no list of feeds: each sheet lists the feeds.
+export function WalletPage({ recipient, feeds, go }) {
+  const [uses, setUses] = useState(null);
+  const [sheet, setSheet] = useState(null);
+  const { error, run } = useAction();
+  useEffect(() => {
+    run(async () => {
+      const result = await api('/recipients/uses', { method: 'POST', body: recipientKey(recipient) });
+      setUses(result.feeds);
+    });
+  }, []);
+  const used = uses !== null && uses.length > 0;
+  const row = recipientRow(recipient);
+  return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
+    <${ErrorNotice} error=${error} />
+    <header class="recipient-head"><h1>${breakParts(row.title).map((part, i) => html`${i > 0 && html`<wbr />`}${part}`)}</h1>
+      ${addressLines(recipient).map((line) => html`<p class="hint" key=${line.address || line.label}>${line.label}${line.address && html` <span class="mono">${line.address}</span>`}${line.account && ` · account ${line.account}`}</p>`)}</header>
+    <div class="actions recipient-actions">${walletActions(recipient).map((action) => html`<button key=${action.kind}
+      class=${`button ${action.role}`} type="button" disabled=${action.kind !== 'add' && !used}
+      onClick=${() => setSheet(action.kind)}>${action.label}</button>`)}</div>
+    ${uses === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}
+    ${uses !== null && uses.length === 0 && html`<p class="empty">No feed uses this wallet. Add to All Releases puts it in feeds.</p>`}
+    <${WalletSheet} kind=${sheet} recipient=${recipient} uses=${uses || []} feeds=${feeds} go=${go} onClose=${() => setSheet(null)} />
   </section></div>`;
 }

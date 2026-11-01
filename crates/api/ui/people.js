@@ -239,7 +239,7 @@ export function changeTitle(operation) {
     case 'change_address': return 'Change address';
     case 'rename': return 'Rename';
     case 'remove': return 'Remove';
-    case 'add': return 'Add to an artist or label';
+    case 'add': return 'Add to All Releases';
     case 'use_lnaddress': return 'Use the Lightning address';
     case 'use_address': return 'Use This Address';
     case 'rename_person': return 'Rename';

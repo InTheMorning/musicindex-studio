@@ -2,8 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  recipientRow, rowLines, sortRecipients, placesText, useRow, outcomeText, causeText, blockedText,
-  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationTitle, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, changeSetRow, nameOf, statusError,
+  recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
+  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
+  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT,
 } from '../ui/recipients.js';
 
 test('the row of a used recipient gives the title, the count and the lines', () => {
@@ -15,15 +16,10 @@ test('the row of a used recipient gives the title, the count and the lines', () 
 test('the count of a saved recipient that no feed uses says so', () => {
   const row = recipientRow({ name: 'Cara', recipient_type: 'node', address: '02ab12cd34ef5678', feeds: 0, saved_id: 4 });
   assert.equal(row.count, 'Saved, not used');
-  assert.deepEqual(row.lines, ['Node 02ab12cd…5678'],
+  assert.deepEqual(row.lines, ['Lightning node 02ab12cd…5678'],
     'ADR 0095 item 7: a node key with no provider shows its first 8 and its last 4 characters.');
   assert.equal(recipientRow({ name: 'Dan', address: '03cd', feeds: 0, saved_id: null }).count, '0 feeds',
     'ADR 0091 item 2: only a saved recipient shows "Saved, not used". Give the number of feeds for each other recipient.');
-});
-
-test('the list is A to Z by name, and a recipient with no name uses its address', () => {
-  const sorted = sortRecipients([{ name: 'bob', address: 'x' }, { name: null, address: 'ann@x' }, { name: 'Cara', address: 'y' }]);
-  assert.deepEqual(sorted.map((r) => r.address), ['ann@x', 'x', 'y']);
 });
 
 test('the places text of a feed with the channel and 12 tracks', () => {
@@ -92,19 +88,6 @@ test('the write status after one failure keeps the next feed Waiting', () => {
   assert.equal(retryStatuses(statuses)[1].state, 'waiting');
 });
 
-test('the row of an open change set gives its operation and the changed feeds', () => {
-  const row = changeSetRow({ operation: { kind: 'rename' }, recipient: { address: 'ann@example.com' }, feeds: set.feeds });
-  assert.deepEqual(row, { title: 'Rename · ann@example.com', text: '3 feeds changed' });
-});
-
-test('a change set names its recipient by name, or by address when no recipient has the key', () => {
-  const list = [{ address: 'ann@example.com', custom_key: '', custom_value: null, name: 'Ann' }];
-  const set = { operation: { kind: 'remove' }, recipient: { address: 'ann@example.com', custom_key: null, custom_value: null }, feeds: [] };
-  assert.equal(changeSetRow(set, list).title, 'Remove · Ann',
-    'ADR 0091 item 21: the review names the recipient. Find the name with nameOf of recipients.js.');
-  assert.equal(nameOf([], set.recipient), 'ann@example.com');
-});
-
 const wallet = {
   name: null, address: '02ab12cd34ef5678', recipient_type: 'node', custom_key: '906608', custom_value: '01abc', feeds: 7,
   addresses: [
@@ -117,13 +100,13 @@ test('a wallet of two addresses gives its title, row and lines', () => {
   assert.equal(recipientTitle(wallet), 'tj@getalby.com');
   assert.deepEqual(addressLines(wallet), [
     { label: 'Lightning address', address: 'tj@getalby.com', account: null },
-    { label: 'Node', address: '02ab12cd34ef5678', account: '01abc' }],
+    { label: 'Lightning node', address: '02ab12cd34ef5678', account: '01abc' }],
   'ADR 0095 item 8: the header shows the full key and the account.');
   assert.equal(lnaddressOf(wallet), 'tj@getalby.com');
   assert.equal(nodeOf(wallet), '02ab12cd34ef5678');
   const row = recipientRow({ ...wallet, name: 'TJ Doerfel' });
   assert.equal(row.count, '7 feeds');
-  assert.deepEqual(row.lines, ['Lightning address tj@getalby.com', 'Node 02ab12cd…5678 · account 01abc']);
+  assert.deepEqual(row.lines, ['Lightning address tj@getalby.com', 'Lightning node 02ab12cd…5678 · account 01abc']);
   const keyFirst = { ...wallet, addresses: [wallet.addresses[1], wallet.addresses[0]] };
   assert.equal(recipientRow(keyFirst).lines[0], 'Lightning address tj@getalby.com',
     'ADR 0095 item 7: the Lightning address is first in the row.');
@@ -144,12 +127,12 @@ test('rowLines gives a provider node with its domain and its account', () => {
 });
 
 test('rowLines gives a node with no provider and no account', () => {
-  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node' }), ['Node 03d55f4d…aa67'],
+  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node' }), ['Lightning node 03d55f4d…aa67'],
     'ADR 0095 item 7: a node with no provider shows its short key.');
 });
 
 test('rowLines gives a node with no provider and an account', () => {
-  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node', custom_value: 'abc' }), ['Node 03d55f4d…aa67 · account abc']);
+  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node', custom_value: 'abc' }), ['Lightning node 03d55f4d…aa67 · account abc']);
 });
 
 test('the operation form starts at the member of the wallet with the type of the menu', () => {
@@ -170,7 +153,7 @@ test('the operation form starts at the member of the wallet with the type of the
 test('an entry with no addresses gives one line', () => {
   const entry = { name: null, address: '03cd', recipient_type: 'node' };
   assert.equal(recipientTitle(entry), '03cd');
-  assert.deepEqual(addressLines(entry), [{ label: 'Node', address: '03cd', account: null }]);
+  assert.deepEqual(addressLines(entry), [{ label: 'Lightning node', address: '03cd', account: null }]);
   assert.equal(lnaddressOf(entry), null);
   assert.equal(nodeOf(entry), null);
 });
@@ -180,8 +163,9 @@ test('the picker gives one row for each address, with the name of the entry', ()
   assert.deepEqual(rows.map((r) => [r.address, r.name]), [['tj@getalby.com', 'TJ Doerfel'], ['02ab12cd34ef5678', 'TJ node']]);
 });
 
-test('the keysend hint names the domain', () => {
-  assert.match(lookupHint('chadf@getalby.com'), /getalby\.com/);
+test('the lookup hint has the text of ADR 0099 item 16', () => {
+  assert.equal(lookupHint('chadf@getalby.com'),
+    'Studio found no payment details for this address at getalby.com. Some apps cannot pay it.');
 });
 
 test('the suggestion field gives a menu with suggestions and a text field with none (ADR 0097)', () => {
@@ -212,25 +196,74 @@ test('a title breaks after its @', () => {
   assert.deepEqual(breakParts(null), ['']);
 });
 
-test('the operation add has the name of ADR 0096', () => {
-  assert.equal(operationTitle({ kind: 'add' }), 'Add to an artist or label');
-});
-
 test('the new operation and the new cause have texts', () => {
-  assert.equal(operationTitle({ kind: 'use_lnaddress' }), 'Use the Lightning address');
   assert.equal(operationLine({ kind: 'use_lnaddress', address: 'a@b.c' }, 'TJ'),
     'Studio replaces the node key of TJ with a@b.c in the selected feeds.');
   assert.equal(causeText({ cause: 'no_node_recipient' }), 'Each value block has the Lightning address already.');
 });
 
-test('the type menu of the operation sheet has no placeholder', async () => {
-  const { readFileSync } = await import('node:fs');
-  const text = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
-  const start = text.indexOf('id="op-type"');
-  const element = text.slice(start, text.indexOf('/>', start));
-  assert.ok(!element.includes('placeholder'),
-    'ADR 0095 item 14: the Type menu of the operation sheet has no placeholder. Remove it.');
-  const form = text.slice(text.indexOf('<div class="group rows">', text.indexOf("kind === 'change_address' || kind === 'add'")));
-  assert.ok(form.indexOf('${typeMenu}') < form.indexOf('id="op-address"'),
-    'ADR 0095 item 14: the Type menu is the first field of the operation sheet. Put it before the address field.');
+test('the address lines of a row and of a header are one function (ADR 0099 item 15)', () => {
+  const entry = { address: keyA, addresses: [
+    { address: keyA, recipient_type: 'node', provider: 'fountain.fm', custom_value: '01ab' },
+    { address: 'bot@fountain.fm', recipient_type: 'lnaddress' }] };
+  assert.deepEqual(rowLines(entry), ['Lightning address bot@fountain.fm', 'fountain.fm node · account 01ab']);
+  assert.deepEqual(addressLines(entry).map((l) => l.label), ['Lightning address', 'fountain.fm node']);
+});
+
+test('the type menu of a wallet sheet gives Lightning Node and Lightning Address (ADR 0099 item 14)', () => {
+  assert.deepEqual(WALLET_TYPES, [['node', 'Lightning Node'], ['lnaddress', 'Lightning Address']]);
+  assert.equal(CUSTOM_KEY_HINT, 'Most wallets do not need it. Copy it from your wallet when it gives one.');
+});
+
+test('the page of a wallet has the five operations, the last one destructive (ADR 0099 item 7)', () => {
+  const actions = walletActions(wallet);
+  assert.deepEqual(actions.map((a) => [a.kind, a.label, a.role]), [
+    ['change_address', 'Change Address', 'action'],
+    ['rename', 'Rename', 'action'],
+    ['use_lnaddress', 'Use the Lightning Address', 'action'],
+    ['add', 'Add to All Releases', 'action'],
+    ['remove', 'Remove', 'destructive']]);
+  assert.ok(!walletActions({ address: 'a@b.c', recipient_type: 'lnaddress' }).some((a) => a.kind === 'use_lnaddress'),
+    'ADR 0095: a wallet with no node key has nothing to replace.');
+});
+
+test('each sheet of a wallet lists the feeds, each selected, and counts them in its button (ADR 0099 item 7)', () => {
+  const uses = [
+    { feed_id: 1, title: 'One', channel: true, items: 2, live_items: 0, writable: true },
+    { feed_id: 2, title: '', channel: false, items: 0, live_items: 1, writable: false }];
+  for (const kind of ['change_address', 'rename', 'use_lnaddress', 'remove']) {
+    const sheet = walletSheet(kind, uses);
+    assert.deepEqual(sheet.rows.map((r) => [r.id, r.checked]), [[1, true], [2, true]]);
+    assert.equal(sheet.button, 'Review in 2 Feeds');
+  }
+  assert.deepEqual(walletSheet('rename', uses).rows[0], { id: 1, title: 'One', lines: ['Channel · 2 tracks'], checked: true });
+  assert.equal(walletSheet('rename', [uses[0]]).button, 'Review in 1 Feed');
+  assert.equal(walletSheet('add', uses).title, 'Add to All Releases');
+  assert.deepEqual(walletSheet('add', uses).rows, [], 'The feeds of Add to All Releases come from the artist or label that the user selects.');
+});
+
+test('the fields of a wallet sheet start at the member with the type and give the body of the route', () => {
+  const fields = walletSheetStart('change_address', wallet);
+  assert.equal(fields.type, 'node');
+  assert.equal(fields.address, '02ab12cd34ef5678');
+  assert.deepEqual(walletSheetBody('change_address', { ...fields, address: ' 03ff ', custom_value: '' }),
+    { kind: 'change_address', address: '03ff', custom_key: '906608', custom_value: null, recipient_type: 'node' });
+  const toAddress = walletTypeChange(wallet, fields, 'lnaddress');
+  assert.equal(toAddress.address, 'tj@getalby.com');
+  assert.deepEqual(walletSheetBody('change_address', toAddress),
+    { kind: 'change_address', address: 'tj@getalby.com', custom_key: null, custom_value: null, recipient_type: 'lnaddress' });
+  assert.equal(walletTypeChange(wallet, { ...fields, address: 'typed' }, 'lnaddress').address, 'typed');
+  assert.equal(walletSheetStart('use_lnaddress', wallet).address, 'tj@getalby.com');
+  assert.deepEqual(walletSheetBody('remove', fields), { kind: 'remove' });
+});
+
+test('Add to All Releases needs a percentage, an address and one feed; its details have a summary line', () => {
+  const fields = { ...walletSheetStart('add', wallet), percent: '' };
+  assert.equal(walletSheetReady('add', fields, [1]), false);
+  assert.equal(walletSheetReady('add', { ...fields, percent: '5' }, []), false);
+  assert.equal(walletSheetReady('add', { ...fields, percent: '5' }, [1]), true);
+  assert.equal(walletSheetReady('remove', fields, [1]), true);
+  assert.equal(walletDetailsLine({ type: 'lnaddress', address: 'tj@getalby.com' }), 'Lightning Address · tj@getalby.com');
+  assert.equal(walletDetailsLine({ type: 'node', address: '' }), 'Lightning Node · No address yet');
+  assert.equal(walletSheetBody('add', { ...fields, percent: '5', name: ' ' }).percent, 5);
 });

@@ -20,10 +20,10 @@ export const CONFIRMS = {
     `Remove the file host “${name}”?`,
     'Studio forgets this file host. The files on it do not change.',
     'Remove the File Host'),
-  discardChangeSet: () => destructive(
-    'Discard this change set?',
+  discardChanges: () => destructive(
+    'Discard these changes?',
     'Each feed that you did not write gets back its draft from before the change. A feed that you wrote does not change.',
-    'Discard the Change Set'),
+    'Discard the Changes'),
   discardDraft: () => destructive(
     'Discard the draft?',
     'Studio deletes each change that you did not write. The feed file on its file host does not change.',

@@ -361,3 +361,26 @@ test('the review line of a change set of a person names the operation', () => {
     'Remove Ann as a payee and a credit from 2 feeds');
   assert.equal(changeLine({ feeds, operation: { kind: 'merge' } }, 'Ann'), '');
 });
+
+import { readFileSync } from 'node:fs';
+
+test('no text of the People area shows an XML attribute or the words "change set" (ADR 0099 items 13 and 17)', () => {
+  for (const name of ['people.js', 'peoplepages.js', 'recipients.js']) {
+    const source = readFileSync(new URL(`../ui/${name}`, import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
+    assert.ok(!/method=/.test(source),
+      `ADR 0099 item 17: ${name} shows an XML attribute such as method="lnaddress". Name the type with "Lightning Address" instead.`);
+    assert.ok(!/change sets?/i.test(source),
+      `ADR 0099 item 13: ${name} has a text with the words "change set". Say "changes" instead.`);
+  }
+});
+
+test('the words of an address line and a change title follow ADR 0099 items 15 and 18', () => {
+  assert.equal(memberText({ address: 'a@b.c', recipient_type: 'lnaddress' }), 'Lightning address a@b.c');
+  assert.equal(memberText({ address: '03aa', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'x1' }), 'fountain.fm node · account x1');
+  assert.equal(memberText({ address: '03aa', recipient_type: 'node', custom_value: 'x1' }), 'Lightning node 03aa · account x1');
+  assert.equal(changeTitle({ kind: 'add' }), 'Add to All Releases');
+});

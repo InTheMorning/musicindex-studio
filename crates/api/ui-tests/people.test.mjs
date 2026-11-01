@@ -174,3 +174,59 @@ test('the result line leaves out a count of 0 and names one part', () => {
   assert.equal(addResultLine(all), '1 release · 1 have all already');
   assert.equal(addResultLine([]), '');
 });
+
+import {
+  initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeTitle, feedsToWrite,
+  changeRow, afterDiscard, memberChoices, makeSheetTitle, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
+} from '../ui/people.js';
+
+test('the search matches the name, an address and a key, with no regard to capitals', () => {
+  const person = { name: 'Mary Kate', wallets: [{ key: { address: 'MK@fountain.fm' } }], keys: [{ npub: 'npub1abc' }] };
+  assert.ok(personMatches(person, 'mary'));
+  assert.ok(personMatches(person, 'mk@FOUNTAIN'));
+  assert.ok(personMatches(person, 'NPUB1A'));
+  assert.ok(personMatches(person, ''));
+  assert.ok(!personMatches(person, 'sam'));
+  assert.equal(filterPeople([person, { name: 'Sam' }], 'sam').length, 1);
+  const payee = { name: 'BoostBot', address: '03d5', addresses: [{ address: 'bot@x.fm' }] };
+  assert.equal(filterPayees([payee], 'bot@X').length, 1);
+  assert.equal(filterPayees([payee], 'zzz').length, 0);
+});
+
+test('the lists of payees and of open change sets', () => {
+  assert.deepEqual(payeesWithNoPerson([{ saved_id: null, name: 'a' }, { saved_id: 3, name: 'b' }]).map((r) => r.name), ['a']);
+  assert.deepEqual(openChanges([{ id: 1, open: true }, { id: 2, open: false }]).map((s) => s.id), [1]);
+  assert.equal(initials('mary kate ultra'), 'MK');
+});
+
+test('a change row gives the operation, the subject and the feeds to write', () => {
+  const feeds = [
+    { outcome: { outcome: 'changed' }, written_at: null },
+    { outcome: { outcome: 'changed' }, written_at: 5 },
+    { outcome: { outcome: 'unchanged' }, written_at: null },
+  ];
+  assert.equal(feedsToWrite({ feeds }), 1);
+  const person = changeRow({ operation: { kind: 'rename_person' }, person_id: 7, feeds }, [{ id: 7, name: 'Mary' }]);
+  assert.deepEqual(person, { title: 'Rename · Mary', text: '1 feed to write' });
+  const wallet = changeRow({ operation: { kind: 'remove' }, recipient: { address: 'a@x' }, feeds }, [], [{ address: 'a@x', name: 'Ann' }]);
+  assert.equal(wallet.title, 'Remove · Ann');
+  assert.equal(changeTitle({ kind: 'add_to_releases' }), 'Add to All Releases');
+});
+
+test('Discard opens the person of a person change set, else People (ADR 0099 item 12)', () => {
+  assert.deepEqual(afterDiscard({ person_id: 7 }), { name: 'person', id: 7 });
+  assert.deepEqual(afterDiscard({ person_id: null }), { name: 'people' });
+});
+
+test('the sheet Make a Person gives its texts, rows and menu', () => {
+  assert.equal(makeSheetTitle('Mary'), 'Make a Person: Mary');
+  assert.deepEqual(memberChoices([
+    { id: 2, medium: 'publisher', title: 'Zed' }, { id: 1, medium: 'music', title: 'Album' }, { id: 3, medium: 'publisher', title: 'Ann' },
+  ]), [['3', 'Ann'], ['2', 'Zed']]);
+  assert.equal(creditItemRow({ roles: ['Vocals'], feeds: [1, 2] }, { 1: 'A', 2: 'B' }).lines[0], 'A, B');
+  assert.match(payeeItemRow({ key: { address: 'a@x.fm' }, recipient_type: 'lnaddress', feeds: [1], same_name: false, name: 'MK' }).lines[0], /the name in that feed is "MK"/);
+  const state = makePersonStart(SUGGESTION);
+  assert.equal(toggledItem(state, 'recipients', 0).recipients[0].checked, !state.recipients[0].checked);
+  assert.deepEqual(dismissBody({ identity: 'i', item_keys: ['k'] }), { identity: 'i', items: ['k'] });
+  assert.deepEqual(addPersonBody('  Sam '), { name: 'Sam' });
+});

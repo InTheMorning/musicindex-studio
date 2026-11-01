@@ -68,8 +68,9 @@ const set = {
 
 test('only a changed feed that is not blocked needs a write', () => {
   assert.deepEqual(writableIds(set), [1, 2]);
-  assert.equal(writeLabel(2), 'Write 2 feeds');
-  assert.equal(writeLabel(1), 'Write 1 feed');
+  // A button label uses title case (musicindex ADR 0023 R-CASE-1, ADR 0099 item 12).
+  assert.equal(writeLabel(2), 'Write 2 Feeds');
+  assert.equal(writeLabel(1), 'Write 1 Feed');
 });
 
 test('the write status after one failure keeps the next feed Waiting', () => {

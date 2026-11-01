@@ -4,8 +4,8 @@ import { pageSequence } from './pages.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
-  recipientKey, recipientTitle, breakParts, addressLines as walletLines, lnaddressOf, hasNode, suggestionField, OTHER_ADDRESS, memberStart, startType, sortRecipients, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
-  outcomeText, blockedText, operationTitle, operationLine, changeSetRow, nameOf, writableIds, initialStatuses, startWrite,
+  recipientKey, recipientTitle, breakParts, addressLines as walletLines, lnaddressOf, hasNode, suggestionField, OTHER_ADDRESS, memberStart, startType, recipientRow, useRow, allSelected, selectedIds, toggled, feedCount,
+  outcomeText, blockedText, operationLine, nameOf, writableIds, initialStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
 import {
@@ -18,6 +18,8 @@ import {
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
 import { CONFIRMS } from './confirms.js';
+import { changeTitle, afterDiscard } from './people.js';
+import { PeoplePage, PersonStub } from './peoplepages.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf, coverNote } from './cover.js';
@@ -1201,7 +1203,7 @@ function BlossomHostForm({ onAdded }) {
 // `options` is a list of [value, label] pairs.
 // A `placeholder` adds a first entry with an empty value, for a setting that
 // has no value yet.
-function ChoiceSelect({ id, label, value, options, placeholder, hint, onChange }) {
+export function ChoiceSelect({ id, label, value, options, placeholder, hint, onChange }) {
   return html`<div class="field">
     <label for=${id}>${label}</label>
     <div class="field-body">
@@ -1725,6 +1727,7 @@ function Chevron({ direction }) {
 // gives the accessible name.
 const ICONS = {
   library: () => html`<path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" />`,
+  users: () => html`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />`,
   wallet: () => html`<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />`,
   'hard-drive': () => html`<path d="M10 16h.01" /><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M21.946 12.013H2.054" /><path d="M6 16h.01" />`,
   settings: () => html`<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" />`,
@@ -1766,7 +1769,7 @@ function FeedAddress({ url }) {
   </p>`;
 }
 
-function Bar({ back = true, children }) {
+export function Bar({ back = true, children }) {
   const nav = useContext(NavContext);
   return html`<div class="bar">
     ${back && nav && (nav.coarse
@@ -2489,47 +2492,10 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
   </section></div>`;
 }
 
-// ---- Recipients (ADR 0091) ----
-
-// The Recipients page: one summary line for each recipient, A to Z (ADR 0091
-// item 2). A row opens the page of the recipient. The open change sets show
-// above the list, so that the user can go back to a review.
-function RecipientsPage({ go }) {
-  const [list, setList] = useState(null);
-  const [sets, setSets] = useState([]);
-  const { error, run } = useAction();
-  useEffect(() => {
-    run(async () => {
-      setList(await api('/recipients'));
-      setSets(await api('/change-sets'));
-    });
-  }, []);
-  const rows = sortRecipients(list);
-  return html`<div><${Bar}><span class="bar-title">Recipients</span><//><section class="section">
-    <${ErrorNotice} error=${error} />
-    ${sets.length > 0 && html`<section class="page-section recipient-sets"><h2>Open change sets</h2>
-      <div class="group">${sets.map((set) => {
-        const row = changeSetRow(set, list);
-        return html`<button key=${set.id} class="link-row" type="button" onClick=${() => go({ name: 'change-set', id: set.id })}>
-          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
-        </button>`;
-      })}</div></section>`}
-    <section class="page-section"><h2>Recipients</h2>
-      ${list === null && !error && html`<p class="empty" role="status">Loading the recipients…</p>`}
-      ${list !== null && rows.length === 0 && html`<p class="empty">Studio found no recipient in your feeds yet.</p>`}
-      ${rows.length > 0 && html`<div class="group">${rows.map((recipient) => {
-        const row = recipientRow(recipient);
-        return html`<button key=${JSON.stringify(recipientKey(recipient))} class="link-row" type="button"
-          onClick=${() => go({ name: 'recipient', recipient })}>
-          <span class="text"><span class="label">${row.title}</span>${row.lines.map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span><span class="count">${row.count}</span><span class="go">›</span>
-        </button>`;
-      })}</div>`}
-    </section>
-  </section></div>`;
-}
+// ---- Wallets and change sets (ADR 0091, ADR 0099) ----
 
 // A checkbox row of a feed, with its title and its places (ADR 0091 item 3).
-function FeedCheckRow({ title, text, checked, onChange }) {
+export function FeedCheckRow({ title, text, checked, onChange }) {
   return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onChange} />
     <span class="text"><span class="label">${title}</span>${text && html`<span class="summary">${text}</span>`}</span></label>`;
 }
@@ -2806,17 +2772,21 @@ function ChangeSetPage({ id, go, onChanged }) {
     run(async () => {
       await api(`/change-sets/${id}`, { method: 'DELETE' });
       await onChanged();
-      go({ name: 'recipients' }, { replace: true });
+      go(afterDiscard(set), { replace: true });
     });
   };
   const notFound = error && error.status === 404;
-  return html`<div><${Bar}><span class="bar-title">Review of the change</span><//><section class="section">
+  const pendingWrite = set !== null && pending > 0;
+  return html`<div><${Bar}><span class="bar-title">Review the changes</span>
+    ${set && html`${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy} onClick=${writeAll}>
+        ${writing ? 'Writing…' : writeLabel(pending)}</button>`}
+      <button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>`}<//><section class="section">
     ${notFound
       ? html`<div class="notice" role="status"><strong>Studio did not find this change set.</strong>It is written or discarded.
-          <div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'recipients' })}>Open Recipients</button></div></div>`
+          <div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'people' })}>Open People</button></div></div>`
       : html`<${ErrorNotice} error=${error} />`}
     ${set === null && !error && html`<p class="empty" role="status">Loading the change set…</p>`}
-    ${set && html`<header class="recipient-head"><h1>${operationTitle(set.operation)}</h1>
+    ${set && html`<header class="recipient-head"><h1>${changeTitle(set.operation)}</h1>
       <p class="hint">${operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
       <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
         const outcome = outcomeText(feed.outcome);
@@ -2840,12 +2810,7 @@ function ChangeSetPage({ id, go, onChanged }) {
               : html`<p class="hint">The draft is the same as the hosted file.</p>`)}
           </div>
         </details>`;
-      })}</div></section>
-      <div class="actions">
-        ${pending > 0 && html`<button class="button primary" type="button" disabled=${writing || busy} onClick=${writeAll}>
-          ${writing ? 'Writing…' : writeLabel(pending)}</button>`}
-        <button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>
-      </div>`}
+      })}</div></section>`}
   </section></div>`;
 }
 
@@ -2989,7 +2954,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     </ul>`;
 }
 
-// The footer of the left panel and of the root page: Recipients, File hosts, Settings, and Lock
+// The footer of the left panel and of the root page: People, File hosts, Settings, and Lock
 // Studio when the vault is open. On a server with a locked vault, Unlock Studio
 // opens the unlock sheet.
 function LeftPanelFooter({ panel, go, onLock }) {
@@ -3353,9 +3318,11 @@ function Shell({ vault, onLock }) {
       onOpen=${(id) => go({ name: 'feed', id })} />`;
   } else if (view.name === 'settings') {
     main = html`<${SettingsPage} />`;
-  } else if (view.name === 'recipients') {
-    main = html`<${RecipientsPage} go=${go} />`;
-  } else if (view.name === 'recipient') {
+  } else if (view.name === 'people') {
+    main = html`<${PeoplePage} feeds=${feeds} go=${go} />`;
+  } else if (view.name === 'person') {
+    main = html`<${PersonStub} key=${view.id} id=${view.id} go=${go} />`;
+  } else if (view.name === 'wallet') {
     main = html`<${RecipientPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'change-set') {
     main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} onChanged=${() => load()} />`;

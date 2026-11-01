@@ -1767,6 +1767,23 @@ button.outline-feed {
 .person-picture { width: 72px; height: 72px; border-radius: 12px; overflow: hidden; background: var(--fill); }
 .person-picture img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
+/* The People area (task 065b, ADR 0099). The round picture of a person in a
+   row. A person with no picture shows the initials of the name. */
+.person-art {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-size: var(--text-callout);
+  font-weight: 700;
+}
+.person-art img { width: 100%; height: 100%; object-fit: cover; }
+
 /* musicindex ADR 0024 R-TYPE-1: with Touch, a field has the Body size of 17 px.
    iOS Safari zooms the page when a field with text under 16 px gets the focus.
    This rule is the last rule of the file, and its selector is as specific as

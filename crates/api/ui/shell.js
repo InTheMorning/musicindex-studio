@@ -233,6 +233,10 @@ export function isFeedView(view) {
   return view.name === 'feed' || view.name === 'outline';
 }
 
+// The views of the People area. People is current on each of them (ADR 0099
+// item 1).
+export const PEOPLE_VIEWS = ['people', 'person', 'where-used', 'wallet', 'change-set'];
+
 // The left panel (ADR 0039 items 1, 5 and 6). With no open feed it gives the
 // destinations. With an open feed, or the outline view, it gives the outline
 // of that feed. `model` is the typed model of the draft of the open feed, or
@@ -241,13 +245,13 @@ export function isFeedView(view) {
 // the place of "Lock Studio" (ADR 0039 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false }) {
   const bottom = [
-    // The Recipients destination holds the page of a recipient and the review
-    // of a change set (ADR 0091 item 1).
+    // The People destination holds the page of a person, the page of a
+    // wallet and the review of a change set (ADR 0099 items 1 and 12).
     {
-      id: 'recipients', label: 'Recipients', icon: 'wallet',
-      current: ['recipients', 'recipient', 'change-set'].includes(view.name),
-      // A click on the row opens the list from the page of a recipient.
-      opens: view.name !== 'recipients',
+      id: 'people', label: 'People', icon: 'users',
+      current: PEOPLE_VIEWS.includes(view.name),
+      // A click on the row opens the list from a page of the area.
+      opens: view.name !== 'people',
     },
     { id: 'hosts', label: 'File hosts', icon: 'hard-drive', current: view.name === 'hosts' },
     { id: 'settings', label: 'Settings', icon: 'settings', current: view.name === 'settings' },
@@ -705,8 +709,11 @@ export function narrowStack(view) {
     // Each level above a level is a page below it (ADR 0088 item 7).
     case 'releases': return view.group === undefined ? [root, releases] : [root, ...levelPages(view.trail), view];
     case 'add-feed': return [root, releases, view];
-    case 'recipient':
-    case 'change-set': return [root, { name: 'recipients' }, view];
+    // The People area (ADR 0099 items 1 and 5).
+    case 'person':
+    case 'wallet':
+    case 'change-set': return [root, { name: 'people' }, view];
+    case 'where-used': return [root, { name: 'people' }, { name: 'person', id: view.id }, view];
     case 'outline': return view.from ? [root, ...levelPages([...view.from.trail, view.from.group]), view] : [root, releases, view];
     case 'feed': return view.from
       ? [root, ...levelPages([...view.from.trail, view.from.group]), { name: 'outline', id: view.id, from: view.from }, view]

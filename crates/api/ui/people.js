@@ -194,3 +194,127 @@ export function addResultLine(outcomes) {
   if (selected.length > 0 && already > 0) pieces.push(`${already} ${ALREADY[selected.length - 1]}`);
   return pieces.join(' · ');
 }
+
+// ---- The People page (ADR 0099 items 1 to 3 and 12) ----
+
+const lower = (text) => String(text ?? '').toLowerCase();
+const matchesAny = (texts, query) => {
+  const q = lower(query).trim();
+  return q === '' || texts.some((t) => lower(t).includes(q));
+};
+
+// The initials of a name, for a person with no picture.
+export function initials(name) {
+  return String(name ?? '').split(/\s+/).filter(Boolean).map((w) => Array.from(w)[0]).slice(0, 2).join('').toUpperCase();
+}
+
+// True when a person matches the text of the search field: the name, an
+// address or a Nostr key, with no regard to capital letters. This is a
+// display filter only.
+export function personMatches(person, query) {
+  const texts = [person.name, ...(person.wallets || []).map((w) => w.key.address), ...(person.keys || []).map((k) => k.npub)];
+  return matchesAny(texts, query);
+}
+
+// True when a wallet with no person matches the text of the search field.
+export function payeeMatches(payee, query) {
+  const texts = [payee.name, payee.address, ...(payee.addresses || []).map((a) => a.address)];
+  return matchesAny(texts, query);
+}
+
+export const filterPeople = (people, query) => (people || []).filter((p) => personMatches(p, query));
+export const filterPayees = (payees, query) => (payees || []).filter((p) => payeeMatches(p, query));
+
+// The wallets of `GET /recipients` that have no person (ADR 0099 item 2).
+export const payeesWithNoPerson = (recipients) => (recipients || []).filter((r) => r.saved_id === null || r.saved_id === undefined);
+
+// The change sets of `GET /change-sets` that are not closed.
+export const openChanges = (sets) => (sets || []).filter((s) => s.open);
+
+// The title of the operation of a change set. The page "Review the changes"
+// and the list "Changes to write" use it (ADR 0099 items 2 and 12).
+export function changeTitle(operation) {
+  switch (operation && operation.kind) {
+    case 'change_address': return 'Change address';
+    case 'rename': return 'Rename';
+    case 'remove': return 'Remove';
+    case 'add': return 'Add to an artist or label';
+    case 'use_lnaddress': return 'Use the Lightning address';
+    case 'use_address': return 'Use This Address';
+    case 'rename_person': return 'Rename';
+    case 'add_to_releases': return 'Add to All Releases';
+    case 'remove_person': return 'Remove';
+    default: return 'Change';
+  }
+}
+
+// The number of feeds of a change set that Studio has still to write.
+export function feedsToWrite(set) {
+  return (set.feeds || []).filter((f) => f.outcome && f.outcome.outcome === 'changed' && f.written_at == null).length;
+}
+
+// The row of a change set in "Changes to write". `people` is the list of
+// people, and `payees` is the list of wallets, for the name of the subject.
+export function changeRow(set, people = [], payees = []) {
+  let who = '';
+  if (set.person_id != null) {
+    const person = people.find((p) => p.id === set.person_id);
+    who = person ? person.name : 'A person';
+  } else {
+    const key = set.recipient || {};
+    const same = (a, b) => (a || '') === (b || '');
+    const found = payees.find((r) => r.address === key.address && same(r.custom_key, key.custom_key) && same(r.custom_value, key.custom_value));
+    who = found && found.name && found.name.trim() !== '' ? found.name : key.address || 'A wallet';
+  }
+  return { title: `${changeTitle(set.operation)} · ${who}`, text: `${feedCount(feedsToWrite(set))} to write` };
+}
+
+// The view that opens after Discard: the page of the person of a person
+// change set, else the People page (ADR 0099 item 12).
+export const afterDiscard = (set) => (set && set.person_id != null ? { name: 'person', id: set.person_id } : { name: 'people' });
+
+// The choices of "Member of": each publisher feed, A to Z, as
+// [value, label] pairs. `None` is the placeholder of the menu.
+export function memberChoices(feeds) {
+  return (feeds || []).filter((f) => f.medium === 'publisher')
+    .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }))
+    .map((f) => [String(f.id), f.title || 'Untitled feed']);
+}
+
+// The title of the sheet "Make a Person".
+export const makeSheetTitle = (name) => `Make a Person: ${name}`;
+
+// The hint of the sheet "Make a Person" (ADR 0099 item 3).
+export const makeSheetHint = (name) => `Studio found these items with the name "${name}". Select the items that are this person. Studio changes no feed.`;
+
+// The row of a credit in the sheet "Make a Person".
+export function creditItemRow(item, titles) {
+  const feeds = (item.feeds || []).map((id) => titleOf(titles, id));
+  const lines = [];
+  if (feeds.length > 0) lines.push(feeds.join(', '));
+  if (item.same_name === false) lines.push(`The name in that credit is "${item.name}"`);
+  return { title: (item.roles || []).length > 0 ? item.roles.join(', ') : 'Credit', lines };
+}
+
+// The row of a payment address in the sheet "Make a Person".
+export function payeeItemRow(item) {
+  const count = (item.feeds || []).length;
+  const lines = [feedCount(count)];
+  if (item.same_name === false) lines[0] += ` · the name in that feed is "${item.name}"`;
+  return { title: addressText(item.key, item.recipient_type), lines };
+}
+
+// The row of a Nostr key in the sheet "Make a Person".
+export const keyItemRow = (npub) => ({ title: shortKey(npub), lines: ['In a credit of the feeds'] });
+
+// A copy of the state of the sheet with one item turned over. `group` is
+// `credits`, `recipients` or `keys`.
+export function toggledItem(state, group, index) {
+  return { ...state, [group]: state[group].map((r, i) => (i === index ? { ...r, checked: !r.checked } : r)) };
+}
+
+// The body of `POST /people/suggestions/dismiss`.
+export const dismissBody = (suggestion) => ({ identity: suggestion.identity, items: suggestion.item_keys || [] });
+
+// The body of `POST /people` from the sheet "Add a Person".
+export const addPersonBody = (name) => ({ name: String(name ?? '').trim() });

@@ -364,7 +364,7 @@ export function retryStatuses(statuses) {
 }
 
 export function writeLabel(count) {
-  return `Write ${plural(count, 'feed', 'feeds')}`;
+  return `Write ${plural(count, 'Feed', 'Feeds')}`;
 }
 
 export function hasWrittenFeed(changeSet, statuses) {

@@ -16,7 +16,7 @@ use serde_json::Value;
 use crate::address::{self, Address, AddressSource};
 use crate::announce::{Announcement, AnnouncementState};
 use crate::connector::{KeptBlob, Stamp, Version};
-use crate::feed::{Feed, Recipient};
+use crate::feed::{Feed, Person, Recipient};
 use crate::keysend::{Lookup, LookupStatus};
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
@@ -328,6 +328,19 @@ CREATE TABLE keysend_lookups (
     custom_value TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     checked_at INTEGER NOT NULL
+);
+",
+    r"
+CREATE TABLE feed_credits (
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT '',
+    grp TEXT NOT NULL DEFAULT '',
+    img TEXT NOT NULL DEFAULT '',
+    href TEXT NOT NULL DEFAULT '',
+    npub TEXT NOT NULL DEFAULT '',
+    seen_at INTEGER NOT NULL,
+    PRIMARY KEY (feed_id, name, role, grp, href, npub)
 );
 ",
 ];
@@ -1238,6 +1251,7 @@ impl Collection {
         )?;
         choose_address(&tx, id)?;
         put_recipients(&tx, id, feed.recipients())?;
+        put_credits(&tx, id, feed.credits())?;
         // A publisher feed with no confirmed roles gets the roles that its
         // links give (ADR 0082 item 4).
         if feed.medium.as_deref() == Some("publisher") {
@@ -2706,6 +2720,31 @@ impl Collection {
             })
     }
 
+    /// Each row of `feed_credits`, by feed ID and then by name (ADR 0098
+    /// item 10).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn feed_credits(&self) -> Result<Vec<CreditRow>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT feed_id, name, role, grp, img, href, npub
+             FROM feed_credits ORDER BY feed_id, name, role, grp, href, npub",
+        )?;
+        let rows = statement.query_map([], |r| {
+            Ok(CreditRow {
+                feed_id: FeedId(r.get(0)?),
+                name: r.get(1)?,
+                role: r.get(2)?,
+                group: r.get(3)?,
+                img: r.get(4)?,
+                href: r.get(5)?,
+                npub: r.get(6)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// Each recipient that the collection knows: from a feed that Studio
     /// read, or from a save (ADR 0027 items 2 to 5).
     ///
@@ -3376,6 +3415,58 @@ fn put_recipients(
     Ok(())
 }
 
+/// One row of `feed_credits`: a credit of a feed (ADR 0098 item 10).
+///
+/// Each text is trimmed. A missing attribute is empty text, and `role` is
+/// the raw role text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreditRow {
+    /// The feed that has the credit.
+    pub feed_id: FeedId,
+    /// The name of the person.
+    pub name: String,
+    /// `role`, or empty text.
+    pub role: String,
+    /// `group`, or empty text.
+    pub group: String,
+    /// `img`, or empty text.
+    pub img: String,
+    /// `href`, or empty text.
+    pub href: String,
+    /// `npub`, or empty text.
+    pub npub: String,
+}
+
+/// Replace the `feed_credits` rows of a feed with its current credits
+/// (ADR 0098 item 10).
+///
+/// Two credits with the same key give one row. The last one gives `img`.
+fn put_credits(db: &Connection, id: FeedId, credits: Vec<&Person>) -> Result<(), CollectionError> {
+    db.execute("DELETE FROM feed_credits WHERE feed_id = ?1", [id.0])?;
+    let seen_at = now();
+    let text = |value: Option<&String>| value.map_or_else(String::new, |v| v.trim().to_owned());
+    for person in credits {
+        db.execute(
+            "INSERT INTO feed_credits
+                 (feed_id, name, role, grp, img, href, npub, seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT (feed_id, name, role, grp, href, npub)
+             DO UPDATE SET img = excluded.img",
+            params![
+                id.0,
+                person.name.trim(),
+                text(person.role.as_ref()),
+                text(person.group.as_ref()),
+                text(person.img.as_ref()),
+                text(person.href.as_ref()),
+                text(person.npub.as_ref()),
+                seen_at
+            ],
+        )?;
+    }
+    Ok(())
+}
+
 /// One row of `feed_recipients`. [`put_recipients`] uses it to give each
 /// identity of a feed one row.
 struct RecipientRow {
@@ -3756,6 +3847,53 @@ mod tests {
             })
             .unwrap();
         assert_eq!(collection.known_recipients().unwrap().len(), 1);
+    }
+
+    fn credit_doc(persons: &str) -> Document {
+        Document::parse(&format!(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             {persons}</channel></rss>"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn record_state_keeps_one_credit_row_for_equal_credits_and_refreshes_them() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let three = credit_doc(
+            "<podcast:person role=\"Mixer\" img=\"a.jpg\"> Ann </podcast:person>\
+             <podcast:person role=\"Mixer\" img=\"b.jpg\">Ann</podcast:person>\
+             <podcast:person>Bob</podcast:person>",
+        );
+        collection
+            .record_state(feed, &Feed::read(&three).unwrap(), &Version::new("v1"))
+            .unwrap();
+        let rows = collection.feed_credits().unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].name, "Ann");
+        assert_eq!(rows[0].img, "b.jpg");
+        // A missing role stays empty text, not `host`.
+        assert_eq!(rows[1].name, "Bob");
+        assert_eq!(rows[1].role, "");
+        let one = credit_doc("<podcast:person>Bob</podcast:person>");
+        collection
+            .record_state(feed, &Feed::read(&one).unwrap(), &Version::new("v2"))
+            .unwrap();
+        assert_eq!(collection.feed_credits().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_delete_of_a_feed_deletes_its_credit_rows() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let doc = credit_doc("<podcast:person>Ann</podcast:person>");
+        collection
+            .record_state(feed, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        assert_eq!(collection.feed_credits().unwrap().len(), 1);
+        collection.delete_feed(feed).unwrap();
+        assert_eq!(collection.feed_credits().unwrap(), Vec::new());
     }
 
     fn value_recipient_doc(address: &str, extra: &str) -> Document {

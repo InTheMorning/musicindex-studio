@@ -376,6 +376,27 @@ impl Feed {
         }
         found
     }
+
+    /// Each `podcast:person` of the channel, of each item and of each live
+    /// item, in that sequence (ADR 0098 item 10).
+    ///
+    /// A person with no name and no `npub` is not in the list. A name of
+    /// only spaces is no name.
+    #[must_use]
+    pub fn credits(&self) -> Vec<&Person> {
+        let live = self.live_items.iter().map(|live| &live.item);
+        let lists = std::iter::once(&self.persons)
+            .chain(self.items.iter().map(|item| &item.persons))
+            .chain(live.map(|item| &item.persons));
+        lists
+            .flatten()
+            .map(|entry| &entry.value)
+            .filter(|person| {
+                !person.name.trim().is_empty()
+                    || person.npub.as_deref().is_some_and(|n| !n.trim().is_empty())
+            })
+            .collect()
+    }
 }
 
 /// Add each recipient of `entries` that has an address of one or more
@@ -779,5 +800,37 @@ mod tests {
             .map(|r| r.address.as_deref().unwrap())
             .collect();
         assert_eq!(addresses, ["channel", "item", "live"]);
+    }
+
+    #[test]
+    fn credits_come_from_the_channel_items_and_live_items_but_not_an_empty_person() {
+        let person = |name: &str, npub: Option<&str>| {
+            Entry::new(Person {
+                name: name.to_owned(),
+                npub: npub.map(str::to_owned),
+                ..Person::default()
+            })
+        };
+        let feed = Feed {
+            persons: vec![person("Channel", None), person("  ", None)],
+            items: vec![Entry::new(Item {
+                persons: vec![person("", Some("npub1item")), person("", None)],
+                ..Item::default()
+            })],
+            live_items: vec![Entry::new(LiveItem {
+                item: Item {
+                    persons: vec![person("Live", None)],
+                    ..Item::default()
+                },
+                ..LiveItem::default()
+            })],
+            ..Feed::default()
+        };
+        let names: Vec<_> = feed
+            .credits()
+            .into_iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(names, ["Channel", "", "Live"]);
     }
 }

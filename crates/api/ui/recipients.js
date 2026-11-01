@@ -92,8 +92,9 @@ export function memberStart(entry, type) {
 }
 
 // The start type of an operation form. Change address starts at the node
-// key when the wallet has one. Add to a level starts at the Lightning
-// address when the wallet has one (ADR 0095 items 10 and 14).
+// key when the wallet has one. Add to an artist or label starts at the
+// Lightning address when the wallet has one (ADR 0095 items 10 and 14,
+// ADR 0096).
 export function startType(entry, kind) {
   const [first, second] = kind === 'add' ? ['lnaddress', 'node'] : ['node', 'lnaddress'];
   return memberOfType(entry, first) ? first : second;
@@ -220,7 +221,7 @@ export function operationTitle(operation) {
     case 'change_address': return 'Change address';
     case 'rename': return 'Rename';
     case 'remove': return 'Remove';
-    case 'add': return 'Add to a level';
+    case 'add': return 'Add to an artist or label';
     case 'use_lnaddress': return 'Use the Lightning address';
     default: return 'Change set';
   }

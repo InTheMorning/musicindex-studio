@@ -2627,7 +2627,7 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
       ${kind === 'add' && html`<div class="group rows">
         ${owners.length === 0
           ? html`<p class="hint">Studio found no artist or label feed in your collection.</p>`
-          : html`<${ChoiceSelect} id="op-level" label="Level" value=${levelOwner} onChange=${chooseOwner}
+          : html`<${ChoiceSelect} id="op-level" label="Artist or label" value=${levelOwner} onChange=${chooseOwner}
               placeholder="Select an artist or label" options=${owners.map((f) => [String(f.id), f.title || 'Untitled feed'])} />`}
         <${Field} id="op-percent" label="Percentage" type="number" min="1" max="99" step="1" required
           hint="The share of the new recipient, from 1 to 99." value=${percent} onInput=${(e) => setPercent(e.target.value)} />
@@ -2642,7 +2642,7 @@ function OperationForm({ kind, recipient, uses, selected, feeds, onCreated }) {
     </footer>`;
 }
 
-const OPERATION_TITLES = { change_address: 'Change address', rename: 'Rename', remove: 'Remove', add: 'Add to a level', use_lnaddress: 'Use the Lightning address' };
+const OPERATION_TITLES = { change_address: 'Change address', rename: 'Rename', remove: 'Remove', add: 'Add to an artist or label', use_lnaddress: 'Use the Lightning address' };
 
 function OperationSheet({ kind, recipient, uses, selected, feeds, onCreated, onClose }) {
   const ref = useSheet(kind !== null);
@@ -2681,12 +2681,12 @@ function RecipientPage({ recipient, feeds, go }) {
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change Address</button>
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('rename')}>Rename</button>
       ${hasNode(recipient) && html`<button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('use_lnaddress')}>Use the Lightning Address</button>`}
-      <button class="button action" type="button" onClick=${() => setOpen('add')}>Add to a Level</button>
+      <button class="button action" type="button" onClick=${() => setOpen('add')}>Add to an Artist or Label</button>
       <button class="button destructive" type="button" disabled=${count === 0} onClick=${() => setOpen('remove')}>Remove</button>
     </div>
     <section class="page-section"><h2>Feeds${uses ? ` · ${count} of ${uses.length} selected` : ''}</h2>
       ${uses === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}
-      ${uses !== null && uses.length === 0 && html`<p class="empty">No feed uses this recipient. Add to a level puts it in feeds.</p>`}
+      ${uses !== null && uses.length === 0 && html`<p class="empty">No feed uses this recipient. Add to an artist or label puts it in feeds.</p>`}
       ${uses && uses.length > 0 && html`<div class="group">${uses.map((use) => {
         const line = useRow(use);
         return html`<${FeedCheckRow} key=${use.feed_id} title=${line.title} text=${line.text}

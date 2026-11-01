@@ -18,7 +18,7 @@ test('titleCase gives the title style of the Apple HIG', () => {
   assert.equal(titleCase('Sign in with Amber or a bunker'), 'Sign In with Amber or a Bunker');
   assert.equal(titleCase('Yes, I have feeds'), 'Yes, I Have Feeds');
   assert.equal(titleCase('Move to this file host'), 'Move to This File Host');
-  assert.equal(titleCase('Add to a level'), 'Add to a Level');
+  assert.equal(titleCase('Add to an artist or label'), 'Add to an Artist or Label');
   assert.equal(titleCase('Set up a file host'), 'Set Up a File Host');
   assert.equal(titleCase('Choose a file to'), 'Choose a File To');
   assert.equal(titleCase('＋ Add the track'), '＋ Add the Track');

@@ -183,6 +183,10 @@ test('the keysend hint names the domain', () => {
   assert.match(lookupHint('chadf@getalby.com'), /getalby\.com/);
 });
 
+test('the operation add has the name of ADR 0096', () => {
+  assert.equal(operationTitle({ kind: 'add' }), 'Add to an artist or label');
+});
+
 test('the new operation and the new cause have texts', () => {
   assert.equal(operationTitle({ kind: 'use_lnaddress' }), 'Use the Lightning address');
   assert.equal(operationLine({ kind: 'use_lnaddress', address: 'a@b.c' }, 'TJ'),

@@ -4056,7 +4056,14 @@ mod tests {
             custom_key: None,
             custom_value: None,
         };
-        crate::people::add_wallet(&collection, person, &key, "node").unwrap();
+        crate::people::add_wallet(
+            &collection,
+            person,
+            &key,
+            "node",
+            crate::people::LinkEvidence::User,
+        )
+        .unwrap();
         let feed = collection.add_feed(None, None).unwrap();
         collection
             .record_state(

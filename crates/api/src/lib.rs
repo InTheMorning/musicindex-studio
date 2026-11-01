@@ -140,6 +140,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/media/tickets", post(media::make_ticket))
         .route("/search", get(routes::search))
         .route("/people", get(people::list_people).post(people::add_person))
+        .route("/people/export", get(people::export_people))
         .route("/people/suggestions", get(people::list_suggestions))
         .route("/people/suggestions/make", post(people::make_person))
         .route(
@@ -155,6 +156,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route(
             "/people/{id}/default-address",
             put(people::set_default_address),
+        )
+        .route(
+            "/people/{id}/profile-addresses",
+            get(people::list_profile_addresses).post(people::add_profile_address),
         )
         .route("/people/{id}/{kind}", post(people::add_link))
         .route("/people/{id}/{kind}/{link_id}", delete(people::remove_link))

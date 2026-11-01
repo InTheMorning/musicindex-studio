@@ -779,7 +779,14 @@ fn rename_sets_the_name_of_the_person_with_any_member_of_the_wallet() {
     )
     .unwrap();
     // The person holds the Lightning address of the wallet, not its key.
-    people::add_wallet(&s.collection, id, &plain("ann@example.com"), "lnaddress").unwrap();
+    people::add_wallet(
+        &s.collection,
+        id,
+        &plain("ann@example.com"),
+        "lnaddress",
+        people::LinkEvidence::User,
+    )
+    .unwrap();
     let mut starter = start(&s);
     make_change_set(
         &s.collection,

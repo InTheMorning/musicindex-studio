@@ -7,6 +7,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::BuildHasher;
+use std::slice::from_ref;
+use std::thread;
+use std::time::Duration;
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -14,7 +17,10 @@ use serde::{Deserialize, Serialize};
 use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, FeedId, now};
 use crate::feed::Recipient;
-use crate::keysend::{self, Lookup};
+use crate::keysend::{self, Lookup, LookupResult};
+use crate::net::NetPolicy;
+use crate::profiles;
+use crate::web::Web;
 
 /// The ID of a person.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -83,6 +89,31 @@ pub fn normal_name(name: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase()
+}
+
+/// The proof of a link (ADR 0098 item 24): the statement of the user, the
+/// keysend lookup or a Nostr signature.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkEvidence {
+    /// The user said so.
+    User,
+    /// A keysend lookup gave the link.
+    Keysend,
+    /// A signed Nostr profile gave the link.
+    Nostr,
+}
+
+impl LinkEvidence {
+    /// The text that the collection keeps.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Keysend => "keysend",
+            Self::Nostr => "nostr",
+        }
+    }
 }
 
 /// A wallet that the user linked to a person.
@@ -540,6 +571,7 @@ fn insert_wallet<S: BuildHasher>(
     id: PersonId,
     key: &RecipientKey,
     recipient_type: &str,
+    evidence: LinkEvidence,
     lookups: &HashMap<String, Lookup, S>,
 ) -> Result<i64, CollectionError> {
     check_person(db, id)?;
@@ -574,7 +606,7 @@ fn insert_wallet<S: BuildHasher>(
     db.execute(
         "INSERT INTO person_wallets
              (person_id, address, custom_key, custom_value, recipient_type, position, evidence, linked_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'user', ?7)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             id.0,
             address,
@@ -582,6 +614,7 @@ fn insert_wallet<S: BuildHasher>(
             custom_value,
             recipient_type.trim(),
             position,
+            evidence.as_str(),
             now()
         ],
     )?;
@@ -601,9 +634,10 @@ pub fn add_wallet(
     id: PersonId,
     key: &RecipientKey,
     recipient_type: &str,
+    evidence: LinkEvidence,
 ) -> Result<i64, CollectionError> {
     let lookups = lookup_map(collection)?;
-    insert_wallet(collection.db(), id, key, recipient_type, &lookups)
+    insert_wallet(collection.db(), id, key, recipient_type, evidence, &lookups)
 }
 
 /// True when `key` is a member of a wallet of `person`.
@@ -991,6 +1025,7 @@ pub fn save_recipient(
         id,
         &key,
         recipient.recipient_type.as_deref().unwrap_or(""),
+        LinkEvidence::User,
         &lookups,
     )?;
     tx.commit()?;
@@ -1538,7 +1573,7 @@ pub fn make_person<S: BuildHasher>(
         insert_key(&tx, id, npub)?;
     }
     for (key, recipient_type) in &request.recipients {
-        insert_wallet(&tx, id, key, recipient_type, lookups)?;
+        insert_wallet(&tx, id, key, recipient_type, LinkEvidence::User, lookups)?;
     }
 
     // The most frequent role of the selected credits. With a tie, the first
@@ -1580,6 +1615,267 @@ pub fn make_person<S: BuildHasher>(
     }
     tx.commit()?;
     Ok(id)
+}
+
+// ---- The Lightning address of a profile (ADR 0098 items 17 to 19) ----
+
+/// The Lightning address in the profile of a key of a person, with a
+/// keysend lookup that gives a wallet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfileAddress {
+    /// The Lightning address, in lowercase.
+    pub address: String,
+    /// The key of the wallet that the lookup gives.
+    pub wallet: RecipientKey,
+    /// True when `wallet` is the wallet key of a wallet of the person.
+    pub in_person_wallet: bool,
+}
+
+/// The Lightning addresses of the Nostr keys of `person` that can be
+/// added to a wallet (ADR 0098 items 17 to 19).
+///
+/// The function reads the `lud16` of the newest kind 0 of each key. It
+/// leaves out an address that is a member of a wallet of the person
+/// already. It requests the keysend data of each other address and gives
+/// only an address with a `Found` result. It keeps no lookup, so the
+/// collection has no lookup of a suggestion that the user did not add
+/// (ADR 0097 item 3). Each request follows `policy` (ADR 0057).
+#[must_use]
+pub fn profile_addresses<S: BuildHasher>(
+    web: &Web,
+    policy: &NetPolicy,
+    relays: &[String],
+    scheme: &str,
+    limit: Duration,
+    person: &Person,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Vec<ProfileAddress> {
+    let npubs: Vec<String> = person.keys.iter().map(|k| k.npub.clone()).collect();
+    let wanted: Vec<String> = profiles::lightning_addresses(relays, policy, limit, &npubs)
+        .into_iter()
+        .filter(|address| {
+            let key = RecipientKey {
+                address: address.clone(),
+                custom_key: None,
+                custom_value: None,
+            };
+            !is_member(person, &key, lookups)
+        })
+        .collect();
+    let results: Vec<(&String, LookupResult)> = thread::scope(|scope| {
+        let handles: Vec<_> = wanted
+            .iter()
+            .map(|address| {
+                scope.spawn(move || {
+                    let web = web.clone();
+                    let scheme = scheme.to_owned();
+                    let text = address.clone();
+                    let result = profiles::within(keysend::LOOKUP_LIMIT, move || {
+                        keysend::request(&web, &scheme, &text)
+                    })
+                    .unwrap_or(LookupResult::Failed);
+                    (address, result)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .filter_map(|handle| handle.join().ok())
+            .collect()
+    });
+    let owned: HashSet<(String, String, String)> = person
+        .wallets
+        .iter()
+        .map(|w| parts(&keysend::wallet_key(&w.key, lookups)))
+        .collect();
+    results
+        .into_iter()
+        .filter_map(|(address, result)| {
+            let LookupResult::Found {
+                pubkey,
+                custom_key,
+                custom_value,
+            } = result
+            else {
+                return None;
+            };
+            let wallet = RecipientKey {
+                address: pubkey,
+                custom_key,
+                custom_value,
+            };
+            Some(ProfileAddress {
+                address: address.clone(),
+                in_person_wallet: owned.contains(&parts(&wallet)),
+                wallet,
+            })
+        })
+        .collect()
+}
+
+/// Add the Lightning address of a profile to a wallet of a person. The
+/// function requests and stores the keysend lookup of `address`. With a
+/// `Found` result, it links the wallet of the lookup with the type
+/// `lnaddress` and the evidence `nostr`.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] when the lookup gives no wallet,
+/// [`CollectionErrorKind::Conflict`] when a different person has the wallet
+/// and [`CollectionErrorKind::NotFound`] for an unknown person.
+pub fn add_profile_address(
+    collection: &Collection,
+    web: &Web,
+    scheme: &str,
+    id: PersonId,
+    address: &str,
+) -> Result<i64, CollectionError> {
+    check_person(collection.db(), id)?;
+    let address = address.trim().to_lowercase();
+    let lookups = keysend::refresh(collection, web, scheme, from_ref(&address), now())?;
+    let key = lookups
+        .get(&address)
+        .and_then(Lookup::key)
+        .ok_or_else(|| CollectionError::invalid("the address has no keysend data"))?;
+    add_wallet(collection, id, &key, "lnaddress", LinkEvidence::Nostr)
+}
+
+// ---- The export (ADR 0098 items 24 and 25) ----
+
+/// A feed of which a person is a member.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExportMembership {
+    /// The ID of the feed.
+    pub feed_id: FeedId,
+    /// The title, from the last read.
+    pub title: Option<String>,
+    /// `podcast:guid`, from the last read.
+    pub podcast_guid: Option<String>,
+}
+
+/// A Lightning address that a stored lookup gives for a wallet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExportAddress {
+    /// The Lightning address.
+    pub address: String,
+    /// Always `keysend`.
+    pub evidence: &'static str,
+    /// The Unix time of the lookup.
+    pub checked_at: i64,
+}
+
+/// A wallet of a person, with the other addresses of the wallet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExportWallet {
+    /// The wallet as the user linked it.
+    #[serde(flatten)]
+    pub wallet: PersonWallet,
+    /// Each Lightning address that the stored lookups give for the wallet.
+    pub addresses: Vec<ExportAddress>,
+}
+
+/// A person in the export.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExportPerson {
+    /// The ID.
+    pub id: PersonId,
+    /// The name.
+    pub name: String,
+    /// The usual role, as raw text.
+    pub usual_role: String,
+    /// The picture address, or empty text.
+    pub img: String,
+    /// The information address, or empty text.
+    pub href: String,
+    /// The default address that applies now ([`default_address`]).
+    pub default_address: Option<RecipientKey>,
+    /// The wallets, with the addresses of each wallet.
+    pub wallets: Vec<ExportWallet>,
+    /// The Nostr keys.
+    pub keys: Vec<PersonKey>,
+    /// The credit names.
+    pub credit_names: Vec<CreditName>,
+    /// The support links.
+    pub support_links: Vec<SupportLink>,
+    /// The publisher feeds of the person, with their titles.
+    pub memberships: Vec<ExportMembership>,
+}
+
+/// The export of the people (ADR 0098 items 24 and 25).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PeopleExport {
+    /// Always `studio-people`.
+    pub format: &'static str,
+    /// The version of the format.
+    pub version: u32,
+    /// The Unix time of the export.
+    pub exported_at: i64,
+    /// Each person, A to Z.
+    pub people: Vec<ExportPerson>,
+}
+
+/// The export of each person with each link, its evidence and its time.
+/// The tables of the people hold no secret, so the export holds none.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn export<S: BuildHasher>(
+    collection: &Collection,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<PeopleExport, CollectionError> {
+    let mut list = Vec::new();
+    for person in people(collection)? {
+        let wallets = person
+            .wallets
+            .iter()
+            .map(|wallet| {
+                let (key, members) = keysend::wallet_of(&wallet.key, lookups);
+                let addresses = members
+                    .iter()
+                    .filter(|m| m.parts() != wallet.key.parts() && m.parts() != key.parts())
+                    .filter_map(|m| lookups.get(&m.address.trim().to_lowercase()))
+                    .map(|lookup| ExportAddress {
+                        address: lookup.address.clone(),
+                        evidence: "keysend",
+                        checked_at: lookup.checked_at,
+                    })
+                    .collect();
+                ExportWallet {
+                    wallet: wallet.clone(),
+                    addresses,
+                }
+            })
+            .collect();
+        let mut memberships = Vec::new();
+        for feed in &person.members {
+            let row = collection.feed(*feed)?;
+            memberships.push(ExportMembership {
+                feed_id: row.id,
+                title: row.title,
+                podcast_guid: row.podcast_guid,
+            });
+        }
+        list.push(ExportPerson {
+            id: person.id,
+            default_address: default_address(&person, lookups),
+            name: person.name,
+            usual_role: person.usual_role,
+            img: person.img,
+            href: person.href,
+            wallets,
+            keys: person.keys,
+            credit_names: person.credit_names,
+            support_links: person.support_links,
+            memberships,
+        });
+    }
+    Ok(PeopleExport {
+        format: "studio-people",
+        version: 1,
+        exported_at: now(),
+        people: list,
+    })
 }
 
 #[cfg(test)]
@@ -1681,15 +1977,30 @@ mod tests {
         let collection = Collection::open_in_memory().unwrap();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
         let bob = add_person(&collection, &fields("Bob")).unwrap();
-        add_wallet(&collection, ann, &key("node-1"), "node").unwrap();
+        add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
         found(&collection, "ann@example.com", "node-1");
         // The lookup of the Lightning address gives the wallet key of Ann.
-        let error = add_wallet(&collection, bob, &key("ann@example.com"), "lnaddress").unwrap_err();
+        let error = add_wallet(
+            &collection,
+            bob,
+            &key("ann@example.com"),
+            "lnaddress",
+            LinkEvidence::User,
+        )
+        .unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::Conflict);
-        let error = add_wallet(&collection, bob, &key("node-1"), "node").unwrap_err();
+        let error =
+            add_wallet(&collection, bob, &key("node-1"), "node", LinkEvidence::User).unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::Conflict);
         // A second key of the same wallet in the same person is permitted.
-        add_wallet(&collection, ann, &key("ann@example.com"), "lnaddress").unwrap();
+        add_wallet(
+            &collection,
+            ann,
+            &key("ann@example.com"),
+            "lnaddress",
+            LinkEvidence::User,
+        )
+        .unwrap();
         let wallets = person(&collection, ann).unwrap().wallets;
         assert_eq!(wallets.len(), 2);
         assert_eq!((wallets[0].position, wallets[1].position), (0, 1));
@@ -1788,8 +2099,9 @@ mod tests {
         let collection = Collection::open_in_memory().unwrap();
         let lookups = HashMap::new();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
-        add_wallet(&collection, ann, &key("first"), "node").unwrap();
-        let second = add_wallet(&collection, ann, &key("second"), "node").unwrap();
+        add_wallet(&collection, ann, &key("first"), "node", LinkEvidence::User).unwrap();
+        let second =
+            add_wallet(&collection, ann, &key("second"), "node", LinkEvidence::User).unwrap();
         let read = || person(&collection, ann).unwrap();
         assert_eq!(default_address(&read(), &lookups), Some(key("first")));
 
@@ -1815,7 +2127,7 @@ mod tests {
     fn a_default_address_can_be_a_lightning_address_of_a_wallet() {
         let collection = Collection::open_in_memory().unwrap();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
-        add_wallet(&collection, ann, &key("node-1"), "node").unwrap();
+        add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
         found(&collection, "ann@example.com", "node-1");
         set_default_address(&collection, ann, Some(&key("ann@example.com"))).unwrap();
         let lookups = lookup_map(&collection).unwrap();
@@ -1829,7 +2141,7 @@ mod tests {
     fn remove_person_removes_each_link_of_the_person() {
         let collection = Collection::open_in_memory().unwrap();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
-        add_wallet(&collection, ann, &key("node-1"), "node").unwrap();
+        add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
         add_key(&collection, ann, "npub1abc").unwrap();
         add_credit_name(&collection, ann, "Ann", "", "").unwrap();
         add_support_link(&collection, ann, "", "https://tip.example").unwrap();
@@ -1863,7 +2175,7 @@ mod tests {
     fn save_recipient_gives_the_person_that_has_the_wallet() {
         let collection = Collection::open_in_memory().unwrap();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
-        add_wallet(&collection, ann, &key("node-1"), "node").unwrap();
+        add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
         found(&collection, "ann@example.com", "node-1");
         let recipient = Recipient {
             name: Some("Other name".into()),
@@ -2081,7 +2393,7 @@ mod tests {
         let ann = add_person(&collection, &fields("Person")).unwrap();
         add_credit_name(&collection, ann, "ANN", "", "").unwrap();
         add_key(&collection, ann, "npub1bob").unwrap();
-        add_wallet(&collection, ann, &key("node-1"), "node").unwrap();
+        add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
         let list = suggest(&collection);
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "Cy");
@@ -2172,7 +2484,7 @@ mod tests {
     fn a_conflict_makes_no_person() {
         let collection = Collection::open_in_memory().unwrap();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
-        add_wallet(&collection, ann, &key("node-2"), "node").unwrap();
+        add_wallet(&collection, ann, &key("node-2"), "node", LinkEvidence::User).unwrap();
         let before = counts(&collection);
         let error = make_person(
             &collection,
@@ -2190,5 +2502,116 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::Conflict);
         assert_eq!(counts(&collection), before);
+    }
+
+    /// A relay that holds a kind 0 event with `lud16` for each address, and
+    /// the `npub` of the key of each event.
+    fn profile_relay(profiles: &[(u8, &str)]) -> (crate::testing::relay::TestRelay, Vec<String>) {
+        use nostr::nips::nip19::ToBech32;
+        use nostr::prelude::{Keys, Kind, SecretKey, Timestamp, UnsignedEvent};
+        let relay = crate::testing::relay::TestRelay::start();
+        let mut npubs = Vec::new();
+        for (seed, address) in profiles {
+            let keys = Keys::new(SecretKey::from_slice(&[*seed; 32]).expect("a secret key"));
+            let unsigned = UnsignedEvent::new(
+                keys.public_key(),
+                Timestamp::from(100),
+                Kind::Metadata,
+                Vec::new(),
+                format!(r#"{{"lud16":"{address}"}}"#),
+            );
+            relay.insert(crate::nostr_events::sign_with_keys(unsigned, &keys).expect("an event"));
+            npubs.push(keys.public_key().to_bech32().expect("an npub"));
+        }
+        (relay, npubs)
+    }
+
+    const KEYSEND: &str = r#"{"status":"OK","tag":"keysend","pubkey":"node-1","customData":[{"customKey":"696969","customValue":"x1"}]}"#;
+
+    #[test]
+    fn a_profile_address_is_a_suggestion_only_when_its_lookup_is_found() {
+        let collection = Collection::open_in_memory().unwrap();
+        let server = crate::testing::TestServer::start(vec![
+            ("/.well-known/keysend/ann", 200, KEYSEND.as_bytes().to_vec()),
+            ("/.well-known/keysend/bob", 404, b"no".to_vec()),
+        ]);
+        let port = server.port();
+        let ann_address = format!("ann@127.0.0.1:{port}");
+        let bob_address = format!("bob@127.0.0.1:{port}");
+        let (relay, npubs) = profile_relay(&[(7, &ann_address), (8, &bob_address)]);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        for npub in &npubs {
+            add_key(&collection, ann, npub).unwrap();
+        }
+        let person = person(&collection, ann).unwrap();
+        let list = profile_addresses(
+            &Web::new(),
+            &NetPolicy::Open,
+            &[relay.url()],
+            "http",
+            profiles::SOURCE_LIMIT,
+            &person,
+            &HashMap::new(),
+        );
+        assert_eq!(list.len(), 1, "{list:?}");
+        assert_eq!(list[0].address, ann_address);
+        assert_eq!(list[0].wallet.address, "node-1");
+        assert!(!list[0].in_person_wallet);
+        assert_eq!(collection.keysend_lookups().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn a_profile_address_of_a_wallet_of_the_person_is_not_a_suggestion() {
+        let collection = Collection::open_in_memory().unwrap();
+        let server = crate::testing::TestServer::start(vec![
+            ("/.well-known/keysend/ann", 200, KEYSEND.as_bytes().to_vec()),
+            ("/.well-known/keysend/bob", 200, KEYSEND.as_bytes().to_vec()),
+        ]);
+        let port = server.port();
+        let ann_address = format!("ann@127.0.0.1:{port}");
+        let bob_address = format!("bob@127.0.0.1:{port}");
+        let (relay, npubs) = profile_relay(&[(7, &ann_address), (8, &bob_address)]);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        for npub in &npubs {
+            add_key(&collection, ann, npub).unwrap();
+        }
+        add_wallet(
+            &collection,
+            ann,
+            &key(&ann_address),
+            "lnaddress",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        let person = person(&collection, ann).unwrap();
+        let ask = |lookups: &HashMap<String, Lookup>| {
+            profile_addresses(
+                &Web::new(),
+                &NetPolicy::Open,
+                &[relay.url()],
+                "http",
+                profiles::SOURCE_LIMIT,
+                &person,
+                lookups,
+            )
+        };
+        // With no stored lookup, only the address itself is a member.
+        let list = ask(&HashMap::new());
+        assert_eq!(list.len(), 1, "{list:?}");
+        assert_eq!(list[0].address, bob_address);
+        // With a stored lookup, `bob` has the wallet key of the person.
+        let stored = Lookup {
+            address: ann_address.clone(),
+            pubkey: Some("node-1".into()),
+            custom_key: Some("696969".into()),
+            custom_value: Some("x1".into()),
+            status: LookupStatus::Found,
+            checked_at: 1,
+        };
+        let lookups = HashMap::from([(ann_address, stored)]);
+        let list = ask(&lookups);
+        assert_eq!(list.len(), 1, "{list:?}");
+        assert_eq!(list[0].address, bob_address);
+        assert!(list[0].in_person_wallet);
     }
 }

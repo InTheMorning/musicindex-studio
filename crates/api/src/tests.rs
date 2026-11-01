@@ -10749,3 +10749,160 @@ async fn each_people_route_needs_the_token() {
         assert_eq!(value["error"]["code"], "token_required", "{method} {path}");
     }
 }
+
+// ---- The profile addresses and the export of the people (ADR 0098, task 064c) ----
+
+/// An app with a lookup relay and the keysend scheme `http`, so that a test
+/// server on loopback can answer the lookups.
+fn profile_address_app(relay: &studio_core::testing::relay::TestRelay) -> App {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![relay.url()])
+        .with_keysend(Some("http"))
+        .with_address_check(std::sync::Arc::new(PassAll));
+    App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    }
+}
+
+/// A person that has the Nostr key 1, whose profile gives a Lightning address
+/// that has keysend data. Gives the app, the person and the address.
+async fn person_with_profile_address() -> (
+    App,
+    i64,
+    String,
+    (
+        studio_core::testing::relay::TestRelay,
+        studio_core::testing::TestServer,
+    ),
+) {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set(
+        "/.well-known/keysend/ann",
+        200,
+        WALLET_KEYSEND.as_bytes().to_vec(),
+    );
+    let address = format!("ann@127.0.0.1:{}", server.port());
+    let relay = studio_core::testing::relay::TestRelay::start();
+    relay.insert(profile_event(1, 100, &json!({ "lud16": address })));
+    let app = profile_address_app(&relay);
+    let id = new_person(&app, "Ann").await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/keys"),
+        Some(json!({ "npub": nostr_npub(1) })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    (app, id, address, (relay, server))
+}
+
+#[tokio::test]
+async fn a_profile_address_is_a_suggestion_and_the_user_adds_it_with_the_evidence_nostr() {
+    let (app, id, address, _servers) = person_with_profile_address().await;
+    let path = format!("/api/v1/people/{id}/profile-addresses");
+    let (status, body) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let list = body["suggestions"].as_array().unwrap();
+    assert_eq!(list.len(), 1, "{body}");
+    assert_eq!(list[0]["address"], address);
+    assert_eq!(list[0]["wallet"]["address"], "02abc");
+    assert_eq!(list[0]["in_person_wallet"], false);
+    // The suggestion keeps no lookup.
+    assert_eq!(collection_of(&app).keysend_lookups().unwrap().len(), 0);
+
+    let (status, body) = call(&app, "POST", &path, Some(json!({ "address": address }))).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert!(body["id"].as_i64().is_some(), "{body}");
+    let (_, person) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    let wallets = person["wallets"].as_array().unwrap();
+    assert_eq!(wallets.len(), 1, "{person}");
+    assert_eq!(wallets[0]["evidence"], "nostr");
+    assert_eq!(wallets[0]["recipient_type"], "lnaddress");
+    assert_eq!(wallets[0]["key"]["address"], "02abc");
+    assert_eq!(collection_of(&app).keysend_lookups().unwrap().len(), 1);
+
+    // The address is a member of the wallet now, so it is no suggestion.
+    let (_, body) = call(&app, "GET", &path, None).await;
+    assert_eq!(body["suggestions"], json!([]));
+}
+
+#[tokio::test]
+async fn a_profile_address_with_no_keysend_data_is_refused() {
+    let (app, id, _, (_relay, server)) = person_with_profile_address().await;
+    let none = format!("cy@127.0.0.1:{}", server.port());
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/profile-addresses"),
+        Some(json!({ "address": none })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_person");
+    let (_, person) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(person["wallets"], json!([]));
+}
+
+#[tokio::test]
+async fn with_no_keysend_scheme_the_profile_addresses_are_empty() {
+    let app = app();
+    let id = new_person(&app, "Ann").await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{id}/profile-addresses"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["suggestions"], json!([]));
+}
+
+#[tokio::test]
+async fn the_export_gives_each_link_with_its_evidence_and_the_keysend_addresses_and_no_secret() {
+    let (app, id, address, _servers) = person_with_profile_address().await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/profile-addresses"),
+        Some(json!({ "address": address })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, headers, bytes) =
+        send_raw(&app, request("GET", "/api/v1/people/export", None)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers[header::CONTENT_DISPOSITION],
+        "attachment; filename=\"studio-people.json\""
+    );
+    let text = String::from_utf8(bytes).unwrap();
+    for secret in ["secret", "passphrase", "password", "token"] {
+        assert!(!text.contains(secret), "the export has the text {secret}");
+    }
+    let body: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(body["format"], "studio-people");
+    assert_eq!(body["version"], 1);
+    assert!(body["exported_at"].as_i64().unwrap() > 0);
+    let people = body["people"].as_array().unwrap();
+    assert_eq!(people.len(), 1, "{body}");
+    let person = &people[0];
+    assert_eq!(person["name"], "Ann");
+    assert_eq!(person["keys"][0]["evidence"], "user");
+    assert!(person["keys"][0]["linked_at"].as_i64().unwrap() > 0);
+    let wallet = &person["wallets"][0];
+    assert_eq!(wallet["evidence"], "nostr");
+    assert!(wallet["linked_at"].as_i64().unwrap() > 0);
+    assert_eq!(wallet["addresses"][0]["address"], address);
+    assert_eq!(wallet["addresses"][0]["evidence"], "keysend");
+    assert!(wallet["addresses"][0]["checked_at"].as_i64().unwrap() > 0);
+    assert_eq!(person["memberships"], json!([]));
+    assert_eq!(person["default_address"]["address"], "02abc");
+}

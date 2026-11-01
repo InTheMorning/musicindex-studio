@@ -1,22 +1,24 @@
 //! The routes of the people (ADR 0098, ADR 0099).
 //!
-//! No route here makes a request to a host or a relay. A route reads the
-//! lookups that the collection keeps.
+//! Only the routes of the profile addresses make a request to a host or a
+//! relay. The other routes read the lookups that the collection keeps.
 
 use std::collections::HashMap;
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use studio_core::change_set::RecipientKey;
 use studio_core::collection::{Collection, CollectionError, CollectionErrorKind, FeedId};
 use studio_core::keysend::Lookup;
-use studio_core::people::{self, MakePerson, Person, PersonFields, PersonId};
+use studio_core::people::{self, LinkEvidence, MakePerson, Person, PersonFields, PersonId};
+use studio_core::profiles;
 
 use crate::error::ApiError;
-use crate::routes::{ApiResult, Shared, blocking};
+use crate::routes::{ApiResult, Shared, blocking, blocking_unlocked};
 
 /// The core refuses a value of a person with `Invalid`. This route family
 /// names that refusal `invalid_person`. The other errors keep the mapping
@@ -203,7 +205,7 @@ pub(crate) async fn add_link(
         let link = match kind.as_str() {
             "wallets" => {
                 let body: WalletBody = serde_json::from_value(body).map_err(|e| bad_body(&e))?;
-                people::add_wallet(c, id, &body.key, &body.recipient_type)
+                people::add_wallet(c, id, &body.key, &body.recipient_type, LinkEvidence::User)
             }
             "keys" => {
                 let body: KeyBody = serde_json::from_value(body).map_err(|e| bad_body(&e))?;
@@ -291,4 +293,90 @@ pub(crate) async fn dismiss_suggestion(
         Ok(StatusCode::NO_CONTENT)
     })
     .await
+}
+
+/// The Lightning addresses in the profiles of the Nostr keys of a person
+/// (ADR 0098 items 17 to 19). The answer is `{ "suggestions": [...] }`. A
+/// shell with no keysend scheme gives no suggestion. The requests run
+/// with no lock of the workspace.
+pub(crate) async fn list_profile_addresses(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    let facts = blocking(shared, move |w| {
+        let person = people::person(&w.collection, PersonId(id))?;
+        let Some(scheme) = w.keysend_scheme else {
+            return Ok(None);
+        };
+        Ok(Some((
+            w.web.clone(),
+            w.net_policy.clone(),
+            w.lookup_relays.clone(),
+            scheme,
+            person,
+            lookups(&w.collection)?,
+        )))
+    })
+    .await?;
+    let Some((web, policy, relays, scheme, person, lookups)) = facts else {
+        return Ok(Json(json!({ "suggestions": [] })));
+    };
+    blocking_unlocked(move || {
+        let list = people::profile_addresses(
+            &web,
+            &policy,
+            &relays,
+            scheme,
+            profiles::SOURCE_LIMIT,
+            &person,
+            &lookups,
+        );
+        Ok(Json(json!({ "suggestions": list })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ProfileAddressBody {
+    address: String,
+}
+
+/// Add the Lightning address of a profile to a wallet of a person. The
+/// core stores the lookup of the address.
+pub(crate) async fn add_profile_address(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<ProfileAddressBody>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let Some(scheme) = w.keysend_scheme else {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_person",
+                "this shell makes no keysend lookup",
+            ));
+        };
+        let link =
+            people::add_profile_address(&w.collection, &w.web, scheme, PersonId(id), &body.address)
+                .map_err(person_error)?;
+        Ok(created(link))
+    })
+    .await
+}
+
+/// The people as a JSON file (ADR 0098 items 24 and 25).
+pub(crate) async fn export_people(State(shared): State<Shared>) -> Result<Response, ApiError> {
+    let export = blocking(shared, |w| {
+        let lookups = lookups(&w.collection)?;
+        Ok(people::export(&w.collection, &lookups)?)
+    })
+    .await?;
+    Ok((
+        [(
+            header::CONTENT_DISPOSITION,
+            "attachment; filename=\"studio-people.json\"",
+        )],
+        Json(export),
+    )
+        .into_response())
 }

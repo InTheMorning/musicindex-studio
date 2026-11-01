@@ -3,7 +3,7 @@
 //! Only the routes of the profile addresses make a request to a host or a
 //! relay. The other routes read the lookups that the collection keeps.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -11,14 +11,20 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use studio_core::change_set::RecipientKey;
+use studio_core::change_set::{
+    self, Cause, Outcome, PersonOperation, RecipientKey, RecipientOperation, Wallet,
+};
 use studio_core::collection::{Collection, CollectionError, CollectionErrorKind, FeedId};
 use studio_core::keysend::Lookup;
 use studio_core::people::{self, LinkEvidence, MakePerson, Person, PersonFields, PersonId};
+use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::profiles;
 
 use crate::error::ApiError;
-use crate::routes::{ApiResult, Shared, blocking, blocking_unlocked};
+use crate::routes::{
+    ApiResult, Shared, blocking, blocking_unlocked, change_set_json, ensure_draft, files_feed,
+};
+use crate::workspace::Workspace;
 
 /// The core refuses a value of a person with `Invalid`. This route family
 /// names that refusal `invalid_person`. The other errors keep the mapping
@@ -379,4 +385,107 @@ pub(crate) async fn export_people(State(shared): State<Shared>) -> Result<Respon
         Json(export),
     )
         .into_response())
+}
+
+/// The body of the two routes of a person change set.
+#[derive(Deserialize)]
+pub(crate) struct PersonChanges {
+    operation: PersonOperation,
+    feed_ids: Vec<i64>,
+}
+
+/// Check the body of a person change set, and make the snapshot of the
+/// operation. An operation that is not valid gives 422
+/// `invalid_person_operation` (ADR 0098 item 20).
+fn person_snapshot(
+    w: &Workspace,
+    id: i64,
+    body: &PersonChanges,
+) -> Result<(Wallet, RecipientOperation, Vec<FeedId>), ApiError> {
+    if body.feed_ids.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_change_set",
+            "a change set needs at least one feed",
+        ));
+    }
+    // A person that does not exist gives 404, not a refusal of the operation.
+    people::person(&w.collection, PersonId(id))?;
+    // Only a refused operation is 422. A failure of the collection keeps
+    // its own status.
+    let invalid = |error: PipelineError| {
+        if error.kind() == PipelineErrorKind::InvalidOperation {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_person_operation",
+                error.to_string(),
+            )
+        } else {
+            error.into()
+        }
+    };
+    let (wallet, snapshot) = change_set::person_operation(
+        &w.collection,
+        PersonId(id),
+        &body.operation,
+        &lookups(&w.collection)?,
+    )
+    .map_err(invalid)?;
+    change_set::check_operation(&snapshot).map_err(invalid)?;
+    let feeds: Vec<FeedId> = body.feed_ids.iter().map(|&id| FeedId(id)).collect();
+    for &feed in &feeds {
+        w.collection.feed(feed)?;
+    }
+    Ok((wallet, snapshot, feeds))
+}
+
+/// Make the change set of a person operation. The route writes nothing to a
+/// file host (ADR 0098 item 20).
+pub(crate) async fn make_changes(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<PersonChanges>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let (_, _, feeds) = person_snapshot(w, id, &body)?;
+        let set = {
+            let workspace: &Workspace = w;
+            change_set::make_person_change_set(
+                &workspace.collection,
+                &mut |feed| ensure_draft(workspace, feed).map_err(|e| e.coded()),
+                PersonId(id),
+                &body.operation,
+                &feeds,
+            )?
+        };
+        Ok((StatusCode::CREATED, Json(change_set_json(w, &set))))
+    })
+    .await
+}
+
+/// The outcome of a person operation for each feed. The route applies the
+/// operation to a copy of the model of each feed. It saves nothing and makes
+/// no draft.
+pub(crate) async fn preview_changes(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<PersonChanges>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let (wallet, snapshot, feeds) = person_snapshot(w, id, &body)?;
+        let mut seen = HashSet::new();
+        let mut rows = Vec::new();
+        for feed_id in feeds.into_iter().filter(|&feed| seen.insert(feed)) {
+            let outcome = match files_feed(w, feed_id)? {
+                Some(mut feed) => change_set::apply(&mut feed, &wallet, &snapshot),
+                None => Outcome::NotChanged {
+                    cause: Cause::CannotStart("the feed has no model".to_owned()),
+                    parts: Vec::new(),
+                },
+            };
+            rows.push(json!({ "feed_id": feed_id.0, "outcome": outcome }));
+        }
+        Ok(Json(json!({ "feeds": rows })))
+    })
+    .await
 }

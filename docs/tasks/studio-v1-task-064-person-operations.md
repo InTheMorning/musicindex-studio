@@ -3,7 +3,12 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0098](../adr/0098-the-people-module.md) items 17 to 25, [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) items 7 to 12, [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0097](../adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: Not started.
+Status: Complete, in three packets. It has no visual check and no human test, because the UI does not change. Notes from the reviews:
+
+- 064a: `RecipientOperation` has `#[allow(clippy::large_enum_variant)]`, because `AddToReleases` is large. A rename to the same name counts as a change, as `Rename` does for a payment name. The new credit and the new support link go at the end of the channel lists.
+- 064c: `add_profile_address` makes its keysend lookup with the workspace lock, as `check_lnaddress` does. The default address of the export is the address that applies, as in `GET /people/{id}`.
+- 064b: `check_operation` is public, so that the preview can refuse an operation. The planning model added `PipelineErrorKind::InvalidOperation`. `change_set::invalid` gives it, and the API gives 422 `invalid_change_set` for it, in the place of 502 `pipeline`. The routes of a person give 422 `invalid_person_operation` only for that kind, and a failure of the collection keeps its own status.
+- The packets 064a and 064c ran in one worktree by an error of the planning model. Their commits hold their own files.
 
 ## Goal
 

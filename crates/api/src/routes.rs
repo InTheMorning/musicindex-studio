@@ -2074,7 +2074,7 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
 /// Start the draft of a feed when it has none (ADR 0041 item 8). A feed
 /// with a draft is not changed. A feed with no connector starts its draft
 /// from its release folder (ADR 0067 item 3).
-fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
+pub(crate) fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
     if w.collection.draft(id)?.is_none() {
         if w.collection.feed(id)?.connector_id.is_none() {
             let library = w.library()?;
@@ -2840,7 +2840,7 @@ fn feed_library_file(
 /// feed from the release folder when the feed has no draft, such as a
 /// read-only feed (ADR 0036 item 11, ADR 0038 item 5). Gives `None` when
 /// the feed has neither.
-fn files_feed(w: &Workspace, id: FeedId) -> Result<Option<Feed>, ApiError> {
+pub(crate) fn files_feed(w: &Workspace, id: FeedId) -> Result<Option<Feed>, ApiError> {
     match pipeline::draft_model(&w.collection, id) {
         Ok((feed, _)) => Ok(Some(feed)),
         Err(error) if error.kind() == pipeline::PipelineErrorKind::NoDraft => {
@@ -5027,7 +5027,7 @@ fn change_blocked(w: &Workspace, id: FeedId) -> Option<&'static str> {
 /// The JSON of a change set: the operation, the recipient and each feed
 /// with its outcome. `blocked` is the cause why Studio cannot write a
 /// changed feed now, or null.
-fn change_set_json(w: &Workspace, set: &change_set::ChangeSet) -> Value {
+pub(crate) fn change_set_json(w: &Workspace, set: &change_set::ChangeSet) -> Value {
     let feeds: Vec<Value> = set
         .feeds
         .iter()
@@ -5054,6 +5054,7 @@ fn change_set_json(w: &Workspace, set: &change_set::ChangeSet) -> Value {
         "made_at": set.made_at,
         "recipient": set.recipient,
         "operation": set.operation,
+        "person_id": set.person.map(|p| p.0),
         "open": set.is_open(),
         "feeds": feeds,
     })

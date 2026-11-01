@@ -107,6 +107,10 @@ pub enum PipelineErrorKind {
     /// The granted change makes a change that the grant does not cover
     /// (ADR 0054 item 13).
     NotCovered,
+    /// A change set operation is not valid: no part, no type, no address,
+    /// or a value that the person does not have (ADR 0091, ADR 0098 item
+    /// 20).
+    InvalidOperation,
     /// The status of the live item cannot change to the requested status
     /// (ADR 0054 item 5).
     BadStatus,
@@ -120,7 +124,7 @@ pub struct PipelineError {
 }
 
 impl PipelineError {
-    fn new(kind: PipelineErrorKind, message: impl Into<String>) -> Self {
+    pub(crate) fn new(kind: PipelineErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             message: message.into(),

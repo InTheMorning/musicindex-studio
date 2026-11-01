@@ -192,6 +192,9 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::DraftOpen => (StatusCode::CONFLICT, "draft_open"),
             PipelineErrorKind::BadStatus => (StatusCode::CONFLICT, "bad_status"),
             PipelineErrorKind::NotCovered => (StatusCode::UNPROCESSABLE_ENTITY, "not_covered"),
+            PipelineErrorKind::InvalidOperation => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "invalid_change_set")
+            }
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
         Self::new(status, code, error.to_string())

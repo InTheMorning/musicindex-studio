@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 
 use studio_core::change_set::{
-    self, Cause, Outcome, RecipientKey, RecipientOperation, Wallet, discard_change_set,
-    level_feeds, make_change_set,
+    self, Cause, CreditMatch, Outcome, PersonOperation, RecipientKey, RecipientOperation, Wallet,
+    discard_change_set, level_feeds, make_change_set, make_person_change_set, person_operation,
 };
 use studio_core::collection::{Collection, FeedId};
 use studio_core::connector::{self, Connector, Expected, LocalFolder};
@@ -76,6 +76,11 @@ fn setup() -> Setup {
 }
 
 fn setup_with(xml: &str) -> Setup {
+    setup_each(&[xml, xml])
+}
+
+/// A setup with one feed for each text in `xmls`.
+fn setup_each(xmls: &[&str]) -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let folder = LocalFolder::new(dir.path(), Some("https://music.example".into()));
     let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
@@ -85,7 +90,7 @@ fn setup_with(xml: &str) -> Setup {
     let connector =
         connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
     let mut feeds = Vec::new();
-    for name in ["one.xml", "two.xml"] {
+    for (name, xml) in ["one.xml", "two.xml"].into_iter().zip(xmls) {
         folder
             .write(name, xml.as_bytes(), &Expected::Absent)
             .unwrap();
@@ -799,4 +804,173 @@ fn rename_sets_the_name_of_the_person_with_any_member_of_the_wallet() {
     )
     .unwrap();
     assert_eq!(people::person(&s.collection, id).unwrap().name, "Anna");
+}
+
+/// A feed that pays the one address `address`.
+fn paying(address: &str) -> String {
+    FEED.replace("address=\"old\"", &format!("address=\"{address}\""))
+}
+
+/// A person with a wallet for each of `addresses`, with the first one as
+/// the default address.
+fn person_with(collection: &Collection, name: &str, addresses: &[&str]) -> people::PersonId {
+    let id = people::add_person(
+        collection,
+        &PersonFields {
+            name: name.into(),
+            ..PersonFields::default()
+        },
+    )
+    .unwrap();
+    for address in addresses {
+        people::add_wallet(
+            collection,
+            id,
+            &plain(address),
+            "node",
+            people::LinkEvidence::User,
+        )
+        .unwrap();
+    }
+    id
+}
+
+fn no_lookups() -> HashMap<String, studio_core::keysend::Lookup> {
+    HashMap::new()
+}
+
+#[test]
+fn person_operation_makes_the_wallet_and_the_credit_match_of_the_person() {
+    let s = setup();
+    let id = person_with(&s.collection, "Ann", &["first", "second"]);
+    people::add_credit_name(&s.collection, id, "Ann Lee", "", "").unwrap();
+    people::add_key(&s.collection, id, "npub1ann").unwrap();
+    let (wallet, operation) = person_operation(
+        &s.collection,
+        id,
+        &PersonOperation::Remove {
+            payee: true,
+            credit: true,
+        },
+        &no_lookups(),
+    )
+    .unwrap();
+    assert_eq!(wallet.key, plain("first"));
+    assert_eq!(wallet.members, [plain("first"), plain("second")]);
+    let RecipientOperation::RemovePerson { credits, .. } = operation else {
+        panic!("ADR 0098 item 20: Remove must make the operation RemovePerson.");
+    };
+    assert_eq!(
+        credits,
+        CreditMatch {
+            identities: vec![people::Identity::of("Ann Lee", "", "").unwrap().key()],
+            npubs: vec!["npub1ann".into()],
+        }
+    );
+}
+
+#[test]
+fn use_this_address_changes_a_feed_of_each_wallet_and_keeps_the_person() {
+    let s = setup_each(&[&paying("first"), &paying("second")]);
+    let id = person_with(&s.collection, "Ann", &["first", "second", "third"]);
+    let mut starter = start(&s);
+    let set = make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &PersonOperation::UseAddress {
+            key: plain("third"),
+        },
+        &s.feeds,
+    )
+    .unwrap();
+    assert!(
+        set.feeds.iter().all(|f| f.outcome.is_changed()),
+        "ADR 0098 item 20: Use this address must change each wallet of the person."
+    );
+    assert_eq!(set.person, Some(id));
+    assert_eq!(addresses(&s.collection, s.feeds[0]), ["third", "other"]);
+    assert_eq!(addresses(&s.collection, s.feeds[1]), ["third", "other"]);
+    let listed = change_set::change_sets(&s.collection).unwrap();
+    assert_eq!(listed[0].person, Some(id));
+}
+
+#[test]
+fn use_this_address_refuses_an_address_that_is_not_in_a_wallet_of_the_person() {
+    let s = setup();
+    let id = person_with(&s.collection, "Ann", &["first"]);
+    let mut starter = start(&s);
+    let error = make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &PersonOperation::UseAddress {
+            key: plain("stranger"),
+        },
+        &s.feeds,
+    )
+    .unwrap_err();
+    assert!(format!("{error}").contains("not in a wallet"));
+    assert_eq!(s.collection.change_set_rows().unwrap().len(), 0);
+}
+
+#[test]
+fn rename_sets_the_name_of_the_person_when_a_feed_changed_and_discard_keeps_it() {
+    let s = setup();
+    let id = person_with(&s.collection, "Old", &["old"]);
+    let mut starter = start(&s);
+    let rename = PersonOperation::Rename {
+        name: "New".into(),
+        payment: true,
+        credit: false,
+    };
+    let set = make_person_change_set(&s.collection, &mut starter, id, &rename, &s.feeds).unwrap();
+    assert!(set.feeds.iter().all(|f| f.outcome.is_changed()));
+    assert_eq!(people::person(&s.collection, id).unwrap().name, "New");
+    discard_change_set(&s.collection, set.id).unwrap();
+    assert_eq!(
+        people::person(&s.collection, id).unwrap().name,
+        "New",
+        "ADR 0098 item 23: Discard must not set the name of a person back."
+    );
+}
+
+#[test]
+fn rename_that_changes_no_feed_keeps_the_name_of_the_person() {
+    let s = setup();
+    let id = person_with(&s.collection, "Old", &["nobody"]);
+    let mut starter = start(&s);
+    let set = make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &PersonOperation::Rename {
+            name: "New".into(),
+            payment: true,
+            credit: true,
+        },
+        &s.feeds,
+    )
+    .unwrap();
+    assert!(set.feeds.iter().all(|f| !f.outcome.is_changed()));
+    assert_eq!(people::person(&s.collection, id).unwrap().name, "Old");
+}
+
+#[test]
+fn a_person_with_no_default_address_gives_an_invalid_request_for_a_payee() {
+    let s = setup();
+    let id = person_with(&s.collection, "Ann", &[]);
+    let operation = PersonOperation::AddToReleases {
+        payee_percent: Some(10),
+        credit: true,
+        support_link: None,
+    };
+    let error = person_operation(&s.collection, id, &operation, &no_lookups()).unwrap_err();
+    assert!(
+        format!("{error}").contains("no address"),
+        "ADR 0098 item 20: a payee with no default address must give an invalid request."
+    );
+    let mut starter = start(&s);
+    assert!(make_person_change_set(&s.collection, &mut starter, id, &operation, &s.feeds).is_err());
+    assert_eq!(s.collection.change_set_rows().unwrap().len(), 0);
 }

@@ -11,12 +11,11 @@ use std::hash::BuildHasher;
 
 use serde::{Deserialize, Serialize};
 
-use crate::collection::{
-    ChangeSetFeedRow, Collection, CollectionError, CollectionErrorKind, FeedId, now,
-};
+use crate::collection::{ChangeSetFeedRow, Collection, FeedId, now};
 use crate::feed::{Entry, Feed, Funding, Person, Recipient, ValueBlock};
-use crate::people::{self, Identity};
-use crate::pipeline::{self, PipelineError};
+use crate::keysend::{self, Lookup};
+use crate::people::{self, Identity, PersonId};
+use crate::pipeline::{self, PipelineError, PipelineErrorKind};
 use crate::publisher::Catalog;
 
 /// The identity of a recipient (ADR 0027 item 3). An empty custom key or
@@ -968,6 +967,8 @@ pub struct ChangeSet {
     pub made_at: i64,
     /// The feeds, with their outcomes.
     pub feeds: Vec<ChangeSetFeed>,
+    /// The person of a person operation (ADR 0098 item 20).
+    pub person: Option<PersonId>,
 }
 
 impl ChangeSet {
@@ -981,10 +982,7 @@ impl ChangeSet {
 }
 
 fn invalid(message: impl Into<String>) -> PipelineError {
-    PipelineError::from(CollectionError::with_kind(
-        CollectionErrorKind::Invalid,
-        message,
-    ))
+    PipelineError::new(PipelineErrorKind::InvalidOperation, message)
 }
 
 fn to_json<T: Serialize>(value: &T) -> Result<String, PipelineError> {
@@ -1022,11 +1020,262 @@ pub fn make_change_set(
     operation: &RecipientOperation,
     feeds: &[FeedId],
 ) -> Result<ChangeSet, PipelineError> {
+    build_change_set(collection, start, wallet, operation, None, feeds)
+}
+
+/// Make the change set of a person operation (ADR 0098 item 20). The core
+/// makes the snapshot of the operation with [`person_operation`], keeps the
+/// person in the change set, and then works as [`make_change_set`].
+///
+/// A Rename that changes a feed also sets the name of the person. Discard
+/// does not put the name back (ADR 0098 item 23).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the request is not valid, the person does
+/// not exist, the collection fails or a draft is not a feed.
+pub fn make_person_change_set(
+    collection: &Collection,
+    start: &mut dyn FnMut(FeedId) -> Result<(), String>,
+    id: PersonId,
+    operation: &PersonOperation,
+    feeds: &[FeedId],
+) -> Result<ChangeSet, PipelineError> {
+    let lookups = lookup_map(collection)?;
+    let (wallet, snapshot) = person_operation(collection, id, operation, &lookups)?;
+    build_change_set(collection, start, &wallet, &snapshot, Some(id), feeds)
+}
+
+/// The stored keysend lookups, by lowercase address.
+fn lookup_map(collection: &Collection) -> Result<HashMap<String, Lookup>, PipelineError> {
+    Ok(collection
+        .keysend_lookups()?
+        .into_iter()
+        .map(|lookup| (lookup.address.clone(), lookup))
+        .collect())
+}
+
+/// The request of a user for a person operation (ADR 0098 item 20).
+/// [`person_operation`] makes the [`RecipientOperation`] from it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PersonOperation {
+    /// Use one address of a wallet of the person.
+    UseAddress {
+        /// The address. It must be a member of a wallet of the person.
+        key: RecipientKey,
+    },
+    /// Rename the payments, the credits or both.
+    Rename {
+        /// The new name.
+        name: String,
+        /// True to rename the recipients of the person.
+        payment: bool,
+        /// True to rename the credits of the person.
+        credit: bool,
+    },
+    /// Add the payee, the credit or the support link to each release.
+    AddToReleases {
+        /// The percentage of the payee, or `None` for no payee.
+        payee_percent: Option<u64>,
+        /// True to add the credit.
+        credit: bool,
+        /// The ID of a support link of the person, or `None` for none.
+        support_link: Option<i64>,
+    },
+    /// Remove the payments, the credits or both.
+    Remove {
+        /// True to remove the recipients of the person.
+        payee: bool,
+        /// True to remove the credits of the person.
+        credit: bool,
+    },
+}
+
+/// The type of a wallet address of a person: the type of the wallet row
+/// with that key, else `lnaddress` for an address with `@`, else `node`.
+fn wallet_type(person: &people::Person, key: &RecipientKey) -> String {
+    person
+        .wallets
+        .iter()
+        .find(|w| w.key.parts() == key.parts() && !w.recipient_type.trim().is_empty())
+        .map_or_else(
+            || {
+                if key.address.contains('@') {
+                    "lnaddress".to_owned()
+                } else {
+                    "node".to_owned()
+                }
+            },
+            |w| w.recipient_type.clone(),
+        )
+}
+
+/// The [`RecipientOperation::AddToReleases`] of a person: the payee, the
+/// credit and the support link that the request selects.
+fn add_snapshot(
+    person: &people::Person,
+    default: Option<RecipientKey>,
+    payee_percent: Option<u64>,
+    credit: bool,
+    support_link: Option<i64>,
+    credits: CreditMatch,
+) -> Result<RecipientOperation, PipelineError> {
+    let payee = match payee_percent {
+        Some(percent) => {
+            let key = default.ok_or_else(|| invalid("the person has no address for a payee"))?;
+            Some(NewPayee {
+                name: Some(person.name.clone()),
+                recipient_type: wallet_type(person, &key),
+                address: key.address.clone(),
+                custom_key: non_empty(key.custom_key.as_ref()),
+                custom_value: non_empty(key.custom_value.as_ref()),
+                percent,
+            })
+        }
+        None => None,
+    };
+    let new_credit = credit.then(|| NewCredit {
+        name: person.name.clone(),
+        role: person.usual_role.clone(),
+        img: person.img.clone(),
+        href: person.href.clone(),
+        npub: person
+            .keys
+            .first()
+            .map(|k| k.npub.clone())
+            .unwrap_or_default(),
+    });
+    let link = match support_link {
+        Some(link_id) => {
+            let link = person
+                .support_links
+                .iter()
+                .find(|l| l.id == link_id)
+                .ok_or_else(|| invalid("the support link is not a link of the person"))?;
+            Some(NewSupportLink {
+                label: link.label.clone(),
+                url: link.url.clone(),
+            })
+        }
+        None => None,
+    };
+    Ok(RecipientOperation::AddToReleases {
+        payee,
+        credit: new_credit,
+        support_link: link,
+        credits,
+    })
+}
+
+/// Make the snapshot of a person operation: the wallet of the person and
+/// the [`RecipientOperation`] with each value of the person. The change set
+/// keeps these values, so it does not change when the person changes
+/// (ADR 0098 item 20).
+///
+/// The wallet has the members of each wallet of the person. Its key is the
+/// default address of the person, else an empty key.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the person does not exist, when the
+/// address of Use this address is not in a wallet of the person, when a
+/// payee has no default address, or when the support link is not a link of
+/// the person.
+pub fn person_operation<S: BuildHasher>(
+    collection: &Collection,
+    id: PersonId,
+    operation: &PersonOperation,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<(Wallet, RecipientOperation), PipelineError> {
+    let person = people::person(collection, id)?;
+    let default = people::default_address(&person, lookups);
+    let mut members: Vec<RecipientKey> = Vec::new();
+    for row in &person.wallets {
+        for member in keysend::members(&row.key, lookups) {
+            if !members.iter().any(|m| m.parts() == member.parts()) {
+                members.push(member);
+            }
+        }
+    }
+    let wallet = Wallet {
+        key: default.clone().unwrap_or_else(|| RecipientKey {
+            address: String::new(),
+            custom_key: None,
+            custom_value: None,
+        }),
+        members,
+    };
+    let credits = CreditMatch {
+        identities: person
+            .credit_names
+            .iter()
+            .map(|c| c.identity.clone())
+            .collect(),
+        npubs: person.keys.iter().map(|k| k.npub.clone()).collect(),
+    };
+    let snapshot = match operation {
+        PersonOperation::UseAddress { key } => {
+            if !wallet.has(key) {
+                return Err(invalid("the address is not in a wallet of the person"));
+            }
+            RecipientOperation::UseAddress {
+                address: key.address.clone(),
+                custom_key: non_empty(key.custom_key.as_ref()),
+                custom_value: non_empty(key.custom_value.as_ref()),
+                recipient_type: wallet_type(&person, key),
+            }
+        }
+        PersonOperation::Rename {
+            name,
+            payment,
+            credit,
+        } => RecipientOperation::RenamePerson {
+            name: name.clone(),
+            payment: *payment,
+            credit: *credit,
+            credits,
+        },
+        PersonOperation::AddToReleases {
+            payee_percent,
+            credit,
+            support_link,
+        } => add_snapshot(
+            &person,
+            default,
+            *payee_percent,
+            *credit,
+            *support_link,
+            credits,
+        )?,
+        PersonOperation::Remove { payee, credit } => RecipientOperation::RemovePerson {
+            payee: *payee,
+            credit: *credit,
+            credits,
+        },
+    };
+    Ok((wallet, snapshot))
+}
+
+/// The code that [`make_change_set`] and [`make_person_change_set`] share.
+fn build_change_set(
+    collection: &Collection,
+    start: &mut dyn FnMut(FeedId) -> Result<(), String>,
+    wallet: &Wallet,
+    operation: &RecipientOperation,
+    person: Option<PersonId>,
+    feeds: &[FeedId],
+) -> Result<ChangeSet, PipelineError> {
     check_operation(operation)?;
     // A closed change set has no more work (ADR 0091 item 19).
     collection.delete_closed_change_sets()?;
     let made_at = now();
-    let id = collection.add_change_set(&to_json(operation)?, &to_json(&wallet.key)?, made_at)?;
+    let id = collection.add_change_set(
+        &to_json(operation)?,
+        &to_json(&wallet.key)?,
+        made_at,
+        person.map(|p| p.0),
+    )?;
     let mut seen = HashSet::new();
     let mut changed = false;
     let busy: HashSet<FeedId> = change_sets(collection)?
@@ -1075,12 +1324,38 @@ pub fn make_change_set(
     if changed && let RecipientOperation::Rename { name } = operation {
         people::rename_with_wallets(collection, &wallet.members, name)?;
     }
+    // A Rename of a person that changed a feed sets the name of the person.
+    if changed
+        && let (Some(person), RecipientOperation::RenamePerson { name, .. }) = (person, operation)
+    {
+        set_person_name(collection, person, name)?;
+    }
     change_set(collection, id)
 }
 
+/// Set the name of a person. The other fields stay.
+fn set_person_name(collection: &Collection, id: PersonId, name: &str) -> Result<(), PipelineError> {
+    let person = people::person(collection, id)?;
+    people::change_person(
+        collection,
+        id,
+        &people::PersonFields {
+            name: name.to_owned(),
+            usual_role: person.usual_role,
+            img: person.img,
+            href: person.href,
+        },
+    )?;
+    Ok(())
+}
+
 /// Refuse an operation that has no type or no address (ADR 0095 items 12
-/// and 14).
-fn check_operation(operation: &RecipientOperation) -> Result<(), PipelineError> {
+/// and 14), or that selects no part.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] for an operation that is not valid.
+pub fn check_operation(operation: &RecipientOperation) -> Result<(), PipelineError> {
     match operation {
         RecipientOperation::ChangeAddress { recipient_type, .. }
         | RecipientOperation::Add { recipient_type, .. }
@@ -1202,6 +1477,7 @@ fn change_set(collection: &Collection, id: i64) -> Result<ChangeSet, PipelineErr
         operation: from_json(&row.operation)?,
         made_at: row.made_at,
         feeds,
+        person: row.person_id.map(PersonId),
     })
 }
 

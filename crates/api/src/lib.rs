@@ -161,6 +161,11 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/people/{id}/profile-addresses",
             get(people::list_profile_addresses).post(people::add_profile_address),
         )
+        .route("/people/{id}/changes", post(people::make_changes))
+        .route(
+            "/people/{id}/changes/preview",
+            post(people::preview_changes),
+        )
         .route("/people/{id}/{kind}", post(people::add_link))
         .route("/people/{id}/{kind}/{link_id}", delete(people::remove_link))
         .route("/recipients", get(routes::list_recipients))

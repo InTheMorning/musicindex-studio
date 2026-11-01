@@ -10735,6 +10735,8 @@ async fn each_people_route_needs_the_token() {
         ("GET", "/api/v1/people/suggestions"),
         ("POST", "/api/v1/people/suggestions/make"),
         ("POST", "/api/v1/people/suggestions/dismiss"),
+        ("POST", "/api/v1/people/1/changes"),
+        ("POST", "/api/v1/people/1/changes/preview"),
     ];
     for (method, path) in routes {
         let request = Request::builder()
@@ -10905,4 +10907,125 @@ async fn the_export_gives_each_link_with_its_evidence_and_the_keysend_addresses_
     assert!(wallet["addresses"][0]["checked_at"].as_i64().unwrap() > 0);
     assert_eq!(person["memberships"], json!([]));
     assert_eq!(person["default_address"]["address"], "02abc");
+}
+
+// ---- The change sets of a person (ADR 0098 item 20, task 064b) ----
+
+/// A person Ann with the wallet `ann@example.com`, and two feeds that pay
+/// only Bob. Gives the app, the person and the two feed IDs.
+async fn person_and_two_feeds() -> (App, i64, [i64; 2]) {
+    let (app, connector) = publisher_app().await;
+    let a = add_paid_feed(
+        &app,
+        connector,
+        "a.xml",
+        &paid_feed("A", "ga", &[BOB], &[], ""),
+    )
+    .await;
+    let b = add_paid_feed(
+        &app,
+        connector,
+        "b.xml",
+        &paid_feed("B", "gb", &[BOB], &[], ""),
+    )
+    .await;
+    let id = new_person(&app, "Ann").await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/wallets"),
+        Some(json!({ "address": "ann@example.com", "recipient_type": "lnaddress" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    (app, id, [a, b])
+}
+
+#[tokio::test]
+async fn the_preview_of_a_person_operation_changes_no_draft_and_the_change_set_lists_the_person() {
+    let (app, id, feeds) = person_and_two_feeds().await;
+    let body = json!({
+        "operation": {
+            "kind": "add_to_releases",
+            "payee_percent": 10,
+            "credit": true,
+            "support_link": null,
+        },
+        "feed_ids": feeds,
+    });
+    let (status, preview) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/changes/preview"),
+        Some(body.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    let rows = preview["feeds"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "{preview}");
+    for row in rows {
+        assert_eq!(row["outcome"]["outcome"], "changed", "{preview}");
+        assert_eq!(row["outcome"]["parts"].as_array().unwrap().len(), 2);
+    }
+    let collection = collection_of(&app);
+    for feed in feeds {
+        assert!(
+            collection
+                .draft(studio_core::collection::FeedId(feed))
+                .unwrap()
+                .is_none(),
+            "ADR 0098 item 20: a preview must make no draft."
+        );
+    }
+    assert_eq!(collection.change_set_rows().unwrap().len(), 0);
+
+    let (status, set) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/changes"),
+        Some(body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    assert_eq!(set["person_id"], id);
+    let row = change_row(&set, feeds[0]);
+    assert_eq!(row["outcome"]["outcome"], "changed");
+    assert_eq!(row["outcome"]["parts"][0]["part"], "payee");
+    assert_eq!(row["outcome"]["parts"][1]["part"], "credit");
+    let (_, list) = call(&app, "GET", "/api/v1/change-sets", None).await;
+    assert_eq!(list[0]["person_id"], id, "{list}");
+}
+
+#[tokio::test]
+async fn a_person_operation_that_is_not_valid_gives_422() {
+    let (app, id, feeds) = person_and_two_feeds().await;
+    let path = format!("/api/v1/people/{id}/changes");
+    let empty = json!({
+        "operation": { "kind": "remove", "payee": true, "credit": false },
+        "feed_ids": [],
+    });
+    let (status, body) = call(&app, "POST", &path, Some(empty)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_change_set");
+    let nothing = json!({
+        "operation": { "kind": "remove", "payee": false, "credit": false },
+        "feed_ids": feeds,
+    });
+    for route in [path.clone(), format!("{path}/preview")] {
+        let (status, body) = call(&app, "POST", &route, Some(nothing.clone())).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert_eq!(body["error"]["code"], "invalid_person_operation");
+    }
+    let stranger = json!({
+        "operation": {
+            "kind": "use_address",
+            "key": { "address": "stranger@example.com" },
+        },
+        "feed_ids": feeds,
+    });
+    let (status, body) = call(&app, "POST", &path, Some(stranger)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_person_operation");
+    let (_, list) = call(&app, "GET", "/api/v1/change-sets", None).await;
+    assert_eq!(list, json!([]));
 }

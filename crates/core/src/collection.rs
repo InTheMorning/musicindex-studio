@@ -452,6 +452,9 @@ FROM saved_recipients s JOIN merged_saved m ON m.saved_id = s.id;
 DROP TABLE merged_saved;
 DELETE FROM saved_recipients;
 ",
+    r"
+ALTER TABLE change_sets ADD COLUMN person_id INTEGER REFERENCES people(id) ON DELETE SET NULL;
+",
 ];
 
 /// The index in `MIGRATIONS` of the migration that makes the people. After
@@ -2995,6 +2998,8 @@ pub struct ChangeSetRow {
     pub recipient: String,
     /// The Unix time when the user made the change set.
     pub made_at: i64,
+    /// The person of a person operation, or `None`.
+    pub person_id: Option<i64>,
 }
 
 /// A row of `change_set_feeds`: the outcome for one feed, and the draft of
@@ -3015,7 +3020,8 @@ pub struct ChangeSetFeedRow {
 }
 
 impl Collection {
-    /// Add a change set. Gives its ID.
+    /// Add a change set. `person_id` is the person of a person operation.
+    /// Gives its ID.
     ///
     /// # Errors
     ///
@@ -3025,10 +3031,12 @@ impl Collection {
         operation: &str,
         recipient: &str,
         made_at: i64,
+        person_id: Option<i64>,
     ) -> Result<i64, CollectionError> {
         self.db.execute(
-            "INSERT INTO change_sets (operation, recipient, made_at) VALUES (?1, ?2, ?3)",
-            params![operation, recipient, made_at],
+            "INSERT INTO change_sets (operation, recipient, made_at, person_id)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![operation, recipient, made_at, person_id],
         )?;
         Ok(self.db.last_insert_rowid())
     }
@@ -3070,9 +3078,9 @@ impl Collection {
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn change_set_rows(&self) -> Result<Vec<ChangeSetRow>, CollectionError> {
-        let mut statement = self
-            .db
-            .prepare("SELECT id, operation, recipient, made_at FROM change_sets ORDER BY id")?;
+        let mut statement = self.db.prepare(
+            "SELECT id, operation, recipient, made_at, person_id FROM change_sets ORDER BY id",
+        )?;
         let rows = statement
             .query_map([], |r| {
                 Ok(ChangeSetRow {
@@ -3080,6 +3088,7 @@ impl Collection {
                     operation: r.get(1)?,
                     recipient: r.get(2)?,
                     made_at: r.get(3)?,
+                    person_id: r.get(4)?,
                 })
             })?
             .collect::<Result<_, _>>()?;
@@ -3095,7 +3104,7 @@ impl Collection {
         Ok(self
             .db
             .query_row(
-                "SELECT id, operation, recipient, made_at FROM change_sets WHERE id = ?1",
+                "SELECT id, operation, recipient, made_at, person_id FROM change_sets WHERE id = ?1",
                 [id],
                 |r| {
                     Ok(ChangeSetRow {
@@ -3103,6 +3112,7 @@ impl Collection {
                         operation: r.get(1)?,
                         recipient: r.get(2)?,
                         made_at: r.get(3)?,
+                        person_id: r.get(4)?,
                     })
                 },
             )

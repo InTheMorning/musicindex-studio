@@ -35,6 +35,12 @@
 // its group (ADR 0029 items 11 and 12: a group holds rows, and a row has
 // inner space). The content of a dialog in a group is not content of that
 // group. An empty list means that no content touches an edge.
+// $overflow() gives each visible element that goes past the right edge of
+// the window, and the page width when the page scrolls to the side. An
+// element in a box that clips or scrolls its content is not in the list.
+// $fieldText() gives each visible text field and select with text smaller
+// than 16 px. iOS Safari zooms the page when such a field gets the focus
+// (musicindex ADR 0024 R-TYPE-1, Body on Touch). Use it with "touch": true.
 // The script prints each result and each console error.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -119,6 +125,24 @@ const helpers = `
     }
     return near;
   };
+  window.$overflow = () => {
+    const width = document.documentElement.clientWidth;
+    const found = [];
+    if (document.documentElement.scrollWidth > width) found.push('page ' + document.documentElement.scrollWidth + ' > ' + width);
+    for (const e of document.querySelectorAll('body *')) {
+      if (!(e.checkVisibility ? e.checkVisibility() : e.offsetParent)) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width === 0 || r.right <= width + 0.5) continue;
+      // An ancestor that clips or scrolls its content keeps the box inside it.
+      let clipped = false;
+      for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
+        if (getComputedStyle(a).overflowX !== 'visible' && a.getBoundingClientRect().right <= width + 0.5) { clipped = true; break; }
+      }
+      if (!clipped) found.push(e.outerHTML.slice(0, 70) + ' @ ' + Math.round(r.right - width));
+    }
+    return found;
+  };
+  window.$fieldText = () => [...document.querySelectorAll('input, select, textarea')].filter((e) => !['checkbox', 'radio', 'range', 'file', 'hidden', 'color'].includes(e.type) && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => getComputedStyle(e).fontSize + ' ' + e.outerHTML.slice(0, 70));
   window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
 let authenticatorId;

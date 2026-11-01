@@ -1748,3 +1748,11 @@ button.outline-feed {
 /* The picture of a person in an open entry of Credits. */
 .person-picture { width: 72px; height: 72px; border-radius: 12px; overflow: hidden; background: var(--fill); }
 .person-picture img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* musicindex ADR 0024 R-TYPE-1: with Touch, a field has the Body size of 17 px.
+   iOS Safari zooms the page when a field with text under 16 px gets the focus.
+   This rule is the last rule of the file, and its selector is as specific as
+   `.field input`, so that it replaces the size of each earlier rule. */
+@media (pointer: coarse) {
+  :root :is(input, select, textarea) { font-size: 17px; }
+}

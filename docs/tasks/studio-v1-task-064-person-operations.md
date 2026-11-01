@@ -31,9 +31,9 @@ No packet changes the UI, so no packet needs a screenshot visual check. Human te
 
 Inspect: `crates/core/src/change_set.rs` (`RecipientOperation`, `Cause`, `Outcome`, `apply`, `apply_block`, `pick_cause`, `scale`, `set_lnaddress_method`, `check_operation`, the tests), `crates/core/src/people.rs` (`Identity`), `crates/core/src/feed.rs` and `crates/core/src/feed/elements.rs` (`Person`, `Funding`, `Recipient`, `ValueBlock`).
 
-Change: `crates/core/src/change_set.rs` only.
+Change: `crates/core/src/change_set.rs`, and `crates/core/tests/change_set.rs` only to add `parts: Vec::new()` to each struct literal of `Outcome`.
 
-Do not change: `crates/core/src/people.rs`, `crates/core/src/collection.rs`, the API, the UI, the ADRs. Do not change the behavior of the operations that exist now.
+Do not change: `crates/core/src/people.rs`, `crates/core/src/collection.rs`, the API, the UI, the ADRs. Keep the behavior of the current operations. Do not change an assertion of a current test.
 
 ### Architecture
 

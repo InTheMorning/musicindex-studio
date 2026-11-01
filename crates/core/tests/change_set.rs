@@ -190,7 +190,8 @@ fn a_feed_that_does_not_change_keeps_its_draft_bytes_and_makes_no_draft() {
     .unwrap();
     assert!(set.feeds.iter().all(|f| f.outcome
         == Outcome::NotChanged {
-            cause: Cause::NoRecipient
+            cause: Cause::NoRecipient,
+            parts: Vec::new()
         }));
     assert_eq!(s.collection.draft(one).unwrap().unwrap(), before);
     assert!(s.collection.draft(two).unwrap().is_none());
@@ -212,7 +213,8 @@ fn a_failed_start_is_the_outcome_cannot_start() {
     assert_eq!(
         set.feeds[0].outcome,
         Outcome::NotChanged {
-            cause: Cause::CannotStart("no host".into())
+            cause: Cause::CannotStart("no host".into()),
+            parts: Vec::new()
         }
     );
 }
@@ -345,7 +347,8 @@ fn a_feed_in_an_open_change_set_is_not_changed_by_a_second_one() {
     assert_eq!(
         second.feeds[0].outcome,
         Outcome::NotChanged {
-            cause: Cause::InOpenChangeSet
+            cause: Cause::InOpenChangeSet,
+            parts: Vec::new()
         }
     );
     assert_eq!(s.collection.draft(one).unwrap().unwrap(), kept);
@@ -700,7 +703,8 @@ fn use_lnaddress_with_no_node_recipient_gives_the_cause_and_keeps_the_bytes() {
     assert_eq!(
         set.feeds[0].outcome,
         Outcome::NotChanged {
-            cause: Cause::NoNodeRecipient
+            cause: Cause::NoNodeRecipient,
+            parts: Vec::new()
         }
     );
     assert!(s.collection.draft(one).unwrap().is_none());

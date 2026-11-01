@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use crate::collection::{
     ChangeSetFeedRow, Collection, CollectionError, CollectionErrorKind, FeedId, now,
 };
-use crate::feed::{Entry, Feed, Recipient, ValueBlock};
-use crate::people;
+use crate::feed::{Entry, Feed, Funding, Person, Recipient, ValueBlock};
+use crate::people::{self, Identity};
 use crate::pipeline::{self, PipelineError};
 use crate::publisher::Catalog;
 
@@ -90,6 +90,9 @@ impl Wallet {
 }
 
 /// One operation on a recipient (ADR 0091 items 5 to 7 and 9, ADR 0095).
+// The person operations hold their values, so that `apply` stays a pure
+// function. The operation is not in a hot path.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecipientOperation {
@@ -132,6 +135,156 @@ pub enum RecipientOperation {
         /// The Lightning address.
         address: String,
     },
+    /// Give each recipient of the wallet of a person a new address, and
+    /// merge the recipients that then have the same key (ADR 0098 item 20).
+    UseAddress {
+        /// The new `address`.
+        address: String,
+        /// The new `customKey`.
+        custom_key: Option<String>,
+        /// The new `customValue`.
+        custom_value: Option<String>,
+        /// The new `type`.
+        recipient_type: String,
+    },
+    /// Replace the payment name, the credit name, or both, of a person.
+    RenamePerson {
+        /// The new name.
+        name: String,
+        /// True to rename the recipients of the wallet.
+        payment: bool,
+        /// True to rename the credits that `credits` matches.
+        credit: bool,
+        /// The credits of the person.
+        credits: CreditMatch,
+    },
+    /// Add the payee, the credit and the support link of a person to the
+    /// channel.
+    AddToReleases {
+        /// The payee part.
+        payee: Option<NewPayee>,
+        /// The credit part.
+        credit: Option<NewCredit>,
+        /// The support link part.
+        support_link: Option<NewSupportLink>,
+        /// The credits of the person.
+        credits: CreditMatch,
+    },
+    /// Remove the payee, the credit, or both, of a person.
+    RemovePerson {
+        /// True to remove the recipients of the wallet.
+        payee: bool,
+        /// True to remove the credits that `credits` matches.
+        credit: bool,
+        /// The credits of the person.
+        credits: CreditMatch,
+    },
+}
+
+/// The credits of a person (ADR 0098 item 6). The change set keeps the
+/// values, so that it does not change when the person changes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreditMatch {
+    /// The keys of the credit names, from [`Identity::key`].
+    pub identities: Vec<String>,
+    /// The Nostr keys, trimmed and in lowercase.
+    pub npubs: Vec<String>,
+}
+
+impl CreditMatch {
+    /// True when the identity of `person` is in `identities`, or its
+    /// `npub` is in `npubs`.
+    #[must_use]
+    pub fn matches(&self, person: &Person) -> bool {
+        let href = person.href.as_deref().unwrap_or("");
+        let npub = person.npub.as_deref().unwrap_or("");
+        if Identity::of(&person.name, href, npub)
+            .is_some_and(|identity| self.identities.contains(&identity.key()))
+        {
+            return true;
+        }
+        let npub = npub.trim().to_lowercase();
+        !npub.is_empty() && self.npubs.contains(&npub)
+    }
+}
+
+/// The payee that Add to all releases adds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewPayee {
+    /// `name`.
+    pub name: Option<String>,
+    /// `type`.
+    pub recipient_type: String,
+    /// `address`.
+    pub address: String,
+    /// `customKey`.
+    pub custom_key: Option<String>,
+    /// `customValue`.
+    pub custom_value: Option<String>,
+    /// The split of the new recipient, from 1 to 99.
+    pub percent: u64,
+}
+
+impl NewPayee {
+    fn to_recipient(&self) -> Recipient {
+        Recipient {
+            name: self.name.clone(),
+            recipient_type: Some(self.recipient_type.clone()),
+            address: Some(self.address.clone()),
+            split: Some(self.percent.to_string()),
+            custom_key: non_empty(self.custom_key.as_ref()),
+            custom_value: non_empty(self.custom_value.as_ref()),
+            fee: None,
+        }
+    }
+}
+
+/// The credit that Add to all releases adds. An empty text gives no
+/// attribute.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewCredit {
+    /// The name.
+    pub name: String,
+    /// `role`.
+    pub role: String,
+    /// `img`.
+    pub img: String,
+    /// `href`.
+    pub href: String,
+    /// `npub`.
+    pub npub: String,
+}
+
+/// The support link that Add to all releases adds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewSupportLink {
+    /// The text of the link.
+    pub label: String,
+    /// `url`.
+    pub url: String,
+}
+
+/// One item of Add to all releases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Part {
+    /// The payee.
+    Payee,
+    /// The credit.
+    Credit,
+    /// The support link.
+    SupportLink,
+}
+
+/// The result of one part of Add to all releases.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PartOutcome {
+    /// The part.
+    pub part: Part,
+    /// True when the part changed the feed.
+    pub changed: bool,
+    /// The cause, when the part did not change the feed.
+    pub cause: Option<Cause>,
 }
 
 /// The reason why a feed does not change (ADR 0091 item 17).
@@ -163,6 +316,15 @@ pub enum Cause {
     BadPercent,
     /// The feed has a change of an open change set that is not written.
     InOpenChangeSet,
+    /// The feed has no credit of the person.
+    NoCredit,
+    /// The channel has a credit of the person (Add to all releases).
+    HasCredit,
+    /// The channel has a support link with the same URL (Add to all
+    /// releases).
+    HasSupportLink,
+    /// The operation has no selected part.
+    NothingSelected,
 }
 
 /// The result of an operation for one feed.
@@ -177,11 +339,17 @@ pub enum Outcome {
         items: usize,
         /// The number of live items with a changed value block.
         live_items: usize,
+        /// The result of each part. Only Add to all releases gives it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        parts: Vec<PartOutcome>,
     },
     /// The model did not change.
     NotChanged {
         /// The cause.
         cause: Cause,
+        /// The result of each part. Only Add to all releases gives it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        parts: Vec<PartOutcome>,
     },
 }
 
@@ -193,7 +361,10 @@ impl Outcome {
     }
 
     fn not_changed(cause: Cause) -> Self {
-        Self::NotChanged { cause }
+        Self::NotChanged {
+            cause,
+            parts: Vec::new(),
+        }
     }
 }
 
@@ -321,7 +492,7 @@ fn apply_block(
             }
             BlockResult::Changed
         }
-        RecipientOperation::Rename { name } => {
+        RecipientOperation::Rename { name } | RecipientOperation::RenamePerson { name, .. } => {
             if !has_wallet(block) {
                 return BlockResult::Skipped(Cause::NoRecipient);
             }
@@ -332,7 +503,7 @@ fn apply_block(
             }
             BlockResult::Changed
         }
-        RecipientOperation::Remove => {
+        RecipientOperation::Remove | RecipientOperation::RemovePerson { .. } => {
             if !has_wallet(block) {
                 return BlockResult::Skipped(Cause::NoRecipient);
             }
@@ -346,9 +517,6 @@ fn apply_block(
             custom_value,
             percent,
         } => {
-            if has_wallet(block) {
-                return BlockResult::Skipped(Cause::HasRecipient);
-            }
             let added = Recipient {
                 name: name.clone(),
                 recipient_type: recipient_type.clone(),
@@ -358,18 +526,245 @@ fn apply_block(
                 custom_value: non_empty(custom_value.as_ref()),
                 fee: None,
             };
-            let result = add_to_block(block, added, *percent);
-            if matches!(result, BlockResult::Changed)
-                && is_lnaddress_type(recipient_type.as_deref())
-            {
-                set_lnaddress_method(block);
-            }
-            result
+            add_payee(block, wallet, added, *percent)
         }
         RecipientOperation::UseLnaddress { address } => {
             use_lnaddress_in_block(block, wallet, address)
         }
+        RecipientOperation::UseAddress {
+            address,
+            custom_key,
+            custom_value,
+            recipient_type,
+        } => {
+            let new_key = RecipientKey {
+                address: address.clone(),
+                custom_key: custom_key.clone(),
+                custom_value: custom_value.clone(),
+            };
+            use_address_in_block(block, wallet, &new_key, recipient_type)
+        }
+        RecipientOperation::AddToReleases { payee, .. } => match payee {
+            Some(payee) => add_payee(block, wallet, payee.to_recipient(), payee.percent),
+            None => BlockResult::Skipped(Cause::NothingSelected),
+        },
     }
+}
+
+/// Add the recipient to a block that has no recipient of the wallet, and
+/// write the method of an `lnaddress` recipient.
+fn add_payee(
+    block: &mut ValueBlock,
+    wallet: &Wallet,
+    added: Recipient,
+    percent: u64,
+) -> BlockResult {
+    if block.recipients.iter().any(|e| wallet.matches(&e.value)) {
+        return BlockResult::Skipped(Cause::HasRecipient);
+    }
+    let is_lnaddress = is_lnaddress_type(added.recipient_type.as_deref());
+    let result = add_to_block(block, added, percent);
+    if matches!(result, BlockResult::Changed) && is_lnaddress {
+        set_lnaddress_method(block);
+    }
+    result
+}
+
+/// Give each recipient of the wallet the new key and type. Then merge the
+/// recipients that have the new key and the same fee state into the first
+/// of them. The merge keeps the name of the first (ADR 0098 item 21).
+fn use_address_in_block(
+    block: &mut ValueBlock,
+    wallet: &Wallet,
+    new_key: &RecipientKey,
+    recipient_type: &str,
+) -> BlockResult {
+    if !block.recipients.iter().any(|e| wallet.matches(&e.value)) {
+        return BlockResult::Skipped(Cause::NoRecipient);
+    }
+    let mut changed = block.clone();
+    for entry in &mut changed.recipients {
+        if wallet.matches(&entry.value) {
+            entry.value.address = Some(new_key.address.clone());
+            entry.value.custom_key = non_empty(new_key.custom_key.as_ref());
+            entry.value.custom_value = non_empty(new_key.custom_value.as_ref());
+            entry.value.recipient_type = Some(recipient_type.to_owned());
+        }
+    }
+    merge_recipients(&mut changed, new_key);
+    if changed == *block {
+        return BlockResult::Skipped(Cause::HasNewAddress);
+    }
+    if is_lnaddress_type(Some(recipient_type)) {
+        set_lnaddress_method(&mut changed);
+    }
+    *block = changed;
+    BlockResult::Changed
+}
+
+/// Merge the recipients with `key` and the same fee state. A group with a
+/// split that is not a non-negative integer stays as it is.
+fn merge_recipients(block: &mut ValueBlock, key: &RecipientKey) {
+    for fee in [false, true] {
+        let group: Vec<usize> = block
+            .recipients
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| key.matches(&e.value) && is_fee(&e.value) == fee)
+            .map(|(position, _)| position)
+            .collect();
+        if group.len() < 2 {
+            continue;
+        }
+        let splits: Option<Vec<u64>> = group
+            .iter()
+            .map(|&position| parse_split(&block.recipients[position].value))
+            .collect();
+        let Some(splits) = splits else {
+            continue;
+        };
+        let sum = splits.iter().fold(0_u64, |a, &s| a.saturating_add(s));
+        block.recipients[group[0]].value.split = Some(sum.to_string());
+        let mut index = 0;
+        block.recipients.retain(|_| {
+            let keep = !group[1..].contains(&index);
+            index += 1;
+            keep
+        });
+    }
+}
+
+/// True when the operation changes the value blocks.
+fn wants_blocks(operation: &RecipientOperation) -> bool {
+    match operation {
+        RecipientOperation::RenamePerson { payment, .. } => *payment,
+        RecipientOperation::RemovePerson { payee, .. } => *payee,
+        _ => true,
+    }
+}
+
+/// Change the credits of one place for Rename and Remove of a person. Gives
+/// true when a credit changed.
+fn apply_credits(persons: &mut Vec<Entry<Person>>, operation: &RecipientOperation) -> bool {
+    match operation {
+        RecipientOperation::RenamePerson {
+            name,
+            credit: true,
+            credits,
+            ..
+        } => {
+            let mut changed = false;
+            for entry in persons.iter_mut().filter(|e| credits.matches(&e.value)) {
+                entry.value.name.clone_from(name);
+                changed = true;
+            }
+            changed
+        }
+        RecipientOperation::RemovePerson {
+            credit: true,
+            credits,
+            ..
+        } => {
+            let before = persons.len();
+            persons.retain(|e| !credits.matches(&e.value));
+            persons.len() != before
+        }
+        _ => false,
+    }
+}
+
+/// Add the parts of Add to all releases to the channel. Each selected part
+/// gives one outcome.
+fn add_to_releases(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -> Outcome {
+    let RecipientOperation::AddToReleases {
+        payee,
+        credit,
+        support_link,
+        credits,
+    } = operation
+    else {
+        return Outcome::not_changed(Cause::NothingSelected);
+    };
+    let mut parts = Vec::new();
+    let mut part = |part: Part, result: Result<(), Cause>| {
+        parts.push(PartOutcome {
+            part,
+            changed: result.is_ok(),
+            cause: result.err(),
+        });
+    };
+    if let Some(payee) = payee {
+        let result = if (1..=99).contains(&payee.percent) {
+            let mut causes = Vec::new();
+            let mut changed = false;
+            for entry in &mut feed.values {
+                match add_payee(
+                    &mut entry.value,
+                    wallet,
+                    payee.to_recipient(),
+                    payee.percent,
+                ) {
+                    BlockResult::Changed => changed = true,
+                    BlockResult::Skipped(cause) => causes.push(cause),
+                }
+            }
+            if changed {
+                Ok(())
+            } else {
+                Err(pick_cause(&causes, operation))
+            }
+        } else {
+            Err(Cause::BadPercent)
+        };
+        part(Part::Payee, result);
+    }
+    if let Some(credit) = credit {
+        let result = if feed.persons.iter().any(|e| credits.matches(&e.value)) {
+            Err(Cause::HasCredit)
+        } else {
+            let text = |value: &str| (!value.is_empty()).then(|| value.to_owned());
+            feed.persons.push(Entry::new(Person {
+                name: credit.name.clone(),
+                role: text(&credit.role),
+                img: text(&credit.img),
+                href: text(&credit.href),
+                npub: text(&credit.npub),
+                ..Person::default()
+            }));
+            Ok(())
+        };
+        part(Part::Credit, result);
+    }
+    if let Some(link) = support_link {
+        let url = link.url.trim();
+        let result = if feed
+            .fundings
+            .iter()
+            .any(|e| e.value.url.as_deref().is_some_and(|u| u.trim() == url))
+        {
+            Err(Cause::HasSupportLink)
+        } else {
+            feed.fundings.push(Entry::new(Funding {
+                label: link.label.clone(),
+                url: Some(link.url.clone()),
+            }));
+            Ok(())
+        };
+        part(Part::SupportLink, result);
+    }
+    if parts.iter().any(|p| p.changed) {
+        return Outcome::Changed {
+            channel: true,
+            items: 0,
+            live_items: 0,
+            parts,
+        };
+    }
+    let cause = parts
+        .first()
+        .and_then(|p| p.cause.clone())
+        .unwrap_or(Cause::NothingSelected);
+    Outcome::NotChanged { cause, parts }
 }
 
 /// Replace each recipient of the wallet that is not an `lnaddress`
@@ -458,7 +853,9 @@ fn add_to_block(block: &mut ValueBlock, added: Recipient, percent: u64) -> Block
 fn pick_cause(causes: &[Cause], operation: &RecipientOperation) -> Cause {
     if causes.is_empty() {
         return match operation {
-            RecipientOperation::Add { .. } => Cause::NoValueBlock,
+            RecipientOperation::Add { .. } | RecipientOperation::AddToReleases { .. } => {
+                Cause::NoValueBlock
+            }
             _ => Cause::NoRecipient,
         };
     }
@@ -488,30 +885,39 @@ pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -
     {
         return Outcome::not_changed(Cause::BadPercent);
     }
+    if matches!(operation, RecipientOperation::AddToReleases { .. }) {
+        return add_to_releases(feed, wallet, operation);
+    }
     let mut causes = Vec::new();
-    let mut run = |blocks: &mut [Entry<ValueBlock>]| -> bool {
+    let mut run = |blocks: &mut [Entry<ValueBlock>], persons: &mut Vec<Entry<Person>>| -> bool {
         let mut changed = false;
-        for entry in blocks {
-            // Add reports the blocks that have the key. The other
-            // operations report only the blocks that can name a cause.
-            match apply_block(&mut entry.value, wallet, operation) {
-                BlockResult::Changed => changed = true,
-                BlockResult::Skipped(cause) => causes.push(cause),
+        if wants_blocks(operation) {
+            for entry in blocks {
+                // Add reports the blocks that have the key. The other
+                // operations report only the blocks that can name a
+                // cause.
+                match apply_block(&mut entry.value, wallet, operation) {
+                    BlockResult::Changed => changed = true,
+                    BlockResult::Skipped(cause) => causes.push(cause),
+                }
             }
         }
-        changed
+        apply_credits(persons, operation) || changed
     };
-    let channel = run(&mut feed.values);
+    let channel = run(&mut feed.values, &mut feed.persons);
     let items = feed
         .items
         .iter_mut()
-        .map(|item| run(&mut item.value.values))
+        .map(|item| run(&mut item.value.values, &mut item.value.persons))
         .filter(|&changed| changed)
         .count();
     let live_items = feed
         .live_items
         .iter_mut()
-        .map(|live| run(&mut live.value.item.values))
+        .map(|live| {
+            let item = &mut live.value.item;
+            run(&mut item.values, &mut item.persons)
+        })
         .filter(|&changed| changed)
         .count();
     if channel || items > 0 || live_items > 0 {
@@ -519,12 +925,21 @@ pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -
             channel,
             items,
             live_items,
+            parts: Vec::new(),
         };
     }
     // Blocks without the key give `NoRecipient` for the three operations
     // that need the key. They are not a cause by themselves when another
     // block names a better one.
-    Outcome::not_changed(pick_cause(&causes, operation))
+    Outcome::not_changed(match operation {
+        RecipientOperation::RenamePerson {
+            payment: false,
+            credit: true,
+            ..
+        }
+        | RecipientOperation::RemovePerson { payee: false, .. } => Cause::NoCredit,
+        _ => pick_cause(&causes, operation),
+    })
 }
 
 /// One feed of a change set.
@@ -678,8 +1093,55 @@ fn check_operation(operation: &RecipientOperation) -> Result<(), PipelineError> 
         RecipientOperation::UseLnaddress { address } if address.trim().is_empty() => {
             Err(invalid("the Lightning address is empty"))
         }
+        RecipientOperation::UseAddress {
+            address,
+            recipient_type,
+            ..
+        } => check_address(address, recipient_type),
+        RecipientOperation::RenamePerson {
+            name,
+            payment,
+            credit,
+            ..
+        } => {
+            if !payment && !credit {
+                return Err(invalid("nothing is selected"));
+            }
+            if name.trim().is_empty() {
+                return Err(invalid("the name is empty"));
+            }
+            Ok(())
+        }
+        RecipientOperation::RemovePerson { payee, credit, .. } if !payee && !credit => {
+            Err(invalid("nothing is selected"))
+        }
+        RecipientOperation::AddToReleases {
+            payee,
+            credit,
+            support_link,
+            ..
+        } => {
+            if payee.is_none() && credit.is_none() && support_link.is_none() {
+                return Err(invalid("nothing is selected"));
+            }
+            match payee {
+                Some(payee) => check_address(&payee.address, &payee.recipient_type),
+                None => Ok(()),
+            }
+        }
         _ => Ok(()),
     }
+}
+
+/// Refuse an address or a type that is empty.
+fn check_address(address: &str, recipient_type: &str) -> Result<(), PipelineError> {
+    if recipient_type.trim().is_empty() {
+        return Err(invalid("the recipient needs a type"));
+    }
+    if address.trim().is_empty() {
+        return Err(invalid("the recipient needs an address"));
+    }
+    Ok(())
 }
 
 /// Change the draft of one feed. Gives the outcome.
@@ -939,7 +1401,8 @@ mod tests {
             Outcome::Changed {
                 channel: true,
                 items: 1,
-                live_items: 1
+                live_items: 1,
+                parts: Vec::new()
             }
         );
         let blocks = [
@@ -1002,7 +1465,8 @@ mod tests {
             Outcome::Changed {
                 channel: true,
                 items: 0,
-                live_items: 0
+                live_items: 0,
+                parts: Vec::new()
             }
         );
         assert_eq!(
@@ -1050,7 +1514,7 @@ mod tests {
         let rename = RecipientOperation::Rename { name: "z".into() };
         let none =
             |feed: &mut Feed, op: &RecipientOperation, k: &str| match apply(feed, &wallet(k), op) {
-                Outcome::NotChanged { cause } => cause,
+                Outcome::NotChanged { cause, .. } => cause,
                 Outcome::Changed { .. } => panic!("the feed must not change"),
             };
         // No recipient.
@@ -1191,7 +1655,8 @@ mod tests {
         assert_eq!(
             cause,
             Outcome::NotChanged {
-                cause: Cause::NoNodeRecipient
+                cause: Cause::NoNodeRecipient,
+                parts: Vec::new()
             }
         );
     }
@@ -1208,5 +1673,326 @@ mod tests {
         };
         assert!(apply(&mut feed, &wallet("a"), &operation).is_changed());
         assert_eq!(feed.values[0].value.method.as_deref(), Some("lnaddress"));
+    }
+
+    fn person(name: &str, npub: &str) -> Entry<Person> {
+        Entry::new(Person {
+            name: name.into(),
+            npub: (!npub.is_empty()).then(|| npub.to_owned()),
+            ..Person::default()
+        })
+    }
+
+    fn credits_of(name: &str) -> CreditMatch {
+        CreditMatch {
+            identities: vec![Identity::of(name, "", "").unwrap().key()],
+            npubs: Vec::new(),
+        }
+    }
+
+    fn names(persons: &[Entry<Person>]) -> Vec<&str> {
+        persons.iter().map(|e| e.value.name.as_str()).collect()
+    }
+
+    fn use_address(address: &str, recipient_type: &str) -> RecipientOperation {
+        RecipientOperation::UseAddress {
+            address: address.into(),
+            custom_key: None,
+            custom_value: None,
+            recipient_type: recipient_type.into(),
+        }
+    }
+
+    #[test]
+    fn use_address_changes_each_wallet_member_and_merges_the_same_key() {
+        let mut feed = Feed {
+            values: vec![block(vec![
+                recipient("a", "30"),
+                recipient("a2", "20"),
+                recipient("b", "50"),
+            ])],
+            ..Feed::default()
+        };
+        let before = feed.values[0].value.recipients[0].value.clone();
+        let wallet = Wallet {
+            key: key("a"),
+            members: vec![key("a"), key("a2")],
+        };
+        let outcome = apply(&mut feed, &wallet, &use_address("new", "lnaddress"));
+        assert!(outcome.is_changed());
+        let block = &feed.values[0].value;
+        assert_eq!(
+            splits(&feed.values[0]),
+            [pair("new", "50"), pair("b", "50")]
+        );
+        let first = &block.recipients[0].value;
+        assert_eq!(first.name, before.name);
+        assert_eq!(first.fee, before.fee);
+        assert_eq!(first.recipient_type.as_deref(), Some("lnaddress"));
+        assert_eq!(block.method.as_deref(), Some("lnaddress"));
+    }
+
+    #[test]
+    fn use_address_keeps_name_split_and_fee_of_each_recipient() {
+        let mut feed = feed();
+        assert!(apply(&mut feed, &wallet("a"), &use_address("new", "node")).is_changed());
+        let first = &feed.items[0].value.values[0].value.recipients[0].value;
+        assert_eq!(first.address.as_deref(), Some("new"));
+        assert_eq!(first.name.as_deref(), Some("name a"));
+        assert_eq!(first.split.as_deref(), Some("80"));
+    }
+
+    #[test]
+    fn use_address_does_not_merge_a_fee_recipient_with_a_plain_one() {
+        let mut feed = Feed {
+            values: vec![block(vec![
+                recipient("a", "40"),
+                fee("new", "10"),
+                recipient("b", "50"),
+            ])],
+            ..Feed::default()
+        };
+        assert!(apply(&mut feed, &wallet("a"), &use_address("new", "node")).is_changed());
+        assert_eq!(
+            splits(&feed.values[0]),
+            [pair("new", "40"), pair("new", "10"), pair("b", "50")]
+        );
+    }
+
+    #[test]
+    fn use_address_gives_the_causes_of_a_block_that_cannot_change() {
+        let mut none = Feed {
+            values: vec![block(vec![recipient("x", "100")])],
+            ..Feed::default()
+        };
+        let outcome = apply(&mut none, &wallet("a"), &use_address("new", "node"));
+        assert_eq!(outcome, Outcome::not_changed(Cause::NoRecipient));
+        let mut same = Feed {
+            values: vec![block(vec![recipient("new", "100")])],
+            ..Feed::default()
+        };
+        let outcome = apply(&mut same, &wallet("new"), &use_address("new", "node"));
+        assert_eq!(outcome, Outcome::not_changed(Cause::HasNewAddress));
+    }
+
+    #[test]
+    fn rename_person_changes_only_the_selected_names() {
+        let make = || {
+            let mut feed = feed();
+            feed.persons = vec![person("Ann", ""), person("Bob", "")];
+            feed.items[0].value.persons = vec![person("ann", "")];
+            feed
+        };
+        let rename = |payment, credit| RecipientOperation::RenamePerson {
+            name: "Anna".into(),
+            payment,
+            credit,
+            credits: credits_of("Ann"),
+        };
+        let mut feed = make();
+        assert!(apply(&mut feed, &wallet("a"), &rename(true, false)).is_changed());
+        assert_eq!(names(&feed.persons), ["Ann", "Bob"]);
+        assert_eq!(
+            feed.values[0].value.recipients[0].value.name.as_deref(),
+            Some("Anna")
+        );
+        let mut feed = make();
+        let outcome = apply(&mut feed, &wallet("a"), &rename(false, true));
+        assert_eq!(
+            outcome,
+            Outcome::Changed {
+                channel: true,
+                items: 1,
+                live_items: 0,
+                parts: Vec::new()
+            }
+        );
+        assert_eq!(names(&feed.persons), ["Anna", "Bob"]);
+        assert_eq!(names(&feed.items[0].value.persons), ["Anna"]);
+        assert_eq!(
+            feed.values[0].value.recipients[0].value.name.as_deref(),
+            Some("name a")
+        );
+        let mut feed = make();
+        assert!(apply(&mut feed, &wallet("a"), &rename(true, true)).is_changed());
+        assert_eq!(names(&feed.persons), ["Anna", "Bob"]);
+        let mut empty = Feed::default();
+        assert_eq!(
+            apply(&mut empty, &wallet("a"), &rename(false, true)),
+            Outcome::not_changed(Cause::NoCredit)
+        );
+    }
+
+    fn add_all() -> RecipientOperation {
+        RecipientOperation::AddToReleases {
+            payee: Some(NewPayee {
+                name: Some("Ann".into()),
+                recipient_type: "node".into(),
+                address: "n".into(),
+                custom_key: None,
+                custom_value: None,
+                percent: 10,
+            }),
+            credit: Some(NewCredit {
+                name: "Ann".into(),
+                role: "vocals".into(),
+                img: String::new(),
+                href: String::new(),
+                npub: String::new(),
+            }),
+            support_link: Some(NewSupportLink {
+                label: "Support".into(),
+                url: "https://a.example/s".into(),
+            }),
+            credits: credits_of("Ann"),
+        }
+    }
+
+    #[test]
+    fn add_to_releases_adds_three_parts_and_then_gives_the_three_causes() {
+        let mut feed = Feed {
+            values: vec![block(vec![recipient("x", "100")])],
+            persons: vec![person("Bob", "")],
+            ..Feed::default()
+        };
+        let outcome = apply(&mut feed, &wallet("n"), &add_all());
+        let Outcome::Changed {
+            channel,
+            items,
+            parts,
+            ..
+        } = outcome
+        else {
+            panic!("the feed must change");
+        };
+        assert!(channel);
+        assert_eq!(items, 0);
+        assert_eq!(parts.len(), 3);
+        assert!(parts.iter().all(|p| p.changed && p.cause.is_none()));
+        assert_eq!(names(&feed.persons), ["Bob", "Ann"]);
+        assert_eq!(feed.persons[1].value.img, None);
+        assert_eq!(feed.persons[1].value.role.as_deref(), Some("vocals"));
+        assert_eq!(feed.fundings.len(), 1);
+        assert_eq!(splits(&feed.values[0]), [pair("x", "90"), pair("n", "10")]);
+        let again = apply(&mut feed, &wallet("n"), &add_all());
+        let Outcome::NotChanged { cause, parts } = again else {
+            panic!("the feed must not change");
+        };
+        assert_eq!(cause, Cause::HasRecipient);
+        let causes: Vec<_> = parts.iter().map(|p| p.cause.clone().unwrap()).collect();
+        assert_eq!(
+            causes,
+            [Cause::HasRecipient, Cause::HasCredit, Cause::HasSupportLink]
+        );
+    }
+
+    #[test]
+    fn remove_person_removes_only_the_selected_items() {
+        let make = || {
+            let mut feed = Feed {
+                values: vec![block(vec![
+                    recipient("x", "50"),
+                    recipient("y", "30"),
+                    recipient("a", "20"),
+                ])],
+                persons: vec![person("Ann", ""), person("Bob", "")],
+                ..Feed::default()
+            };
+            feed.items = vec![Entry::new(Item {
+                persons: vec![person("Ann", "")],
+                ..Item::default()
+            })];
+            feed
+        };
+        let remove = |payee, credit| RecipientOperation::RemovePerson {
+            payee,
+            credit,
+            credits: credits_of("Ann"),
+        };
+        let mut feed = make();
+        assert!(apply(&mut feed, &wallet("a"), &remove(true, false)).is_changed());
+        assert_eq!(names(&feed.persons), ["Ann", "Bob"]);
+        assert_eq!(splits(&feed.values[0]), [pair("x", "63"), pair("y", "37")]);
+        let mut feed = make();
+        assert!(apply(&mut feed, &wallet("a"), &remove(false, true)).is_changed());
+        assert_eq!(names(&feed.persons), ["Bob"]);
+        assert_eq!(names(&feed.items[0].value.persons), Vec::<&str>::new());
+        assert_eq!(feed.values[0].value.recipients.len(), 3);
+        let mut empty = Feed::default();
+        assert_eq!(
+            apply(&mut empty, &wallet("a"), &remove(false, true)),
+            Outcome::not_changed(Cause::NoCredit)
+        );
+    }
+
+    #[test]
+    fn credit_match_uses_the_identity_or_the_npub() {
+        let matcher = CreditMatch {
+            identities: vec![Identity::of("Ann", "", "").unwrap().key()],
+            npubs: vec!["npub1abc".into()],
+        };
+        assert!(matcher.matches(&person("  ANN ", "").value));
+        assert!(matcher.matches(&person("Other", " NPUB1ABC ").value));
+        assert!(!matcher.matches(&person("Bob", "").value));
+    }
+
+    #[test]
+    fn an_outcome_from_before_the_parts_reads_with_an_empty_list() {
+        let changed: Outcome = serde_json::from_str(
+            r#"{"outcome":"changed","channel":true,"items":1,"live_items":0}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            changed,
+            Outcome::Changed {
+                channel: true,
+                items: 1,
+                live_items: 0,
+                parts: Vec::new()
+            }
+        );
+        let kept: Outcome =
+            serde_json::from_str(r#"{"outcome":"not_changed","cause":{"cause":"no_recipient"}}"#)
+                .unwrap();
+        assert_eq!(kept, Outcome::not_changed(Cause::NoRecipient));
+        let json = serde_json::to_string(&kept).unwrap();
+        assert!(!json.contains("parts"));
+    }
+
+    #[test]
+    fn check_operation_refuses_an_operation_with_no_part() {
+        let credits = CreditMatch::default();
+        let none = [
+            RecipientOperation::RenamePerson {
+                name: "Ann".into(),
+                payment: false,
+                credit: false,
+                credits: credits.clone(),
+            },
+            RecipientOperation::RemovePerson {
+                payee: false,
+                credit: false,
+                credits: credits.clone(),
+            },
+            RecipientOperation::AddToReleases {
+                payee: None,
+                credit: None,
+                support_link: None,
+                credits: credits.clone(),
+            },
+            RecipientOperation::RenamePerson {
+                name: " ".into(),
+                payment: true,
+                credit: false,
+                credits,
+            },
+            use_address("", "node"),
+            use_address("a", ""),
+        ];
+        for operation in &none {
+            assert!(check_operation(operation).is_err(), "{operation:?}");
+        }
+        assert!(check_operation(&add_all()).is_ok());
+        assert!(check_operation(&use_address("a", "node")).is_ok());
     }
 }

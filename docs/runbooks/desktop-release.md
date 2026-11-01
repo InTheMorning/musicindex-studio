@@ -10,7 +10,7 @@ The release has no server binary. The server shell is not ready for public use.
 
 1. Make sure the four checks in `AGENTS.md` pass.
 2. Set the workspace version in `Cargo.toml` and commit it with `Cargo.lock`.
-3. Review the change list and the open human tests in the Studio phase plan.
+3. Write the notes of the version in `docs/releases/VERSION.md` and commit them ([ADR 0100](../adr/0100-each-release-candidate-has-a-notes-file.md)). Use the open human tests of the Studio phase plan for "What to test".
 4. Run the `Desktop release` workflow by hand to check all five runners.
 
 A manual run uploads archives as workflow artifacts. It does not create a GitHub Release.
@@ -20,15 +20,15 @@ The workflow needs no repository secret for these unsigned archives.
 
 1. Push a tag that matches the workspace version, such as `v0.1.0`.
 2. Wait for all five build and smoke jobs to pass.
-3. Open the draft GitHub Release and check its notes, five archives, and `SHA256SUMS.txt`.
+3. Open the draft GitHub Release and check its notes, five archives, and `SHA256SUMS.txt`. The notes are the notes file of the version, then one sentence about the archives and the server image.
 4. Test each archive on a normal desktop system before you publish the draft.
 5. Publish the draft only after the remaining release checks pass.
 
 The workflow refuses a tag that does not match `Cargo.toml`.
-For a release candidate, run `tools/release-candidate.sh 0.1.0-rc.1`. It sets the version, pushes `main`, waits for CI and pushes the tag `v0.1.0-rc.1`.
+For a release candidate, run `tools/release-candidate.sh 0.1.0-rc.10`. It stops when `docs/releases/0.1.0-rc.10.md` is not committed. Then it sets the version, pushes `main`, waits for CI and pushes the tag `v0.1.0-rc.10`.
 The workflow marks a draft from a tag with a hyphen as a pre-release.
 It keeps the Release as a draft. It does not publish it.
-If a draft already exists, a new run replaces its assets after all five jobs pass.
+If a draft already exists, a new run replaces its assets and its notes after all five jobs pass.
 A run refuses to change a published Release.
 
 The smoke test extracts the archive, runs the binary, and checks the local UI.

@@ -57,6 +57,16 @@ jobs:
           else
             python tools/release_desktop.py version
           fi
+      - name: Check notes
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          # A candidate after 0.1.0-rc.9 needs its notes file (ADR 0100 items 1, 4 and 7).
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^0\.1\.0-rc\.[1-9]$ && ! -s "docs/releases/$version.md" ]]; then
+            echo "ADR 0100 item 4: the tag $GITHUB_REF_NAME needs the notes file docs/releases/$version.md. Commit it on main, then make a new candidate." >&2
+            exit 1
+          fi
       - name: Install Linux test server
         if: matrix.slug == 'linux-x86_64'
         run: sudo apt-get update && sudo apt-get install -y openssh-server
@@ -119,12 +129,22 @@ jobs:
         shell: bash
         run: |
           tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          # The notes file of the candidate, then the fixed sentence (ADR 0100 item 5).
+          {
+            if [[ -f "docs/releases/$version.md" ]]; then
+              cat "docs/releases/$version.md"
+              echo
+            fi
+            echo "Desktop archives only. These archives are unsigned. The server image is ghcr.io/inthemorning/studio-server:$version."
+          } > .studio-dev/notes.md
           if gh release view "$tag" --json isDraft --jq .isDraft > .studio-dev/draft-state; then
             if [[ "$(cat .studio-dev/draft-state)" != true ]]; then
               echo 'A published Release already uses this tag.' >&2
               exit 1
             fi
             gh release upload "$tag" .studio-dev/release/* --clobber
+            gh release edit "$tag" --notes-file .studio-dev/notes.md
           else
             # A tag with a hyphen, such as v0.1.0-rc.1, is a pre-release.
             prerelease=()
@@ -132,7 +152,7 @@ jobs:
               prerelease=(--prerelease)
             fi
             gh release create "$tag" .studio-dev/release/* \
-              --draft --verify-tag --generate-notes "${prerelease[@]}" \
+              --draft --verify-tag "${prerelease[@]}" \
               --title "Music Index Studio $tag" \
-              --notes "Desktop archives only. These archives are unsigned. The server image is ghcr.io/inthemorning/studio-server:${tag#v}."
+              --notes-file .studio-dev/notes.md
           fi

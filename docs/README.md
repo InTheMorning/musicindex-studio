@@ -103,6 +103,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0097: Studio suggests the Lightning address of a wallet](adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md)
 - [ADR 0098: The People module](adr/0098-the-people-module.md)
 - [ADR 0099: The People destination and the page of a person](adr/0099-the-people-destination-and-the-page-of-a-person.md)
+- [ADR 0100: Each release candidate has a notes file](adr/0100-each-release-candidate-has-a-notes-file.md)
 
 ## Plans
 
@@ -358,6 +359,12 @@ This is the index of the project documents. The user guide is in the root [READM
 - [studio-server](runbooks/studio-server.md)
 - [Start Music Index Studio](runbooks/install-desktop.md)
 - [Desktop release drafts](runbooks/desktop-release.md)
+
+## Release notes
+
+Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-each-release-candidate-has-a-notes-file.md)).
+
+- [0.1.0-rc.9](releases/0.1.0-rc.9.md)
 
 ## Research
 

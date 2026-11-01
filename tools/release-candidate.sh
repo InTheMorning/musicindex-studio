@@ -5,6 +5,9 @@
 # Usage:
 #   tools/release-candidate.sh VERSION [--no-deploy] [--yes]
 #
+# The candidate needs its notes file docs/releases/VERSION.md in the commit
+# of the tag (ADR 0100). The script stops before its first change without it.
+#
 # The script does the steps of the runbooks in their sequence:
 #   1. It sets VERSION in Cargo.toml and Cargo.lock, and commits only these
 #      two files. When the version is already VERSION, it makes no commit.
@@ -154,6 +157,21 @@ else
     fi
     steps+=("Push main (${count} new commits) and wait for CI.")
     steps+=("Push the tag ${tag}.")
+fi
+
+# The notes of the candidate (ADR 0100 items 1 and 3). The file must be in
+# the commit that the tag names. Candidates up to 0.1.0-rc.9 have none
+# (ADR 0100 item 7).
+notes="docs/releases/${version}.md"
+if [[ ! "${version}" =~ ^0\.1\.0-rc\.[1-9]$ ]]; then
+    notes_commit="${tagged:-HEAD}"
+    git cat-file -e "${notes_commit}:${notes}" 2>/dev/null \
+        || die "ADR 0100 item 3: the candidate needs the notes file ${notes} in the commit of the tag. Write it, commit it on main, then run this script again."
+    [[ -n "$(git show "${notes_commit}:${notes}" | tr -d '[:space:]')" ]] \
+        || die "ADR 0100 item 3: the notes file ${notes} is empty. Write the notes, commit them, then run this script again."
+    if [[ -z "${tagged}" ]] && ! git diff --quiet HEAD -- "${notes}"; then
+        die "ADR 0100 item 3: the notes file ${notes} has changes that are not committed. Commit them, then run this script again."
+    fi
 fi
 [[ -z "${remote_tag}" && -n "${local_tag}" ]] && steps+=("Push the tag ${tag}.")
 steps+=("Wait for server-image.yml on the tag.")

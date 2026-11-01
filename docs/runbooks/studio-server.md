@@ -25,7 +25,7 @@ The image is `ghcr.io/inthemorning/studio-server:VERSION`. The compose file is `
 GHCR makes a new package private. After the first push of the image, the operator sets the package `studio-server` to public. Or the operator logs in on the VPS with `docker login ghcr.io`.
 
 1. On the VPS, make the folder of the deployment, and copy `deploy/env.example` to `.env` in it. Set `STUDIO_PUBLIC_ORIGIN` in `.env`.
-2. On this computer, run `tools/release-candidate.sh VERSION`. It makes the candidate and the image, then it runs `tools/deploy-server.sh --release VERSION`. VERSION has a hyphen, for example `0.1.0-rc.1`, and the local tag `vVERSION` is required. The script copies `compose.yml`, pulls the image, pins it in `.env` and starts the container. Then it waits at most 60 seconds for two facts. The revision label of the container is the commit of the tag, and the log has the line `Music Index Studio server VERSION`.
+2. On this computer, commit the notes file `docs/releases/VERSION.md` ([ADR 0100](../adr/0100-each-release-candidate-has-a-notes-file.md)). Then run `tools/release-candidate.sh VERSION`. It makes the candidate and the image, then it runs `tools/deploy-server.sh --release VERSION`. VERSION has a hyphen, for example `0.1.0-rc.1`, and the local tag `vVERSION` is required. The script copies `compose.yml`, pulls the image, pins it in `.env` and starts the container. Then it waits at most 60 seconds for two facts. The revision label of the container is the commit of the tag, and the log has the line `Music Index Studio server VERSION`.
 3. On the VPS, in the folder of the deployment, make the first invite code:
 
 ```sh

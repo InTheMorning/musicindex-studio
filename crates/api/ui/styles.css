@@ -1149,6 +1149,7 @@ select option { background: var(--level-3); color: var(--text); }
 .link-row .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-row .summary { flex: 1; min-width: 0; color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-row .go { color: var(--muted); }
+.link-row .count { color: var(--muted); font-size: .85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* A row with its title above its text. The text wraps, so that a narrow
    window shows all of it (ADR 0073 item 2). */
 .link-row .text { flex: 1; min-width: 0; display: grid; gap: 2px; }

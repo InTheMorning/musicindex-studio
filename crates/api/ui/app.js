@@ -2520,7 +2520,7 @@ function RecipientsPage({ go }) {
         const row = recipientRow(recipient);
         return html`<button key=${JSON.stringify(recipientKey(recipient))} class="link-row" type="button"
           onClick=${() => go({ name: 'recipient', recipient })}>
-          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
+          <span class="text"><span class="label">${row.title}</span>${row.lines.map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span><span class="count">${row.count}</span><span class="go">›</span>
         </button>`;
       })}</div>`}
     </section>
@@ -2676,7 +2676,7 @@ function RecipientPage({ recipient, feeds, go }) {
   return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
     <${ErrorNotice} error=${error} />
     <header class="recipient-head"><h1>${row.title}</h1>
-      ${walletLines(recipient).map((line) => html`<p class="hint" key=${line.address}><span class="mono">${line.address}</span> · ${line.type}${line.custom && ` · ${line.custom}`}</p>`)}</header>
+      ${walletLines(recipient).map((line) => html`<p class="hint" key=${line.address || line.label}>${line.label}${line.address && html` <span class="mono">${line.address}</span>`}${line.account && ` · account ${line.account}`}</p>`)}</header>
     <div class="actions recipient-actions">
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('change_address')}>Change Address</button>
       <button class="button action" type="button" disabled=${count === 0} onClick=${() => setOpen('rename')}>Rename</button>

@@ -24,17 +24,39 @@ export function recipientTitle(recipient) {
   return first ? first.address : recipient.address;
 }
 
-const TYPE_LABELS = { node: 'node (keysend)', lnaddress: 'lnaddress' };
+// The members of a wallet, the Lightning addresses first (ADR 0095 item 7).
+// An entry with no `addresses` is its own single member.
+const membersOf = (entry) => ((entry.addresses || []).length > 0 ? entry.addresses : [entry])
+  .slice().sort((a, b) => (b.recipient_type === 'lnaddress') - (a.recipient_type === 'lnaddress'));
 
-export function typeLabel(type) {
-  return TYPE_LABELS[type] || (type ? type : 'Type not set');
+// The parts of the line of one member (ADR 0095 items 7 and 8). `full` is
+// true in the header of a page, where a node key shows in full. A node on a
+// shared provider node shows the domain of the provider in its label. In a
+// row, it shows no key. `account` is the custom value, or null.
+export function addressLine(member, full) {
+  const account = member.custom_value || null;
+  if (member.recipient_type === 'lnaddress') {
+    return { label: 'Lightning address', address: member.address, account };
+  }
+  if (member.provider) {
+    return { label: `${member.provider} node`, address: full ? member.address : null, account };
+  }
+  return { label: 'Node', address: full ? member.address : shortKey(member.address), account };
 }
 
-// One line for each member of a wallet, for the header of its page: the
-// address, its type and its custom value, or null.
+// One line for each member of a wallet, for the header of its page.
 export function addressLines(entry) {
-  const members = (entry.addresses || []).length > 0 ? entry.addresses : [entry];
-  return members.map((m) => ({ address: m.address, type: typeLabel(m.recipient_type), custom: m.custom_value || null }));
+  return membersOf(entry).map((m) => addressLine(m, true));
+}
+
+// The text of a line of a row: the label, the address, then the account.
+const lineText = ({ label, address, account }) =>
+  `${label}${address ? ` ${address}` : ''}${account ? ` · account ${account}` : ''}`;
+
+// The texts of the lines of a row: the Lightning addresses first, then each
+// node (ADR 0095 item 7).
+export function rowLines(entry) {
+  return membersOf(entry).map((m) => lineText(addressLine(m, false)));
 }
 
 const memberOfType = (entry, type) => (entry.addresses || []).find((m) => m.recipient_type === type) || null;
@@ -98,26 +120,16 @@ export function sortRecipients(list) {
   return (list || []).slice().sort((a, b) => recipientTitle(a).localeCompare(recipientTitle(b), undefined, { sensitivity: 'base' }));
 }
 
-// A node key in its short form, then its custom value when it has one: the
-// accounts of one shared node differ only in the value. Each other address
-// shows in full.
-const shortAddress = (member) => {
-  const address = member.recipient_type === 'node' ? shortKey(member.address) : member.address;
-  return member.custom_value ? `${address} · ${member.custom_value}` : address;
-};
-
-// The summary line of a recipient: the name, then each address of the
-// wallet with the Lightning addresses first, then "N feeds" or "Saved, not
-// used" (ADR 0095 item 7 and ADR 0091 item 2). A recipient that is not saved
-// and that no feed model uses now shows "0 feeds".
+// The row of a recipient: the name, the count of feeds and one line for each
+// address of the wallet (ADR 0095 item 7 and ADR 0091 item 2). The count is
+// "Saved, not used" for a saved recipient that no feed uses. A recipient that
+// is not saved and that no feed model uses now shows "0 feeds".
 export function recipientRow(recipient) {
   const unusedSaved = !(recipient.feeds > 0) && recipient.saved_id != null;
-  const members = ((recipient.addresses || []).length > 0 ? recipient.addresses : [recipient])
-    .slice().sort((a, b) => (b.recipient_type === 'lnaddress') - (a.recipient_type === 'lnaddress'));
-  const feeds = unusedSaved ? 'Saved, not used' : plural(recipient.feeds || 0, 'feed', 'feeds');
   return {
     title: recipientTitle(recipient),
-    text: [...members.map(shortAddress), feeds].join(' · '),
+    count: unusedSaved ? 'Saved, not used' : plural(recipient.feeds || 0, 'feed', 'feeds'),
+    lines: rowLines(recipient),
   };
 }
 

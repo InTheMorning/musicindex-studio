@@ -2,7 +2,7 @@
 
 - Decision: [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) items 7, 8 and 16 to 18.
 - Research: [keysend and Lightning address recipients](../research/2026-10-31-keysend-and-lightning-address-recipients.md), the section "The Nodes Behind The Addresses".
-- Status: Planned on 2026-10-31.
+- Status: Complete on 2026-10-31, in two packets, with its screenshot visual check. The human test is open: on `studio.musicindex.org`, the Recipients page names the Fountain node, and a node with no provider shows its key.
 
 ## Goal
 

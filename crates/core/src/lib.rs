@@ -32,6 +32,7 @@ pub mod musicindex;
 pub mod net;
 pub mod nip46;
 pub mod nostr_events;
+pub mod people;
 pub mod pipeline;
 pub mod playlist;
 pub mod profiles;

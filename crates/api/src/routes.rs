@@ -34,6 +34,7 @@ use studio_core::live::{self, LiveStatus};
 use studio_core::media;
 use studio_core::migrate;
 use studio_core::nostr_events::Signing;
+use studio_core::people;
 use studio_core::pipeline;
 use studio_core::playlist;
 use studio_core::profiles;
@@ -4917,27 +4918,28 @@ fn recipient_places(feed: &Feed) -> RecipientPlaces<'_> {
     }
 }
 
-/// Save a recipient, in the field names of the UI model (ADR 0027 item 5).
-/// Studio does not keep the split and the fee of a saved recipient.
+/// Save a recipient as a person, in the field names of the UI model (ADR
+/// 0027 item 5, ADR 0098). Studio does not keep the split and the fee of a
+/// saved recipient.
 pub(crate) async fn save_recipient(
     State(shared): State<Shared>,
     Json(body): Json<Recipient>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     blocking(shared, move |w| {
-        let id = w.collection.save_recipient(&body)?;
-        Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
+        let id = people::save_recipient(&w.collection, &body)?;
+        Ok((StatusCode::CREATED, Json(json!({ "id": id.0 }))))
     })
     .await
 }
 
-/// Remove a saved recipient. A recipient that a feed of the collection has
-/// stays in the list.
+/// Remove the person with the ID `id`. A recipient that a feed of the
+/// collection has stays in the list.
 pub(crate) async fn remove_saved_recipient(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
-        w.collection.remove_saved_recipient(id)?;
+        people::remove_person(&w.collection, people::PersonId(id))?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

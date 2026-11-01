@@ -2725,6 +2725,17 @@ async fn recipients_are_listed_saved_and_removed() {
         .expect("Cara is in the list");
     assert_eq!(cara["saved_id"], saved_id);
 
+    // A second save of the same key gives the same person (ADR 0098).
+    let (status, again) = call(
+        &app,
+        "POST",
+        "/api/v1/recipients/saved",
+        Some(json!({ "name": "Cara 2", "recipient_type": "node", "address": "cara@example.com" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(again["id"], saved_id);
+
     let (status, body) = call(
         &app,
         "POST",
@@ -9909,7 +9920,7 @@ async fn discard_puts_back_the_draft_byte_for_byte_and_a_feed_with_no_draft_has_
 }
 
 #[tokio::test]
-async fn rename_and_change_address_change_the_saved_recipient() {
+async fn rename_sets_the_name_of_the_person_and_change_address_keeps_its_wallet() {
     let (app, connector) = publisher_app().await;
     let a = add_paid_feed(
         &app,
@@ -9949,8 +9960,7 @@ async fn rename_and_change_address_change_the_saved_recipient() {
     assert_eq!(status, StatusCode::CREATED, "{set}");
     let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
     assert_eq!(saved_row(&list)["name"], "Anna");
-    // The feed is in the open change set. Discard it, so that the next
-    // change set can change the feed. Discard puts back the name.
+    // Discard puts back the feed, and it keeps the new name of the person.
     let (status, _) = call(
         &app,
         "DELETE",
@@ -9960,7 +9970,7 @@ async fn rename_and_change_address_change_the_saved_recipient() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
-    assert_eq!(saved_row(&list)["name"], "Ann");
+    assert_eq!(saved_row(&list)["name"], "Anna");
 
     let (status, set) = call(
         &app,
@@ -9981,7 +9991,7 @@ async fn rename_and_change_address_change_the_saved_recipient() {
     .await;
     assert_eq!(status, StatusCode::CREATED, "{set}");
     let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
-    assert_eq!(saved_row(&list)["address"], "anna@new.example");
+    assert_eq!(saved_row(&list)["address"], "ann@example.com");
 }
 
 /// Add a recipient to the draft of the feed with the ID `id`. The recipient

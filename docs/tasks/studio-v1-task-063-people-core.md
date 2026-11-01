@@ -3,7 +3,11 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0098](../adr/0098-the-people-module.md), [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md), [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0027](../adr/0027-the-recipient-picker.md), [ADR 0014](../adr/0014-collection-in-sqlite.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: Not started.
+Status: In progress. Packets 063a and 063b are complete. Notes from the review of 063b:
+
+- The SQL of the people is in `people.rs` through `Collection::db`, as in `apps.rs` and `grant.rs`. Only the migration, `known_recipients` and the refill pass are in `collection.rs`.
+- The functions that change a person take `&Collection`, because `make_change_set` has only a `&Collection`. Each `add_*` function gives the row ID, and a second add of the same link gives the same ID.
+- The planning model changed `known_recipients`: a wallet of a person always gives the name of the person, also after a newer read of a feed.
 
 ## Goal
 
@@ -419,9 +423,9 @@ At the end, report:
 
 Inspect: `crates/api/src/lib.rs` (the router), `crates/api/src/routes.rs` (`list_recipients`, `keysend_map`, `blocking`, `ApiError`, the mapping of `CollectionErrorKind`), `crates/api/src/tests.rs` (the helpers of the recipient tests), `crates/core/src/people.rs`.
 
-Change: `crates/api/src/lib.rs`, `crates/api/src/routes.rs` or a new `crates/api/src/people.rs`, `crates/api/src/tests.rs`.
+Change: `crates/api/src/lib.rs`, `crates/api/src/routes.rs` or a new `crates/api/src/people.rs`, `crates/api/src/error.rs` (the map of `CollectionErrorKind::Conflict`), `crates/api/src/tests.rs`.
 
-Do not change: the core, the UI, the ADRs.
+Do not change: the core, the UI, the ADRs. The one exception is item 3, and `serde` derives on the types of `people.rs` that the routes send or receive.
 
 ### Architecture
 

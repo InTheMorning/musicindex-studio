@@ -7,11 +7,12 @@ use studio_core::change_set::{
     self, Cause, Outcome, RecipientKey, RecipientOperation, Wallet, discard_change_set,
     level_feeds, make_change_set,
 };
-use studio_core::collection::{Collection, FeedId, KnownRecipient};
+use studio_core::collection::{Collection, FeedId};
 use studio_core::connector::{self, Connector, Expected, LocalFolder};
 use studio_core::feed::Recipient;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
+use studio_core::people::{self, Person, PersonFields};
 use studio_core::pipeline::{self, AddressCheck};
 use studio_core::publisher::Catalog;
 
@@ -377,33 +378,31 @@ fn a_discarded_draft_closes_its_row_so_discard_keeps_it_away() {
     assert_eq!(s.collection.draft(two).unwrap().unwrap(), before_two);
 }
 
-fn saved(collection: &Collection) -> Vec<KnownRecipient> {
-    collection
-        .known_recipients()
-        .unwrap()
-        .into_iter()
-        .filter(|r| r.saved_id.is_some())
-        .collect()
+/// Each person of the collection, as the test compares them.
+fn persons(collection: &Collection) -> Vec<Person> {
+    people::people(collection).unwrap()
 }
 
-fn save(collection: &Collection, name: &str, custom: Option<(&str, &str)>) {
-    collection
-        .save_recipient(&Recipient {
+/// Make a person with one wallet of the address `address`.
+fn save(collection: &Collection, name: &str, address: &str, custom: Option<(&str, &str)>) {
+    people::save_recipient(
+        collection,
+        &Recipient {
             name: Some(name.into()),
             recipient_type: Some("lnaddress".into()),
-            address: Some("old".into()),
+            address: Some(address.into()),
             custom_key: custom.map(|c| c.0.into()),
             custom_value: custom.map(|c| c.1.into()),
             ..Recipient::default()
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
 }
 
 #[test]
-fn rename_changes_the_saved_recipient_and_discard_puts_back_its_name() {
+fn rename_sets_the_name_of_the_person_and_discard_keeps_the_new_name() {
     let s = setup();
-    save(&s.collection, "Old name", None);
-    let before = saved(&s.collection);
+    save(&s.collection, "Old name", "old", None);
     let mut starter = start(&s);
     let set = make_change_set(
         &s.collection,
@@ -415,24 +414,25 @@ fn rename_changes_the_saved_recipient_and_discard_puts_back_its_name() {
         &s.feeds,
     )
     .unwrap();
-    assert_eq!(saved(&s.collection)[0].name.as_deref(), Some("New name"));
+    assert_eq!(persons(&s.collection)[0].name, "New name");
     discard_change_set(&s.collection, set.id).unwrap();
-    assert_eq!(saved(&s.collection), before);
+    assert_eq!(
+        persons(&s.collection)[0].name,
+        "New name",
+        "ADR 0098 item 23: Discard must not set the name of a person back."
+    );
 }
 
 #[test]
-fn change_address_changes_the_saved_recipient_and_discard_puts_back_its_identity() {
+fn change_address_does_not_change_the_wallets_of_the_person() {
     let s = setup();
-    // The test feeds have the recipient "old" with no custom pair. A change
-    // set changes the saved recipient only when a feed changes.
-    save(&s.collection, "Old name", None);
-    let before = saved(&s.collection);
-    let old_key = key();
+    save(&s.collection, "Old name", "old", None);
+    let before = persons(&s.collection);
     let mut starter = start(&s);
     let set = make_change_set(
         &s.collection,
         &mut starter,
-        &old_key,
+        &key(),
         &RecipientOperation::ChangeAddress {
             address: "new".into(),
             custom_key: Some("k2".into()),
@@ -442,51 +442,41 @@ fn change_address_changes_the_saved_recipient_and_discard_puts_back_its_identity
         &s.feeds,
     )
     .unwrap();
-    let changed = saved(&s.collection);
-    assert_eq!(changed.len(), 1);
-    assert_eq!(changed[0].address, "new");
-    assert_eq!(changed[0].custom_key.as_deref(), Some("k2"));
-    assert_eq!(changed[0].custom_value.as_deref(), Some("v2"));
-    assert_eq!(changed[0].recipient_type.as_deref(), Some("node"));
+    assert_eq!(
+        persons(&s.collection),
+        before,
+        "ADR 0098 item 23: a change set must not change a person."
+    );
     discard_change_set(&s.collection, set.id).unwrap();
-    assert_eq!(saved(&s.collection), before);
-    assert_eq!(before[0].address, "old");
-    assert_eq!(before[0].custom_key, None);
-    assert_eq!(before[0].custom_value, None);
-    assert_eq!(before[0].recipient_type.as_deref(), Some("lnaddress"));
+    assert_eq!(persons(&s.collection), before);
+    assert_eq!(before[0].wallets[0].key.address, "old");
 }
 
 #[test]
-fn discard_of_a_change_set_with_no_saved_recipient_keeps_the_saved_recipients() {
+fn a_change_set_does_not_change_a_person_with_no_wallet_of_it() {
     let s = setup();
     // A different recipient is saved. The key of the change set is not.
-    s.collection
-        .save_recipient(&Recipient {
-            name: Some("Other".into()),
-            address: Some("other".into()),
-            ..Recipient::default()
-        })
-        .unwrap();
-    let before = saved(&s.collection);
+    save(&s.collection, "Other", "other-saved", None);
+    let before = persons(&s.collection);
     let mut starter = start(&s);
     let set = make_change_set(
         &s.collection,
         &mut starter,
         &key(),
-        &change_address(),
+        &RecipientOperation::Rename { name: "New".into() },
         &s.feeds,
     )
     .unwrap();
-    assert_eq!(saved(&s.collection), before);
+    assert_eq!(persons(&s.collection), before);
     discard_change_set(&s.collection, set.id).unwrap();
-    assert_eq!(saved(&s.collection), before);
+    assert_eq!(persons(&s.collection), before);
 }
 
 #[test]
-fn a_change_set_with_no_changed_feed_keeps_the_saved_recipient_and_goes_at_the_next_one() {
+fn a_change_set_with_no_changed_feed_keeps_the_person_and_goes_at_the_next_one() {
     let s = setup();
-    save(&s.collection, "Old name", Some(("k", "v")));
-    let before = saved(&s.collection);
+    save(&s.collection, "Old name", "old", Some(("k", "v")));
+    let before = persons(&s.collection);
     // No test feed has this key, so no feed changes.
     let other = Wallet::single(RecipientKey {
         address: "old".into(),
@@ -507,9 +497,9 @@ fn a_change_set_with_no_changed_feed_keeps_the_saved_recipient_and_goes_at_the_n
         .unwrap()
     };
     assert_eq!(
-        saved(&s.collection),
+        persons(&s.collection),
         before,
-        "ADR 0091 item 12: a change set with no changed feed must not change the saved recipient."
+        "ADR 0098 item 23: a Rename with no changed feed must not rename a person."
     );
     assert!(
         change_set::find_change_set(&s.collection, first.id).is_ok(),
@@ -774,76 +764,28 @@ fn an_operation_with_no_type_is_refused_and_leaves_no_change_set() {
 }
 
 #[test]
-fn change_address_of_a_wallet_with_two_saved_rows_merges_them_and_discard_puts_back_both() {
+fn rename_sets_the_name_of_the_person_with_any_member_of_the_wallet() {
     let s = setup_with(WALLET_FEED);
-    for (name, address, kind) in [
-        ("Ann", "node-key", "node"),
-        ("Ann LN", "ann@example.com", "lnaddress"),
-    ] {
-        s.collection
-            .save_recipient(&Recipient {
-                name: Some(name.into()),
-                recipient_type: Some(kind.into()),
-                address: Some(address.into()),
-                ..Recipient::default()
-            })
-            .unwrap();
-    }
-    let before = saved(&s.collection);
-    assert_eq!(before.len(), 2);
+    let id = people::add_person(
+        &s.collection,
+        &PersonFields {
+            name: "Ann".into(),
+            ..PersonFields::default()
+        },
+    )
+    .unwrap();
+    // The person holds the Lightning address of the wallet, not its key.
+    people::add_wallet(&s.collection, id, &plain("ann@example.com"), "lnaddress").unwrap();
     let mut starter = start(&s);
-    let set = make_change_set(
+    make_change_set(
         &s.collection,
         &mut starter,
         &two_member_wallet(),
-        &RecipientOperation::ChangeAddress {
-            address: "new@example.com".into(),
-            custom_key: None,
-            custom_value: None,
-            recipient_type: Some("lnaddress".into()),
+        &RecipientOperation::Rename {
+            name: "Anna".into(),
         },
         &s.feeds,
     )
     .unwrap();
-    let merged = saved(&s.collection);
-    assert_eq!(
-        merged.len(),
-        1,
-        "ADR 0095 item 9: the saved rows must merge."
-    );
-    assert_eq!(merged[0].address, "new@example.com");
-    discard_change_set(&s.collection, set.id).unwrap();
-    let mut after = saved(&s.collection);
-    let mut expected = before;
-    after.sort_by(|a, b| a.address.cmp(&b.address));
-    expected.sort_by(|a, b| a.address.cmp(&b.address));
-    assert_eq!(after, expected);
-}
-
-#[test]
-fn discard_reads_a_saved_before_with_one_object() {
-    let s = setup();
-    save(&s.collection, "Old name", None);
-    let before = saved(&s.collection);
-    let id = s
-        .collection
-        .saved_recipient_row(("old", "", ""))
-        .unwrap()
-        .unwrap();
-    let mut starter = start(&s);
-    let set = make_change_set(
-        &s.collection,
-        &mut starter,
-        &key(),
-        &RecipientOperation::Rename { name: "New".into() },
-        &s.feeds,
-    )
-    .unwrap();
-    assert_eq!(saved(&s.collection)[0].name.as_deref(), Some("New"));
-    // The format from before ADR 0095 is one object, not a list.
-    s.collection
-        .set_change_set_saved_before(set.id, &serde_json::to_string(&id).unwrap())
-        .unwrap();
-    discard_change_set(&s.collection, set.id).unwrap();
-    assert_eq!(saved(&s.collection), before);
+    assert_eq!(people::person(&s.collection, id).unwrap().name, "Anna");
 }

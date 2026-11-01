@@ -6,11 +6,11 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::address::{self, Address, AddressSource};
@@ -18,6 +18,8 @@ use crate::announce::{Announcement, AnnouncementState};
 use crate::connector::{KeptBlob, Stamp, Version};
 use crate::feed::{Feed, Person, Recipient};
 use crate::keysend::{Lookup, LookupStatus};
+use crate::library::Library;
+use crate::xml::Document;
 
 /// The schema migrations. Migration `n` takes the schema from version `n`
 /// to version `n + 1` (ADR 0014).
@@ -343,7 +345,119 @@ CREATE TABLE feed_credits (
     PRIMARY KEY (feed_id, name, role, grp, href, npub)
 );
 ",
+    r"
+CREATE TABLE people (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    usual_role TEXT NOT NULL DEFAULT '',
+    img TEXT NOT NULL DEFAULT '',
+    href TEXT NOT NULL DEFAULT '',
+    default_address TEXT,
+    default_custom_key TEXT NOT NULL DEFAULT '',
+    default_custom_value TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE person_wallets (
+    id INTEGER PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    address TEXT NOT NULL,
+    custom_key TEXT NOT NULL DEFAULT '',
+    custom_value TEXT NOT NULL DEFAULT '',
+    recipient_type TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL,
+    evidence TEXT NOT NULL,
+    linked_at INTEGER NOT NULL,
+    UNIQUE (address, custom_key, custom_value)
+);
+CREATE TABLE person_keys (
+    id INTEGER PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    npub TEXT NOT NULL UNIQUE,
+    evidence TEXT NOT NULL,
+    linked_at INTEGER NOT NULL
+);
+CREATE TABLE person_credit_names (
+    id INTEGER PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    identity TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL DEFAULT '',
+    href TEXT NOT NULL DEFAULT '',
+    npub TEXT NOT NULL DEFAULT '',
+    evidence TEXT NOT NULL,
+    linked_at INTEGER NOT NULL
+);
+CREATE TABLE person_support_links (
+    id INTEGER PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    label TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL,
+    position INTEGER NOT NULL
+);
+CREATE TABLE person_members (
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    PRIMARY KEY (person_id, feed_id)
+);
+CREATE TABLE person_dismissals (
+    identity TEXT PRIMARY KEY,
+    items TEXT NOT NULL,
+    dismissed_at INTEGER NOT NULL
+);
+-- A saved Lightning address with a found lookup joins the person of the
+-- saved node key of that lookup (ADR 0098 item 11).
+CREATE TEMP TABLE merged_saved AS
+SELECT s.id AS saved_id,
+       t.id AS target_id,
+       row_number() OVER (PARTITION BY t.id ORDER BY s.id) AS position
+FROM saved_recipients s
+JOIN keysend_lookups k
+  ON k.address = lower(trim(s.address)) AND k.status = 'found'
+JOIN saved_recipients t
+  ON t.address = k.pubkey
+ AND t.custom_key = k.custom_key
+ AND t.custom_value = k.custom_value
+WHERE t.id != s.id
+  AND t.id NOT IN (
+      SELECT s2.id FROM saved_recipients s2
+      JOIN keysend_lookups k2
+        ON k2.address = lower(trim(s2.address)) AND k2.status = 'found'
+      JOIN saved_recipients t2
+        ON t2.address = k2.pubkey
+       AND t2.custom_key = k2.custom_key
+       AND t2.custom_value = k2.custom_value
+      WHERE t2.id != s2.id);
+INSERT INTO people (id, name, created_at)
+SELECT t.id,
+       COALESCE(
+           NULLIF(trim(t.name), ''),
+           (SELECT NULLIF(trim(s.name), '')
+            FROM saved_recipients s JOIN merged_saved m ON m.saved_id = s.id
+            WHERE m.target_id = t.id AND NULLIF(trim(s.name), '') IS NOT NULL
+            ORDER BY s.id LIMIT 1),
+           t.address),
+       t.saved_at
+FROM saved_recipients t
+WHERE t.id NOT IN (SELECT saved_id FROM merged_saved);
+INSERT INTO person_wallets
+    (person_id, address, custom_key, custom_value, recipient_type, position, evidence, linked_at)
+SELECT t.id, t.address, t.custom_key, t.custom_value,
+       COALESCE(t.recipient_type, ''), 0, 'user', t.saved_at
+FROM saved_recipients t
+WHERE t.id NOT IN (SELECT saved_id FROM merged_saved);
+INSERT INTO person_wallets
+    (person_id, address, custom_key, custom_value, recipient_type, position, evidence, linked_at)
+SELECT m.target_id, s.address, s.custom_key, s.custom_value,
+       COALESCE(s.recipient_type, ''), m.position, 'user', s.saved_at
+FROM saved_recipients s JOIN merged_saved m ON m.saved_id = s.id;
+DROP TABLE merged_saved;
+DELETE FROM saved_recipients;
+",
 ];
+
+/// The index in `MIGRATIONS` of the migration that makes the people. After
+/// it, Studio refills the credit index from the library copies, because SQL
+/// cannot read a feed.
+const PEOPLE_MIGRATION: usize = 20;
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -377,6 +491,8 @@ pub enum CollectionErrorKind {
     InUse,
     /// The collection refuses the sent value.
     Invalid,
+    /// The value is a link of a different person already.
+    Conflict,
     /// SQLite failed, or the schema is not known.
     Database,
 }
@@ -930,7 +1046,48 @@ impl Collection {
                 .map_err(|_| CollectionError::new("too many migrations"))?;
             tx.pragma_update(None, "user_version", version)?;
             tx.commit()?;
+            if index == PEOPLE_MIGRATION {
+                self.refill_credits()?;
+            }
         }
+        Ok(())
+    }
+
+    /// Fill `feed_credits` for each feed that has a library copy and no
+    /// credit row (ADR 0098 item 10). The migration of the people calls it
+    /// one time. A feed with no library copy, or with a copy that does not
+    /// parse, gets no row.
+    fn refill_credits(&mut self) -> Result<(), CollectionError> {
+        let Some(root) = self
+            .setting("library_root")?
+            .and_then(|v| v.as_str().map(PathBuf::from))
+            .filter(|root| root.is_dir())
+        else {
+            return Ok(());
+        };
+        let Ok(library) = Library::open(root) else {
+            return Ok(());
+        };
+        let rows: Vec<FeedRow> = self
+            .feeds()?
+            .into_iter()
+            .filter(|row| row.folder.is_some())
+            .collect();
+        let tx = self.db.transaction()?;
+        for row in rows {
+            let has_rows: bool = tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM feed_credits WHERE feed_id = ?1)",
+                [row.id.0],
+                |r| r.get(0),
+            )?;
+            if has_rows {
+                continue;
+            }
+            if let Some(feed) = library_copy(&library, &row) {
+                put_credits(&tx, row.id, feed.credits())?;
+            }
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -2746,11 +2903,14 @@ impl Collection {
     }
 
     /// Each recipient that the collection knows: from a feed that Studio
-    /// read, or from a save (ADR 0027 items 2 to 5).
+    /// read, or from a wallet of a person (ADR 0027 items 2 to 5, ADR 0098).
     ///
     /// The list has each identity one time. The name and the type come from
-    /// the row with the highest `seen_at` or `saved_at`. The sequence is by
-    /// name, then by address, with no regard to capital letters.
+    /// the feed row with the highest `seen_at`. A wallet of a person always
+    /// gives the name of the person, because the user owns that name. Its
+    /// type replaces the type of the feeds when it is not empty. `saved_id`
+    /// is the person ID. The sequence is by name, then by address, with no
+    /// regard to capital letters.
     ///
     /// # Errors
     ///
@@ -2785,8 +2945,8 @@ impl Collection {
         drop(statement);
 
         let mut statement = self.db.prepare(
-            "SELECT id, address, custom_key, custom_value, name, recipient_type, saved_at
-             FROM saved_recipients",
+            "SELECT p.id, w.address, w.custom_key, w.custom_value, p.name, w.recipient_type
+             FROM person_wallets w JOIN people p ON p.id = w.person_id",
         )?;
         let rows = statement.query_map([], |r| {
             Ok((
@@ -2794,21 +2954,21 @@ impl Collection {
                 r.get::<_, String>(1)?,
                 r.get::<_, String>(2)?,
                 r.get::<_, String>(3)?,
-                r.get::<_, Option<String>>(4)?,
-                r.get::<_, Option<String>>(5)?,
-                r.get::<_, i64>(6)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
             ))
         })?;
         for row in rows {
-            let (saved_id, address, custom_key, custom_value, name, recipient_type, saved_at) =
-                row?;
+            let (person_id, address, custom_key, custom_value, name, recipient_type) = row?;
             let key = (address.clone(), custom_key.clone(), custom_value.clone());
             let agg = found
                 .entry(key)
                 .or_insert_with(|| RecipientAgg::new(address, custom_key, custom_value));
-            agg.saved_id = Some(saved_id);
-            agg.consider(saved_at, name, recipient_type);
+            agg.saved_id = Some(person_id);
+            let recipient_type = non_empty(recipient_type).or(agg.recipient_type.take());
+            agg.consider(i64::MAX, Some(name), recipient_type);
         }
+        drop(statement);
 
         let mut list: Vec<KnownRecipient> = found.into_values().map(RecipientAgg::finish).collect();
         list.sort_by(|a, b| {
@@ -2819,252 +2979,9 @@ impl Collection {
         Ok(list)
     }
 
-    /// Save a recipient. When its identity is already saved, change the
-    /// name and the type of that row (ADR 0027 item 5).
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] of kind [`CollectionErrorKind::Invalid`]
-    /// when the recipient has no address.
-    pub fn save_recipient(&self, recipient: &Recipient) -> Result<i64, CollectionError> {
-        // The same rule as `Feed::recipients`: an address of only spaces is no
-        // address.
-        let Some(address) = recipient
-            .address
-            .as_deref()
-            .filter(|a| !a.trim().is_empty())
-        else {
-            return Err(CollectionError::with_kind(
-                CollectionErrorKind::Invalid,
-                "a saved recipient needs an address",
-            ));
-        };
-        let custom_key = recipient.custom_key.clone().unwrap_or_default();
-        let custom_value = recipient.custom_value.clone().unwrap_or_default();
-        self.db.execute(
-            "INSERT INTO saved_recipients (address, custom_key, custom_value, name, recipient_type, saved_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT (address, custom_key, custom_value)
-             DO UPDATE SET name = ?4, recipient_type = ?5, saved_at = ?6",
-            params![
-                address,
-                custom_key,
-                custom_value,
-                recipient.name,
-                recipient.recipient_type,
-                now()
-            ],
-        )?;
-        Ok(self.db.query_row(
-            "SELECT id FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3",
-            params![address, custom_key, custom_value],
-            |r| r.get(0),
-        )?)
-    }
-
-    /// Change the saved recipient with the identity `old` (ADR 0091 item
-    /// 12). `new_identity` is the new identity and type, or `None` to keep
-    /// them. `name` is the new name, or `None` to keep it. When the new
-    /// identity is already saved, that row stays and the old row goes out.
-    /// Gives true when a saved row with the old identity existed.
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn change_saved_recipient(
-        &self,
-        old: (&str, &str, &str),
-        new_identity: Option<(&str, &str, &str, Option<&str>)>,
-        name: Option<&str>,
-    ) -> Result<bool, CollectionError> {
-        let found: Option<i64> = self
-            .db
-            .query_row(
-                "SELECT id FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3",
-                params![old.0, old.1, old.2],
-                |r| r.get(0),
-            )
-            .optional()?;
-        let Some(id) = found else {
-            return Ok(false);
-        };
-        if let Some(name) = name {
-            self.db.execute(
-                "UPDATE saved_recipients SET name = ?2, saved_at = ?3 WHERE id = ?1",
-                params![id, name, now()],
-            )?;
-        }
-        if let Some((address, custom_key, custom_value, recipient_type)) = new_identity {
-            let taken: Option<i64> = self
-                .db
-                .query_row(
-                    "SELECT id FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3 AND id != ?4",
-                    params![address, custom_key, custom_value, id],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            if taken.is_some() {
-                self.db
-                    .execute("DELETE FROM saved_recipients WHERE id = ?1", [id])?;
-            } else {
-                self.db.execute(
-                    "UPDATE saved_recipients SET address = ?2, custom_key = ?3, custom_value = ?4, recipient_type = ?5, saved_at = ?6 WHERE id = ?1",
-                    params![id, address, custom_key, custom_value, recipient_type, now()],
-                )?;
-            }
-        }
-        Ok(true)
-    }
-
-    /// The saved recipient with the identity `identity`, or `None`.
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn saved_recipient_row(
-        &self,
-        identity: (&str, &str, &str),
-    ) -> Result<Option<SavedRecipientRow>, CollectionError> {
-        Ok(self
-            .db
-            .query_row(
-                "SELECT id, address, custom_key, custom_value, name, recipient_type, saved_at
-                 FROM saved_recipients WHERE address = ?1 AND custom_key = ?2 AND custom_value = ?3",
-                params![identity.0, identity.1, identity.2],
-                |r| {
-                    Ok(SavedRecipientRow {
-                        id: r.get(0)?,
-                        address: r.get(1)?,
-                        custom_key: r.get(2)?,
-                        custom_value: r.get(3)?,
-                        name: r.get(4)?,
-                        recipient_type: r.get(5)?,
-                        saved_at: r.get(6)?,
-                    })
-                },
-            )
-            .optional()?)
-    }
-
-    /// Put back a saved recipient as it was (ADR 0091 item 20). The row
-    /// with the same ID changes back. When it does not exist, Studio adds
-    /// it again. A row that another saved recipient blocks stays as it is.
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn restore_saved_recipient(&self, row: &SavedRecipientRow) -> Result<(), CollectionError> {
-        let changed = self.db.execute(
-            "UPDATE OR IGNORE saved_recipients
-             SET address = ?2, custom_key = ?3, custom_value = ?4, name = ?5,
-                 recipient_type = ?6, saved_at = ?7
-             WHERE id = ?1",
-            params![
-                row.id,
-                row.address,
-                row.custom_key,
-                row.custom_value,
-                row.name,
-                row.recipient_type,
-                row.saved_at
-            ],
-        )?;
-        if changed == 0 {
-            self.db.execute(
-                "INSERT OR IGNORE INTO saved_recipients
-                     (id, address, custom_key, custom_value, name, recipient_type, saved_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    row.id,
-                    row.address,
-                    row.custom_key,
-                    row.custom_value,
-                    row.name,
-                    row.recipient_type,
-                    row.saved_at
-                ],
-            )?;
-        }
-        Ok(())
-    }
-
-    /// Keep the saved recipient from before a change set, as JSON text.
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn set_change_set_saved_before(
-        &self,
-        id: i64,
-        saved_before: &str,
-    ) -> Result<(), CollectionError> {
-        self.db.execute(
-            "UPDATE change_sets SET saved_before = ?2 WHERE id = ?1",
-            params![id, saved_before],
-        )?;
-        Ok(())
-    }
-
-    /// The saved recipient from before a change set, as JSON text. `None`
-    /// when no saved recipient changed.
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn change_set_saved_before(&self, id: i64) -> Result<Option<String>, CollectionError> {
-        Ok(self
-            .db
-            .query_row(
-                "SELECT saved_before FROM change_sets WHERE id = ?1",
-                [id],
-                |r| r.get::<_, Option<String>>(0),
-            )
-            .optional()?
-            .flatten())
-    }
-
-    /// Remove a saved recipient. The `feed_recipients` rows do not
-    /// change.
-    ///
-    /// # Errors
-    ///
-    /// Gives [`CollectionErrorKind::NotFound`] when the ID does not exist.
-    pub fn remove_saved_recipient(&self, id: i64) -> Result<(), CollectionError> {
-        let changed = self
-            .db
-            .execute("DELETE FROM saved_recipients WHERE id = ?1", [id])?;
-        if changed == 0 {
-            return Err(CollectionError::with_kind(
-                CollectionErrorKind::NotFound,
-                format!("saved recipient {id} does not exist"),
-            ));
-        }
-        Ok(())
-    }
-
     pub(crate) fn db(&self) -> &Connection {
         &self.db
     }
-}
-
-/// A row of `saved_recipients`. A change set keeps it as JSON (ADR 0091
-/// item 20).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SavedRecipientRow {
-    /// The ID.
-    pub id: i64,
-    /// The payment address.
-    pub address: String,
-    /// `customKey`, or empty text.
-    pub custom_key: String,
-    /// `customValue`, or empty text.
-    pub custom_value: String,
-    /// The name.
-    pub name: Option<String>,
-    /// The recipient type.
-    pub recipient_type: Option<String>,
-    /// The Unix time of the save.
-    pub saved_at: i64,
 }
 
 /// A row of `change_sets` (ADR 0091 item 19).
@@ -3413,6 +3330,19 @@ fn put_recipients(
         )?;
     }
     Ok(())
+}
+
+/// The feed in the library copy of `row`, or `None` when the feed has no
+/// release folder, no feed XML or an XML that is not a feed.
+fn library_copy(library: &Library, row: &FeedRow) -> Option<Feed> {
+    let folder = row.folder.as_deref()?;
+    let bytes = [row.path.as_deref(), row.public_url.as_deref()]
+        .into_iter()
+        .flatten()
+        .map(|name| name.rsplit_once('/').map_or(name, |(_, last)| last))
+        .find_map(|name| std::fs::read(library.path(folder, name)).ok())?;
+    let doc = Document::parse_bytes(&bytes).ok()?;
+    Feed::read(&doc).ok()
 }
 
 /// One row of `feed_credits`: a credit of a feed (ADR 0098 item 10).
@@ -3809,12 +3739,14 @@ mod tests {
         collection
             .record_state(feed_id, &Feed::read(&doc).unwrap(), &Version::new("v1"))
             .unwrap();
-        collection
-            .save_recipient(&Recipient {
+        crate::people::save_recipient(
+            &collection,
+            &Recipient {
                 address: Some("addr2".to_owned()),
                 ..Recipient::default()
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
         drop(collection);
         let bytes = std::fs::read(&path).unwrap();
         let text = String::from_utf8_lossy(&bytes);
@@ -3840,13 +3772,135 @@ mod tests {
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(collection.feeds().unwrap().len(), 1);
         assert_eq!(collection.known_recipients().unwrap(), Vec::new());
-        collection
-            .save_recipient(&Recipient {
+        crate::people::save_recipient(
+            &collection,
+            &Recipient {
                 address: Some("addr".to_owned()),
                 ..Recipient::default()
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
         assert_eq!(collection.known_recipients().unwrap().len(), 1);
+    }
+
+    /// Make a database at the version before the migration of the people.
+    fn before_people(path: &Path) -> Connection {
+        let db = Connection::open(path).unwrap();
+        for migration in &MIGRATIONS[..PEOPLE_MIGRATION] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(PEOPLE_MIGRATION).unwrap(),
+        )
+        .unwrap();
+        db
+    }
+
+    #[test]
+    fn the_people_migration_is_the_one_that_makes_the_people() {
+        assert!(MIGRATIONS[PEOPLE_MIGRATION].contains("CREATE TABLE people"));
+    }
+
+    #[test]
+    fn the_people_migration_makes_one_person_from_each_saved_recipient() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = before_people(&path);
+        db.execute_batch(
+            "INSERT INTO saved_recipients VALUES (4, 'a1', 'k', 'v', ' Ann ', 'node', 100);
+             INSERT INTO saved_recipients VALUES (9, 'nameless', '', '', NULL, NULL, 200);",
+        )
+        .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        let people = crate::people::people(&collection).unwrap();
+        assert_eq!(people.len(), 2);
+        assert_eq!(people[0].id.0, 4);
+        assert_eq!(people[0].name, "Ann");
+        assert_eq!(people[0].wallets.len(), 1);
+        assert_eq!(people[0].wallets[0].key.address, "a1");
+        assert_eq!(people[0].wallets[0].key.custom_key.as_deref(), Some("k"));
+        assert_eq!(people[0].wallets[0].recipient_type, "node");
+        assert_eq!(people[0].wallets[0].evidence, "user");
+        assert_eq!(people[0].wallets[0].linked_at, 100);
+        assert_eq!(people[1].id.0, 9);
+        assert_eq!(people[1].name, "nameless");
+        let left: i64 = collection
+            .db
+            .query_row("SELECT COUNT(*) FROM saved_recipients", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 0);
+        assert_eq!(collection.known_recipients().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn the_people_migration_puts_a_lightning_address_in_the_person_of_its_node_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = before_people(&path);
+        db.execute_batch(
+            "INSERT INTO saved_recipients VALUES (1, 'ann@fountain.example', '', '', 'Ann LN', 'lnaddress', 100);
+             INSERT INTO saved_recipients VALUES (2, 'node-1', 'k', 'v', '', 'node', 200);
+             INSERT INTO saved_recipients VALUES (3, 'bob@fountain.example', '', '', 'Bob', 'lnaddress', 300);
+             INSERT INTO keysend_lookups VALUES ('ann@fountain.example', 'node-1', 'k', 'v', 'found', 1);
+             INSERT INTO keysend_lookups VALUES ('bob@fountain.example', 'node-1', 'k', 'other', 'found', 1);",
+        )
+        .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        let people = crate::people::people(&collection).unwrap();
+        // Ann is the person of the node key. The name of the node key is
+        // empty, so the person gets the name of the Lightning address.
+        // Bob has a lookup with a different custom pair, so it stays alone.
+        assert_eq!(people.len(), 2);
+        assert_eq!(people[0].id.0, 2);
+        assert_eq!(people[0].name, "Ann LN");
+        let wallets: Vec<(&str, i64)> = people[0]
+            .wallets
+            .iter()
+            .map(|w| (w.key.address.as_str(), w.position))
+            .collect();
+        assert_eq!(wallets, [("node-1", 0), ("ann@fountain.example", 1)]);
+        assert_eq!(people[1].id.0, 3);
+        assert_eq!(people[1].wallets.len(), 1);
+    }
+
+    #[test]
+    fn the_people_migration_fills_the_credit_index_of_a_feed_with_a_library_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let library = dir.path().join("library");
+        std::fs::create_dir_all(library.join("album")).unwrap();
+        std::fs::write(
+            library.join("album").join("a.xml"),
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person></channel></rss>",
+        )
+        .unwrap();
+        std::fs::create_dir_all(library.join("broken")).unwrap();
+        std::fs::write(library.join("broken").join("b.xml"), "not xml").unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = before_people(&path);
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES ('library_root', ?1)",
+            [serde_json::json!(library.to_str().unwrap()).to_string()],
+        )
+        .unwrap();
+        db.execute_batch(
+            "INSERT INTO feeds (id, path, folder, created_at) VALUES (1, 'a.xml', 'album', 0);
+             INSERT INTO feeds (id, path, folder, created_at) VALUES (2, 'b.xml', 'broken', 0);
+             INSERT INTO feeds (id, path, folder, created_at) VALUES (3, 'c.xml', 'missing', 0);
+             INSERT INTO feeds (id, path, created_at) VALUES (4, 'd.xml', 0);",
+        )
+        .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        let rows = collection.feed_credits().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].feed_id, FeedId(1));
+        assert_eq!(rows[0].name, "Ann");
+        assert_eq!(rows[0].role, "Mixer");
     }
 
     fn credit_doc(persons: &str) -> Document {
@@ -3987,6 +4041,42 @@ mod tests {
     }
 
     #[test]
+    fn a_wallet_of_a_person_gives_the_name_of_the_person_after_a_newer_feed_read() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let person = crate::people::add_person(
+            &collection,
+            &crate::people::PersonFields {
+                name: "Person".to_owned(),
+                ..crate::people::PersonFields::default()
+            },
+        )
+        .unwrap();
+        let key = crate::change_set::RecipientKey {
+            address: "shared".to_owned(),
+            custom_key: None,
+            custom_value: None,
+        };
+        crate::people::add_wallet(&collection, person, &key, "node").unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        collection
+            .record_state(
+                feed,
+                &Feed::read(&value_recipient_doc("shared", "name=\"Feed\"")).unwrap(),
+                &Version::new("v1"),
+            )
+            .unwrap();
+        collection
+            .db()
+            .execute("UPDATE feed_recipients SET seen_at = ?1", [i64::MAX - 1])
+            .unwrap();
+        let known = collection.known_recipients().unwrap();
+        let shared = known.iter().find(|r| r.address == "shared").unwrap();
+        assert_eq!(shared.name.as_deref(), Some("Person"));
+        assert_eq!(shared.saved_id, Some(person.0));
+        assert_eq!(shared.feeds, 1);
+    }
+
+    #[test]
     fn a_recipient_goes_out_of_the_list_when_its_feed_loses_it_or_the_feed_is_deleted() {
         let mut collection = Collection::open_in_memory().unwrap();
         let feed = collection.add_feed(None, None).unwrap();
@@ -4035,21 +4125,25 @@ mod tests {
     #[test]
     fn a_saved_recipient_stays_with_no_feed_and_goes_out_when_removed() {
         let collection = Collection::open_in_memory().unwrap();
-        let id = collection
-            .save_recipient(&Recipient {
+        let id = crate::people::save_recipient(
+            &collection,
+            &Recipient {
                 address: Some("saved".to_owned()),
                 name: Some("Ann".to_owned()),
                 ..Recipient::default()
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
         let known = collection.known_recipients().unwrap();
         assert_eq!(known.len(), 1);
         assert_eq!(known[0].feeds, 0);
-        assert_eq!(known[0].saved_id, Some(id));
-        collection.remove_saved_recipient(id).unwrap();
+        assert_eq!(known[0].saved_id, Some(id.0));
+        crate::people::remove_person(&collection, id).unwrap();
         assert_eq!(collection.known_recipients().unwrap(), Vec::new());
         assert_eq!(
-            collection.remove_saved_recipient(id).unwrap_err().kind(),
+            crate::people::remove_person(&collection, id)
+                .unwrap_err()
+                .kind(),
             CollectionErrorKind::NotFound
         );
     }
@@ -4487,17 +4581,16 @@ mod tests {
     }
 
     #[test]
-    fn save_recipient_needs_an_address_and_updates_a_saved_identity() {
+    fn save_recipient_needs_an_address_and_keeps_a_saved_wallet_as_it_is() {
         let collection = Collection::open_in_memory().unwrap();
-        let error = collection
-            .save_recipient(&Recipient::default())
-            .unwrap_err();
+        let save = |recipient: &Recipient| crate::people::save_recipient(&collection, recipient);
+        let error = save(&Recipient::default()).unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::Invalid);
         let spaces = Recipient {
             address: Some("   ".to_owned()),
             ..Recipient::default()
         };
-        let error = collection.save_recipient(&spaces).unwrap_err();
+        let error = save(&spaces).unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::Invalid);
 
         let recipient = Recipient {
@@ -4505,15 +4598,15 @@ mod tests {
             name: Some("Old".to_owned()),
             ..Recipient::default()
         };
-        let id = collection.save_recipient(&recipient).unwrap();
-        let updated = Recipient {
+        let id = save(&recipient).unwrap();
+        let other_name = Recipient {
             name: Some("New".to_owned()),
             ..recipient
         };
-        assert_eq!(collection.save_recipient(&updated).unwrap(), id);
+        assert_eq!(save(&other_name).unwrap(), id);
         let known = collection.known_recipients().unwrap();
         assert_eq!(known.len(), 1);
-        assert_eq!(known[0].name.as_deref(), Some("New"));
+        assert_eq!(known[0].name.as_deref(), Some("Old"));
     }
 
     #[test]

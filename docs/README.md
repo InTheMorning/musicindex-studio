@@ -359,3 +359,4 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Phase 12 authentication research, 2026-10-26](research/2026-10-26-phase-12-auth-research.md)
 - [MSP 2.0 parity and Nostr identities, 2026-10-28](research/2026-10-28-msp-parity-and-nostr-identities.md)
 - [Keysend and Lightning address recipients, 2026-10-31](research/2026-10-31-keysend-and-lightning-address-recipients.md)
+- [People module design note, 2026-11-01](research/2026-11-01-people-module-design-note.md)

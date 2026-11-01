@@ -472,3 +472,25 @@ test('addPickLabel uses title case and the plural', () => {
   assert.equal(addPickLabel(1, 'Person', 'People'), 'Add 1 Person');
   assert.equal(addPickLabel(2, 'Person', 'People'), 'Add 2 People');
 });
+
+test('a fee payee gets the fee mark, and a picked fee payee starts as a fee', async () => {
+  const { withFee, memberText } = await import('../ui/people.js');
+  const { rowLines } = await import('../ui/recipients.js');
+  const fee = { address: '03ae9f910000005e33', recipient_type: 'node', fee: true };
+  assert.equal(withFee(memberText(fee), fee), 'Lightning node 03ae9f91…5e33 · fee');
+  assert.deepEqual(rowLines({ addresses: [fee] }), ['Lightning node 03ae9f91…5e33 · fee']);
+  const rows = recipientPickRows([], [{ saved_id: null, name: 'Podcast Index', addresses: [{ ...fee, name: 'Podcast Index' }] }]);
+  assert.equal(rows.payees[0].line, 'Lightning node 03ae9f91…5e33 · fee');
+  assert.equal(rows.payees[0].recipient.fee, 'true');
+});
+
+test('personKeys gives each address of each wallet of a person, and no payee', async () => {
+  const { personKeys, recipientIdentity } = await import('../ui/people.js');
+  const keys = personKeys([
+    { saved_id: 4, addresses: [{ address: 'ann@example.com' }, { address: '02ab', custom_value: 'acct' }] },
+    { saved_id: null, addresses: [{ address: '03cd' }] },
+  ]);
+  assert.ok(keys.has(recipientIdentity({ address: 'ann@example.com' })));
+  assert.ok(keys.has(recipientIdentity({ address: '02ab', custom_value: 'acct' })));
+  assert.ok(!keys.has(recipientIdentity({ address: '03cd' })));
+});

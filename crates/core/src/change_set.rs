@@ -400,7 +400,10 @@ pub fn scale(splits: &[u64], total: u64) -> Vec<u64> {
     scaled
 }
 
-fn is_fee(recipient: &Recipient) -> bool {
+/// True when the recipient is a fee: its `fee` attribute is `true`, with no
+/// regard to capital letters or spaces.
+#[must_use]
+pub fn is_fee(recipient: &Recipient) -> bool {
     recipient
         .fee
         .as_deref()

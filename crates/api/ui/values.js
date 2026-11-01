@@ -4,7 +4,7 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
 import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT } from './recipients.js';
-import { recipientPickRows, filterPickRows, recipientIdentity } from './people.js';
+import { recipientPickRows, filterPickRows, recipientIdentity, personKeys } from './people.js';
 import { PersonArt } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
@@ -113,20 +113,21 @@ const TYPES = [
 // One load of `GET /recipients` for the page. Each `Recipients` shares it. The
 // map goes from the lowercase address to its keysend lookup. A failed load
 // gives an empty map, and the editor makes no lookup (ADR 0095).
-let lookupsPromise = null;
+let recipientsPromise = null;
+function loadRecipients() {
+  if (!recipientsPromise) recipientsPromise = api('/recipients').catch(() => []);
+  return recipientsPromise;
+}
 function loadLookups() {
-  if (!lookupsPromise) {
-    lookupsPromise = api('/recipients').then((list) => {
-      const map = new Map();
-      for (const entry of list || []) {
-        for (const m of entry.addresses || []) {
-          if (m.address) map.set(m.address.toLowerCase(), m.lookup || null);
-        }
+  return loadRecipients().then((list) => {
+    const map = new Map();
+    for (const entry of list || []) {
+      for (const m of entry.addresses || []) {
+        if (m.address) map.set(m.address.toLowerCase(), m.lookup || null);
       }
-      return map;
-    }).catch(() => new Map());
-  }
-  return lookupsPromise;
+    }
+    return map;
+  });
 }
 
 function Choice({ id, label, value, options, onChange }) {
@@ -222,6 +223,13 @@ function Recipients({ id, recipients, defaultType, onChange }) {
 function SaveRecipientButton({ recipient }) {
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
+  // A recipient of a person needs no add. `null` while the list loads.
+  const [inPeople, setInPeople] = useState(null);
+  useEffect(() => {
+    let live = true;
+    loadRecipients().then((list) => { if (live) setInPeople(personKeys(list).has(recipientIdentity(recipient))); });
+    return () => { live = false; };
+  }, [recipient.address, recipient.custom_key, recipient.custom_value]);
   const save = () => run(async () => {
     await api('/recipients/saved', {
       method: 'POST',
@@ -234,8 +242,11 @@ function SaveRecipientButton({ recipient }) {
       },
     });
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    // The next load of the list has the new person.
+    recipientsPromise = null;
+    setTimeout(() => { setSaved(false); setInPeople(true); }, 2000);
   });
+  if (inPeople && !saved) return html`<p class="hint">This recipient is in People.</p>`;
   return html`<${ErrorNotice} error=${error} />
     <div class="actions">
       <button class="button action" type="button" disabled=${busy} onClick=${save}>

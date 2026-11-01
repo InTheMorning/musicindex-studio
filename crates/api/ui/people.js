@@ -344,6 +344,10 @@ export function memberLine(member, full = true) {
 }
 
 // One line of text for an address, for a select menu.
+// A line of a payee with " · fee" when `GET /recipients` marks the member
+// as a fee in one or more feeds (the mockups of ADR 0099).
+export const withFee = (text, member) => `${text}${member && member.fee ? ' · fee' : ''}`;
+
 export function memberText(member) {
   const { label, address, account } = memberLine(member, false);
   return `${label}${address ? ` ${address}` : ''}${account ? ` · account ${account}` : ''}`;
@@ -618,8 +622,9 @@ export function recipientPickRows(people, recipients) {
     const members = entry.addresses || [];
     const list = members.length === 0 ? [entry] : members.map((m) => ({ ...m, name: m.name || entry.name }));
     return list.map((m) => ({
-      name: m.name || m.address || 'Recipient', line: memberText(m), identity: recipientIdentity(m),
-      recipient: { name: m.name, recipient_type: m.recipient_type, address: m.address, split: '', custom_key: m.custom_key ?? null, custom_value: m.custom_value ?? null, fee: null },
+      name: m.name || m.address || 'Recipient', line: withFee(memberText(m), m), identity: recipientIdentity(m),
+      // A fee payee starts as a fee. The user can change it in the editor.
+      recipient: { name: m.name, recipient_type: m.recipient_type, address: m.address, split: '', custom_key: m.custom_key ?? null, custom_value: m.custom_value ?? null, fee: m.fee ? 'true' : null },
     }));
   });
   return { people: rows, payees };
@@ -678,4 +683,16 @@ export const addPickLabel = (n, one, many) => `Add ${n} ${n === 1 ? one : many}`
 export function filterRows(rows, query) {
   const q = lowerName(query);
   return q === '' ? rows : rows.filter((r) => `${r.name || ''} ${r.line || ''}`.toLowerCase().includes(q));
+}
+
+// The identity of each address of each wallet that is in a person, from the
+// list of `GET /recipients`. The value editor hides "Add to People" for them.
+export function personKeys(recipients) {
+  const keys = new Set();
+  for (const entry of recipients || []) {
+    if (entry.saved_id === null || entry.saved_id === undefined) continue;
+    const members = (entry.addresses || []).length > 0 ? entry.addresses : [entry];
+    for (const m of members) keys.add(recipientIdentity(m));
+  }
+  return keys;
 }

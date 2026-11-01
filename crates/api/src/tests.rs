@@ -11050,3 +11050,35 @@ async fn a_person_operation_that_is_not_valid_gives_422() {
     let (_, list) = call(&app, "GET", "/api/v1/change-sets", None).await;
     assert_eq!(list, json!([]));
 }
+
+#[tokio::test]
+async fn the_recipient_list_marks_a_fee() {
+    let (app, connector) = publisher_app().await;
+    add_paid_feed(
+        &app,
+        connector,
+        "fee.xml",
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+         <title>Fee</title><podcast:guid>g-fee</podcast:guid>\
+         <podcast:medium>music</podcast:medium>\
+         <podcast:value type=\"lightning\" method=\"keysend\">\
+         <podcast:valueRecipient name=\"Artist\" address=\"02aa\" split=\"90\" type=\"node\"/>\
+         <podcast:valueRecipient name=\"Host\" address=\"03bb\" split=\"10\" type=\"node\" fee=\"True\"/>\
+         </podcast:value>\
+         <item><guid>fee-t1</guid><title>Track</title></item></channel></rss>",
+    )
+    .await;
+    let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    let entry = |address: &str| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["address"] == address)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(entry("03bb")["fee"], true, "{list}");
+    assert_eq!(entry("03bb")["addresses"][0]["fee"], true, "{list}");
+    assert_eq!(entry("02aa")["fee"], false, "{list}");
+}

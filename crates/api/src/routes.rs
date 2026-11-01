@@ -4703,6 +4703,10 @@ pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
         // The count of feeds comes from the model of each feed, as in
         // `recipient_uses`. A recipient that only a draft has is added.
         let mut counts: HashMap<KeyParts, UsedRecipient> = HashMap::new();
+        // An identity that is a fee in one or more feed models. The People
+        // page marks it (the mockups of ADR 0099).
+        let mut fee_identities: std::collections::HashSet<KeyParts> =
+            std::collections::HashSet::new();
         for (row, feed) in feed_models(w)? {
             for recipient in recipient_places(&feed).all() {
                 let Some(address) = recipient.address.as_deref().filter(|a| !a.is_empty()) else {
@@ -4713,6 +4717,9 @@ pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
                     recipient.custom_key.clone().unwrap_or_default(),
                     recipient.custom_value.clone().unwrap_or_default(),
                 );
+                if change_set::is_fee(recipient) {
+                    fee_identities.insert(identity.clone());
+                }
                 let used = counts.entry(identity).or_insert_with(|| UsedRecipient {
                     name: recipient.name.clone(),
                     recipient_type: recipient.recipient_type.clone(),
@@ -4749,7 +4756,12 @@ pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
             keysend::refresh(&w.collection, &w.web, scheme, &addresses, now_seconds())?;
         }
         let lookups = keysend_map(w)?;
-        to_json(group_wallets(known, &mut feed_sets, &lookups))
+        to_json(group_wallets(
+            known,
+            &mut feed_sets,
+            &fee_identities,
+            &lookups,
+        ))
     })
     .await
 }
@@ -4759,6 +4771,7 @@ pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
 fn group_wallets(
     known: Vec<studio_core::collection::KnownRecipient>,
     feed_sets: &mut HashMap<KeyParts, std::collections::HashSet<FeedId>>,
+    fee_identities: &std::collections::HashSet<KeyParts>,
     lookups: &HashMap<String, Lookup>,
 ) -> Vec<Value> {
     let mut groups: HashMap<
@@ -4810,6 +4823,14 @@ fn group_wallets(
         let name = first(|m| m.name.clone().filter(|n| !n.is_empty()));
         let recipient_type = first(|m| m.recipient_type.clone().filter(|t| !t.is_empty()));
         let saved_id = members.iter().find_map(|m| m.saved_id);
+        let fee_of = |m: &studio_core::collection::KnownRecipient| {
+            fee_identities.contains(&(
+                m.address.clone(),
+                m.custom_key.clone().unwrap_or_default(),
+                m.custom_value.clone().unwrap_or_default(),
+            ))
+        };
+        let fee = members.iter().any(fee_of);
         let addresses: Vec<Value> = members
             .iter()
             .map(|m| {
@@ -4820,6 +4841,7 @@ fn group_wallets(
                     "recipient_type": m.recipient_type,
                     "name": m.name,
                     "feeds": m.feeds,
+                    "fee": fee_of(m),
                     "saved_id": m.saved_id,
                     "lookup": lookups
                         .get(&m.address.trim().to_lowercase())
@@ -4843,6 +4865,7 @@ fn group_wallets(
                 "custom_key": wallet.custom_key,
                 "custom_value": wallet.custom_value,
                 "feeds": feeds.len(),
+                "fee": fee,
                 "saved_id": saved_id,
                 "addresses": addresses,
             }),

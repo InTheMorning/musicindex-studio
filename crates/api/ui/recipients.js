@@ -4,7 +4,7 @@
 // calculates each split and finds each place (ADR 0065).
 
 import { shortKey } from './nostrkey.js';
-import { memberLine, memberText, reviewLabel, checkedIds } from './people.js';
+import { memberLine, memberText, withFee, reviewLabel, checkedIds } from './people.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -47,7 +47,7 @@ export function addressLines(entry) {
 // The texts of the lines of a row: the Lightning addresses first, then each
 // node (ADR 0095 item 7). A node key shows in short form.
 export function rowLines(entry) {
-  return membersOf(entry).map((m) => memberText(m));
+  return membersOf(entry).map((m) => withFee(memberText(m), m));
 }
 
 const memberOfType = (entry, type) => (entry.addresses || []).find((m) => m.recipient_type === type) || null;

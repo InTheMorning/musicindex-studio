@@ -1806,6 +1806,334 @@ pub fn make_person<S: BuildHasher>(
     Ok(id)
 }
 
+// ---- Add items to a person, more items and merge (ADR 0103) ----
+
+/// The items that the user selects to add to a person (ADR 0103 item 10).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct PersonItems {
+    /// The selected credits: name, `href` and `npub`.
+    pub credits: Vec<(String, String, String)>,
+    /// The selected recipients, each with its recipient type.
+    pub recipients: Vec<(RecipientKey, String)>,
+    /// The selected Nostr keys, more than the keys of the credits.
+    pub keys: Vec<String>,
+}
+
+/// The result of [`add_to_person`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct AddedItems {
+    /// The number of new links.
+    pub added: usize,
+}
+
+/// The number of credit names, keys and wallets of a person.
+fn link_count(db: &Connection, id: PersonId) -> Result<usize, CollectionError> {
+    let count: i64 = db.query_row(
+        "SELECT (SELECT COUNT(*) FROM person_credit_names WHERE person_id = ?1)
+              + (SELECT COUNT(*) FROM person_keys WHERE person_id = ?1)
+              + (SELECT COUNT(*) FROM person_wallets WHERE person_id = ?1)",
+        [id.0],
+        |r| r.get(0),
+    )?;
+    Ok(usize::try_from(count).unwrap_or_default())
+}
+
+/// Add the items that the user selected to a person (ADR 0103 items 8 to
+/// 10). One transaction adds each item that the person does not have. The
+/// function changes no field of the person. A conflict of one item adds no
+/// item.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::NotFound`] for an unknown person,
+/// [`CollectionErrorKind::Invalid`] for an item that cannot be a link, and
+/// [`CollectionErrorKind::Conflict`] when a different person has a link
+/// already.
+pub fn add_to_person<S: BuildHasher>(
+    collection: &Collection,
+    id: PersonId,
+    items: &PersonItems,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<AddedItems, CollectionError> {
+    let tx = collection.db().unchecked_transaction()?;
+    check_person(&tx, id)?;
+    let before = link_count(&tx, id)?;
+
+    let mut npubs: BTreeSet<String> = BTreeSet::new();
+    for (name, href, npub) in &items.credits {
+        insert_credit_name(&tx, id, name, href, npub)?;
+        if !npub.trim().is_empty() {
+            npubs.insert(npub.trim().to_lowercase());
+        }
+    }
+    npubs.extend(items.keys.iter().map(|k| k.trim().to_lowercase()));
+    for npub in &npubs {
+        insert_key(&tx, id, npub)?;
+    }
+    for (key, recipient_type) in &items.recipients {
+        insert_wallet(&tx, id, key, recipient_type, LinkEvidence::User, lookups)?;
+    }
+
+    let added = link_count(&tx, id)?.saturating_sub(before);
+    tx.commit()?;
+    Ok(AddedItems { added })
+}
+
+/// Why an item of the feeds matches a person (ADR 0103 item 11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoreCause {
+    /// The normal name of the item is the normal name of the person.
+    SameName,
+    /// The normal name of the item is the normal name of a credit name of
+    /// the person.
+    SameCreditName,
+    /// The `npub` of the credit is a key of the person.
+    SameNpub,
+    /// The wallet key of the payee is the wallet key of a wallet of the
+    /// person.
+    SameWallet,
+}
+
+/// An item of the feeds that matches a person and is not a link of a
+/// person.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MoreItem {
+    /// A distinct credit `(name, href, npub)`.
+    Credit {
+        /// The trimmed name.
+        name: String,
+        /// The trimmed `href`, or empty text.
+        href: String,
+        /// The trimmed `npub`, or empty text.
+        npub: String,
+        /// The distinct raw roles that are not empty, A to Z.
+        roles: Vec<String>,
+        /// The feeds that have the credit, by ID.
+        feeds: Vec<FeedId>,
+        /// The cause of the match.
+        cause: MoreCause,
+    },
+    /// A distinct recipient key.
+    Payee {
+        /// The key of the recipient.
+        key: RecipientKey,
+        /// The name from the most recent read, or empty text.
+        name: String,
+        /// The recipient type from the most recent read, or empty text.
+        recipient_type: String,
+        /// The feeds that have the recipient, by ID.
+        feeds: Vec<FeedId>,
+        /// The cause of the match.
+        cause: MoreCause,
+    },
+}
+
+type KeyParts = (String, String, String);
+type WalletSets = (HashSet<KeyParts>, HashSet<KeyParts>);
+
+/// The exact keys of all stored wallets, and the wallet keys of the wallets
+/// of people other than `id`.
+fn wallet_sets<S: BuildHasher>(
+    db: &Connection,
+    id: PersonId,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<WalletSets, CollectionError> {
+    let mut stored = HashSet::new();
+    let mut others = HashSet::new();
+    let mut statement =
+        db.prepare("SELECT person_id, address, custom_key, custom_value FROM person_wallets")?;
+    let rows = statement.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+        ))
+    })?;
+    for row in rows {
+        let (owner, address, custom_key, custom_value) = row?;
+        let key = RecipientKey {
+            address: address.clone(),
+            custom_key: Some(custom_key.clone()).filter(|t| !t.is_empty()),
+            custom_value: Some(custom_value.clone()).filter(|t| !t.is_empty()),
+        };
+        if owner != id.0 {
+            others.insert(parts(&keysend::wallet_key(&key, lookups)));
+        }
+        stored.insert((address, custom_key, custom_value));
+    }
+    Ok((stored, others))
+}
+
+/// The items of the feeds that match a person and are not a link of a
+/// person (ADR 0103 items 11 to 13). The credits come first, then the
+/// payees. The function reads only the collection.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn more_items<S: BuildHasher>(
+    collection: &Collection,
+    person: &Person,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<Vec<MoreItem>, CollectionError> {
+    let db = collection.db();
+    let known_identities: HashSet<String> =
+        strings(db, "SELECT identity FROM person_credit_names")?
+            .into_iter()
+            .collect();
+    // A key of the person makes a credit match. A key of a different person
+    // would be a conflict.
+    let other_keys: HashSet<String> = {
+        let mut statement = db.prepare("SELECT npub FROM person_keys WHERE person_id <> ?1")?;
+        statement
+            .query_map([person.id.0], |r| r.get(0))?
+            .collect::<Result<_, _>>()?
+    };
+    let (stored, others) = wallet_sets(db, person.id, lookups)?;
+
+    let person_name = normal_name(&person.name);
+    let credit_names: HashSet<String> = person
+        .credit_names
+        .iter()
+        .map(|c| normal_name(&c.name))
+        .filter(|n| !n.is_empty())
+        .collect();
+    let npubs: HashSet<&str> = person.keys.iter().map(|k| k.npub.as_str()).collect();
+    let wallets: HashSet<(String, String, String)> = person
+        .wallets
+        .iter()
+        .map(|w| parts(&keysend::wallet_key(&w.key, lookups)))
+        .collect();
+    let by_name = |name: &str| -> Option<MoreCause> {
+        let name = normal_name(name);
+        if name.is_empty() {
+            None
+        } else if name == person_name {
+            Some(MoreCause::SameName)
+        } else if credit_names.contains(&name) {
+            Some(MoreCause::SameCreditName)
+        } else {
+            None
+        }
+    };
+
+    let mut found: BTreeMap<(String, String, String), CreditAgg> = BTreeMap::new();
+    for row in collection.feed_credits()? {
+        let Some(identity) = Identity::of(&row.name, &row.href, &row.npub) else {
+            continue;
+        };
+        if known_identities.contains(&identity.key())
+            || matches!(&identity, Identity::Npub(npub) if other_keys.contains(npub))
+        {
+            continue;
+        }
+        let credit = found.entry((row.name, row.href, row.npub)).or_default();
+        if !row.role.is_empty() {
+            credit.roles.insert(row.role);
+        }
+        credit.feeds.insert(row.feed_id.0);
+    }
+    let mut list = Vec::new();
+    for ((name, href, npub), agg) in found {
+        let key = npub.trim().to_lowercase();
+        let cause = if !key.is_empty() && npubs.contains(key.as_str()) {
+            MoreCause::SameNpub
+        } else if let Some(cause) = by_name(&name) {
+            cause
+        } else {
+            continue;
+        };
+        list.push(MoreItem::Credit {
+            name: name.trim().to_owned(),
+            href: href.trim().to_owned(),
+            npub: npub.trim().to_owned(),
+            roles: agg.roles.into_iter().collect(),
+            feeds: feed_ids(&agg.feeds),
+            cause,
+        });
+    }
+    for agg in recipient_aggs(db, lookups)? {
+        let exact = parts(&agg.key);
+        if stored.contains(&exact) || others.contains(&agg.wallet) {
+            continue;
+        }
+        let cause = if wallets.contains(&agg.wallet) {
+            MoreCause::SameWallet
+        } else if let Some(cause) = by_name(&agg.name) {
+            cause
+        } else {
+            continue;
+        };
+        list.push(MoreItem::Payee {
+            feeds: feed_ids(&agg.feeds),
+            key: agg.key,
+            name: agg.name,
+            recipient_type: agg.recipient_type,
+            cause,
+        });
+    }
+    Ok(list)
+}
+
+/// Move each link of the person `other` to the person `keep`, then delete
+/// `other` (ADR 0103 items 14 to 16). One transaction does all of it. The
+/// fields and the default address of `keep` stay. A membership that `keep`
+/// has already is not copied. A change set of `other` gets `keep`. The
+/// function changes no feed.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] when `keep` is `other`, and
+/// [`CollectionErrorKind::NotFound`] for an unknown person.
+pub fn merge_people(
+    collection: &Collection,
+    keep: PersonId,
+    other: PersonId,
+) -> Result<(), CollectionError> {
+    if keep == other {
+        return Err(CollectionError::invalid(
+            "a person cannot merge with the same person",
+        ));
+    }
+    let tx = collection.db().unchecked_transaction()?;
+    check_person(&tx, keep)?;
+    check_person(&tx, other)?;
+    for table in ["person_wallets", "person_support_links"] {
+        // The links of `other` go after the links of `keep`.
+        tx.execute(
+            &format!(
+                "UPDATE {table} SET person_id = ?1,
+                     position = position + (
+                         SELECT COALESCE(MAX(position) + 1, 0) FROM {table} WHERE person_id = ?1)
+                 WHERE person_id = ?2"
+            ),
+            params![keep.0, other.0],
+        )?;
+    }
+    for table in ["person_keys", "person_credit_names"] {
+        tx.execute(
+            &format!("UPDATE {table} SET person_id = ?1 WHERE person_id = ?2"),
+            params![keep.0, other.0],
+        )?;
+    }
+    // A membership that `keep` has stays in `other` and goes with it.
+    tx.execute(
+        "UPDATE OR IGNORE person_members SET person_id = ?1 WHERE person_id = ?2",
+        params![keep.0, other.0],
+    )?;
+    tx.execute(
+        "UPDATE change_sets SET person_id = ?1 WHERE person_id = ?2",
+        params![keep.0, other.0],
+    )?;
+    tx.execute("DELETE FROM people WHERE id = ?1", [other.0])?;
+    tx.commit()?;
+    Ok(())
+}
+
 // ---- The Lightning address of a profile (ADR 0098 items 17 to 19) ----
 
 /// The Lightning address in the profile of a key of a person, with a
@@ -2897,5 +3225,246 @@ mod tests {
         assert_eq!(list.len(), 1, "{list:?}");
         assert_eq!(list[0].address, bob_address);
         assert!(list[0].in_person_wallet);
+    }
+
+    #[test]
+    fn add_to_person_adds_only_the_new_items_and_keeps_the_fields() {
+        let collection = Collection::open_in_memory().unwrap();
+        let lookups = HashMap::new();
+        let id = add_person(&collection, &fields("Ann")).unwrap();
+        add_wallet(&collection, id, &key("node-1"), "node", LinkEvidence::User).unwrap();
+        set_default_address(&collection, id, Some(&key("node-1"))).unwrap();
+        let items = PersonItems {
+            credits: vec![("Ann".into(), String::new(), "npub1ann".into())],
+            recipients: vec![
+                (key("node-1"), "node".into()),
+                (key("node-2"), "node".into()),
+            ],
+            keys: vec!["npub1extra".into()],
+        };
+        let added = add_to_person(&collection, id, &items, &lookups).unwrap();
+        // The credit name, the key of the credit, the extra key and node-2.
+        assert_eq!(added, AddedItems { added: 4 });
+        let again = add_to_person(&collection, id, &items, &lookups).unwrap();
+        assert_eq!(again, AddedItems { added: 0 });
+        let p = person(&collection, id).unwrap();
+        assert_eq!(p.name, "Ann");
+        assert_eq!(p.default_address, Some(key("node-1")));
+        assert_eq!(p.wallets.len(), 2);
+        assert_eq!(p.keys.len(), 2);
+        assert_eq!(p.credit_names.len(), 1);
+    }
+
+    #[test]
+    fn add_to_person_adds_nothing_on_a_conflict() {
+        let collection = Collection::open_in_memory().unwrap();
+        let lookups = HashMap::new();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let bob = add_person(&collection, &fields("Bob")).unwrap();
+        add_key(&collection, bob, "npub1bob").unwrap();
+        let before = counts(&collection);
+        let error = add_to_person(
+            &collection,
+            ann,
+            &PersonItems {
+                credits: vec![("Ann".into(), String::new(), String::new())],
+                recipients: vec![(key("node-1"), "node".into())],
+                keys: vec!["npub1bob".into()],
+            },
+            &lookups,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::Conflict);
+        assert_eq!(counts(&collection), before);
+        let error = add_to_person(&collection, PersonId(99), &PersonItems::default(), &lookups)
+            .unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::NotFound);
+    }
+
+    fn more(collection: &Collection, id: PersonId) -> Vec<MoreItem> {
+        let p = person(collection, id).unwrap();
+        more_items(collection, &p, &lookup_map(collection).unwrap()).unwrap()
+    }
+
+    fn cause_of(item: &MoreItem) -> MoreCause {
+        match item {
+            MoreItem::Credit { cause, .. } | MoreItem::Payee { cause, .. } => *cause,
+        }
+    }
+
+    #[test]
+    fn more_items_give_each_match_with_its_cause_and_no_link() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "artist", "", "");
+        credit(&collection, 1, "Annie", "mixer", "", "");
+        credit(&collection, 2, "Someone", "artist", "", "npub1ann");
+        credit(&collection, 2, "Other", "artist", "", "npub1other");
+        credit(&collection, 3, "Ann", "artist", "https://ann.example", "");
+        credit(
+            &collection,
+            3,
+            "annie",
+            "mixer",
+            "https://annie.example",
+            "",
+        );
+        payee(&collection, 1, "node-1", "ANN");
+        payee(&collection, 1, "node-2", "Annie");
+        payee(&collection, 1, "node-3", "Zed");
+        payee(&collection, 2, "node-4", "Zed");
+        payee(&collection, 2, "node-5", "Other");
+        let id = add_person(&collection, &fields("Ann")).unwrap();
+        add_credit_name(&collection, id, "Annie", "", "").unwrap();
+        add_key(&collection, id, "npub1ann").unwrap();
+        add_wallet(&collection, id, &key("node-3"), "node", LinkEvidence::User).unwrap();
+        // A link of a different person is not in the list.
+        let bob = add_person(&collection, &fields("Bob")).unwrap();
+        add_credit_name(&collection, bob, "Ann", "https://ann.example", "").unwrap();
+        add_wallet(&collection, bob, &key("node-5"), "node", LinkEvidence::User).unwrap();
+        let before = counts(&collection);
+
+        let list = more(&collection, id);
+        let credits: Vec<(&str, MoreCause)> = list
+            .iter()
+            .filter_map(|i| match i {
+                MoreItem::Credit { name, cause, .. } => Some((name.as_str(), *cause)),
+                MoreItem::Payee { .. } => None,
+            })
+            .collect();
+        assert_eq!(
+            credits,
+            vec![
+                ("Ann", MoreCause::SameName),
+                ("Someone", MoreCause::SameNpub),
+                ("annie", MoreCause::SameCreditName),
+            ],
+            "{list:?}"
+        );
+        let payees: Vec<(String, MoreCause)> = list
+            .iter()
+            .filter_map(|i| match i {
+                MoreItem::Payee { key, .. } => Some((key.address.clone(), cause_of(i))),
+                MoreItem::Credit { .. } => None,
+            })
+            .collect();
+        assert_eq!(
+            payees,
+            vec![
+                ("node-1".to_owned(), MoreCause::SameName),
+                ("node-2".to_owned(), MoreCause::SameCreditName),
+            ],
+            "{list:?}"
+        );
+        assert_eq!(counts(&collection), before);
+    }
+
+    #[test]
+    fn more_items_give_a_payee_of_the_same_wallet() {
+        let collection = Collection::open_in_memory().unwrap();
+        payee(&collection, 1, "ann@wallet.example", "Zed");
+        payee(&collection, 1, "node-1", "Zed");
+        payee(&collection, 1, "node-9", "Zed");
+        found(&collection, "ann@wallet.example", "node-1");
+        let id = add_person(&collection, &fields("Ann")).unwrap();
+        add_wallet(&collection, id, &key("node-1"), "node", LinkEvidence::User).unwrap();
+        // The node key is a link. The Lightning address has the same wallet
+        // key through its lookup. A different node key has no cause.
+        let list = more(&collection, id);
+        assert_eq!(list.len(), 1, "{list:?}");
+        match &list[0] {
+            MoreItem::Payee { key, cause, .. } => {
+                assert_eq!(key.address, "ann@wallet.example");
+                assert_eq!(*cause, MoreCause::SameWallet);
+            }
+            MoreItem::Credit { .. } => panic!("a payee was expected"),
+        }
+        // When a different person has the wallet, the item is not in the list.
+        let other = add_person(&collection, &fields("Other")).unwrap();
+        assert_eq!(more(&collection, other), Vec::<MoreItem>::new());
+    }
+
+    #[test]
+    fn merge_people_moves_each_link_and_keeps_the_fields_of_the_kept_person() {
+        let collection = Collection::open_in_memory().unwrap();
+        feed(&collection, 1);
+        feed(&collection, 2);
+        collection
+            .db()
+            .execute("UPDATE feeds SET medium = 'publisher'", [])
+            .unwrap();
+        let keep = add_person(&collection, &fields("Ann")).unwrap();
+        let other = add_person(&collection, &fields("Annie")).unwrap();
+        add_wallet(
+            &collection,
+            keep,
+            &key("node-1"),
+            "node",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        add_wallet(
+            &collection,
+            other,
+            &key("node-2"),
+            "node",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        add_wallet(
+            &collection,
+            other,
+            &key("node-3"),
+            "node",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        set_default_address(&collection, keep, Some(&key("node-1"))).unwrap();
+        add_key(&collection, other, "npub1annie").unwrap();
+        add_credit_name(&collection, other, "Annie", "", "").unwrap();
+        add_support_link(&collection, keep, "A", "https://a.example").unwrap();
+        add_support_link(&collection, other, "B", "https://b.example").unwrap();
+        add_member(&collection, keep, FeedId(1)).unwrap();
+        add_member(&collection, other, FeedId(1)).unwrap();
+        add_member(&collection, other, FeedId(2)).unwrap();
+        let set = collection
+            .add_change_set("add", "node-2", 1, Some(other.0))
+            .unwrap();
+
+        merge_people(&collection, keep, other).unwrap();
+
+        let p = person(&collection, keep).unwrap();
+        assert_eq!(p.name, "Ann");
+        assert_eq!(p.default_address, Some(key("node-1")));
+        let addresses: Vec<&str> = p.wallets.iter().map(|w| w.key.address.as_str()).collect();
+        assert_eq!(addresses, ["node-1", "node-2", "node-3"]);
+        let positions: Vec<i64> = p.wallets.iter().map(|w| w.position).collect();
+        assert_eq!(positions, [0, 1, 2]);
+        assert_eq!(p.keys.len(), 1);
+        assert_eq!(p.credit_names.len(), 1);
+        let labels: Vec<&str> = p.support_links.iter().map(|l| l.label.as_str()).collect();
+        assert_eq!(labels, ["A", "B"]);
+        assert_eq!(p.members, vec![FeedId(1), FeedId(2)]);
+        assert_eq!(
+            person(&collection, other).unwrap_err().kind(),
+            CollectionErrorKind::NotFound
+        );
+        let owner = collection.change_set_row(set).unwrap().map(|c| c.person_id);
+        assert_eq!(owner, Some(Some(keep.0)));
+    }
+
+    #[test]
+    fn merge_people_refuses_the_same_person_and_an_unknown_person() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        assert_eq!(
+            merge_people(&collection, ann, ann).unwrap_err().kind(),
+            CollectionErrorKind::Invalid
+        );
+        assert_eq!(
+            merge_people(&collection, ann, PersonId(99))
+                .unwrap_err()
+                .kind(),
+            CollectionErrorKind::NotFound
+        );
     }
 }

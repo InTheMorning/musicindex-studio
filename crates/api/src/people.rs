@@ -16,7 +16,9 @@ use studio_core::change_set::{
 };
 use studio_core::collection::{Collection, CollectionError, CollectionErrorKind, FeedId};
 use studio_core::keysend::Lookup;
-use studio_core::people::{self, LinkEvidence, MakePerson, Person, PersonFields, PersonId};
+use studio_core::people::{
+    self, LinkEvidence, MakePerson, Person, PersonFields, PersonId, PersonItems,
+};
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::profiles;
 
@@ -296,6 +298,54 @@ pub(crate) async fn make_person(
         let lookups = lookups(&w.collection)?;
         let id = people::make_person(&w.collection, &request, &lookups).map_err(person_error)?;
         Ok(created(id.0))
+    })
+    .await
+}
+
+/// Add the items that the user selected to a person (ADR 0103 item 10).
+/// The answer is `{ "added": N }`.
+pub(crate) async fn add_items(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(items): Json<PersonItems>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let lookups = lookups(&w.collection)?;
+        let added = people::add_to_person(&w.collection, PersonId(id), &items, &lookups)
+            .map_err(person_error)?;
+        Ok((StatusCode::CREATED, Json(json!(added))))
+    })
+    .await
+}
+
+/// The items of the feeds that match a person (ADR 0103 items 11 to 13).
+/// The answer is `{ "items": [...] }`.
+pub(crate) async fn more_items(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let person = people::person(&w.collection, PersonId(id))?;
+        let lookups = lookups(&w.collection)?;
+        let items = people::more_items(&w.collection, &person, &lookups)?;
+        Ok(Json(json!({ "items": items })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MergeBody {
+    other: i64,
+}
+
+/// Merge the person `other` into the person of the path (ADR 0103 items 14
+/// to 16).
+pub(crate) async fn merge_person(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<MergeBody>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        people::merge_people(&w.collection, PersonId(id), PersonId(body.other))
+            .map_err(person_error)?;
+        Ok(StatusCode::NO_CONTENT)
     })
     .await
 }

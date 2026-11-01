@@ -10765,6 +10765,126 @@ async fn a_suggestion_makes_a_person_that_the_feeds_use() {
 }
 
 #[tokio::test]
+async fn items_are_added_to_a_person_and_a_conflict_gives_409() {
+    let app = app();
+    let ann = new_person(&app, "Ann").await;
+    let bob = new_person(&app, "Bob").await;
+    let body = json!({
+        "credits": [["Ann", "", "npub1ann"]],
+        "recipients": [[{ "address": "ann@example.com" }, "lnaddress"]],
+    });
+    let (status, added) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{ann}/items"),
+        Some(body.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{added}");
+    assert_eq!(added["added"], 3);
+    let (_, added) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{ann}/items"),
+        Some(body.clone()),
+    )
+    .await;
+    assert_eq!(added["added"], 0);
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{bob}/items"),
+        Some(body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{error}");
+    assert_eq!(error["error"]["code"], "link_in_other_person");
+    let (status, error) = call(
+        &app,
+        "POST",
+        "/api/v1/people/999/items",
+        Some(json!({ "keys": ["npub1x"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
+    assert_eq!(error["error"]["code"], "not_found");
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{bob}/items"),
+        Some(json!({ "keys": ["not-a-key"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{error}");
+    assert_eq!(error["error"]["code"], "invalid_person");
+}
+
+#[tokio::test]
+async fn the_more_route_gives_the_items_of_the_feeds_that_match_a_person() {
+    let (app, connector) = publisher_app().await;
+    credit_and_payee_feeds(&app, connector).await;
+    let ann = new_person(&app, "Ann").await;
+    let (status, more) = call(&app, "GET", &format!("/api/v1/people/{ann}/more"), None).await;
+    assert_eq!(status, StatusCode::OK, "{more}");
+    let items = more["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{more}");
+    assert_eq!(items[1]["kind"], "payee");
+    assert_eq!(items[1]["cause"], "same_name");
+    assert_eq!(items[0]["kind"], "credit");
+    assert_eq!(items[0]["name"], "Ann");
+    assert_eq!(items[0]["cause"], "same_name");
+    assert_eq!(items[0]["roles"], json!(["vocals"]));
+    let (status, error) = call(&app, "GET", "/api/v1/people/999/more", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
+    assert_eq!(error["error"]["code"], "not_found");
+}
+
+#[tokio::test]
+async fn a_merge_moves_the_links_and_deletes_the_other_person() {
+    let app = app();
+    let keep = new_person(&app, "Ann").await;
+    let other = new_person(&app, "Annie").await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{other}/wallets"),
+        Some(json!({ "address": "annie@example.com" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{keep}/merge"),
+        Some(json!({ "other": other })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, person) = call(&app, "GET", &format!("/api/v1/people/{keep}"), None).await;
+    assert_eq!(person["name"], "Ann");
+    assert_eq!(person["wallets"][0]["key"]["address"], "annie@example.com");
+    let (status, _) = call(&app, "GET", &format!("/api/v1/people/{other}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{keep}/merge"),
+        Some(json!({ "other": keep })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{error}");
+    assert_eq!(error["error"]["code"], "invalid_person");
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{keep}/merge"),
+        Some(json!({ "other": 999 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
+}
+
+#[tokio::test]
 async fn a_dismissed_suggestion_leaves_the_list() {
     let (app, connector) = publisher_app().await;
     credit_and_payee_feeds(&app, connector).await;
@@ -10802,6 +10922,9 @@ async fn each_people_route_needs_the_token() {
         ("POST", "/api/v1/people/suggestions/dismiss"),
         ("POST", "/api/v1/people/1/changes"),
         ("POST", "/api/v1/people/1/changes/preview"),
+        ("POST", "/api/v1/people/1/items"),
+        ("GET", "/api/v1/people/1/more"),
+        ("POST", "/api/v1/people/1/merge"),
     ];
     for (method, path) in routes {
         let request = Request::builder()

@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
 - Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 1 to 4 and 21. [ADR 0092](0092-file-hosts-and-the-destination-icons.md), the name and the icon of the first destination of the bottom group. [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) items 6 to 8, 10 to 12, 14 and 15. [ADR 0096](0096-add-to-an-artist-or-label.md), the name of the operation. [ADR 0027](0027-the-recipient-picker.md) items 1 to 3 and 7, for the rows of the picker.
+- Changed by: [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md). Items 3 and 4: "Add to a Person", "More from your feeds", "Merge With a Person", and the profile of each key.
 - Changed by: [ADR 0102](0102-delete-a-person-changes-no-feed.md). Items 4 and 11: the page of a person gets "Delete Person", and "Remove" reads "Remove From Feeds".
 - Uses: [ADR 0098](0098-the-people-module.md) for the data and the operations. Also [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, [ADR 0028](0028-summary-lines-and-one-open-entry.md) and [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the rows and the levels, and musicindex ADR 0023 for the words.
 

@@ -104,8 +104,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0098: The People module](adr/0098-the-people-module.md)
 - [ADR 0099: The People destination and the page of a person](adr/0099-the-people-destination-and-the-page-of-a-person.md)
 - [ADR 0100: Each release candidate has a notes file](adr/0100-each-release-candidate-has-a-notes-file.md)
-- [ADR 0101: A suggestion groups the items of one name](adr/0101-a-suggestion-groups-the-items-of-one-name.md)
 - [ADR 0102: Delete a person changes no feed](adr/0102-delete-a-person-changes-no-feed.md)
+- [ADR 0103: One person collects the items of many suggestions](adr/0103-one-person-collects-the-items-of-many-suggestions.md)
 
 ## Plans
 
@@ -376,3 +376,9 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [MSP 2.0 parity and Nostr identities, 2026-10-28](research/2026-10-28-msp-parity-and-nostr-identities.md)
 - [Keysend and Lightning address recipients, 2026-10-31](research/2026-10-31-keysend-and-lightning-address-recipients.md)
 - [People module design note, 2026-11-01](research/2026-11-01-people-module-design-note.md)
+
+## Archive
+
+Superseded decisions. Read them for research only. They bind no change.
+
+- [ADR 0101: A suggestion groups the items of one name](archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md), superseded by ADR 0103

@@ -54,9 +54,13 @@ const isField = (selector) => /(?:^|[\s>+~(,])(?:input|select|textarea)(?![\w-])
 
 test('the last rule gives each field 16 px or more with a coarse pointer', () => {
   const index = rules.findIndex((r) => r.selector === last);
-  assert.ok(index >= 0, `${owner}: styles.css has no rule "${last}". Add it in @media (pointer: coarse) at the end of the file, with font-size: 17px.`);
-  const size = rules[index].body.match(/font-size:\s*(\d+(?:\.\d+)?)px/);
-  assert.ok(size && Number(size[1]) >= 16, `${owner}: "${last}" must set font-size to 16px or more. iOS zooms the page for a smaller field. Write font-size: 17px.`);
+  assert.ok(index >= 0, `${owner}: styles.css has no rule "${last}". Add it in @media (pointer: coarse) at the end of the file, with font-size: var(--text-body).`);
+  // The size is a pixel value, or a text token with its Touch value.
+  const value = (rules[index].body.match(/font-size:\s*([^;]+)/) || [])[1] || '';
+  const token = value.match(/^var\((--text-[a-z0-9-]+)\)$/);
+  const touch = token && css.match(new RegExp(`@media\\s*\\(pointer:\\s*coarse\\)[^@]*?${token[1]}:\\s*(\\d+)px`));
+  const size = token ? touch && touch[1] : (value.match(/^(\d+(?:\.\d+)?)px$/) || [])[1];
+  assert.ok(size && Number(size) >= 16, `${owner}: "${last}" must give 16px or more with Touch. iOS zooms the page for a smaller field. Write font-size: var(--text-body).`);
   const before = css.slice(0, css.indexOf(last));
   assert.match(before, /@media\s*\(pointer:\s*coarse\)\s*\{\s*$/, `${owner}: "${last}" must be the only rule in @media (pointer: coarse). Put it in its own block.`);
   assert.equal(index, rules.length - 1, `${owner}: "${last}" must be the last rule of styles.css, so that no later rule replaces its size. Put new rules above it.`);

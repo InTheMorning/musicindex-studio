@@ -50,6 +50,19 @@
   /* musicindex ADR 0029 R-SCALE-3: the web scale of the Desktop profile. */
   --target: 32px;
   --target-min: 24px;
+  /* musicindex ADR 0029 R-SCALE-1 and R-SCALE-2: the text styles of the web scale.
+     With Touch, the block below gives the iOS sizes of ADR 0024 R-TYPE-1. */
+  --text-large-title: 34px;
+  --text-title-1: 28px;
+  --text-title-2: 22px;
+  --text-title-3: 18px;
+  --text-headline: 15px;
+  --text-body: 15px;
+  --text-callout: 14px;
+  --text-subheadline: 13px;
+  --text-footnote: 12px;
+  --text-caption-1: 12px;
+  --text-caption-2: 11px;
   /* The type dot and the ring of the hollow dot (musicindex ADR 0032
      R-DOT-1). The values are the values of assets/tokens.json. */
   --dot-size: 8px;
@@ -85,6 +98,11 @@
 /* musicindex ADR 0024 R-PROFILE-1 and R-TARGET-1: a coarse pointer selects Touch. */
 @media (pointer: coarse) {
   :root { --target: 44px; --target-min: 28px; }
+}
+
+/* musicindex ADR 0029 R-SCALE-1 item 3: with Touch, the iOS text sizes of ADR 0024 R-TYPE-1. */
+@media (pointer: coarse) {
+  :root { --text-large-title: 34px; --text-title-1: 28px; --text-title-2: 22px; --text-title-3: 20px; --text-headline: 17px; --text-body: 17px; --text-callout: 16px; --text-subheadline: 15px; --text-footnote: 13px; --text-caption-1: 12px; --text-caption-2: 11px; }
 }
 
 :root[data-theme="light"] {
@@ -204,7 +222,7 @@ body {
   background: var(--level-1);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Figtree", system-ui, sans-serif;
-  font-size: 15px;
+  font-size: var(--text-body);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
@@ -218,7 +236,7 @@ code, .mono {
 .boot { padding: 32px; color: var(--muted); }
 
 /* A line of muted help text, in a field or on its own. */
-.hint { color: var(--muted); font-size: .9rem; }
+.hint { color: var(--muted); font-size: var(--text-callout); }
 
 :focus-visible {
   outline: 3px solid var(--focus);
@@ -303,7 +321,7 @@ code, .mono {
 /* A field has a fill and no border (ADR 0029). The border shows the
    error only (ADR 0018). */
 .field input[aria-invalid="true"] { border: 1px solid var(--error); }
-.field-error { color: var(--error); font-size: .9rem; font-weight: 500; }
+.field-error { color: var(--error); font-size: var(--text-callout); font-weight: 500; }
 /* A secret value and its eye button (ADR 0078). The value takes the free
    width. The button stays at the top line of a text area. */
 .secret { display: flex; gap: 8px; align-items: center; }
@@ -322,7 +340,7 @@ code, .mono {
   border: 1px solid var(--warning);
   border-radius: 6px;
   color: var(--warning);
-  font-size: .75rem;
+  font-size: var(--text-footnote);
   font-weight: 600;
   line-height: 1.5;
 }
@@ -335,7 +353,7 @@ textarea.masked { -webkit-text-security: disc; }
 .meter .bars span { height: 4px; border-radius: 2px; background: var(--fill); }
 .meter .bars span.on { background: var(--accent); }
 .meter.weak .bars span.on { background: var(--error); }
-.meter .label { color: var(--muted); font-size: .9rem; }
+.meter .label { color: var(--muted); font-size: var(--text-callout); }
 .check { display: flex; align-items: center; gap: 10px; min-height: var(--target); cursor: pointer; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 
@@ -356,7 +374,7 @@ textarea.masked { -webkit-text-security: disc; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: .8rem;
+  font-size: var(--text-footnote);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .08em;
@@ -442,7 +460,7 @@ textarea.masked { -webkit-text-security: disc; }
 /* The same size and filter as the musicindex.org lockup. */
 .brand img { display: block; width: 150px; height: auto; filter: var(--brand-filter); }
 .brand .product {
-  font-size: .8rem;
+  font-size: var(--text-footnote);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .08em;
@@ -461,7 +479,7 @@ textarea.masked { -webkit-text-security: disc; }
 
 .recovery {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 1.1rem;
+  font-size: var(--text-title-3);
   letter-spacing: .04em;
   padding: 16px;
   border-radius: 12px;
@@ -502,7 +520,7 @@ textarea.masked { -webkit-text-security: disc; }
 .sidebar header { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; }
 .sidebar h2 {
   padding: 12px 8px 4px;
-  font-size: .8rem;
+  font-size: var(--text-footnote);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .08em;
@@ -544,13 +562,13 @@ textarea.masked { -webkit-text-security: disc; }
 .section h2.panel-heading {
   padding: 10px 10px 2px;
   color: var(--muted);
-  font-size: .8rem;
+  font-size: var(--text-subheadline);
   font-weight: 600;
   letter-spacing: normal;
   text-transform: none;
 }
 .row .row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .count { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.row .count { color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
 /* The art of a publisher feed in the left panel, with the type dot on its
    bottom right corner (musicindex ADR 0038 R-DOT-3). The dot has a 2 px
    ring in the color of the surface behind the art, so the ring extends
@@ -598,7 +616,7 @@ textarea.masked { -webkit-text-security: disc; }
 .outline-cover .art-box { border-radius: 10px; }
 .outline-cover .art-box.mosaic { border-radius: 0; }
 .row .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .sub { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .sub { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar footer { margin-top: auto; display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--sep); }
 
 .empty { padding: 12px 10px; color: var(--muted); }
@@ -657,7 +675,7 @@ textarea.masked { -webkit-text-security: disc; }
 /* The draft toolbar: the short status, then "Versions" and "Review" (ADR
    0029 item 1). */
 .draft-toolbar { display: flex; align-items: center; flex: none; gap: 10px; }
-.draft-status { color: var(--muted); font-size: .9rem; font-weight: 500; white-space: nowrap; }
+.draft-status { color: var(--muted); font-size: var(--text-callout); font-weight: 500; white-space: nowrap; }
 .draft-status.error { color: var(--error); }
 
 /* The review sheet and the versions sheet (ADR 0029 items 2 and 3). A sheet
@@ -691,7 +709,7 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   padding: 12px 12px 12px 20px;
   border-bottom: 1px solid var(--sep);
 }
-.sheet header h2 { flex: 1; font-size: 1.05rem; }
+.sheet header h2 { flex: 1; font-size: var(--text-headline); }
 .sheet .body {
   overflow: auto;
   padding: 16px 20px;
@@ -770,7 +788,7 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
 .hero .actions { margin-top: 16px; }
 
 .section { padding: 8px 32px 32px; display: grid; gap: 16px; max-width: 880px; }
-.section h2 { font-size: 1.2rem; font-weight: 700; }
+.section h2 { font-size: var(--text-title-3); font-weight: 700; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 20px; }
 .facts dt { color: var(--muted); }
 .passkey-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -837,7 +855,7 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
 .choice input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .choice .text { display: grid; min-width: 0; }
 .choice .title { font-weight: 600; }
-.choice .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.choice .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
 
 textarea {
   min-height: 88px;
@@ -852,7 +870,7 @@ textarea {
 textarea:focus { background: var(--fill); }
 .inline { display: flex; gap: 8px; }
 .inline input, .inline select { flex: 1; }
-.failed { padding-left: 18px; color: var(--muted); font-size: .9rem; }
+.failed { padding-left: 18px; color: var(--muted); font-size: var(--text-callout); }
 .choices .hint { margin-bottom: 4px; }
 
 /* The second selector is more specific than `.field input`, so that a
@@ -871,7 +889,7 @@ textarea:focus { background: var(--fill); }
 .host { gap: 10px; }
 .host-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
 .host-head .actions { flex-wrap: nowrap; }
-.host h2 { font-size: 1.4rem; font-weight: 700; letter-spacing: -.02em; }
+.host h2 { font-size: var(--text-title-2); font-weight: 700; letter-spacing: -.02em; }
 
 /* The feeds of a file host start collapsed, with the number of feeds as the
    summary line (ADR 0028). The summary is on the line of the term "Feeds". */
@@ -913,7 +931,7 @@ textarea:focus { background: var(--fill); }
   border: 1px solid var(--sep);
   border-radius: 10px;
   background: var(--level-1);
-  font-size: .85rem;
+  font-size: var(--text-callout);
   line-height: 1.5;
 }
 .diff span { display: block; padding: 0 14px; border-left: 3px solid transparent; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -923,7 +941,7 @@ textarea:focus { background: var(--fill); }
 .snapshots { list-style: none; display: grid; gap: 8px; }
 .snapshots li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .snapshots li > span { display: grid; }
-.snapshots .sub { color: var(--muted); font-size: .85rem; }
+.snapshots .sub { color: var(--muted); font-size: var(--text-callout); }
 
 /* The value editor (task 012). */
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: end; }
@@ -986,7 +1004,7 @@ select option { background: var(--level-3); color: var(--text); }
 .recipient > summary:hover { background: var(--fill-soft); }
 .recipient > summary .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recipient > summary .share { color: var(--muted); font-variant-numeric: tabular-nums; }
-.recipient > summary .address { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipient > summary .address { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recipient > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
 
 /* Share bars (task 012). A meter for one recipient, and a stack of all
@@ -1018,7 +1036,7 @@ select option { background: var(--level-3); color: var(--text); }
   width: 160px;
   height: 8px;
 }
-.share-legend { color: var(--muted); font-size: .85rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+.share-legend { color: var(--muted); font-size: var(--text-callout); font-weight: 400; font-variant-numeric: tabular-nums; }
 .share-legend .part { white-space: nowrap; }
 .share-stack > span { position: relative; }
 .share-stack > span.other { background: var(--muted); }
@@ -1035,7 +1053,7 @@ select option { background: var(--level-3); color: var(--text); }
   background: var(--level-3);
   border: 1px solid var(--sep);
   color: var(--text);
-  font-size: .8rem;
+  font-size: var(--text-subheadline);
   font-weight: 500;
   white-space: nowrap;
   z-index: 2;
@@ -1053,7 +1071,7 @@ select option { background: var(--level-3); color: var(--text); }
    group of recipients has a heading row in the group, like the heading of
    the picker. */
 .value-routes { max-width: 560px; }
-.value-group { padding: 12px 16px 4px; font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.value-group { padding: 12px 16px 4px; font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 
 /* A list entry as one summary line (ADR 0028), a row of its group, like a
    link row, with no fill of its own (review of task 014c, defect 3). Only
@@ -1070,7 +1088,7 @@ select option { background: var(--level-3); color: var(--text); }
 }
 .entry-row > summary:hover { background: var(--fill-soft); }
 .entry-row > summary .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.entry-row > summary .sub { color: var(--muted); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry-row > summary .sub { color: var(--muted); font-size: var(--text-callout); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-row > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
 /* A link row in an open entry, such as "Nostr" (ADR 0074), starts at the
    inner space of the entry, as each field of the entry does. */
@@ -1084,10 +1102,10 @@ select option { background: var(--level-3); color: var(--text); }
 /* The page of one tree item: a sequence of sections. */
 .page { padding: 8px 32px 32px; max-width: 880px; display: grid; gap: 28px; }
 .page-section { display: grid; gap: 8px; }
-.page-section > h2 { font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
-.page-section > .note { padding: 0 4px; color: var(--muted); font-size: .85rem; }
+.page-section > h2 { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
+.page-section > .note { padding: 0 4px; color: var(--muted); font-size: var(--text-callout); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 4px; }
-.section-head > h2 { font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.section-head > h2 { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 
 /* A section is a heading on level 1, then one group on level 2 (ADR 0029
    item 11). A thin separator divides the rows of a group; a border does
@@ -1147,9 +1165,9 @@ select option { background: var(--level-3); color: var(--text); }
 .link-row:hover { background: var(--fill-soft); }
 .link-row .label { font-weight: 600; flex: none; }
 .link-row .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.link-row .summary { flex: 1; min-width: 0; color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-row .summary { flex: 1; min-width: 0; color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-row .go { color: var(--muted); }
-.link-row .count { color: var(--muted); font-size: .85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.link-row .count { color: var(--muted); font-size: var(--text-callout); white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* A row with its title above its text. The text wraps, so that a narrow
    window shows all of it (ADR 0073 item 2). */
 .link-row .text { flex: 1; min-width: 0; display: grid; gap: 2px; }
@@ -1177,7 +1195,7 @@ select.position {
 select.position:focus { background: var(--fill); }
 .position-field { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
 .link-row .num { flex: none; width: 2ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
-.link-row .dur { color: var(--muted); font-variant-numeric: tabular-nums; font-size: .9rem; }
+.link-row .dur { color: var(--muted); font-variant-numeric: tabular-nums; font-size: var(--text-callout); }
 .link-row.add { color: var(--accent); font-weight: 600; }
 .disclosure > summary.link-row { min-height: 52px; }
 
@@ -1199,13 +1217,13 @@ select.position:focus { background: var(--fill); }
 .pick-footer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pick-footer-row .spacer { flex: 1; }
 .pick-footer-row .button.primary { margin-left: auto; }
-.pick-arrow { font-size: .7rem; }
+.pick-arrow { font-size: var(--text-caption-2); }
 .pick-selected { max-height: 40vh; overflow-y: auto; }
 .pick-anchor { display: block; scroll-margin-top: 8px; }
 /* The name of the feed or the track that the musicindex part shows. */
-.pick-head { position: relative; display: block; padding: 12px 16px 4px; font-size: 1rem; font-weight: 700; overflow-wrap: anywhere; }
+.pick-head { position: relative; display: block; padding: 12px 16px 4px; font-size: var(--text-body); font-weight: 700; overflow-wrap: anywhere; }
 .pick-head .dot { display: inline-block; margin-right: 8px; vertical-align: middle; }
-.pick-head.sub { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.pick-head.sub { font-size: var(--text-footnote); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .pick-head .muted { color: var(--muted); font-weight: 400; }
 /* The track picker of a playlist (task 032c). The title takes the free
    width, and the button or the status keeps its own width. */
@@ -1233,7 +1251,7 @@ select.position:focus { background: var(--fill); }
 }
 .pick-row .pick-box input { width: 20px; height: 20px; accent-color: var(--accent); }
 .pick-row .text { flex: 1; min-width: 0; display: grid; }
-.pick-row .text .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.pick-row .text .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
 .pick-row.taken { opacity: .6; }
 .pick-row.taken .pick-box { cursor: default; }
 
@@ -1302,12 +1320,12 @@ select.position:focus { background: var(--fill); }
   align-items: center;
   gap: 8px 12px;
   color: var(--muted);
-  font-size: .9rem;
+  font-size: var(--text-callout);
   overflow-wrap: anywhere;
 }
 .head .text { flex: 1; min-width: 0; }
-.head h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; }
-.head .sub { color: var(--muted); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.head h1 { font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; }
+.head .sub { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The public address of a feed: a link that opens the feed in a new tab,
    and a button that copies it. The link is truncated, the button is not. */
 .head .sub.feed-address { display: flex; align-items: center; gap: 2px; overflow: visible; }
@@ -1348,10 +1366,10 @@ button.outline-feed[aria-current="page"] {
 .node .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node .num { width: 2ch; flex: none; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .node.add { color: var(--accent); }
-.node .field-error { flex: none; font-size: .78rem; }
+.node .field-error { flex: none; font-size: var(--text-footnote); }
 /* The heading of a group of entries, such as Live shows. */
-.tree-heading { padding: 10px 10px 2px; color: var(--muted); font-size: .8rem; font-weight: 600; }
-.node .sub { flex: none; color: var(--muted); font-size: .78rem; }
+.tree-heading { padding: 10px 10px 2px; color: var(--muted); font-size: var(--text-subheadline); font-weight: 600; }
+.node .sub { flex: none; color: var(--muted); font-size: var(--text-footnote); }
 
 /* The outline of the open feed: its cover and title, then its items. */
 .outline-feed { display: flex; align-items: center; gap: 10px; padding: 8px 10px; min-width: 0; }
@@ -1373,7 +1391,7 @@ button.outline-feed {
 .row .chevron { flex: none; display: block; width: 1.45em; height: 1.45em; margin-right: -4px; }
 .outline-feed .text { display: grid; min-width: 0; }
 .outline-feed .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.outline-feed .sub { color: var(--muted); font-size: .85rem; }
+.outline-feed .sub { color: var(--muted); font-size: var(--text-callout); }
 .outline-feed .change-mark { display: inline-block; margin-left: 6px; vertical-align: middle; }
 .outline-cover {
   width: 40px;
@@ -1398,7 +1416,7 @@ button.outline-feed {
    (ADR 0039 items 2 and 2a). A marked row has the fill of an open entry. */
 .releases { padding: 8px 32px 32px; display: grid; gap: 16px; }
 .releases-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.releases-head h1 { flex: 1; min-width: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; }
+.releases-head h1 { flex: 1; min-width: 0; font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; }
 .releases-roles { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); }
 /* The tools wrap, so that "＋ Add a feed" goes to a new line in a narrow
    window and stays in the margins of the page (ADR 0072 item 2). */
@@ -1468,7 +1486,7 @@ button.outline-feed {
 .releases-row:hover, .releases-tile:hover { background: var(--fill-soft); }
 .releases-text { display: grid; min-width: 0; }
 .releases-text .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.releases-text .sub { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.releases-text .sub { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .releases-cover {
   width: 48px;
   height: 48px;
@@ -1514,7 +1532,7 @@ button.outline-feed {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.import-row .import-head .state { color: var(--muted); font-size: .9rem; flex: none; }
+.import-row .import-head .state { color: var(--muted); font-size: var(--text-callout); flex: none; }
 .import-row .import-head .state.failed { color: var(--error); }
 .import-row .import-progress { width: 100%; height: 8px; accent-color: var(--muted); }
 .import-dest { display: grid; gap: 6px; }
@@ -1544,14 +1562,14 @@ button.outline-feed {
 .group > .import-pick { padding: 10px 16px; }
 /* A line of text in a group, such as the status of a live show. */
 .group > .live-line { padding: 10px 16px; }
-.grant-writes { list-style: none; margin: 0; padding: 0 16px 10px; display: grid; gap: 4px; color: var(--muted); font-size: .9rem; }
+.grant-writes { list-style: none; margin: 0; padding: 0 16px 10px; display: grid; gap: 4px; color: var(--muted); font-size: var(--text-callout); }
 .grant-checks { padding: 10px 16px; display: grid; gap: 8px; }
 .grant-checks .hint { margin: 0; }
 /* A release row of the publisher page: the title, its state, and the
    buttons that move or remove it (task 025c, ADR 0041 item 10). */
 .release-row { display: grid; gap: 8px; padding: 10px 16px; }
 .release-row .title { font-weight: 600; overflow-wrap: anywhere; }
-.release-row .sub { color: var(--muted); font-size: .85rem; }
+.release-row .sub { color: var(--muted); font-size: var(--text-callout); }
 
 /* An alternate enclosure of a track, as one summary line in the Audio file
    group, with a Remove button. There is no form to edit it (task 019d,
@@ -1566,12 +1584,12 @@ button.outline-feed {
    021g, ADR 0036). */
 .badge {
   flex: none; width: 56px; box-sizing: border-box; padding: 3px 0; border-radius: 6px; text-align: center;
-  font-size: .75rem; font-weight: 600; letter-spacing: .04em; color: var(--text); background: var(--fill);
+  font-size: var(--text-footnote); font-weight: 600; letter-spacing: .04em; color: var(--text); background: var(--fill);
 }
 .import-file .name { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .import-file .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.import-file .role { color: var(--muted); font-size: .85rem; }
-.import-file .size { flex: none; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.import-file .role { color: var(--muted); font-size: var(--text-callout); }
+.import-file .size { flex: none; color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
 .alt-enclosure {
   display: flex;
   align-items: center;
@@ -1580,7 +1598,7 @@ button.outline-feed {
   padding: 10px 16px;
 }
 .alt-enclosure .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.alt-enclosure .sub { color: var(--muted); font-size: .9rem; flex: none; }
+.alt-enclosure .sub { color: var(--muted); font-size: var(--text-callout); flex: none; }
 
 /* A host operation of the diff sheet: its kind, its host, its path and
    its size (task 021g, ADR 0036 item 14). A blocked deletion uses the
@@ -1589,8 +1607,8 @@ button.outline-feed {
 .host-op-row .kind { flex: none; width: 4.5rem; font-weight: 600; }
 .host-op-row .text { flex: 1; min-width: 0; display: grid; }
 .host-op-row .title { font-weight: 600; }
-.host-op-row .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
-.host-op-row .size { flex: none; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.host-op-row .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
+.host-op-row .size { flex: none; color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
 .host-op-row.error { color: var(--error); }
 .host-op-row.error .sub { color: var(--error); }
 
@@ -1613,7 +1631,7 @@ button.outline-feed {
    row of `.file-rows` (ADR 0036 items 11 and 12). */
 .copy-row { display: grid; gap: 8px; }
 .copy-row .title { font-weight: 600; }
-.copy-row .sub { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.copy-row .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
 
 /* The downloads of the Files page (task 023d, ADR 0038 items 6 and 7). */
 .download-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -1628,7 +1646,7 @@ button.outline-feed {
 .change-mark { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
 .change-row { display: grid; gap: 8px; padding: 10px 16px; }
 .change-row .title { font-weight: 500; overflow-wrap: anywhere; }
-.change-row .sub { color: var(--muted); font-size: .9rem; }
+.change-row .sub { color: var(--muted); font-size: var(--text-callout); }
 .group > .change-row + .change-row { border-top: 1px solid var(--sep); }
 
 /* The feed move (task 023h, ADR 0038 items 16 to 21). */
@@ -1649,7 +1667,7 @@ button.outline-feed {
   border-radius: 10px;
   background: var(--fill);
   color: var(--text);
-  font-size: .85rem;
+  font-size: var(--text-callout);
 }
 
 /* The file picker (ADR 0062). "Choose…" sits next to the preview in the body
@@ -1738,7 +1756,7 @@ button.outline-feed {
 .use-row input { flex: none; width: 20px; height: 20px; accent-color: var(--accent); }
 .link-row.static { cursor: default; }
 .link-row.static:hover { background: none; }
-.link-row .status { flex: none; color: var(--muted); font-size: .9rem; }
+.link-row .status { flex: none; color: var(--muted); font-size: var(--text-callout); }
 .link-row .status.writing { color: var(--accent); }
 .link-row .status.failed { color: var(--error); font-weight: 500; }
 .link-row .summary.field-error { overflow-wrap: anywhere; }
@@ -1754,5 +1772,5 @@ button.outline-feed {
    This rule is the last rule of the file, and its selector is as specific as
    `.field input`, so that it replaces the size of each earlier rule. */
 @media (pointer: coarse) {
-  :root :is(input, select, textarea) { font-size: 17px; }
+  :root :is(input, select, textarea) { font-size: var(--text-body); }
 }

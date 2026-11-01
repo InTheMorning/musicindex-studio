@@ -25,7 +25,7 @@ The workflow needs no repository secret for these unsigned archives.
 5. Publish the draft only after the remaining release checks pass.
 
 The workflow refuses a tag that does not match `Cargo.toml`.
-For a release candidate, set a version such as `0.1.0-rc.1` and push the tag `v0.1.0-rc.1`.
+For a release candidate, run `tools/release-candidate.sh 0.1.0-rc.1`. It sets the version, pushes `main`, waits for CI and pushes the tag `v0.1.0-rc.1`.
 The workflow marks a draft from a tag with a hyphen as a pre-release.
 It keeps the Release as a draft. It does not publish it.
 If a draft already exists, a new run replaces its assets after all five jobs pass.

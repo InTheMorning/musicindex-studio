@@ -10435,3 +10435,317 @@ async fn change_address_with_no_type_gives_422() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["error"]["code"], "invalid_recipient");
 }
+
+// ---- People (ADR 0098, task 063d) ----
+
+/// The ID of a new person that has the given name.
+async fn new_person(app: &App, name: &str) -> i64 {
+    let (status, body) = call(app, "POST", "/api/v1/people", Some(json!({ "name": name }))).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    body["id"].as_i64().unwrap()
+}
+
+#[tokio::test]
+async fn a_person_is_added_read_changed_and_removed() {
+    let app = app();
+    let id = new_person(&app, " Ann ").await;
+
+    let (status, body) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["name"], "Ann");
+    assert_eq!(body["default_address"], Value::Null);
+    assert_eq!(body["wallets"], json!([]));
+    assert_eq!(body["pays"], json!([]));
+    assert_eq!(body["credited"], json!([]));
+
+    let (status, list) = call(&app, "GET", "/api/v1/people", None).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["id"], id);
+    assert_eq!(list[0]["pays"], 0);
+    assert_eq!(list[0]["credited"], 0);
+
+    let (status, _) = call(
+        &app,
+        "PATCH",
+        &format!("/api/v1/people/{id}"),
+        Some(json!({ "name": "Ann B", "usual_role": "vocals" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, body) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(body["name"], "Ann B");
+    assert_eq!(body["usual_role"], "vocals");
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/people",
+        Some(json!({ "name": "   " })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_person");
+
+    let (status, _) = call(&app, "DELETE", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    for method in ["GET", "DELETE"] {
+        let (status, body) = call(&app, method, &format!("/api/v1/people/{id}"), None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{method} {body}");
+        assert_eq!(body["error"]["code"], "not_found");
+    }
+}
+
+#[tokio::test]
+async fn each_kind_of_link_is_added_and_removed() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let id = new_person(&app, "Ann").await;
+    let base = format!("/api/v1/people/{id}");
+
+    let bodies = [
+        (
+            "wallets",
+            json!({ "address": "ann@example.com", "recipient_type": "lnaddress" }),
+            "wallets",
+        ),
+        ("keys", json!({ "npub": "npub1ann" }), "keys"),
+        (
+            "credit-names",
+            json!({ "name": "Ann Artist" }),
+            "credit_names",
+        ),
+        (
+            "support-links",
+            json!({ "label": "Shop", "url": "https://shop.example" }),
+            "support_links",
+        ),
+        ("members", json!({ "feed_id": label }), "members"),
+    ];
+    for (kind, body, field) in bodies {
+        let (status, added) =
+            call(&app, "POST", &format!("{base}/{kind}"), Some(body.clone())).await;
+        assert_eq!(status, StatusCode::CREATED, "{kind} {added}");
+        let link = added["id"].as_i64().unwrap();
+        let (_, person) = call(&app, "GET", &base, None).await;
+        assert_eq!(person[field].as_array().unwrap().len(), 1, "{kind}");
+
+        // A second add of the same link gives the same ID. A support link
+        // has no key, so each add makes a new link.
+        if kind != "support-links" {
+            let (_, again) = call(&app, "POST", &format!("{base}/{kind}"), Some(body)).await;
+            assert_eq!(again["id"], link, "{kind}");
+        }
+
+        let (status, _) = call(&app, "DELETE", &format!("{base}/{kind}/{link}"), None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{kind}");
+        let (_, person) = call(&app, "GET", &base, None).await;
+        assert_eq!(person[field], json!([]), "{kind}");
+        let (status, _) = call(&app, "DELETE", &format!("{base}/{kind}/{link}"), None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{kind}");
+    }
+
+    let (status, body) = call(&app, "POST", &format!("{base}/pets"), Some(json!({}))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
+#[tokio::test]
+async fn the_default_address_is_set_and_cleared() {
+    let app = app();
+    let id = new_person(&app, "Ann").await;
+    let base = format!("/api/v1/people/{id}");
+    for address in ["a@example.com", "b@example.com"] {
+        call(
+            &app,
+            "POST",
+            &format!("{base}/wallets"),
+            Some(json!({ "address": address })),
+        )
+        .await;
+    }
+    // With no choice, the first wallet is the default address.
+    let (_, person) = call(&app, "GET", &base, None).await;
+    assert_eq!(person["default_address"]["address"], "a@example.com");
+
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("{base}/default-address"),
+        Some(json!({ "address": "b@example.com" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, person) = call(&app, "GET", &base, None).await;
+    assert_eq!(person["default_address"]["address"], "b@example.com");
+
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("{base}/default-address"),
+        Some(Value::Null),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, person) = call(&app, "GET", &base, None).await;
+    assert_eq!(person["default_address"]["address"], "a@example.com");
+}
+
+#[tokio::test]
+async fn a_wallet_of_a_different_person_gives_409() {
+    let app = app();
+    let first = new_person(&app, "Ann").await;
+    let second = new_person(&app, "Bob").await;
+    let wallet = json!({ "address": "ann@example.com" });
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{first}/wallets"),
+        Some(wallet.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{second}/wallets"),
+        Some(wallet),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "link_in_other_person");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("person {first}")),
+        "{body}"
+    );
+}
+
+/// A feed with one credit, and a feed with one recipient. Both have the
+/// name Ann. Gives the two feed IDs.
+async fn credit_and_payee_feeds(app: &App, connector: i64) -> (i64, i64) {
+    let credit = add_paid_feed(
+        app,
+        connector,
+        "credit.xml",
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+         <title>One</title><podcast:guid>g-one</podcast:guid>\
+         <podcast:medium>music</podcast:medium>\
+         <podcast:person role=\"vocals\">Ann</podcast:person>\
+         <item><guid>one-t1</guid><title>Track</title></item></channel></rss>",
+    )
+    .await;
+    let payee = add_paid_feed(
+        app,
+        connector,
+        "payee.xml",
+        &wallet_feed("g-two", "lnaddress", "ann@example.com", ""),
+    )
+    .await;
+    (credit, payee)
+}
+
+#[tokio::test]
+async fn a_suggestion_makes_a_person_that_the_feeds_use() {
+    let (app, connector) = publisher_app().await;
+    let (credit, payee) = credit_and_payee_feeds(&app, connector).await;
+
+    let (status, list) = call(&app, "GET", "/api/v1/people/suggestions", None).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(list.as_array().unwrap().len(), 1, "{list}");
+    let suggestion = &list[0];
+    assert_eq!(suggestion["name"], "Ann");
+    assert_eq!(suggestion["credit_feeds"], 1);
+    assert_eq!(suggestion["payee_feeds"], 1);
+
+    let credits = &suggestion["credits"][0];
+    let recipient = &suggestion["recipients"][0];
+    let (status, made) = call(
+        &app,
+        "POST",
+        "/api/v1/people/suggestions/make",
+        Some(json!({
+            "name": "Ann",
+            "credits": [[credits["name"], credits["href"], credits["npub"]]],
+            "recipients": [[recipient["key"], recipient["recipient_type"]]],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{made}");
+    let id = made["id"].as_i64().unwrap();
+
+    let (_, list) = call(&app, "GET", "/api/v1/people/suggestions", None).await;
+    assert_eq!(list, json!([]));
+
+    let (status, person) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{person}");
+    assert_eq!(person["pays"], json!([payee]));
+    assert_eq!(person["credited"], json!([credit]));
+    let (_, list) = call(&app, "GET", "/api/v1/people", None).await;
+    assert_eq!(list[0]["pays"], 1);
+    assert_eq!(list[0]["credited"], 1);
+}
+
+#[tokio::test]
+async fn a_dismissed_suggestion_leaves_the_list() {
+    let (app, connector) = publisher_app().await;
+    credit_and_payee_feeds(&app, connector).await;
+    let (_, list) = call(&app, "GET", "/api/v1/people/suggestions", None).await;
+    let suggestion = &list[0];
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/people/suggestions/dismiss",
+        Some(json!({
+            "identity": suggestion["identity"],
+            "items": suggestion["item_keys"],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, list) = call(&app, "GET", "/api/v1/people/suggestions", None).await;
+    assert_eq!(list, json!([]));
+}
+
+#[tokio::test]
+async fn each_people_route_needs_the_token() {
+    let app = app();
+    let routes = [
+        ("GET", "/api/v1/people"),
+        ("POST", "/api/v1/people"),
+        ("GET", "/api/v1/people/1"),
+        ("PATCH", "/api/v1/people/1"),
+        ("DELETE", "/api/v1/people/1"),
+        ("PUT", "/api/v1/people/1/default-address"),
+        ("POST", "/api/v1/people/1/wallets"),
+        ("DELETE", "/api/v1/people/1/wallets/1"),
+        ("GET", "/api/v1/people/suggestions"),
+        ("POST", "/api/v1/people/suggestions/make"),
+        ("POST", "/api/v1/people/suggestions/dismiss"),
+    ];
+    for (method, path) in routes {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::HOST, HOST)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from("{}"))
+            .unwrap();
+        let (status, value, _) = send(&app, request).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {path}");
+        assert_eq!(value["error"]["code"], "token_required", "{method} {path}");
+    }
+}

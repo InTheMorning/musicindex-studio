@@ -84,6 +84,8 @@ impl From<CollectionError> for ApiError {
             CollectionErrorKind::InUse => (StatusCode::CONFLICT, "in_use"),
             // ADR 0027: a saved recipient needs an address.
             CollectionErrorKind::Invalid => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_recipient"),
+            // ADR 0098: a link is in a different person already.
+            CollectionErrorKind::Conflict => (StatusCode::CONFLICT, "link_in_other_person"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "collection"),
         };
         Self::new(status, code, error.to_string())

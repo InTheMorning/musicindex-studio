@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::BuildHasher;
 
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::{Deserialize, Serialize};
 
 use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, FeedId, now};
@@ -16,7 +17,8 @@ use crate::feed::Recipient;
 use crate::keysend::{self, Lookup};
 
 /// The ID of a person.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
 pub struct PersonId(pub i64);
 
 /// The key of a credit (ADR 0098 item 12): the `npub`, else the name with
@@ -84,7 +86,7 @@ pub fn normal_name(name: &str) -> String {
 }
 
 /// A wallet that the user linked to a person.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PersonWallet {
     /// The row ID.
     pub id: i64,
@@ -101,7 +103,7 @@ pub struct PersonWallet {
 }
 
 /// A Nostr key that the user linked to a person.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PersonKey {
     /// The row ID.
     pub id: i64,
@@ -114,7 +116,7 @@ pub struct PersonKey {
 }
 
 /// A credit name of a person: the identity of a credit.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CreditName {
     /// The row ID.
     pub id: i64,
@@ -133,7 +135,7 @@ pub struct CreditName {
 }
 
 /// A support link of a person.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SupportLink {
     /// The row ID.
     pub id: i64,
@@ -146,7 +148,7 @@ pub struct SupportLink {
 }
 
 /// A person with all links.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Person {
     /// The ID.
     pub id: PersonId,
@@ -174,7 +176,8 @@ pub struct Person {
 }
 
 /// The fields of a person that the user edits.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
 pub struct PersonFields {
     /// The name. A name of only spaces is refused.
     pub name: String,
@@ -995,7 +998,8 @@ pub fn save_recipient(
 }
 
 /// How a recipient joined a suggestion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum JoinedBy {
     /// The normal name of the recipient is the normal name of the group.
     Name,
@@ -1005,7 +1009,8 @@ pub enum JoinedBy {
 }
 
 /// The reason to join an item to a suggestion (ADR 0098 item 13).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Evidence {
     /// The identity of the suggestion is an `npub`.
     SameNpub,
@@ -1016,7 +1021,7 @@ pub enum Evidence {
 }
 
 /// A distinct credit `(name, href, npub)` of a suggestion.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SuggestedCredit {
     /// The trimmed name.
     pub name: String,
@@ -1035,7 +1040,7 @@ pub struct SuggestedCredit {
 }
 
 /// A distinct recipient key of a suggestion.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SuggestedRecipient {
     /// The key of the recipient.
     pub key: RecipientKey,
@@ -1052,7 +1057,7 @@ pub struct SuggestedRecipient {
 }
 
 /// The items of the feeds that can be one person (ADR 0098 items 12 and 13).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Suggestion {
     /// [`Identity::key`] of the group.
     pub identity: String,
@@ -1073,7 +1078,8 @@ pub struct Suggestion {
 }
 
 /// The items that the user selects to make a person (ADR 0098 item 14).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
 pub struct MakePerson {
     /// The name of the person.
     pub name: String,
@@ -1295,6 +1301,79 @@ fn join_recipients(recipients: &[RecipientAgg], group_name: &str) -> Vec<Suggest
         });
     }
     joined
+}
+
+/// The feeds that use a person (ADR 0099 item 6).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct PersonUses {
+    /// Each feed whose recipients have a member of a wallet of the person.
+    pub pays: Vec<FeedId>,
+    /// Each feed whose credits have a credit name or a Nostr key of the
+    /// person.
+    pub credited: Vec<FeedId>,
+}
+
+/// The feeds that pay a wallet of `person` and the feeds that credit the
+/// person. This function reads the index of the collection and makes no
+/// request.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn uses<S: BuildHasher>(
+    collection: &Collection,
+    person: &Person,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<PersonUses, CollectionError> {
+    let wallets: HashSet<(String, String, String)> = person
+        .wallets
+        .iter()
+        .map(|w| parts(&keysend::wallet_key(&w.key, lookups)))
+        .collect();
+    let mut pays = BTreeSet::new();
+    if !wallets.is_empty() {
+        let mut statement = collection
+            .db()
+            .prepare("SELECT feed_id, address, custom_key, custom_value FROM feed_recipients")?;
+        let rows = statement.query_map([], |r| {
+            let custom_key: String = r.get(2)?;
+            let custom_value: String = r.get(3)?;
+            Ok((
+                r.get::<_, i64>(0)?,
+                RecipientKey {
+                    address: r.get(1)?,
+                    custom_key: Some(custom_key).filter(|t| !t.is_empty()),
+                    custom_value: Some(custom_value).filter(|t| !t.is_empty()),
+                },
+            ))
+        })?;
+        for row in rows {
+            let (feed, key) = row?;
+            if wallets.contains(&parts(&keysend::wallet_key(&key, lookups))) {
+                pays.insert(feed);
+            }
+        }
+    }
+
+    let identities: HashSet<&str> = person
+        .credit_names
+        .iter()
+        .map(|c| c.identity.as_str())
+        .collect();
+    let npubs: HashSet<&str> = person.keys.iter().map(|k| k.npub.as_str()).collect();
+    let mut credited = BTreeSet::new();
+    for row in collection.feed_credits()? {
+        let named = Identity::of(&row.name, &row.href, &row.npub)
+            .is_some_and(|i| identities.contains(i.key().as_str()));
+        let keyed = !row.npub.is_empty() && npubs.contains(row.npub.to_lowercase().as_str());
+        if named || keyed {
+            credited.insert(row.feed_id.0);
+        }
+    }
+    Ok(PersonUses {
+        pays: feed_ids(&pays),
+        credited: feed_ids(&credited),
+    })
 }
 
 /// The suggestions of people from the credits and the recipients of the

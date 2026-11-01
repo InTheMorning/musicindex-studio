@@ -246,6 +246,30 @@ async fn two_users_do_not_see_the_feeds_of_each_other() {
     assert_eq!(still.json.as_array().unwrap().len(), 1);
 }
 
+#[tokio::test]
+async fn the_people_routes_need_a_session_and_keep_the_people_of_each_user() {
+    let app = app(Signup::Invite);
+    let none = send(&app, call("GET", "/api/v1/people", None)).await;
+    assert_eq!(none.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(none.code(), "session_required");
+    let one = new_user(&app, "one@example.org", PASS_ONE).await;
+    let two = new_user(&app, "two@example.org", PASS_TWO).await;
+    let added = api(
+        &app,
+        &one,
+        "POST",
+        "/api/v1/people",
+        Some(json!({ "name": "Ann" })),
+    )
+    .await;
+    assert_eq!(added.status, StatusCode::CREATED, "{:?}", added.text);
+    let own = api(&app, &one, "GET", "/api/v1/people", None).await;
+    assert_eq!(own.json.as_array().unwrap().len(), 1);
+    let other = api(&app, &two, "GET", "/api/v1/people", None).await;
+    assert_eq!(other.status, StatusCode::OK);
+    assert_eq!(other.json.as_array().unwrap().len(), 0);
+}
+
 /// The audio route needs the session of the user who made the ticket
 /// (ADR 0062 item 29).
 async fn audio(app: &App, who: Option<&(String, String)>, ticket: &str) -> Reply {

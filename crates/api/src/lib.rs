@@ -9,6 +9,7 @@ mod announcer;
 mod downloads;
 mod error;
 mod media;
+mod people;
 mod routes;
 mod ui;
 mod uploads;
@@ -138,6 +139,25 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/media/facts", post(routes::media_facts))
         .route("/media/tickets", post(media::make_ticket))
         .route("/search", get(routes::search))
+        .route("/people", get(people::list_people).post(people::add_person))
+        .route("/people/suggestions", get(people::list_suggestions))
+        .route("/people/suggestions/make", post(people::make_person))
+        .route(
+            "/people/suggestions/dismiss",
+            post(people::dismiss_suggestion),
+        )
+        .route(
+            "/people/{id}",
+            get(people::get_person)
+                .patch(people::change_person)
+                .delete(people::remove_person),
+        )
+        .route(
+            "/people/{id}/default-address",
+            put(people::set_default_address),
+        )
+        .route("/people/{id}/{kind}", post(people::add_link))
+        .route("/people/{id}/{kind}/{link_id}", delete(people::remove_link))
         .route("/recipients", get(routes::list_recipients))
         .route("/recipients/uses", post(routes::recipient_uses))
         .route(

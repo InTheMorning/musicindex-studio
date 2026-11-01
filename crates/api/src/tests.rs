@@ -10603,6 +10603,50 @@ async fn the_default_address_is_set_and_cleared() {
 }
 
 #[tokio::test]
+async fn a_wallet_gives_its_members_and_a_member_can_be_the_default_address() {
+    let app = app();
+    collection_of(&app)
+        .set_keysend_lookup(&studio_core::keysend::Lookup {
+            address: "ann@example.com".into(),
+            pubkey: Some("02abc".into()),
+            custom_key: Some("696969".into()),
+            custom_value: Some("x1".into()),
+            status: studio_core::keysend::LookupStatus::Found,
+            checked_at: 1,
+        })
+        .unwrap();
+    let id = new_person(&app, "Ann").await;
+    let base = format!("/api/v1/people/{id}");
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("{base}/wallets"),
+        Some(json!({ "address": "ann@example.com", "recipient_type": "lnaddress" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (_, person) = call(&app, "GET", &base, None).await;
+    let members = person["wallets"][0]["members"].as_array().unwrap();
+    assert_eq!(members.len(), 2, "{person}");
+    assert_eq!(members[0]["key"]["address"], "02abc");
+    assert_eq!(members[0]["key"]["custom_value"], "x1");
+    assert_eq!(members[0]["recipient_type"], "node");
+    assert_eq!(members[1]["key"]["address"], "ann@example.com");
+    assert_eq!(members[1]["recipient_type"], "lnaddress");
+
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("{base}/default-address"),
+        Some(members[0]["key"].clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, person) = call(&app, "GET", &base, None).await;
+    assert_eq!(person["default_address"]["address"], "02abc");
+}
+
+#[tokio::test]
 async fn a_wallet_of_a_different_person_gives_409() {
     let app = app();
     let first = new_person(&app, "Ann").await;

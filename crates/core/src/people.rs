@@ -15,7 +15,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::change_set::RecipientKey;
-use crate::collection::{Collection, CollectionError, CollectionErrorKind, FeedId, now};
+use crate::collection::{Collection, CollectionError, CollectionErrorKind, CreditRow, FeedId, now};
 use crate::feed::Recipient;
 use crate::keysend::{self, Lookup, LookupResult};
 use crate::net::NetPolicy;
@@ -654,6 +654,56 @@ fn is_member<S: BuildHasher>(
     })
 }
 
+/// A member of a wallet, for the menu of the default address.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WalletMember {
+    /// The key of the member.
+    pub key: RecipientKey,
+    /// `lnaddress` or `node`, or the type of the wallet row for its own key.
+    pub recipient_type: String,
+}
+
+/// The members of `wallet` (ADR 0095 item 5). The list always holds
+/// `wallet.key`, with the recipient type of the wallet row. Each other
+/// member, and a wallet row with no type, has the type `lnaddress` for an
+/// address with `@`, else `node`.
+#[must_use]
+pub fn wallet_members<S: BuildHasher>(
+    wallet: &PersonWallet,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Vec<WalletMember> {
+    let type_of = |key: &RecipientKey| {
+        if key.parts() == wallet.key.parts() && !wallet.recipient_type.is_empty() {
+            wallet.recipient_type.clone()
+        } else if key.address.contains('@') {
+            "lnaddress".to_owned()
+        } else {
+            "node".to_owned()
+        }
+    };
+    let wallet_key = keysend::wallet_key(&wallet.key, lookups);
+    let mut members: Vec<WalletMember> = keysend::members(&wallet_key, lookups)
+        .into_iter()
+        .map(|key| {
+            let recipient_type = type_of(&key);
+            WalletMember {
+                key,
+                recipient_type,
+            }
+        })
+        .collect();
+    if !members.iter().any(|m| m.key.parts() == wallet.key.parts()) {
+        members.insert(
+            0,
+            WalletMember {
+                key: wallet.key.clone(),
+                recipient_type: type_of(&wallet.key),
+            },
+        );
+    }
+    members
+}
+
 /// Remove a wallet of a person. The default address goes back to none when
 /// no wallet of the person has it any more.
 ///
@@ -1158,10 +1208,49 @@ struct CreditAgg {
 }
 
 struct Group {
-    identity: Identity,
+    /// The identity key of the suggestion (ADR 0103 item 5).
+    key: String,
+    /// The distinct `npub` values of the credits, trimmed and in lowercase.
+    npubs: BTreeSet<String>,
     credits: BTreeMap<(String, String, String), CreditAgg>,
     /// The feeds of each name, for the most frequent name.
     names: BTreeMap<String, BTreeSet<i64>>,
+}
+
+impl Group {
+    fn new(key: String) -> Self {
+        Self {
+            key,
+            npubs: BTreeSet::new(),
+            credits: BTreeMap::new(),
+            names: BTreeMap::new(),
+        }
+    }
+
+    fn add(&mut self, row: CreditRow) {
+        let npub = row.npub.trim().to_lowercase();
+        if !npub.is_empty() {
+            self.npubs.insert(npub);
+        }
+        // A credit with only an `npub` gives no name to its group.
+        if !row.name.trim().is_empty() {
+            self.names
+                .entry(row.name.trim().to_owned())
+                .or_default()
+                .insert(row.feed_id.0);
+        }
+        let credit = self
+            .credits
+            .entry((row.name, row.href, row.npub))
+            .or_default();
+        if credit.img.is_empty() {
+            credit.img = row.img;
+        }
+        if !row.role.is_empty() {
+            credit.roles.insert(row.role);
+        }
+        credit.feeds.insert(row.feed_id.0);
+    }
 }
 
 struct RecipientAgg {
@@ -1259,46 +1348,66 @@ fn dismissals(db: &Connection) -> Result<HashMap<String, HashSet<String>>, Colle
     Ok(map)
 }
 
+/// Group the credits as ADR 0103 items 1 to 3 say. Two or more `npub` values
+/// with one normal name make one group for each `npub`, and one group for the
+/// credits of that name with no `npub`.
 fn credit_groups(
     collection: &Collection,
     known_identities: &HashSet<String>,
     known_keys: &HashSet<String>,
-) -> Result<BTreeMap<String, Group>, CollectionError> {
-    let mut groups: BTreeMap<String, Group> = BTreeMap::new();
+) -> Result<Vec<Group>, CollectionError> {
+    let mut by_name: BTreeMap<String, Vec<CreditRow>> = BTreeMap::new();
+    let mut unnamed: Vec<CreditRow> = Vec::new();
     for row in collection.feed_credits()? {
         let Some(identity) = Identity::of(&row.name, &row.href, &row.npub) else {
             continue;
         };
-        let key = identity.key();
-        if known_identities.contains(&key)
+        if known_identities.contains(&identity.key())
             || matches!(&identity, Identity::Npub(npub) if known_keys.contains(npub))
         {
             continue;
         }
-        let group = groups.entry(key).or_insert_with(|| Group {
-            identity,
-            credits: BTreeMap::new(),
-            names: BTreeMap::new(),
-        });
-        // A credit with only an `npub` gives no name to its group.
-        if !row.name.trim().is_empty() {
-            group
-                .names
-                .entry(row.name.trim().to_owned())
-                .or_default()
-                .insert(row.feed_id.0);
+        let name = normal_name(&row.name);
+        if name.is_empty() {
+            unnamed.push(row);
+        } else {
+            by_name.entry(name).or_default().push(row);
         }
-        let credit = group
-            .credits
-            .entry((row.name, row.href, row.npub))
-            .or_default();
-        if credit.img.is_empty() {
-            credit.img = row.img;
+    }
+
+    let mut groups: Vec<Group> = Vec::new();
+    for (name, rows) in by_name {
+        let npubs: BTreeSet<String> = rows
+            .iter()
+            .map(|r| r.npub.trim().to_lowercase())
+            .filter(|n| !n.is_empty())
+            .collect();
+        let mut split: BTreeMap<String, Group> = BTreeMap::new();
+        for row in rows {
+            let npub = row.npub.trim().to_lowercase();
+            let key = if npubs.len() >= 2 && !npub.is_empty() {
+                format!("npub:{npub}")
+            } else {
+                format!("name:{name}")
+            };
+            split
+                .entry(key.clone())
+                .or_insert_with(|| Group::new(key))
+                .add(row);
         }
-        if !row.role.is_empty() {
-            credit.roles.insert(row.role);
+        groups.extend(split.into_values());
+    }
+    // A credit with an `npub` and no name joins the group of that `npub`.
+    // Else its `npub` makes a group.
+    for row in unnamed {
+        let npub = row.npub.trim().to_lowercase();
+        if let Some(group) = groups.iter_mut().find(|g| g.npubs.contains(&npub)) {
+            group.add(row);
+        } else {
+            let mut group = Group::new(format!("npub:{npub}"));
+            group.add(row);
+            groups.push(group);
         }
-        credit.feeds.insert(row.feed_id.0);
     }
     Ok(groups)
 }
@@ -1336,6 +1445,39 @@ fn join_recipients(recipients: &[RecipientAgg], group_name: &str) -> Vec<Suggest
         });
     }
     joined
+}
+
+/// The name of each group, its normal name, and whether a payee can join it
+/// (ADR 0103 item 4). A payee joins the group with no `npub` when a name has
+/// more than one group, else it joins each group of the name.
+fn plan_groups(groups: &[Group]) -> Vec<(Option<String>, String, bool)> {
+    let names: Vec<(Option<String>, String)> = groups
+        .iter()
+        .map(|group| {
+            // The most frequent name. With a tie, the first name A to Z.
+            let name = group
+                .names
+                .iter()
+                .max_by(|a, b| a.1.len().cmp(&b.1.len()).then_with(|| b.0.cmp(a.0)))
+                .map(|(name, _)| name.clone());
+            let group_name = name.as_deref().map(normal_name).unwrap_or_default();
+            (name, group_name)
+        })
+        .collect();
+    groups
+        .iter()
+        .enumerate()
+        .zip(&names)
+        .map(|((i, group), (name, group_name))| {
+            let same: Vec<usize> = (0..groups.len())
+                .filter(|j| names[*j].1 == names[i].1)
+                .collect();
+            let pays = same.len() == 1
+                || !same.iter().any(|j| groups[*j].npubs.is_empty())
+                || group.npubs.is_empty();
+            (name.clone(), group_name.clone(), pays)
+        })
+        .collect()
 }
 
 /// The feeds that use a person (ADR 0099 item 6).
@@ -1483,22 +1625,25 @@ pub fn suggestions<S: BuildHasher>(
         .filter(|r| !owned_wallets.contains(&r.wallet))
         .collect();
 
+    let plans = plan_groups(&groups);
     let mut list = Vec::new();
-    for (identity_key, group) in groups {
-        // The most frequent name. With a tie, the first name A to Z. A group
-        // of credits with only an `npub` uses the `npub` as its name.
-        let name = group
-            .names
-            .iter()
-            .max_by(|a, b| a.1.len().cmp(&b.1.len()).then_with(|| b.0.cmp(a.0)))
-            .map(|(name, _)| name.clone());
-        let group_name = name.as_deref().map(normal_name).unwrap_or_default();
-        let name = name.unwrap_or_else(|| match &group.identity {
-            Identity::Npub(npub) => npub.clone(),
-            Identity::NameHref { name, .. } | Identity::Name(name) => name.clone(),
+    for (group, (name, group_name, pays)) in groups.into_iter().zip(plans) {
+        let identity_key = group.key.clone();
+        // A group of credits with only an `npub` uses the `npub` as its name.
+        let name = name.unwrap_or_else(|| {
+            group
+                .npubs
+                .iter()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| group.key.clone())
         });
 
-        let joined = join_recipients(&recipients, &group_name);
+        let joined = if pays {
+            join_recipients(&recipients, &group_name)
+        } else {
+            Vec::new()
+        };
 
         let mut credit_feeds = BTreeSet::new();
         let mut credits = Vec::new();
@@ -1531,7 +1676,7 @@ pub fn suggestions<S: BuildHasher>(
         }
 
         let mut evidence = Vec::new();
-        if matches!(group.identity, Identity::Npub(_)) {
+        if group.npubs.len() == 1 {
             evidence.push(Evidence::SameNpub);
         }
         if joined.iter().any(|r| r.joined_by == JoinedBy::Name) {
@@ -2311,24 +2456,45 @@ mod tests {
     }
 
     #[test]
-    fn credits_with_the_same_npub_make_one_suggestion() {
+    fn credits_with_one_name_and_one_npub_make_one_suggestion() {
         let collection = Collection::open_in_memory().unwrap();
         credit(&collection, 1, "Ann Lee", "artist", "", "npub1aaa");
         credit(&collection, 2, "Ann Lee", "artist", "", "npub1aaa");
-        credit(&collection, 3, "A. Lee", "mixer", "", "npub1aaa");
+        credit(&collection, 3, "ann  lee", "mixer", "", "NPUB1AAA");
+        credit(&collection, 4, "", "", "", "npub1aaa");
         let list = suggest(&collection);
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "Ann Lee");
         assert_eq!(list[0].evidence, [Evidence::SameNpub]);
-        let same: Vec<(&str, bool)> = list[0]
+        // The credit with no name has `same_name`, as ADR 0103 item 4 says.
+        assert!(list[0].credits.iter().all(|c| c.same_name));
+        let first = list[0]
             .credits
             .iter()
-            .map(|c| (c.name.as_str(), c.same_name))
+            .find(|c| c.name == "Ann Lee" && c.npub == "npub1aaa")
+            .unwrap();
+        assert_eq!(first.roles, ["artist"]);
+        assert_eq!(first.img, "img.png");
+        assert_eq!(list[0].credit_feeds, 4);
+    }
+
+    #[test]
+    fn credits_with_one_npub_and_two_names_make_one_suggestion_for_each_name() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann Lee", "artist", "", "npub1aaa");
+        credit(&collection, 2, "A. Lee", "mixer", "", "npub1aaa");
+        let list = suggest(&collection);
+        let same: Vec<(&str, &str, bool)> = list
+            .iter()
+            .map(|s| (s.identity.as_str(), s.name.as_str(), s.credits[0].same_name))
             .collect();
-        assert_eq!(same, [("A. Lee", false), ("Ann Lee", true)]);
-        assert_eq!(list[0].credits[1].roles, ["artist"]);
-        assert_eq!(list[0].credits[1].img, "img.png");
-        assert_eq!(list[0].credit_feeds, 3);
+        assert_eq!(
+            same,
+            [
+                ("name:a. lee", "A. Lee", true),
+                ("name:ann lee", "Ann Lee", true)
+            ]
+        );
     }
 
     #[test]
@@ -2360,17 +2526,91 @@ mod tests {
     }
 
     #[test]
-    fn a_credit_with_an_href_and_one_without_make_two_suggestions() {
+    fn credits_of_one_name_make_one_suggestion_with_or_without_an_href() {
         let collection = Collection::open_in_memory().unwrap();
         credit(&collection, 1, "Ann", "", "https://ann.example", "");
-        credit(&collection, 2, "Ann", "", "", "");
-        let identities: Vec<String> = suggest(&collection)
-            .into_iter()
-            .map(|s| s.identity)
-            .collect();
-        assert_eq!(identities.len(), 2);
-        assert!(identities.contains(&"name:ann".to_owned()));
-        assert!(identities.contains(&"href:ann\u{1f}https://ann.example".to_owned()));
+        credit(&collection, 2, "ann", "", "", "");
+        credit(&collection, 3, "Ann", "", "", "npub1ann");
+        let list = suggest(&collection);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].identity, "name:ann");
+        assert_eq!(list[0].credits.len(), 3);
+        assert_eq!(list[0].evidence, [Evidence::SameNpub]);
+    }
+
+    #[test]
+    fn two_npubs_with_one_name_make_two_suggestions_and_one_for_the_rest() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "", "", "npub1aaa");
+        credit(&collection, 2, "Ann", "", "", "npub1bbb");
+        credit(&collection, 3, "Ann", "", "", "");
+        credit(&collection, 4, "Ann", "", "https://ann.example", "");
+        payee(&collection, 5, "node-1", "ann");
+        let list = suggest(&collection);
+        let mut identities: Vec<&str> = list.iter().map(|s| s.identity.as_str()).collect();
+        identities.sort_unstable();
+        assert_eq!(identities, ["name:ann", "npub:npub1aaa", "npub:npub1bbb"]);
+        let rest = list.iter().find(|s| s.identity == "name:ann").unwrap();
+        assert_eq!(rest.credits.len(), 2);
+        assert!(rest.evidence.contains(&Evidence::SameName));
+        // The payee joins the suggestion with no `npub` only.
+        for s in &list {
+            let expected = usize::from(s.identity == "name:ann");
+            assert_eq!(s.recipients.len(), expected, "{}", s.identity);
+        }
+        let by_npub = list.iter().find(|s| s.identity == "npub:npub1aaa").unwrap();
+        assert_eq!(by_npub.evidence, [Evidence::SameNpub]);
+        assert!(by_npub.credits.iter().all(|c| c.same_name));
+    }
+
+    #[test]
+    fn a_payee_joins_each_suggestion_of_a_name_when_all_have_an_npub() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "", "", "npub1aaa");
+        credit(&collection, 2, "Ann", "", "", "npub1bbb");
+        payee(&collection, 3, "node-1", "Ann");
+        let list = suggest(&collection);
+        assert_eq!(list.len(), 2);
+        assert!(list.iter().all(|s| s.recipients.len() == 1));
+    }
+
+    #[test]
+    fn a_wallet_gives_its_members_with_their_types() {
+        let collection = Collection::open_in_memory().unwrap();
+        collection
+            .set_keysend_lookup(&Lookup {
+                address: "ann@example.com".into(),
+                pubkey: Some("node-1".into()),
+                custom_key: Some("696969".into()),
+                custom_value: Some("abc".into()),
+                status: LookupStatus::Found,
+                checked_at: 1,
+            })
+            .unwrap();
+        let lookups = lookup_map(&collection).unwrap();
+        let wallet = PersonWallet {
+            id: 1,
+            key: key("ann@example.com"),
+            recipient_type: "lnaddress".to_owned(),
+            position: 0,
+            evidence: "user".to_owned(),
+            linked_at: 0,
+        };
+        let members = wallet_members(&wallet, &lookups);
+        assert_eq!(members.len(), 2);
+        assert_eq!(members[0].key.address, "node-1");
+        assert_eq!(members[0].key.custom_key.as_deref(), Some("696969"));
+        assert_eq!(members[0].key.custom_value.as_deref(), Some("abc"));
+        assert_eq!(members[0].recipient_type, "node");
+        assert_eq!(members[1].key.address, "ann@example.com");
+        assert_eq!(members[1].recipient_type, "lnaddress");
+        // A wallet with no lookup has only its own key.
+        let lone = PersonWallet {
+            key: key("node-9"),
+            recipient_type: "node".to_owned(),
+            ..wallet
+        };
+        assert_eq!(wallet_members(&lone, &lookups).len(), 1);
     }
 
     #[test]

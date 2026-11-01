@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md), [ADR 0102](../adr/0102-delete-a-person-changes-no-feed.md), [ADR 0098](../adr/0098-the-people-module.md) items 6, 7 and 17 to 19, [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) items 3, 4 and 15, [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 12 to 15, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md) and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
 
-Status: Not started.
+Status: In progress. Packet 067a is complete.
 
 ## Goal
 

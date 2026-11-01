@@ -60,6 +60,16 @@ fn person_json(
     let uses = people::uses(collection, person, lookups)?;
     let mut value = serde_json::to_value(person).map_err(|e| ApiError::internal(e.to_string()))?;
     value["default_address"] = json!(people::default_address(person, lookups));
+    // Each wallet gives its members, for the menu of the default address.
+    for (wallet, json_wallet) in person.wallets.iter().zip(
+        value["wallets"]
+            .as_array_mut()
+            .map(|a| a.iter_mut())
+            .into_iter()
+            .flatten(),
+    ) {
+        json_wallet["members"] = json!(people::wallet_members(wallet, lookups));
+    }
     let feeds: HashSet<_> = uses
         .pays
         .iter()

@@ -52,6 +52,14 @@ const PAGES = {
     { id: 'cards', tier: 'identity' },
     { id: 'add', tier: 'content' },
   ],
+  person: () => [
+    { id: 'profile', tier: 'identity' },
+    { id: 'actions', tier: 'identity' },
+    { id: 'where', tier: 'identity' },
+    { id: 'payment', tier: 'content' },
+    { id: 'credits', tier: 'details' },
+    { id: 'support', tier: 'details' },
+  ],
   'studio-settings': ({ server }) => [
     ...(server ? [{ id: 'account', tier: 'setup' }] : []),
     { id: 'apps', tier: 'setup' },

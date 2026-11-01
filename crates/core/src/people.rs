@@ -1346,6 +1346,32 @@ pub struct PersonUses {
     /// Each feed whose credits have a credit name or a Nostr key of the
     /// person.
     pub credited: Vec<FeedId>,
+    /// The places of the person in each feed of `pays` and `credited`, by
+    /// feed ID (ADR 0099 item 5).
+    pub places: Vec<FeedPlaces>,
+}
+
+/// The places of a person in one feed (ADR 0099 item 5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FeedPlaces {
+    /// The feed.
+    pub feed_id: FeedId,
+    /// Each address of the person in the value blocks of the feed, each one
+    /// time. The keys are the keys that the feed has.
+    pub pays: Vec<RecipientKey>,
+    /// Each role of a credit of the person in the feed, each one time, A to
+    /// Z. A credit with no role gives empty text.
+    pub roles: Vec<String>,
+}
+
+impl FeedPlaces {
+    fn new(feed_id: FeedId) -> Self {
+        Self {
+            feed_id,
+            pays: Vec::new(),
+            roles: Vec::new(),
+        }
+    }
 }
 
 /// The feeds that pay a wallet of `person` and the feeds that credit the
@@ -1366,10 +1392,12 @@ pub fn uses<S: BuildHasher>(
         .map(|w| parts(&keysend::wallet_key(&w.key, lookups)))
         .collect();
     let mut pays = BTreeSet::new();
+    let mut places: BTreeMap<i64, FeedPlaces> = BTreeMap::new();
     if !wallets.is_empty() {
-        let mut statement = collection
-            .db()
-            .prepare("SELECT feed_id, address, custom_key, custom_value FROM feed_recipients")?;
+        let mut statement = collection.db().prepare(
+            "SELECT feed_id, address, custom_key, custom_value FROM feed_recipients
+             ORDER BY feed_id, address, custom_key, custom_value",
+        )?;
         let rows = statement.query_map([], |r| {
             let custom_key: String = r.get(2)?;
             let custom_value: String = r.get(3)?;
@@ -1386,6 +1414,12 @@ pub fn uses<S: BuildHasher>(
             let (feed, key) = row?;
             if wallets.contains(&parts(&keysend::wallet_key(&key, lookups))) {
                 pays.insert(feed);
+                let place = places
+                    .entry(feed)
+                    .or_insert_with(|| FeedPlaces::new(FeedId(feed)));
+                if !place.pays.contains(&key) {
+                    place.pays.push(key);
+                }
             }
         }
     }
@@ -1403,11 +1437,21 @@ pub fn uses<S: BuildHasher>(
         let keyed = !row.npub.is_empty() && npubs.contains(row.npub.to_lowercase().as_str());
         if named || keyed {
             credited.insert(row.feed_id.0);
+            places
+                .entry(row.feed_id.0)
+                .or_insert_with(|| FeedPlaces::new(row.feed_id))
+                .roles
+                .push(row.role.trim().to_owned());
         }
+    }
+    for place in places.values_mut() {
+        place.roles.sort();
+        place.roles.dedup();
     }
     Ok(PersonUses {
         pays: feed_ids(&pays),
         credited: feed_ids(&credited),
+        places: places.into_values().collect(),
     })
 }
 

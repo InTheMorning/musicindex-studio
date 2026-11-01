@@ -3,7 +3,9 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decisions: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) items 1 to 18, [ADR 0098](../adr/0098-the-people-module.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0092](../adr/0092-file-hosts-and-the-destination-icons.md), [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0071](../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md), [ADR 0037](../adr/0037-button-roles.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
-Status: Not started.
+Status: In progress. Packet 065a is complete. Notes from the reviews:
+
+- 065a: `GET /people` and `GET /people/{id}` also give `feeds`, the number of distinct feeds of `pays` and `credited`, because `personRow` needs it. `roles` keeps an empty role as `""`, so that a credit with no role gives "Credited". `crates/api/src/ui.rs` serves `people.js`. An address line of `people.js` gives no provider name, because `places` has no lookup data. Packet 065d gives the address lines with the provider.
 
 ## Goal
 

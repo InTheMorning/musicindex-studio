@@ -60,12 +60,20 @@ fn person_json(
     let uses = people::uses(collection, person, lookups)?;
     let mut value = serde_json::to_value(person).map_err(|e| ApiError::internal(e.to_string()))?;
     value["default_address"] = json!(people::default_address(person, lookups));
+    let feeds: HashSet<_> = uses
+        .pays
+        .iter()
+        .chain(&uses.credited)
+        .map(|f| f.0)
+        .collect();
+    value["feeds"] = json!(feeds.len());
     if counts_only {
         value["pays"] = json!(uses.pays.len());
         value["credited"] = json!(uses.credited.len());
     } else {
         value["pays"] = json!(uses.pays);
         value["credited"] = json!(uses.credited);
+        value["places"] = json!(uses.places);
     }
     Ok(value)
 }

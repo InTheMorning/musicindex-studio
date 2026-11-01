@@ -10694,9 +10694,30 @@ async fn a_suggestion_makes_a_person_that_the_feeds_use() {
     assert_eq!(status, StatusCode::OK, "{person}");
     assert_eq!(person["pays"], json!([payee]));
     assert_eq!(person["credited"], json!([credit]));
+    // ADR 0099 item 5: the places give the address and the role of each feed.
+    let places = person["places"].as_array().unwrap();
+    assert_eq!(places.len(), 2, "{person}");
+    assert!(
+        places.iter().all(|p| p.get("feed_id").is_some()),
+        "{person}"
+    );
+    let paid = places
+        .iter()
+        .find(|p| p["feed_id"] == json!(payee))
+        .unwrap();
+    assert_eq!(paid["pays"][0]["address"], "ann@example.com");
+    assert_eq!(paid["roles"], json!([]));
+    let credited = places
+        .iter()
+        .find(|p| p["feed_id"] == json!(credit))
+        .unwrap();
+    assert_eq!(credited["pays"], json!([]));
+    assert_eq!(credited["roles"], json!(["vocals"]));
     let (_, list) = call(&app, "GET", "/api/v1/people", None).await;
     assert_eq!(list[0]["pays"], 1);
     assert_eq!(list[0]["credited"], 1);
+    assert_eq!(list[0]["feeds"], 2);
+    assert!(list[0].get("places").is_none(), "{list}");
 }
 
 #[tokio::test]

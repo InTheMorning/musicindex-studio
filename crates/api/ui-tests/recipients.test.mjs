@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
-  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, pickerRows, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
+  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
   walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT,
 } from '../ui/recipients.js';
 
@@ -156,11 +156,6 @@ test('an entry with no addresses gives one line', () => {
   assert.deepEqual(addressLines(entry), [{ label: 'Lightning node', address: '03cd', account: null }]);
   assert.equal(lnaddressOf(entry), null);
   assert.equal(nodeOf(entry), null);
-});
-
-test('the picker gives one row for each address, with the name of the entry', () => {
-  const rows = pickerRows([{ ...wallet, name: 'TJ Doerfel' }]);
-  assert.deepEqual(rows.map((r) => [r.address, r.name]), [['tj@getalby.com', 'TJ Doerfel'], ['02ab12cd34ef5678', 'TJ node']]);
 });
 
 test('the lookup hint has the text of ADR 0099 item 16', () => {

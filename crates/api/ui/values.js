@@ -3,7 +3,9 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { pickerRows, lookupHint } from './recipients.js';
+import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT } from './recipients.js';
+import { recipientPickRows, filterPickRows, recipientIdentity } from './people.js';
+import { PersonArt } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
 // ---- Shares and percentages ----
@@ -104,8 +106,8 @@ function fresh(value) {
 // Studio keeps the values of the fields that the editor does not show.
 
 const TYPES = [
-  { value: 'node', label: 'node (keysend)', hint: 'The public key of the Lightning node, 66 hexadecimal characters.' },
-  { value: 'lnaddress', label: 'lnaddress', hint: 'A Lightning address, for example name@example.com.' },
+  { value: 'node', label: WALLET_TYPES[0][1], hint: 'The public key of the Lightning node, 66 hexadecimal characters.' },
+  { value: 'lnaddress', label: WALLET_TYPES[1][1], hint: 'A Lightning address, for example name@example.com.' },
 ];
 
 // One load of `GET /recipients` for the page. Each `Recipients` shares it. The
@@ -180,8 +182,8 @@ function Recipients({ id, recipients, defaultType, onChange }) {
             ? lookupHint(r.address.trim()) : type ? type.hint : 'A node public key, or a Lightning address.'}
           value=${r.address} onChange=${change('address')} />
         ${r.recipient_type !== 'lnaddress' && html`<div class="grid2">
-          <${TextField} id=${`${rid}-key`} label="Custom key" hint="For a node that many people share." value=${r.custom_key} onChange=${change('custom_key')} />
-          <${TextField} id=${`${rid}-value`} label="Custom value" hint="The account on that node." value=${r.custom_value} onChange=${change('custom_value')} />
+          <${TextField} id=${`${rid}-key`} label="Custom key" hint=${CUSTOM_KEY_HINT} value=${r.custom_key} onChange=${change('custom_key')} />
+          <${TextField} id=${`${rid}-value`} label="Account" hint="The account on that node." value=${r.custom_value} onChange=${change('custom_value')} />
         </div>`}
         <div class="grid2">
           <${TextField} id=${`${rid}-split`} label=${isFee(r) ? 'Split (percent)' : 'Split (shares)'} inputmode="numeric" value=${r.split} onChange=${change('split')} />
@@ -206,7 +208,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         onChange([...recipients, added]);
       }}><span class="num">＋</span><span class="title">Add a recipient</span></button>
     <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
-      <span class="num">＋</span><span class="title">Pick from your recipients</span></button>
+      <span class="num">＋</span><span class="title">Pick from your people</span></button>
     <h3 class="value-group">Fees</h3>
     ${ofGroup(true)}
     ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
@@ -237,7 +239,7 @@ function SaveRecipientButton({ recipient }) {
   return html`<${ErrorNotice} error=${error} />
     <div class="actions">
       <button class="button action" type="button" disabled=${busy} onClick=${save}>
-        ${saved ? 'Saved' : busy ? 'Saving…' : 'Save to Your Recipients'}</button>
+        ${saved ? 'Added' : busy ? 'Adding…' : 'Add to People'}</button>
     </div>`;
 }
 
@@ -249,26 +251,25 @@ function SaveRecipientButton({ recipient }) {
 // The identity of a recipient: its address, its custom key and its custom
 // value (ADR 0027 item 3). Two rows with the same identity are the same
 // recipient, even with a different name.
-function identityOf(r) {
-  return `${r.address || ''}\u0000${r.custom_key || ''}\u0000${r.custom_value || ''}`;
-}
+const identityOf = recipientIdentity;
 
 // One row of a part of the picker: a checkbox, the name, the address and a
-// status word. The checkbox sits in its own label of one target size, so
-// that a Remove button can share the row (musicindex ADR 0029 R-SCALE-3).
-function PickRow({ name, address, status, checked, taken, onToggle, remove }) {
+// status word. The checkbox sits in its own label of one target size
+// (musicindex ADR 0029 R-SCALE-3). `lead` is a picture before the name.
+function PickRow({ name, address, line, status, checked, taken, onToggle, lead }) {
   const label = taken ? 'Already in this list' : status;
   return html`<div class="link-row pick-row">
     <label class="pick-box"><input type="checkbox" checked=${checked || taken} disabled=${taken}
       aria-label=${name} onChange=${onToggle} /></label>
-    <span class="text"><span class="title">${name}</span><span class="sub mono">${address}</span></span>
+    <span class="text"><span class="title">${lead || ''}${name}</span>${line
+      ? html`<span class="sub">${line}</span>`
+      : html`<span class="sub mono">${address}</span>`}</span>
     <span class="summary">${label || ''}</span>
-    <span class="pick-action">${remove || ''}</span>
   </div>`;
 }
 
-// The picker sheet: musicindex, then the user's recipients (ADR 0027 items
-// 1, 5 to 7, and ADR 0030). `Recipients` opens it from the album and from each track.
+// The picker sheet: the people, the payees with no person, then musicindex
+// (ADR 0099 item 19, ADR 0027 items 5 to 7, and ADR 0030). `Recipients` opens it from the album and from each track.
 function PickerSheet({ open, recipients, onAdd, onClose }) {
   const ref = useSheet(open);
   const taken = new Set(recipients.map(identityOf));
@@ -283,14 +284,9 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
-  const removeSaved = (savedId) => yours.run(async () => {
-    await api(`/recipients/saved/${savedId}`, { method: 'DELETE' });
-    setList(pickerRows(await api('/recipients')));
-  });
-  const q = filter.trim().toLowerCase();
-  const shownYours = (list || []).filter(
-    (r) => !q || `${r.name || ''} ${r.address || ''}`.toLowerCase().includes(q),
-  );
+  const shownPeople = list ? filterPickRows(list.people, filter) : [];
+  const shownPayees = list ? filterPickRows(list.payees, filter) : [];
+  const yoursRows = list ? [...list.people, ...list.payees] : [];
 
   // ---- From musicindex ----
   const [query, setQuery] = useState('');
@@ -360,25 +356,23 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     setTrackData(null);
     setIndexSelected(new Map());
     setList(null);
-    yours.run(async () => setList(pickerRows(await api('/recipients'))));
+    yours.run(async () => {
+      const [people, recipients] = await Promise.all([api('/people'), api('/recipients')]);
+      setList(recipientPickRows(people, recipients));
+    });
   }, [open]);
 
   const total = yoursSelected.size + indexSelected.size;
   const selectedRows = [
-    ...(list || []).filter((r) => yoursSelected.has(identityOf(r)))
-      .map((r) => ({ key: identityOf(r), recipient: r, from: 'Your recipients', clear: () => toggleYours(identityOf(r)) })),
+    ...yoursRows.filter((r) => yoursSelected.has(r.identity))
+      .map((r) => ({ key: r.identity, recipient: r.recipient, from: r.person ? 'People' : 'Payees', clear: () => toggleYours(r.identity) })),
     ...[...indexSelected].map(([key, entry]) => ({ key, recipient: entry.recipient, from: entry.from,
       clear: () => toggleIndex(entry.recipient) })),
   ];
   const add = () => {
     const combined = new Map();
-    for (const r of list || []) {
-      if (yoursSelected.has(identityOf(r))) {
-        combined.set(identityOf(r), {
-          name: r.name, recipient_type: r.recipient_type, address: r.address, split: '',
-          custom_key: r.custom_key, custom_value: r.custom_value, fee: null,
-        });
-      }
+    for (const r of yoursRows) {
+      if (yoursSelected.has(r.identity)) combined.set(r.identity, r.recipient);
     }
     // An imported recipient keeps its fee mark but gets no split. The user
     // gives each new recipient its split (ADR 0030).
@@ -388,10 +382,34 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
 
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="picker-title" onClose=${onClose}>
     <header>
-      <h2 id="picker-title">Pick recipients</h2>
+      <h2 id="picker-title">Pick From Your People</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
+      <section class="page-section">
+        <h2>People</h2>
+        <${Field} id="picker-filter" label="Filter" value=${filter} placeholder="Name or address"
+          onInput=${(e) => setFilter(e.target.value)} />
+        <${ErrorNotice} error=${yours.error} />
+        ${list === null
+          ? html`<p class="hint" role="status">Loading your people…</p>`
+          : html`<div class="group">
+              ${shownPeople.length === 0 && html`<p class="hint">${list.people.length === 0
+                ? 'You have no people with a wallet yet.' : 'No person matches this filter.'}</p>`}
+              ${shownPeople.map((r) => html`<${PickRow} key=${`p-${r.id}`} name=${r.name} line=${r.line}
+                lead=${html`<${PersonArt} person=${r.person} />`}
+                checked=${yoursSelected.has(r.identity)} taken=${taken.has(r.identity)} onToggle=${() => toggleYours(r.identity)} />`)}
+            </div>`}
+      </section>
+
+      ${list !== null && list.payees.length > 0 && html`<section class="page-section">
+        <h2>Payees with no person</h2>
+        <div class="group">
+          ${shownPayees.length === 0 && html`<p class="hint">No payee matches this filter.</p>`}
+          ${shownPayees.map((r) => html`<${PickRow} key=${`y-${r.identity}`} name=${r.name} line=${r.line}
+            checked=${yoursSelected.has(r.identity)} taken=${taken.has(r.identity)} onToggle=${() => toggleYours(r.identity)} />`)}
+        </div>
+      </section>`}
       <section class="page-section">
         <h2>From musicindex</h2>
         <form class="form" onSubmit=${runSearch} role="search">
@@ -443,27 +461,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
           })}
         </div>`}
       </section>
-
-      <section class="page-section">
-        <h2>Your recipients</h2>
-        <${Field} id="picker-filter" label="Filter" value=${filter} placeholder="Name or address"
-          onInput=${(e) => setFilter(e.target.value)} />
-        <${ErrorNotice} error=${yours.error} />
-        ${list === null
-          ? html`<p class="hint" role="status">Loading your recipients…</p>`
-          : html`<div class="group">
-              ${shownYours.length === 0 && html`<p class="hint">${list.length === 0
-                ? 'You have no recipients yet.' : 'No recipient matches this filter.'}</p>`}
-              ${shownYours.map((r) => {
-                const key = identityOf(r);
-                return html`<${PickRow} key=${key} name=${r.name || r.address || 'Recipient'} address=${r.address}
-                  status=${r.saved_id !== null ? 'Saved' : `In ${r.feeds} feed${r.feeds === 1 ? '' : 's'}`}
-                  checked=${yoursSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleYours(key)}
-                  remove=${r.saved_id !== null && html`<button class="button destructive" type="button" disabled=${yours.busy}
-                    onClick=${() => removeSaved(r.saved_id)}>Remove</button>`} />`;
-              })}
-            </div>`}
-      </section>
+      <p class="hint">A new recipient gets no split. You give the splits in the editor.</p>
     </div>
     <footer class="pick-footer">
       ${showSelected && selectedRows.length > 0 && html`<div class="group pick-selected" id="picker-selected">

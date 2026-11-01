@@ -579,3 +579,56 @@ export function changeLine(set, name) {
     default: return '';
   }
 }
+
+// ---- The recipient picker (ADR 0099 item 19, task 066a) ----
+
+const sameKey = (a, b) => a.address === b.address && (a.custom_key || null) === (b.custom_key || null)
+  && (a.custom_value || null) === (b.custom_value || null);
+
+// The identity of a recipient in a list: its address, its custom key and its
+// custom value (ADR 0027 item 3).
+export const recipientIdentity = (r) => `${r.address || ''}\u0000${r.custom_key || ''}\u0000${r.custom_value || ''}`;
+
+// The new recipient from a person: the name of the person and the values of
+// the default address. It is a start value, with no split (ADR 0030).
+export function recipientFromPerson(person) {
+  const key = person.default_address || {};
+  const wallet = (person.wallets || []).find((w) => sameKey(w.key, key));
+  // A default address that joins a wallet through the keysend lookup is not
+  // a wallet row. Its start type follows the rule of the core: an address
+  // with "@" is a Lightning address, else a node key (task 064b).
+  const type = wallet && wallet.recipient_type ? wallet.recipient_type : (key.address || '').includes('@') ? 'lnaddress' : 'node';
+  return {
+    name: person.name, recipient_type: type, address: key.address ?? null, split: '',
+    custom_key: key.custom_key ?? null, custom_value: key.custom_value ?? null, fee: null,
+  };
+}
+
+// The rows of the recipient picker. `people` is the list of `GET /people`
+// and `recipients` is the list of `GET /recipients`. A person with no wallet
+// or no default address has no row. A payee row is an address with no person.
+export function recipientPickRows(people, recipients) {
+  const rows = (people || []).filter((p) => p.default_address && (p.wallets || []).length > 0).map((person) => {
+    const start = recipientFromPerson(person);
+    const found = (recipients || []).flatMap((e) => e.addresses || []).find((m) => sameKey(m, start));
+    const member = { ...start, provider: found ? found.provider : null };
+    return { id: person.id, name: person.name, img: person.img, line: `Adds ${memberText(member)}`, identity: recipientIdentity(start), recipient: start, person };
+  });
+  const payees = (recipients || []).filter((e) => e.saved_id === null || e.saved_id === undefined).flatMap((entry) => {
+    const members = entry.addresses || [];
+    const list = members.length === 0 ? [entry] : members.map((m) => ({ ...m, name: m.name || entry.name }));
+    return list.map((m) => ({
+      name: m.name || m.address || 'Recipient', line: memberText(m), identity: recipientIdentity(m),
+      recipient: { name: m.name, recipient_type: m.recipient_type, address: m.address, split: '', custom_key: m.custom_key ?? null, custom_value: m.custom_value ?? null, fee: null },
+    }));
+  });
+  return { people: rows, payees };
+}
+
+// The rows that match the text of the filter field, by name and address. This
+// is a display filter only.
+export function filterPickRows(rows, query) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (q === '') return rows;
+  return rows.filter((r) => `${r.name || ''} ${r.recipient.address || ''}`.toLowerCase().includes(q));
+}

@@ -91,16 +91,6 @@ export function startType(entry, kind) {
   return memberOfType(entry, first) ? first : second;
 }
 
-// One picker row for each member of each wallet. A member with no name gets
-// the name of its wallet (ADR 0027 item 3).
-export function pickerRows(list) {
-  return (list || []).flatMap((entry) => {
-    const members = entry.addresses || [];
-    if (members.length === 0) return [entry];
-    return members.map((m) => ({ ...m, name: m.name || entry.name }));
-  });
-}
-
 // The value of the option "Other address" of the suggestion menu.
 export const OTHER_ADDRESS = '';
 

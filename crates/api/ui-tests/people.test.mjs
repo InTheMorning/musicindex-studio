@@ -384,3 +384,53 @@ test('the words of an address line and a change title follow ADR 0099 items 15 a
   assert.equal(memberText({ address: '03aa', recipient_type: 'node', custom_value: 'x1' }), 'Lightning node 03aa · account x1');
   assert.equal(changeTitle({ kind: 'add' }), 'Add to All Releases');
 });
+
+// ---- The recipient picker (task 066a) ----
+import { recipientPickRows, recipientFromPerson, filterPickRows } from '../ui/people.js';
+
+const PICK_PEOPLE = [
+  { id: 1, name: 'Mary Kate', img: '', default_address: { address: '03aa', custom_key: '696969', custom_value: 'acct1' },
+    wallets: [{ key: { address: '03aa', custom_key: '696969', custom_value: 'acct1' }, recipient_type: 'node' }] },
+  { id: 2, name: 'Jo Keys', img: '', default_address: null, wallets: [] },
+];
+const PICK_RECIPIENTS = [
+  { name: 'Mary wallet', saved_id: 1, addresses: [{ address: '03aa', custom_key: '696969', custom_value: 'acct1', recipient_type: 'node', provider: 'fountain.fm' }] },
+  { name: 'BoostBot', saved_id: null, addresses: [{ address: 'bot@x.example', recipient_type: 'lnaddress' }] },
+];
+
+test('recipientPickRows gives a person row with its default address and leaves out a person with no wallet', () => {
+  const { people, payees } = recipientPickRows(PICK_PEOPLE, PICK_RECIPIENTS);
+  assert.deepEqual(people.map((r) => r.name), ['Mary Kate']);
+  assert.equal(people[0].line, 'Adds fountain.fm node · account acct1');
+  assert.deepEqual(payees.map((r) => r.name), ['BoostBot']);
+  assert.equal(payees[0].line, 'Lightning address bot@x.example');
+});
+
+test('recipientFromPerson gives the name and the values of the default address, and no split', () => {
+  assert.deepEqual(recipientFromPerson(PICK_PEOPLE[0]), {
+    name: 'Mary Kate', recipient_type: 'node', address: '03aa', split: '', custom_key: '696969', custom_value: 'acct1', fee: null,
+  });
+});
+
+test('filterPickRows filters by name and address', () => {
+  const { payees } = recipientPickRows(PICK_PEOPLE, PICK_RECIPIENTS);
+  assert.equal(filterPickRows(payees, 'BOT@').length, 1);
+  assert.equal(filterPickRows(payees, 'zzz').length, 0);
+});
+
+test('the type menu of the value editor uses the words of ADR 0099 item 14', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../ui/values.js', import.meta.url), 'utf8');
+  assert.match(source, /label: WALLET_TYPES\[0\]\[1\]/);
+  assert.match(source, /label: WALLET_TYPES\[1\]\[1\]/);
+  const { WALLET_TYPES } = await import('../ui/recipients.js');
+  assert.deepEqual(WALLET_TYPES.map(([, label]) => label), ['Lightning Node', 'Lightning Address']);
+  assert.match(source, /Add to People/);
+});
+
+test('a default address that is not a wallet row gets the type of its form', () => {
+  const person = { name: 'Ann', default_address: { address: 'ann@example.com' }, wallets: [{ id: 1, key: { address: '02ab' }, recipient_type: 'node' }] };
+  assert.equal(recipientFromPerson(person).recipient_type, 'lnaddress');
+  const node = { name: 'Bo', default_address: { address: '03cd' }, wallets: [] };
+  assert.equal(recipientFromPerson(node).recipient_type, 'node');
+});

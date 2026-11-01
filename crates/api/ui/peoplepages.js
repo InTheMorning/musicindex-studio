@@ -23,7 +23,7 @@ import {
 
 // The round picture of a person. A person with no picture, or a picture that
 // Studio cannot read, shows the initials of the name.
-function PersonArt({ person, large = false }) {
+export function PersonArt({ person, large = false }) {
   const { src } = useImage(person.img);
   return html`<span class=${large ? 'person-art large' : 'person-art'} aria-hidden="true">${src ? html`<img src=${src} alt="" />` : initials(person.name)}</span>`;
 }

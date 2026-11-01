@@ -1201,16 +1201,16 @@ select.position:focus { background: var(--fill); }
 
 /* The recipient picker (task 013c, ADR 0027). A row is a .link-row in a
    .group; the sheet already puts a .group on level 3 (below). The checkbox
-   sits in its own 44 px label, so that a Remove button can share the row. */
-/* Fixed columns, so that the status and the Remove button line up from row
-   to row: the checkbox, the name and address, the status, the action. */
+   sits in its own 44 px label. */
+/* Fixed columns, so that the status lines up from row
+   to row: the checkbox, the name and address, the status. */
 .pick-row {
   display: grid;
-  grid-template-columns: var(--target) minmax(0, 1fr) 9.5rem 6.5rem;
+  grid-template-columns: var(--target) minmax(0, 1fr) 9.5rem;
   cursor: default;
 }
 .pick-row .summary { white-space: normal; }
-.pick-action { display: flex; justify-content: flex-end; }
+.pick-row .title .person-art { display: inline-grid; vertical-align: middle; margin-right: 8px; }
 /* The footer of the picker: the list of the selections, when it is open,
    then the handle and the buttons. */
 .sheet footer.pick-footer { flex-direction: column; align-items: stretch; }
@@ -1238,7 +1238,6 @@ select.position:focus { background: var(--fill); }
 @media (max-width: 760px) {
   .pick-row { grid-template-columns: var(--target) minmax(0, 1fr) auto; }
   .pick-row .summary { grid-column: 2; grid-row: 2; }
-  .pick-action { grid-column: 3; grid-row: 1 / span 2; }
 }
 .pick-row .pick-box {
   display: inline-flex;

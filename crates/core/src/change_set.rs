@@ -170,6 +170,15 @@ pub enum RecipientOperation {
         /// The credits of the person.
         credits: CreditMatch,
     },
+    /// Add the credit of a person to the channel of one publisher feed, and
+    /// keep it as its own operation (ADR 0118 items 2 and 12). The change
+    /// works as [`RecipientOperation::AddToReleases`] with only `credit`.
+    CreditFeed {
+        /// The credit part.
+        credit: NewCredit,
+        /// The credits of the person.
+        credits: CreditMatch,
+    },
     /// Remove the payee, the credit, or both, of a person.
     RemovePerson {
         /// True to remove the recipients of the wallet.
@@ -620,6 +629,8 @@ fn apply_block(
             Some(payee) => add_payee(block, wallet, payee.to_recipient(), payee.percent),
             None => BlockResult::Skipped(Cause::NothingSelected),
         },
+        // A credit feed has no payee, as Add to all releases with only a credit.
+        RecipientOperation::CreditFeed { .. } => BlockResult::Skipped(Cause::NothingSelected),
         RecipientOperation::Correct { .. } => correct_in_block(block, wallet, operation),
     }
 }
@@ -1073,9 +1084,9 @@ fn add_to_block(block: &mut ValueBlock, added: Recipient, percent: u64) -> Block
 fn pick_cause(causes: &[Cause], operation: &RecipientOperation) -> Cause {
     if causes.is_empty() {
         return match operation {
-            RecipientOperation::Add { .. } | RecipientOperation::AddToReleases { .. } => {
-                Cause::NoValueBlock
-            }
+            RecipientOperation::Add { .. }
+            | RecipientOperation::AddToReleases { .. }
+            | RecipientOperation::CreditFeed { .. } => Cause::NoValueBlock,
             _ => Cause::NoRecipient,
         };
     }
@@ -1107,6 +1118,15 @@ pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -
     }
     if matches!(operation, RecipientOperation::AddToReleases { .. }) {
         return add_to_releases(feed, wallet, operation);
+    }
+    if let RecipientOperation::CreditFeed { credit, credits } = operation {
+        let as_add = RecipientOperation::AddToReleases {
+            payee: None,
+            credit: Some(credit.clone()),
+            support_link: None,
+            credits: credits.clone(),
+        };
+        return add_to_releases(feed, wallet, &as_add);
     }
     let mut causes = Vec::new();
     let mut run = |blocks: &mut [Entry<ValueBlock>], persons: &mut Vec<Entry<Person>>| -> bool {
@@ -1269,10 +1289,21 @@ pub fn make_person_change_set(
 ) -> Result<ChangeSet, PipelineError> {
     if matches!(operation, PersonOperation::CreditFeed { .. }) {
         check_credit_feed(collection, feeds)?;
+        link_credit_name(collection, id)?;
     }
     let lookups = lookup_map(collection)?;
     let (wallet, snapshot) = person_operation(collection, id, operation, &lookups)?;
     build_change_set(collection, start, &wallet, &snapshot, Some(id), feeds)
+}
+
+/// Link the credit name of a person, with the values of its credit (ADR
+/// 0118 item 11). A remove after the write then finds the credit. A credit
+/// name of a different person gives a conflict, and no change is made.
+fn link_credit_name(collection: &Collection, id: PersonId) -> Result<(), PipelineError> {
+    let person = people::person(collection, id)?;
+    let npub = person.keys.first().map_or("", |k| k.npub.as_str());
+    people::add_credit_name(collection, id, &person.name, &person.href, npub)?;
+    Ok(())
 }
 
 /// Refuse a channel credit for other than one publisher feed (ADR 0118
@@ -1612,10 +1643,8 @@ pub fn person_operation<S: BuildHasher>(
         },
         PersonOperation::CreditFeed { role, group } => {
             let (role, group) = role_and_group(role, group);
-            RecipientOperation::AddToReleases {
-                payee: None,
-                credit: Some(credit_of(&person, role, group)),
-                support_link: None,
+            RecipientOperation::CreditFeed {
+                credit: credit_of(&person, role, group),
                 credits,
             }
         }

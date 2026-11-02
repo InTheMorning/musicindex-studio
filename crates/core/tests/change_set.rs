@@ -1295,6 +1295,11 @@ const PUBLISHER_WITH_CREDIT: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 
 /// A person named `Ann` with one Nostr key and no wallet.
 fn ann(s: &Setup) -> people::PersonId {
+    ann_with_key(s, "npub1ann")
+}
+
+/// A person named `Ann` with the Nostr key `npub`, and no wallet.
+fn ann_with_key(s: &Setup, npub: &str) -> people::PersonId {
     let id = people::add_person(
         &s.collection,
         &PersonFields {
@@ -1305,7 +1310,7 @@ fn ann(s: &Setup) -> people::PersonId {
         },
     )
     .unwrap();
-    people::add_key(&s.collection, id, "npub1ann").unwrap();
+    people::add_key(&s.collection, id, npub).unwrap();
     id
 }
 
@@ -1437,4 +1442,109 @@ fn credit_feed_refuses_two_feeds_or_an_album_and_makes_no_draft() {
     assert!(album.collection.draft(album.feeds[0]).unwrap().is_none());
     assert_eq!(publishers.collection.change_set_rows().unwrap().len(), 0);
     assert_eq!(album.collection.change_set_rows().unwrap().len(), 0);
+}
+
+/// A person named `Bea` with the credit name `Ann` of another person.
+fn other_person_with_ann_credit(s: &Setup) -> people::PersonId {
+    let bea = people::add_person(
+        &s.collection,
+        &PersonFields {
+            name: "Bea".into(),
+            ..PersonFields::default()
+        },
+    )
+    .unwrap();
+    people::add_credit_name(&s.collection, bea, "Ann", "", "npub1ann").unwrap();
+    bea
+}
+
+#[test]
+fn credit_feed_links_the_credit_name_and_a_remove_after_its_write_removes_the_credit() {
+    let mut s = setup_with(PUBLISHER);
+    // The write checks each Nostr key, so the key must be a valid npub.
+    let id = ann_with_key(
+        &s,
+        "npub19573mxeqcq5k6xt7hcp2e4wgd9wakh7mvz7l5zq7l3f3t4glnz6su85g79",
+    );
+    let mut starter = start(&s);
+    make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &credit_feed("Vocalist", ""),
+        &s.feeds[..1],
+    )
+    .unwrap();
+    let person = people::person(&s.collection, id).unwrap();
+    assert_eq!(
+        person.credit_names.len(),
+        1,
+        "ADR 0118 item 11: the credit name must be linked to the person."
+    );
+    drop(starter);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feeds[0]).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feeds[0],
+        &diff.id,
+    )
+    .unwrap();
+    let mut starter = start(&s);
+    let remove = PersonOperation::Remove {
+        payee: false,
+        credit: true,
+    };
+    let set =
+        make_person_change_set(&s.collection, &mut starter, id, &remove, &s.feeds[..1]).unwrap();
+    assert!(set.feeds[0].outcome.is_changed());
+    let (feed, _) = pipeline::draft_model(&s.collection, s.feeds[0]).unwrap();
+    assert!(
+        feed.persons.is_empty(),
+        "ADR 0118 item 11: the remove must find the credit that the change set added."
+    );
+}
+
+#[test]
+fn credit_feed_refuses_a_credit_name_of_another_person_and_makes_no_draft() {
+    let s = setup_with(PUBLISHER);
+    let id = ann(&s);
+    other_person_with_ann_credit(&s);
+    let mut starter = start(&s);
+    assert!(
+        make_person_change_set(
+            &s.collection,
+            &mut starter,
+            id,
+            &credit_feed("Vocalist", ""),
+            &s.feeds[..1],
+        )
+        .is_err(),
+        "ADR 0118 item 11: a credit name of another person must stop the change set."
+    );
+    assert!(s.collection.draft(s.feeds[0]).unwrap().is_none());
+    assert_eq!(s.collection.change_set_rows().unwrap().len(), 0);
+}
+
+#[test]
+fn credit_feed_keeps_its_own_operation_kind_in_the_change_set() {
+    let s = setup_with(PUBLISHER);
+    let id = ann(&s);
+    let mut starter = start(&s);
+    let set = make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &credit_feed("Vocalist", ""),
+        &s.feeds[..1],
+    )
+    .unwrap();
+    let row = s.collection.change_set_row(set.id).unwrap().unwrap();
+    let operation: serde_json::Value = serde_json::from_str(&row.operation).unwrap();
+    assert_eq!(
+        operation["kind"], "credit_feed",
+        "ADR 0118 item 12: the stored operation must keep its own kind."
+    );
 }

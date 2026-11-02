@@ -247,9 +247,9 @@ test('the sheet Check gives its rows and menu', () => {
 // ---- Task 065c: the page of a person and its sheets ----
 import {
   keyValue, keyFromValue, memberLine, memberText, walletGroups, addressOptions, usedText, keyEvidenceText, checkRow,
-  saveStatus, checkGroups, findingLine, checkFeedLines, checkKeys, memberChange,
+  savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, findingLine, checkFeedLines, checkKeys,
   feedRows, levelRows, feedsHeading, SHEET_TITLES, sheetStart, sheetBody, sheetReady, LINK_FORMS, linkFields,
-  linkStart, linkBody, linkReady, personFieldsBody, profileLine, changeLine, addIntro,
+  linkStart, linkBody, linkReady, profileLine, changeLine, addIntro,
 } from '../ui/people.js';
 
 const KEY = (address, custom_value = null) => ({ address, custom_key: null, custom_value });
@@ -311,12 +311,38 @@ test('the evidence of a key and the row Check your feeds have their texts', () =
   assert.equal(row.count, '3 feeds');
 });
 
-test('the status of a field after a save (ADR 0111 item 2)', () => {
-  assert.deepEqual(saveStatus(null, 'name'), { text: '', error: false });
-  assert.deepEqual(saveStatus({ key: 'name', ok: true }, 'name'), { text: 'Saved', error: false });
-  assert.deepEqual(saveStatus({ key: 'name', ok: true }, 'img'), { text: '', error: false });
-  assert.deepEqual(saveStatus({ key: 'img', ok: false, message: 'Not an address' }, 'img'), { text: 'Not an address', error: true });
-  assert.equal(saveStatus({ key: 'img', ok: false }, 'img').error, true);
+test('the saved values and the pending changes of a person (ADR 0116 items 1 to 3)', () => {
+  const saved = savedValues(MK);
+  assert.deepEqual(saved, {
+    name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), member: '3',
+  });
+  assert.deepEqual(pendingKeys(saved, saved), []);
+  assert.equal(saveBody(saved, saved), null);
+  assert.equal(pendingStatus(0), 'No changes');
+  assert.equal(pendingStatus(1), '1 change not saved');
+  assert.equal(pendingStatus(2), '2 changes not saved');
+  const name = { ...saved, name: 'Mary' };
+  assert.deepEqual(pendingKeys(saved, name), ['name']);
+  assert.deepEqual(saveBody(saved, name), { fields: { name: 'Mary', usual_role: 'Vocals', usual_group: '', img: '', href: '' } });
+  const role = { ...saved, usual_group: 'Band' };
+  assert.deepEqual(pendingKeys(saved, role), ['usual_role'], 'ADR 0116 item 1: the role and its group are one control.');
+  assert.ok(isPending(saved, role, 'usual_role'));
+  assert.deepEqual(saveBody(saved, role), { fields: { name: 'Mary Kate', usual_role: 'Vocals', usual_group: 'Band', img: '', href: '' } });
+  const address = { ...saved, default_address: keyValue(KEY('new@x.example')) };
+  assert.deepEqual(pendingKeys(saved, address), ['default_address']);
+  assert.deepEqual(saveBody(saved, address), { default_address: KEY('new@x.example') });
+  assert.deepEqual(saveBody(saved, { ...saved, default_address: '' }), { default_address: null });
+  assert.deepEqual(saveBody(saved, { ...saved, member: '5' }), { member: 5 });
+  assert.deepEqual(saveBody(saved, { ...saved, member: '' }), { member: null });
+  assert.deepEqual(saveBody(saved, { ...saved, img: 'https://x.example/p.jpg', name: 'Mary' }), {
+    fields: { name: 'Mary', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: '' },
+  });
+});
+
+test('the leave sheet names each pending control (ADR 0116 item 8)', () => {
+  assert.equal(leaveText('DuhLaurien', ['img', 'href']),
+    'DuhLaurien has 2 changes that are not saved: the picture address and the information address.');
+  assert.equal(leaveText('Mary Kate', ['name']), 'Mary Kate has 1 change that is not saved: the name.');
 });
 
 test('the lines of each finding and the group of each state (ADR 0111 items 9 to 11)', () => {
@@ -346,12 +372,8 @@ test('the lines of each finding and the group of each state (ADR 0111 items 9 to
   assert.deepEqual(checkFeedLines(check.feeds[2], ['Album'], 'Ann', profiles).map((l) => l.error), [false, true, true]);
 });
 
-test('Member of labels each feed with its first role and changes the membership (ADR 0111 item 3)', () => {
+test('Member of labels each feed with its first role (ADR 0111 item 3)', () => {
   assert.deepEqual(memberChoices([{ id: 2, medium: 'publisher', title: 'HeyCitizen', publisher_roles: ['artist', 'label'] }]), [['2', 'HeyCitizen · Artist']]);
-  assert.deepEqual(memberChange({ members: [3] }, '5'), { add: 5, remove: [3] });
-  assert.deepEqual(memberChange({ members: [3] }, '3'), { add: null, remove: [] });
-  assert.deepEqual(memberChange({ members: [3] }, ''), { add: null, remove: [3] });
-  assert.deepEqual(memberChange({ members: [] }, '5'), { add: 5, remove: [] });
 });
 
 test('the feed rows give the type first, each selected', () => {
@@ -411,8 +433,7 @@ test('the forms of a link give the fields and the body', () => {
   assert.deepEqual(linkBody('support-links', { label: ' L ', url: 'u' }), { label: 'L', url: 'u' });
 });
 
-test('a change of one field sends the four fields of the person', () => {
-  assert.deepEqual(personFieldsBody(MK, { usual_role: 'Fiddle' }), { name: 'Mary Kate', usual_role: 'Fiddle', usual_group: '', img: '', href: '' });
+test('the usual role line and the membership of a person', () => {
   assert.deepEqual(profileLine(MK, { 3: 'The Ultras' }), { role: 'Vocals', members: [{ id: 3, title: 'The Ultras' }] });
   assert.deepEqual(profileLine(MK, { 3: 'The Ultras' }, [{ id: 3, medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true }]),
     { role: 'Vocals', members: [{ id: 3, title: 'The Ultras', dot: 'artist', role: 'Artist' }] });

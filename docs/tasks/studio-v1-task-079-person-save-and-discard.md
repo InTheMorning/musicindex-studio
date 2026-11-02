@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md). It changes [ADR 0111](../adr/0111-the-page-of-a-person-checks-the-feeds.md) item 2 and [ADR 0113](../adr/0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md) item 8.
 
-Status: Not started.
+Status: Complete. Packets 079a and 079b are committed. The screenshot visual check passed on 2026-11-02. The human test is open.
 
 ## Goal
 

@@ -310,14 +310,6 @@ export function memberChoices(feeds) {
 // The first role of a feed, as the label of its type.
 const firstRole = (feed) => feedKind(feed).label.split(' · ')[0];
 
-// The change of the membership when the user picks a feed in "Member of": the
-// feed to add, and the feeds to remove. An empty pick removes each membership.
-export function memberChange(person, picked) {
-  const target = picked === '' || picked == null ? null : Number(picked);
-  const current = person.members || [];
-  return { add: target !== null && !current.includes(target) ? target : null, remove: current.filter((id) => id !== target) };
-}
-
 // ---- The profiles of Nostr keys (ADR 0099 item 3, ADR 0103 items 17 and 18) ----
 
 export const NO_PROFILE = 'No Nostr profile found';
@@ -630,10 +622,69 @@ export function linkBody(kind, values) {
 
 export const linkReady = (kind, values) => linkFields(kind, values).every((f) => !f.required || String(values[f.id] ?? '').trim() !== '');
 
-// The body of `PATCH /people/{id}`: the fields, with some changed.
-export const personFieldsBody = (person, change = {}) => ({
-  name: person.name, usual_role: person.usual_role, usual_group: person.usual_group ?? '', img: person.img, href: person.href, ...change,
-});
+// ---- The pending changes of the page of a person (ADR 0116 items 1 to 5) ----
+
+// The values that the page keeps for a person. Each field, the default
+// address and the membership are values of the page.
+export function savedValues(person) {
+  return {
+    name: person.name ?? '',
+    usual_role: person.usual_role ?? '',
+    usual_group: person.usual_group ?? '',
+    img: person.img ?? '',
+    href: person.href ?? '',
+    default_address: person.default_address ? keyValue(person.default_address) : '',
+    member: (person.members || []).length > 0 ? String(person.members[0]) : '',
+  };
+}
+
+// The controls of the page, in their sequence. The usual role and its group
+// are one control. The field controls are sent in the `fields` of a save.
+const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'member'];
+const FIELD_CONTROLS = ['name', 'usual_role', 'img', 'href'];
+
+// Whether one control has a value that differs from the saved value.
+export function isPending(saved, values, control) {
+  if (control === 'usual_role') return values.usual_role !== saved.usual_role || values.usual_group !== saved.usual_group;
+  return values[control] !== saved[control];
+}
+
+// The controls with a pending change.
+export const pendingKeys = (saved, values) => CONTROLS.filter((control) => isPending(saved, values, control));
+
+// The status of the toolbar of the page (ADR 0116 item 3).
+export const pendingStatus = (count) => (count === 0 ? 'No changes' : plural(count, 'change not saved', 'changes not saved'));
+
+// The body of `POST /people/{id}/save` (packet 079a). It holds only the parts
+// with a pending change. It gives null when no control has a change.
+export function saveBody(saved, values) {
+  const keys = pendingKeys(saved, values);
+  if (keys.length === 0) return null;
+  const body = {};
+  if (keys.some((key) => FIELD_CONTROLS.includes(key))) {
+    body.fields = { name: values.name, usual_role: values.usual_role, usual_group: values.usual_group, img: values.img, href: values.href };
+  }
+  if (keys.includes('default_address')) body.default_address = values.default_address === '' ? null : keyFromValue(values.default_address);
+  if (keys.includes('member')) body.member = values.member === '' ? null : Number(values.member);
+  return body;
+}
+
+// The names of the controls in the text of the leave sheet.
+const LEAVE_NAMES = {
+  name: 'the name',
+  usual_role: 'the usual role',
+  img: 'the picture address',
+  href: 'the information address',
+  default_address: 'the default address',
+  member: 'the artist or label',
+};
+
+// The text of the leave sheet. It names each control with a pending change
+// (ADR 0116 item 8).
+export function leaveText(name, keys) {
+  const changes = plural(keys.length, 'change', 'changes');
+  return `${name} has ${changes} that ${keys.length === 1 ? 'is' : 'are'} not saved: ${joinList(keys.map((key) => LEAVE_NAMES[key]))}.`;
+}
 
 // The line of the usual role of a person, and the publisher feeds of which
 // the person is a member, as `{ role, members: [{ id, title, dot, role }] }`.
@@ -655,19 +706,8 @@ export function profileLine(person, titles, feeds = []) {
   };
 }
 
-// The hint of the first field of a person (ADR 0111 item 2).
-export const FIELDS_HINT = 'Studio saves each field when you leave it.';
-
 // The hint of "Member of" (ADR 0111 item 3).
 export const MEMBER_HINT = 'The artist or label that this person is in. Studio changes no feed.';
-
-// The status of a field after a save. `save` is null before a save, or
-// `{ key, ok: true }`, or `{ key, ok: false, message }` for the field `key`.
-// The result is `{ text, error }`. A field that was not saved has no text.
-export function saveStatus(save, key) {
-  if (!save || save.key !== key) return { text: '', error: false };
-  return save.ok ? { text: 'Saved', error: false } : { text: save.message || 'Studio could not save this field', error: true };
-}
 
 // ---- The suggestions of the picture and the information address (ADR 0113) ----
 

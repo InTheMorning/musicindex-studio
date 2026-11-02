@@ -322,6 +322,8 @@ code, .mono {
    error only (ADR 0018). */
 .field input[aria-invalid="true"] { border: 1px solid var(--error); }
 .field-error { color: var(--error); font-size: var(--text-callout); font-weight: 500; }
+/* A control with a pending change has a mark at its start edge (ADR 0116 item 6). */
+.pending { box-shadow: inset 3px 0 0 var(--accent); }
 /* A secret value and its eye button (ADR 0078). The value takes the free
    width. The button stays at the top line of a text area. */
 .secret { display: flex; gap: 8px; align-items: center; }

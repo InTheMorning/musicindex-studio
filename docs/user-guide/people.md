@@ -29,10 +29,14 @@ Studio then adds the selected items to it. Select **Not This Person** to hide th
 
 ## The page of a person
 
-The page shows the details first. A field saves when you select a different field. The field then shows **Saved**.
-The page has no **Save** button.
+The page shows the details first. The page keeps each change until you select **Save**. The toolbar shows how many changes are not saved.
+A control with a change has a mark at its start edge.
 
-- **Suggestions for the picture** and **Suggestions for the information address** show below those two fields. Studio takes the values from the Nostr profile of a key of the person, from the credits of the feeds and from the artist or label feed. Each line names its source. Select **Use** to fill the field and save it. When the field has a value, the other values are in a line that you open.
+- Select **Save** to keep all the changes together. Save changes no feed.
+- Select **Discard** to put back the saved values.
+- Studio asks before you open a different page with a change that is not saved. Select **Keep Editing** to stay on the page. Select **Discard Changes** to open the other page.
+
+- **Suggestions for the picture** and **Suggestions for the information address** show below those two fields. Studio takes the values from the Nostr profile of a key of the person, from the credits of the feeds and from the artist or label feed. Each line names its source. Select **Use** to fill the field. Then select **Save**. When the field has a value, the other values are in a line that you open.
 - **More from your feeds** lists items that can belong to this person. Select **Add** for an item.
 - **Payment** shows the wallets and the default address. Select **Add a Wallet** to add one. Select **Remove Wallet** below a wallet to remove it from the person.
 - A Lightning address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, remove the key in **Credits**.

@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
-import { api, assetMode, askConfirm, Bar, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { api, assetMode, askConfirm, Bar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
@@ -19,14 +19,14 @@ import {
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
-  linkReady, personFieldsBody, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
+  linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
   personChoices, addToTitle, ADD_TO_HINT, addToRows, addItemsBody, MORE_HINT,
   NEW_MEMBER_HINT, NEW_PERSON_HINT, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson,
   checkSheetLabel, checkSheetReady, NEW_PERSON, WALLET_TO_PERSON_HINT, walletToPersonStart, walletToPersonReady,
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  memberChange, saveStatus, detailList, FIELDS_HINT, MEMBER_HINT, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, MEMBER_HINT, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
 } from './people.js';
 
 // The merges of this page load: the ID of each merged person, to the ID of
@@ -279,35 +279,23 @@ function AddressRow({ member, count, note, action }) {
 const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="button" onClick=${onClick}>
   <span class="num">＋</span><span class="title">${title}</span></button>`;
 
-// The fields of a person. A text field sends the fields with
-// `PATCH /people/{id}` when it loses the focus. The usual role is a menu and
-// sends them at once. `onSave` gives `{ ok, message }`. After a save, the field
-// shows its status (ADR 0111 item 2).
-function PersonFields({ person, onSave, detail, profiles, titles, feeds }) {
-  const [values, setValues] = useState(() => personFieldsBody(person));
-  const [save, setSave] = useState(null);
-  useEffect(() => { setValues(personFieldsBody(person)); }, [person.name, person.usual_role, person.usual_group, person.img, person.href]);
-  const commit = async (key, body) => {
-    const result = await onSave(body);
-    setSave({ key, ok: result.ok, message: result.message });
-  };
-  const status = (key) => {
-    const { text, error } = saveStatus(save, key);
-    return text && html`<span class=${error ? 'field-error' : 'hint'} role="status">${text}</span>`;
-  };
-  const field = (id, label, key, hint) => html`<${Field} id=${id} label=${label} hint=${hint} value=${values[key]}
-    onInput=${(e) => { setSave(null); setValues({ ...values, [key]: e.target.value }); }}
-    onChange=${(e) => { if (e.target.value !== person[key]) commit(key, personFieldsBody(person, { [key]: e.target.value })); }}>${status(key)}<//>`;
-  // The suggestions of the core for one field. "Use" saves the value like a
-  // field save does. The UI changes no value.
+// The fields of a person: the name, the usual role, and the picture and the
+// information address. The values are pending changes of the page (ADR 0116
+// item 1). `update` changes them, and the page saves them. A pending control
+// has a mark. "Use" of a suggestion changes the value only (ADR 0113 item 8).
+function PersonFields({ values, saved, update, detail, profiles, titles, feeds }) {
+  const field = (id, label, key) => html`<${Field} id=${id} label=${label} value=${values[key]}
+    class=${isPending(saved, values, key) ? 'pending' : undefined}
+    onInput=${(e) => update({ [key]: e.target.value })} />`;
+  // The suggestions of the core for one field.
   const suggestions = (key) => {
-    const list = detailList(key, person[key], detail, profiles, titles, feeds);
+    const list = detailList(key, values[key], detail, profiles, titles, feeds);
     if (list.state === 'none') return null;
     const rows = list.rows.map((row) => html`<div class="link-row static" key=${row.value}>
       ${key === 'img' && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
       <span class="text"><span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
       <button class="button action" type="button" aria-label=${`Use ${row.value}`}
-        onClick=${() => commit(key, personFieldsBody(person, { [key]: row.value }))}>Use</button></div>`);
+        onClick=${() => update({ [key]: row.value })}>Use</button></div>`);
     // A collapsed list has no heading: its summary line names the values
     // (ADR 0113 item 6).
     if (list.state === 'collapsed') {
@@ -318,14 +306,10 @@ function PersonFields({ person, onSave, detail, profiles, titles, feeds }) {
     return html`<p class="hint suggest-heading">${list.heading}</p><div class="group">${rows}</div>`;
   };
   return html`<div class="group rows">
-    ${field('person-name', 'Name', 'name', FIELDS_HINT)}
+    ${field('person-name', 'Name', 'name')}
     <${RoleMenu} id="person-role" label="Usual role" role=${values.usual_role} group=${values.usual_group} hint="The start value of a new credit."
-      status=${saveStatus(save, 'usual_role')}
-      onChange=${(role, group) => {
-        setSave(null);
-        setValues({ ...values, usual_role: role, usual_group: group });
-        if (role !== person.usual_role || group !== (person.usual_group || '')) commit('usual_role', personFieldsBody(person, { usual_role: role, usual_group: group }));
-      }} />
+      pending=${isPending(saved, values, 'usual_role')}
+      onChange=${(role, group) => update({ usual_role: role, usual_group: group })} />
     ${field('person-img', 'Picture address', 'img')}</div>
     ${suggestions('img')}
     <div class="group rows suggest-gap">${field('person-href', 'Information address', 'href')}</div>
@@ -526,6 +510,51 @@ export function PersonPage({ id, feeds, go }) {
   ]);
   // Each change of a link reads the person again (task 065 item 5).
   const act = (work) => run(async () => { try { await work(); } finally { await reload(); } });
+  // The pending changes of the fields, the default address and "Member of"
+  // (ADR 0116 items 1 to 6). The saved values come from each read of the person.
+  const [values, setValues] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveFailure, setSaveFailure] = useState(null);
+  useEffect(() => { if (data) { setValues(savedValues(data.person)); setSaveFailure(null); } }, [data]);
+  const saved = data ? savedValues(data.person) : null;
+  const shown = values || saved;
+  const keys = saved ? pendingKeys(saved, shown) : [];
+  const dirty = keys.length > 0;
+  const update = (patch) => { setSaveFailure(null); setValues((current) => ({ ...(current || saved), ...patch })); };
+  const discard = () => { setValues(saved); setSaveFailure(null); };
+  // Save sends each pending change in one request (ADR 0116 item 5). A failure
+  // keeps the pending changes, and shows the error.
+  const save = async () => {
+    if (!dirty) return;
+    setSaving(true);
+    setSaveFailure(null);
+    try {
+      await api(`/people/${id}/save`, { method: 'POST', body: saveBody(saved, shown) });
+      await reload();
+    } catch (e) {
+      setSaveFailure((e && e.message) || 'Studio could not save this person');
+    } finally {
+      setSaving(false);
+    }
+  };
+  // Asks before the page leaves with a pending change (ADR 0116 items 8 and 11).
+  // "Discard Changes" puts back the saved values, and gives true.
+  const askLeave = async () => {
+    if (!dirty) return true;
+    const leave = await askConfirm(CONFIRMS.leavePerson(leaveText(data.person.name, keys)));
+    if (leave) setValues(saved);
+    return leave;
+  };
+  useLeaveGuard(dirty, askLeave);
+  // An action that would lose the pending changes waits for the answer (ADR 0116 item 13).
+  const withLeave = (work) => askLeave().then((leave) => { if (leave) work(); });
+  // The browser asks before it closes the page with a pending change (ADR 0116 item 10).
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ''; };
+    addEventListener('beforeunload', warn);
+    return () => removeEventListener('beforeunload', warn);
+  }, [dirty]);
   // Back can open a person that a merge or a delete removed.
   const missing = !data && error && error.status === 404;
   useEffect(() => { if (missing) go(afterMissing(id, merged), { replace: true }); }, [missing]);
@@ -538,29 +567,10 @@ export function PersonPage({ id, feeds, go }) {
   const groups = walletGroups(person, recipients);
   const profile = profileLine(person, titles, feeds);
   const check = checkRow(person);
-  const remove = (kind, linkId) => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' }));
+  const remove = (kind, linkId) => withLeave(() => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' })));
   const removeButton = (kind, linkId, label) => html`<button class="button" type="button" aria-label=${label}
     onClick=${() => remove(kind, linkId)}>Remove</button>`;
-  const open = (kind) => setSheet(kind);
-  // A save of the fields gives the result to the field that was saved.
-  const saveFields = async (body) => {
-    let result = { ok: true };
-    await act(async () => {
-      try {
-        await api(`/people/${id}`, { method: 'PATCH', body });
-      } catch (e) {
-        result = { ok: false, message: e && e.message };
-        throw e;
-      }
-    });
-    return result;
-  };
-  // A new membership replaces the old one, through the routes of the links.
-  const changeMember = (picked) => act(async () => {
-    const { add, remove: gone } = memberChange(person, picked);
-    if (add !== null) await api(`/people/${id}/members`, { method: 'POST', body: { feed_id: add } });
-    for (const feedId of gone) await api(`/people/${id}/members/${feedId}`, { method: 'DELETE' });
-  });
+  const open = (kind) => withLeave(() => setSheet(kind));
   // The delete changes no feed (ADR 0102). Then the People page opens.
   const deletePerson = () => run(async () => {
     if (!await askConfirm(CONFIRMS.deletePerson(person.name))) return;
@@ -583,12 +593,12 @@ export function PersonPage({ id, feeds, go }) {
           ${row.npub && html`<${PersonArt} person=${{ img: row.picture, name: row.title }} />`}<${KeyText} row=${row} />
           ${row.npub && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}
           <button class="button action" type="button" aria-label=${`Add ${row.title}`}
-            onClick=${() => act(async () => { await api(`/people/${id}/items`, { method: 'POST', body: row.body }); await loadMore(); })}>Add</button></div>`)}</div></section>`,
+            onClick=${() => withLeave(() => act(async () => { await api(`/people/${id}/items`, { method: 'POST', body: row.body }); await loadMore(); }))}>Add</button></div>`)}</div></section>`,
     payment: () => html`<section class="page-section"><h2>Payment</h2>
       ${groups.length > 0 && html`<div class="group rows"><${ChoiceSelect} id="person-default" label="Default address"
-        value=${person.default_address ? keyValue(person.default_address) : ''} options=${addressOptions(groups)}
+        value=${shown.default_address} options=${addressOptions(groups)}
         hint="The picker adds this address for this person."
-        onChange=${(value) => act(() => api(`/people/${id}/default-address`, { method: 'PUT', body: value === '' ? null : keyFromValue(value) }))} /></div>`}
+        pending=${isPending(saved, shown, 'default_address')} onChange=${(value) => update({ default_address: value })} /></div>`}
       ${groups.length === 0 && html`<p class="empty">No wallet yet. Add a wallet to give this person a payment address.</p>`}
       ${groups.map((g) => html`<div class="group" key=${g.id}>${g.members.map((m) => html`<${AddressRow} key=${JSON.stringify(m.key)}
           member=${m.member} count=${usedText(m.count)} />`)}
@@ -604,9 +614,9 @@ export function PersonPage({ id, feeds, go }) {
           await api(`/people/${id}/profile-addresses/dismiss`, { method: 'POST', body: { address: s.address } });
           await loadSuggestions();
         })}>Dismiss</button></div></div>`)}
-      <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => setLinking('wallets')} /></div></section>`,
+      <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => withLeave(() => setLinking('wallets'))} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
-      <${PersonFields} person=${person} onSave=${saveFields} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} />
+      <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} />
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<div class="group">
         ${person.credit_names.map((c) => html`<div class="link-row static" key=${`c${c.id}`}><span class="text"><span class="label">Credit name</span>
           ${c.name && html`<span class="summary">${c.name}</span>`}${c.href && html`<span class="summary">${c.href}</span>`}${c.npub && html`<span class="summary mono">${shortKey(c.npub)}</span>`}</span>
@@ -614,25 +624,28 @@ export function PersonPage({ id, feeds, go }) {
           ${removeButton('credit-names', c.id, `Remove the credit name ${c.name}`)}</div>`)}
         ${person.keys.map((k) => html`<${KeyRowView} key=${`k${k.id}`} npub=${k.npub} profiles=${profiles} name=${person.name}
           note=${keyEvidenceText(k.evidence)} action=${removeButton('keys', k.id, `Remove the Nostr key ${shortKey(k.npub)}`)} />`)}</div>`}
-      <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => setLinking('credit-names')} />
-        <${AddRow} title="Add a Nostr Key" onClick=${() => setLinking('keys')} /></div></section>`,
+      <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => withLeave(() => setLinking('credit-names'))} />
+        <${AddRow} title="Add a Nostr Key" onClick=${() => withLeave(() => setLinking('keys'))} /></div></section>`,
     support: () => html`<section class="page-section"><h2>Support links</h2>
       <div class="group">${person.support_links.map((l) => html`<div class="link-row static" key=${l.id}><span class="text">
           <span class="label">${l.label || 'Support link'}</span><span class="summary address-text">${l.url}</span></span>
           ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div>`)}
-        <${AddRow} title="Add a Support Link" onClick=${() => setLinking('support-links')} /></div></section>`,
+        <${AddRow} title="Add a Support Link" onClick=${() => withLeave(() => setLinking('support-links'))} /></div></section>`,
     member: () => html`<section class="page-section"><h2>Artist or label</h2><div class="group rows">
-      <${ChoiceSelect} id="person-member" label="Member of" value=${person.members.length > 0 ? String(person.members[0]) : ''} placeholder="None"
-        hint=${MEMBER_HINT} options=${memberChoices(feeds)} onChange=${changeMember} /></div></section>`,
+      <${ChoiceSelect} id="person-member" label="Member of" value=${shown.member} pending=${isPending(saved, shown, 'member')} placeholder="None"
+        hint=${MEMBER_HINT} options=${memberChoices(feeds)} onChange=${(value) => update({ member: value })} /></div></section>`,
     change: () => html`<section class="page-section"><h2>Change your feeds</h2>
       <p class="hint">${CHANGE_NOTE}</p>
       <div class="group">${CHANGE_ROWS.map(([kind, line]) => html`<${ListRow} key=${kind} title=${SHEET_TITLES[kind]} lines=${[line]}
         onClick=${() => open(kind)} />`)}</div></section>`,
     delete: () => html`<section class="page-section"><div class="actions">
-      <button class="button" type="button" onClick=${() => setMerging(true)}>Merge with a Person</button>
-      <button class="button destructive" type="button" onClick=${deletePerson}>Delete Person</button></div></section>`,
+      <button class="button" type="button" onClick=${() => withLeave(() => setMerging(true))}>Merge with a Person</button>
+      <button class="button destructive" type="button" onClick=${() => withLeave(deletePerson)}>Delete Person</button></div></section>`,
   };
-  return html`<div><${Bar}><span class="bar-title">${person.name}</span><//><section class="section">
+  return html`<div><${Bar}><span class="bar-title">${person.name}</span>
+    <div class="draft-toolbar"><span class=${saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${saveFailure || pendingStatus(keys.length)}</span>
+      <button class="button" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
+      <button class="button primary" type="button" disabled=${!dirty || saving} onClick=${save}>Save</button></div><//><section class="section">
     <${ErrorNotice} error=${error} />
     ${pageSequence('person').map((section) => html`<${Fragment} key=${section.id}>${sections[section.id]()}<//>`)}
   </section>

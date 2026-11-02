@@ -17,6 +17,15 @@ test('no UI module uses the browser box confirm()', () => {
   }
 });
 
+test('the leave sheet of a person has the texts of ADR 0116 item 8', () => {
+  const entry = CONFIRMS.leavePerson('Text of the sheet');
+  assert.equal(entry.title, 'Leave without saving?');
+  assert.equal(entry.text, 'Text of the sheet');
+  assert.equal(entry.action, 'Discard Changes');
+  assert.equal(entry.role, 'destructive');
+  assert.equal(entry.cancel, 'Keep Editing');
+});
+
 test('each entry gives a title, a text, an action and a role', () => {
   for (const [name, entry] of Object.entries(CONFIRMS)) {
     const { title, text, action, role } = entry('X', 'track');

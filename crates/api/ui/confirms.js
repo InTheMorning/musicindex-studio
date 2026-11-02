@@ -51,6 +51,15 @@ export const CONFIRMS = {
     `Delete ${name} from People?`,
     'Studio deletes this person and its links. Studio changes no feed.',
     'Delete the Person'),
+  // The leave sheet of the page of a person (ADR 0116 item 8). `cancel` names
+  // the button that keeps the page open.
+  leavePerson: (text) => ({
+    title: 'Leave without saving?',
+    text,
+    action: 'Discard Changes',
+    role: 'destructive',
+    cancel: 'Keep Editing',
+  }),
   removeRecipients: (noun) => destructive(
     `Remove the recipients of this ${noun}?`,
     `The ${noun} then uses the recipients of the album.`,

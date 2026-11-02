@@ -1277,12 +1277,12 @@ function BlossomHostForm({ onAdded }) {
 // `options` is a list of [value, label] pairs.
 // A `placeholder` adds a first entry with an empty value, for a setting that
 // has no value yet.
-export function ChoiceSelect({ id, label, value, options, placeholder, hint, onChange }) {
+export function ChoiceSelect({ id, label, value, options, placeholder, hint, onChange, pending = false }) {
   return html`<div class="field">
     <label for=${id}>${label}</label>
     <div class="field-body">
       ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
-      <select id=${id} value=${value} aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.target.value)}>
+      <select id=${id} value=${value} class=${pending ? 'pending' : undefined} aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.target.value)}>
         ${placeholder && html`<option value="">${placeholder}</option>`}
         ${options.map(([option, text]) => html`<option value=${option}>${text}</option>`)}
       </select>
@@ -1313,7 +1313,7 @@ export function useRoleList() {
 // "Other role" goes to `onChange` when the field loses the focus, as the
 // other text fields do. `hint` replaces the hint of an empty role. `status`
 // is an optional `{ text, error }` below the menu.
-export function RoleMenu({ id, label = 'Role', role, group, hint, status, onChange }) {
+export function RoleMenu({ id, label = 'Role', role, group, hint, status, pending = false, onChange }) {
   const list = useRoleList();
   const [otherPicked, setOtherPicked] = useState(false);
   const [otherText, setOtherText] = useState(role ?? '');
@@ -1331,7 +1331,7 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, onChan
       <label for=${id}>${label}</label>
       <div class="field-body">
         ${choice === '' && (hint || NO_ROLE_HINT) && html`<span class="hint" id=${`${id}-hint`}>${hint || NO_ROLE_HINT}</span>`}
-        <select id=${id} value=${choice} aria-describedby=${choice === '' ? `${id}-hint` : undefined} onChange=${(e) => pick(e.target.value)}>
+        <select id=${id} value=${choice} class=${pending ? 'pending' : undefined} aria-describedby=${choice === '' ? `${id}-hint` : undefined} onChange=${(e) => pick(e.target.value)}>
           <option value="">${ROLE_PLACEHOLDER}</option>
           ${options.groups.map((g) => html`<optgroup label=${g.label}>
             ${g.options.map(([value, text]) => html`<option value=${value}>${text}</option>`)}</optgroup>`)}
@@ -1918,6 +1918,20 @@ export function Bar({ back = true, children }) {
           disabled=${!nav.canForward} onClick=${nav.forward}><${Chevron} direction="forward" /></button>`)}
     ${children}
   </div>`;
+}
+
+// A page with pending changes sets its guard while it has them (ADR 0116
+// item 10). `guard` gives a promise of true when the page may leave.
+export function useLeaveGuard(active, guard) {
+  const nav = useContext(NavContext);
+  const setGuard = nav ? nav.setLeaveGuard : null;
+  const latest = useRef(guard);
+  latest.current = guard;
+  useEffect(() => {
+    if (!active || !setGuard) return undefined;
+    setGuard(() => latest.current());
+    return () => setGuard(null);
+  }, [active, setGuard]);
 }
 
 // A feed that the editor cannot open yet: the full hero and the facts, as
@@ -3170,8 +3184,21 @@ function Shell({ vault, onLock }) {
     writeNav(next);
     setNavState(next);
   };
-  // A new view, or with `replace`, the current view changes.
-  const go = (target, { replace = false } = {}) => {
+  // The guard of a page with pending changes (ADR 0116 item 10). It gives a
+  // promise of true when the page may leave. `useLeaveGuard` sets it.
+  const leaveGuard = useRef(null);
+  const setLeaveGuard = useCallback((guard) => { leaveGuard.current = guard; }, []);
+  // Set for the one leave that the guard allowed, so that its popstate does
+  // not ask again.
+  const leaving = useRef(false);
+  // Runs `action` when the page may leave. Without a guard it runs at once.
+  const guarded = (action) => {
+    if (!leaveGuard.current) action();
+    else leaveGuard.current().then((leave) => { if (leave) action(); });
+  };
+  // A new view, or with `replace`, the current view changes. The guard asks first.
+  const go = (target, options) => guarded(() => goNow(target, options));
+  const goNow = (target, { replace = false } = {}) => {
     const base = withScroll();
     // A page of the same feed keeps the level that the feed came from
     // (ADR 0088 item 6).
@@ -3200,19 +3227,22 @@ function Shell({ vault, onLock }) {
     const current = withScroll();
     if (mirrored.current && current.index > 0 && history.state
       && history.state.scope === 'shell' && history.state.index === current.index) {
+      // The browser goes back, and `popstate` asks the guard.
       history.back();
       return;
     }
-    const next = backNav(current);
-    commit(next);
-    history.replaceState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
+    guarded(() => {
+      const next = backNav(withScroll());
+      commit(next);
+      history.replaceState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
+    });
   };
-  const forward = () => {
+  const forward = () => guarded(() => {
     if (!canForward(nav)) return;
     const next = forwardNav(withScroll());
     commit(next);
     history.pushState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
-  };
+  });
   // The link "Releases" of an open feed. It opens Releases as a new view,
   // and it does not go back in the history (ADR 0069). The view keeps the
   // scroll of the nearest Releases entry.
@@ -3234,7 +3264,8 @@ function Shell({ vault, onLock }) {
       for (let i = 1; i <= index; i += 1) history.pushState({ scope: 'shell', index: i, mirrored: true }, '');
       mirrored.current = true;
     }
-    const onPop = (event) => {
+    // Applies the index of a popstate event to the state.
+    const applyPop = (event) => {
       const target = event.state && event.state.scope === 'shell' ? event.state.index : 0;
       mirrored.current = Boolean(event.state && event.state.mirrored === true);
       let next = withScroll();
@@ -3245,6 +3276,21 @@ function Shell({ vault, onLock }) {
       }
       while (next.index < target && canForward(next)) next = forwardNav(next);
       commit(next);
+    };
+    // A page with pending changes asks first. The entry of the page goes back
+    // in the history, so that "Keep Editing" keeps the page (ADR 0116 item 10).
+    const onPop = (event) => {
+      if (!leaveGuard.current || leaving.current) {
+        leaving.current = false;
+        applyPop(event);
+        return;
+      }
+      history.pushState({ scope: 'shell', index: navRef.current.index, mirrored: mirrored.current }, '');
+      leaveGuard.current().then((leave) => {
+        if (!leave) return;
+        leaving.current = true;
+        history.back();
+      });
     };
     addEventListener('popstate', onPop);
     return () => removeEventListener('popstate', onPop);
@@ -3382,7 +3428,7 @@ function Shell({ vault, onLock }) {
       onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${() => go({ name: 'add-feed' })} />`;
   }
 
-  const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward };
+  const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
@@ -4382,7 +4428,7 @@ function ConfirmHost() {
     setAsk(null);
   };
   if (!ask) return null;
-  const { title, text, action, role } = ask.entry;
+  const { title, text, action, role, cancel } = ask.entry;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="confirm-title" onClose=${onClose}>
     <header>
       <h2 id="confirm-title">${title}</h2>
@@ -4390,7 +4436,7 @@ function ConfirmHost() {
     </header>
     <div class="body"><p>${text}</p></div>
     <footer>
-      <button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>${cancel || 'Cancel'}</button>
       <button class=${`button ${role}`} type="button" onClick=${() => { result.current = true; ref.current.close(); }}>${action}</button>
     </footer>
   </dialog>`;

@@ -1,7 +1,7 @@
 // The screens of the People area (ADR 0099, task 065). The components show
 // the pages and call the API. The functions of `people.js` give each text
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
-import { html, useState, useEffect } from './vendor/htm-preact-standalone.module.js';
+import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
 import { api, assetMode, askConfirm, Bar, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
@@ -23,7 +23,7 @@ import {
   personChoices, addToTitle, ADD_TO_HINT, addToRows, addItemsBody, MORE_HINT,
   NEW_MEMBER_HINT, NEW_PERSON_HINT, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson,
   checkSheetLabel, checkSheetReady, NEW_PERSON, WALLET_TO_PERSON_HINT, walletToPersonStart, walletToPersonReady,
-  walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctOptions,
+  walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   memberChange, saveStatus, detailList, FIELDS_HINT, MEMBER_HINT, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
@@ -753,7 +753,13 @@ function CorrectForm({ person, check, titles, placeRows, go, onCancel }) {
   const { busy, error, run } = useAction();
   const profiles = useProfiles([...person.keys.map((k) => k.npub), ...checkKeys(check)]);
   const feedIds = correctFeedIds(check);
-  const set = (patch) => setFields({ ...fields, ...patch });
+  // When the profiles come, the key menu takes a key with no warning, until
+  // the user changes a selection (ADR 0103 item 18).
+  const touched = useRef(false);
+  const set = (patch) => { touched.current = true; setFields({ ...fields, ...patch }); };
+  useEffect(() => {
+    if (!touched.current && profiles && profiles.size > 0) setFields((before) => correctKeyStart(person, before, profiles));
+  }, [profiles]);
   // After each change of a selection, the core gives the outcome of each feed.
   useEffect(() => {
     if (!correctAnySelected(fields) || feedIds.length === 0) { setList({ rows: [], omitted: 0 }); setPreviewError(null); return undefined; }

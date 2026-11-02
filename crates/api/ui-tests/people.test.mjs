@@ -745,7 +745,7 @@ test('the merge sheet gives the links of the other person and the result line', 
 import {
   NEW_PERSON, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson, checkSheetLabel, checkSheetReady,
   walletToPersonStart, walletToPersonReady, walletToPersonLabel, correctCount, correctButtonLabel, correctFeedIds,
-  correctStart, correctOptions, otherPayeesLine, otherWalletCount, correctKeyChoices, correctBody, correctAnySelected, correctRows, correctFindingLines,
+  correctStart, correctKeyStart, correctOptions, otherPayeesLine, otherWalletCount, correctKeyChoices, correctBody, correctAnySelected, correctRows, correctFindingLines,
 } from '../ui/people.js';
 import { addWalletSections, walletBodyOf } from '../ui/recipients.js';
 
@@ -919,4 +919,17 @@ test('the change of the payees of the name says what it replaces, and with which
   const check = { feeds: [{ findings: [{ kind: 'other_wallet' }, { kind: 'credit_role' }] }, { findings: [{ kind: 'other_wallet' }] }] };
   assert.equal(otherWalletCount(check), 2);
   assert.equal(otherWalletCount(null), 0);
+});
+
+test('the key of Correct the Feeds is never a key with the warning by default (ADR 0103 item 18)', () => {
+  const person = { ...CORRECT_PERSON, keys: [{ npub: 'npub1radio' }, { npub: 'npub1mine' }] };
+  const profiles = new Map([['npub1radio', { name: 'City Radio' }], ['npub1mine', { name: 'Sir HeyCitizen' }]]);
+  const start = correctStart(person);
+  assert.equal(correctKeyStart(person, start, profiles).npub, 'npub1mine',
+    'ADR 0103 item 18: the sheet must start on a key with no warning. Check correctKeyStart.');
+  const only = { ...CORRECT_PERSON, keys: [{ npub: 'npub1radio' }] };
+  const fields = correctKeyStart(only, correctStart(only), profiles);
+  assert.equal(fields.key, false, 'A person with only keys of other accounts must not write a key by default.');
+  const line = correctOptions(only, { ...fields, key: true }, profiles).find((o) => o.id === 'key').line;
+  assert.match(line, /City Radio\. The profile name is not "HeyCitizen"\. Check this key\./);
 });

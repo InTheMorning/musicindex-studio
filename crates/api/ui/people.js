@@ -860,6 +860,17 @@ export function correctStart(person) {
   };
 }
 
+// The key of the change "Nostr key" when the profiles are known: the first
+// key with no warning of ADR 0103 item 18. When each key has the warning, the
+// change starts not selected, so that Studio writes no key of a different
+// account by default. `fields` is the state before the profiles came.
+export function correctKeyStart(person, fields, profiles) {
+  const keys = person.keys || [];
+  const good = keys.find((k) => !keyWarning(k.npub, profiles, person.name));
+  if (good) return { ...fields, npub: good.npub };
+  return { ...fields, key: false };
+}
+
 // The check boxes of the sheet: `id`, `label` and `line`.
 // The line of the change "other_payees". `count` is the number of the
 // findings `other_wallet` of the check, and the address is the default
@@ -881,7 +892,7 @@ export function correctOptions(person, fields, profiles = null, check = null) {
   const who = profileName(fields.npub, profiles) || shortKey(fields.npub || '');
   const role = trimmed(person.usual_role);
   const all = [
-    ['key', 'Nostr key', `Each credit of ${person.name} gets ${who}`],
+    ['key', 'Nostr key', [`Each credit of ${person.name} gets ${who}`, keyWarning(fields.npub, profiles, person.name)].filter(Boolean).join('. ')],
     ['payment', 'Payment address', `Each payment of ${person.name} uses the default address`],
     ['details', 'Picture and information address', 'Each credit gets the picture and the information address of this person'],
     ['role', 'Role', role === '' ? 'Each credit with no role gets the usual role' : `Each credit with no role gets ${role}`],

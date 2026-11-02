@@ -378,6 +378,22 @@ impl WorkspaceHandle {
         let root = root.to_path_buf();
         self.run(move |w| w.set_library_root(&root)).await
     }
+
+    /// Set each app to "Connect Again" and end each grant, after the import
+    /// of an account (ADR 0110 item 41, ADR 0107). The grant vaults go at
+    /// the next sync.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the collection fails.
+    pub async fn reset_apps_after_import(&self) -> Result<(), ApiError> {
+        self.run(|w| {
+            apps::reset_after_import(&w.collection, clock_now())?;
+            w.sync_grant_vaults(None);
+            Ok(())
+        })
+        .await
+    }
 }
 
 pub(crate) fn lock_workspace(
@@ -482,16 +498,52 @@ impl std::fmt::Debug for AddressChecker {
 /// A change of the list of connected apps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppChange {
-    /// The user added an app.
+    /// The user added a waiting app.
     Added {
         /// The ID of the app.
         app_id: i64,
+        /// The SHA-256 of its pairing code, as hexadecimal text.
+        code_hash: String,
+        /// The end of the code, in seconds since the Unix epoch.
+        code_expires_at: i64,
+    },
+    /// An app paired with its public key.
+    Paired {
+        /// The ID of the app.
+        app_id: i64,
+        /// The public key, as 64 lowercase hexadecimal characters.
+        pubkey: String,
     },
     /// The user removed an app.
     Removed {
         /// The ID of the app.
         app_id: i64,
     },
+}
+
+/// The client address of a request, as the shell knows it. The server puts
+/// it into the request before the router of the user gets it (ADR 0110
+/// item 18). The desktop does not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientAddress(pub String);
+
+/// The wall clock of the workspace, in seconds since the Unix epoch. It
+/// gives the time for the signed requests of the apps. A test gives a clock
+/// that it controls.
+#[derive(Clone)]
+pub struct WallClock(Arc<dyn Fn() -> u64 + Send + Sync>);
+
+impl WallClock {
+    /// Make a clock from a function.
+    pub fn new(now: impl Fn() -> u64 + Send + Sync + 'static) -> Self {
+        Self(Arc::new(now))
+    }
+}
+
+impl std::fmt::Debug for WallClock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("WallClock(..)")
+    }
 }
 
 /// The clock of the workspace. It gives the time for the rule of the recent
@@ -610,6 +662,14 @@ pub struct Workspace {
     pub(crate) rules: Option<ServerRules>,
     /// The function for the changes of the app list. `None` on the desktop.
     pub(crate) app_hook: Option<AppHook>,
+    /// The public origin of the shell, without a path. The expected `u` tag
+    /// of a signed app request and the pairing text start with it (ADR 0110
+    /// items 6 and 12). The shell sets it. The desktop uses its loopback
+    /// address.
+    pub(crate) public_origin: Option<String>,
+    /// A clock for the signed requests of the apps. `None` means the clock
+    /// of the computer.
+    pub(crate) wall_clock: Option<WallClock>,
     /// The time of the last use of a vault secret (ADR 0055 item 16).
     vault_used: Mutex<Instant>,
     /// The clock of the recent unlock (ADR 0106 item 2).
@@ -625,6 +685,11 @@ pub struct Workspace {
     /// Counts the connections, so that a late answer of an old connection
     /// changes nothing.
     pub(crate) signer_generation: u64,
+}
+
+/// The time of the computer, in seconds since the Unix epoch.
+fn clock_now() -> i64 {
+    i64::try_from(crate::announcer::now()).unwrap_or(i64::MAX)
 }
 
 /// The default relay for a `nostrconnect://` address.
@@ -707,6 +772,10 @@ impl Workspace {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(ApiError::internal(format!("vault.json: {e}"))),
         }
+        let collection = Collection::open(&data_dir.join("collection.sqlite"))?;
+        // ADR 0110 item 3: a waiting app with an expired code goes out at
+        // each start. The reads of the app list do not write.
+        apps::purge_expired(&collection, clock_now())?;
         Ok(Self {
             data_dir: data_dir.to_path_buf(),
             identity: AccountIdentity::default(),
@@ -715,7 +784,7 @@ impl Workspace {
             )),
             vault_path: data_dir.join("vault.json"),
             grants_dir,
-            collection: Collection::open(&data_dir.join("collection.sqlite"))?,
+            collection,
             vault: None,
             web: Web::with_policy(&NetPolicy::Open),
             hub_web: Web::with_policy(&NetPolicy::Open),
@@ -735,6 +804,8 @@ impl Workspace {
             announcer: Announcer::new(),
             rules: None,
             app_hook: None,
+            public_origin: None,
+            wall_clock: None,
             vault_used: Mutex::new(Instant::now()),
             clock: Clock::new(Instant::now),
             unlocked_at: None,
@@ -782,6 +853,33 @@ impl Workspace {
     pub fn with_app_hook(mut self, hook: AppHook) -> Self {
         self.app_hook = Some(hook);
         self
+    }
+
+    /// Set the public origin of the shell: the scheme, the host and the port,
+    /// with no path (ADR 0110 items 6 and 12).
+    #[must_use]
+    pub fn with_public_origin(mut self, origin: &str) -> Self {
+        self.public_origin = Some(origin.trim_end_matches('/').to_owned());
+        self
+    }
+
+    /// Use `clock` for the time of the signed requests of the apps. A test
+    /// uses it to move the time of the server.
+    #[must_use]
+    pub fn with_wall_clock(mut self, clock: WallClock) -> Self {
+        self.wall_clock = Some(clock);
+        self
+    }
+
+    /// The time for the signed requests of the apps, in seconds since the
+    /// Unix epoch.
+    pub(crate) fn now_secs(&self) -> u64 {
+        match &self.wall_clock {
+            Some(clock) => (clock.0)(),
+            None => std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+        }
     }
 
     /// Use `clock` for the rule of the recent unlock (ADR 0106 item 2).
@@ -1093,6 +1191,9 @@ impl Workspace {
         }
         self.collection
             .replace_from(&staged.join("collection.sqlite"))?;
+        // ADR 0110 item 41: each app needs to connect again, and no grant
+        // stays. The sync at the unlock removes the grant vaults.
+        apps::reset_after_import(&self.collection, clock_now())?;
         self.vault = None;
         self.unlocked_at = None;
         std::fs::rename(staged.join("vault.json"), &self.vault_path)
@@ -1277,24 +1378,34 @@ impl Workspace {
             .collect())
     }
 
+    /// True when the host of the feed XML of the grant needs a secret, so
+    /// the grant has a grant vault file (ADR 0058 item 2).
+    pub(crate) fn grant_needs_vault(&self, show: &ShowGrant) -> Result<bool, ApiError> {
+        Ok(!self.grant_secret_ids(show.feed_id)?.is_empty())
+    }
+
+    /// The file of the grant vault of a grant.
+    pub(crate) fn grant_vault_path(&self, grant_id: i64) -> PathBuf {
+        self.grant_path(grant_id)
+    }
+
     fn grant_path(&self, grant_id: i64) -> PathBuf {
         self.grants_dir.join(format!("{grant_id}.json"))
     }
 
-    /// Open the grant vault of a show with the grant vault key. Gives
-    /// `None` when the host of the feed XML needs no secret.
+    /// Open the grant vault of a show with the grant vault key from the
+    /// signed body of the request (ADR 0110 item 23). The caller has
+    /// examined that the grant names the app. Gives `None` when the host of
+    /// the feed XML needs no secret.
     ///
     /// # Errors
     ///
     /// Gives 423 `vault_locked` when the host needs a secret and the grant
     /// vault is not there, when the key does not open it, or when the grant
     /// vault does not hold the secret (ADR 0058 item 13).
-    // 073c: the app must be the app that the grant names, and the key comes
-    // from the signed body.
     pub(crate) fn open_grant_vault(
         &self,
         show: &ShowGrant,
-        _app_id: i64,
         key: &str,
     ) -> Result<Option<OpenVault>, ApiError> {
         let secret_ids = self.grant_secret_ids(show.feed_id)?;

@@ -42,6 +42,18 @@ impl ApiError {
         }
     }
 
+    /// The error as the `/app/v1/` routes give it. A live value that the
+    /// core refuses is 400 `live_value_invalid` (ADR 0110 item 26). The
+    /// page of the user keeps 422 `invalid_live_value`.
+    #[must_use]
+    pub(crate) fn for_app(mut self) -> Self {
+        if self.code == "invalid_live_value" {
+            self.status = StatusCode::BAD_REQUEST;
+            self.code = "live_value_invalid";
+        }
+        self
+    }
+
     /// The code of the error, such as `wrong_key`.
     #[must_use]
     pub fn code(&self) -> &'static str {
@@ -205,6 +217,7 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::GrantNotActive => (StatusCode::CONFLICT, "grant_ended"),
             PipelineErrorKind::DraftOpen => (StatusCode::CONFLICT, "draft_open"),
             PipelineErrorKind::BadStatus => (StatusCode::CONFLICT, "bad_status"),
+            PipelineErrorKind::AppNotActive => (StatusCode::CONFLICT, "app_not_active"),
             PipelineErrorKind::NotCovered => (StatusCode::UNPROCESSABLE_ENTITY, "not_covered"),
             PipelineErrorKind::InvalidOperation => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "invalid_change_set")

@@ -13,6 +13,8 @@ use tower::ServiceExt;
 use crate::config::{Origin, ServeOptions, Signup};
 use crate::session::Shared;
 
+mod apps;
+
 const ORIGIN: &str = "http://127.0.0.1:8080";
 const HOST: &str = "127.0.0.1:8080";
 const PASS_ONE: &str = "correct horse battery";
@@ -22,9 +24,7 @@ struct App {
     router: Router,
     state: Shared,
     data: tempfile::TempDir,
-    #[expect(dead_code, reason = "task 073d tests restart the server with it")]
     options: ServeOptions,
-    #[expect(dead_code, reason = "task 073d tests restart the server with it")]
     rules: PublicRules,
 }
 
@@ -74,7 +74,6 @@ fn app_with_rules(
 }
 
 /// Start the server again on the same data folder.
-#[expect(dead_code, reason = "task 073d tests restart the server with it")]
 fn restart(old: App) -> App {
     let App {
         data,

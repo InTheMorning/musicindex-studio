@@ -478,6 +478,13 @@ async fn open_new_user(
         .set_library_root(&library)
         .await
         .map_err(from_api)?;
+    // ADR 0110 item 41: each app of the archive needs to connect again, and
+    // no grant stays. This comes before the unlock, so that the sync of the
+    // unlock makes no grant vault.
+    user.handle
+        .reset_apps_after_import()
+        .await
+        .map_err(from_api)?;
     user.handle.unlock_with_key(key).await.map_err(from_api)?;
     if let Some(link) = link {
         user.handle
@@ -485,9 +492,13 @@ async fn open_new_user(
             .await
             .map_err(from_api)?;
     }
-    // The apps of the archive work at once (ADR 0107 item 2).
-    crate::users::rebuild_app_tokens_of(&state.users, &state.accounts, account_id, folder)
-        .map_err(|_| internal("the index of the app tokens did not change"))?;
+    // The index follows the collection.
+    crate::users::rebuild_app_index_of(
+        &state.accounts,
+        account_id,
+        &state.users.folder_path(folder),
+    )
+    .map_err(|_| internal("the index of the apps did not change"))?;
     state
         .accounts
         .add_import_notice(account_id)

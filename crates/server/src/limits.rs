@@ -170,9 +170,12 @@ impl ImportStarts {
     }
 }
 
-/// The requests that one app can make in one minute (ADR 0058 item 18).
+/// The requests that one app key can make in one minute (ADR 0110
+/// item 40).
 pub const APP_LIMIT: usize = 60;
-/// The unknown tokens that one client address can send in one hour.
+/// The requests with an unknown key, a signature that is not correct or a
+/// wrong code that one client address can send in one hour (ADR 0110
+/// item 40).
 pub const UNKNOWN_TOKEN_LIMIT: usize = 20;
 /// The length of the window of an app.
 const APP_WINDOW: Duration = Duration::from_mins(1);
@@ -195,7 +198,7 @@ fn lock_map(
 }
 
 impl AppLimits {
-    /// Count one request of an app. The key is the hash of its token.
+    /// Count one request of an app. The key is the public key of the app.
     /// Gives false when the app is over its limit in the window.
     pub fn allow_app(&self, key: &str) -> bool {
         let mut map = lock_map(&self.requests);
@@ -208,13 +211,13 @@ impl AppLimits {
         true
     }
 
-    /// True when the address has sent too many unknown tokens.
+    /// True when the address has sent too many requests with an unknown key.
     pub fn unknown_blocked(&self, address: &str) -> bool {
         let mut map = lock_map(&self.unknown);
         Attempts::count(&mut map, address) >= UNKNOWN_TOKEN_LIMIT
     }
 
-    /// Count one unknown token for the address only.
+    /// Count one request with an unknown key for the address only.
     pub fn record_unknown(&self, address: &str) {
         lock_map(&self.unknown)
             .entry(address.to_owned())

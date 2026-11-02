@@ -124,9 +124,11 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         hold_assets: options.hold_assets,
         nip46_relays: options.nip46_relays.clone(),
         accounts: Arc::clone(&accounts),
+        public_origin: options.origin.text.clone(),
     });
-    // A lost row must not stop an app (ADR 0058 item 16).
-    users::rebuild_app_tokens(&users, &accounts)?;
+    // A lost row must not stop an app (ADR 0110 item 39). The index comes
+    // from the collections at each start.
+    users::rebuild_app_index(&users, &accounts)?;
     Ok(Arc::new(ServerState {
         accounts,
         users,

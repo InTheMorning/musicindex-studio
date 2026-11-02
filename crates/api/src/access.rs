@@ -13,7 +13,7 @@ use crate::error::ApiError;
 #[derive(Clone)]
 pub struct Access {
     token: Arc<str>,
-    port: u16,
+    pub(crate) port: u16,
 }
 
 impl std::fmt::Debug for Access {
@@ -93,6 +93,20 @@ pub(crate) async fn check(
             StatusCode::FORBIDDEN,
             "host_not_allowed",
             "ADR 0017: the local API answers only a loopback host name",
+        ));
+    }
+    let path = request.uri().path();
+    if (path.starts_with("/api/") || path.starts_with("/auth/"))
+        && request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok())
+            .is_some_and(|h| h.starts_with("Nostr "))
+    {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "app_credential_refused",
+            "ADR 0110 item 16: a signed app request opens /app/v1/ only",
         ));
     }
     if request.uri().path().starts_with("/api/") {

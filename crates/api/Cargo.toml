@@ -26,6 +26,10 @@ qrcode.workspace = true
 
 [dev-dependencies]
 studio-core = { workspace = true, features = ["testing"] }
+# The API tests of /app/v1/ use the client crate (ADR 0110 item 30).
+studio-app-client = { path = "../app-client" }
+sha2 = "0.11"
+base64 = "0.23"
 nostr.workspace = true
 http-body-util = "0.1"
 rusqlite = { version = "0.40", features = ["bundled"] }

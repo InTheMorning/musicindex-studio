@@ -2341,8 +2341,17 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
             .count(),
         "tracks": model.items.len(),
     });
+    // ADR 0110 item 42: the core gives the state, and the UI keeps no copy
+    // of the rule. The base file of the draft is the file that the draft
+    // changes. A feed that is not readable gives no state.
+    let grant_blocked_by_draft = w.collection.draft(id)?.and_then(|draft| {
+        pipeline::grant_blocked_by_draft(&w.collection, id, &draft.base_xml, w.now_secs())
+            .ok()
+            .flatten()
+    });
     Ok(Json(json!({
         "revision": revision,
+        "grant_blocked_by_draft": grant_blocked_by_draft,
         "op3_tracks": op3_tracks,
         "model": model,
         "changed": changed,
@@ -2552,10 +2561,33 @@ pub(crate) async fn delete_draft(
 /// The route after `POST .../operations` and `DELETE .../operations/{op}`
 /// gives this too, so that the UI sees the new diff with no second
 /// request.
+/// The active apps with their live value origins, for the review sheet
+/// (ADR 0110 items 19 and 25).
+fn review_apps(w: &Workspace) -> Result<Vec<Value>, ApiError> {
+    Ok(apps::apps(&w.collection)?
+        .into_iter()
+        .filter(|app| app.state == apps::AppState::Active && app.live_value_origin.is_some())
+        .map(|app| {
+            json!({
+                "id": app.id,
+                "name": app.name,
+                "short_key": app.pubkey.as_deref().map(apps::short_key),
+                "live_value_origin": app.live_value_origin,
+            })
+        })
+        .collect())
+}
+
 fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
     let hosts = w.hosts()?;
     let library = w.library()?;
     let diff = pipeline::diff(&w.collection, &hosts, &library, id)?;
+    // The app of each grant of the draft, for the review sheet (ADR 0110
+    // item 19).
+    let mut grant_apps = serde_json::Map::new();
+    for guid in &diff.grants {
+        grant_apps.insert(guid.clone(), json!(w.collection.draft_grant_app(id, guid)?));
+    }
     Ok(Json(json!({
         "id": diff.id.as_str(),
         "unified": diff.unified,
@@ -2567,6 +2599,8 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
         "announcements": diff.announcements,
         "announce_skip": diff.announce_skip,
         "grants": diff.grants,
+        "grant_apps": grant_apps,
+        "apps": review_apps(w)?,
         "events": diff
             .events
             .iter()
@@ -5513,9 +5547,74 @@ pub(crate) async fn index_feed_tracks(
     .await
 }
 
-/// The connected apps. The list has no token (ADR 0054 item 7).
+/// The JSON of one connected app for the UI (ADR 0110 items 18 and 42). It
+/// has no code, no code hash and no public key: only the short key.
+fn app_json(w: &Workspace, app: &ConnectedApp) -> Result<Value, ApiError> {
+    let mut shows = Vec::new();
+    for show in grant::open_grants(&w.collection)? {
+        if show.app_id != Some(app.id) {
+            continue;
+        }
+        let writes = grant::writes(&w.collection, show.id)?;
+        let last_write_at = writes
+            .iter()
+            .filter(|write| write.cause.is_none())
+            .map(|write| write.written_at)
+            .max();
+        shows.push(json!({
+            "grant_id": show.id,
+            "feed_id": show.feed_id,
+            "feed_title": w.collection.feed(show.feed_id)?.title,
+            "item_guid": show.item_guid,
+            "created_at": show.created_at,
+            "last_write_at": last_write_at,
+        }));
+    }
+    Ok(json!({
+        "id": app.id,
+        "name": app.name,
+        "created_at": app.created_at,
+        "state": app.state,
+        "code_expires_at": (app.state == apps::AppState::Waiting)
+            .then_some(app.code_expires_at)
+            .flatten(),
+        "live_value_origin": app.live_value_origin,
+        "short_key": app.pubkey.as_deref().map(apps::short_key),
+        "last_used_at": app.last_used_at,
+        "last_address": app.last_address,
+        "shows": shows,
+    }))
+}
+
+/// The connected apps, with their state, short key, last use, live value
+/// origin and shows. The list has no code and no public key (ADR 0110
+/// items 7 and 18).
 pub(crate) async fn list_apps(State(shared): State<Shared>) -> ApiResult {
-    blocking(shared, |w| to_json(apps::apps(&w.collection)?)).await
+    blocking(shared, |w| {
+        let list = apps::apps(&w.collection)?
+            .iter()
+            .map(|app| app_json(w, app))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Json(Value::Array(list)))
+    })
+    .await
+}
+
+/// One connected app, for the notice of a pairing that waits (ADR 0110
+/// item 7). Gives 404 when the app is not there, for example after Done or
+/// after the 15 minutes.
+pub(crate) async fn get_app(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let app = apps::app(&w.collection, id)?.ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                format!("connected app {id} does not exist"),
+            )
+        })?;
+        Ok(Json(app_json(w, &app)?))
+    })
+    .await
 }
 
 #[derive(Deserialize)]
@@ -5523,10 +5622,9 @@ pub(crate) struct AppBody {
     name: String,
 }
 
-/// Add a connected app: a waiting app and its pairing code (ADR 0110
-/// item 6). This response is the only one that has the code.
-// 073c: this route gives the full pairing text (the public origin and the
-// code) and the new `GET` and `DELETE` routes of one app.
+/// Add a connected app: a waiting app and its pairing text (ADR 0110
+/// items 5 and 6). This response is the only one that has the code. The
+/// pairing text is the public origin and `#pair=` with the code.
 pub(crate) async fn add_app(
     State(shared): State<Shared>,
     Json(body): Json<AppBody>,
@@ -5534,6 +5632,9 @@ pub(crate) async fn add_app(
     blocking(shared, move |w| {
         // ADR 0106 item 2: a new app is a sensitive change.
         w.require_recent_unlock()?;
+        let origin = w.public_origin.clone().ok_or_else(|| {
+            ApiError::internal("the shell gave no public origin for the pairing text")
+        })?;
         let (app, code) =
             apps::start_pairing(&w.collection, &body.name).map_err(|e| match e.kind() {
                 CollectionErrorKind::Invalid => ApiError::new(
@@ -5543,29 +5644,31 @@ pub(crate) async fn add_app(
                 ),
                 _ => ApiError::from(e),
             })?;
-        w.app_changed(&crate::workspace::AppChange::Added { app_id: app.id });
-        Ok((
-            StatusCode::CREATED,
-            Json(json!({
-                "id": app.id,
-                "name": app.name,
-                "created_at": app.created_at,
-                "state": app.state,
-                "code_expires_at": app.code_expires_at,
-                "code": code.as_str(),
-            })),
-        ))
+        w.app_changed(&crate::workspace::AppChange::Added {
+            app_id: app.id,
+            code_hash: apps::hash_of_code(&code).unwrap_or_default(),
+            code_expires_at: app.code_expires_at.unwrap_or_default(),
+        });
+        let mut json = app_json(w, &app)?;
+        json["pairing_text"] = json!(format!("{origin}#pair={}", code.as_str()));
+        json["code"] = json!(code.as_str());
+        Ok((StatusCode::CREATED, Json(json)))
     })
     .await
 }
 
-/// Remove a connected app. Its grants end at once (ADR 0110 item 21).
+/// Remove a connected app. Its grants end at once (ADR 0110 items 8 and 21).
+/// The route also removes a waiting app and its code.
 pub(crate) async fn remove_app(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
-        apps::remove_app(&w.collection, id)?;
+        apps::remove_app_at(
+            &w.collection,
+            id,
+            i64::try_from(w.now_secs()).unwrap_or(i64::MAX),
+        )?;
         w.app_changed(&crate::workspace::AppChange::Removed { app_id: id });
         // Each grant vault of the app goes with its grant (ADR 0110
         // item 21).
@@ -5575,45 +5678,210 @@ pub(crate) async fn remove_app(
     .await
 }
 
-/// The layer of the `/app/v1/` routes. ADR 0110 item 16: the layer accepts
-/// no token. It refuses each request until the signed request of
-/// ADR 0110 item 12 is built.
-// 073c: this layer checks `Authorization: Nostr <base64 event>` with
-// `studio_core::apps::authenticate`, and puts the app into the request.
-pub(crate) async fn app_check(
-    State(_shared): State<Shared>,
-    _request: Request,
-    _next: axum::middleware::Next,
-) -> Result<Response, ApiError> {
-    Err(ApiError::new(
-        StatusCode::UNAUTHORIZED,
-        "app_key_required",
-        "ADR 0110: this route needs a request that the key of a connected app signed",
-    ))
+/// The largest body of an app request, before the hash (ADR 0110 item 14).
+const MAX_APP_BODY: usize = 64 * 1024;
+
+/// The result of the check of a signed app request.
+enum Signer {
+    /// The key of an active app.
+    App(Box<ConnectedApp>),
+    /// The key of the pairing request: no app has it yet.
+    Pairing(String),
 }
 
-/// The grant vault key that a granted write uses to open the grant vault.
-/// The type clears its memory when it is dropped, and it shows no text in
-/// debug output.
-// 073c: the key comes from `grant_key` in the signed body of the request.
+/// The public key of the pairing request, as lowercase hexadecimal text.
 #[derive(Clone)]
-pub(crate) struct AppToken(Zeroizing<String>);
+pub(crate) struct PairingKey(String);
 
-impl AppToken {
-    fn as_str(&self) -> &str {
-        &self.0
+fn app_signature_invalid() -> ApiError {
+    ApiError::new(
+        StatusCode::UNAUTHORIZED,
+        "app_signature_invalid",
+        "ADR 0110 item 13: Studio does not accept this signed request. Sign a new request with the key of the app",
+    )
+}
+
+/// The error of a failed check of a signed request. The message names no
+/// event, key or address (ADR 0110 item 17).
+fn request_error(error: &apps::RequestError) -> ApiError {
+    match error.kind() {
+        apps::RequestErrorKind::Database => ApiError::internal("the collection failed"),
+        _ => app_signature_invalid(),
     }
 }
 
-impl std::fmt::Debug for AppToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("AppToken(..)")
+/// The layer of the `/app/v1/` routes (ADR 0110 items 12 to 16). It accepts
+/// only `Authorization: Nostr <base64 event>`. It reads the body with a
+/// limit of 64 KiB, checks the hash of the body against the `payload` tag,
+/// and only then lets the route read the JSON. The expected address comes
+/// from the public origin of the shell, not from the `Host` header.
+pub(crate) async fn app_check(
+    State(shared): State<Shared>,
+    request: Request,
+    next: axum::middleware::Next,
+) -> Result<Response, ApiError> {
+    let (mut parts, body) = request.into_parts();
+    let header_text = parts
+        .headers
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok());
+    // ADR 0110 item 37: a token from before gets its own answer.
+    if header_text.is_some_and(|h| h.starts_with("Bearer ")) {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "app_key_required",
+            "ADR 0110 item 37: this route needs a request that the key of a connected app signed. Connect the app again",
+        ));
     }
+    let event = header_text
+        .and_then(studio_core::signed_request::parse_header)
+        .ok_or_else(app_signature_invalid)?;
+    let bytes = axum::body::to_bytes(body, MAX_APP_BODY)
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "body_too_large",
+                "ADR 0110 item 14: the body of an app request has 64 KiB at most",
+            )
+        })?;
+    let original = parts
+        .extensions
+        .get::<axum::extract::OriginalUri>()
+        .map_or_else(|| parts.uri.clone(), |o| o.0.clone());
+    let path_query = original
+        .path_and_query()
+        .map_or_else(|| original.path().to_owned(), |p| p.as_str().to_owned());
+    let is_pair = parts.method == axum::http::Method::POST && original.path() == "/app/v1/pair";
+    let method = parts.method.as_str().to_owned();
+    let address = parts
+        .extensions
+        .get::<crate::workspace::ClientAddress>()
+        .map(|a| a.0.clone())
+        .or_else(|| {
+            parts
+                .extensions
+                .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                .map(|c| c.0.ip().to_string())
+        })
+        .unwrap_or_else(|| "loopback".to_owned());
+    let checked_body = bytes.clone();
+    let signer = blocking(shared, move |w| {
+        let origin = w.public_origin.clone().ok_or_else(|| {
+            ApiError::internal("the shell gave no public origin for the signed requests")
+        })?;
+        let url = format!("{origin}{path_query}");
+        let now = w.now_secs();
+        let expected = studio_core::signed_request::ExpectedRequest {
+            url: &url,
+            method: &method,
+            body: Some(&checked_body),
+            now,
+        };
+        let now = i64::try_from(now).unwrap_or(i64::MAX);
+        if is_pair {
+            // The pairing is the only request that accepts a key that no app
+            // has (ADR 0110 item 13).
+            let key = studio_core::signed_request::check(&event, &expected)
+                .map_err(|_| app_signature_invalid())?;
+            let created_at = i64::try_from(event.created_at.as_secs()).unwrap_or(i64::MAX);
+            apps::accept_event(&w.collection, None, &event.id.to_hex(), created_at, now)
+                .map_err(|e| request_error(&e))?;
+            Ok(Signer::Pairing(key.to_hex()))
+        } else {
+            let app = apps::authenticate(&w.collection, &event, &expected)
+                .map_err(|e| request_error(&e))?;
+            apps::record_use(&w.collection, app.id, &address, now)?;
+            Ok(Signer::App(Box::new(app)))
+        }
+    })
+    .await?;
+    match signer {
+        Signer::App(app) => {
+            parts.extensions.insert(*app);
+        }
+        Signer::Pairing(key) => {
+            parts.extensions.insert(PairingKey(key));
+        }
+    }
+    let request = Request::from_parts(parts, axum::body::Body::from(bytes));
+    Ok(next.run(request).await)
 }
 
-/// The app that signed the request. It tests the layer of `/app/v1/`.
+/// Read the JSON of an app request body. An empty body gives the default
+/// value. The layer has examined the hash of the body already.
+fn app_body<T: serde::de::DeserializeOwned + Default>(bytes: &[u8]) -> Result<T, ApiError> {
+    if bytes.is_empty() {
+        return Ok(T::default());
+    }
+    serde_json::from_slice(bytes).map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_body",
+            "the body of the request is not the JSON that this route reads",
+        )
+    })
+}
+
+#[derive(Deserialize, Default)]
+pub(crate) struct PairBody {
+    #[serde(default)]
+    code: Zeroizing<String>,
+    #[serde(default)]
+    live_value_origin: String,
+}
+
+/// The JSON that tells the app who it is (ADR 0110 item 18).
+fn who_json(app: &ConnectedApp) -> Value {
+    json!({
+        "id": app.id,
+        "name": app.name,
+        "state": app.state,
+        "live_value_origin": app.live_value_origin,
+        "short_key": app.pubkey.as_deref().map(apps::short_key),
+    })
+}
+
+/// `POST /app/v1/pair`: the app gives the code and its live value origin,
+/// and the request is signed with the new key of the app (ADR 0110
+/// items 10 and 11).
+pub(crate) async fn pair_app(
+    State(shared): State<Shared>,
+    Extension(PairingKey(key)): Extension<PairingKey>,
+    body: axum::body::Bytes,
+) -> ApiResult {
+    let body: PairBody = app_body(&body)?;
+    blocking(shared, move |w| {
+        let app =
+            apps::pair(&w.collection, &body.code, &key, &body.live_value_origin).map_err(|e| {
+                let (status, code) = match e.kind() {
+                    apps::PairErrorKind::CodeInvalid => {
+                        (StatusCode::UNAUTHORIZED, "app_code_invalid")
+                    }
+                    apps::PairErrorKind::CodeUsed => (StatusCode::CONFLICT, "app_code_used"),
+                    apps::PairErrorKind::KeyInUse => (StatusCode::CONFLICT, "app_key_in_use"),
+                    apps::PairErrorKind::KeyInvalid => (StatusCode::BAD_REQUEST, "app_key_invalid"),
+                    apps::PairErrorKind::OriginInvalid => {
+                        (StatusCode::BAD_REQUEST, "live_value_origin_invalid")
+                    }
+                    _ => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
+                };
+                // The message names no code and no key.
+                ApiError::new(status, code, e.to_string())
+            })?;
+        w.app_changed(&crate::workspace::AppChange::Paired {
+            app_id: app.id,
+            pubkey: key,
+        });
+        Ok(Json(who_json(&app)))
+    })
+    .await
+}
+
+/// The app that signed the request: who it is, its state and its live value
+/// origin (ADR 0110 item 18).
 pub(crate) async fn whoami(Extension(app): Extension<ConnectedApp>) -> Json<Value> {
-    Json(json!({ "id": app.id, "name": app.name }))
+    Json(who_json(&app))
 }
 
 // ---- Show grants (ADR 0054 items 11 to 17) ----
@@ -5628,7 +5896,9 @@ fn unix_now() -> u64 {
 /// Add a show grant to the draft or remove it, and give the new diff, so
 /// that the review sheet needs no second request. The guid must be a
 /// `pending` live item of the draft. The route never writes to a host.
-fn change_draft_grant(w: &Workspace, id: i64, guid: &str, add: bool) -> ApiResult {
+/// A grant names one active app (ADR 0110 item 19): an add carries the app
+/// ID of the request, which can be missing.
+fn change_draft_grant(w: &Workspace, id: i64, guid: &str, edit: GrantEdit) -> ApiResult {
     let id = FeedId(id);
     ensure_draft(w, id)?;
     let (model, _) = pipeline::draft_model(&w.collection, id)?;
@@ -5639,33 +5909,56 @@ fn change_draft_grant(w: &Workspace, id: i64, guid: &str, add: bool) -> ApiResul
             "only a pending live show of the draft can get a grant",
         ));
     }
-    if add {
-        // 073c: the review sheet sends the app. Now the grant names the one
-        // active app.
-        let active: Vec<_> = apps::apps(&w.collection)?
-            .into_iter()
-            .filter(|app| app.state == apps::AppState::Active)
-            .collect();
-        let [app] = active.as_slice() else {
-            return Err(ApiError::new(
+    if let GrantEdit::Add(app_id) = edit {
+        let app_required = || {
+            ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "app_required",
-                "ADR 0110 item 19: a grant names one active app",
-            ));
+                "ADR 0110 item 19: a grant names one active app. Select an app for the grant",
+            )
         };
-        w.collection.add_draft_grant(id, guid, app.id)?;
+        let app_id = app_id.ok_or_else(app_required)?;
+        let active = apps::app(&w.collection, app_id)?.is_some_and(|app| {
+            app.state == apps::AppState::Active && app.live_value_origin.is_some()
+        });
+        if !active {
+            return Err(app_required());
+        }
+        w.collection.add_draft_grant(id, guid, app_id)?;
     } else {
         w.collection.remove_draft_grant(id, guid)?;
     }
     diff_json(w, id)
 }
 
-/// Ask for a show grant in the draft (ADR 0054 item 11).
+/// A change of the show grant of a draft.
+#[derive(Clone, Copy)]
+enum GrantEdit {
+    /// Ask for the grant, for the app of the request.
+    Add(Option<i64>),
+    /// Remove the grant.
+    Remove,
+}
+
+#[derive(Deserialize, Default)]
+pub(crate) struct GrantApp {
+    #[serde(default)]
+    app_id: Option<i64>,
+}
+
+/// Ask for a show grant in the draft (ADR 0054 item 11). The body names the
+/// app: `{"app_id": 3}`. A body with no active app gives 422
+/// `app_required` (ADR 0110 item 19).
 pub(crate) async fn put_draft_grant(
     State(shared): State<Shared>,
     Path((id, guid)): Path<(i64, String)>,
+    body: axum::body::Bytes,
 ) -> ApiResult {
-    blocking(shared, move |w| change_draft_grant(w, id, &guid, true)).await
+    let body: GrantApp = app_body(&body)?;
+    blocking(shared, move |w| {
+        change_draft_grant(w, id, &guid, GrantEdit::Add(body.app_id))
+    })
+    .await
 }
 
 /// Remove a show grant from the draft (ADR 0054 item 11).
@@ -5673,7 +5966,10 @@ pub(crate) async fn delete_draft_grant(
     State(shared): State<Shared>,
     Path((id, guid)): Path<(i64, String)>,
 ) -> ApiResult {
-    blocking(shared, move |w| change_draft_grant(w, id, &guid, false)).await
+    blocking(shared, move |w| {
+        change_draft_grant(w, id, &guid, GrantEdit::Remove)
+    })
+    .await
 }
 
 /// End the open grant of a live item: "Stop the grant" on the live item
@@ -5727,6 +6023,8 @@ pub(crate) async fn list_feed_grants(
                 "item_guid": show.item_guid,
                 "created_at": show.created_at,
                 "ended_at": show.ended_at,
+                "app_id": show.app_id,
+                "live_value_origin": show.live_value_origin,
                 "writes": writes
                     .iter()
                     .map(|write| json!({
@@ -5760,20 +6058,38 @@ fn hosted_feed(w: &Workspace, hosts: &Hosts, id: FeedId) -> Result<Option<Feed>,
     Ok(Some(feed))
 }
 
-/// The hosts for a granted read or write of one grant (ADR 0058 items 11
-/// and 13). The secrets come from the grant vault, which the token of the
-/// app opens. The user vault is never read, also when it is open. A grant on
-/// a host with no secret needs no grant vault.
+/// The show grant that names the app (ADR 0110 item 19). Another app, or
+/// no such grant, gives 404 `no_grant`: the answer does not tell the app
+/// that the grant of a different app exists.
+fn grant_of_app(
+    w: &Workspace,
+    grant_id: i64,
+    app: &ConnectedApp,
+) -> Result<grant::ShowGrant, ApiError> {
+    grant::grant(&w.collection, grant_id)?
+        .filter(|show| show.app_id == Some(app.id))
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                "no_grant",
+                format!("show grant {grant_id} does not exist for this app"),
+            )
+        })
+}
+
+/// The hosts for a granted write of one grant (ADR 0058 items 11 and 13).
+/// The secrets come from the grant vault, which the grant vault key of the
+/// signed body opens. The user vault is never read, also when it is open. A
+/// grant on a host with no secret needs no grant vault.
 ///
 /// # Errors
 ///
 /// Gives 423 `vault_locked` when the grant vault does not open with the
-/// token, and an [`ApiError`] when a connector fails.
+/// key, and an [`ApiError`] when a connector fails.
 fn grant_hosts(
     w: &Workspace,
     show: &grant::ShowGrant,
-    app: &ConnectedApp,
-    token: &AppToken,
+    key: &str,
     signing: &Signing,
 ) -> Result<Hosts, ApiError> {
     // An ended grant needs no grant vault. The write then gives
@@ -5781,56 +6097,104 @@ fn grant_hosts(
     let vault = if show.ended_at.is_some() {
         None
     } else {
-        w.open_grant_vault(show, app.id, token.as_str())?
+        w.open_grant_vault(show, key)?
     };
     w.hosts_with_grant_vault(vault.as_ref(), signing)
 }
 
-/// Each active show grant, for a connected app (ADR 0054 item 8). The route
-/// reads the hosted file of each feed with a grant, with the hosts of the
-/// grant vault. A grant whose vault the token does not open is not in the
-/// list, and it gives no error for the full list.
+/// The wrapper of the grant vault key for the app (ADR 0110 item 23). The
+/// app decrypts it with its own key, and sends the grant vault key in the
+/// body of each write. A grant on a host with no secret gets a wrapper of a
+/// random key that the write ignores. A grant vault that Studio has not made
+/// yet gives 423 `vault_locked`: the user must unlock Studio once.
+pub(crate) async fn show_wrapper(
+    State(shared): State<Shared>,
+    Extension(app): Extension<ConnectedApp>,
+    Path(grant_id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let show = grant_of_app(w, grant_id, &app)?;
+        if show.ended_at.is_some() {
+            return Err(grant_ended());
+        }
+        let wrapper = if w.grant_needs_vault(&show)? {
+            let file = studio_core::vault::VaultFile::load(&w.grant_vault_path(show.id))
+                .map_err(|_| ApiError::vault_locked())?;
+            studio_core::grant_vault::wrapper(&file, app.id).ok_or_else(ApiError::vault_locked)?
+        } else {
+            studio_core::grant_vault::placeholder_wrapper(&app)
+                .map_err(|_| ApiError::internal("the wrapper cannot be made"))?
+        };
+        to_json(wrapper)
+    })
+    .await
+}
+
+fn grant_ended() -> ApiError {
+    ApiError::new(
+        StatusCode::CONFLICT,
+        "grant_ended",
+        "the show grant ended: stop the writes for this show",
+    )
+}
+
+/// Each active show grant of the app (ADR 0054 item 8). The route has no
+/// grant vault key, so it reads the hosted file of a feed only from a host
+/// that needs no secret. A show on a host with a secret is in the list with
+/// its feed and its live value origin, and with no status, no times and no
+/// live value: the write result gives the status.
 pub(crate) async fn list_shows(
     State(shared): State<Shared>,
     Extension(app): Extension<ConnectedApp>,
-    Extension(token): Extension<AppToken>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        let now = unix_now();
+        let now = w.now_secs();
         let signing = Signing::default();
+        let hosts = w.hosts_with_grant_vault(None, &signing)?;
         let mut read: std::collections::HashMap<FeedId, Option<Feed>> =
             std::collections::HashMap::new();
         let mut shows = Vec::new();
         for show in grant::open_grants(&w.collection)? {
+            if show.app_id != Some(app.id) {
+                continue;
+            }
             if let std::collections::hash_map::Entry::Vacant(entry) = read.entry(show.feed_id) {
-                let hosts = match grant_hosts(w, &show, &app, &token, &signing) {
-                    Ok(hosts) => hosts,
-                    Err(error) if error.code() == "vault_locked" => continue,
+                let hosted = match hosted_feed(w, &hosts, show.feed_id) {
+                    Ok(hosted) => hosted,
+                    Err(error) if error.code() == "vault_locked" => None,
                     Err(error) => return Err(error),
                 };
-                entry.insert(hosted_feed(w, &hosts, show.feed_id)?);
+                entry.insert(hosted);
             }
-            let Some(Some(hosted)) = read.get(&show.feed_id) else {
-                continue;
-            };
-            if grant::active(&w.collection, show.feed_id, &show.item_guid, hosted, now)?.is_none() {
-                continue;
-            }
-            let Some(live) = grant::live_item(hosted, &show.item_guid) else {
-                continue;
-            };
             let row = w.collection.feed(show.feed_id)?;
-            shows.push(json!({
+            let mut entry = json!({
                 "grant_id": show.id,
                 "feed_id": show.feed_id,
                 "feed_title": row.title,
                 "item_guid": show.item_guid,
-                "title": live.item.title,
-                "status": live.status,
-                "start": live.start,
-                "end": live.end,
-                "live_value": live.live_value,
-            }));
+                "title": Value::Null,
+                "status": Value::Null,
+                "start": Value::Null,
+                "end": Value::Null,
+                "live_value": Value::Null,
+                "live_value_origin": show.live_value_origin,
+            });
+            if let Some(Some(hosted)) = read.get(&show.feed_id) {
+                if grant::active(&w.collection, show.feed_id, &show.item_guid, hosted, now)?
+                    .is_none()
+                {
+                    continue;
+                }
+                let Some(live) = grant::live_item(hosted, &show.item_guid) else {
+                    continue;
+                };
+                entry["title"] = json!(live.item.title);
+                entry["status"] = json!(live.status);
+                entry["start"] = json!(live.start);
+                entry["end"] = json!(live.end);
+                entry["live_value"] = json!(live.live_value);
+            }
+            shows.push(entry);
         }
         Ok(Json(Value::Array(shows)))
     })
@@ -5840,42 +6204,53 @@ pub(crate) async fn list_shows(
 /// Write one granted change for a connected app (ADR 0054 item 15, ADR
 /// 0058 items 11 to 13). Give the version, the status and the live value
 /// after the write. The app never gets a secret. The connectors get their
-/// secrets from the grant vault, which the token of the app opens. The user
-/// vault can be locked, and the write never reads it.
+/// secrets from the grant vault, which the grant vault key of the body
+/// opens. The user vault can be locked, and the write never reads it.
 fn granted_change(
     w: &mut Workspace,
     grant_id: i64,
     app: &ConnectedApp,
-    token: &AppToken,
+    key: &str,
     change: &grant::GrantChange,
 ) -> ApiResult {
-    let result = granted_write(w, grant_id, app, token, change);
+    let result = granted_write(w, grant_id, app, key, change);
     // A write can end the grant, and then the grant vault goes.
     w.sync_grant_vaults(None);
-    result
+    result.map_err(ApiError::for_app)
 }
 
 fn granted_write(
     w: &mut Workspace,
     grant_id: i64,
     app: &ConnectedApp,
-    token: &AppToken,
+    key: &str,
     change: &grant::GrantChange,
 ) -> ApiResult {
-    let show = grant::grant(&w.collection, grant_id)?.ok_or_else(|| {
-        ApiError::new(
-            StatusCode::NOT_FOUND,
-            "no_grant",
-            format!("show grant {grant_id} does not exist"),
-        )
-    })?;
-    let now = unix_now();
+    let show = grant_of_app(w, grant_id, app)?;
+    let now = w.now_secs();
     // The diff of the granted write makes its signing plan at `now`.
     let signing = Signing {
         plan_time: Some(now),
         signed: Vec::new(),
     };
-    let hosts = grant_hosts(w, &show, app, token, &signing)?;
+    let hosts = match grant_hosts(w, &show, key, &signing) {
+        Ok(hosts) => hosts,
+        Err(error) => {
+            // ADR 0110 item 43: a grant vault that does not open is a cause
+            // in the list of granted writes.
+            if error.code() == "vault_locked" && show.ended_at.is_none() {
+                grant::add_refusal(
+                    &w.collection,
+                    show.id,
+                    &app.name,
+                    change,
+                    grant::Refusal::VaultNotOpen,
+                    i64::try_from(now).unwrap_or(i64::MAX),
+                )?;
+            }
+            return Err(error);
+        }
+    };
     let library = w.library()?;
     let addresses: &dyn pipeline::AddressCheck = match &w.address_check {
         Some(check) => check.0.as_ref(),
@@ -5908,19 +6283,29 @@ fn granted_write(
     })))
 }
 
-#[derive(Deserialize)]
-pub(crate) struct ShowStatus {
+/// The body of a granted write: the grant vault key from the wrapper, and
+/// the fields of the route (ADR 0110 item 23). The key clears its memory
+/// when it is dropped, and it shows no text in debug output.
+#[derive(Deserialize, Default)]
+pub(crate) struct GrantedBody {
+    #[serde(default)]
+    grant_key: Zeroizing<String>,
+    #[serde(default)]
     status: String,
+    #[serde(default)]
+    uri: String,
+    #[serde(default)]
+    protocol: String,
 }
 
 /// Start or end a show through its grant: `live` or `ended`.
 pub(crate) async fn set_show_status(
     State(shared): State<Shared>,
     Extension(app): Extension<ConnectedApp>,
-    Extension(token): Extension<AppToken>,
     Path(grant_id): Path<i64>,
-    Json(body): Json<ShowStatus>,
+    body: axum::body::Bytes,
 ) -> ApiResult {
+    let body: GrantedBody = app_body(&body)?;
     blocking(shared, move |w| {
         let change = match body.status.as_str() {
             "live" => grant::GrantChange::GoLive,
@@ -5933,47 +6318,27 @@ pub(crate) async fn set_show_status(
                 ));
             }
         };
-        granted_change(w, grant_id, &app, &token, &change)
+        granted_change(w, grant_id, &app, &body.grant_key, &change)
     })
     .await
 }
 
-#[derive(Deserialize)]
-pub(crate) struct ShowLiveValue {
-    uri: String,
-    protocol: String,
-}
-
-/// Set or change the `podcast:liveValue` of a show through its grant.
+/// Set or change the `podcast:liveValue` of a show through its grant. The
+/// core refuses a value that is not on the live value origin of the grant
+/// with 400 `live_value_invalid` (ADR 0110 item 26).
 pub(crate) async fn put_show_live_value(
     State(shared): State<Shared>,
     Extension(app): Extension<ConnectedApp>,
-    Extension(token): Extension<AppToken>,
     Path(grant_id): Path<i64>,
-    Json(body): Json<ShowLiveValue>,
+    body: axum::body::Bytes,
 ) -> ApiResult {
+    let body: GrantedBody = app_body(&body)?;
     blocking(shared, move |w| {
-        let uri = body.uri.trim();
-        let protocol = body.protocol.trim();
-        if uri.is_empty() || protocol.is_empty() {
-            return Err(ApiError::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "invalid_live_value",
-                "give the uri and the protocol of the live value",
-            ));
-        }
-        live::check_live_value(uri, protocol).map_err(|e| {
-            ApiError::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "invalid_live_value",
-                e.to_string(),
-            )
-        })?;
         let change = grant::GrantChange::SetLiveValue {
-            uri: uri.to_owned(),
-            protocol: protocol.to_owned(),
+            uri: body.uri.trim().to_owned(),
+            protocol: body.protocol.trim().to_owned(),
         };
-        granted_change(w, grant_id, &app, &token, &change)
+        granted_change(w, grant_id, &app, &body.grant_key, &change)
     })
     .await
 }
@@ -5982,15 +6347,16 @@ pub(crate) async fn put_show_live_value(
 pub(crate) async fn delete_show_live_value(
     State(shared): State<Shared>,
     Extension(app): Extension<ConnectedApp>,
-    Extension(token): Extension<AppToken>,
     Path(grant_id): Path<i64>,
+    body: axum::body::Bytes,
 ) -> ApiResult {
+    let body: GrantedBody = app_body(&body)?;
     blocking(shared, move |w| {
         granted_change(
             w,
             grant_id,
             &app,
-            &token,
+            &body.grant_key,
             &grant::GrantChange::RemoveLiveValue,
         )
     })

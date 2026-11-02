@@ -7,7 +7,8 @@ use std::sync::Arc;
 use axum::Router;
 use axum::response::{IntoResponse, Response};
 use studio_api::{
-    AccountIdentity, ApiError, ServerRules, Workspace, WorkspaceHandle, workspace_router,
+    AccountIdentity, ApiError, AppChange, AppHook, ServerRules, Workspace, WorkspaceHandle,
+    workspace_router,
 };
 use studio_core::collection::Collection;
 use studio_core::net::{NetPolicy, PublicRules};
@@ -42,9 +43,12 @@ pub struct UserSettings {
     pub hold_assets: bool,
     /// The relays for a `nostrconnect://` address (ADR 0056 item 13).
     pub nip46_relays: Vec<String>,
-    /// The database that keeps the index of the app tokens (ADR 0058
-    /// item 16).
+    /// The database that keeps the index of the apps (ADR 0110 item 39).
     pub accounts: Arc<Accounts>,
+    /// The public origin: the scheme, the host and the port. The signed
+    /// requests of the apps and the pairing text use it (ADR 0110 items 6
+    /// and 12).
+    pub public_origin: String,
 }
 
 /// The open users, by account ID.
@@ -221,6 +225,26 @@ fn open_user(
         workspace = workspace.with_clock(clock);
     }
     workspace = workspace.with_nip46_relays(settings.nip46_relays.clone());
+    workspace = workspace.with_public_origin(&settings.public_origin);
+    // The index of the apps follows the changes of the app list (ADR 0110
+    // item 39). The hook holds no secret.
+    let index = Arc::clone(&settings.accounts);
+    workspace = workspace.with_app_hook(AppHook::new(move |change| {
+        let result = match change {
+            AppChange::Added {
+                app_id,
+                code_hash,
+                code_expires_at,
+            } => index.add_app_code(code_hash, account_id, *app_id, *code_expires_at),
+            AppChange::Paired { app_id, pubkey } => {
+                index.finish_app_key(pubkey, account_id, *app_id)
+            }
+            AppChange::Removed { app_id } => index.remove_app_rows(account_id, *app_id),
+        };
+        if result.is_err() {
+            eprintln!("studio-server: the index of the apps did not change");
+        }
+    }));
     if let Some(base) = &settings.musicindex {
         workspace = workspace.with_musicindex(base);
     }
@@ -235,26 +259,42 @@ fn open_user(
     Ok(OpenUser { router, handle })
 }
 
-/// Clear the rows of the app tokens of each user (ADR 0110 item 37). An app
-/// token works no more, so the index holds no row.
-// 073d: the index holds the public key of each app and the code hash of each
-// waiting app, made again from the collections.
-pub fn rebuild_app_tokens(users: &Users, accounts: &Accounts) -> Result<(), String> {
+/// Make the index of the apps again from the collection of each user
+/// (ADR 0110 item 39). The public key of each active app and the code of
+/// each waiting app are in the index after the call.
+pub fn rebuild_app_index(users: &Users, accounts: &Accounts) -> Result<(), String> {
     for (id, folder) in accounts.folders()? {
-        rebuild_app_tokens_of(users, accounts, id, &folder)?;
+        rebuild_app_index_of(accounts, id, &users.folder_path(&folder))?;
     }
     Ok(())
 }
 
-/// Clear the rows of the app tokens of one account. An import calls it, so
-/// that an imported app has no token row (ADR 0107 item 2).
-pub fn rebuild_app_tokens_of(
-    _users: &Users,
+/// Make the rows of one account again from its collection. An import calls
+/// it, so that the index follows the apps of the imported collection.
+pub fn rebuild_app_index_of(
     accounts: &Accounts,
     id: i64,
-    _folder: &str,
+    folder: &std::path::Path,
 ) -> Result<(), String> {
-    accounts.replace_app_tokens(id, &[])
+    let file = folder.join("collection.sqlite");
+    let (keys, codes) = if file.exists() {
+        let collection = Collection::open(&file).map_err(|e| e.to_string())?;
+        let keys = studio_core::apps::apps(&collection)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter(|app| app.state == studio_core::apps::AppState::Active)
+            .filter_map(|app| app.pubkey.map(|key| (app.id, key)))
+            .collect::<Vec<_>>();
+        let codes = studio_core::apps::known_codes(&collection)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|code| (code.app_id, code.hash, code.expires_at))
+            .collect::<Vec<_>>();
+        (keys, codes)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    accounts.replace_app_index(id, &keys, &codes)
 }
 
 /// An address check that passes each address. A test uses it, so that no

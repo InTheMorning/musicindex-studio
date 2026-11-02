@@ -1,5 +1,7 @@
 //! Contract tests of the local API (task 007).
 
+mod apps;
+
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -10745,6 +10747,7 @@ fn app_with_clock(clock: crate::Clock) -> (App, crate::WorkspaceHandle) {
     let workspace = Workspace::open(data.path())
         .unwrap()
         .with_musicindex("http://127.0.0.1:9")
+        .with_public_origin("http://127.0.0.1:4100")
         .with_clock(clock);
     let (workspace_routes, handle) = crate::workspace_router(workspace);
     let router =
@@ -11614,12 +11617,58 @@ async fn import_check(app: &App, bytes: &[u8]) -> (String, StatusCode, Value) {
     (upload, status, facts)
 }
 
+/// An app that paired, with a grant, in the collection of `app` (ADR 0110
+/// item 41).
+fn add_app_with_grant(app: &App) {
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let (connected, code) = studio_core::apps::start_pairing(&collection, "Show tool").unwrap();
+    let signer = studio_app_client::MemorySigner::generate().unwrap();
+    let key = studio_app_client::AppSigner::public_key(&signer).to_hex();
+    studio_core::apps::pair(&collection, &code, &key, "wss://example.com").unwrap();
+    let feed = collection.feeds().unwrap()[0].id;
+    studio_core::grant::record(
+        &collection,
+        feed,
+        "guid-1",
+        connected.id,
+        "wss://example.com",
+        1,
+    )
+    .unwrap();
+}
+
+/// After an import, each app shows Connect Again and no grant stays
+/// (ADR 0110 item 41).
+async fn assert_apps_reset(target: &App, feeds: &Value) {
+    let (_, apps_after) = call(target, "GET", "/api/v1/apps", None).await;
+    assert_eq!(apps_after[0]["name"], "Show tool");
+    assert_eq!(
+        apps_after[0]["state"], "token",
+        "ADR 0110 item 41: an imported app must show Connect Again. Call reset_apps_after_import in replace_account"
+    );
+    let feed_id = feeds[0]["id"].as_i64().unwrap();
+    let (_, grants_after) = call(
+        target,
+        "GET",
+        &format!("/api/v1/feeds/{feed_id}/grants"),
+        None,
+    )
+    .await;
+    assert!(
+        grants_after[0]["ended_at"].is_i64(),
+        "ADR 0110 item 41: an import must keep no grant: {grants_after}"
+    );
+}
+
 #[tokio::test]
 async fn an_export_imports_into_an_empty_desktop_and_opens_with_the_passphrase() {
     let (source, _) = app_assets(true, None);
     set_up_server(&source).await;
     std::fs::create_dir_all(source.data.path().join("library")).unwrap();
     std::fs::write(source.data.path().join("library/loose.mp3"), b"audio").unwrap();
+    add_app_with_grant(&source);
     let (_, _, _, bytes) = export_archive(&source, json!({})).await;
     let vault_before = std::fs::read(source.data.path().join("vault.json")).unwrap();
 
@@ -11653,6 +11702,7 @@ async fn an_export_imports_into_an_empty_desktop_and_opens_with_the_passphrase()
     assert_eq!(body["feeds"], 1);
     let (_, feeds) = call(&target, "GET", "/api/v1/feeds", None).await;
     assert_eq!(feeds.as_array().unwrap().len(), 1, "{feeds}");
+    assert_apps_reset(&target, &feeds).await;
     assert_eq!(
         std::fs::read(target.data.path().join("vault.json")).unwrap(),
         vault_before,

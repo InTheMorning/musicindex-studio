@@ -166,8 +166,20 @@ pub async fn outer(State(state): State<Shared>, request: Request, next: Next) ->
             "the host is not the host of the public origin",
         );
     }
+    // The signed request of an app opens `/app/v1/` only (ADR 0110
+    // item 16).
+    let path = request.uri().path();
+    if (path.starts_with("/api/") || path.starts_with("/auth/"))
+        && crate::apps::has_app_header(request.headers())
+    {
+        return failure(
+            StatusCode::UNAUTHORIZED,
+            "app_credential_refused",
+            "ADR 0110 item 16: a signed app request opens /app/v1/ only",
+        );
+    }
     // An app is not a browser and sends no `Origin`. The `/app/v1/` layer
-    // checks the token of the app (ADR 0058 item 17).
+    // checks the signed request of the app (ADR 0110 item 12).
     let is_app = request.uri().path().starts_with("/app/v1/");
     if !is_app && request.method() != Method::GET && request.method() != Method::HEAD {
         let origin = request
@@ -514,12 +526,6 @@ pub async fn media(State(state): State<Shared>, request: Request) -> Response {
 /// The `/api/` layer: find the session, check the CSRF header, and send
 /// the request to the router of the user (ADR 0055 item 5).
 pub async fn api(State(state): State<Shared>, request: Request) -> Response {
-    // The token of an app opens `/app/v1/` only (ADR 0058 item 19).
-    match crate::apps::is_app_token(&state, request.headers()) {
-        Ok(false) => {}
-        Ok(true) => return crate::apps::unauthorized(),
-        Err(response) => return response,
-    }
     let session = match active_session(&state, request.headers()).await {
         Ok(session) => session,
         Err(response) => return response,

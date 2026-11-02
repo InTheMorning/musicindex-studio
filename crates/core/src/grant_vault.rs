@@ -9,6 +9,7 @@
 //! [`open_with_key`] opens the vault. Studio keeps no copy of the key outside
 //! the user vault.
 
+use base64::Engine as _;
 use nostr::prelude::{Keys, PublicKey, SecretKey};
 use serde::Serialize;
 use zeroize::Zeroizing;
@@ -102,6 +103,35 @@ pub fn add_wrapper(
         .map_err(|_| VaultError::wrong_key())?;
     file.set_app_wrapper(app.id, &sender.public_key().to_hex(), &ciphertext);
     Ok(())
+}
+
+/// A wrapper of a random key for an app, with no grant vault file. A grant
+/// on a host with no secret has no grant vault (ADR 0058 item 2), but the
+/// app still takes the wrapper step before a write (ADR 0110 item 23). The
+/// key is random, Studio keeps no copy of it, and the write ignores it.
+///
+/// # Errors
+///
+/// Gives [`VaultErrorKind::WrongKey`](crate::vault::VaultErrorKind::WrongKey)
+/// when the app has no app key, and a [`VaultError`] when the random source
+/// is not available.
+pub fn placeholder_wrapper(app: &ConnectedApp) -> Result<Wrapper, VaultError> {
+    let mut bytes = Zeroizing::new([0_u8; 32]);
+    getrandom::fill(bytes.as_mut_slice())
+        .map_err(|_| VaultError::corrupt("the random source is not available"))?;
+    let key = Zeroizing::new(base64::engine::general_purpose::STANDARD.encode(bytes.as_slice()));
+    let pubkey = app
+        .pubkey
+        .as_deref()
+        .and_then(|hex| PublicKey::from_hex(hex).ok())
+        .ok_or_else(VaultError::wrong_key)?;
+    let sender = random_keys()?;
+    let ciphertext =
+        encrypt_text(sender.secret_key(), &pubkey, &key).map_err(|_| VaultError::wrong_key())?;
+    Ok(Wrapper {
+        sender: sender.public_key().to_hex(),
+        ciphertext,
+    })
 }
 
 /// Remove the wrapper of an app from a grant vault file. Gives `true` when

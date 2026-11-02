@@ -120,6 +120,9 @@ pub enum PipelineErrorKind {
     /// The status of the live item cannot change to the requested status
     /// (ADR 0054 item 5).
     BadStatus,
+    /// A show grant of the draft names an app that is not active now, so
+    /// the write would drop the grant with no message (ADR 0110 item 19).
+    AppNotActive,
 }
 
 /// An error from the write pipeline.
@@ -1726,6 +1729,36 @@ fn grant_apps(
         .collect()
 }
 
+/// Give [`PipelineErrorKind::AppNotActive`] when an app of `grants` is not
+/// active now, or has no live value origin (ADR 0110 items 19 and 25).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails or an app is not
+/// active.
+fn ensure_grant_apps_active(
+    collection: &Collection,
+    grants: &[(String, Option<i64>)],
+) -> Result<(), PipelineError> {
+    for (guid, app_id) in grants {
+        let active = match app_id {
+            Some(app_id) => crate::apps::app(collection, *app_id)?.is_some_and(|app| {
+                app.state == crate::apps::AppState::Active && app.live_value_origin.is_some()
+            }),
+            None => false,
+        };
+        if !active {
+            return Err(PipelineError::new(
+                PipelineErrorKind::AppNotActive,
+                format!(
+                    "ADR 0110 item 19: the show grant of {guid} names an app that is not active. Select an active app for the grant, or remove the grant"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// The bytes that [`diff_id`] adds for the show grants, in the form of
 /// [`announce_bytes`]. A change of a grant of the draft, or of its app, after
 /// the diff changes the ID (ADR 0054 item 11, ADR 0110 item 19).
@@ -2769,6 +2802,9 @@ pub fn write_draft_signed(
     // function, and its grants go with it.
     let grant_apps = grant_apps(collection, id, &grants)?;
     extra.extend(grant_bytes(&grant_apps));
+    // ADR 0110 item 19: a grant needs an active app. No grant is dropped
+    // with no message.
+    ensure_grant_apps_active(collection, &grant_apps)?;
     if &diff_id(&draft, &extra) != approved {
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
@@ -3435,7 +3471,7 @@ pub fn grant_blocked_by_draft(
 /// Record the grants of a write, and end each grant that the written feed
 /// ends (ADR 0054 items 12 and 14). Each grant names its app and keeps the
 /// live value origin of that app at the approval (ADR 0110 items 19 and
-/// 25). A grant whose app is not active now is not recorded.
+/// 25). The write refused a grant whose app is not active before it ran.
 ///
 /// # Errors
 ///
@@ -3449,14 +3485,15 @@ fn record_grants(
 ) -> Result<(), PipelineError> {
     let now = i64::try_from(now).unwrap_or(i64::MAX);
     for (guid, app_id) in grants {
-        let Some(app) = app_id
+        // `ensure_grant_apps_active` examined each app before the write.
+        let app = app_id
             .map(|app_id| crate::apps::app(collection, app_id))
             .transpose()?
-            .flatten()
-        else {
-            continue;
-        };
-        if let (crate::apps::AppState::Active, Some(origin)) = (app.state, &app.live_value_origin) {
+            .flatten();
+        if let Some(app) = app
+            && let (crate::apps::AppState::Active, Some(origin)) =
+                (app.state, &app.live_value_origin)
+        {
             grant::record(collection, id, guid, app.id, origin, now)?;
         }
     }

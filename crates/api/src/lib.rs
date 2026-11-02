@@ -30,8 +30,8 @@ pub use import::{
     Credential, ImportOpen, ImportStore, PART_SIZE as IMPORT_PART_SIZE, Staged, verify_credential,
 };
 pub use workspace::{
-    AccountIdentity, AppChange, AppHook, Clock, ServerRules, VaultState, Workspace,
-    WorkspaceHandle, private_dir,
+    AccountIdentity, AppChange, AppHook, ClientAddress, Clock, ServerRules, VaultState, WallClock,
+    Workspace, WorkspaceHandle, private_dir,
 };
 
 /// Serve a router until the process stops.
@@ -83,6 +83,12 @@ async fn local_session() -> axum::Json<serde_json::Value> {
 /// session route and the routes of one workspace, all under the access
 /// layer (ADR 0017).
 pub fn local_router(workspace: Workspace, access: Access) -> Router {
+    // The desktop public origin is its loopback address (ADR 0110 item 12).
+    let workspace = if workspace.public_origin.is_none() {
+        workspace.with_public_origin(&format!("http://127.0.0.1:{}", access.port))
+    } else {
+        workspace
+    };
     let (workspace_routes, _handle) = workspace_router(workspace);
     ui_router()
         .route("/auth/v1/session", get(local_session))
@@ -326,13 +332,18 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/feeds/{id}/announcements", get(routes::list_announcements))
         .route("/hosts/{id}/scan", post(routes::scan_host))
         .route("/apps", get(routes::list_apps).post(routes::add_app))
-        .route("/apps/{id}", delete(routes::remove_app))
+        .route(
+            "/apps/{id}",
+            get(routes::get_app).delete(routes::remove_app),
+        )
         .with_state(Arc::clone(&shared));
     // The routes for connected apps (ADR 0054 items 8 and 15). The outer layer
     // checks the loopback `Host` only. The app layer checks the app token.
     let app_api = Router::new()
+        .route("/pair", post(routes::pair_app))
         .route("/whoami", get(routes::whoami))
         .route("/shows", get(routes::list_shows))
+        .route("/shows/{grant_id}/wrapper", get(routes::show_wrapper))
         .route("/shows/{grant_id}/status", post(routes::set_show_status))
         .route(
             "/shows/{grant_id}/live-value",

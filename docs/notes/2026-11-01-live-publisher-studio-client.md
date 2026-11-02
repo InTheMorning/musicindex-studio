@@ -63,7 +63,7 @@ The crate calls these routes. The live publisher does not call them directly.
 | --- | --- |
 | `POST /app/v1/pair` | `code` and `live_value_origin`. This makes the app active. |
 | `GET /app/v1/whoami` | The app, its state and its live value origin. |
-| `GET /app/v1/shows` | The show grants of the app: the grant ID, the feed, the live item, its status, `start`, `end`, `live_value` and the live value origin. |
+| `GET /app/v1/shows` | The show grants of the app: the grant ID, the feed, the live item, its status, `start`, `end`, `live_value` and the live value origin. The request has no grant vault key, so Studio reads the status, the times and the live value only when the host of the feed needs no secret. For a host with a secret, these fields are `null`, and the answer of each write gives the status. |
 | `GET /app/v1/shows/{grant_id}/wrapper` | The grant vault key, encrypted with NIP-44 version 2 to the public key of the app. |
 | `POST /app/v1/shows/{grant_id}/status` | `live` or `ended`. This writes the feed. |
 | `PUT /app/v1/shows/{grant_id}/live-value` | The `uri` and the `protocol` of `podcast:liveValue`. The `uri` is on the live value origin, with a maximum of 2048 characters. The `protocol` has 1 to 32 letters, digits, `.` or `-`. This writes the feed. |

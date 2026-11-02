@@ -90,7 +90,32 @@ const MIGRATIONS: &[&str] = &[
         created_at INTEGER NOT NULL
     );
 ",
+    // The index of the apps (ADR 0110 item 39): the public key of each
+    // active app, and the SHA-256 of each pairing code that Studio knows.
+    // The index of the token hashes goes out (ADR 0110 item 37). An app
+    // row with the app ID 0 is a claim of a pairing request that waits for
+    // the answer of the workspace.
+    "
+    DROP TABLE app_tokens;
+    CREATE TABLE app_keys (
+        pubkey TEXT PRIMARY KEY,
+        account_id INTEGER NOT NULL,
+        app_id INTEGER NOT NULL
+    );
+    CREATE TABLE app_codes (
+        code_hash TEXT PRIMARY KEY,
+        account_id INTEGER NOT NULL,
+        app_id INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+    );
+",
 ];
+
+/// The schema migrations, for a test of a migration.
+#[cfg(test)]
+pub fn migrations_for_test() -> &'static [&'static str] {
+    MIGRATIONS
+}
 
 /// A challenge is valid for this many seconds (ADR 0056 item 5).
 pub const CHALLENGE_SECONDS: i64 = 300;
@@ -974,7 +999,8 @@ impl Accounts {
             "DELETE FROM account_nostr WHERE account_id = ?1",
             "DELETE FROM account_passkeys WHERE account_id = ?1",
             "DELETE FROM passkey_pending WHERE account_id = ?1",
-            "DELETE FROM app_tokens WHERE account_id = ?1",
+            "DELETE FROM app_keys WHERE account_id = ?1",
+            "DELETE FROM app_codes WHERE account_id = ?1",
             "DELETE FROM accounts WHERE id = ?1",
         ] {
             tx.execute(sql, [account_id]).map_err(|e| e.to_string())?;
@@ -1040,41 +1066,183 @@ impl Accounts {
         Ok(left)
     }
 
-    /// The account and the app ID of an app token hash.
+    /// The account and the app ID of the public key of an active app.
     ///
     /// # Errors
     ///
     /// Gives a message when the database fails.
-    pub fn app_account(&self, token_hash: &str) -> Result<Option<(i64, i64)>, String> {
+    pub fn app_key_account(&self, pubkey: &str) -> Result<Option<(i64, i64)>, String> {
         self.db()
             .query_row(
-                "SELECT account_id, app_id FROM app_tokens WHERE token_hash = ?1",
-                [token_hash],
+                "SELECT account_id, app_id FROM app_keys WHERE pubkey = ?1 AND app_id <> 0",
+                [pubkey],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()
             .map_err(|e| e.to_string())
     }
 
-    /// Make the rows of one account again from the given apps. A row of
-    /// the account that is not in the list goes out.
+    /// Claim a public key for a pairing request of an account (ADR 0110
+    /// item 11). The check and the insert are one transaction, and the
+    /// insert never replaces a row. Gives false when a different account
+    /// has the key.
     ///
     /// # Errors
     ///
     /// Gives a message when the database fails.
-    pub fn replace_app_tokens(
+    pub fn claim_app_key(&self, pubkey: &str, account_id: i64) -> Result<bool, String> {
+        let mut db = self.db();
+        let tx = db.transaction().map_err(|e| e.to_string())?;
+        let owner: Option<i64> = tx
+            .query_row(
+                "SELECT account_id FROM app_keys WHERE pubkey = ?1",
+                [pubkey],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let free = if let Some(owner) = owner {
+            owner == account_id
+        } else {
+            tx.execute(
+                "INSERT INTO app_keys (pubkey, account_id, app_id) VALUES (?1, ?2, 0)",
+                params![pubkey, account_id],
+            )
+            .map_err(|e| e.to_string())?;
+            true
+        };
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(free)
+    }
+
+    /// Give a claim back after a pairing request that failed. A key of an
+    /// active app stays.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn release_app_key_claim(&self, pubkey: &str, account_id: i64) -> Result<(), String> {
+        self.db()
+            .execute(
+                "DELETE FROM app_keys WHERE pubkey = ?1 AND account_id = ?2 AND app_id = 0",
+                params![pubkey, account_id],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Set the app of the claim of a pairing request that passed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn finish_app_key(&self, pubkey: &str, account_id: i64, app_id: i64) -> Result<(), String> {
+        self.db()
+            .execute(
+                "INSERT INTO app_keys (pubkey, account_id, app_id) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (pubkey) DO UPDATE SET app_id = excluded.app_id
+                 WHERE app_keys.account_id = excluded.account_id",
+                params![pubkey, account_id, app_id],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Keep the SHA-256 of a pairing code with its account (ADR 0110
+    /// item 39). A code that exists keeps its first account.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn add_app_code(
+        &self,
+        code_hash: &str,
+        account_id: i64,
+        app_id: i64,
+        expires_at: i64,
+    ) -> Result<(), String> {
+        self.db()
+            .execute(
+                "INSERT INTO app_codes (code_hash, account_id, app_id, expires_at)
+                 VALUES (?1, ?2, ?3, ?4) ON CONFLICT (code_hash) DO NOTHING",
+                params![code_hash, account_id, app_id, expires_at],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// The account and the app ID of a pairing code that has not ended.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn app_code_account(
+        &self,
+        code_hash: &str,
+        now: i64,
+    ) -> Result<Option<(i64, i64)>, String> {
+        self.db()
+            .query_row(
+                "SELECT account_id, app_id FROM app_codes WHERE code_hash = ?1 AND expires_at > ?2",
+                params![code_hash, now],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove the rows of one app: its key and its code.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn remove_app_rows(&self, account_id: i64, app_id: i64) -> Result<(), String> {
+        let db = self.db();
+        for sql in [
+            "DELETE FROM app_keys WHERE account_id = ?1 AND app_id = ?2",
+            "DELETE FROM app_codes WHERE account_id = ?1 AND app_id = ?2",
+        ] {
+            db.execute(sql, params![account_id, app_id])
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// Make the rows of one account again: `keys` are the app ID and the
+    /// public key of each active app, `codes` are the app ID, the code hash
+    /// and the end of each known code. A row of the account that is not in
+    /// the lists goes out. A key that a different account has stays with
+    /// that account.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn replace_app_index(
         &self,
         account_id: i64,
-        apps: &[(i64, String)],
+        keys: &[(i64, String)],
+        codes: &[(i64, String, i64)],
     ) -> Result<(), String> {
         let mut db = self.db();
         let tx = db.transaction().map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM app_tokens WHERE account_id = ?1", [account_id])
-            .map_err(|e| e.to_string())?;
-        for (app_id, hash) in apps {
+        for sql in [
+            "DELETE FROM app_keys WHERE account_id = ?1",
+            "DELETE FROM app_codes WHERE account_id = ?1",
+        ] {
+            tx.execute(sql, [account_id]).map_err(|e| e.to_string())?;
+        }
+        for (app_id, pubkey) in keys {
             tx.execute(
-                "INSERT OR REPLACE INTO app_tokens (token_hash, account_id, app_id) VALUES (?1, ?2, ?3)",
-                params![hash, account_id, app_id],
+                "INSERT OR IGNORE INTO app_keys (pubkey, account_id, app_id) VALUES (?1, ?2, ?3)",
+                params![pubkey, account_id, app_id],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        for (app_id, hash, expires_at) in codes {
+            tx.execute(
+                "INSERT OR IGNORE INTO app_codes (code_hash, account_id, app_id, expires_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![hash, account_id, app_id, expires_at],
             )
             .map_err(|e| e.to_string())?;
         }

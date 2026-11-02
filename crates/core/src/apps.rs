@@ -460,17 +460,18 @@ pub fn remove_app_at(collection: &Collection, id: i64, now: i64) -> Result<(), C
 }
 
 /// The apps, the oldest first. A waiting app with an expired code is not in
-/// the list.
+/// the list. The function only reads: [`purge_expired`] removes such an app
+/// (ADR 0110 item 8).
 ///
 /// # Errors
 ///
 /// Gives a [`CollectionError`] when SQLite fails.
 pub fn apps(collection: &Collection) -> Result<Vec<ConnectedApp>, CollectionError> {
-    purge_expired(collection, now())?;
     let mut statement = collection.db().prepare(&format!(
-        "SELECT {APP_COLUMNS} FROM connected_apps ORDER BY id"
+        "SELECT {APP_COLUMNS} FROM connected_apps
+         WHERE NOT (state = 'waiting' AND code_expires_at <= ?1) ORDER BY id"
     ))?;
-    let rows = statement.query_map([], app_row)?;
+    let rows = statement.query_map([now()], app_row)?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
@@ -480,15 +481,42 @@ pub fn apps(collection: &Collection) -> Result<Vec<ConnectedApp>, CollectionErro
 ///
 /// Gives a [`CollectionError`] when SQLite fails.
 pub fn app(collection: &Collection, id: i64) -> Result<Option<ConnectedApp>, CollectionError> {
-    purge_expired(collection, now())?;
     Ok(collection
         .db()
         .query_row(
-            &format!("SELECT {APP_COLUMNS} FROM connected_apps WHERE id = ?1"),
-            [id],
+            &format!(
+                "SELECT {APP_COLUMNS} FROM connected_apps
+                 WHERE id = ?1 AND NOT (state = 'waiting' AND code_expires_at <= ?2)"
+            ),
+            rusqlite::params![id, now()],
             app_row,
         )
         .optional()?)
+}
+
+/// Set each app to the state `token` after an import, and end each grant
+/// (ADR 0110 item 41, ADR 0107). An app keeps its name. It loses its key,
+/// its code, its live value origin and its use. The draft grants go out
+/// too. The caller makes the grant vaults go with the next sync.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn reset_after_import(collection: &Collection, now: i64) -> Result<(), CollectionError> {
+    let db = collection.db();
+    db.execute(
+        "UPDATE connected_apps SET state = 'token', pubkey = NULL, code_hash = NULL,
+         code_expires_at = NULL, live_value_origin = NULL, last_used_at = NULL,
+         last_address = NULL, latest_event_at = NULL",
+        [],
+    )?;
+    db.execute(
+        "UPDATE show_grants SET ended_at = ?1 WHERE ended_at IS NULL",
+        [now],
+    )?;
+    db.execute("DELETE FROM draft_grants", [])?;
+    db.execute("DELETE FROM app_events", [])?;
+    Ok(())
 }
 
 /// The active app that has this public key, or `None`. The key is
@@ -520,12 +548,46 @@ pub fn app_for_pubkey(
 ///
 /// Gives a [`CollectionError`] when SQLite fails.
 pub fn waiting_code_hashes(collection: &Collection) -> Result<Vec<(i64, String)>, CollectionError> {
-    purge_expired(collection, now())?;
     let mut statement = collection.db().prepare(
         "SELECT id, code_hash FROM connected_apps
-         WHERE state = 'waiting' AND code_hash IS NOT NULL ORDER BY id",
+         WHERE state = 'waiting' AND code_hash IS NOT NULL AND code_expires_at > ?1 ORDER BY id",
     )?;
-    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    let rows = statement.query_map([now()], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// A pairing code that Studio still knows: the app, the SHA-256 of the
+/// code and the time when the code ends.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnownCode {
+    /// The ID of the app.
+    pub app_id: i64,
+    /// The SHA-256 of the normalized code as hexadecimal.
+    pub hash: String,
+    /// The end of the 15 minutes, in seconds since the Unix epoch.
+    pub expires_at: i64,
+}
+
+/// Each code that Studio knows now: the code of a waiting app, and the code
+/// of an app that paired in the last 15 minutes (it gives `app_code_used`).
+/// The server makes its index of codes from this list (ADR 0110 items 11
+/// and 39). The function only reads.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn known_codes(collection: &Collection) -> Result<Vec<KnownCode>, CollectionError> {
+    let mut statement = collection.db().prepare(
+        "SELECT id, code_hash, code_expires_at FROM connected_apps
+         WHERE code_hash IS NOT NULL AND code_expires_at > ?1 ORDER BY id",
+    )?;
+    let rows = statement.query_map([now()], |row| {
+        Ok(KnownCode {
+            app_id: row.get(0)?,
+            hash: row.get(1)?,
+            expires_at: row.get(2)?,
+        })
+    })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
@@ -1166,5 +1228,31 @@ mod tests {
         let found = self::app(&collection, app.id).unwrap().unwrap();
         assert_eq!(found.last_used_at, Some(77));
         assert_eq!(found.last_address.as_deref(), Some("203.0.113.7"));
+    }
+
+    #[test]
+    fn a_read_does_not_remove_an_expired_waiting_app_and_purge_expired_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+        // The code ended one second ago.
+        let start = crate::collection::now() - CODE_LIFETIME - 1;
+        let (app, _) = started(&collection, start);
+        assert_eq!(apps(&collection).unwrap().len(), 0);
+        assert!(self::app(&collection, app.id).unwrap().is_none());
+        assert_eq!(waiting_code_hashes(&collection).unwrap().len(), 0);
+        let rows: i64 = collection
+            .db()
+            .query_row("SELECT COUNT(*) FROM connected_apps", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            rows, 1,
+            "ADR 0110 item 3: a read of the app list must not write. Call purge_expired at the start and before a pairing"
+        );
+        purge_expired(&collection, crate::collection::now()).unwrap();
+        let rows: i64 = collection
+            .db()
+            .query_row("SELECT COUNT(*) FROM connected_apps", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
     }
 }

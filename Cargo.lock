@@ -2432,6 +2432,7 @@ name = "studio-api"
 version = "0.1.0-rc.9"
 dependencies = [
  "axum",
+ "base64 0.23.1",
  "directories",
  "futures-util",
  "getrandom 0.4.3",
@@ -2441,6 +2442,8 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
+ "studio-app-client",
  "studio-core",
  "tar",
  "tempfile",
@@ -2531,6 +2534,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "studio-api",
+ "studio-app-client",
  "studio-core",
  "tempfile",
  "tokio",

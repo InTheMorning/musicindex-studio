@@ -618,6 +618,50 @@ pub fn lightning_addresses_by_key(
     out
 }
 
+/// The picture and the website in the newest kind 0 of a key (ADR 0113
+/// item 2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfileDetails {
+    /// The key, as `npub`.
+    pub npub: String,
+    /// The `picture`, when it is an `http` or `https` address.
+    pub picture: Option<String>,
+    /// The `website`, when it is an `http` or `https` address.
+    pub website: Option<String>,
+}
+
+/// The `picture` and the `website` of the newest kind 0 of each key
+/// (ADR 0113 item 2). A text that is not an `npub` is ignored. The results
+/// are in the sequence of the keys. A key with no kind 0 gives no result.
+/// The requests follow `policy` (ADR 0057) and `limit`.
+#[must_use]
+pub fn profile_details_by_key(
+    relays: &[String],
+    policy: &NetPolicy,
+    limit: Duration,
+    npubs: &[String],
+) -> Vec<ProfileDetails> {
+    let keys: Vec<PublicKey> = npubs.iter().filter_map(|n| key_of(n)).collect();
+    let newest = newest_metadata(relays, policy, limit, &keys, Vec::new());
+    let mut out: Vec<ProfileDetails> = Vec::new();
+    for key in &keys {
+        let Some(event) = newest.get(key) else {
+            continue;
+        };
+        let Ok(npub) = key.to_bech32();
+        if out.iter().any(|known| known.npub == npub) {
+            continue;
+        }
+        let meta = meta_of(event);
+        out.push(ProfileDetails {
+            npub,
+            picture: meta.picture,
+            website: meta.website,
+        });
+    }
+    out
+}
+
 /// The field `lud16` of a kind 0 event, in lowercase.
 fn lud16_of(event: &Event) -> Option<String> {
     let content: Value = serde_json::from_str(&event.content).ok()?;
@@ -630,6 +674,7 @@ fn lud16_of(event: &Event) -> Option<String> {
 struct Meta {
     name: Option<String>,
     picture: Option<String>,
+    website: Option<String>,
     nip05: Option<String>,
 }
 
@@ -648,6 +693,7 @@ fn meta_of(event: &Event) -> Meta {
     Meta {
         name: text("display_name").or_else(|| text("name")),
         picture: text("picture").filter(|p| is_web_address(p)),
+        website: text("website").filter(|p| is_web_address(p)),
         nip05: text("nip05"),
     }
 }

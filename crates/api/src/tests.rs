@@ -10406,6 +10406,7 @@ async fn each_people_route_needs_the_token() {
         ("POST", "/api/v1/people/1/changes"),
         ("POST", "/api/v1/people/1/changes/preview"),
         ("GET", "/api/v1/people/1/check"),
+        ("GET", "/api/v1/people/1/detail-suggestions"),
         ("POST", "/api/v1/people/1/profile-addresses/dismiss"),
         ("POST", "/api/v1/people/1/items"),
         ("GET", "/api/v1/people/1/more"),
@@ -10506,6 +10507,54 @@ async fn a_profile_address_is_a_suggestion_and_the_user_adds_it_with_the_evidenc
     // The address is a member of the wallet now, so it is no suggestion.
     let (_, body) = call(&app, "GET", &path, None).await;
     assert_eq!(body["suggestions"], json!([]));
+}
+
+#[tokio::test]
+async fn the_detail_suggestions_give_img_and_href_from_the_profile_and_the_credits() {
+    let relay = studio_core::testing::relay::TestRelay::start();
+    relay.insert(profile_event(
+        1,
+        100,
+        &json!({ "picture": "https://p.example/a.png", "website": "https://w.example" }),
+    ));
+    let app = profile_address_app(&relay);
+    let id = new_person(&app, "Ann").await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/keys"),
+        Some(json!({ "npub": nostr_npub(1) })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    rusqlite::Connection::open(app.data.path().join("collection.sqlite"))
+        .unwrap()
+        .execute_batch(
+            "INSERT INTO feeds (id, medium, created_at) VALUES (1, 'music', 0);
+             INSERT INTO feed_credits (feed_id, name, role, href, npub, img, seen_at)
+             VALUES (1, 'Ann', 'vocals', 'https://c.example', '', 'https://c.example/a.png', 0);",
+        )
+        .unwrap();
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{id}/detail-suggestions"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["img"][0]["value"], "https://p.example/a.png",
+        "ADR 0113 item 1: the route must give img with the profile first. {body}"
+    );
+    assert_eq!(body["img"][0]["sources"][0]["kind"], "profile");
+    assert_eq!(body["img"][0]["sources"][0]["npub"], nostr_npub(1));
+    assert_eq!(body["img"][1]["sources"][0]["kind"], "credit");
+    assert_eq!(body["img"][1]["sources"][0]["feed_ids"], json!([1]));
+    assert_eq!(body["href"][0]["value"], "https://w.example");
+    assert_eq!(body["href"][1]["value"], "https://c.example");
+    let (status, _) = call(&app, "GET", "/api/v1/people/999/detail-suggestions", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

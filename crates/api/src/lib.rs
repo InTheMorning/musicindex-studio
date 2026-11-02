@@ -191,6 +191,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             put(people::set_default_address),
         )
         .route(
+            "/people/{id}/detail-suggestions",
+            get(people::detail_suggestions),
+        )
+        .route(
             "/people/{id}/profile-addresses",
             get(people::list_profile_addresses).post(people::add_profile_address),
         )

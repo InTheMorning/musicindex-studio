@@ -1703,6 +1703,42 @@ fn check_state(findings: &[Finding]) -> CheckState {
     }
 }
 
+/// The credits of a person (ADR 0111 item 10). A credit of the person has a
+/// credit name or a key of the person, or the normal name of the person or
+/// of a credit name. `person_names` holds those normal names.
+fn person_credits(
+    collection: &Collection,
+    person: &Person,
+    person_names: &HashSet<String>,
+) -> Result<Vec<CreditRow>, CollectionError> {
+    let identities: HashSet<&str> = person
+        .credit_names
+        .iter()
+        .map(|c| c.identity.as_str())
+        .collect();
+    let npubs: HashSet<&str> = person.keys.iter().map(|k| k.npub.as_str()).collect();
+    Ok(collection
+        .feed_credits()?
+        .into_iter()
+        .filter(|row| {
+            let npub = row.npub.to_lowercase();
+            let named = Identity::of(&row.name, &row.href, &row.npub)
+                .is_some_and(|i| identities.contains(i.key().as_str()))
+                || person_names.contains(&normal_name(&row.name));
+            named || (!npub.is_empty() && npubs.contains(npub.as_str()))
+        })
+        .collect())
+}
+
+/// The normal names of a person and of the credit names of the person.
+fn person_normal_names(person: &Person) -> HashSet<String> {
+    std::iter::once(person.name.as_str())
+        .chain(person.credit_names.iter().map(|c| c.name.as_str()))
+        .map(normal_name)
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
 /// The findings of the credits of a person, with the feed of each. A credit
 /// with no finding gives the feed and `None`.
 fn credit_findings(
@@ -1710,23 +1746,12 @@ fn credit_findings(
     person: &Person,
     person_names: &HashSet<String>,
 ) -> Result<Vec<(i64, Option<Finding>)>, CollectionError> {
-    let identities: HashSet<&str> = person
-        .credit_names
-        .iter()
-        .map(|c| c.identity.as_str())
-        .collect();
     let npubs: HashSet<&str> = person.keys.iter().map(|k| k.npub.as_str()).collect();
     let img = person.img.trim();
     let href = person.href.trim();
     let mut found = Vec::new();
-    for row in collection.feed_credits()? {
+    for row in person_credits(collection, person, person_names)? {
         let npub = row.npub.to_lowercase();
-        let named = Identity::of(&row.name, &row.href, &row.npub)
-            .is_some_and(|i| identities.contains(i.key().as_str()))
-            || person_names.contains(&normal_name(&row.name));
-        if !(named || (!npub.is_empty() && npubs.contains(npub.as_str()))) {
-            continue;
-        }
         let feed = row.feed_id.0;
         found.push((feed, None));
         if !npubs.is_empty() && !npubs.contains(npub.as_str()) {
@@ -1779,11 +1804,7 @@ pub fn check<S: BuildHasher>(
         .map(|w| parts(&keysend::wallet_key(&w.key, lookups)))
         .collect();
     let default = default_address(person, lookups).map(|key| parts(&key));
-    let names: HashSet<String> = std::iter::once(person.name.as_str())
-        .chain(person.credit_names.iter().map(|c| c.name.as_str()))
-        .map(normal_name)
-        .filter(|n| !n.is_empty())
-        .collect();
+    let names = person_normal_names(person);
     let mut found: BTreeMap<i64, Vec<Finding>> = BTreeMap::new();
     let mut add = |feed: i64, finding: Option<Finding>| {
         let list = found.entry(feed).or_default();
@@ -2561,6 +2582,203 @@ pub fn profile_addresses<S: BuildHasher, T: BuildHasher>(
             })
         })
         .collect()
+}
+
+// ---- The picture and the information address (ADR 0113) ----
+
+/// The source of a suggested value (ADR 0113 item 2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DetailSource {
+    /// The newest kind 0 of a key of the person.
+    Profile {
+        /// The key, as `npub`.
+        npub: String,
+    },
+    /// The credits of the person in the feeds.
+    Credit {
+        /// The feeds, from low to high.
+        feed_ids: Vec<FeedId>,
+    },
+    /// A publisher feed of which the person is a member.
+    Member {
+        /// The publisher feed.
+        feed_id: FeedId,
+    },
+}
+
+/// A suggested value with each source that gives it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DetailSuggestion {
+    /// An `http` or `https` address.
+    pub value: String,
+    /// The sources, in the sequence profile, credit, member.
+    pub sources: Vec<DetailSource>,
+}
+
+/// The suggestions for the picture and for the information address.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct DetailSuggestions {
+    /// The suggestions for the picture address.
+    pub img: Vec<DetailSuggestion>,
+    /// The suggestions for the information address.
+    pub href: Vec<DetailSuggestion>,
+}
+
+/// The image and the link of a publisher feed, from the last read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemberFeed {
+    /// The publisher feed.
+    pub id: FeedId,
+    /// The image of the feed.
+    pub image: Option<String>,
+    /// The `link` of the feed.
+    pub link: Option<String>,
+}
+
+/// The values of one field, by source, before they join.
+#[derive(Default)]
+struct DetailValues {
+    profile: Vec<(String, String)>,
+    credit: Vec<(i64, String)>,
+    member: Vec<(FeedId, String)>,
+}
+
+fn is_web_value(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.starts_with("https://") || lower.starts_with("http://")
+}
+
+/// The sources of one value, before they become [`DetailSource`] items.
+#[derive(Default)]
+struct Joined {
+    profile: Vec<String>,
+    credit: BTreeSet<i64>,
+    member: Vec<FeedId>,
+}
+
+/// The entry of `value` in `joined`, or `None` when the value is empty, is
+/// `current` or is not an `http` or `https` address.
+fn slot<'a>(
+    joined: &'a mut HashMap<String, Joined>,
+    order: &mut Vec<String>,
+    current: &str,
+    value: &str,
+) -> Option<&'a mut Joined> {
+    let value = value.trim();
+    if value.is_empty() || value == current || !is_web_value(value) {
+        return None;
+    }
+    if !joined.contains_key(value) {
+        order.push(value.to_owned());
+    }
+    Some(joined.entry(value.to_owned()).or_default())
+}
+
+/// Join equal values, leave out `current` and sort (ADR 0113 items 3 and 4).
+fn join_details(current: &str, values: DetailValues) -> Vec<DetailSuggestion> {
+    let current = current.trim();
+    let mut order: Vec<String> = Vec::new();
+    let mut joined: HashMap<String, Joined> = HashMap::new();
+    for (npub, value) in values.profile {
+        if let Some(j) = slot(&mut joined, &mut order, current, &value)
+            && !j.profile.contains(&npub)
+        {
+            j.profile.push(npub);
+        }
+    }
+    for (feed, value) in values.credit {
+        if let Some(j) = slot(&mut joined, &mut order, current, &value) {
+            j.credit.insert(feed);
+        }
+    }
+    for (feed, value) in values.member {
+        if let Some(j) = slot(&mut joined, &mut order, current, &value)
+            && !j.member.contains(&feed)
+        {
+            j.member.push(feed);
+        }
+    }
+    let mut list: Vec<(usize, usize, DetailSuggestion)> = order
+        .into_iter()
+        .filter_map(|value| {
+            let j = joined.remove(&value)?;
+            let rank = if !j.profile.is_empty() {
+                0
+            } else if !j.credit.is_empty() {
+                1
+            } else {
+                2
+            };
+            let count = j.credit.len();
+            let mut sources: Vec<DetailSource> = j
+                .profile
+                .into_iter()
+                .map(|npub| DetailSource::Profile { npub })
+                .collect();
+            if !j.credit.is_empty() {
+                sources.push(DetailSource::Credit {
+                    feed_ids: j.credit.into_iter().map(FeedId).collect(),
+                });
+            }
+            sources.extend(
+                j.member
+                    .into_iter()
+                    .map(|feed_id| DetailSource::Member { feed_id }),
+            );
+            Some((rank, count, DetailSuggestion { value, sources }))
+        })
+        .collect();
+    // A stable sort keeps the first-seen sequence of equal keys.
+    list.sort_by_key(|(rank, count, _)| (*rank, std::cmp::Reverse(*count)));
+    list.into_iter().map(|(_, _, s)| s).collect()
+}
+
+/// The suggestions for the picture and the information address of a person
+/// (ADR 0113). The credits follow ADR 0111 item 10, as [`check`] does.
+/// `feeds` holds the publisher feeds. The function uses only those in
+/// `person.members`. `profiles` holds the values that the caller read from
+/// the relays. This function makes no request.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn detail_suggestions(
+    collection: &Collection,
+    person: &Person,
+    feeds: &[MemberFeed],
+    profiles: &[profiles::ProfileDetails],
+) -> Result<DetailSuggestions, CollectionError> {
+    let mut img = DetailValues::default();
+    let mut href = DetailValues::default();
+    let own_keys: HashSet<&str> = person.keys.iter().map(|k| k.npub.as_str()).collect();
+    for details in profiles
+        .iter()
+        .filter(|d| own_keys.contains(d.npub.as_str()))
+    {
+        if let Some(value) = &details.picture {
+            img.profile.push((details.npub.clone(), value.clone()));
+        }
+        if let Some(value) = &details.website {
+            href.profile.push((details.npub.clone(), value.clone()));
+        }
+    }
+    for row in person_credits(collection, person, &person_normal_names(person))? {
+        img.credit.push((row.feed_id.0, row.img));
+        href.credit.push((row.feed_id.0, row.href));
+    }
+    for feed in feeds.iter().filter(|f| person.members.contains(&f.id)) {
+        if let Some(value) = &feed.image {
+            img.member.push((feed.id, value.clone()));
+        }
+        if let Some(value) = &feed.link {
+            href.member.push((feed.id, value.clone()));
+        }
+    }
+    Ok(DetailSuggestions {
+        img: join_details(&person.img, img),
+        href: join_details(&person.href, href),
+    })
 }
 
 /// Add the Lightning address of a profile to a wallet of a person. The
@@ -3618,6 +3836,224 @@ mod tests {
     }
 
     const KEYSEND: &str = r#"{"status":"OK","tag":"keysend","pubkey":"node-1","customData":[{"customKey":"696969","customValue":"x1"}]}"#;
+
+    /// A credit with an `href`, for the tests of the detail suggestions.
+    fn credit_with_href(collection: &Collection, feed_id: i64, name: &str, img: &str, href: &str) {
+        feed(collection, feed_id);
+        collection
+            .db()
+            .execute(
+                "INSERT INTO feed_credits (feed_id, name, role, href, npub, img, seen_at)
+                 VALUES (?1, ?2, 'vocals', ?3, '', ?4, 0)",
+                params![feed_id, name, href, img],
+            )
+            .unwrap();
+    }
+
+    fn member_feed(id: i64, image: Option<&str>, link: Option<&str>) -> MemberFeed {
+        MemberFeed {
+            id: FeedId(id),
+            image: image.map(str::to_owned),
+            link: link.map(str::to_owned),
+        }
+    }
+
+    fn details(
+        npub: &str,
+        picture: Option<&str>,
+        website: Option<&str>,
+    ) -> profiles::ProfileDetails {
+        profiles::ProfileDetails {
+            npub: npub.to_owned(),
+            picture: picture.map(str::to_owned),
+            website: website.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn detail_suggestions_join_equal_values_and_leave_out_the_current_value() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(
+            &collection,
+            &PersonFields {
+                name: "Ann".into(),
+                img: " https://cur.example/a.png ".into(),
+                ..PersonFields::default()
+            },
+        )
+        .unwrap();
+        add_key(&collection, ann, "npub1ann").unwrap();
+        credit_with_href(
+            &collection,
+            1,
+            "Ann",
+            "https://cur.example/a.png",
+            "https://a.example",
+        );
+        credit_with_href(
+            &collection,
+            2,
+            "Ann",
+            "https://pic.example/a.png",
+            "https://a.example",
+        );
+        credit_with_href(
+            &collection,
+            3,
+            "Ann",
+            " https://pic.example/a.png ",
+            "https://a.example",
+        );
+        credit_with_href(
+            &collection,
+            4,
+            "Bob",
+            "https://bob.example/b.png",
+            "https://b.example",
+        );
+        let person = person(&collection, ann).unwrap();
+        let list = detail_suggestions(
+            &collection,
+            &person,
+            &[],
+            &[details("npub1ann", Some("https://pic.example/a.png"), None)],
+        )
+        .unwrap();
+        assert_eq!(
+            list.img,
+            [DetailSuggestion {
+                value: "https://pic.example/a.png".into(),
+                sources: vec![
+                    DetailSource::Profile {
+                        npub: "npub1ann".into()
+                    },
+                    DetailSource::Credit {
+                        feed_ids: vec![FeedId(2), FeedId(3)]
+                    },
+                ],
+            }],
+            "ADR 0113 item 3: equal values must join and the current value must not be a suggestion. Check people::detail_suggestions."
+        );
+        assert_eq!(list.href.len(), 1, "{:?}", list.href);
+        assert_eq!(list.href[0].value, "https://a.example");
+    }
+
+    #[test]
+    fn detail_suggestions_follow_the_sequence_profile_credit_member() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_key(&collection, ann, "npub1ann").unwrap();
+        credit_with_href(&collection, 1, "Ann", "https://one.example/1.png", "");
+        credit_with_href(&collection, 2, "Ann", "https://two.example/2.png", "");
+        credit_with_href(&collection, 3, "Ann", "https://two.example/2.png", "");
+        collection
+            .db()
+            .execute(
+                "INSERT INTO feeds (id, medium, created_at) VALUES (9, 'publisher', 0)",
+                [],
+            )
+            .unwrap();
+        add_member(&collection, ann, FeedId(9)).unwrap();
+        let person = person(&collection, ann).unwrap();
+        let list = detail_suggestions(
+            &collection,
+            &person,
+            &[
+                member_feed(9, Some("https://member.example/m.png"), None),
+                member_feed(8, Some("https://other.example/o.png"), None),
+            ],
+            &[details(
+                "npub1ann",
+                Some("https://profile.example/p.png"),
+                None,
+            )],
+        )
+        .unwrap();
+        let values: Vec<&str> = list.img.iter().map(|s| s.value.as_str()).collect();
+        assert_eq!(
+            values,
+            [
+                "https://profile.example/p.png",
+                "https://two.example/2.png",
+                "https://one.example/1.png",
+                "https://member.example/m.png",
+            ],
+            "ADR 0113 item 4: the sequence must be profile, credit by feed count, member. Check people::detail_suggestions."
+        );
+        assert_eq!(
+            list.img[3].sources,
+            [DetailSource::Member { feed_id: FeedId(9) }]
+        );
+    }
+
+    #[test]
+    fn detail_suggestions_refuse_a_value_that_is_not_a_web_address() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        credit_with_href(&collection, 1, "Ann", "ann.png", "ftp://a.example");
+        credit_with_href(&collection, 2, "Ann", "HTTPS://up.example/a.png", "");
+        let person = person(&collection, ann).unwrap();
+        let list = detail_suggestions(&collection, &person, &[], &[]).unwrap();
+        assert_eq!(list.img.len(), 1, "{:?}", list.img);
+        assert_eq!(list.img[0].value, "HTTPS://up.example/a.png");
+        assert!(
+            list.href.is_empty(),
+            "ADR 0113 item 3: only an http or https address counts. Check people::detail_suggestions."
+        );
+    }
+
+    #[test]
+    fn a_profile_with_a_picture_and_a_website_gives_profile_sources_and_a_silent_relay_keeps_the_others()
+     {
+        use nostr::nips::nip19::ToBech32;
+        use nostr::prelude::{Keys, Kind, SecretKey, Timestamp, UnsignedEvent};
+        let collection = Collection::open_in_memory().unwrap();
+        let keys = Keys::new(SecretKey::from_slice(&[5; 32]).expect("a secret key"));
+        let npub = keys.public_key().to_bech32().expect("an npub");
+        let unsigned = UnsignedEvent::new(
+            keys.public_key(),
+            Timestamp::from(100),
+            Kind::Metadata,
+            Vec::new(),
+            r#"{"picture":"https://p.example/a.png","website":"https://w.example"}"#.to_owned(),
+        );
+        let relay = crate::testing::relay::TestRelay::start();
+        relay.insert(crate::nostr_events::sign_with_keys(unsigned, &keys).expect("an event"));
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_key(&collection, ann, &npub).unwrap();
+        credit_with_href(
+            &collection,
+            1,
+            "Ann",
+            "https://c.example/a.png",
+            "https://c.example",
+        );
+        let person = person(&collection, ann).unwrap();
+        let read = |relays: &[String]| {
+            let found = profiles::profile_details_by_key(
+                relays,
+                &NetPolicy::Open,
+                profiles::SOURCE_LIMIT,
+                std::slice::from_ref(&npub),
+            );
+            detail_suggestions(&collection, &person, &[], &found).unwrap()
+        };
+        let with = read(&[relay.url()]);
+        assert_eq!(with.img.len(), 2, "{:?}", with.img);
+        assert_eq!(
+            with.img[0].sources,
+            [DetailSource::Profile { npub: npub.clone() }],
+            "ADR 0113 item 2: the picture of the profile must give a profile source."
+        );
+        assert_eq!(with.href[0].value, "https://w.example");
+        // A relay that does not answer gives no profile source.
+        let without = read(&[]);
+        assert_eq!(without.img.len(), 1, "{:?}", without.img);
+        assert!(
+            matches!(without.img[0].sources[0], DetailSource::Credit { .. }),
+            "ADR 0113 item 5: a relay that does not answer must leave the other sources."
+        );
+    }
 
     #[test]
     fn a_profile_address_is_a_suggestion_only_when_its_lookup_is_found() {

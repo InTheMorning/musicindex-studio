@@ -17,7 +17,7 @@ use studio_core::change_set::{
 use studio_core::collection::{Collection, CollectionError, CollectionErrorKind, FeedId};
 use studio_core::keysend::Lookup;
 use studio_core::people::{
-    self, LinkEvidence, MakePerson, Person, PersonFields, PersonId, PersonItems,
+    self, LinkEvidence, MakePerson, MemberFeed, Person, PersonFields, PersonId, PersonItems,
 };
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::profiles;
@@ -432,6 +432,46 @@ pub(crate) async fn list_profile_addresses(
             &dismissed,
         );
         Ok(Json(json!({ "suggestions": list })))
+    })
+    .await
+}
+
+/// The suggestions for the picture and the information address of a person
+/// (ADR 0113). The answer is `{ "img": [...], "href": [...] }`. The reads of
+/// the person and of the feeds, and the join, run under the workspace. The
+/// requests to the relays run with no lock of the workspace. A shell with no
+/// lookup relay gives no `profile` source.
+pub(crate) async fn detail_suggestions(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    let (person, feeds, relays, policy) = blocking(shared.clone(), move |w| {
+        let person = people::person(&w.collection, PersonId(id))?;
+        let mut feeds = Vec::new();
+        for feed_id in &person.members {
+            let feed = files_feed(w, *feed_id).ok().flatten();
+            feeds.push(MemberFeed {
+                id: *feed_id,
+                image: feed.as_ref().and_then(|f| f.image.clone()),
+                link: feed.as_ref().and_then(|f| f.link.clone()),
+            });
+        }
+        Ok((person, feeds, w.lookup_relays.clone(), w.net_policy.clone()))
+    })
+    .await?;
+    let npubs: Vec<String> = person.keys.iter().map(|k| k.npub.clone()).collect();
+    let found = blocking_unlocked(move || {
+        Ok(profiles::profile_details_by_key(
+            &relays,
+            &policy,
+            profiles::SOURCE_LIMIT,
+            &npubs,
+        ))
+    })
+    .await?;
+    blocking(shared, move |w| {
+        let list = people::detail_suggestions(&w.collection, &person, &feeds, &found)?;
+        Ok(Json(json!(list)))
     })
     .await
 }

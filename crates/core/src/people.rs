@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, CreditRow, FeedId, now};
-use crate::feed::Recipient;
+use crate::feed::{CreditPlace, Recipient};
 use crate::keysend::{self, Lookup, LookupResult};
 use crate::net::NetPolicy;
 use crate::profiles;
@@ -1751,8 +1751,12 @@ pub enum Finding {
     CreditKey {
         /// The role of the credit, or empty text.
         role: String,
+        /// The group of the credit, or empty text.
+        group: String,
         /// The `npub` of the credit, or empty text.
         npub: String,
+        /// The places of the credit (ADR 0120 item 2).
+        places: Vec<CreditPlace>,
     },
     /// A credit of the person has a picture or an information address that
     /// differs from the value of the person.
@@ -1763,9 +1767,22 @@ pub enum Finding {
         img: bool,
         /// True when the information address differs.
         href: bool,
+        /// The picture of the feed, or empty text (ADR 0120 item 5).
+        feed_img: String,
+        /// The information address of the feed, or empty text.
+        feed_href: String,
+        /// The picture of the person, or empty text.
+        person_img: String,
+        /// The information address of the person, or empty text.
+        person_href: String,
+        /// The places of the credit (ADR 0120 item 2).
+        places: Vec<CreditPlace>,
     },
     /// A credit of the person has no role.
-    CreditRole,
+    CreditRole {
+        /// The places of the credit (ADR 0120 item 6).
+        places: Vec<CreditPlace>,
+    },
     /// A recipient of a wallet of the person does not use the default
     /// address. This finding is neutral.
     NotDefault {
@@ -1934,7 +1951,9 @@ fn credit_findings(
                 feed,
                 Some(Finding::CreditKey {
                     role: row.role.clone(),
+                    group: row.group.clone(),
                     npub: row.npub.clone(),
+                    places: row.places.clone(),
                 }),
             ));
         }
@@ -1947,11 +1966,21 @@ fn credit_findings(
                     role: row.role.clone(),
                     img: img_differs,
                     href: href_differs,
+                    feed_img: row.img.clone(),
+                    feed_href: row.href.clone(),
+                    person_img: img.to_owned(),
+                    person_href: href.to_owned(),
+                    places: row.places.clone(),
                 }),
             ));
         }
         if row.role.is_empty() {
-            found.push((feed, Some(Finding::CreditRole)));
+            found.push((
+                feed,
+                Some(Finding::CreditRole {
+                    places: row.places.clone(),
+                }),
+            ));
         }
     }
     Ok(found)
@@ -3611,7 +3640,9 @@ mod tests {
             feed_check(&list, 1).findings,
             [Finding::CreditKey {
                 role: "vocals".into(),
-                npub: "npub1city".into()
+                group: String::new(),
+                npub: "npub1city".into(),
+                places: Vec::new(),
             }],
             "ADR 0111 item 10: a credit with the name of the person and a wrong key must be a finding."
         );
@@ -3619,7 +3650,9 @@ mod tests {
             feed_check(&list, 2).findings,
             [Finding::CreditKey {
                 role: "vocals".into(),
-                npub: String::new()
+                group: String::new(),
+                npub: String::new(),
+                places: Vec::new(),
             }]
         );
         assert_eq!(
@@ -3627,14 +3660,69 @@ mod tests {
             [Finding::CreditDetails {
                 role: "vocals".into(),
                 img: true,
-                href: false
+                href: false,
+                feed_img: "old.png".into(),
+                feed_href: String::new(),
+                person_img: "ann.png".into(),
+                person_href: String::new(),
+                places: Vec::new(),
             }]
         );
-        assert_eq!(feed_check(&list, 4).findings, [Finding::CreditRole]);
+        assert_eq!(
+            feed_check(&list, 4).findings,
+            [Finding::CreditRole { places: Vec::new() }]
+        );
         assert_eq!(feed_check(&list, 4).state, CheckState::NeedsCorrection);
         assert_eq!(feed_check(&list, 5).state, CheckState::Correct);
         assert!(list.feeds.iter().all(|f| f.feed_id.0 != 6));
         assert_eq!(list.needs_correction(), 4);
+    }
+
+    #[test]
+    fn a_difference_gives_the_values_and_the_places_of_the_credit() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(
+            &collection,
+            &PersonFields {
+                name: "Ann".into(),
+                img: "ann.png".into(),
+                ..PersonFields::default()
+            },
+        )
+        .unwrap();
+        let feed_id = collection.add_feed(None, None).unwrap();
+        let doc = Document::parse(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             <podcast:person role=\"vocals\" img=\"old.png\">Ann</podcast:person>\
+             <item><guid>t1</guid><title>Neon Diner</title>\
+             <podcast:person role=\"vocals\" img=\"old.png\">Ann</podcast:person></item>\
+             </channel></rss>",
+        )
+        .unwrap();
+        collection
+            .record_state(feed_id, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        let list = checked(&collection, ann);
+        assert_eq!(
+            feed_check(&list, feed_id.0).findings,
+            [Finding::CreditDetails {
+                role: "vocals".into(),
+                img: true,
+                href: false,
+                feed_img: "old.png".into(),
+                feed_href: String::new(),
+                person_img: "ann.png".into(),
+                person_href: String::new(),
+                places: vec![
+                    CreditPlace::Channel,
+                    CreditPlace::Item {
+                        guid: "t1".into(),
+                        title: "Neon Diner".into(),
+                    },
+                ],
+            }],
+            "ADR 0120 item 6: a finding gives the four values and the places of the credit."
+        );
     }
 
     #[test]

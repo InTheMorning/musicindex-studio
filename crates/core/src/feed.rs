@@ -378,25 +378,58 @@ impl Feed {
     }
 
     /// Each `podcast:person` of the channel, of each item and of each live
-    /// item, in that sequence (ADR 0098 item 10).
+    /// item, in that sequence, with the place of each credit (ADR 0098 item
+    /// 10, ADR 0120 item 2).
     ///
     /// A person with no name and no `npub` is not in the list. A name of
     /// only spaces is no name.
     #[must_use]
-    pub fn credits(&self) -> Vec<&Person> {
-        let live = self.live_items.iter().map(|live| &live.item);
-        let lists = std::iter::once(&self.persons)
-            .chain(self.items.iter().map(|item| &item.persons))
-            .chain(live.map(|item| &item.persons));
-        lists
-            .flatten()
-            .map(|entry| &entry.value)
-            .filter(|person| {
+    pub fn credit_places(&self) -> Vec<(CreditPlace, &Person)> {
+        let channel = self
+            .persons
+            .iter()
+            .map(|entry| (CreditPlace::Channel, &entry.value));
+        let items = self.items.iter().flat_map(|item| item_credits(item));
+        let live = self
+            .live_items
+            .iter()
+            .flat_map(|live| item_credits(&live.item));
+        channel
+            .chain(items)
+            .chain(live)
+            .filter(|(_, person)| {
                 !person.name.trim().is_empty()
                     || person.npub.as_deref().is_some_and(|n| !n.trim().is_empty())
             })
             .collect()
     }
+}
+
+/// The place of a credit in a feed (ADR 0120 item 2).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CreditPlace {
+    /// The channel of the feed.
+    Channel,
+    /// An item, or a live item. A missing `guid` or `title` is empty text.
+    Item {
+        /// The text of `guid`, or empty text.
+        guid: String,
+        /// The text of `title`, or empty text.
+        title: String,
+    },
+}
+
+/// The credits of one item or live item, each with the place of the item.
+fn item_credits(item: &Item) -> Vec<(CreditPlace, &Person)> {
+    let place = CreditPlace::Item {
+        guid: item.guid.clone().unwrap_or_default(),
+        title: item.title.clone().unwrap_or_default(),
+    };
+    item.persons
+        .iter()
+        .map(|entry| (place.clone(), &entry.value))
+        .collect()
 }
 
 /// Add each recipient of `entries` that has an address of one or more
@@ -827,9 +860,9 @@ mod tests {
             ..Feed::default()
         };
         let names: Vec<_> = feed
-            .credits()
+            .credit_places()
             .into_iter()
-            .map(|p| p.name.as_str())
+            .map(|(_, p)| p.name.as_str())
             .collect();
         assert_eq!(names, ["Channel", "", "Live"]);
     }

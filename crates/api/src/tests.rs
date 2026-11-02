@@ -10377,6 +10377,41 @@ async fn the_check_route_gives_the_state_of_each_feed() {
 }
 
 #[tokio::test]
+async fn the_check_route_gives_the_places_and_the_values_of_a_finding() {
+    let (app, connector) = publisher_app().await;
+    let (credit, _) = credit_and_payee_feeds(&app, connector).await;
+    let ann = new_person(&app, "Ann").await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{ann}/keys"),
+        Some(json!({ "npub": "npub1ann" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, check) = call(&app, "GET", &format!("/api/v1/people/{ann}/check"), None).await;
+    assert_eq!(status, StatusCode::OK, "{check}");
+    let credited = check["feeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["feed_id"] == json!(credit))
+        .unwrap();
+    // The credit is in the channel, and it has no key of the person.
+    assert_eq!(
+        credited["findings"][0],
+        json!({
+            "kind": "credit_key",
+            "role": "vocals",
+            "group": "",
+            "npub": "",
+            "places": [{ "kind": "channel" }],
+        }),
+        "ADR 0120 item 6: a finding gives its values and its places. {check}"
+    );
+}
+
+#[tokio::test]
 async fn the_more_route_gives_the_items_of_the_feeds_that_match_a_person() {
     let (app, connector) = publisher_app().await;
     credit_and_payee_feeds(&app, connector).await;

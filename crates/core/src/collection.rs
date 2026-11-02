@@ -16,7 +16,7 @@ use serde_json::Value;
 use crate::address::{self, Address, AddressSource};
 use crate::announce::{Announcement, AnnouncementState};
 use crate::connector::{KeptBlob, Stamp, Version};
-use crate::feed::{Feed, Person, Recipient};
+use crate::feed::{CreditPlace, Feed, Person, Recipient};
 use crate::keysend::{Lookup, LookupStatus};
 use crate::library::Library;
 use crate::xml::Document;
@@ -520,6 +520,12 @@ CREATE TABLE person_address_dismissals (
     PRIMARY KEY (person_id, address)
 );
 ",
+    // ADR 0120 item 1: the credit index keeps the places of each credit. A
+    // credit from before has no places until the refill after this
+    // migration (ADR 0120 item 4).
+    r"
+ALTER TABLE feed_credits ADD COLUMN places TEXT NOT NULL DEFAULT '[]';
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -547,9 +553,10 @@ fn relative_to_data(data_dir: Option<&Path>, root: &Path) -> Option<String> {
 /// The setting that holds the time that the mode `off` of ADR 0105 began.
 const ASSETS_OFF_SINCE: &str = "assets_off_since";
 
-/// The index in `MIGRATIONS` of the migration that makes the people. After
-/// it, Studio refills the credit index from the library copies, because SQL
-/// cannot read a feed.
+/// The index in `MIGRATIONS` of the migration that makes the people. The
+/// credit index is refilled after the migrations of a run (ADR 0120 item 4),
+/// because SQL cannot read a feed.
+#[cfg(test)]
 const PEOPLE_MIGRATION: usize = 20;
 
 /// The index in `MIGRATIONS` of the migration that makes `library_root`
@@ -561,6 +568,11 @@ const RELATIVE_LIBRARY_MIGRATION: usize = 23;
 /// key pair (ADR 0110 items 37 and 38). SQL cannot change a grant vault
 /// file, so Studio removes the wrappers after it, in code.
 const APP_KEYS_MIGRATION: usize = 24;
+
+/// The index in `MIGRATIONS` of the migration that adds the places of each
+/// credit (ADR 0120 item 1). A run that applies it refills the credit index
+/// from the library copies (ADR 0120 item 4).
+const CREDIT_PLACES_MIGRATION: usize = 27;
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1193,15 +1205,19 @@ impl Collection {
                 .map_err(|_| CollectionError::new("too many migrations"))?;
             tx.pragma_update(None, "user_version", version)?;
             tx.commit()?;
-            if index == PEOPLE_MIGRATION {
-                self.refill_credits()?;
-            }
             if index == RELATIVE_LIBRARY_MIGRATION {
                 self.relativize_library_root()?;
             }
             if index == APP_KEYS_MIGRATION {
                 self.remove_all_grant_wrappers();
             }
+        }
+        // The refill writes the places of each credit. Those places exist
+        // from CREDIT_PLACES_MIGRATION on, so the refill runs after the last
+        // migration of this run, and only when this run applied that
+        // migration (ADR 0120 item 4).
+        if current <= CREDIT_PLACES_MIGRATION {
+            self.refill_credits()?;
         }
         Ok(())
     }
@@ -1299,10 +1315,9 @@ impl Collection {
         Ok(())
     }
 
-    /// Fill `feed_credits` for each feed that has a library copy and no
-    /// credit row (ADR 0098 item 10). The migration of the people calls it
-    /// one time. A feed with no library copy, or with a copy that does not
-    /// parse, gets no row.
+    /// Replace the `feed_credits` rows of each feed that has a library copy
+    /// (ADR 0098 item 10, ADR 0120 item 4). A feed with no library copy, or
+    /// with a copy that does not parse, keeps its rows as they are.
     fn refill_credits(&mut self) -> Result<(), CollectionError> {
         let Some(root) = self.library_root()?.filter(|root| root.is_dir()) else {
             return Ok(());
@@ -1317,16 +1332,8 @@ impl Collection {
             .collect();
         let tx = self.db.transaction()?;
         for row in rows {
-            let has_rows: bool = tx.query_row(
-                "SELECT EXISTS (SELECT 1 FROM feed_credits WHERE feed_id = ?1)",
-                [row.id.0],
-                |r| r.get(0),
-            )?;
-            if has_rows {
-                continue;
-            }
             if let Some(feed) = library_copy(&library, &row) {
-                put_credits(&tx, row.id, feed.credits())?;
+                put_credits(&tx, row.id, feed.credit_places())?;
             }
         }
         tx.commit()?;
@@ -1692,7 +1699,7 @@ impl Collection {
         )?;
         choose_address(&tx, id)?;
         put_recipients(&tx, id, feed.recipients())?;
-        put_credits(&tx, id, feed.credits())?;
+        put_credits(&tx, id, feed.credit_places())?;
         // A publisher feed with no confirmed roles gets the roles that its
         // links give (ADR 0082 item 4).
         if feed.medium.as_deref() == Some("publisher") {
@@ -3298,14 +3305,15 @@ impl Collection {
     ///
     /// # Errors
     ///
-    /// Gives a [`CollectionError`] when SQLite fails.
+    /// Gives a [`CollectionError`] when SQLite fails, or when a stored list
+    /// of places is not valid.
     pub fn feed_credits(&self) -> Result<Vec<CreditRow>, CollectionError> {
         let mut statement = self.db.prepare(
-            "SELECT feed_id, name, role, grp, img, href, npub
+            "SELECT feed_id, name, role, grp, img, href, npub, places
              FROM feed_credits ORDER BY feed_id, name, role, grp, href, npub",
         )?;
         let rows = statement.query_map([], |r| {
-            Ok(CreditRow {
+            let row = CreditRow {
                 feed_id: FeedId(r.get(0)?),
                 name: r.get(1)?,
                 role: r.get(2)?,
@@ -3313,9 +3321,19 @@ impl Collection {
                 img: r.get(4)?,
                 href: r.get(5)?,
                 npub: r.get(6)?,
-            })
+                places: Vec::new(),
+            };
+            Ok((row, r.get::<_, String>(7)?))
         })?;
-        Ok(rows.collect::<Result<_, _>>()?)
+        let mut found = Vec::new();
+        for row in rows {
+            let (mut credit, places) = row?;
+            credit.places = serde_json::from_str(&places).map_err(|e| {
+                CollectionError::new(format!("the places of a credit are not valid: {e}"))
+            })?;
+            found.push(credit);
+        }
+        Ok(found)
     }
 
     /// Each recipient that the collection knows: from a feed that Studio
@@ -3788,32 +3806,84 @@ pub struct CreditRow {
     pub href: String,
     /// `npub`, or empty text.
     pub npub: String,
+    /// The places of the credit, in the sequence of the feed, each one time
+    /// (ADR 0120 item 2).
+    pub places: Vec<CreditPlace>,
+}
+
+/// One row of `feed_credits` before it is written. The key fields are the
+/// primary key of the table.
+struct CreditCell {
+    name: String,
+    role: String,
+    group: String,
+    img: String,
+    href: String,
+    npub: String,
+    places: Vec<CreditPlace>,
+}
+
+impl CreditCell {
+    /// True when `other` has the same primary key as this row. The picture
+    /// is not part of the key.
+    fn same_key(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.role == other.role
+            && self.group == other.group
+            && self.href == other.href
+            && self.npub == other.npub
+    }
 }
 
 /// Replace the `feed_credits` rows of a feed with its current credits
-/// (ADR 0098 item 10).
+/// (ADR 0098 item 10, ADR 0120 items 2 and 3).
 ///
 /// Two credits with the same key give one row. The last one gives `img`.
-fn put_credits(db: &Connection, id: FeedId, credits: Vec<&Person>) -> Result<(), CollectionError> {
+/// The row gets the places of both, in the sequence of the feed, and each
+/// place one time.
+fn put_credits(
+    db: &Connection,
+    id: FeedId,
+    credits: Vec<(CreditPlace, &Person)>,
+) -> Result<(), CollectionError> {
     db.execute("DELETE FROM feed_credits WHERE feed_id = ?1", [id.0])?;
     let seen_at = now();
     let text = |value: Option<&String>| value.map_or_else(String::new, |v| v.trim().to_owned());
-    for person in credits {
+    let mut cells: Vec<CreditCell> = Vec::new();
+    for (place, person) in credits {
+        let cell = CreditCell {
+            name: person.name.trim().to_owned(),
+            role: text(person.role.as_ref()),
+            group: text(person.group.as_ref()),
+            img: text(person.img.as_ref()),
+            href: text(person.href.as_ref()),
+            npub: text(person.npub.as_ref()),
+            places: Vec::new(),
+        };
+        if let Some(index) = cells.iter().position(|c| c.same_key(&cell)) {
+            let existing = &mut cells[index];
+            existing.img = cell.img;
+            if !existing.places.contains(&place) {
+                existing.places.push(place);
+            }
+        } else {
+            cells.push(CreditCell {
+                places: vec![place],
+                ..cell
+            });
+        }
+    }
+    for cell in cells {
+        let places = serde_json::to_string(&cell.places).map_err(|e| {
+            CollectionError::new(format!("the places of a credit cannot be written: {e}"))
+        })?;
         db.execute(
             "INSERT INTO feed_credits
-                 (feed_id, name, role, grp, img, href, npub, seen_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-             ON CONFLICT (feed_id, name, role, grp, href, npub)
-             DO UPDATE SET img = excluded.img",
+                 (feed_id, name, role, grp, img, href, npub, seen_at, places)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                id.0,
-                person.name.trim(),
-                text(person.role.as_ref()),
-                text(person.group.as_ref()),
-                text(person.img.as_ref()),
-                text(person.href.as_ref()),
-                text(person.npub.as_ref()),
-                seen_at
+                id.0, cell.name, cell.role, cell.group, cell.img, cell.href, cell.npub, seen_at,
+                places
             ],
         )?;
     }
@@ -4434,6 +4504,110 @@ mod tests {
         assert_eq!(collection.feed_credits().unwrap().len(), 1);
         collection.delete_feed(feed).unwrap();
         assert_eq!(collection.feed_credits().unwrap(), Vec::new());
+    }
+
+    #[test]
+    fn put_credits_keeps_one_row_with_the_places_of_each_credit_in_sequence() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let doc = credit_doc(
+            "<podcast:person role=\"Mixer\">Ann</podcast:person>\
+             <item><guid>t1</guid><title>Track 1</title>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person></item>\
+             <item><guid>t2</guid><title>Track 2</title>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person></item>",
+        );
+        collection
+            .record_state(feed, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        let rows = collection.feed_credits().unwrap();
+        assert_eq!(rows.len(), 1, "ADR 0120 item 3: equal keys give one row");
+        let item = |guid: &str, title: &str| CreditPlace::Item {
+            guid: guid.into(),
+            title: title.into(),
+        };
+        assert_eq!(
+            rows[0].places,
+            [
+                CreditPlace::Channel,
+                item("t1", "Track 1"),
+                item("t2", "Track 2"),
+            ],
+            "ADR 0120 item 2: each place is one time, in the sequence of the feed"
+        );
+    }
+
+    #[test]
+    fn the_credit_places_migration_has_its_index() {
+        assert!(
+            MIGRATIONS[CREDIT_PLACES_MIGRATION].contains("places"),
+            "ADR 0120 item 1: CREDIT_PLACES_MIGRATION must be the index of its entry in MIGRATIONS"
+        );
+        assert_eq!(CREDIT_PLACES_MIGRATION + 1, MIGRATIONS.len());
+    }
+
+    /// Make a database at the version before the migration of the places.
+    fn before_credit_places(path: &Path) -> Connection {
+        let db = Connection::open(path).unwrap();
+        for migration in &MIGRATIONS[..CREDIT_PLACES_MIGRATION] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(CREDIT_PLACES_MIGRATION).unwrap(),
+        )
+        .unwrap();
+        db
+    }
+
+    #[test]
+    fn the_credit_places_migration_refills_each_feed_with_its_places() {
+        let dir = tempfile::tempdir().unwrap();
+        let library = dir.path().join("library");
+        std::fs::create_dir_all(library.join("album")).unwrap();
+        std::fs::write(
+            library.join("album").join("a.xml"),
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person>\
+             <item><guid>t1</guid><title>Track</title>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person></item></channel></rss>",
+        )
+        .unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = before_credit_places(&path);
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES ('library_root', ?1)",
+            [serde_json::json!(library.to_str().unwrap()).to_string()],
+        )
+        .unwrap();
+        // A row from before has no places. The refill replaces it.
+        db.execute_batch(
+            "INSERT INTO feeds (id, path, folder, created_at) VALUES (1, 'a.xml', 'album', 0);
+             INSERT INTO feed_credits (feed_id, name, role, grp, img, href, npub, seen_at)
+                 VALUES (1, 'Old', '', '', '', '', '', 0);",
+        )
+        .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        let rows = collection.feed_credits().unwrap();
+        assert_eq!(
+            rows.len(),
+            1,
+            "ADR 0120 item 4: the refill replaces the old rows"
+        );
+        assert_eq!(rows[0].name, "Ann");
+        assert_eq!(
+            rows[0].places,
+            [
+                CreditPlace::Channel,
+                CreditPlace::Item {
+                    guid: "t1".into(),
+                    title: "Track".into(),
+                },
+            ]
+        );
     }
 
     fn value_recipient_doc(address: &str, extra: &str) -> Document {

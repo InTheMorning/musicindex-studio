@@ -4,54 +4,89 @@ Date: 2026-11-01. This note is advisory. [ADR 0110](../adr/0110-a-connected-app-
 
 ## Purpose
 
-`musicindex-live-publisher` is the only app that the operator expects to connect to Studio. It has no Studio client on 2026-11-01. This note gives the interface that ADR 0110 sets, so that the live publisher can plan its client.
+`musicindex-live-publisher` is the only app that the operator expects to connect to Studio. It has no Studio client on 2026-11-01. This note tells the live publisher how to use the Studio client crate, so that it can plan its client.
 
-## What The Client Does
+## Use The Client Crate
 
-1. It makes one secp256k1 key pair for each Studio account. It keeps the private key in a file with mode 0600, in a folder with mode 0700. This is the method of the relay tokens in `src/relay.rs` and `systemd/*.service`.
-2. It shows its public key, for example with `musicindex-live-publisher studio connect`. The user pastes that key into Studio, in Settings, Connected apps, "Connect an App". The key is not secret.
-3. It shows its key in the short form of Studio too: the first 9 and the last 4 characters of the `npub`, for example `npub1lp7w…9k2q`. The user compares the two forms.
-4. It signs each request to `/app/v1/` with an event of kind 27235, in the header `Authorization: Nostr <base64 event>`. The event has these tags:
-   - `u`: the full address of the request.
-   - `method`: the HTTP method.
-   - `payload`: the SHA-256 of the raw body bytes. Studio refuses a request with a body and no `payload` tag. Studio refuses a body larger than 64 KiB.
-5. It sends a new event for each request, with the current time. Studio refuses an event that is older than 60 seconds, and an event that it already accepted. A request that fails also uses up its event.
-6. Studio shows a confirmation code of 8 characters at "Connect an App". The client asks the user for the code, and sends it in `POST /app/v1/confirm`. The code expires after 15 minutes, and 5 wrong codes remove the waiting app. Until the confirmation, Studio answers only `GET /app/v1/whoami` and `POST /app/v1/confirm`.
-7. A grant applies only to the apps that are confirmed when the user approves it. A client that connects later sees no grant from before.
+Studio gives the crate `studio-app-client` in `crates/app-client` (task 073). The crate does the full protocol: the pairing, the signed requests, the wrapper and the four operations. Studio tests the crate against its own API in each CI run. The live publisher thus does not write the protocol itself.
+
+- The crate has the AGPL-3.0 license, the same as the live publisher.
+- The live publisher depends on the crate through a Git tag of the Studio repository.
+- The crate documentation gives an example of each step. Its README lists the rules for an app.
+
+## What The Live Publisher Does
+
+1. It adds a command that reads a pairing text, for example `musicindex-live-publisher studio connect`. The user makes the pairing text in Studio, in Settings, Connected apps, "Connect an App". The command reads the text as "Read The Pairing Text" below gives.
+2. It gives the crate its live value origin: the scheme, the host and the port where its listeners get the live value, for example `wss://live.musicindex.org`. The live publisher can make it from its relay `endpoint` setting. Studio refuses each later live value on a different origin.
+3. It selects how it keeps its private key. The crate gives `FileSigner` (a file with mode 0600 in a folder with mode 0700). The live publisher can give its own `AppSigner`, for example for systemd credentials or the key store of the operating system.
+4. It makes one key pair for each Studio account and each computer. The pairing makes the key, so the user copies no key.
+5. During a show, it calls `set_status` and `set_live_value` of the `Client`. The crate gets the grant vault key, keeps it in memory only, and clears it at the end of the grant.
+
+## Rules For The Live Publisher
+
+These rules come from ADR 0110 item 32. The crate README gives the same list.
+
+- Keep the private key private. Do not put it in a log, a backup that other persons can read, or a support message.
+- Use one pairing for each computer or copy of the app.
+- Keep the grant vault key in memory only. The crate does this. Do not copy it out of the crate.
+- Log no pairing text, signed event, request body or grant vault key.
+- Keep the clock of the computer correct. Studio refuses a request that is more than 60 seconds from its own time.
+
+## Read The Pairing Text
+
+These rules decrease the risk of a screen share, a recording or a shell history. The crate module `input` applies them (ADR 0110 items 33 and 34).
+
+- Read the pairing text from the clipboard, or from a prompt that does not show the text. Offer the clipboard first, for example "Press Enter to read the pairing text from the clipboard".
+- After a read from the clipboard, the crate clears the clipboard if it still holds the pairing text.
+- Do not take the pairing text as a command argument or an environment variable. A shell history and a process list keep them.
+- Show no part of the code after the read. Show only the result and the short key, for example "Connected to studio.musicindex.org, key npub1lp7w…9k2q". Studio shows the same short key, and the user can compare the two.
+- Save the Studio origin after the first pairing. Then accept the code alone, for example `K7M2-Q9XD`, for a user who types it from a phone screen. The crate accepts small letters, spaces and a missing hyphen.
+- When the crate gives `CodeUsed`, tell the user that a different program possibly used the pairing text. The user must then remove that app in Studio.
+
+## The Pairing
+
+1. Studio shows a pairing text, for example `https://studio.musicindex.org#pair=K7M2-Q9XD`. Studio hides it, and the user selects Copy. It works one time, for 15 minutes. If the user selects Done in Studio before the pairing, the text stops working.
+2. The live publisher makes a key pair, and sends `POST /app/v1/pair`, signed with the new key. The body has `code` and `live_value_origin`.
+3. Studio makes the app active. The notice in Studio changes to "Connected", and the user sees the short key and the live value address on the app row.
+
+## A Grant
+
+- A grant names one app. The user selects that app when the user approves the show in Studio.
+- A grant gives the four operations on one live item, until the grant ends: go live, end, set the live value and remove the live value.
+- A different copy of the live publisher cannot use the grant. The user approves the show again for that copy.
 
 ## The Routes
 
-The routes are the routes of ADR 0054, with one new route.
+The crate calls these routes. The live publisher does not call them directly.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /app/v1/whoami` | The app and its state. |
-| `POST /app/v1/confirm` | New. `code`: the confirmation code from Studio. |
-| `GET /app/v1/shows` | The show grants of the app: the grant ID, the feed, the live item, its status, `start`, `end` and `live_value`. |
-| `GET /app/v1/shows/{grant_id}/wrapper` | New. The grant vault key, encrypted with NIP-44 version 2 to the public key of the app. |
+| `POST /app/v1/pair` | `code` and `live_value_origin`. This makes the app active. |
+| `GET /app/v1/whoami` | The app, its state and its live value origin. |
+| `GET /app/v1/shows` | The show grants of the app: the grant ID, the feed, the live item, its status, `start`, `end`, `live_value` and the live value origin. |
+| `GET /app/v1/shows/{grant_id}/wrapper` | The grant vault key, encrypted with NIP-44 version 2 to the public key of the app. |
 | `POST /app/v1/shows/{grant_id}/status` | `live` or `ended`. This writes the feed. |
-| `PUT /app/v1/shows/{grant_id}/live-value` | The `uri` and the `protocol` of `podcast:liveValue`. The `uri` starts with `https://` or `wss://` and has a maximum of 2048 characters. The `protocol` has 1 to 32 letters, digits, `.` or `-`. This writes the feed. |
+| `PUT /app/v1/shows/{grant_id}/live-value` | The `uri` and the `protocol` of `podcast:liveValue`. The `uri` is on the live value origin, with a maximum of 2048 characters. The `protocol` has 1 to 32 letters, digits, `.` or `-`. This writes the feed. |
 | `DELETE /app/v1/shows/{grant_id}/live-value` | Removes `podcast:liveValue`. This writes the feed. |
 
-## A Write
+## The Errors Of The Crate
 
-1. The client gets the wrapper of the grant one time, and decrypts it with its private key. The result is the grant vault key.
-2. The client adds `grant_key` to the body of each request that writes the feed. The `payload` tag of the signed event covers the body.
-3. Studio opens the grant vault, writes the feed, and clears the keys from memory.
-4. The client keeps the grant vault key in memory only, and only while the grant is open. It writes the key to no file and no log.
-
-## The Answers Of Studio
-
-- 401 `app_signature_invalid`: the signature, the time, the address, the method or the body hash is not correct, or Studio already accepted the event.
-- 401 `app_key_required`: a request with a token from before ADR 0110.
-- 401 `app_code_invalid`: the confirmation code is not correct or expired.
-- 400 `live_value_invalid`: the `uri` or the `protocol` of a live value is not permitted.
-- 404: the grant does not name this app.
-- 423 `vault_locked`: the grant vault key is not correct, or the host needs a secret that the grant vault does not hold.
-- 429 `too_many_attempts`: more than 60 requests in one minute.
+| Error | Cause | What to do |
+| --- | --- | --- |
+| `CodeInvalid` | The pairing text is not correct or expired, or the user selected Done before the pairing. | Ask the user for a new pairing text. |
+| `CodeUsed` | A program used this pairing text in the last 15 minutes. | Tell the user that a different program possibly used it. The user removes that app in Studio, and makes a new pairing text. |
+| `SignatureInvalid` | The clock is wrong, or Studio does not know the key. | Examine the clock. If the clock is correct, ask the user to connect the app again. |
+| `KeyRequired` | The app uses a token from before ADR 0110. | Ask the user to connect the app again. |
+| `KeyInUse` | A different account uses this key. | Make a new key, and pair again. |
+| `LiveValueInvalid` | The live value is not on the live value origin, or its protocol is not permitted. | Examine the relay setting. To change the origin, the user connects the app again. |
+| `NotGranted` | The grant does not name this app, or it ended. | Stop the writes for this show. Tell the operator. |
+| `VaultLocked` | The grant vault key is not correct, or the host needs a secret that the grant vault does not hold. | Stop the writes for this show. Tell the operator. |
+| `TooManyAttempts` | More than 60 requests in one minute. | Wait one minute, then send again. |
+| `Network` | Studio did not answer. | Send again with a new request. The crate signs a new event. |
 
 ## Open Points For The Live Publisher
 
-- Where it keeps the address of each Studio, and the key of each account.
+- Where it keeps the Studio address and the key of each account.
 - What it does when Studio refuses a write during a show.
-- When it gets the wrapper again, for example after a restart.
+- When it reads the shows again, for example after a restart.
+- Which `AppSigner` it uses.

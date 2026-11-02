@@ -4,7 +4,7 @@
 - Date: 2026-10-22
 - Owner: operator
 - Amended: 2026-10-26 by operator decision. [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) item 20 changes item 4: the server can also write under a show grant with the token of a connected app of the user.
-- Changed by: [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md) item 17. Item 4: the key of a connected app that the grant names replaces the token.
+- Changed by: [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md) item 19. Item 4: the key of a connected app that the grant names replaces the token.
 
 ## Context
 

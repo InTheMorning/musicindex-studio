@@ -186,6 +186,11 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
                 .delete(people::remove_person),
         )
         .route("/people/{id}/save", post(people::save_person))
+        .route("/people/{id}/musicindex", get(people::search_musicindex))
+        .route(
+            "/people/{id}/musicindex/{guid}",
+            get(people::musicindex_values),
+        )
         .route("/people/{id}/check", get(people::check_person))
         .route(
             "/people/{id}/default-address",

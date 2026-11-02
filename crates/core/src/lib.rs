@@ -27,6 +27,7 @@ pub mod inventory;
 pub mod keysend;
 pub mod library;
 pub mod live;
+pub mod lookup;
 pub mod media;
 pub mod migrate;
 pub mod msp;

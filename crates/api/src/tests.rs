@@ -10470,6 +10470,8 @@ async fn each_people_route_needs_the_token() {
         ("DELETE", "/api/v1/people/1"),
         ("PUT", "/api/v1/people/1/default-address"),
         ("POST", "/api/v1/people/1/save"),
+        ("GET", "/api/v1/people/1/musicindex"),
+        ("GET", "/api/v1/people/1/musicindex/c0ffee-01"),
         ("POST", "/api/v1/people/1/wallets"),
         ("DELETE", "/api/v1/people/1/wallets/1"),
         ("GET", "/api/v1/people/suggestions"),
@@ -10579,6 +10581,145 @@ async fn a_profile_address_is_a_suggestion_and_the_user_adds_it_with_the_evidenc
     // The address is a member of the wallet now, so it is no suggestion.
     let (_, body) = call(&app, "GET", &path, None).await;
     assert_eq!(body["suggestions"], json!([]));
+}
+
+/// A test server of the musicindex API with one artist feed and one feed
+/// with no link, and the keysend data of the Lightning address of the artist
+/// feed. It gives the server and that address.
+fn musicindex_lookup_server() -> (studio_core::testing::TestServer, String) {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    let address = format!("ann@127.0.0.1:{}", server.port());
+    server.set(
+        "/v1/search",
+        200,
+        br#"{"data":[
+            {"entity_type":"publisher","entity_id":"c0ffee-01","title":"Ann Lee","release_artist":"Ann Lee","release_artist_source":"itunes_author","two_way_link_count":2,"agreed_roles":["artist"],"confirmed_release_artists":["Ann Lee"]},
+            {"entity_type":"publisher","entity_id":"c0ffee-02","title":"Ann Band","two_way_link_count":0,"agreed_roles":[],"confirmed_release_artists":[]}
+        ]}"#
+            .to_vec(),
+    );
+    server.set(
+        "/v1/feeds/c0ffee-01",
+        200,
+        format!(
+            r#"{{"data":{{"title":"Ann Lee","feed_url":"https://feed.example/ann.xml","image_url":"https://img.example/ann.png",
+                "source_links":[{{"link_type":"website","url":"https://ann.example"}}],
+                "source_ids":[{{"scheme":"nostr_npub","value":"npub1ann"}}],
+                "payment_routes":[{{"recipient_name":"Ann","route_type":"lnaddress","address":"{address}","split":100,"fee":false}}]}}}}"#
+        )
+        .into_bytes(),
+    );
+    server.set(
+        "/.well-known/keysend/ann",
+        200,
+        br#"{"pubkey":"02ln","customData":[]}"#.to_vec(),
+    );
+    (server, address)
+}
+
+/// The musicindex lookup of a person (ADR 0117). The search gives the rows
+/// in three levels, and the values give the state of each value of a feed.
+#[tokio::test]
+async fn the_musicindex_lookup_gives_the_levels_and_the_states_of_a_feed() {
+    let (server, address) = musicindex_lookup_server();
+    let app = app_with_keysend(&server.url(""), Some("http"));
+    let id = new_person(&app, "Ann Lee").await;
+
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{id}/musicindex?q=Ann%20Lee"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let rows = body["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "{body}");
+    assert_eq!(rows[0]["feed_guid"], "c0ffee-01");
+    assert_eq!(rows[0]["level"], "role");
+    assert_eq!(
+        rows[0]["kind"],
+        json!({"type": "role", "roles": ["artist"]})
+    );
+    assert_eq!(rows[0]["albums"], 2);
+    assert_eq!(rows[0]["host"], "feed.example");
+    assert_eq!(rows[0]["has"]["wallet"], true);
+    assert_eq!(rows[1]["feed_guid"], "c0ffee-02");
+    assert_eq!(rows[1]["level"], "name_only");
+    assert_eq!(rows[1]["kind"], json!({"type": "unverified"}));
+    assert_eq!(rows[1]["host"], Value::Null);
+
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{id}/musicindex/c0ffee-01"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["picture"],
+        json!({"value": "https://img.example/ann.png", "state": "new"})
+    );
+    assert_eq!(body["website"]["value"], "https://ann.example");
+    assert_eq!(body["npub"]["value"], "npub1ann");
+    assert_eq!(body["wallets"][0]["lookup"], "found");
+    assert_eq!(body["wallets"][0]["key"]["address"], address.as_str());
+    assert_eq!(body["wallets"][0]["state"], "new");
+
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{id}/musicindex/00000000-0000-0000-0000-000000000000"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["error"]["code"], "not_in_index");
+    let (status, body) = call(&app, "GET", "/api/v1/people/999/musicindex?q=Ann", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    let (status, body) = call(&app, "GET", "/api/v1/people/999/musicindex/c0ffee-01", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
+/// A save of a Lightning address from the musicindex lookup links the
+/// address, and stores its lookup: the wallet then has the node of the
+/// address too (ADR 0095, ADR 0117 item 7).
+#[tokio::test]
+async fn a_saved_lightning_address_from_musicindex_keeps_its_node() {
+    let (server, address) = musicindex_lookup_server();
+    let app = app_with_keysend(&server.url(""), Some("http"));
+    let id = new_person(&app, "Ann Lee").await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{id}/musicindex/c0ffee-01"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let wallet = body["wallets"][0]["key"].clone();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/save"),
+        Some(json!({ "wallets": [{ "key": wallet, "recipient_type": "lnaddress" }] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (_, body) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(
+        body["wallets"][0]["key"]["address"],
+        address.as_str(),
+        "{body}"
+    );
+    let members: Vec<&str> = body["wallets"][0]["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m["key"]["address"].as_str())
+        .collect();
+    assert!(members.contains(&"02ln"), "{body}");
 }
 
 #[tokio::test]

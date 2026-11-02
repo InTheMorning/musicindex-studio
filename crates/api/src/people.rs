@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
@@ -15,7 +15,8 @@ use studio_core::change_set::{
     self, Cause, Outcome, PersonOperation, RecipientKey, RecipientOperation, Wallet,
 };
 use studio_core::collection::{Collection, CollectionError, CollectionErrorKind, FeedId};
-use studio_core::keysend::Lookup;
+use studio_core::keysend::{self, Lookup};
+use studio_core::lookup;
 use studio_core::people::{
     self, LinkEvidence, MakePerson, MemberFeed, Person, PersonFields, PersonId, PersonItems,
     PersonSave,
@@ -26,6 +27,7 @@ use studio_core::profiles;
 use crate::error::ApiError;
 use crate::routes::{
     ApiResult, Shared, blocking, blocking_unlocked, change_set_json, ensure_draft, files_feed,
+    now_seconds,
 };
 use crate::workspace::Workspace;
 
@@ -166,13 +168,27 @@ pub(crate) async fn change_person(
 }
 
 /// The body of `POST /people/{id}/save`: the pending changes of the page
-/// (ADR 0116). The core applies them in one transaction.
+/// (ADR 0116). The core applies them in one transaction. Before the save,
+/// Studio stores the keysend lookup of each Lightning address of the save, as
+/// `add_profile_address` does. The core then finds the person of its node,
+/// and the wallet joins the address and the node (ADR 0095, ADR 0117 item 7).
 pub(crate) async fn save_person(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
     Json(save): Json<PersonSave>,
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
+        let addresses: Vec<String> = save
+            .wallets
+            .iter()
+            .filter(|wallet| wallet.recipient_type == "lnaddress")
+            .map(|wallet| wallet.key.address.clone())
+            .collect();
+        if let Some(scheme) = w.keysend_scheme
+            && !addresses.is_empty()
+        {
+            keysend::refresh(&w.collection, &w.web, scheme, &addresses, now_seconds())?;
+        }
         people::save_person(&w.collection, PersonId(id), &save).map_err(person_error)?;
         Ok(StatusCode::NO_CONTENT)
     })
@@ -515,6 +531,66 @@ pub(crate) async fn add_profile_address(
             people::add_profile_address(&w.collection, &w.web, scheme, PersonId(id), &body.address)
                 .map_err(person_error)?;
         Ok(created(link))
+    })
+    .await
+}
+
+/// The query of the musicindex search of a person.
+#[derive(Deserialize)]
+pub(crate) struct MusicIndexQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// Search the artist and label feeds of musicindex for a name, in three
+/// levels (ADR 0117 items 3 and 4). The answer is `{ "rows": [...] }`. The
+/// request runs with no lock of the workspace.
+pub(crate) async fn search_musicindex(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Query(query): Query<MusicIndexQuery>,
+) -> ApiResult {
+    let index = blocking(shared, move |w| {
+        people::person(&w.collection, PersonId(id)).map_err(person_error)?;
+        Ok(w.index.clone())
+    })
+    .await?;
+    blocking_unlocked(move || {
+        let rows = lookup::search(&index, &query.q)?;
+        Ok(Json(json!({ "rows": rows })))
+    })
+    .await
+}
+
+/// The values of one musicindex feed for a person, with the state of each
+/// value (ADR 0117 items 5 and 6). The musicindex and keysend requests run
+/// with no lock of the workspace. The collection is read again under the
+/// lock, after the requests. Gives 404 when musicindex does not know the
+/// feed.
+pub(crate) async fn musicindex_values(
+    State(shared): State<Shared>,
+    Path((id, guid)): Path<(i64, String)>,
+) -> ApiResult {
+    let (index, web, scheme) = blocking(shared.clone(), move |w| {
+        people::person(&w.collection, PersonId(id)).map_err(person_error)?;
+        Ok((w.index.clone(), w.web.clone(), w.keysend_scheme))
+    })
+    .await?;
+    let feed = blocking_unlocked(move || {
+        let feed = lookup::fetch_values(&index, &web, scheme, &guid)?;
+        feed.ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_in_index",
+                format!("musicindex has no feed {guid}"),
+            )
+        })
+    })
+    .await?;
+    blocking(shared, move |w| {
+        let values =
+            lookup::compose_values(&w.collection, PersonId(id), feed).map_err(person_error)?;
+        Ok(Json(json!(values)))
     })
     .await
 }

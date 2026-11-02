@@ -244,7 +244,9 @@ fn parts(key: &RecipientKey) -> (String, String, String) {
     )
 }
 
-fn lookup_map(collection: &Collection) -> Result<HashMap<String, Lookup>, CollectionError> {
+pub(crate) fn lookup_map(
+    collection: &Collection,
+) -> Result<HashMap<String, Lookup>, CollectionError> {
     Ok(collection
         .keysend_lookups()?
         .into_iter()
@@ -1049,6 +1051,19 @@ pub struct PersonSave {
     /// The one membership to keep. `Some(None)` removes each membership.
     #[serde(deserialize_with = "double_option")]
     pub member: Option<Option<FeedId>>,
+    /// Each wallet to link to the person (ADR 0117 item 7).
+    pub wallets: Vec<WalletAdd>,
+    /// Each Nostr key to link to the person (ADR 0117 item 7).
+    pub keys: Vec<String>,
+}
+
+/// A wallet that the save links to a person (ADR 0117 item 7).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct WalletAdd {
+    /// The wallet key.
+    pub key: RecipientKey,
+    /// The recipient type, such as `node` or `lnaddress`.
+    pub recipient_type: String,
 }
 
 /// Read a present value, also `null`, as `Some`. A missing key stays `None`
@@ -1067,13 +1082,17 @@ where
 
 /// Apply the pending changes of a person in one transaction (ADR 0116
 /// item 5). A failure of one part changes nothing. The save writes no feed.
+/// The wallets and the keys are linked with the evidence of the user, before
+/// the default address (ADR 0117 item 7).
 ///
 /// # Errors
 ///
 /// Gives the error of the first part that fails: [`CollectionErrorKind::Invalid`]
-/// for a name of only spaces, a default address that is in no wallet, or a
-/// feed that is not a publisher feed, and [`CollectionErrorKind::NotFound`]
-/// for an unknown person or feed.
+/// for a name of only spaces, a default address that is in no wallet, a
+/// feed that is not a publisher feed, or a wallet or key that is not valid,
+/// [`CollectionErrorKind::Conflict`] for a wallet or a key of a different
+/// person, and [`CollectionErrorKind::NotFound`] for an unknown person or
+/// feed.
 pub fn save_person(
     collection: &Collection,
     id: PersonId,
@@ -1098,6 +1117,19 @@ pub fn save_person(
                 tx.execute("DELETE FROM person_members WHERE person_id = ?1", [id.0])?;
             }
         }
+    }
+    for wallet in &save.wallets {
+        insert_wallet(
+            &tx,
+            id,
+            &wallet.key,
+            &wallet.recipient_type,
+            LinkEvidence::User,
+            &lookups,
+        )?;
+    }
+    for npub in &save.keys {
+        insert_key(&tx, id, npub)?;
     }
     if let Some(key) = &save.default_address {
         write_default_address(&tx, id, key.as_ref(), &lookups)?;
@@ -3701,6 +3733,7 @@ mod tests {
             fields: Some(fields("Ann B")),
             default_address: Some(Some(key.clone())),
             member: Some(Some(publisher)),
+            ..PersonSave::default()
         };
         save_person(&collection, ann, &save).unwrap();
         let saved = person(&collection, ann).unwrap();
@@ -3722,6 +3755,53 @@ mod tests {
         let error = save_person(&collection, ann, &save).unwrap_err();
         assert_eq!(error.kind(), CollectionErrorKind::Invalid);
         assert_eq!(person(&collection, ann).unwrap().name, "Ann");
+    }
+
+    #[test]
+    fn a_save_links_the_wallets_and_keys_or_changes_nothing() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let bob = add_person(&collection, &fields("Bob")).unwrap();
+        add_wallet(
+            &collection,
+            bob,
+            &key("02other"),
+            "node",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        let new_wallet = WalletAdd {
+            key: key("02new"),
+            recipient_type: "node".to_owned(),
+        };
+        let conflict = WalletAdd {
+            key: key("02other"),
+            recipient_type: "node".to_owned(),
+        };
+        let save = PersonSave {
+            wallets: vec![new_wallet.clone(), conflict],
+            keys: vec!["npub1ann".to_owned()],
+            ..PersonSave::default()
+        };
+        let error = save_person(&collection, ann, &save).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::Conflict);
+        let unchanged = person(&collection, ann).unwrap();
+        assert!(unchanged.wallets.is_empty(), "a failed save adds no wallet");
+        assert!(unchanged.keys.is_empty(), "a failed save adds no key");
+
+        let save = PersonSave {
+            wallets: vec![new_wallet],
+            keys: vec!["npub1ann".to_owned()],
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        let saved = person(&collection, ann).unwrap();
+        assert_eq!(saved.wallets.len(), 1);
+        assert_eq!(saved.wallets[0].key.address, "02new");
+        assert_eq!(saved.wallets[0].evidence, "user");
+        assert_eq!(saved.keys.len(), 1);
+        assert_eq!(saved.keys[0].npub, "npub1ann");
+        assert_eq!(person(&collection, bob).unwrap().wallets.len(), 1);
     }
 
     #[test]

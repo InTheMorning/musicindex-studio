@@ -5033,7 +5033,7 @@ fn group_wallets(
 }
 
 /// The time of the computer in seconds, for the keysend lookups.
-fn now_seconds() -> i64 {
+pub(crate) fn now_seconds() -> i64 {
     i64::try_from(unix_now()).unwrap_or(i64::MAX)
 }
 

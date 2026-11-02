@@ -46,6 +46,47 @@ pub struct IndexRoutes {
     pub tracks: Vec<IndexTrack>,
 }
 
+/// A publisher feed that a musicindex search found, with its link facts
+/// (ADR 0117 item 1). The lists are empty when musicindex gives none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublisherHit {
+    /// `podcast:guid` of the feed.
+    pub feed_guid: String,
+    /// The feed title.
+    pub title: Option<String>,
+    /// The address of the feed image.
+    pub image_url: Option<String>,
+    /// The release artist that musicindex gives.
+    pub release_artist: Option<String>,
+    /// The source of the release artist, such as `placeholder`.
+    pub release_artist_source: Option<String>,
+    /// The number of two-way links of the feed. Missing when musicindex
+    /// gives no link facts.
+    pub two_way_link_count: Option<i64>,
+    /// The roles that the confirmed links agree on.
+    pub agreed_roles: Vec<String>,
+    /// The release artists of the confirmed links.
+    pub confirmed_release_artists: Vec<String>,
+}
+
+/// The values of a publisher feed in musicindex, for the fields of a person
+/// (ADR 0117 item 2). The addresses are not checked here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublisherValues {
+    /// The feed title.
+    pub title: Option<String>,
+    /// The feed address.
+    pub feed_url: Option<String>,
+    /// The address of the feed image.
+    pub image_url: Option<String>,
+    /// The address of the first `website` link.
+    pub website: Option<String>,
+    /// The `nostr_npub` value of the feed, as the first source ID.
+    pub npub: Option<String>,
+    /// Each payment route of the feed, as a recipient.
+    pub routes: Vec<Recipient>,
+}
+
 /// The Nostr keys that musicindex records for a feed (ADR 0074 item 9).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FeedKeys {
@@ -152,6 +193,67 @@ struct TrackSummaryData {
 struct TrackRoutesData {
     title: String,
     payment_routes: Option<Vec<RouteData>>,
+}
+
+/// One `GET /v1/search?type=publisher` row, with the link facts.
+#[derive(Deserialize)]
+struct PublisherRowData {
+    entity_type: String,
+    entity_id: String,
+    title: Option<String>,
+    release_artist: Option<String>,
+    release_artist_source: Option<String>,
+    feed_image_url: Option<String>,
+    two_way_link_count: Option<i64>,
+    agreed_roles: Option<Vec<String>>,
+    confirmed_release_artists: Option<Vec<String>>,
+}
+
+/// One `source_links` entry of a feed response.
+#[derive(Deserialize)]
+struct LinkData {
+    link_type: String,
+    url: Option<String>,
+}
+
+/// One `GET /v1/feeds/{guid}` response, with only the fields that
+/// [`MusicIndex::publisher_values`] uses.
+#[derive(Deserialize)]
+struct PublisherFeedData {
+    title: Option<String>,
+    feed_url: Option<String>,
+    image_url: Option<String>,
+    source_links: Option<Vec<LinkData>>,
+    source_ids: Option<Vec<EntityIdData>>,
+    payment_routes: Option<Vec<RouteData>>,
+}
+
+impl From<PublisherFeedData> for PublisherValues {
+    fn from(data: PublisherFeedData) -> Self {
+        Self {
+            title: data.title,
+            feed_url: data.feed_url,
+            image_url: data.image_url,
+            website: data
+                .source_links
+                .unwrap_or_default()
+                .into_iter()
+                .find(|link| link.link_type == "website")
+                .and_then(|link| link.url),
+            npub: data
+                .source_ids
+                .unwrap_or_default()
+                .into_iter()
+                .find(|id| id.scheme == "nostr_npub")
+                .map(|id| id.value),
+            routes: data
+                .payment_routes
+                .unwrap_or_default()
+                .into_iter()
+                .map(Recipient::from)
+                .collect(),
+        }
+    }
 }
 
 impl From<FeedRoutesData> for IndexRoutes {
@@ -369,6 +471,67 @@ impl MusicIndex {
             })
             .collect())
     }
+
+    /// Search musicindex for publisher feeds by name, with their link facts
+    /// (ADR 0117 item 1). The search sends at most 25 rows.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails.
+    pub fn search_publishers(&self, query: &str) -> Result<Vec<PublisherHit>, WebError> {
+        let url = format!("{}/v1/search", self.base);
+        let file = self.web.get_with_query(
+            &url,
+            &[
+                ("q", query),
+                ("type", "publisher"),
+                ("include", "link_facts"),
+                ("limit", "25"),
+            ],
+            MAX_RESPONSE_BYTES,
+        )?;
+        let rows = serde_json::from_slice::<Envelope<Vec<PublisherRowData>>>(&file.bytes)
+            .map(|e| e.data)
+            .unwrap_or_default();
+        Ok(rows
+            .into_iter()
+            .filter(|row| row.entity_type == "publisher")
+            .map(|row| PublisherHit {
+                feed_guid: row.entity_id,
+                title: row.title,
+                image_url: row.feed_image_url,
+                release_artist: row.release_artist,
+                release_artist_source: row.release_artist_source,
+                two_way_link_count: row.two_way_link_count,
+                agreed_roles: row.agreed_roles.unwrap_or_default(),
+                confirmed_release_artists: row.confirmed_release_artists.unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    /// The values of a publisher feed for a person: its picture, its
+    /// website, its Nostr key and its payment routes (ADR 0117 item 2). Gives
+    /// `None` when musicindex does not know the feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails.
+    pub fn publisher_values(&self, feed_guid: &str) -> Result<Option<PublisherValues>, WebError> {
+        let url = format!("{}/v1/feeds/{}", self.base, filter_guid(feed_guid));
+        match self.web.get_with_query(
+            &url,
+            &[("include", "source_links,source_ids,payment_routes")],
+            MAX_RESPONSE_BYTES,
+        ) {
+            Ok(file) => Ok(
+                serde_json::from_slice::<Envelope<PublisherFeedData>>(&file.bytes)
+                    .ok()
+                    .map(|e| e.data.into()),
+            ),
+            Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -465,6 +628,67 @@ mod tests {
         assert_eq!(
             index
                 .track_routes("00000000-0000-0000-0000-000000000000", "aa11")
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_publisher_search_reads_the_link_facts_and_skips_other_rows() {
+        let server = TestServer::start(vec![(
+            "/v1/search",
+            200,
+            br#"{"data":[
+                {"entity_type":"publisher","entity_id":"c0ffee-01","title":"Ann","release_artist":"Ann","release_artist_source":"itunes_author","feed_image_url":"https://img.example/a.png","two_way_link_count":3,"agreed_roles":["artist"],"confirmed_release_artists":["Ann"]},
+                {"entity_type":"feed","entity_id":"f1","title":"Other"},
+                {"entity_type":"publisher","entity_id":"c0ffee-02","title":"Bo"}
+            ]}"#
+                .to_vec(),
+        )]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let hits = index.search_publishers("ann").unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].feed_guid, "c0ffee-01");
+        assert_eq!(hits[0].two_way_link_count, Some(3));
+        assert_eq!(hits[0].agreed_roles, ["artist"]);
+        assert_eq!(hits[0].confirmed_release_artists, ["Ann"]);
+        assert_eq!(
+            hits[0].release_artist_source.as_deref(),
+            Some("itunes_author")
+        );
+        assert_eq!(hits[1].two_way_link_count, None);
+        assert_eq!(hits[1].agreed_roles, Vec::<String>::new());
+    }
+
+    #[test]
+    fn publisher_values_give_the_website_the_npub_and_the_routes() {
+        let server = TestServer::start(vec![(
+            "/v1/feeds/c0ffee-01",
+            200,
+            br#"{"data":{"title":"Ann","feed_url":"https://feed.example/ann.xml","image_url":"https://img.example/a.png",
+                "source_links":[{"link_type":"other","url":"https://x.example"},{"link_type":"website","url":"https://ann.example"}],
+                "source_ids":[{"scheme":"other","value":"x"},{"scheme":"nostr_npub","value":"npub1ann"}],
+                "payment_routes":[{"recipient_name":"Ann","route_type":"node","address":"02aa","split":100,"fee":false}]}}"#
+                .to_vec(),
+        )]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let values = index.publisher_values("c0ffee-01").unwrap().unwrap();
+        assert_eq!(values.title.as_deref(), Some("Ann"));
+        assert_eq!(
+            values.feed_url.as_deref(),
+            Some("https://feed.example/ann.xml")
+        );
+        assert_eq!(
+            values.image_url.as_deref(),
+            Some("https://img.example/a.png")
+        );
+        assert_eq!(values.website.as_deref(), Some("https://ann.example"));
+        assert_eq!(values.npub.as_deref(), Some("npub1ann"));
+        assert_eq!(values.routes.len(), 1);
+        assert_eq!(values.routes[0].address.as_deref(), Some("02aa"));
+        assert_eq!(
+            index
+                .publisher_values("00000000-0000-0000-0000-000000000000")
                 .unwrap(),
             None
         );

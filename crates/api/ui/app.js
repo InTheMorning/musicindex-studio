@@ -6,7 +6,7 @@ import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
   recipientKey,
-  outcomeText, blockedText, operationLine, nameOf, writableIds, initialStatuses, startWrite,
+  outcomeText, blockedText, operationLine, nameOf, writableIds, initialStatuses, refreshedStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
 import {
@@ -2718,6 +2718,10 @@ function writeFailText(e) {
 }
 
 // The review of a change set and its write (ADR 0091 items 21 to 24).
+// The event after an unlock. A page that keeps a state from a locked vault
+// reads it again.
+const UNLOCKED = 'studio-unlocked';
+
 function ChangeSetPage({ id, go, onChanged }) {
   const [set, setSet] = useState(null);
   const [known, setKnown] = useState([]);
@@ -2738,6 +2742,17 @@ function ChangeSetPage({ id, go, onChanged }) {
         setPersonName(person ? person.name : '');
       }
     });
+  }, [id]);
+  // The server marks each feed `vault_locked` while the vault is locked.
+  // After an unlock, the page reads the change set again, so that the cause
+  // goes away and the feeds can be written.
+  useEffect(() => {
+    const again = () => api(`/change-sets/${id}`).then((loaded) => {
+      setSet(loaded);
+      setStatuses((before) => refreshedStatuses(before, loaded));
+    }, () => {});
+    window.addEventListener(UNLOCKED, again);
+    return () => window.removeEventListener(UNLOCKED, again);
   }, [id]);
   // A feed opens its diff in a closed entry. One entry is open at a time.
   const toggle = (feedId, isOpen) => {
@@ -4432,7 +4447,10 @@ function App() {
   const closeUnlock = (ok) => {
     unlockAsk.resolve(ok);
     setUnlockAsk(null);
-    if (ok) setEpoch((n) => n + 1);
+    if (ok) {
+      setEpoch((n) => n + 1);
+      window.dispatchEvent(new Event(UNLOCKED));
+    }
   };
   return html`${body}<${ConfirmHost} />${unlockAsk && (view === 'shell' || view === 'local') && html`<${UnlockSheet} session=${session} reason=${unlockAsk.reason} onDone=${closeUnlock} />`}`;
 }

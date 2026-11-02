@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
-  initialStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
+  initialStatuses, refreshedStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
   walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT,
 } from '../ui/recipients.js';
 
@@ -261,4 +261,17 @@ test('Add to All Releases needs a percentage, an address and one feed; its detai
   assert.equal(walletDetailsLine({ type: 'lnaddress', address: 'tj@getalby.com' }), 'Lightning Address · tj@getalby.com');
   assert.equal(walletDetailsLine({ type: 'node', address: '' }), 'Lightning Node · No address yet');
   assert.equal(walletSheetBody('add', { ...fields, percent: '5', name: ' ' }).percent, 5);
+});
+
+test('after an unlock, a feed that the vault blocked can be written and a written feed stays written', () => {
+  const changed = { outcome: 'changed', channel: true, items: 0, live_items: 0 };
+  const locked = { feeds: [
+    { feed_id: 1, outcome: changed, blocked: 'vault_locked', written_at: null },
+    { feed_id: 2, outcome: changed, blocked: null, written_at: null },
+  ] };
+  const before = { ...initialStatuses(locked), 2: { state: 'written' } };
+  assert.deepEqual(writableIds(locked), [2]);
+  const open = { feeds: locked.feeds.map((f) => ({ ...f, blocked: null })) };
+  assert.deepEqual(refreshedStatuses(before, open), { 1: { state: 'waiting' }, 2: { state: 'written' } },
+    'A feed that the vault blocked must be waiting after the unlock. Check refreshedStatuses in recipients.js.');
 });

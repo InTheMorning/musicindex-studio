@@ -247,6 +247,17 @@ export function initialStatuses(changeSet) {
   return statuses;
 }
 
+// The statuses after the change set is read again, for example after an
+// unlock. A feed that is written stays written. Each other feed takes the
+// status of the new read, so a feed that the vault blocked can be written.
+export function refreshedStatuses(statuses, changeSet) {
+  const fresh = initialStatuses(changeSet);
+  for (const [id, status] of Object.entries(statuses || {})) {
+    if (status.state === 'written') fresh[id] = status;
+  }
+  return fresh;
+}
+
 // The status of the other feeds does not change.
 export function startWrite(statuses, id) {
   return { ...statuses, [id]: { state: 'writing' } };

@@ -215,3 +215,11 @@ A restart has these effects:
 - The limit counters start at zero.
 
 A new migration of `server.sqlite` or of a collection runs at the start. Make a backup before an update.
+
+Keep the copy of an update only for a short time. This is an operator procedure, and no ADR owns it:
+
+1. Before the update, make one copy with the commands of section 6, in `/backup/studio-VERSION-DATE/`.
+2. After the update, do the checks of the deploy script, and sign in one time.
+3. When the checks pass, delete the copy. Each copy holds the vault files, the grant vaults and the account emails, on a disk with no encryption.
+
+A copy of this type gives no protection when the disk fails. Only a copy on a different computer gives that protection.

@@ -5,9 +5,11 @@
 //! the UI files (ADR 0016).
 
 mod access;
+mod account;
 mod announcer;
 mod downloads;
 mod error;
+mod import;
 mod media;
 mod people;
 mod routes;
@@ -24,8 +26,12 @@ use axum::routing::{delete, get, post, put};
 pub use access::Access;
 pub use axum::Router;
 pub use error::ApiError;
+pub use import::{
+    Credential, ImportOpen, ImportStore, PART_SIZE as IMPORT_PART_SIZE, Staged, verify_credential,
+};
 pub use workspace::{
-    AppChange, AppHook, Clock, ServerRules, VaultState, Workspace, WorkspaceHandle, private_dir,
+    AccountIdentity, AppChange, AppHook, Clock, ServerRules, VaultState, Workspace,
+    WorkspaceHandle, private_dir,
 };
 
 /// Serve a router until the process stops.
@@ -113,6 +119,22 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             get(routes::get_nostr_wrapper).post(routes::add_nostr_wrapper),
         )
         .route("/vault/signer-key", post(routes::signer_key))
+        .route("/vault/recovery-key", post(account::recovery_key))
+        .route("/account/export-facts", get(account::export_facts))
+        .route("/account/export", post(account::export))
+        .route("/import", post(import::start))
+        .route(
+            "/import/{upload}",
+            get(import::get_import).delete(import::delete_import),
+        )
+        .route(
+            "/import/{upload}/parts/{n}",
+            put(import::put_part).layer(DefaultBodyLimit::max(
+                usize::try_from(uploads::PART_SIZE).unwrap_or(usize::MAX),
+            )),
+        )
+        .route("/import/{upload}/check", post(import::check_import))
+        .route("/import/{upload}/open", post(import::open_import))
         .route(
             "/signer",
             get(routes::get_signer).delete(routes::delete_signer),

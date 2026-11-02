@@ -38,6 +38,7 @@ pub async fn sweep(state: &Shared) {
     state.attempts.prune();
     state.app_limits.prune();
     state.challenges.prune();
+    state.import_starts.prune();
     // A signer goes away with its session. A connection that nobody used
     // goes away after five minutes.
     let gone = state

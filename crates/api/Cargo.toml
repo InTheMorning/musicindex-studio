@@ -28,6 +28,8 @@ qrcode.workspace = true
 studio-core = { workspace = true, features = ["testing"] }
 nostr.workspace = true
 http-body-util = "0.1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+tar.workspace = true
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 

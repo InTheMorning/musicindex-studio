@@ -987,6 +987,19 @@ pub struct Collection {
     data_dir: Option<PathBuf>,
 }
 
+/// The counts of an account (ADR 0107 items 4 and 5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct AccountCounts {
+    /// The feeds in the collection.
+    pub feeds: u64,
+    /// The feeds with a draft.
+    pub drafts: u64,
+    /// The versions that Studio kept (the snapshots).
+    pub versions: u64,
+    /// The people.
+    pub people: u64,
+}
+
 /// The rules of a workspace that holds no assets (ADR 0105). A workspace
 /// that holds assets has none.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1482,6 +1495,48 @@ impl Collection {
             })?;
         row.address_differences = address::differences(&addresses(&self.db, id)?);
         Ok(row)
+    }
+
+    /// The counts that the export and the import show (ADR 0107 items 4
+    /// and 5).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn account_counts(&self) -> Result<AccountCounts, CollectionError> {
+        let count = |table: &str| -> Result<u64, CollectionError> {
+            let n: i64 = self
+                .db
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))?;
+            Ok(u64::try_from(n).unwrap_or(0))
+        };
+        Ok(AccountCounts {
+            feeds: count("feeds")?,
+            drafts: count("drafts")?,
+            versions: count("snapshots")?,
+            people: count("people")?,
+        })
+    }
+
+    /// Replace the whole content of this collection with the collection
+    /// file at `source` (ADR 0107 item 9). The source is opened first, so
+    /// that an older schema migrates. The settings of this collection that
+    /// belong to the process, such as the asset rules, stay.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when the source cannot be opened or
+    /// SQLite fails. After an error, this collection can hold part of the
+    /// source.
+    pub fn replace_from(&mut self, source: &Path) -> Result<(), CollectionError> {
+        drop(Self::open(source)?);
+        self.db.restore(
+            rusqlite::MAIN_DB,
+            source,
+            None::<fn(rusqlite::backup::Progress)>,
+        )?;
+        self.db.pragma_update(None, "foreign_keys", true)?;
+        Ok(())
     }
 
     /// All feeds.

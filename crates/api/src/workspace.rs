@@ -571,9 +571,26 @@ impl std::fmt::Debug for AppHook {
     }
 }
 
+/// The sign-in identity of a server account. The manifest of an export
+/// holds it (ADR 0107 item 6). The desktop has none.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AccountIdentity {
+    /// The email address of the account.
+    pub email: Option<String>,
+    /// The Nostr public key of the account, as hexadecimal text.
+    pub pubkey: Option<String>,
+}
+
 /// The collection and the vault in one data folder.
 #[derive(Debug)]
 pub struct Workspace {
+    /// The data folder.
+    pub(crate) data_dir: PathBuf,
+    /// The sign-in identity of the account. Empty on the desktop.
+    pub(crate) identity: AccountIdentity,
+    /// The imports of an account that wait for a check or an open. Only the
+    /// desktop uses it (ADR 0107 item 9).
+    pub(crate) imports: Arc<crate::import::ImportStore>,
     vault_path: PathBuf,
     /// The folder of the grant vaults: `grants/` in the data folder
     /// (ADR 0058 item 1).
@@ -727,6 +744,11 @@ impl Workspace {
             Err(e) => return Err(ApiError::internal(format!("vault.json: {e}"))),
         }
         Ok(Self {
+            data_dir: data_dir.to_path_buf(),
+            identity: AccountIdentity::default(),
+            imports: Arc::new(crate::import::ImportStore::new(
+                data_dir.join("import-staging"),
+            )),
             vault_path: data_dir.join("vault.json"),
             grants_dir,
             collection: Collection::open(&data_dir.join("collection.sqlite"))?,
@@ -774,6 +796,14 @@ impl Workspace {
         self.collection.set_asset_rules(asset_rules, now)?;
         self.rules = Some(rules);
         Ok(self)
+    }
+
+    /// Give the workspace the sign-in identity of its account, for the
+    /// manifest of an export (ADR 0107 item 6).
+    #[must_use]
+    pub fn with_identity(mut self, identity: AccountIdentity) -> Self {
+        self.identity = identity;
+        self
     }
 
     /// True when the workspace holds assets: the desktop, and a server with
@@ -1043,6 +1073,85 @@ impl Workspace {
         self.mark_unlocked();
         self.sync_grant_vaults(None);
         Ok(())
+    }
+
+    /// The unlock methods of the vault, from the open vault or from its
+    /// file. A vault that does not exist has none.
+    pub(crate) fn vault_methods(&self) -> Result<Vec<studio_core::vault::VaultMethod>, ApiError> {
+        if let Some(vault) = &self.vault {
+            return Ok(vault.file().methods());
+        }
+        match self.vault_state() {
+            VaultState::Absent => Ok(Vec::new()),
+            _ => Ok(self.vault_file()?.methods()),
+        }
+    }
+
+    /// Make a new recovery key, replace the older one and save the vault.
+    /// The key is in the result only (ADR 0107 item 4). The last unlock
+    /// must be recent (ADR 0106 item 2).
+    pub(crate) fn new_recovery_key(&mut self) -> Result<Zeroizing<String>, ApiError> {
+        self.require_recent_unlock()?;
+        let vault = self
+            .vault
+            .as_mut()
+            .ok_or_else(|| ApiError::internal("the vault closed"))?;
+        let key = vault.add_recovery_key()?;
+        self.touch_vault();
+        self.save_vault()?;
+        Ok(Zeroizing::new(key.as_str().to_owned()))
+    }
+
+    /// Replace the collection, the vault, the grant vaults and the library
+    /// of the data folder with the unpacked files of an archive, and open
+    /// the vault with `key` (ADR 0107 items 9 and 12). The desktop calls it
+    /// for a collection with no feed. The library of the archive moves to
+    /// `library` in the data folder, and that folder must be empty or absent.
+    pub(crate) fn replace_account(&mut self, staged: &Path, key: &str) -> Result<(), ApiError> {
+        let io = |what: &str, e: &std::io::Error| ApiError::internal(format!("{what}: {e}"));
+        let library_from = staged.join("library");
+        let library_to = self.data_dir.join("library");
+        // The checks come before the first change.
+        if library_from.is_dir() {
+            match std::fs::read_dir(&library_to) {
+                Ok(mut children) => {
+                    if children.next().is_some() {
+                        return Err(ApiError::new(
+                            StatusCode::CONFLICT,
+                            "library_not_empty",
+                            "ADR 0107 item 9: the folder library in the data folder has files. Use a new data folder",
+                        ));
+                    }
+                    std::fs::remove_dir(&library_to).map_err(|e| io("library", &e))?;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(io("library", &e)),
+            }
+        }
+        self.collection
+            .replace_from(&staged.join("collection.sqlite"))?;
+        self.vault = None;
+        self.unlocked_at = None;
+        std::fs::rename(staged.join("vault.json"), &self.vault_path)
+            .map_err(|e| io("vault.json", &e))?;
+        match std::fs::remove_dir_all(&self.grants_dir) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(io("grants", &e)),
+        }
+        if staged.join("grants").is_dir() {
+            std::fs::rename(staged.join("grants"), &self.grants_dir)
+                .map_err(|e| io("grants", &e))?;
+        } else {
+            private_dir(&self.grants_dir).map_err(|e| io("grants", &e))?;
+        }
+        if library_from.is_dir() {
+            std::fs::rename(&library_from, &library_to).map_err(|e| io("library", &e))?;
+        }
+        self.images.clear();
+        self.discovered.clear();
+        self.signer.clear();
+        self.unlock_with_key(key)
     }
 
     /// Replace the passphrase of the open vault, and save the vault. The

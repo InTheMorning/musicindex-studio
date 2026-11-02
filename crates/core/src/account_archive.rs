@@ -118,6 +118,8 @@ pub enum ArchiveCause {
     InvalidManifest,
     /// `vault.json` or `collection.sqlite` is not in the archive.
     MissingFile,
+    /// `collection.sqlite` is not a database that Studio can read.
+    InvalidCollection,
     /// The archive has more entries than the limit.
     TooManyEntries,
     /// The entries are larger than the limit.
@@ -145,6 +147,7 @@ impl ArchiveCause {
             Self::MissingManifest => "missing_manifest",
             Self::InvalidManifest => "invalid_manifest",
             Self::MissingFile => "missing_file",
+            Self::InvalidCollection => "invalid_collection",
             Self::TooManyEntries => "too_many_entries",
             Self::TooLarge => "too_large",
             Self::Unreadable => "unreadable",
@@ -216,19 +219,46 @@ impl Drop for TempFile {
 /// Write the archive of the account in `folder` to `out`.
 ///
 /// The folder is the data folder of the account. The function reads
-/// `vault.json`, `grants/`, `collection.sqlite` and `library/` in it. A
-/// library outside the folder is not in the archive. `collection.sqlite`
-/// goes through the SQLite backup command into a temporary file in `folder`,
-/// and Studio removes the file at the end, also after a failure. With
-/// `include_assets` false, `library/` holds only the `.xml` files.
+/// `vault.json`, `grants/`, `collection.sqlite` and `library/` in it. It is
+/// [`write_archive_from`] with the library folder `<folder>/library`.
+///
+/// # Errors
+///
+/// Gives the errors of [`write_archive_from`].
+pub fn write_archive<W: Write>(
+    folder: &Path,
+    manifest: &Manifest,
+    include_assets: bool,
+    out: W,
+) -> Result<(), ArchiveError> {
+    write_archive_from(
+        folder,
+        Some(&folder.join(LIBRARY)),
+        manifest,
+        include_assets,
+        out,
+    )
+}
+
+/// Write the archive of the account in `folder` to `out`, with the library
+/// in `library`.
+///
+/// The files of `library` go into `library/` of the archive, also when
+/// `library` is outside `folder` (the desktop, ADR 0107 item 6). With
+/// `None`, or a path that is not a folder, the archive has no `library/`.
+/// `collection.sqlite` goes through the SQLite backup command into a
+/// temporary file in `folder`, and Studio removes the file at the end, also
+/// after a failure. With `include_assets` false, `library/` holds only the
+/// `.xml` files.
 ///
 /// # Errors
 ///
 /// Gives an [`ArchiveError`] with the cause `Io` when a file cannot be read
 /// or `out` cannot be written, and `MissingFile` when the folder has no
 /// `vault.json` or no `collection.sqlite`.
-pub fn write_archive<W: Write>(
+pub fn write_archive_from<W: Write>(
     folder: &Path,
+    library: Option<&Path>,
     manifest: &Manifest,
     include_assets: bool,
     out: W,
@@ -277,10 +307,9 @@ pub fn write_archive<W: Write>(
         drop(source);
         append_file(&mut builder, COLLECTION, &temporary.0, mtime)?;
     }
-    let library = folder.join(LIBRARY);
-    if library.is_dir() {
+    if let Some(library) = library.filter(|path| path.is_dir()) {
         append_dir(&mut builder, LIBRARY, mtime)?;
-        append_tree(&mut builder, LIBRARY, &library, include_assets, mtime)?;
+        append_tree(&mut builder, LIBRARY, library, include_assets, mtime)?;
     }
     builder.finish().map_err(|e| ArchiveError::io(&e))?;
     Ok(())
@@ -382,6 +411,216 @@ fn append_file<W: Write>(
     builder
         .append_data(&mut header, name, file.take(size))
         .map_err(|e| ArchiveError::io(&e))
+}
+
+/// The size of an archive, as an estimate from the file sizes.
+///
+/// It counts the `tar` headers and the padding of each entry. The SQLite
+/// backup copy has about the size of `collection.sqlite`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sizes {
+    /// The bytes of an archive with the feed XML files and no other
+    /// library file.
+    pub without_assets: u64,
+    /// The bytes of an archive with each library file.
+    pub with_assets: u64,
+}
+
+/// The bytes of one `tar` file entry: one header block, and the data
+/// padded to whole blocks.
+fn tar_file_bytes(size: u64) -> u64 {
+    512 + size.div_ceil(512) * 512
+}
+
+/// Estimate the size of the archive that [`write_archive_from`] writes for
+/// the same arguments (ADR 0107 items 5 and 6).
+///
+/// # Errors
+///
+/// Gives an [`ArchiveError`] with the cause `Io` when a folder cannot be read.
+pub fn archive_sizes(folder: &Path, library: Option<&Path>) -> Result<Sizes, ArchiveError> {
+    let size_of = |path: &Path| fs::metadata(path).map_or(0, |m| m.len());
+    // The manifest, and the two empty blocks at the end of the stream.
+    let mut base = tar_file_bytes(1024) + 1024;
+    base += tar_file_bytes(size_of(&folder.join(VAULT)));
+    let grants = folder.join(GRANTS);
+    if grants.is_dir() {
+        base += 512;
+        for (_, path, is_dir) in sorted_children(&grants)? {
+            if !is_dir {
+                base += tar_file_bytes(size_of(&path));
+            }
+        }
+    }
+    let collection = folder.join(COLLECTION);
+    let mut wal = collection.as_os_str().to_owned();
+    wal.push("-wal");
+    base += tar_file_bytes(size_of(&collection) + size_of(Path::new(&wal)));
+    let (mut feeds, mut other) = (0_u64, 0_u64);
+    if let Some(library) = library.filter(|path| path.is_dir()) {
+        base += 512;
+        library_bytes(library, &mut feeds, &mut other)?;
+    }
+    Ok(Sizes {
+        without_assets: base + feeds,
+        with_assets: base + feeds + other,
+    })
+}
+
+/// Add the tar bytes of the entries below `dir`: the feed XML files to
+/// `feeds`, and the folders and other files to `other` (folders count in
+/// both, so that `feeds` alone is an archive with the folders).
+fn library_bytes(dir: &Path, feeds: &mut u64, other: &mut u64) -> Result<(), ArchiveError> {
+    for (name, path, is_dir) in sorted_children(dir)? {
+        if is_dir {
+            *feeds += 512;
+            library_bytes(&path, feeds, other)?;
+        } else {
+            let size = fs::metadata(&path).map_or(0, |m| m.len());
+            if is_feed_xml(&name) {
+                *feeds += tar_file_bytes(size);
+            } else {
+                *other += tar_file_bytes(size);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Who owns the library folder of an unpacked account.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibraryPolicy {
+    /// A server: the library is always `library` in the user folder.
+    Own,
+    /// The desktop: a plain relative path stays. An absolute path, or a
+    /// path with `..`, becomes `library` in the data folder.
+    Relative,
+}
+
+#[expect(clippy::needless_pass_by_value, reason = "used as a map_err function")]
+fn invalid(e: rusqlite::Error) -> ArchiveError {
+    ArchiveError::new(
+        ArchiveCause::InvalidCollection,
+        format!("ADR 0107 item 11: collection.sqlite cannot be read: {e}"),
+    )
+}
+
+/// Open the unpacked `collection.sqlite` of an archive for the steps that
+/// run before Studio opens it. The archive is hostile data, so the
+/// connection does not trust the schema (no function of the file runs),
+/// and Studio loads no extension. A trigger or a view that the Studio
+/// schema does not define is a refusal (ADR 0107 item 11).
+fn open_unpacked(folder: &Path) -> Result<rusqlite::Connection, ArchiveError> {
+    let db = rusqlite::Connection::open_with_flags(
+        folder.join(COLLECTION),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
+    )
+    .map_err(invalid)?;
+    db.pragma_update(None, "trusted_schema", false)
+        .map_err(invalid)?;
+    let foreign: Option<String> = {
+        use rusqlite::OptionalExtension as _;
+        db.query_row(
+            "SELECT name FROM sqlite_master
+             WHERE (type = 'trigger' AND name != 'snapshots_do_not_change') OR type = 'view'
+             LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(invalid)?
+    };
+    if let Some(name) = foreign {
+        return Err(ArchiveError::new(
+            ArchiveCause::InvalidCollection,
+            format!(
+                "ADR 0107 item 11: collection.sqlite has the trigger or view {name}, which the schema of Studio does not define"
+            ),
+        ));
+    }
+    Ok(db)
+}
+
+/// Remove the waiting announcements and the queued downloads of the
+/// unpacked collection. The workspace of the new account resumes both
+/// queues at its start, and an import must send no podping and start no
+/// download (ADR 0107 item 13). Call it before Studio opens the collection.
+///
+/// # Errors
+///
+/// Gives an [`ArchiveError`] with the cause `InvalidCollection` when the
+/// file is not a database of Studio, and `Io` when SQLite cannot write.
+pub fn clear_queues(folder: &Path) -> Result<(), ArchiveError> {
+    let db = open_unpacked(folder)?;
+    for (table, condition) in [
+        ("announcements", "state = 'waiting'"),
+        ("downloads", "state = 'queued'"),
+    ] {
+        let exists: bool = db
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+                [table],
+                |r| r.get(0),
+            )
+            .map_err(invalid)?;
+        if exists {
+            db.execute(&format!("DELETE FROM {table} WHERE {condition}"), [])
+                .map_err(|e| ArchiveError::new(ArchiveCause::Io, e.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Fix the `library_root` setting in the unpacked `collection.sqlite` of
+/// `folder` (ADR 0107 items 1 and 13). Call it before Studio opens the
+/// collection, so that a hostile archive cannot make Studio read or write
+/// outside the new folder. A collection with no `settings` table has no
+/// `library_root` to fix.
+///
+/// # Errors
+///
+/// Gives an [`ArchiveError`] with the cause `InvalidCollection` when the
+/// file is not a database, and `Io` when SQLite cannot write.
+pub fn reset_library_root(folder: &Path, policy: LibraryPolicy) -> Result<(), ArchiveError> {
+    use rusqlite::OptionalExtension as _;
+    let db = open_unpacked(folder)?;
+    let has_settings: bool = db
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'settings')",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(invalid)?;
+    if !has_settings {
+        return Ok(());
+    }
+    let current: Option<String> = db
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'library_root'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(invalid)?;
+    let plain = current.as_deref().is_some_and(|text| {
+        serde_json::from_str::<String>(text).is_ok_and(|text| {
+            let path = Path::new(&text);
+            !text.is_empty() && path.components().all(|c| matches!(c, Component::Normal(_)))
+        })
+    });
+    let reset = match policy {
+        LibraryPolicy::Own => true,
+        LibraryPolicy::Relative => current.is_some() && !plain,
+    };
+    if reset {
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES ('library_root', ?1)
+             ON CONFLICT (key) DO UPDATE SET value = ?1",
+            [serde_json::Value::from(LIBRARY).to_string()],
+        )
+        .map_err(|e| ArchiveError::new(ArchiveCause::Io, e.to_string()))?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------- reading
@@ -1176,6 +1415,208 @@ mod tests {
                 collection.library_root().is_err(),
                 "ADR 0107 item 1: an imported library_root must not leave the data folder. Refuse {bad:?}."
             );
+        }
+    }
+
+    #[test]
+    fn a_library_outside_the_folder_goes_into_library_of_the_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        account(&source);
+        // The desktop can keep the library outside the data folder.
+        let outside = dir.path().join("music");
+        fs::create_dir_all(outside.join("album")).unwrap();
+        fs::write(outside.join("album/album.xml"), b"<rss/>").unwrap();
+        fs::write(outside.join("album/track.mp3"), b"audio").unwrap();
+        fs::remove_dir_all(source.join("library")).unwrap();
+        let mut out = Vec::new();
+        let manifest = Manifest::new(None, Vec::new());
+        write_archive_from(&source, Some(&outside), &manifest, true, &mut out).unwrap();
+        let target = dir.path().join("target");
+        unpack_archive(&out[..], &target).unwrap();
+        assert_eq!(
+            fs::read(target.join("library/album/track.mp3")).unwrap(),
+            b"audio",
+            "ADR 0107 item 6: a library outside the data folder must go into library/ of the archive. Pass the library path to write_archive_from."
+        );
+    }
+
+    #[test]
+    fn the_size_estimate_follows_the_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        account(&source);
+        fs::write(source.join("library/album/big.mp3"), vec![7_u8; 200_000]).unwrap();
+        fs::write(source.join("library/album/big.xml"), vec![b'x'; 30_000]).unwrap();
+        let sizes = archive_sizes(&source, Some(&source.join("library"))).unwrap();
+        for (assets, estimate) in [(true, sizes.with_assets), (false, sizes.without_assets)] {
+            let actual = pack(&source, assets).len() as u64;
+            assert!(
+                actual.abs_diff(estimate) <= 8192,
+                "ADR 0107 item 4: the size estimate {estimate} must be near the archive size {actual} (assets {assets})"
+            );
+        }
+        assert!(sizes.without_assets < sizes.with_assets);
+    }
+
+    #[test]
+    fn a_hostile_library_root_is_reset_before_the_collection_opens() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        account(&source);
+        let set = |value: Option<&str>| {
+            let db = rusqlite::Connection::open(source.join("collection.sqlite")).unwrap();
+            match value {
+                Some(text) => db
+                    .execute(
+                        "INSERT INTO settings (key, value) VALUES ('library_root', ?1)
+                         ON CONFLICT (key) DO UPDATE SET value = ?1",
+                        [json!(text).to_string()],
+                    )
+                    .unwrap(),
+                None => db
+                    .execute("DELETE FROM settings WHERE key = 'library_root'", [])
+                    .unwrap(),
+            };
+        };
+        let read = || {
+            let db = rusqlite::Connection::open(source.join("collection.sqlite")).unwrap();
+            db.query_row(
+                "SELECT value FROM settings WHERE key = 'library_root'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .ok()
+        };
+        let own = json!("library").to_string();
+        for bad in ["/etc", "/data/users/other/library", "../x", "a/../../x", ""] {
+            for policy in [LibraryPolicy::Own, LibraryPolicy::Relative] {
+                set(Some(bad));
+                reset_library_root(&source, policy).unwrap();
+                assert_eq!(
+                    read().as_deref(),
+                    Some(own.as_str()),
+                    "ADR 0107 item 1: an imported library_root {bad:?} must become library ({policy:?}). Call reset_library_root after the unpack."
+                );
+            }
+        }
+        set(Some("keep/me"));
+        reset_library_root(&source, LibraryPolicy::Relative).unwrap();
+        assert_eq!(read(), Some(json!("keep/me").to_string()));
+        reset_library_root(&source, LibraryPolicy::Own).unwrap();
+        assert_eq!(read().as_deref(), Some(own.as_str()));
+        set(None);
+        reset_library_root(&source, LibraryPolicy::Relative).unwrap();
+        assert_eq!(read(), None, "the desktop keeps a missing library_root");
+        reset_library_root(&source, LibraryPolicy::Own).unwrap();
+        assert_eq!(read().as_deref(), Some(own.as_str()));
+    }
+
+    #[test]
+    fn a_collection_that_is_not_a_database_is_an_invalid_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("collection.sqlite"),
+            b"not a database at all",
+        )
+        .unwrap();
+        let error = reset_library_root(dir.path(), LibraryPolicy::Own).unwrap_err();
+        assert!(
+            error.is_refusal() && error.cause() == ArchiveCause::InvalidCollection,
+            "ADR 0107 item 11: a collection.sqlite that is not a database must be a refusal, not a 500: {error}"
+        );
+    }
+
+    #[test]
+    fn a_collection_replaces_the_content_of_another() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        account(&source);
+        let target = dir.path().join("target");
+        fs::create_dir_all(&target).unwrap();
+        let mut live = Collection::open(&target.join("collection.sqlite")).unwrap();
+        live.set_setting("marker", &json!("old")).unwrap();
+        Collection::open(&source.join("collection.sqlite"))
+            .unwrap()
+            .set_setting("marker", &json!("new"))
+            .unwrap();
+        live.replace_from(&source.join("collection.sqlite"))
+            .unwrap();
+        assert_eq!(
+            live.setting("marker").unwrap(),
+            Some(json!("new")),
+            "ADR 0107 item 9: the desktop import must replace the content of the open collection"
+        );
+        assert_eq!(live.account_counts().unwrap().feeds, 0);
+    }
+
+    #[test]
+    fn the_queues_of_an_archive_do_not_come_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        account(&source);
+        let db = rusqlite::Connection::open(source.join("collection.sqlite")).unwrap();
+        db.pragma_update(None, "foreign_keys", false).unwrap();
+        for state in ["waiting", "done", "failed"] {
+            db.execute(
+                "INSERT INTO announcements (feed_id, url, podping, state, created_at, next_at)
+                 VALUES (1, 'https://example.org/a.xml', 1, ?1, 0, 0)",
+                [state],
+            )
+            .unwrap();
+        }
+        for (id, state) in [(1, "queued"), (2, "failed")] {
+            db.execute(
+                "INSERT INTO downloads (library_file_id, state, added_at) VALUES (?1, ?2, 0)",
+                rusqlite::params![id, state],
+            )
+            .unwrap();
+        }
+        drop(db);
+        clear_queues(&source).unwrap();
+        let db = rusqlite::Connection::open(source.join("collection.sqlite")).unwrap();
+        let count = |sql: &str| db.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
+        assert_eq!(
+            count("SELECT COUNT(*) FROM announcements WHERE state = 'waiting'"),
+            0,
+            "ADR 0107 item 13: an import must not send a waiting announcement. Call clear_queues after the unpack."
+        );
+        assert_eq!(
+            count("SELECT COUNT(*) FROM downloads WHERE state = 'queued'"),
+            0,
+            "ADR 0107 item 13: an import must not start a queued download. Call clear_queues after the unpack."
+        );
+        assert_eq!(count("SELECT COUNT(*) FROM announcements"), 2);
+        assert_eq!(count("SELECT COUNT(*) FROM downloads"), 1);
+    }
+
+    #[test]
+    fn a_collection_with_a_foreign_trigger_or_view_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        account(&source);
+        // The trigger of the Studio schema is fine.
+        reset_library_root(&source, LibraryPolicy::Own).unwrap();
+        clear_queues(&source).unwrap();
+        for sql in [
+            "CREATE VIEW sneaky AS SELECT * FROM settings",
+            "CREATE TRIGGER sneaky AFTER INSERT ON settings BEGIN SELECT 1; END",
+        ] {
+            let db = rusqlite::Connection::open(source.join("collection.sqlite")).unwrap();
+            db.execute_batch(sql).unwrap();
+            drop(db);
+            for error in [
+                reset_library_root(&source, LibraryPolicy::Own).unwrap_err(),
+                clear_queues(&source).unwrap_err(),
+            ] {
+                assert!(
+                    error.is_refusal() && error.cause() == ArchiveCause::InvalidCollection,
+                    "ADR 0107 item 11: a trigger or view that the Studio schema does not define must be a refusal ({sql}): {error}"
+                );
+            }
+            let db = rusqlite::Connection::open(source.join("collection.sqlite")).unwrap();
+            db.execute_batch("DROP VIEW IF EXISTS sneaky; DROP TRIGGER IF EXISTS sneaky;")
+                .unwrap();
         }
     }
 }

@@ -134,6 +134,42 @@ impl ChallengeLimits {
     }
 }
 
+/// The imports that one client address can start in one window (ADR 0107
+/// item 9). The routes of an import need no session.
+pub const IMPORT_START_LIMIT: usize = 5;
+/// The length of the window of the import starts.
+const IMPORT_START_WINDOW: Duration = Duration::from_hours(1);
+
+/// The imports that each client address started. The counter lives in
+/// memory only, so a restart clears it.
+#[derive(Debug, Default)]
+pub struct ImportStarts {
+    started: Mutex<HashMap<String, Vec<Instant>>>,
+}
+
+impl ImportStarts {
+    /// Count one start for the address. Gives false when the address is over
+    /// its limit in the window.
+    pub fn allow(&self, address: &str) -> bool {
+        let mut map = lock_map(&self.started);
+        let times = map.entry(address.to_owned()).or_default();
+        times.retain(|time| time.elapsed() < IMPORT_START_WINDOW);
+        if times.len() >= IMPORT_START_LIMIT {
+            return false;
+        }
+        times.push(Instant::now());
+        true
+    }
+
+    /// Forget the entries with no start in the window.
+    pub fn prune(&self) {
+        lock_map(&self.started).retain(|_, times| {
+            times.retain(|time| time.elapsed() < IMPORT_START_WINDOW);
+            !times.is_empty()
+        });
+    }
+}
+
 /// The requests that one app can make in one minute (ADR 0058 item 18).
 pub const APP_LIMIT: usize = 60;
 /// The unknown tokens that one client address can send in one hour.

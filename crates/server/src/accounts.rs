@@ -74,6 +74,14 @@ const MIGRATIONS: &[&str] = &[
         app_id INTEGER NOT NULL
     );
 ",
+    // An account that came from an import shows a notice until the user
+    // adds a passkey or closes it (ADR 0107 item 14).
+    "
+    CREATE TABLE import_notices (
+        account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL
+    );
+",
 ];
 
 /// A challenge is valid for this many seconds (ADR 0056 item 5).
@@ -321,6 +329,67 @@ impl Accounts {
         )?;
         tx.commit()?;
         Ok(id)
+    }
+
+    /// True when `code` is an invite code that nobody used.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn invite_unused(&self, code: &str) -> Result<bool, String> {
+        self.db()
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM invites WHERE code_hash = ?1 AND used_at IS NULL)",
+                [sha256_hex(code)],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+    }
+
+    /// Record that an account came from an import (ADR 0107 item 14).
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn add_import_notice(&self, account_id: i64) -> Result<(), String> {
+        self.db()
+            .execute(
+                "INSERT OR REPLACE INTO import_notices (account_id, created_at) VALUES (?1, ?2)",
+                params![account_id, now()],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// True when the account came from an import and the user has neither
+    /// added a passkey nor closed the notice.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn has_import_notice(&self, account_id: i64) -> Result<bool, String> {
+        self.db()
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM import_notices WHERE account_id = ?1)",
+                [account_id],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+    }
+
+    /// Close the notice of an import. Gives true when there was one.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn clear_import_notice(&self, account_id: i64) -> Result<bool, String> {
+        self.db()
+            .execute(
+                "DELETE FROM import_notices WHERE account_id = ?1",
+                [account_id],
+            )
+            .map(|n| n > 0)
+            .map_err(|e| e.to_string())
     }
 
     /// Make a challenge, and give it with its end time. The call removes

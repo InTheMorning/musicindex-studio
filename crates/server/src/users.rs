@@ -7,7 +7,8 @@ use std::sync::Arc;
 use axum::Router;
 use axum::response::{IntoResponse, Response};
 use studio_api::{
-    ApiError, AppChange, AppHook, ServerRules, Workspace, WorkspaceHandle, workspace_router,
+    AccountIdentity, ApiError, AppChange, AppHook, ServerRules, Workspace, WorkspaceHandle,
+    workspace_router,
 };
 use studio_core::collection::Collection;
 use studio_core::net::{NetPolicy, PublicRules};
@@ -73,6 +74,13 @@ impl Users {
             #[cfg(test)]
             test_clock: std::sync::Mutex::new(None),
         }
+    }
+
+    /// The most bytes in the folder of a user (ADR 0055 item 21). The import
+    /// uses it as the limit of the archive (ADR 0107 item 15).
+    #[must_use]
+    pub fn storage_limit(&self) -> u64 {
+        self.settings.storage_limit
     }
 
     /// The folder of a user.
@@ -205,7 +213,14 @@ fn open_user(
             eprintln!("studio-server: the index of the app tokens did not change");
         }
     });
+    // The manifest of an export holds the email and the Nostr key (ADR 0107
+    // item 6).
+    let identity = AccountIdentity {
+        email: settings.accounts.email_of(account_id).ok().flatten(),
+        pubkey: settings.accounts.pubkey_of(account_id).ok().flatten(),
+    };
     let mut workspace = Workspace::open(path)?
+        .with_identity(identity)
         .with_app_hook(hook)
         .with_net_policy(NetPolicy::Public(settings.rules.clone()))
         .with_server_rules(ServerRules {
@@ -242,19 +257,30 @@ fn open_user(
 /// one that cannot be read, keeps its rows.
 pub fn rebuild_app_tokens(users: &Users, accounts: &Accounts) -> Result<(), String> {
     for (id, folder) in accounts.folders()? {
-        let file = users.folder_path(&folder).join("collection.sqlite");
-        if !file.exists() {
-            continue;
-        }
-        let Ok(collection) = Collection::open(&file) else {
-            continue;
-        };
-        let Ok(rows) = studio_core::apps::token_hashes(&collection) else {
-            continue;
-        };
-        accounts.replace_app_tokens(id, &rows)?;
+        rebuild_app_tokens_of(users, accounts, id, &folder)?;
     }
     Ok(())
+}
+
+/// Make the rows of the app tokens of one account again. An import calls it
+/// for the imported apps, so that they work at once (ADR 0107 item 2).
+pub fn rebuild_app_tokens_of(
+    users: &Users,
+    accounts: &Accounts,
+    id: i64,
+    folder: &str,
+) -> Result<(), String> {
+    let file = users.folder_path(folder).join("collection.sqlite");
+    if !file.exists() {
+        return Ok(());
+    }
+    let Ok(collection) = Collection::open(&file) else {
+        return Ok(());
+    };
+    let Ok(rows) = studio_core::apps::token_hashes(&collection) else {
+        return Ok(());
+    };
+    accounts.replace_app_tokens(id, &rows)
 }
 
 /// An address check that passes each address. A test uses it, so that no

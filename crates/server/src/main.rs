@@ -28,6 +28,7 @@ mod apps;
 mod auth;
 mod config;
 mod idle;
+mod import;
 mod limits;
 mod nip46_sessions;
 mod session;
@@ -140,6 +141,8 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         nip46,
         app_limits: limits::AppLimits::default(),
         challenges: limits::ChallengeLimits::default(),
+        imports: studio_api::ImportStore::new(options.data_dir.join("import-staging")),
+        import_starts: limits::ImportStarts::default(),
     }))
 }
 

@@ -54,6 +54,25 @@ pub fn server_router(state: &Shared) -> Router {
             "/auth/v1/passkeys/{credential_id}",
             axum::routing::delete(passkey_remove),
         )
+        .route("/auth/v1/import", post(crate::import::start))
+        .route(
+            "/auth/v1/import/{upload}",
+            get(crate::import::status).delete(crate::import::cancel),
+        )
+        .route(
+            "/auth/v1/import/{upload}/parts/{n}",
+            axum::routing::put(crate::import::put_part).layer(
+                axum::extract::DefaultBodyLimit::max(
+                    usize::try_from(studio_api::IMPORT_PART_SIZE).unwrap_or(usize::MAX),
+                ),
+            ),
+        )
+        .route("/auth/v1/import/{upload}/check", post(crate::import::check))
+        .route("/auth/v1/import/{upload}/open", post(crate::import::open))
+        .route(
+            "/auth/v1/import-notice/close",
+            post(crate::import::close_notice),
+        )
         .route("/auth/v1/signout", post(sign_out))
         .route("/auth/v1/account/delete", post(delete_account))
         // A wildcard route would add a path parameter to the request, and the
@@ -78,7 +97,7 @@ fn with_cookie(mut response: Response, cookie: &str) -> Response {
 
 /// An email address in lowercase with no space at the start or the end
 /// (ADR 0055 item 8). Gives `None` when it is not an address.
-fn normalize_email(email: &str) -> Option<String> {
+pub(crate) fn normalize_email(email: &str) -> Option<String> {
     let email = email.trim().to_lowercase();
     let (name, host) = email.split_once('@')?;
     let valid = !name.is_empty()
@@ -98,7 +117,7 @@ fn sign_in_failed() -> Response {
 }
 
 /// Make a session, and give the response with its cookie.
-fn start_session(
+pub(crate) fn start_session(
     state: &Shared,
     account_id: i64,
     status: StatusCode,
@@ -108,10 +127,10 @@ fn start_session(
 }
 
 /// A NIP-46 signer that signed the sign-in event. The new session keeps it.
-struct SignerLink {
+pub(crate) struct SignerLink {
     /// The connection ID. The ID stops working when the session starts.
-    connection: String,
-    signer: Arc<RemoteSigner>,
+    pub(crate) connection: String,
+    pub(crate) signer: Arc<RemoteSigner>,
 }
 
 /// Make a session with or without the limit of a recovery sign-in, and
@@ -128,7 +147,7 @@ fn start_session_with(
 
 /// The same as `start_session_with`. A signer link moves the NIP-46 signer
 /// to the new session.
-fn start_session_full(
+pub(crate) fn start_session_full(
     state: &Shared,
     account_id: i64,
     restricted: bool,
@@ -205,6 +224,10 @@ async fn get_session(State(state): State<Shared>, request: Request) -> Response 
         "vault": vault,
         "recovery": session.restricted,
         "signer": state.nip46.has_signer(&accounts::sha256_hex(&session.token)),
+        // The account came from an import, and the user has not added a
+        // passkey or closed the notice (ADR 0107 item 14).
+        "imported": passkeys.is_empty()
+            && state.accounts.has_import_notice(session.account_id).unwrap_or(false),
     }))
     .into_response()
 }
@@ -311,7 +334,7 @@ async fn sign_up(State(state): State<Shared>, request: Request) -> Response {
     }
 }
 
-fn invite_required() -> Response {
+pub(crate) fn invite_required() -> Response {
     failure(
         StatusCode::FORBIDDEN,
         "invite_required",
@@ -857,7 +880,7 @@ fn nip46_failure(error: &Nip46Error) -> Response {
 
 /// Run a blocking call to a signer on a blocking thread. No lock of the
 /// server is held during the call.
-async fn blocking_signer<T: Send + 'static>(
+pub(crate) async fn blocking_signer<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, Nip46Error> + Send + 'static,
 ) -> Result<T, Response> {
     match tokio::task::spawn_blocking(work).await {
@@ -989,7 +1012,7 @@ async fn nip46_connect_bunker(state: &Shared, uri: Zeroizing<String>) -> Respons
     }
 }
 
-fn connection_unknown() -> Response {
+pub(crate) fn connection_unknown() -> Response {
     failure(
         StatusCode::NOT_FOUND,
         "connection_unknown",
@@ -1701,6 +1724,8 @@ async fn passkey_add(State(state): State<Shared>, request: Request) -> Response 
     {
         return internal("the account database failed");
     }
+    // A passkey closes the notice of an import (ADR 0107 item 14).
+    let _ = state.accounts.clear_import_notice(session.account_id);
     (
         StatusCode::CREATED,
         axum::Json(json!({

@@ -6,8 +6,9 @@
 //! range that the player asks for, and keeps no full file in memory.
 
 use std::collections::HashMap;
-use std::io::{Read, SeekFrom};
+use std::io::{Read, SeekFrom, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::Json;
@@ -27,7 +28,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use crate::access::random_hex;
 use crate::error::ApiError;
 use crate::routes::{ApiResult, Shared, blocking, pending_library_file};
-use crate::workspace::lock_workspace;
+use crate::workspace::{Workspace, lock_workspace};
 
 /// How long a ticket works (ADR 0062 item 29).
 const TICKET_LIFETIME: Duration = Duration::from_hours(1);
@@ -42,6 +43,11 @@ const BLOCK_BYTES: usize = 64 * 1024;
 enum Target {
     Address(String),
     File(i64),
+    /// The archive of the account (ADR 0107 item 7). The flag says if the
+    /// archive holds the audio and the images.
+    Archive {
+        include_assets: bool,
+    },
 }
 
 /// The media tickets of one workspace. A ticket holds one target and its
@@ -78,6 +84,28 @@ impl Tickets {
     /// item 15). The ticket holds the file ID.
     pub(crate) fn issue_file(&mut self, file: i64, now: Instant) -> Result<String, ApiError> {
         self.insert(Target::File(file), now)
+    }
+
+    /// Make a ticket for the archive of the account (ADR 0107 item 7).
+    pub(crate) fn issue_archive(
+        &mut self,
+        include_assets: bool,
+        now: Instant,
+    ) -> Result<String, ApiError> {
+        self.insert(Target::Archive { include_assets }, now)
+    }
+
+    /// Use the archive ticket: the call removes it, so that it works one
+    /// time. Gives `include_assets` of the ticket.
+    pub(crate) fn take_archive(&mut self, ticket: &str, now: Instant) -> Option<bool> {
+        match self.tickets.get(ticket) {
+            Some((Target::Archive { include_assets }, expires)) if now < *expires => {
+                let include_assets = *include_assets;
+                self.tickets.remove(ticket);
+                Some(include_assets)
+            }
+            _ => None,
+        }
     }
 
     fn insert(&mut self, target: Target, now: Instant) -> Result<String, ApiError> {
@@ -455,6 +483,19 @@ pub(crate) async fn download(
     State(shared): State<Shared>,
     Query(query): Query<AudioQuery>,
 ) -> Result<Response, ApiError> {
+    // The ticket of an archive is single use (ADR 0107 item 7).
+    let job = {
+        let (shared, ticket) = (Arc::clone(&shared), query.ticket.clone());
+        tokio::task::spawn_blocking(move || {
+            let mut w = lock_workspace(&shared)?;
+            archive_job(&mut w, &ticket)
+        })
+        .await
+        .map_err(|e| ApiError::internal(e.to_string()))??
+    };
+    if let Some(job) = job {
+        return Ok(archive_response(job));
+    }
     // A connector cannot move between threads, so one blocking task reads
     // the host. It drops the workspace lock before the read.
     let (file, source) = tokio::task::spawn_blocking(move || {
@@ -519,4 +560,109 @@ pub(crate) async fn download(
         &attachment(&file.path),
     );
     Ok(response)
+}
+
+/// What the stream of an archive needs. The job holds no lock of the
+/// workspace.
+struct ArchiveJob {
+    folder: PathBuf,
+    library: Option<PathBuf>,
+    manifest: studio_core::account_archive::Manifest,
+    include_assets: bool,
+}
+
+/// Use the archive ticket, and collect what the stream needs. Gives `None`
+/// when the ticket is not an archive ticket.
+fn archive_job(w: &mut Workspace, ticket: &str) -> Result<Option<ArchiveJob>, ApiError> {
+    let Some(include_assets) = w.tickets.take_archive(ticket, Instant::now()) else {
+        return Ok(None);
+    };
+    // The manifest holds the email of the account and the public key of
+    // each Nostr method. It holds no secret (ADR 0107 item 6).
+    let mut keys: Vec<String> = w.identity.pubkey.iter().cloned().collect();
+    for method in w.vault_methods()? {
+        if let studio_core::vault::VaultMethod::Nostr { pubkey } = method
+            && !keys.contains(&pubkey)
+        {
+            keys.push(pubkey);
+        }
+    }
+    Ok(Some(ArchiveJob {
+        folder: w.data_dir.clone(),
+        library: w.collection.library_root()?,
+        manifest: studio_core::account_archive::Manifest::new(w.identity.email.clone(), keys),
+        include_assets,
+    }))
+}
+
+/// A writer that sends its bytes to the body of the response in blocks.
+/// The archive never lands in a file (ADR 0107 item 7).
+struct ChannelWriter {
+    sender: tokio::sync::mpsc::Sender<std::io::Result<Bytes>>,
+    block: Vec<u8>,
+}
+
+impl ChannelWriter {
+    fn send_block(&mut self) -> std::io::Result<()> {
+        if self.block.is_empty() {
+            return Ok(());
+        }
+        let block = Bytes::from(std::mem::replace(
+            &mut self.block,
+            Vec::with_capacity(BLOCK_BYTES),
+        ));
+        // The send fails when the browser closed the connection.
+        self.sender
+            .blocking_send(Ok(block))
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+    }
+}
+
+impl Write for ChannelWriter {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        self.block.extend_from_slice(data);
+        if self.block.len() >= BLOCK_BYTES {
+            self.send_block()?;
+        }
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.send_block()
+    }
+}
+
+/// Send the archive as a stream with `Content-Disposition: attachment`.
+fn archive_response(job: ArchiveJob) -> Response {
+    let (sender, receiver) = tokio::sync::mpsc::channel::<std::io::Result<Bytes>>(4);
+    let name = crate::account::archive_name(job.manifest.exported_at);
+    tokio::task::spawn_blocking(move || {
+        let mut writer = ChannelWriter {
+            sender: sender.clone(),
+            block: Vec::with_capacity(BLOCK_BYTES),
+        };
+        let written = studio_core::account_archive::write_archive_from(
+            &job.folder,
+            job.library.as_deref(),
+            &job.manifest,
+            job.include_assets,
+            &mut writer,
+        )
+        .map_err(|e| std::io::Error::other(e.to_string()))
+        .and_then(|()| writer.flush());
+        if let Err(error) = written {
+            // The error ends the body, so that the browser does not keep a
+            // short file as a good one.
+            let _ = sender.blocking_send(Err(error));
+        }
+    });
+    let body = Body::from_stream(unfold(receiver, |mut receiver| async move {
+        receiver.recv().await.map(|item| (item, receiver))
+    }));
+    let mut response = Response::new(body);
+    let headers = response.headers_mut();
+    set_header(headers, header::CONTENT_TYPE, "application/x-tar");
+    set_header(headers, header::CONTENT_DISPOSITION, &attachment(&name));
+    set_header(headers, header::CACHE_CONTROL, "no-store");
+    response
 }

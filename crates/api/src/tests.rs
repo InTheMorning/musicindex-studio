@@ -11389,16 +11389,19 @@ fn app_with_clock(clock: crate::Clock) -> (App, crate::WorkspaceHandle) {
     )
 }
 
-const SENSITIVE: [(&str, &str); 3] = [
+const SENSITIVE: [(&str, &str); 5] = [
     ("POST", "/api/v1/vault/signer-key"),
     ("POST", "/api/v1/vault/passphrase"),
     ("POST", "/api/v1/apps"),
+    ("POST", "/api/v1/vault/recovery-key"),
+    ("POST", "/api/v1/account/export"),
 ];
 
 fn sensitive_body(path: &str) -> Option<Value> {
     match path {
         "/api/v1/vault/passphrase" => Some(json!({ "passphrase": "staple orange umbrella river" })),
         "/api/v1/apps" => Some(json!({ "name": "Show tool" })),
+        "/api/v1/account/export" => Some(json!({})),
         _ => None,
     }
 }
@@ -12008,5 +12011,503 @@ async fn the_asset_sweeps_do_not_change_the_last_use_of_the_vault() {
     assert_eq!(
         before, after,
         "ADR 0055 item 16: a sweep must not touch the vault. Use hosts_without_secrets."
+    );
+}
+
+// ---- Export and import of an account (task 071b, 071c, ADR 0107) ----
+
+/// Make an export ticket and read the archive of the ticket. Gives the
+/// ticket response, and the status, the headers and the body of the stream.
+async fn export_archive(
+    app: &App,
+    body: Value,
+) -> (Value, StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let (status, ticket) = call(app, "POST", "/api/v1/account/export", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{ticket}");
+    let name = ticket["ticket"].as_str().unwrap().to_owned();
+    let (status, headers, bytes) = send_raw(app, download_request(&name)).await;
+    (ticket, status, headers, bytes)
+}
+
+fn tar_names(bytes: &[u8]) -> Vec<String> {
+    let mut archive = tar::Archive::new(bytes);
+    archive
+        .entries()
+        .unwrap()
+        .map(|e| e.unwrap().path().unwrap().display().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_new_recovery_key_opens_the_vault_and_needs_a_recent_unlock() {
+    let (clock, offset) = test_clock();
+    let (app, handle) = app_with_clock(clock);
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, body) = call(&app, "POST", "/api/v1/vault/recovery-key", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let key = body["recovery_key"].as_str().unwrap().to_owned();
+    assert_eq!(key.len(), 39, "32 digits in 8 groups: {key}");
+    lock(&app).await;
+    handle.unlock_with_recovery_key(&key).await.unwrap();
+    let (_, status_body) = call(&app, "GET", "/api/v1/status", None).await;
+    assert_eq!(
+        status_body["vault"], "open",
+        "ADR 0107 item 4: the new recovery key must open the vault. Save the vault in new_recovery_key."
+    );
+    offset.store(6 * 60, std::sync::atomic::Ordering::SeqCst);
+    let (status, body) = call(&app, "POST", "/api/v1/vault/recovery-key", None).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "ADR 0107 item 4: the recovery key route needs a recent unlock: {body}"
+    );
+    assert_eq!(body["error"]["code"], "unlock_required");
+    assert!(
+        !body.to_string().contains(&key),
+        "the error must not repeat a key"
+    );
+}
+
+#[tokio::test]
+async fn the_export_facts_give_the_counts_and_if_the_vault_can_move() {
+    let (app, handle) = app_assets(true, None);
+    set_up_server(&app).await;
+    let (status, facts) = call(&app, "GET", "/api/v1/account/export-facts", None).await;
+    assert_eq!(status, StatusCode::OK, "{facts}");
+    assert_eq!(facts["feeds"], 1);
+    assert_eq!(facts["people"], 0);
+    assert_eq!(
+        facts["movable"], true,
+        "ADR 0107 item 4: a passphrase vault can move"
+    );
+    assert_eq!(facts["methods"], json!(["passphrase"]));
+    assert!(facts["archive_bytes"].as_u64().unwrap() > 0, "{facts}");
+    assert_eq!(facts["holds_assets"], true);
+    drop(handle);
+    // A vault with only a passkey wrapper cannot open on a different server.
+    let (app, handle) = app_assets(true, None);
+    handle.create_vault(None, false).await.unwrap();
+    handle
+        .add_passkey_wrapper("cred", [1; 32], zeroize::Zeroizing::new([2; 32]))
+        .await
+        .unwrap();
+    let (_, facts) = call(&app, "GET", "/api/v1/account/export-facts", None).await;
+    assert_eq!(
+        facts["movable"], false,
+        "ADR 0107 item 4: a vault with only a passkey wrapper must not be movable"
+    );
+    assert_eq!(facts["methods"], json!(["passkey"]));
+    let (status, body) = call(&app, "POST", "/api/v1/account/export", Some(json!({}))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["error"]["code"], "vault_not_movable",
+        "ADR 0107 item 4: the export of a vault with only passkeys needs a recovery key first"
+    );
+    // The recovery key makes the vault movable.
+    let (status, _) = call(&app, "POST", "/api/v1/vault/recovery-key", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, facts) = call(&app, "GET", "/api/v1/account/export-facts", None).await;
+    assert_eq!(facts["movable"], true);
+}
+
+#[tokio::test]
+async fn the_export_ticket_streams_an_archive_and_writes_no_copy() {
+    let (app, _) = app_assets(true, None);
+    set_up_server(&app).await;
+    // A loose file in the library, and a file the export must never see.
+    std::fs::create_dir_all(app.data.path().join("library")).unwrap();
+    std::fs::write(app.data.path().join("library/loose.mp3"), b"audio").unwrap();
+    let before = files_under(app.data.path());
+    let (ticket, status, headers, bytes) =
+        export_archive(&app, json!({ "include_assets": true })).await;
+    assert_eq!(status, StatusCode::OK);
+    let disposition = headers
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(
+        disposition.starts_with("attachment;") && disposition.contains(".tar"),
+        "ADR 0107 item 7: the archive must come as an attachment: {disposition}"
+    );
+    assert_eq!(
+        headers.get(header::CONTENT_TYPE).unwrap(),
+        "application/x-tar"
+    );
+    assert_eq!(
+        ticket["file_name"].as_str().unwrap().len(),
+        "studio-2026-11-01.tar".len()
+    );
+    let manifest = studio_core::account_archive::check_archive(&bytes[..])
+        .unwrap_or_else(|e| panic!("ADR 0107 item 11: the export must pass check_archive: {e}"));
+    assert_eq!(manifest.email, None, "the desktop has no email");
+    let names = tar_names(&bytes);
+    assert!(names.contains(&"library/loose.mp3".to_owned()), "{names:?}");
+    assert!(names.contains(&"vault.json".to_owned()));
+    assert_eq!(
+        files_under(app.data.path()),
+        before,
+        "ADR 0107 item 7: the export must write no copy of the archive and leave no temporary file"
+    );
+    // The ticket works one time.
+    let (status, _, _) = send_raw(&app, download_request(ticket["ticket"].as_str().unwrap())).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "ADR 0107 item 7: an archive ticket must work one time. Use take_archive."
+    );
+    // Without the audio, the loose file stays out.
+    let (_, status, _, bytes) = export_archive(&app, json!({ "include_assets": false })).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!tar_names(&bytes).contains(&"library/loose.mp3".to_owned()));
+}
+
+#[tokio::test]
+async fn a_server_that_holds_no_assets_exports_the_files_that_it_keeps() {
+    let (app, _) = app_assets(false, None);
+    set_up_server(&app).await;
+    std::fs::create_dir_all(app.data.path().join("library")).unwrap();
+    std::fs::write(app.data.path().join("library/waiting.mp3"), b"audio").unwrap();
+    let (ticket, _, _, bytes) = export_archive(&app, json!({ "include_assets": false })).await;
+    assert_eq!(ticket["include_assets"], true);
+    assert!(
+        tar_names(&bytes).contains(&"library/waiting.mp3".to_owned()),
+        "ADR 0107 item 6: with --hold-assets off the archive must hold the files that the server keeps, because they have no other copy"
+    );
+}
+
+#[tokio::test]
+async fn a_library_outside_the_data_folder_is_in_the_archive() {
+    let (app, _) = app_assets(true, None);
+    set_up_server(&app).await;
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("song.mp3"), b"audio").unwrap();
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .set_setting("library_root", &json!(outside.path().to_str().unwrap()))
+        .unwrap();
+    drop(collection);
+    // Reopen the app on the changed collection: the workspace reads the
+    // setting at each request.
+    let (_, _, _, bytes) = export_archive(&app, json!({})).await;
+    assert!(
+        tar_names(&bytes).contains(&"library/song.mp3".to_owned()),
+        "ADR 0107 item 6: a library outside the data folder must go into library/ of the archive"
+    );
+}
+
+/// Send the archive to the import routes in parts, and check it. Gives the
+/// upload ID and the response of the check.
+async fn import_check(app: &App, bytes: &[u8]) -> (String, StatusCode, Value) {
+    let (status, started) = call(
+        app,
+        "POST",
+        "/api/v1/import",
+        Some(json!({ "size": bytes.len() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    let upload = started["upload"].as_str().unwrap().to_owned();
+    let part = usize::try_from(started["part_size"].as_u64().unwrap()).unwrap();
+    for (n, chunk) in bytes.chunks(part).enumerate() {
+        let request = Request::builder()
+            .method("PUT")
+            .uri(format!("/api/v1/import/{upload}/parts/{n}"))
+            .header(header::HOST, HOST)
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::from(chunk.to_vec()))
+            .unwrap();
+        let (status, body, _) = send(app, request).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let (status, facts) = call(app, "POST", &format!("/api/v1/import/{upload}/check"), None).await;
+    (upload, status, facts)
+}
+
+#[tokio::test]
+async fn an_export_imports_into_an_empty_desktop_and_opens_with_the_passphrase() {
+    let (source, _) = app_assets(true, None);
+    set_up_server(&source).await;
+    std::fs::create_dir_all(source.data.path().join("library")).unwrap();
+    std::fs::write(source.data.path().join("library/loose.mp3"), b"audio").unwrap();
+    let (_, _, _, bytes) = export_archive(&source, json!({})).await;
+    let vault_before = std::fs::read(source.data.path().join("vault.json")).unwrap();
+
+    let target = app();
+    // The desktop made a vault of its own before the import.
+    make_vault(&target).await;
+    let (upload, status, facts) = import_check(&target, &bytes).await;
+    assert_eq!(status, StatusCode::OK, "{facts}");
+    assert_eq!(facts["counts"]["feeds"], 1);
+    assert_eq!(facts["methods"], json!(["passphrase"]));
+    assert_eq!(facts["needs_email"], true);
+    let open_path = format!("/api/v1/import/{upload}/open");
+    let (status, body) = call(
+        &target,
+        "POST",
+        &open_path,
+        Some(json!({ "passphrase": "wrong wrong wrong wrong" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "wrong_key");
+    let (status, body) = call(
+        &target,
+        "POST",
+        &open_path,
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["vault"], "open");
+    assert_eq!(body["feeds"], 1);
+    let (_, feeds) = call(&target, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.as_array().unwrap().len(), 1, "{feeds}");
+    assert_eq!(
+        std::fs::read(target.data.path().join("vault.json")).unwrap(),
+        vault_before,
+        "ADR 0107 item 13: the import must keep the vault as it is"
+    );
+    let collection =
+        studio_core::collection::Collection::open(&target.data.path().join("collection.sqlite"))
+            .unwrap();
+    assert_eq!(
+        collection.library_root().unwrap(),
+        Some(target.data.path().join("library")),
+        "ADR 0107 item 1: the library must be in the new data folder"
+    );
+    assert_eq!(
+        std::fs::read(target.data.path().join("library/loose.mp3")).unwrap(),
+        b"audio"
+    );
+    let (status, _) = call(&target, "GET", &format!("/api/v1/import/{upload}"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "the import ends after the open"
+    );
+    assert!(
+        !target
+            .data
+            .path()
+            .join("import-staging")
+            .read_dir()
+            .is_ok_and(|mut d| d.next().is_some()),
+        "ADR 0107 item 9: the import must leave no staging file"
+    );
+}
+
+#[tokio::test]
+async fn a_hostile_library_root_does_not_leave_the_data_folder_on_the_desktop() {
+    let (source, _) = app_assets(true, None);
+    set_up_server(&source).await;
+    let (_, _, _, bytes) = export_archive(&source, json!({})).await;
+    // Repack the archive with a collection that points outside.
+    let work = tempfile::tempdir().unwrap();
+    studio_core::account_archive::unpack_archive(&bytes[..], &work.path().join("a")).unwrap();
+    let db = rusqlite::Connection::open(work.path().join("a/collection.sqlite")).unwrap();
+    db.execute(
+        "UPDATE settings SET value = ?1 WHERE key = 'library_root'",
+        [json!("/etc").to_string()],
+    )
+    .unwrap();
+    drop(db);
+    let mut hostile = Vec::new();
+    studio_core::account_archive::write_archive(
+        &work.path().join("a"),
+        &studio_core::account_archive::Manifest::new(None, Vec::new()),
+        true,
+        &mut hostile,
+    )
+    .unwrap();
+    let target = app();
+    let (upload, status, facts) = import_check(&target, &hostile).await;
+    assert_eq!(status, StatusCode::OK, "{facts}");
+    let (status, body) = call(
+        &target,
+        "POST",
+        &format!("/api/v1/import/{upload}/open"),
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let collection =
+        studio_core::collection::Collection::open(&target.data.path().join("collection.sqlite"))
+            .unwrap();
+    assert_eq!(
+        collection.library_root().unwrap(),
+        Some(target.data.path().join("library")),
+        "ADR 0107 item 1: an absolute library_root in an archive must become the library of the data folder. Call reset_library_root after the unpack."
+    );
+}
+
+#[tokio::test]
+async fn a_desktop_import_into_a_collection_with_a_feed_gives_collection_not_empty() {
+    let source = app();
+    set_up(&source).await;
+    let target = app();
+    set_up(&target).await;
+    for (method, path, body) in [
+        ("POST", "/api/v1/import", Some(json!({ "size": 10 }))),
+        ("POST", "/api/v1/import/x/check", None),
+        (
+            "POST",
+            "/api/v1/import/x/open",
+            Some(json!({ "passphrase": PASSPHRASE })),
+        ),
+    ] {
+        let (status, body) = call(&target, method, path, body).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{path}: {body}");
+        assert_eq!(
+            body["error"]["code"], "collection_not_empty",
+            "ADR 0107 item 9: {path} must refuse a collection with a feed. Call require_empty."
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_import_refuses_a_file_that_is_not_an_archive_and_the_server_has_no_desktop_import() {
+    let target = app();
+    let (upload, status, body) = import_check(&target, &vec![7_u8; 3000]).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(
+        body["error"]["code"], "archive_invalid",
+        "ADR 0107 item 11: a bad archive must give 422 archive_invalid"
+    );
+    let (status, _) = call(&target, "GET", &format!("/api/v1/import/{upload}"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // An incomplete upload is not checked.
+    let (_, started) = call(
+        &target,
+        "POST",
+        "/api/v1/import",
+        Some(json!({ "size": 10 })),
+    )
+    .await;
+    let upload = started["upload"].as_str().unwrap();
+    let (status, body) = call(
+        &target,
+        "POST",
+        &format!("/api/v1/import/{upload}/check"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "upload_incomplete");
+    let (status, _) = call(
+        &target,
+        "POST",
+        &format!("/api/v1/import/{upload}/open"),
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "open needs a check first");
+    // A server user imports at sign-up, not here.
+    let (server, _) = app_assets(true, None);
+    let (status, body) = call(
+        &server,
+        "POST",
+        "/api/v1/import",
+        Some(json!({ "size": 10 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"]["code"], "not_on_server");
+}
+
+#[tokio::test]
+async fn a_desktop_import_over_an_existing_vault_needs_a_recent_unlock() {
+    let (source, _) = app_assets(true, None);
+    set_up_server(&source).await;
+    let (_, _, _, bytes) = export_archive(&source, json!({})).await;
+
+    let (clock, offset) = test_clock();
+    let (target, _handle) = app_with_clock(clock);
+    make_vault(&target).await;
+    let (upload, status, facts) = import_check(&target, &bytes).await;
+    assert_eq!(status, StatusCode::OK, "{facts}");
+    let open_path = format!("/api/v1/import/{upload}/open");
+    let body = json!({ "passphrase": PASSPHRASE });
+    offset.store(6 * 60, std::sync::atomic::Ordering::SeqCst);
+    let (status, answer) = call(&target, "POST", &open_path, Some(body.clone())).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "ADR 0106 item 2 and ADR 0107 item 9: an import over an existing vault needs a recent unlock. Call require_recent_unlock in open_import: {answer}"
+    );
+    assert_eq!(answer["error"]["code"], "unlock_required");
+    let (_, feeds) = call(&target, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(feeds.as_array().map(Vec::len), Some(0), "nothing changed");
+    let (status, answer) = call(
+        &target,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    let (status, answer) = call(&target, "POST", &open_path, Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "a fresh unlock passes: {answer}");
+}
+
+#[tokio::test]
+async fn the_queues_of_an_archive_do_not_come_in_on_the_desktop() {
+    let (source, _) = app_assets(true, None);
+    set_up_server(&source).await;
+    let db = rusqlite::Connection::open(source.data.path().join("collection.sqlite")).unwrap();
+    db.pragma_update(None, "foreign_keys", false).unwrap();
+    db.execute(
+        "INSERT INTO announcements (feed_id, url, podping, state, created_at, next_at)
+         VALUES (1, 'https://example.org/a.xml', 1, 'waiting', 0, 4000000000)",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO downloads (library_file_id, state, added_at) VALUES (1, 'queued', 0)",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    let (_, _, _, bytes) = export_archive(&source, json!({})).await;
+    let work = tempfile::tempdir().unwrap();
+    studio_core::account_archive::unpack_archive(&bytes[..], &work.path().join("a")).unwrap();
+    let count = |dir: &std::path::Path, sql: &str| {
+        rusqlite::Connection::open(dir.join("collection.sqlite"))
+            .unwrap()
+            .query_row(sql, [], |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    let waiting = "SELECT (SELECT COUNT(*) FROM announcements WHERE state = 'waiting')
+                   + (SELECT COUNT(*) FROM downloads WHERE state = 'queued')";
+    assert_eq!(
+        count(&work.path().join("a"), waiting),
+        2,
+        "the archive has both queues"
+    );
+
+    let target = app();
+    let (upload, status, facts) = import_check(&target, &bytes).await;
+    assert_eq!(status, StatusCode::OK, "{facts}");
+    let (status, body) = call(
+        &target,
+        "POST",
+        &format!("/api/v1/import/{upload}/open"),
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        count(target.data.path(), waiting),
+        0,
+        "ADR 0107 item 13: an import must not bring a waiting announcement or a queued download. Call clear_queues in the check."
     );
 }

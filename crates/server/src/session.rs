@@ -62,6 +62,11 @@ pub struct ServerState {
     pub app_limits: limits::AppLimits,
     /// The challenges that each client address asked for (ADR 0106 item 5).
     pub challenges: limits::ChallengeLimits,
+    /// The imports of an account that wait for a check or an open
+    /// (ADR 0107 items 9 to 12).
+    pub imports: studio_api::ImportStore,
+    /// The imports that each client address started (ADR 0107 item 9).
+    pub import_starts: limits::ImportStarts,
 }
 
 /// The shared state.

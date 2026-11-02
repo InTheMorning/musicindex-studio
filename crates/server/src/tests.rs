@@ -3273,3 +3273,700 @@ async fn the_31st_challenge_of_one_address_in_five_minutes_gives_429() {
     other.addr = "10.0.0.99:4000";
     assert_eq!(send(&app, other).await.status, StatusCode::OK);
 }
+
+// ---- Export and import of an account (task 071b, 071c, ADR 0107) ----
+
+/// Send a request and give the status and the raw body.
+async fn send_bytes(app: &App, call: Call<'_>) -> (StatusCode, Vec<u8>) {
+    let mut builder = Request::builder()
+        .method(call.method)
+        .uri(call.path)
+        .header(header::HOST, call.host);
+    if let Some(origin) = call.origin {
+        builder = builder.header(header::ORIGIN, origin);
+    }
+    if let Some(token) = call.token {
+        builder = builder.header(header::COOKIE, format!("__Host-studio-session={token}"));
+    }
+    let mut request = builder.body(Body::empty()).unwrap();
+    request.extensions_mut().insert(axum::extract::ConnectInfo(
+        call.addr.parse::<std::net::SocketAddr>().unwrap(),
+    ));
+    let response = app.router.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, bytes.to_vec())
+}
+
+/// Export the account of `who` and give the archive.
+async fn export_of(app: &App, who: &(String, String)) -> Vec<u8> {
+    let ticket = api(app, who, "POST", "/api/v1/account/export", Some(json!({}))).await;
+    assert_eq!(ticket.status, StatusCode::OK, "{:?}", ticket.json);
+    let path = format!(
+        "/media/download?ticket={}",
+        ticket.json["ticket"].as_str().unwrap()
+    );
+    let mut c = call("GET", &path, None);
+    c.token = Some(&who.0);
+    let (status, bytes) = send_bytes(app, c).await;
+    assert_eq!(status, StatusCode::OK);
+    bytes
+}
+
+/// Start an import and send the file in parts. Gives the response of the
+/// start and the upload ID.
+async fn import_upload(app: &App, bytes: &[u8], invite: Option<&str>) -> (Reply, String) {
+    let started = send(
+        app,
+        call(
+            "POST",
+            "/auth/v1/import",
+            Some(json!({ "size": bytes.len(), "invite": invite })),
+        ),
+    )
+    .await;
+    if started.status != StatusCode::CREATED {
+        return (started, String::new());
+    }
+    let upload = started.json["upload"].as_str().unwrap().to_owned();
+    let part = usize::try_from(started.json["part_size"].as_u64().unwrap()).unwrap();
+    for (n, chunk) in bytes.chunks(part).enumerate() {
+        let mut request = Request::builder()
+            .method("PUT")
+            .uri(format!("/auth/v1/import/{upload}/parts/{n}"))
+            .header(header::HOST, HOST)
+            .header(header::ORIGIN, ORIGIN)
+            .body(Body::from(chunk.to_vec()))
+            .unwrap();
+        request.extensions_mut().insert(axum::extract::ConnectInfo(
+            "10.0.0.1:4000".parse::<std::net::SocketAddr>().unwrap(),
+        ));
+        let response = app.router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    (started, upload)
+}
+
+async fn import_check(app: &App, upload: &str) -> Reply {
+    send(
+        app,
+        call("POST", &format!("/auth/v1/import/{upload}/check"), None),
+    )
+    .await
+}
+
+async fn import_open(app: &App, upload: &str, body: Value) -> Reply {
+    send(
+        app,
+        call(
+            "POST",
+            &format!("/auth/v1/import/{upload}/open"),
+            Some(body),
+        ),
+    )
+    .await
+}
+
+/// The names of the user folders on the server.
+fn user_folders(app: &App) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(app.data.path().join("users"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// Add a feed to the collection of a user, for a test. The workspace of the
+/// user keeps its own connection to the file.
+fn add_feed_to(app: &App, email: &str) {
+    let (_, folder) = app.state.accounts.account_by_email(email).unwrap().unwrap();
+    let mut collection = studio_core::collection::Collection::open(
+        &app.state
+            .users
+            .folder_path(&folder)
+            .join("collection.sqlite"),
+    )
+    .unwrap();
+    collection
+        .add_feed(Some("https://example.org/feed.xml"), None)
+        .unwrap();
+}
+
+fn user_collection(app: &App, email: &str) -> studio_core::collection::Collection {
+    let (_, folder) = app.state.accounts.account_by_email(email).unwrap().unwrap();
+    studio_core::collection::Collection::open(
+        &app.state
+            .users
+            .folder_path(&folder)
+            .join("collection.sqlite"),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn an_export_from_one_server_imports_into_a_second_server_and_opens_with_the_passphrase() {
+    let one = app(Signup::Invite);
+    let who = new_user(&one, "heycitizen@example.org", PASS_ONE).await;
+    add_feed_to(&one, "heycitizen@example.org");
+    let facts = api(&one, &who, "GET", "/api/v1/account/export-facts", None).await;
+    assert_eq!(facts.json["feeds"], 1, "{:?}", facts.json);
+    assert_eq!(facts.json["movable"], true);
+    let archive = export_of(&one, &who).await;
+    let manifest = studio_core::account_archive::check_archive(&archive[..]).unwrap();
+    assert_eq!(
+        manifest.email.as_deref(),
+        Some("heycitizen@example.org"),
+        "ADR 0107 item 6: the manifest of a server export must hold the email of the account. Pass the identity to the workspace."
+    );
+
+    let two = app(Signup::Invite);
+    let invite = two.state.accounts.create_invite().unwrap();
+    // An invite server needs an unused invite code to start.
+    let (refused, _) = import_upload(&two, &archive, None).await;
+    assert_eq!(refused.status, StatusCode::FORBIDDEN, "{:?}", refused.json);
+    assert_eq!(refused.code(), "invite_required");
+    let (_, upload) = import_upload(&two, &archive, Some(&invite)).await;
+    let checked = import_check(&two, &upload).await;
+    assert_eq!(checked.status, StatusCode::OK, "{:?}", checked.json);
+    assert_eq!(checked.json["account"]["email"], "heycitizen@example.org");
+    assert_eq!(checked.json["counts"]["feeds"], 1);
+    assert_eq!(checked.json["methods"], json!(["passphrase"]));
+    assert_eq!(two.state.accounts.folders().unwrap().len(), 0);
+
+    let wrong = import_open(
+        &two,
+        &upload,
+        json!({ "passphrase": "not the passphrase at all" }),
+    )
+    .await;
+    assert_eq!(
+        wrong.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{:?}",
+        wrong.json
+    );
+    assert_eq!(two.state.accounts.folders().unwrap().len(), 0);
+    assert!(
+        user_folders(&two).is_empty(),
+        "a wrong passphrase makes no folder"
+    );
+    let opened = import_open(&two, &upload, json!({ "passphrase": PASS_ONE })).await;
+    assert_eq!(opened.status, StatusCode::CREATED, "{:?}", opened.json);
+    assert_eq!(opened.json["vault"], "open");
+    assert_eq!(opened.json["imported"], true);
+    let who_two = (
+        opened.token(),
+        opened.json["csrf"].as_str().unwrap().to_owned(),
+    );
+    let feeds = api(&two, &who_two, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(
+        feeds.json.as_array().map(Vec::len),
+        Some(1),
+        "ADR 0107 item 13: the feeds of the archive must be in the new account: {:?}",
+        feeds.json
+    );
+    // The invite was used, and a second import of the same file has no folder.
+    assert!(!two.state.accounts.invite_unused(&invite).unwrap());
+    let session = session_json(&two, &who_two).await;
+    assert_eq!(session["email"], "heycitizen@example.org");
+    assert_eq!(session["imported"], true);
+    assert_eq!(session["passkeys"], 0);
+    // The user signs in again with the passphrase of the old account.
+    let out = send(&two, sign_out_call(&who_two)).await;
+    assert_eq!(out.status, StatusCode::OK);
+    let again = send(&two, sign_in_call("heycitizen@example.org", PASS_ONE)).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    let who_two = who_of(&again);
+    // The notice stays until the user closes it.
+    assert_eq!(session_json(&two, &who_two).await["imported"], true);
+    let closed = api(&two, &who_two, "POST", "/auth/v1/import-notice/close", None).await;
+    assert_eq!(closed.status, StatusCode::OK, "{:?}", closed.json);
+    assert_eq!(
+        session_json(&two, &who_two).await["imported"],
+        false,
+        "ADR 0107 item 14: the user must be able to close the notice"
+    );
+    // The old server still has the account: the export changes nothing.
+    assert_eq!(one.state.accounts.folders().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn an_import_with_the_email_of_an_existing_account_gives_account_exists_and_no_folder() {
+    let one = app(Signup::Open);
+    let who = new_user_open(&one, "heycitizen@example.org").await;
+    let archive = export_of(&one, &who).await;
+    let before = user_folders(&one);
+    let (_, upload) = import_upload(&one, &archive, None).await;
+    let checked = import_check(&one, &upload).await;
+    assert_eq!(checked.status, StatusCode::OK, "{:?}", checked.json);
+    // The check of the account comes before the key derivation, so that a
+    // wrong passphrase does not hide the conflict.
+    let early = import_open(
+        &one,
+        &upload,
+        json!({ "passphrase": "not the passphrase at all" }),
+    )
+    .await;
+    assert_eq!(
+        early.code(),
+        "account_exists",
+        "ADR 0107 item 12: the server must refuse an account that exists before it derives a key"
+    );
+    let opened = import_open(&one, &upload, json!({ "passphrase": PASS_ONE })).await;
+    assert_eq!(opened.status, StatusCode::CONFLICT, "{:?}", opened.json);
+    assert_eq!(
+        opened.code(),
+        "account_exists",
+        "ADR 0107 item 12: an email in use must give 409 account_exists"
+    );
+    assert_eq!(
+        user_folders(&one),
+        before,
+        "task 071c item 4: a refused import must leave no user folder. Check the account before the move."
+    );
+    assert_eq!(one.state.accounts.folders().unwrap().len(), 1);
+    // The staged files are still there, so the user can cancel.
+    let cancel = send(
+        &one,
+        call("DELETE", &format!("/auth/v1/import/{upload}"), None),
+    )
+    .await;
+    assert_eq!(cancel.status, StatusCode::NO_CONTENT);
+    assert!(
+        one.data
+            .path()
+            .join("import-staging")
+            .read_dir()
+            .unwrap()
+            .next()
+            .is_none(),
+        "a cancelled import must leave no staging file"
+    );
+}
+
+#[tokio::test]
+async fn an_archive_with_a_hostile_library_root_does_not_make_the_workspace_use_that_path() {
+    let one = app(Signup::Open);
+    let who = new_user_open(&one, "heycitizen@example.org").await;
+    let archive = export_of(&one, &who).await;
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("secret.txt"), b"x").unwrap();
+    let hostile_values = [
+        outside.path().to_str().unwrap().to_owned(),
+        "../../other-user/library".to_owned(),
+        // Inside the user folder, but not the library of the account.
+        "elsewhere/music".to_owned(),
+    ];
+    for hostile_value in hostile_values {
+        let work = tempfile::tempdir().unwrap();
+        studio_core::account_archive::unpack_archive(&archive[..], &work.path().join("a")).unwrap();
+        let db = rusqlite::Connection::open(work.path().join("a/collection.sqlite")).unwrap();
+        db.execute(
+            "UPDATE settings SET value = ?1 WHERE key = 'library_root'",
+            [json!(hostile_value).to_string()],
+        )
+        .unwrap();
+        drop(db);
+        let mut hostile = Vec::new();
+        studio_core::account_archive::write_archive(
+            &work.path().join("a"),
+            &studio_core::account_archive::Manifest::new(
+                Some("heycitizen@example.org".to_owned()),
+                Vec::new(),
+            ),
+            true,
+            &mut hostile,
+        )
+        .unwrap();
+
+        let two = app(Signup::Open);
+        let (_, upload) = import_upload(&two, &hostile, None).await;
+        let checked = import_check(&two, &upload).await;
+        assert_eq!(checked.status, StatusCode::OK, "{:?}", checked.json);
+        let opened = import_open(&two, &upload, json!({ "passphrase": PASS_ONE })).await;
+        assert_eq!(opened.status, StatusCode::CREATED, "{:?}", opened.json);
+        let (_, folder) = two
+            .state
+            .accounts
+            .account_by_email("heycitizen@example.org")
+            .unwrap()
+            .unwrap();
+        let own = two.state.users.folder_path(&folder);
+        let collection = user_collection(&two, "heycitizen@example.org");
+        assert_eq!(
+            collection.library_root().unwrap(),
+            Some(own.join("library")),
+            "ADR 0107 item 1: on a server the library of an imported account must be its own library folder, not {hostile_value:?}. Call reset_library_root with LibraryPolicy::Own."
+        );
+        assert_eq!(
+            collection.setting("library_root").unwrap(),
+            Some(json!("library")),
+            "ADR 0107 item 1: the path must be relative"
+        );
+        let who_two = (
+            opened.token(),
+            opened.json["csrf"].as_str().unwrap().to_owned(),
+        );
+        let library = api(&two, &who_two, "GET", "/api/v1/library", None).await;
+        assert!(
+            !library.text.contains(outside.path().to_str().unwrap()),
+            "the library route must not name the hostile path: {}",
+            library.text
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_import_of_a_vault_with_only_a_passkey_wrapper_is_refused_with_the_cause() {
+    let one = app(Signup::Open);
+    let who = new_user_open(&one, "heycitizen@example.org").await;
+    let archive = export_of(&one, &who).await;
+    let work = tempfile::tempdir().unwrap();
+    let dir = work.path().join("a");
+    studio_core::account_archive::unpack_archive(&archive[..], &dir).unwrap();
+    let mut vault = studio_core::vault::OpenVault::create_with_no_wrapper().unwrap();
+    vault
+        .add_passkey_wrapper("cred", &[1; 32], &[2; 32])
+        .unwrap();
+    vault.file().save(&dir.join("vault.json")).unwrap();
+    let mut passkey_only = Vec::new();
+    studio_core::account_archive::write_archive(
+        &dir,
+        &studio_core::account_archive::Manifest::new(Some("a@example.org".to_owned()), Vec::new()),
+        true,
+        &mut passkey_only,
+    )
+    .unwrap();
+
+    let two = app(Signup::Open);
+    let (_, upload) = import_upload(&two, &passkey_only, None).await;
+    let checked = import_check(&two, &upload).await;
+    assert_eq!(
+        checked.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{:?}",
+        checked.json
+    );
+    assert_eq!(
+        checked.code(),
+        "archive_invalid",
+        "ADR 0107 item 4: a vault with only passkeys cannot open on another server"
+    );
+    assert!(
+        checked.message().contains("no_portable_method")
+            && checked.message().contains("recovery key"),
+        "the cause must name the fix: {}",
+        checked.message()
+    );
+    assert_eq!(
+        user_folders(&two),
+        Vec::<String>::new(),
+        "ADR 0107 item 11: a refused import must leave no user folder"
+    );
+    let gone = send(
+        &two,
+        call("GET", &format!("/auth/v1/import/{upload}"), None),
+    )
+    .await;
+    assert_eq!(
+        gone.status,
+        StatusCode::NOT_FOUND,
+        "a refusal ends the import"
+    );
+}
+
+#[tokio::test]
+async fn the_import_obeys_the_storage_limit_and_refuses_a_bad_file() {
+    let two = app_with(Signup::Open, |options| options.storage_limit = 4096);
+    let big = send(
+        &two,
+        call("POST", "/auth/v1/import", Some(json!({ "size": 5000 }))),
+    )
+    .await;
+    assert_eq!(
+        big.status,
+        StatusCode::INSUFFICIENT_STORAGE,
+        "{:?}",
+        big.json
+    );
+    assert_eq!(
+        big.code(),
+        "storage_full",
+        "ADR 0107 item 15: an archive over the storage limit must be refused at the start"
+    );
+    let (_, upload) = import_upload(&two, &[7_u8; 3000], None).await;
+    let checked = import_check(&two, &upload).await;
+    assert_eq!(checked.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(checked.code(), "archive_invalid");
+    assert_eq!(
+        user_folders(&two),
+        Vec::<String>::new(),
+        "ADR 0107 item 11: a refused import must leave no user folder"
+    );
+    // The size of the entries counts against the limit, too.
+    let one = app(Signup::Open);
+    let who = new_user_open(&one, "heycitizen@example.org").await;
+    let archive = export_of(&one, &who).await;
+    let tight = app_with(Signup::Open, |options| options.storage_limit = 2048);
+    let size = archive.len() as u64;
+    assert!(
+        size > 2048,
+        "the archive of a vault and a collection is over 2 KiB"
+    );
+    let (started, _) = import_upload(&tight, &archive, None).await;
+    assert_eq!(started.status, StatusCode::INSUFFICIENT_STORAGE);
+}
+
+#[tokio::test]
+async fn an_export_from_a_server_needs_a_recent_unlock_and_a_movable_vault() {
+    let one = app(Signup::Open);
+    let offset = clock_of(&one);
+    let who = new_user_open(&one, "heycitizen@example.org").await;
+    offset.store(6 * 60, std::sync::atomic::Ordering::SeqCst);
+    let old = api(
+        &one,
+        &who,
+        "POST",
+        "/api/v1/account/export",
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(
+        old.status,
+        StatusCode::UNAUTHORIZED,
+        "ADR 0107 item 3: the export needs an unlock in the last 5 minutes. Call require_recent_unlock in the route."
+    );
+    assert_eq!(old.code(), "unlock_required");
+    let key = api(&one, &who, "POST", "/api/v1/vault/recovery-key", None).await;
+    assert_eq!(key.code(), "unlock_required", "ADR 0107 item 4");
+    let unlock = api(
+        &one,
+        &who,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASS_ONE })),
+    )
+    .await;
+    assert_eq!(unlock.status, StatusCode::OK);
+    let key = api(&one, &who, "POST", "/api/v1/vault/recovery-key", None).await;
+    assert_eq!(key.status, StatusCode::OK, "{:?}", key.json);
+    // The new recovery key signs in to the account.
+    let out = send(&one, sign_out_call(&who)).await;
+    assert_eq!(out.status, StatusCode::OK);
+    let recovery = send(
+        &one,
+        recovery_call(
+            "heycitizen@example.org",
+            key.json["recovery_key"].as_str().unwrap(),
+        ),
+    )
+    .await;
+    assert_eq!(recovery.status, StatusCode::OK, "{:?}", recovery.json);
+}
+
+#[tokio::test]
+async fn a_nostr_archive_imports_with_the_vault_key_and_makes_a_nostr_account() {
+    let one = app(Signup::Open);
+    let keys = new_keys();
+    let up = nostr_sign_in(&one, &keys).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let who = who_of(&up);
+    let key = api(&one, &who, "POST", "/api/v1/vault/signer-key", None).await;
+    let key = key.json["key"].as_str().unwrap().to_owned();
+    let pubkey = keys.public_key().to_hex();
+    let add = api(
+        &one,
+        &who,
+        "POST",
+        "/api/v1/vault/nostr-wrapper",
+        Some(json!({ "pubkey": pubkey, "ciphertext": "test-nip44-ciphertext" })),
+    )
+    .await;
+    assert_eq!(add.status, StatusCode::OK, "{:?}", add.json);
+    let archive = export_of(&one, &who).await;
+    let manifest = studio_core::account_archive::check_archive(&archive[..]).unwrap();
+    assert_eq!(manifest.email, None);
+    assert_eq!(manifest.nostr_keys, vec![pubkey.clone()]);
+
+    let two = app(Signup::Open);
+    let (_, upload) = import_upload(&two, &archive, None).await;
+    let checked = import_check(&two, &upload).await;
+    assert_eq!(checked.status, StatusCode::OK, "{:?}", checked.json);
+    assert_eq!(checked.json["methods"], json!(["nostr"]));
+    assert_eq!(checked.json["nostr_wrappers"][0]["pubkey"], pubkey.as_str());
+    assert_eq!(
+        checked.json["nostr_wrappers"][0]["ciphertext"],
+        "test-nip44-ciphertext"
+    );
+    let wrong = import_open(
+        &two,
+        &upload,
+        json!({ "key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }),
+    )
+    .await;
+    assert_eq!(
+        wrong.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{:?}",
+        wrong.json
+    );
+    let opened = import_open(&two, &upload, json!({ "key": key })).await;
+    assert_eq!(opened.status, StatusCode::CREATED, "{:?}", opened.json);
+    assert!(
+        two.state
+            .accounts
+            .account_by_pubkey(&pubkey)
+            .unwrap()
+            .is_some()
+    );
+    // The Nostr key signs in to the new account.
+    let again = nostr_sign_in(&two, &keys).await;
+    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
+    assert_eq!(again.json["new_account"], false);
+}
+
+#[tokio::test]
+async fn a_nip46_signer_opens_the_vault_of_an_archive() {
+    let remote = remote_app(Signup::Open, 10_000);
+    let one = &remote.app;
+    let connection = bunker_connect(&remote).await;
+    let up = nip46_sign_in(one, &connection, None).await;
+    assert_eq!(up.status, StatusCode::CREATED, "{:?}", up.json);
+    let who = who_of(&up);
+    let archive = export_of(one, &who).await;
+    let pubkey = remote.signer.public_key().to_hex();
+
+    let relay_url = remote.relay.url();
+    let port: u16 = relay_url.rsplit(':').next().unwrap().parse().unwrap();
+    let rules =
+        PublicRules::with_test_exceptions(vec![std::net::SocketAddr::from(([127, 0, 0, 1], port))]);
+    let two = app_with_rules(Signup::Open, rules, |options| {
+        options.nip46_relays = vec![relay_url.clone()];
+        options.nip46_timeout = std::time::Duration::from_millis(10_000);
+    });
+    let (_, upload) = import_upload(&two, &archive, None).await;
+    let checked = import_check(&two, &upload).await;
+    assert_eq!(checked.status, StatusCode::OK, "{:?}", checked.json);
+    let reply = send(
+        &two,
+        call(
+            "POST",
+            "/auth/v1/nip46/connect",
+            Some(json!({ "bunker": remote.signer.bunker_uri() })),
+        ),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    let connection = reply.json["connection"].as_str().unwrap().to_owned();
+    let opened = import_open(&two, &upload, json!({ "connection": connection })).await;
+    assert_eq!(opened.status, StatusCode::CREATED, "{:?}", opened.json);
+    assert_eq!(opened.json["vault"], "open");
+    assert!(
+        two.state
+            .accounts
+            .account_by_pubkey(&pubkey)
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(two.state.nip46.counts().0, 0, "the connection ends");
+}
+
+#[tokio::test]
+async fn the_queues_of_an_archive_do_not_come_in_on_a_server() {
+    let one = app(Signup::Open);
+    let who = new_user_open(&one, "heycitizen@example.org").await;
+    add_feed_to(&one, "heycitizen@example.org");
+    let (_, folder) = one
+        .state
+        .accounts
+        .account_by_email("heycitizen@example.org")
+        .unwrap()
+        .unwrap();
+    let db = rusqlite::Connection::open(
+        one.state
+            .users
+            .folder_path(&folder)
+            .join("collection.sqlite"),
+    )
+    .unwrap();
+    db.pragma_update(None, "foreign_keys", false).unwrap();
+    db.execute(
+        "INSERT INTO announcements (feed_id, url, podping, state, created_at, next_at)
+         VALUES (1, 'https://example.org/a.xml', 1, 'waiting', 0, 4000000000)",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO downloads (library_file_id, state, added_at) VALUES (1, 'queued', 0)",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    let archive = export_of(&one, &who).await;
+    let two = app(Signup::Open);
+    let (_, upload) = import_upload(&two, &archive, None).await;
+    assert_eq!(import_check(&two, &upload).await.status, StatusCode::OK);
+    let opened = import_open(&two, &upload, json!({ "passphrase": PASS_ONE })).await;
+    assert_eq!(opened.status, StatusCode::CREATED, "{:?}", opened.json);
+    let (_, folder) = two
+        .state
+        .accounts
+        .account_by_email("heycitizen@example.org")
+        .unwrap()
+        .unwrap();
+    let db = rusqlite::Connection::open(
+        two.state
+            .users
+            .folder_path(&folder)
+            .join("collection.sqlite"),
+    )
+    .unwrap();
+    let left: i64 = db
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM announcements WHERE state = 'waiting')
+                  + (SELECT COUNT(*) FROM downloads WHERE state = 'queued')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        left, 0,
+        "ADR 0107 item 13: an import must not bring a waiting announcement or a queued download. Call clear_queues in the check."
+    );
+}
+
+#[tokio::test]
+async fn an_address_can_start_only_a_few_imports_in_an_hour() {
+    let two = app(Signup::Open);
+    let start = |addr: &'static str| {
+        let mut c = call("POST", "/auth/v1/import", Some(json!({ "size": 100 })));
+        c.addr = addr;
+        send(&two, c)
+    };
+    for _ in 0..crate::limits::IMPORT_START_LIMIT {
+        let reply = start("10.0.0.7:4000").await;
+        assert_eq!(reply.status, StatusCode::CREATED, "{:?}", reply.json);
+        let upload = reply.json["upload"].as_str().unwrap().to_owned();
+        // Cancel, so that the cap of open imports does not stop the test.
+        send(
+            &two,
+            call("DELETE", &format!("/auth/v1/import/{upload}"), None),
+        )
+        .await;
+    }
+    let over = start("10.0.0.7:4000").await;
+    assert_eq!(
+        over.status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "ADR 0107 item 9: an address must have a limit of import starts. Call import_starts.allow in start."
+    );
+    assert_eq!(over.code(), "too_many_attempts");
+    let other = start("10.0.0.8:4000").await;
+    assert_eq!(
+        other.status,
+        StatusCode::CREATED,
+        "another address starts: {:?}",
+        other.json
+    );
+}

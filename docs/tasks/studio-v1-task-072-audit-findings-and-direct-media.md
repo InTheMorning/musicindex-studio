@@ -2,7 +2,7 @@
 
 Decision: [ADR 0109](../adr/0109-images-and-audio-load-from-their-hosts.md) for packet 072e. The other packets correct defects against ADR 0013 items 13 and 14, ADR 0054 item 13 and ADR 0055 items 9 and 21. They also correct defects against ADR 0057 and ADR 0066. They add no rule.
 
-Status: In progress. Packets 072a to 072d are complete.
+Status: Complete. Packets 072a to 072f are complete, with the screenshot visual check. Open: the human test of ADR 0109, a deploy with `tools/deploy-server.sh` that pins the digest, a CI run with the pinned actions, and a build of the server image from the pinned base image.
 
 ## Goal
 

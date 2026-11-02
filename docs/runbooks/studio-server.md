@@ -106,6 +106,18 @@ The nginx server block of `studio.musicindex.org` in `../musicindex/nginx-site` 
 client_max_body_size 9m;
 ```
 
+### The access log
+
+A player that plays a file that the server holds reads `/media/audio?ticket=TICKET`. A download reads `/media/download?ticket=TICKET`. The ticket works for one hour, and it is the access to the file. The default `access_log` format writes the query. Use a log format that writes the path with no query. This example writes `$uri`, not `$request`:
+
+```nginx
+log_format studio '$remote_addr - [$time_local] "$request_method $uri" '
+                  '$status $body_bytes_sent "$http_user_agent"';
+access_log /var/log/nginx/studio.access.log studio;
+```
+
+Add these lines to the server block of `studio.musicindex.org`. A player plays a file on its host from the host, so only a file that the server holds gives such a request ([ADR 0109](../adr/0109-images-and-audio-load-from-their-hosts.md)).
+
 ## 4. The Options
 
 `studio-server serve` has these options:
@@ -138,6 +150,8 @@ sudo -u studio studio-server invite --data-dir /var/lib/studio
 ```
 
 A code works one time. `server.sqlite` keeps only its SHA-256. A failed sign-up gives the code back. With `--signup open`, each person who can open the origin can make an account.
+
+With `--signup open`, a sign-up with an email that has an account gives an error. A person can thus find out if an email has an account. The default mode `invite` prevents this, because a sign-up needs a new invite code. Use `--signup open` only when you accept this.
 
 A user has five sign-in methods: email with a passphrase, NIP-07, NIP-46, a passkey and the recovery key. A sign-in with the recovery key opens the vault and asks for a new method before the session continues.
 

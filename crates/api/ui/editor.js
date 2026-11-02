@@ -4,7 +4,7 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { api, assetMode, askConfirm, CopyButton, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
+import { api, assetMode, askConfirm, CopyButton, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
@@ -29,6 +29,7 @@ import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
+import { mediaSource, playerNotice, canPlay } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
@@ -315,9 +316,10 @@ function Enclosure({ id, path, enclosure, onChange, bad, pick }) {
     </details>`;
 }
 
-// The player of an audio file (ADR 0062 items 26 to 29). It plays through
-// Studio with a media ticket and reads no audio before the user presses
-// play. The one exception is the read of the metadata after a selection that
+// The player of an audio file (ADR 0062 items 26 to 29, ADR 0109). It plays
+// from the `https` address of the file on its host, and reads no audio before
+// the user presses play. A file that only Studio holds plays through Studio
+// with a media ticket. An `http` address does not play. The one exception is the read of the metadata after a selection that
 // `needsMetadataRead` marks. The element then reads the duration, and
 // `pick.metadataDone` puts it in the track.
 const TICKET_RENEW_MS = 50 * 60 * 1000;
@@ -333,13 +335,23 @@ function AudioPlayer({ id, url, pick }) {
   const [position, setPosition] = useState(0);
   const [length, setLength] = useState(NaN);
   const [error, setError] = useState(null);
-  const usable = typeof url === 'string' && /^https?:\/\/\S+$/i.test(url);
+  const heldFiles = useHeldFiles(url);
+  const source = mediaSource(url, heldFiles);
+  const usable = canPlay(source);
+  const notice = playerNotice(source);
   const reading = Boolean(pick.metadataFor) && pick.metadataFor === url;
-  // A ticket is for one address, so a new address needs a new ticket.
+  // A file from its host needs no ticket. A held file needs a ticket for its
+  // library file ID.
   const load = async () => {
-    const { ticket } = await api('/media/tickets', { method: 'POST', body: { url } });
+    let src;
+    if (source.kind === 'held') {
+      const { ticket } = await api('/media/tickets', { method: 'POST', body: { file: source.file } });
+      src = `/media/audio?ticket=${ticket}`;
+    } else {
+      src = source.src;
+    }
     audio.current.preload = reading ? 'metadata' : 'none';
-    audio.current.src = `/media/audio?ticket=${ticket}`;
+    audio.current.src = src;
     held.current = { url, at: Date.now() };
   };
   useEffect(() => {
@@ -357,12 +369,13 @@ function AudioPlayer({ id, url, pick }) {
   useEffect(() => {
     if (!reading || !usable) return;
     load().catch(() => pick.metadataDone(null));
-  }, [url, pick.metadataFor]);
+  }, [url, pick.metadataFor, usable]);
   const toggle = async () => {
     const element = audio.current;
     if (!element.paused) { element.pause(); return; }
     setError(null);
-    const fresh = held.current && held.current.url === url && Date.now() - held.current.at < TICKET_RENEW_MS;
+    const fresh = held.current && held.current.url === url
+      && (source.kind === 'direct' || Date.now() - held.current.at < TICKET_RENEW_MS);
     try {
       if (!fresh) {
         resume.current = held.current && held.current.url === url ? element.currentTime : 0;
@@ -399,6 +412,7 @@ function AudioPlayer({ id, url, pick }) {
         <span class="player-time">${clockText(position)} / ${clockText(length)}</span>
       </div>
       ${error && html`<span class="field-error" role="alert">${error}</span>`}
+      ${notice && html`<span class="hint" id=${`${id}-notice`} role="status">${notice}</span>`}
       <audio ref=${audio} preload="none" onLoadedMetadata=${onLoadedMetadata} onDurationChange=${(e) => setLength(e.currentTarget.duration)}
         onTimeUpdate=${(e) => setPosition(e.currentTarget.currentTime)} onPlay=${() => setPlaying(true)} onPause=${() => setPlaying(false)}
         onEnded=${() => setPlaying(false)} onError=${onError}></audio>
@@ -2329,17 +2343,31 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
 
 const BLANK_IMAGE = { href: '', alt: null, aspect_ratio: null, width: null, height: null, media_type: null, purpose: null };
 
-// The image at an address, read through `/images` (ADR 0025). It gives the
-// size of the image and the type of the response. A failure gives `null`.
+// The facts of the image at an address (ADR 0064 items 10 to 12, ADR 0109).
+// The browser reads the size of the image from its host. The core reads the
+// type of the response (item 7 of the ADR). A held file comes through
+// Studio. A failure gives `null`.
 async function readImageFacts(url) {
   try {
-    const blob = await api(`/images?url=${encodeURIComponent(url)}`, { raw: true });
-    const src = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    const source = mediaSource(url, await heldFilesNow());
+    let src;
+    let type = null;
+    if (source.kind === 'held') {
+      const blob = await api(`/images?file=${source.file}`, { raw: true });
+      type = blob.type;
+      src = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } else if (source.kind === 'direct') {
+      src = source.src;
+      const facts = await api('/media/facts', { method: 'POST', body: { url: source.src } }).catch(() => null);
+      type = facts && facts.media_type;
+    } else {
+      return null;
+    }
     const size = await new Promise((resolve, reject) => {
       const image = new Image();
       image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
@@ -2347,7 +2375,7 @@ async function readImageFacts(url) {
       image.src = src;
     });
     if (!(size.width > 0 && size.height > 0)) return null;
-    return imageFacts(size.width, size.height, blob.type);
+    return imageFacts(size.width, size.height, type);
   } catch (_) {
     return null;
   }

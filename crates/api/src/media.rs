@@ -2,11 +2,13 @@
 //!
 //! The audio player cannot send the access token. It asks for a ticket
 //! with the usual access, and then reads `/media/audio?ticket=`. The route
-//! reads the file from the release folder or from its host, sends the byte
-//! range that the player asks for, and keeps no full file in memory.
+//! reads the file from the release folder, sends the byte range that the
+//! player asks for, and keeps no full file in memory. A ticket holds the ID of
+//! a library file, never an address, and the route never reads a host
+//! (ADR 0109 items 5 and 6).
 
 use std::collections::HashMap;
-use std::io::{Read, SeekFrom, Write};
+use std::io::{SeekFrom, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -20,14 +22,12 @@ use futures_util::stream::unfold;
 use serde::Deserialize;
 use serde_json::json;
 use studio_core::collection::LibraryFileId;
-use studio_core::feed::is_web_address;
 use studio_core::inventory;
-use studio_core::web::Web;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::access::random_hex;
 use crate::error::ApiError;
-use crate::routes::{ApiResult, Shared, blocking, pending_library_file};
+use crate::routes::{ApiResult, Shared, blocking};
 use crate::workspace::{Workspace, lock_workspace};
 
 /// How long a ticket works (ADR 0062 item 29).
@@ -36,12 +36,11 @@ const TICKET_LIFETIME: Duration = Duration::from_hours(1);
 /// The size of one block that the route sends.
 const BLOCK_BYTES: usize = 64 * 1024;
 
-/// What a ticket opens: an address for the audio player, or a library file
-/// for the download to a device. A ticket for a file holds the ID of the
-/// file and no address (ADR 0105 item 15).
+/// What a ticket opens: a library file for the player or for the download
+/// to a device, or the archive of the account. A ticket for a file holds the
+/// ID of the file and no address (ADR 0109 item 5, ADR 0105 item 15).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Target {
-    Address(String),
     File(i64),
     /// The archive of the account (ADR 0107 item 7). The flag says if the
     /// archive holds the audio and the images.
@@ -74,14 +73,8 @@ impl Tickets {
         }
     }
 
-    /// Make a ticket for `url`. The call removes each ticket that
-    /// expired.
-    pub(crate) fn issue(&mut self, url: &str, now: Instant) -> Result<String, ApiError> {
-        self.insert(Target::Address(url.to_owned()), now)
-    }
-
-    /// Make a ticket for the download of one library file (ADR 0105
-    /// item 15). The ticket holds the file ID.
+    /// Make a ticket for one library file (ADR 0109 item 5). The ticket
+    /// holds the file ID.
     pub(crate) fn issue_file(&mut self, file: i64, now: Instant) -> Result<String, ApiError> {
         self.insert(Target::File(file), now)
     }
@@ -116,14 +109,6 @@ impl Tickets {
         Ok(ticket)
     }
 
-    /// The address of a ticket that exists and has not expired.
-    pub(crate) fn address(&self, ticket: &str, now: Instant) -> Option<&str> {
-        match self.tickets.get(ticket) {
-            Some((Target::Address(url), expires)) if now < *expires => Some(url.as_str()),
-            _ => None,
-        }
-    }
-
     /// The library file of a ticket that exists and has not expired.
     pub(crate) fn file(&self, ticket: &str, now: Instant) -> Option<i64> {
         match self.tickets.get(ticket) {
@@ -135,51 +120,32 @@ impl Tickets {
 
 #[derive(Deserialize)]
 pub(crate) struct TicketRequest {
-    /// The address for the audio player.
-    #[serde(default)]
-    url: Option<String>,
-    /// The ID of a library file, for the download to a device (ADR 0105
-    /// item 15).
+    /// The ID of a library file of the user.
     #[serde(default)]
     file: Option<i64>,
+    /// An address. A ticket never holds one, so the route refuses it
+    /// (ADR 0109 item 5).
+    #[serde(default)]
+    url: Option<String>,
 }
 
-/// Make a media ticket for one address, or for one library file. The
-/// address must be correct by ADR 0023 item 2. The route uses the usual
-/// access of the API.
+/// Make a media ticket for one library file of the user. The route uses the
+/// usual access of the API. A request with an address is refused.
 pub(crate) async fn make_ticket(
     State(shared): State<Shared>,
     Json(body): Json<TicketRequest>,
 ) -> ApiResult {
-    let url = match (body.url, body.file) {
-        (Some(url), None) => url,
-        (None, Some(file)) => return make_file_ticket(shared, file).await,
-        _ => {
-            return Err(ApiError::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "invalid_ticket_request",
-                "give either url or file",
-            ));
-        }
-    };
-    if !is_web_address(&url) {
-        return Err(ApiError::new(
+    match (body.file, body.url) {
+        (Some(file), None) => make_file_ticket(shared, file).await,
+        _ => Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "invalid_address",
-            format!("{url} is not a correct web address"),
-        ));
+            "invalid_ticket_request",
+            "give the ID of a library file: a ticket holds no address",
+        )),
     }
-    blocking(shared, move |w| {
-        // A ticket holds the address with no OP3 prefix, so that the player
-        // does not make a download for OP3 (ADR 0076 item 3).
-        let plain = studio_core::media::plain_address(&url);
-        let ticket = w.tickets.issue(&plain, Instant::now())?;
-        Ok(Json(json!({ "ticket": ticket })))
-    })
-    .await
 }
 
-/// Make a ticket for the download of a library file (ADR 0105 item 15).
+/// Make a ticket for a library file (ADR 0109 item 5).
 async fn make_file_ticket(shared: Shared, file: i64) -> ApiResult {
     blocking(shared, move |w| {
         let file = w.collection.library_file(LibraryFileId(file))?;
@@ -193,15 +159,6 @@ async fn make_file_ticket(shared: Shared, file: i64) -> ApiResult {
 pub(crate) struct AudioQuery {
     #[serde(default)]
     ticket: String,
-}
-
-/// Where the bytes of a ticket are.
-enum Source {
-    /// A file of the release folder.
-    Folder { path: PathBuf, media_type: String },
-    /// A file on its host. The client has the network policy of the
-    /// workspace (ADR 0057).
-    Host { url: String, web: Web },
 }
 
 /// A byte range of one `Range` header: the first and the last byte, or
@@ -246,18 +203,6 @@ impl Range {
             _ => None,
         }
     }
-
-    /// The header value for a host.
-    fn header(self) -> String {
-        match self {
-            Self::From {
-                first,
-                last: Some(last),
-            } => format!("bytes={first}-{last}"),
-            Self::From { first, last: None } => format!("bytes={first}-"),
-            Self::Suffix(count) => format!("bytes=-{count}"),
-        }
-    }
 }
 
 /// What the player asked for.
@@ -287,31 +232,44 @@ pub(crate) async fn audio(
     // The lock is held only to read the ticket and the library. The read of
     // the bytes occurs with no lock, so that a long play does not stop the
     // other requests.
-    let source = {
+    let (path, media_type) = {
         let w = lock_workspace(&shared)?;
-        let url = w
+        let id = w
             .tickets
-            .address(&query.ticket, Instant::now())
-            .ok_or_else(|| {
-                ApiError::new(
-                    StatusCode::FORBIDDEN,
-                    "ticket_not_valid",
-                    "the media ticket is unknown or expired: ask for a new ticket",
-                )
-            })?
-            .to_owned();
-        match pending_library_file(&w, &url, "audio/") {
-            Some((path, media_type)) => Source::Folder { path, media_type },
-            None => Source::Host {
-                url,
-                web: w.web.clone(),
-            },
+            .file(&query.ticket, Instant::now())
+            .ok_or_else(ticket_not_valid)?;
+        let file = w.collection.library_file(LibraryFileId(id))?;
+        // The route sends only a file that the server holds. A file that
+        // only a host has loads from the host (ADR 0109 items 5 and 6).
+        if !file.local || !file.media_type.starts_with("audio/") {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "file_not_held",
+                format!("{} is not an audio file that this server holds", file.path),
+            ));
         }
+        (local_path(&w, &file)?, file.media_type)
     };
-    match source {
-        Source::Folder { path, media_type } => from_folder(&path, &media_type, ask).await,
-        Source::Host { url, web } => from_host(url, web, ask).await,
-    }
+    from_folder(&path, &media_type, ask).await
+}
+
+fn ticket_not_valid() -> ApiError {
+    ApiError::new(
+        StatusCode::FORBIDDEN,
+        "ticket_not_valid",
+        "the media ticket is unknown or expired: ask for a new ticket",
+    )
+}
+
+/// The path of a library file that the server holds, in its release folder.
+fn local_path(
+    w: &Workspace,
+    file: &studio_core::collection::LibraryFile,
+) -> Result<PathBuf, ApiError> {
+    let folder = w.collection.feed(file.feed_id)?.folder.ok_or_else(|| {
+        ApiError::internal(format!("feed {} has no release folder", file.feed_id.0))
+    })?;
+    Ok(w.library()?.path(&folder, &file.path))
 }
 
 /// The response for a range that the file cannot give.
@@ -379,67 +337,6 @@ fn set_header(headers: &mut axum::http::HeaderMap, name: header::HeaderName, val
     }
 }
 
-async fn from_host(url: String, web: Web, ask: Ask) -> Result<Response, ApiError> {
-    let header_value = match ask {
-        Ask::Whole => None,
-        Ask::One(range) => Some(range.header()),
-        // A header that is not one range cannot be satisfied.
-        Ask::Bad => return Ok(not_satisfiable(None)),
-    };
-    let stream = tokio::task::spawn_blocking(move || web.open_range(&url, header_value.as_deref()))
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))??;
-    let status = StatusCode::from_u16(stream.status).unwrap_or(StatusCode::BAD_GATEWAY);
-    if status == StatusCode::RANGE_NOT_SATISFIABLE {
-        return Ok(not_satisfiable(stream.content_range));
-    }
-    // The reader blocks, so a blocking task reads it and sends the blocks
-    // through a small channel. The task ends when the player closes the
-    // connection, because the send then fails.
-    let (sender, receiver) = tokio::sync::mpsc::channel::<std::io::Result<Bytes>>(4);
-    let mut reader = stream.reader;
-    let (media_type, content_length, content_range) = (
-        stream.media_type,
-        stream.content_length,
-        stream.content_range,
-    );
-    tokio::task::spawn_blocking(move || {
-        loop {
-            let mut block = vec![0_u8; BLOCK_BYTES];
-            let item = match reader.read(&mut block) {
-                Ok(0) => return,
-                Ok(count) => {
-                    block.truncate(count);
-                    Ok(Bytes::from(block))
-                }
-                Err(error) => Err(error),
-            };
-            let failed = item.is_err();
-            if sender.blocking_send(item).is_err() || failed {
-                return;
-            }
-        }
-    });
-    let body = Body::from_stream(unfold(receiver, |mut receiver| async move {
-        receiver.recv().await.map(|item| (item, receiver))
-    }));
-    let mut response = Response::new(body);
-    *response.status_mut() = status;
-    let headers = response.headers_mut();
-    if let Some(media_type) = &media_type {
-        set_header(headers, header::CONTENT_TYPE, media_type);
-    }
-    if let Some(length) = content_length {
-        set_header(headers, header::CONTENT_LENGTH, &length.to_string());
-    }
-    if let Some(content_range) = &content_range {
-        set_header(headers, header::CONTENT_RANGE, content_range);
-    }
-    set_header(headers, header::ACCEPT_RANGES, "bytes");
-    set_header(headers, header::CACHE_CONTROL, "no-store");
-    Ok(response)
-}
-
 /// Where the bytes of a file download are.
 enum Download {
     /// A file of the release folder.
@@ -503,19 +400,10 @@ pub(crate) async fn download(
         let id = w
             .tickets
             .file(&query.ticket, Instant::now())
-            .ok_or_else(|| {
-                ApiError::new(
-                    StatusCode::FORBIDDEN,
-                    "ticket_not_valid",
-                    "the media ticket is unknown or expired: ask for a new ticket",
-                )
-            })?;
+            .ok_or_else(ticket_not_valid)?;
         let file = w.collection.library_file(LibraryFileId(id))?;
         if file.local {
-            let folder = w.collection.feed(file.feed_id)?.folder.ok_or_else(|| {
-                ApiError::internal(format!("feed {} has no release folder", file.feed_id.0))
-            })?;
-            let path = w.library()?.path(&folder, &file.path);
+            let path = local_path(&w, &file)?;
             return Ok::<_, ApiError>((file, Download::Folder(path)));
         }
         let missing = |file: &studio_core::collection::LibraryFile| {

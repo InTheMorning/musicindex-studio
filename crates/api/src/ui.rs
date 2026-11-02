@@ -162,6 +162,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/picker.js"),
     ),
     (
+        "media.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/media.js"),
+    ),
+    (
         "audio.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/audio.js"),
@@ -249,12 +254,13 @@ const FILES: &[(&str, &str, &[u8])] = &[
     ),
 ];
 
-/// The UI loads nothing from other servers (ADR 0016). The policy makes the
-/// browser enforce this.
+/// The UI loads scripts, styles, fonts and frames only from Studio (ADR 0016,
+/// ADR 0109 item 2). It loads images and audio from their `https` addresses
+/// (ADR 0109 item 1). The policy makes the browser enforce this.
 const SECURITY_HEADERS: [(header::HeaderName, &str); 3] = [
     (
         header::CONTENT_SECURITY_POLICY,
-        "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "default-src 'self'; img-src 'self' data: https:; media-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     ),
     (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
     (header::REFERRER_POLICY, "no-referrer"),

@@ -777,7 +777,6 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   -webkit-mask: var(--mark-mask) center / contain no-repeat;
   mask: var(--mark-mask) center / contain no-repeat;
 }
-.cover-note { margin-top: 4px; }
 .hero h1 {
   font-size: clamp(2rem, 4.4vw, 4.5rem);
   font-weight: 800;

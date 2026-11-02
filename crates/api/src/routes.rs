@@ -1518,9 +1518,6 @@ pub(crate) async fn new_album_feed(
 pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        // The feed may give a different image at the same address, or a
-        // different address, after this read (ADR 0032 item 13).
-        w.images.clear();
         let row = w.collection.feed(id)?;
         let Some(connector_id) = row.connector_id else {
             // A read-only feed reads from its public address (ADR 0020).
@@ -4719,94 +4716,78 @@ pub(crate) async fn media_facts(
 
 #[derive(Deserialize)]
 pub(crate) struct ImageQuery {
-    url: String,
+    file: i64,
 }
 
-/// The image at an address, from the cache or from its host (ADR 0025,
-/// ADR 0032 items 13 and 14). The UI cannot put the access token on an
-/// `<img>` request, so it gets the image through this route instead.
+/// The image of a library file that the server holds (ADR 0109 item 5). The
+/// UI cannot put the access token on an `<img>` request, so it gets a held
+/// image through this route. An image on a host loads from the host, so the
+/// route reads no address.
 pub(crate) async fn get_image(
     State(shared): State<Shared>,
     Query(query): Query<ImageQuery>,
 ) -> Result<Response, ApiError> {
-    // The lock is held only to read and to fill the cache. The read from
-    // the host of the image occurs with no lock, so that a slow host does
-    // not stop the other requests, such as a save of the draft.
-    let url = query.url;
-    let (cached, pending, web) = {
-        let w = lock(&shared)?;
-        let cached = w.images.get(&url).cloned();
-        let pending = if cached.is_none() {
-            pending_image(&w, &url)
-        } else {
-            None
-        };
-        (cached, pending, w.web.clone())
-    };
-    let image = if let Some(image) = cached {
-        image
-    } else if let Some(image) = pending {
-        image
-    } else {
-        let read_url = url.clone();
-        let image = tokio::task::spawn_blocking(move || web.get_image(&read_url))
-            .await
-            .map_err(|e| ApiError::internal(e.to_string()))??;
-        lock(&shared)?.images.put(url, image.clone());
-        image
-    };
+    let (path, media_type) = blocking(shared, move |w| {
+        let file = w.collection.library_file(LibraryFileId(query.file))?;
+        if !file.local || !file.media_type.starts_with("image/") {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "file_not_held",
+                format!("{} is not an image that this server holds", file.path),
+            ));
+        }
+        let folder = w.collection.feed(file.feed_id)?.folder.ok_or_else(|| {
+            ApiError::internal(format!("feed {} has no release folder", file.feed_id.0))
+        })?;
+        Ok((w.library()?.path(&folder, &file.path), file.media_type))
+    })
+    .await?;
+    let bytes = tokio::fs::read(path)
+        .await
+        .map_err(|e| ApiError::internal(format!("the image file: {e}")))?;
     Ok((
         [
-            (header::CONTENT_TYPE, image.media_type),
+            (header::CONTENT_TYPE, media_type),
             (header::CACHE_CONTROL, "no-store".to_owned()),
         ],
-        image.bytes,
+        bytes,
     )
         .into_response())
 }
 
-/// The image at `url` from the release folder, when `url` is the planned
-/// address of a library image that is not on its host yet. The preview of
-/// an imported image then shows before the write (ADR 0025 item 2, ADR
-/// 0036 items 5 and 9). Each failure gives `None`, so the route then
-/// reads the address from the web.
-fn pending_image(w: &Workspace, url: &str) -> Option<studio_core::web::WebImage> {
-    let (path, media_type) = pending_library_file(w, url, "image/")?;
-    let bytes = std::fs::read(path).ok()?;
-    Some(studio_core::web::WebImage { bytes, media_type })
-}
-
-/// The path and the media type of the library file whose planned address is
-/// `url`, when its bytes are in the release folder and not on the host yet.
-/// The media type starts with `media_prefix`. Each failure gives `None`.
-pub(crate) fn pending_library_file(
-    w: &Workspace,
-    url: &str,
-    media_prefix: &str,
-) -> Option<(PathBuf, String)> {
-    let library = w.library().ok()?;
-    let hosts = w.hosts().ok()?;
-    for feed in w.collection.feeds().ok()? {
-        let Some(folder) = feed.folder.as_deref() else {
-            continue;
-        };
-        let Ok(files) = w.collection.library_files(feed.id) else {
-            continue;
-        };
-        for file in files {
-            if !file.local || !file.media_type.starts_with(media_prefix) {
-                continue;
+/// The library files that the server holds and that no host has yet, with
+/// their planned address (ADR 0109 item 5). The UI loads such a file through
+/// Studio, and each other `https` address from its host.
+pub(crate) async fn held_files(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        let library_ready = w.library().is_ok();
+        let mut held = Vec::new();
+        if library_ready && let Ok(hosts) = w.hosts() {
+            for feed in w.collection.feeds()? {
+                if feed.folder.is_none() {
+                    continue;
+                }
+                for file in w.collection.library_files(feed.id)? {
+                    if !file.local {
+                        continue;
+                    }
+                    let Ok(planned) = inventory::planned_path(&w.collection, &hosts, &feed, &file)
+                    else {
+                        continue;
+                    };
+                    if let (false, Some(url)) = (planned.on_host, planned.url) {
+                        held.push(json!({
+                            "file": file.id.0,
+                            "url": url,
+                            "media_type": file.media_type,
+                        }));
+                    }
+                }
             }
-            let Ok(planned) = inventory::planned_path(&w.collection, &hosts, &feed, &file) else {
-                continue;
-            };
-            if planned.on_host || planned.url.as_deref() != Some(url) {
-                continue;
-            }
-            return Some((library.path(folder, &file.path), file.media_type));
         }
-    }
-    None
+        Ok(Json(json!({ "files": held })))
+    })
+    .await
 }
 
 // ---- Recipients (ADR 0027) ----

@@ -160,6 +160,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/connectors/{id}/match", post(routes::match_connector))
         .route("/discover", post(routes::discover))
         .route("/images", get(routes::get_image))
+        .route("/media/held", get(routes::held_files))
         .route("/media/facts", post(routes::media_facts))
         .route("/media/tickets", post(media::make_ticket))
         .route("/search", get(routes::search))

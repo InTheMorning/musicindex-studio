@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap};
 
 use axum::http::StatusCode;
 use serde_json::json;
@@ -22,7 +22,7 @@ use studio_core::nostr_events::{LOOKUP_RELAYS, Signing};
 use studio_core::pipeline::AddressCheck;
 use studio_core::remote;
 use studio_core::vault::{OpenVault, VaultFile};
-use studio_core::web::{Web, WebImage};
+use studio_core::web::Web;
 use studio_core::xml::Document;
 use zeroize::Zeroizing;
 
@@ -41,50 +41,6 @@ const GRANT_RECORD_PREFIX: &str = "grant-vault/";
 
 /// How often the sync of the grant vaults runs (ADR 0058 item 10).
 const GRANT_SYNC_INTERVAL: Duration = Duration::from_hours(1);
-
-/// The number of images that [`ImageCache`] keeps (ADR 0032 item 13).
-const MAX_IMAGES: usize = 64;
-
-/// The images that the core already read, by their address (ADR 0025,
-/// ADR 0032 items 13 and 14). The UI gets each image through the local API,
-/// so that it loads no image from another server (ADR 0016).
-///
-/// The cache keeps the order that each image came in, so that it can remove
-/// the oldest image when it is full.
-#[derive(Debug, Default)]
-pub(crate) struct ImageCache {
-    order: VecDeque<String>,
-    images: HashMap<String, WebImage>,
-}
-
-impl ImageCache {
-    /// The image at this address, when the cache has it.
-    pub(crate) fn get(&self, url: &str) -> Option<&WebImage> {
-        self.images.get(url)
-    }
-
-    /// Keep an image at this address. When the cache is full, it removes the
-    /// oldest image.
-    pub(crate) fn put(&mut self, url: String, image: WebImage) {
-        if !self.images.contains_key(&url) {
-            if self.order.len() >= MAX_IMAGES
-                && let Some(oldest) = self.order.pop_front()
-            {
-                self.images.remove(&oldest);
-            }
-            self.order.push_back(url.clone());
-        }
-        self.images.insert(url, image);
-    }
-
-    /// Remove each image. A refresh of a feed may read each address again,
-    /// so Studio does not keep an image that may no longer be correct
-    /// (ADR 0032 item 13).
-    pub(crate) fn clear(&mut self) {
-        self.order.clear();
-        self.images.clear();
-    }
-}
 
 /// A clone of the shared workspace, for the shell that owns it. The server
 /// uses it for the vault (ADR 0055 items 4 and 5). Each function runs on a
@@ -634,8 +590,6 @@ pub struct Workspace {
     /// The feeds of the last discovery, by address, so that an import does
     /// not read them again.
     pub(crate) discovered: HashMap<String, Found>,
-    /// The images that the core already read (ADR 0025, ADR 0032 item 13).
-    pub(crate) images: ImageCache,
     /// The media tickets of the audio player (ADR 0062 item 29).
     pub(crate) tickets: crate::media::Tickets,
     /// The staging folder for the body of an upload, before its import
@@ -777,7 +731,6 @@ impl Workspace {
             nip05_scheme: "https",
             keysend_scheme: Some("https"),
             discovered: HashMap::new(),
-            images: ImageCache::default(),
             tickets: crate::media::Tickets::default(),
             incoming_dir: data_dir.join("incoming"),
             imports_dir: data_dir.join("imports"),
@@ -1163,7 +1116,6 @@ impl Workspace {
         if library_from.is_dir() {
             std::fs::rename(&library_from, &library_to).map_err(|e| io("library", &e))?;
         }
-        self.images.clear();
         self.discovered.clear();
         self.signer.clear();
         self.unlock_with_key(key)

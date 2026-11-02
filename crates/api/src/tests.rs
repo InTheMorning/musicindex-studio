@@ -1286,6 +1286,37 @@ async fn no_get_response_contains_a_secret() {
     }
 }
 
+/// The page rule of ADR 0109 item 1. Scripts, styles, fonts and frames come
+/// only from Studio. Only `img-src` and `media-src` accept `https:`.
+fn check_page_rule(policy: &str) {
+    const FIX: &str =
+        "Change SECURITY_HEADERS in crates/api/src/ui.rs back to the rule of ADR 0109 item 1.";
+    assert_eq!(
+        policy,
+        "default-src 'self'; img-src 'self' data: https:; media-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "ADR 0109 item 1: the page rule is not the rule of the decision. {FIX}"
+    );
+    assert!(
+        !policy.contains("unsafe"),
+        "ADR 0016: the page rule has no unsafe source. {FIX}"
+    );
+    for directive in policy.split(';').map(str::trim) {
+        let (name, sources) = directive.split_once(' ').unwrap_or((directive, ""));
+        if matches!(name, "img-src" | "media-src") {
+            continue;
+        }
+        let allowed: &[&str] = match name {
+            "default-src" | "script-src" | "style-src" | "font-src" | "frame-src"
+            | "connect-src" => &["'self'"],
+            _ => &["'none'"],
+        };
+        assert!(
+            sources.split(' ').all(|source| allowed.contains(&source)),
+            "ADR 0109 item 2: {name} may load only from Studio, and `https:` is only for img-src and media-src. {FIX}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn the_ui_files_load_without_the_token_and_with_a_strict_policy() {
     let app = app();
@@ -1302,8 +1333,7 @@ async fn the_ui_files_load_without_the_token_and_with_a_strict_policy() {
         let policy = response.headers()[header::CONTENT_SECURITY_POLICY]
             .to_str()
             .unwrap();
-        assert!(policy.starts_with("default-src 'self'"));
-        assert!(!policy.contains("unsafe"));
+        check_page_rule(policy);
     }
     let request = Request::builder()
         .uri("/ui/../Cargo.toml")
@@ -1372,6 +1402,9 @@ fn the_ui_names_no_other_server_and_sends_the_token() {
                 // The link that the user opens to the OP3 page (ADR 0076
                 // item 11). The UI does not load it.
                 .filter(|s| !s.starts_with("https://op3.dev/show/"))
+                // The prefix that `media.js` removes from an address, so that
+                // the player makes no download for OP3 (ADR 0076 item 3).
+                .filter(|s| !s.starts_with("https://op3.dev/e"))
                 .collect();
             assert!(
                 found.is_empty(),
@@ -2428,78 +2461,79 @@ async fn the_media_route_gives_the_size_and_the_type_of_a_file() {
     assert_eq!(body["error"]["code"], "network");
 }
 
+/// A held image comes from the release folder (ADR 0109 item 5). The planned
+/// address `https://music.example/...` has no web server in this test, so
+/// only the library can give the bytes.
 #[tokio::test]
-async fn the_image_route_gives_the_bytes_and_caches_until_a_refresh() {
-    let server = studio_core::testing::TestServer::start(Vec::new());
-    server.set_file("/cover.png", vec![1, 2, 3, 4], "image/png", true);
-    let app = app();
-    let id = set_up(&app).await;
-    let image_url = server.url("/cover.png");
-    let path = format!("/api/v1/images?url={}", url_encode(&image_url));
-
-    let (status, headers, bytes) = send_raw(&app, request("GET", &path, None)).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(headers[header::CONTENT_TYPE], "image/png");
-    assert_eq!(headers[header::CACHE_CONTROL], "no-store");
-    assert_eq!(bytes, vec![1, 2, 3, 4]);
-
-    // A second request for the same address does not call the host again:
-    // the route still gives the first bytes, not these new ones.
-    server.set_file("/cover.png", vec![9, 9, 9], "image/png", true);
-    let (_, _, bytes) = send_raw(&app, request("GET", &path, None)).await;
-    assert_eq!(bytes, vec![1, 2, 3, 4]);
-
-    // After a refresh of the feed, the route calls the host again.
-    call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
-    let (_, _, bytes) = send_raw(&app, request("GET", &path, None)).await;
-    assert_eq!(bytes, vec![9, 9, 9]);
-
-    let (status, body) = call(&app, "GET", "/api/v1/images?url=not-an-address", None).await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "invalid_address");
-
-    server.set_file("/page.html", b"<html></html>".to_vec(), "text/html", true);
-    let (status, body) = call(
-        &app,
-        "GET",
-        &format!(
-            "/api/v1/images?url={}",
-            url_encode(&server.url("/page.html"))
-        ),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "not_image");
-}
-
-/// An imported image that is not on its host yet comes from the release
-/// folder. The planned address `https://music.example/...` has no web
-/// server in this test, so only the library can give the bytes.
-#[tokio::test]
-async fn the_image_route_gives_an_imported_image_before_the_write() {
+async fn the_image_route_gives_a_held_image_by_its_file_id() {
     let app = app();
     let id = set_up(&app).await;
     let bytes = std::fs::read(media_path("image.png")).unwrap();
     let (status, file) = upload(&app, id, "image.png", bytes.clone()).await;
     assert_eq!(status, StatusCode::CREATED, "{file}");
     assert_eq!(file["on_host"], false);
+    let file_id = file["library_file_id"].as_i64().unwrap();
 
-    let path = format!(
-        "/api/v1/images?url={}",
-        url_encode(file["url"].as_str().unwrap())
-    );
+    let path = format!("/api/v1/images?file={file_id}");
     let (status, headers, body) = send_raw(&app, request("GET", &path, None)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(headers[header::CONTENT_TYPE], "image/png");
     assert_eq!(body, bytes);
+
+    // The held list gives the planned address of the file.
+    let (status, held) = call(&app, "GET", "/api/v1/media/held", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let row = &held["files"][0];
+    assert_eq!(row["file"], file_id);
+    assert_eq!(row["url"], file["url"]);
+}
+
+#[tokio::test]
+async fn the_image_route_reads_no_address_and_no_file_that_is_not_an_image() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set_file("/cover.png", vec![1, 2, 3, 4], "image/png", true);
+    let app = app();
+    let id = set_up(&app).await;
+    // An address is not a file ID: the route refuses it, and the host
+    // sees no request.
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!(
+            "/api/v1/images?url={}",
+            url_encode(&server.url("/cover.png"))
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "ADR 0109 item 5: the image route accepts a file ID, not an address"
+    );
+    let (status, _) = call(&app, "GET", "/api/v1/images?file=9999", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!(
+            "/api/v1/images?file={}",
+            file["library_file_id"].as_i64().unwrap()
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "file_not_held");
 }
 
 #[tokio::test]
 async fn an_api_request_with_no_token_to_images_gives_401() {
     let app = app();
     let request = Request::builder()
-        .uri("/api/v1/images?url=https://example.com/a.png")
+        .uri("/api/v1/images?file=1")
         .header(header::HOST, HOST)
         .body(Body::empty())
         .unwrap();
@@ -2522,12 +2556,12 @@ fn audio_request(ticket: &str, range: Option<&str>) -> Request<Body> {
     .unwrap()
 }
 
-async fn ticket_for(app: &App, url: &str) -> String {
+async fn ticket_for(app: &App, file: i64) -> String {
     let (status, body) = call(
         app,
         "POST",
         "/api/v1/media/tickets",
-        Some(json!({ "url": url })),
+        Some(json!({ "file": file })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -2545,7 +2579,7 @@ async fn the_audio_route_gives_a_range_of_a_file_of_the_release_folder() {
     assert!(bytes.len() > 100);
     let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
     assert_eq!(status, StatusCode::CREATED, "{file}");
-    let ticket = ticket_for(&app, file["url"].as_str().unwrap()).await;
+    let ticket = ticket_for(&app, file["library_file_id"].as_i64().unwrap()).await;
 
     let (status, headers, body) = send_raw(&app, audio_request(&ticket, Some("bytes=0-99"))).await;
     assert_eq!(status, StatusCode::PARTIAL_CONTENT);
@@ -2576,24 +2610,18 @@ async fn the_audio_route_gives_a_range_of_a_file_of_the_release_folder() {
     );
 }
 
+/// The audio route sends only an audio file of the release folder (ADR 0109
+/// items 5 and 6).
 #[tokio::test]
-async fn the_audio_route_gives_a_range_of_a_file_of_a_web_server() {
-    let body: Vec<u8> = (0..=255_u8).cycle().take(5000).collect();
-    let server = studio_core::testing::RangeServer::start(body.clone());
+async fn the_audio_route_refuses_a_file_that_is_not_audio() {
     let app = app();
-    let ticket = ticket_for(&app, &server.url("/a.mp3")).await;
-
-    let (status, headers, bytes) =
-        send_raw(&app, audio_request(&ticket, Some("bytes=10-19"))).await;
-    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
-    assert_eq!(bytes, body[10..20]);
-    assert_eq!(headers[header::CONTENT_RANGE], "bytes 10-19/5000");
-    assert_eq!(headers[header::CONTENT_TYPE], "audio/mpeg");
-    assert_eq!(server.ranges(), vec![Some("bytes=10-19".to_owned())]);
-
-    let (status, _, bytes) = send_raw(&app, audio_request(&ticket, None)).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(bytes, body);
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("image.png")).unwrap();
+    let (_, file) = upload(&app, id, "image.png", bytes).await;
+    let ticket = ticket_for(&app, file["library_file_id"].as_i64().unwrap()).await;
+    let (status, body, _) = send(&app, audio_request(&ticket, None)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["error"]["code"], "file_not_held");
 }
 
 #[tokio::test]
@@ -2602,7 +2630,7 @@ async fn the_audio_route_gives_416_for_a_range_outside_the_file() {
     let id = set_up(&app).await;
     let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
     let (_, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
-    let ticket = ticket_for(&app, file["url"].as_str().unwrap()).await;
+    let ticket = ticket_for(&app, file["library_file_id"].as_i64().unwrap()).await;
     for range in [
         format!("bytes={}-", bytes.len()),
         "bytes=99999999-".to_owned(),
@@ -2649,43 +2677,51 @@ async fn the_audio_route_refuses_an_unknown_an_expired_and_a_missing_ticket() {
         data,
         feeds: tempfile::tempdir().unwrap(),
     };
-    let ticket = ticket_for(&expired, "https://music.example/a.mp3").await;
+    let id = set_up(&expired).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&expired, id, "tagged.mp3", bytes).await;
+    let ticket = ticket_for(&expired, file["library_file_id"].as_i64().unwrap()).await;
     let (status, body, _) = send(&expired, audio_request(&ticket, None)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"]["code"], "ticket_not_valid");
 }
 
 #[tokio::test]
-async fn the_ticket_route_needs_the_token_and_a_correct_address() {
+async fn the_ticket_route_needs_the_token_and_a_file_id_and_never_an_address() {
     let app = app();
     let no_token = Request::builder()
         .method("POST")
         .uri("/api/v1/media/tickets")
         .header(header::HOST, HOST)
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(
-            json!({ "url": "https://example.com/a.mp3" }).to_string(),
-        ))
+        .body(Body::from(json!({ "file": 1 }).to_string()))
         .unwrap();
     let (status, body, _) = send(&app, no_token).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["error"]["code"], "token_required");
-    for url in [
-        "",
-        "not-an-address",
-        "ftp://example.com/a.mp3",
-        "https://a b/c",
+    for request in [
+        json!({ "url": "https://example.com/a.mp3" }),
+        json!({}),
+        json!({ "url": "https://example.com/a.mp3", "file": 1 }),
     ] {
-        let (status, body) = call(
-            &app,
-            "POST",
-            "/api/v1/media/tickets",
-            Some(json!({ "url": url })),
-        )
-        .await;
-        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{url}");
-        assert_eq!(body["error"]["code"], "invalid_address");
+        let (status, body) =
+            call(&app, "POST", "/api/v1/media/tickets", Some(request.clone())).await;
+        assert_eq!(
+            status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "ADR 0109 item 5: a ticket holds a library file ID, not an address {request}"
+        );
+        assert_eq!(body["error"]["code"], "invalid_ticket_request");
     }
+    // A file of no user is refused.
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/media/tickets",
+        Some(json!({ "file": 9999 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -7171,7 +7207,7 @@ fn assert_not_public(status: StatusCode, body: &Value, host: &str) {
 }
 
 #[tokio::test]
-async fn with_the_policy_public_a_feed_an_image_and_a_media_address_on_loopback_give_422() {
+async fn with_the_policy_public_a_feed_and_a_media_address_on_loopback_give_422() {
     let server = web_feeds();
     server.set_file("/a.mp3", vec![0; 10], "audio/mpeg", false);
     let app = public_app();
@@ -7190,9 +7226,6 @@ async fn with_the_policy_public_a_feed_an_image_and_a_media_address_on_loopback_
         Some(json!({ "url": server.url("/a.mp3") })),
     )
     .await;
-    assert_not_public(status, &body, "127.0.0.1");
-    let path = format!("/api/v1/images?url={}", url_encode(&server.url("/a.png")));
-    let (status, body) = call(&app, "GET", &path, None).await;
     assert_not_public(status, &body, "127.0.0.1");
 }
 
@@ -9648,20 +9681,6 @@ async fn the_media_route_reads_the_plain_address_of_a_prefixed_enclosure() {
 }
 
 #[tokio::test]
-async fn the_audio_route_reads_the_plain_address_of_a_prefixed_enclosure() {
-    let body: Vec<u8> = (0..=255_u8).cycle().take(5000).collect();
-    let server = studio_core::testing::RangeServer::start(body.clone());
-    let app = app();
-    let ticket = ticket_for(&app, &op3_address(&server.url("/a.mp3"))).await;
-
-    let (status, headers, bytes) =
-        send_raw(&app, audio_request(&ticket, Some("bytes=10-19"))).await;
-    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
-    assert_eq!(bytes, body[10..20]);
-    assert_eq!(headers[header::CONTENT_RANGE], "bytes 10-19/5000");
-}
-
-#[tokio::test]
 async fn a_new_album_with_from_is_a_copy_with_new_guids_and_leaves_the_source_as_it_was() {
     let (app, connector) = publisher_app().await;
     let source = make_feed(
@@ -11858,6 +11877,17 @@ async fn the_download_route_sends_a_file_from_its_host_and_writes_no_file() {
     );
     let before = files_under(app.data.path());
     let ticket = file_ticket(&app, file_id).await;
+    // The audio route reads no host: a file that only a host has loads from
+    // the host (ADR 0109 item 6).
+    let (status, body, _) = send(&app, audio_request(&ticket, None)).await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "ADR 0109 item 6: the audio route sends only a held file. Remove the read from a host. {body}"
+    );
+    assert_eq!(body["error"]["code"], "file_not_held");
+    let (_, held) = call(&app, "GET", "/api/v1/media/held", None).await;
+    assert_eq!(held["files"], json!([]), "a file on a host is not held");
     let (status, headers, body) = send_raw(&app, download_request(&ticket)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
@@ -11921,11 +11951,6 @@ async fn the_download_route_refuses_an_unknown_ticket_a_ticket_of_another_user_a
         );
         assert_eq!(body["error"]["code"], "ticket_not_valid");
     }
-    // The ticket of an address is not a ticket for a file.
-    let address = ticket_for(&first, "https://music.example/a.mp3").await;
-    let (status, _, _) = send(&first, download_request(&address)).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-
     // A ticket that is valid for no time is expired at its first use.
     let (expired, _) = app_assets(false, Some(std::time::Duration::ZERO));
     let expired_id = set_up_server(&expired).await;

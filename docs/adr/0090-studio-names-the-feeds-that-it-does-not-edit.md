@@ -17,7 +17,7 @@
 
 1. The page of a feed that the editor does not open gives its type and the cause: "This feed has the type “podcast”. Studio edits albums, playlists, and artist and label feeds, so it shows only the facts of this feed."
 2. Releases and "Not linked" list only albums and playlists. After "Not linked", the destination "Other feeds" lists each other feed that is not a publisher feed. It shows only when such a feed exists. A publisher feed with no role is in the heading "No role" of its level.
-3. The hero of that page shows the cover of the feed. When the `/images` address refuses a cover with `too_large`, the head of the page says: "The cover is larger than 10 MB, so Studio does not show it." The box of the cover gives the same text as its title.
+3. The hero of that page shows the cover of the feed. Changed by [ADR 0109](0109-images-and-audio-load-from-their-hosts.md): the browser loads the cover from its `https` address, so the `/images` address does not refuse it. The text about a cover larger than 10 MB does not apply.
 
 ## Alternatives Considered
 

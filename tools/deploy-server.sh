@@ -44,8 +44,11 @@ environment, or from .studio-dev/deploy.env. Git ignores that file.
 The script copies deploy/compose.yml to the folder. It does not copy .env.
 The folder on the VPS must have a .env file (see deploy/env.example).
 The VPS pulls the image first, and nothing stops when the pull fails.
-Then the script pins the image in .env and runs docker compose up -d.
-Last, it waits at most 60 seconds for two facts:
+Then the script reads the digest of the pulled image, and pins the image
+with its digest in .env (STUDIO_SERVER_IMAGE=NAME:VERSION@sha256:DIGEST).
+It runs docker compose up -d. Last, it waits at most 60 seconds for three
+facts:
+  - The running container uses the image with that digest.
   - The revision label of the container is the commit of the tag vVERSION.
   - The log of the container has the line "Music Index Studio server VERSION".
 The script makes no account and no invite code.
@@ -140,24 +143,45 @@ fi
 echo "Pulling ${IMAGE}..."
 docker pull "${IMAGE}"
 
-# Pin the image in .env, so that a plain `docker compose up -d` keeps it.
-if grep -q '^STUDIO_SERVER_IMAGE=' .env; then
-    sed -i "s#^STUDIO_SERVER_IMAGE=.*#STUDIO_SERVER_IMAGE=${IMAGE}#" .env
-else
-    echo "STUDIO_SERVER_IMAGE=${IMAGE}" >> .env
+# Read the digest of the pulled image. A tag can move, and the digest cannot
+# (SEC-15). The repository digest of the pulled image is the registry digest.
+repo="${IMAGE%:*}"
+digest="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${IMAGE}" \
+    | grep -F "${repo}@sha256:" | head -n1 | sed 's/^.*@//' || true)"
+if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo >&2 "error: the pulled image ${IMAGE} has no repository digest."
+    exit 1
 fi
-echo "Pinned in .env: STUDIO_SERVER_IMAGE=${IMAGE}"
+PINNED="${IMAGE}@${digest}"
+
+# Pin the image with its digest in .env, so that a plain
+# `docker compose up -d` keeps it.
+if grep -q '^STUDIO_SERVER_IMAGE=' .env; then
+    sed -i "s#^STUDIO_SERVER_IMAGE=.*#STUDIO_SERVER_IMAGE=${PINNED}#" .env
+else
+    echo "STUDIO_SERVER_IMAGE=${PINNED}" >> .env
+fi
+echo "Pinned in .env: STUDIO_SERVER_IMAGE=${PINNED}"
 
 docker compose up -d
 
 # Wait at most 60 seconds. The start takes several seconds (Argon2).
 expected_line="Music Index Studio server ${RELEASE}"
 actual_revision=""
+digest_found=0
 line_found=0
 for _ in $(seq 1 30); do
     id="$(docker compose ps -q studio | head -n1)"
     if [[ -n "${id}" ]]; then
         actual_revision="$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${id}" 2>/dev/null || true)"
+        # The container must run the image with the pinned digest.
+        image_id="$(docker inspect -f '{{ .Image }}' "${id}" 2>/dev/null || true)"
+        running="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${image_id}" 2>/dev/null || true)"
+        if grep -qxF "${repo}@${digest}" <<<"${running}"; then
+            digest_found=1
+        else
+            digest_found=0
+        fi
         # Read the whole log first. With pipefail, `docker logs | grep -q`
         # can fail when grep stops at the first match.
         log="$(docker logs "${id}" 2>&1 || true)"
@@ -166,13 +190,17 @@ for _ in $(seq 1 30); do
         else
             line_found=0
         fi
-        if [[ "${actual_revision}" == "${EXPECTED_REVISION}" && "${line_found}" -eq 1 ]]; then
+        if [[ "${actual_revision}" == "${EXPECTED_REVISION}" && "${line_found}" -eq 1 && "${digest_found}" -eq 1 ]]; then
             break
         fi
     fi
     sleep 2
 done
 
+if [[ "${digest_found}" -ne 1 ]]; then
+    echo >&2 "error: the running container does not use the image ${repo}@${digest}"
+    exit 1
+fi
 if [[ "${actual_revision}" != "${EXPECTED_REVISION}" ]]; then
     echo >&2 "error: the revision label of the container is '${actual_revision}', and v${RELEASE} is '${EXPECTED_REVISION}'"
     exit 1
@@ -183,6 +211,7 @@ if [[ "${line_found}" -ne 1 ]]; then
     echo >&2 "       Found (first log line): $(docker logs "${id}" 2>&1 | head -n1)"
     exit 1
 fi
+echo "   the container uses ${repo}@${digest}"
 echo "   revision ${actual_revision} is the commit of v${RELEASE}"
 echo "   log line found: ${expected_line}"
 REMOTE

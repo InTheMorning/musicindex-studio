@@ -1,7 +1,10 @@
 # Runtime image of studio-server (ADR 0066).
-# The build stage uses the Rust version of rust-toolchain.toml.
+# The build stage uses the Rust version of rust-toolchain.toml. The base image
+# and cargo-chef have fixed versions (SEC-15). The digest is the digest of the
+# image index of rust:1.99.1-alpine. Find it with
+# `docker buildx imagetools inspect rust:VERSION-alpine`.
 
-FROM rust:1.99.1-alpine AS chef
+FROM rust:1.99.1-alpine@sha256:7e9e2d068a107a2adafd19930011178d14a78326053cd4c3a9f7ad3fd049557d AS chef
 
 # These packages build the three C libraries: SQLite, OpenSSL and LAME.
 RUN apk add --no-cache \
@@ -10,7 +13,7 @@ RUN apk add --no-cache \
     linux-headers \
     perl \
     pkgconf \
- && cargo install cargo-chef --locked
+ && cargo install cargo-chef --version 0.1.78 --locked
 
 WORKDIR /build
 

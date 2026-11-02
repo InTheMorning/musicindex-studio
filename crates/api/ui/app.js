@@ -23,7 +23,8 @@ import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { PeoplePage, PersonPage, WhereUsedPage, WalletPage } from './peoplepages.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
-import { coverOf, coverNote } from './cover.js';
+import { coverOf } from './cover.js';
+import { heldMap, mediaSource } from './media.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
 import { RETRY_DELAYS, findUpload, missingParts, partCount, partRange, receivedBytes } from './upload.js';
@@ -153,6 +154,9 @@ async function exchange(url, headers, { method = 'GET', body, raw = false }) {
 }
 
 export function api(path, options = {}) {
+  // A change can add or remove a file that only Studio holds (ADR 0109
+  // item 5), so the next read of that list asks again.
+  if (options.method && options.method !== 'GET') { heldCache = null; heldImages.clear(); }
   return withUnlock(() => {
     const headers = serverMode ? { 'X-Studio-CSRF': csrfToken || '' } : { Authorization: `Bearer ${token}` };
     return exchange(`/api/v1${path}`, headers, options);
@@ -209,40 +213,99 @@ function authCall(path, options = {}) {
   return exchange(`/auth/v1${path}`, headers, { method: 'POST', ...options });
 }
 
-// ---- Images, through the local API (ADR 0025, ADR 0032 items 13 and 14) ----
-// The browser cannot put the access token on an <img src> request, so the
-// UI asks the API for each image and reads it as a data: address instead.
-// The UI loads no image from another server (ADR 0016).
+// ---- Images and audio from their hosts (ADR 0109) ----
+// The browser loads an image from its `https` address. A file that only
+// Studio holds is the exception: it has no host copy yet, so the UI reads it
+// through the API with the access token and shows it as a `data:` address.
+// `media.js` chooses the source.
 
-// Each image that the page already read, by its address, for the life of
-// the page.
-const imageResults = new Map();
+// The library files that Studio holds and that no host has, as a map from
+// their planned address to the file ID. `null` after a change, so that the
+// next read asks again.
+let heldCache = null;
 
-// The image at an address: `{ src, failed }`. `src` is a data: address, or
-// `null` while the image loads or when Studio could not read it.
+function loadHeld() {
+  if (!heldCache) {
+    const entry = { map: null, promise: null };
+    entry.promise = api('/media/held').then((answer) => {
+      entry.map = heldMap(answer);
+      return entry.map;
+    }, () => {
+      entry.map = new Map();
+      return entry.map;
+    });
+    heldCache = entry;
+  }
+  return heldCache;
+}
+
+// The map of the held files, when it is ready (ADR 0109 item 5).
+export function heldFilesNow() {
+  return loadHeld().promise;
+}
+
+// The map of the held files, or `null` while it loads. `key` makes the hook
+// read the map again when it changes, for example the address of a file.
+export function useHeldFiles(key) {
+  const [map, setMap] = useState(() => (heldCache && heldCache.map) || null);
+  useEffect(() => {
+    let current = true;
+    const entry = loadHeld();
+    if (entry.map) setMap(entry.map);
+    else entry.promise.then((loaded) => { if (current) setMap(loaded); });
+    return () => { current = false; };
+  }, [key]);
+  return map;
+}
+
+// Each held image that the page already read, by its file ID, for the life
+// of the page.
+const heldImages = new Map();
+
+// Check that the browser can load an image from its host, so that a broken
+// image shows the mark and not the broken-image icon.
+function probeImage(src) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = src;
+  });
+}
+
+// The image at an address: `{ src, failed }`. `src` is the `https` address,
+// a `data:` address of a held file, or `null` while the image loads, when the
+// address gives no source (an `http` address) or when the image does not
+// load.
 export function useImage(url) {
-  const [result, setResult] = useState(() => (url ? imageResults.get(url) || null : null));
+  const [result, setResult] = useState(null);
   useEffect(() => {
     // A new address has no result yet, even when the old address had one.
-    // With no reset here, the box would keep the image of the old address
-    // until the new one loads or fails.
-    if (!url) { setResult(null); return undefined; }
-    const cached = imageResults.get(url);
-    setResult(cached || null);
-    if (cached) return undefined;
+    setResult(null);
+    if (!url) return undefined;
     let current = true;
-    const finish = (found) => {
-      imageResults.set(url, found);
-      if (current) setResult(found);
-    };
-    // A failure keeps the error code, so a page can give the reason
-    // (ADR 0090 item 3).
-    api(`/images?url=${encodeURIComponent(url)}`, { raw: true }).then((blob) => {
-      const reader = new FileReader();
-      reader.onload = () => finish({ src: reader.result, failed: false });
-      reader.onerror = () => finish({ src: null, failed: true });
-      reader.readAsDataURL(blob);
-    }, (error) => finish({ src: null, failed: true, code: error && error.code }));
+    const finish = (found) => { if (current) setResult(found); };
+    loadHeld().promise.then((held) => {
+      const source = mediaSource(url, held);
+      if (source.kind === 'direct') {
+        probeImage(source.src).then((ok) => finish({ src: ok ? source.src : null, failed: !ok }));
+      } else if (source.kind === 'held') {
+        const cached = heldImages.get(source.file);
+        if (cached) { finish(cached); return; }
+        api(`/images?file=${source.file}`, { raw: true }).then((blob) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const found = { src: reader.result, failed: false };
+            heldImages.set(source.file, found);
+            finish(found);
+          };
+          reader.onerror = () => finish({ src: null, failed: true });
+          reader.readAsDataURL(blob);
+        }, () => finish({ src: null, failed: true }));
+      } else {
+        finish({ src: null, failed: false });
+      }
+    });
     return () => { current = false; };
   }, [url]);
   return result || { src: null, failed: false };
@@ -257,11 +320,11 @@ export function useImage(url) {
 // `onOpen`, the box is the content of a button with the name `label` (ADR
 // 0070 items 1 to 3).
 export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = false, onOpen, label }) {
-  const { src, failed, code } = useImage(url);
+  const { src, failed } = useImage(url);
   if (!url && !always) return null;
   const box = src
     ? html`<div class=${className}><img src=${src} alt="" /></div>`
-    : html`<div class=${className} title=${failed ? coverNote(code) || url : undefined}>
+    : html`<div class=${className} title=${failed ? url : undefined}>
       <span class="mark" style=${{ '--glow': glow }}></span>
     </div>`;
   if (!onOpen) return box;
@@ -288,14 +351,6 @@ function FeedArt({ art, glow, dot, className = 'panel-art' }) {
 function ArtCell({ url }) {
   const { src } = useImage(url);
   return src ? html`<img src=${src} alt="" />` : html`<span class="art-empty"></span>`;
-}
-
-// The reason why a cover does not show, below the head of a page
-// (ADR 0090 item 3). It shows nothing when the cover loads or has no reason.
-function CoverNote({ url }) {
-  const { code } = useImage(url);
-  const note = url ? coverNote(code) : null;
-  return note ? html`<p class="hint cover-note">${note}</p>` : null;
 }
 
 // ---- Small parts ----
@@ -1830,7 +1885,6 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
         <h1>${feed.title || 'Untitled feed'}</h1>
         <p class="summary">${feed.public_url || 'This feed has no public address yet.'}</p>
         <p class="hint">${otherFeedText(feed)}</p>
-        <${CoverNote} url=${feedCover(feed)} />
         <div class="actions">
           <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read Again'}</button>
@@ -1914,7 +1968,6 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           ${feed.public_url
             ? html`<${FeedAddress} url=${feed.public_url} />`
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
-          <${CoverNote} url=${draft.model && coverOf(draft.model)} />
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
           ${busy ? 'Reading…' : 'Read Again'}</button>`}

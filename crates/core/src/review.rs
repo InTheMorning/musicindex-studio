@@ -78,6 +78,11 @@ pub struct FieldChange {
     /// The entry of the change: the role of a credit or the name of a
     /// recipient.
     pub entry: Option<String>,
+    /// The name of the credit, for a change of an entry of a `persons`
+    /// list. It is the name in the draft, or in the live file when the
+    /// draft has no name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// The value in the live file.
     pub old: Option<Value>,
     /// The value in the draft.
@@ -583,7 +588,7 @@ fn diff_models(old: &Model, new: &Model) -> Vec<FieldGroup> {
                     Some(&old_obj),
                     Some(&new_obj),
                     "",
-                    None,
+                    Who::default(),
                     &mut changes,
                 );
                 let kind = if matches!(field.via, Via::List(..)) {
@@ -669,7 +674,7 @@ fn credit_groups(field: &Field, old: &Obj, new: &Obj, groups: &mut Vec<FieldGrou
             &news,
             "",
             field.key,
-            None,
+            Who::default(),
             &mut changes,
         );
         let name = match matched {
@@ -739,7 +744,7 @@ fn item_groups(field: &Field, kind: GroupKind, old: &Obj, new: &Obj, groups: &mu
             &news,
             "",
             field.key,
-            None,
+            Who::default(),
             &mut changes,
         );
         let (position, name) = match matched {
@@ -794,6 +799,20 @@ fn match_entries(olds: &[Obj], news: &[Obj]) -> Vec<Match> {
     matches
 }
 
+/// The role and the credit name that a change inherits from its entry.
+#[derive(Debug, Clone, Copy, Default)]
+struct Who<'a> {
+    entry: Option<&'a str>,
+    name: Option<&'a str>,
+}
+
+/// The name of a credit entry. Only a `persons` list has one.
+fn credit_name(list_key: &str, map: &Map<String, Value>) -> Option<String> {
+    (list_key == "persons")
+        .then(|| string_at(map, "name"))
+        .flatten()
+}
+
 /// The entry label of a list entry: the role of a credit or the name of a
 /// recipient.
 fn entry_label(list_key: &str, map: &Map<String, Value>) -> Option<String> {
@@ -814,26 +833,26 @@ fn match_changes(
     news: &[Obj],
     path: &str,
     list_key: &str,
-    inherited: Option<&str>,
+    inherited: Who,
     out: &mut Vec<FieldChange>,
 ) {
     let label_of = |obj: &Obj| entry_label(list_key, obj.map);
+    let name_of = |obj: &Obj| credit_name(list_key, obj.map);
     match *matched {
         Match::Pair(i, j) => {
             let label = label_of(&news[j]).or_else(|| label_of(&olds[i]));
-            walk_table(
-                sub,
-                Some(&olds[i]),
-                Some(&news[j]),
-                path,
-                label.as_deref().or(inherited),
-                out,
-            );
+            let name = name_of(&news[j]).or_else(|| name_of(&olds[i]));
+            let who = Who {
+                entry: label.as_deref().or(inherited.entry),
+                name: name.as_deref().or(inherited.name),
+            };
+            walk_table(sub, Some(&olds[i]), Some(&news[j]), path, who, out);
         }
         Match::Added(j) => out.push(FieldChange {
             op: ChangeOp::Added,
             path: path.to_owned(),
-            entry: label_of(&news[j]).or_else(|| inherited.map(str::to_owned)),
+            entry: label_of(&news[j]).or_else(|| inherited.entry.map(str::to_owned)),
+            name: name_of(&news[j]).or_else(|| inherited.name.map(str::to_owned)),
             old: None,
             new: Some(news[j].whole()),
             old_at: None,
@@ -842,7 +861,8 @@ fn match_changes(
         Match::Removed(i) => out.push(FieldChange {
             op: ChangeOp::Removed,
             path: path.to_owned(),
-            entry: label_of(&olds[i]).or_else(|| inherited.map(str::to_owned)),
+            entry: label_of(&olds[i]).or_else(|| inherited.entry.map(str::to_owned)),
+            name: name_of(&olds[i]).or_else(|| inherited.name.map(str::to_owned)),
             old: Some(olds[i].whole()),
             new: None,
             old_at: olds[i].cur.as_ref().map(|cur| cur.place(true)),
@@ -864,11 +884,11 @@ fn walk_table(
     old: Option<&Obj>,
     new: Option<&Obj>,
     path: &str,
-    entry: Option<&str>,
+    who: Who,
     out: &mut Vec<FieldChange>,
 ) {
     for field in table {
-        walk_field(field, old, new, &join(path, field.key), entry, out);
+        walk_field(field, old, new, &join(path, field.key), who, out);
     }
 }
 
@@ -883,7 +903,7 @@ fn walk_field(
     old: Option<&Obj>,
     new: Option<&Obj>,
     path: &str,
-    entry: Option<&str>,
+    who: Who,
     out: &mut Vec<FieldChange>,
 ) {
     let (old_value, new_value) = (value_at(old, field.key), value_at(new, field.key));
@@ -893,7 +913,8 @@ fn walk_field(
     let leaf = |old_at: Option<Place>, new_at: Option<Place>| FieldChange {
         op: ChangeOp::Changed,
         path: path.to_owned(),
-        entry: entry.map(str::to_owned),
+        entry: who.entry.map(str::to_owned),
+        name: who.name.map(str::to_owned),
         old: old_value.cloned(),
         new: new_value.cloned(),
         old_at,
@@ -921,7 +942,7 @@ fn walk_field(
                 map,
                 cur: new_child,
             });
-            walk_pair(sub, old_sub.as_ref(), new_sub.as_ref(), path, entry, out);
+            walk_pair(sub, old_sub.as_ref(), new_sub.as_ref(), path, who, out);
         }
         Via::Within(sub) => {
             let old_sub = old_value.and_then(Value::as_object).map(|map| Obj {
@@ -932,13 +953,13 @@ fn walk_field(
                 map,
                 cur: new.and_then(|o| o.cur.clone()),
             });
-            walk_pair(sub, old_sub.as_ref(), new_sub.as_ref(), path, entry, out);
+            walk_pair(sub, old_sub.as_ref(), new_sub.as_ref(), path, who, out);
         }
         Via::List(ns, local, sub) => {
             let olds = entries(old, field.key, *ns, local);
             let news = entries(new, field.key, *ns, local);
             for matched in match_entries(&olds, &news) {
-                match_changes(&matched, sub, &olds, &news, path, field.key, entry, out);
+                match_changes(&matched, sub, &olds, &news, path, field.key, who, out);
             }
         }
     }
@@ -950,15 +971,16 @@ fn walk_pair(
     old: Option<&Obj>,
     new: Option<&Obj>,
     path: &str,
-    entry: Option<&str>,
+    who: Who,
     out: &mut Vec<FieldChange>,
 ) {
     match (old, new) {
-        (Some(_), Some(_)) => walk_table(sub, old, new, path, entry, out),
+        (Some(_), Some(_)) => walk_table(sub, old, new, path, who, out),
         (None, Some(new)) => out.push(FieldChange {
             op: ChangeOp::Added,
             path: path.to_owned(),
-            entry: entry.map(str::to_owned),
+            entry: who.entry.map(str::to_owned),
+            name: who.name.map(str::to_owned),
             old: None,
             new: Some(new.whole()),
             old_at: None,
@@ -967,7 +989,8 @@ fn walk_pair(
         (Some(old), None) => out.push(FieldChange {
             op: ChangeOp::Removed,
             path: path.to_owned(),
-            entry: entry.map(str::to_owned),
+            entry: who.entry.map(str::to_owned),
+            name: who.name.map(str::to_owned),
             old: Some(old.whole()),
             new: None,
             old_at: old.cur.as_ref().map(|cur| cur.place(true)),
@@ -1332,6 +1355,51 @@ mod tests {
         assert_eq!(review.fields[0].name.as_deref(), Some("title"));
         assert_eq!(review.fields[0].changes[0].path, "");
         assert_eq!(review.uncovered, 1);
+    }
+
+    fn track_with_credits(npub: bool) -> String {
+        let key = if npub { " npub=\"npub1abc\"" } else { "" };
+        feed(&format!(
+            "<item>\n<title>Song</title>\n<guid>a</guid>\n\
+             <podcast:person role=\"vocalist\"{key}>Ann</podcast:person>\n\
+             <podcast:person role=\"drummer\"{key}>Bob</podcast:person>\n</item>\n"
+        ))
+    }
+
+    #[test]
+    fn a_track_credit_change_has_the_role_and_the_name_of_the_credit() {
+        let review = run(&track_with_credits(false), &track_with_credits(true));
+        assert_eq!(review.fields.len(), 1, "{:?}", review.fields);
+        let group = &review.fields[0];
+        assert_eq!(group.kind, GroupKind::Track);
+        assert_eq!(group.changes.len(), 2);
+        assert_eq!(group.changes[0].entry.as_deref(), Some("vocalist"));
+        assert_eq!(group.changes[0].name.as_deref(), Some("Ann"));
+        assert_eq!(group.changes[1].entry.as_deref(), Some("drummer"));
+        assert_eq!(group.changes[1].name.as_deref(), Some("Bob"));
+    }
+
+    #[test]
+    fn a_channel_credit_change_has_a_name_and_a_recipient_change_has_none() {
+        let credits = run(&six_credits(false), &six_credits(true));
+        assert!(
+            credits.fields[0]
+                .changes
+                .iter()
+                .all(|c| c.name.as_deref() == Some("HeyCitizen"))
+        );
+        let value = |address: &str| {
+            feed(&format!(
+                "<podcast:value type=\"lightning\" method=\"keysend\">\n\
+                 <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"{address}\" split=\"100\"/>\n\
+                 </podcast:value>\n"
+            ))
+        };
+        let review = run(&value("aaa"), &value("bbb"));
+        let changes: Vec<_> = review.fields.iter().flat_map(|g| &g.changes).collect();
+        assert!(!changes.is_empty(), "{:?}", review.fields);
+        assert!(changes.iter().all(|c| c.name.is_none()), "{changes:?}");
+        assert_eq!(changes[0].entry.as_deref(), Some("Ann"));
     }
 
     fn two_items(order: [&str; 2], second_title: &str) -> String {

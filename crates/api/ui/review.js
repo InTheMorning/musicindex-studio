@@ -212,8 +212,9 @@ export function changeRow(group, change, profiles) {
   }
   if (lead) text = `${lead}: ${text}`;
   let warning = null;
-  if (lastKey(change.path) === 'npub' && group.kind === 'credits' && typeof change.new === 'string') {
-    warning = keyWarning(change.new, profiles, group.name);
+  if (lastKey(change.path) === 'npub' && typeof change.new === 'string') {
+    const who = change.name || (group.kind === 'credits' ? group.name : null);
+    if (who) warning = keyWarning(change.new, profiles, who);
   }
   return { label, text, warning };
 }

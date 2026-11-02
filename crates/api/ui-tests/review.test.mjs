@@ -104,6 +104,14 @@ test('a key line shows the profile, the short key or the warning', () => {
   assert.equal(changeRow({ ...group, name: 'City Radio' }, credit('musician'), profiles).warning, null);
 });
 
+test('a track credit key shows the warning from the name of the credit', () => {
+  const track = { kind: 'track', name: 'Song', position: 1 };
+  const change = { ...credit('musician'), path: 'persons.npub', name: 'HeyCitizen' };
+  assert.equal(changeRow(track, change, profiles).warning, 'The profile name is not "HeyCitizen". Check this key.');
+  assert.equal(changeRow(track, change, null).warning, null);
+  assert.equal(changeRow(track, { ...change, name: undefined }, profiles).warning, null);
+});
+
 test('the guard row counts the uncovered changes', () => {
   assert.equal(guardRow(0), null);
   assert.equal(guardRow(1).title, '1 more change in the XML');

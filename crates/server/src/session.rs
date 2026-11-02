@@ -475,7 +475,7 @@ async fn open_user(
         .map_err(IntoResponse::into_response)
 }
 
-/// The route `/media/audio`: find the session, and send the request to
+/// The routes `/media/audio` and `/media/download`: find the session, and send the request to
 /// the router of the user. A ticket belongs to the workspace that made it,
 /// so the router of a different user does not know the ticket
 /// (ADR 0062 item 29). The route needs no CSRF header, because it reads.
@@ -573,14 +573,15 @@ fn needs_derivation(request: &Request) -> bool {
 }
 
 /// The fallback of the router: `/api/` goes to the `/api/` layer, `/app/v1/`
-/// goes to the layer of the apps, `/media/audio` goes to the media route,
+/// goes to the layer of the apps, `/media/audio` and `/media/download` go to
+/// the media route,
 /// and each other path gives 404.
 pub async fn dispatch(State(state): State<Shared>, request: Request) -> Response {
     if request.uri().path().starts_with("/api/") {
         api(State(state), request).await
     } else if request.uri().path().starts_with("/app/v1/") {
         crate::apps::app(State(state), request).await
-    } else if request.uri().path() == "/media/audio" {
+    } else if matches!(request.uri().path(), "/media/audio" | "/media/download") {
         media(State(state), request).await
     } else {
         failure(StatusCode::NOT_FOUND, "not_found", "no such route")

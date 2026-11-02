@@ -88,10 +88,27 @@ pub(crate) fn to_json(value: impl serde::Serialize) -> ApiResult {
         .map_err(|e| ApiError::internal(e.to_string()))
 }
 
+/// Give 403 `not_on_server` when the workspace holds no assets: the
+/// downloads into the library and the folder scan do not exist there
+/// (ADR 0105 item 14).
+pub(crate) fn require_held_assets(w: &Workspace) -> Result<(), ApiError> {
+    if w.holds_assets() {
+        Ok(())
+    } else {
+        Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "not_on_server",
+            "This server keeps no audio and no images. Use Studio on your computer to keep a library.",
+        ))
+    }
+}
+
 pub(crate) async fn status(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         Ok(Json(json!({
             "version": env!("CARGO_PKG_VERSION"),
+            // ADR 0105 item 1: false on a server with `--hold-assets off`.
+            "hold_assets": w.holds_assets(),
             "vault": w.vault_state(),
             "connectors": w.collection.connectors()?.len(),
             "feeds": w.collection.feeds()?.len(),
@@ -3201,6 +3218,24 @@ pub(crate) async fn connector_picker(
 /// operation of its host and path. Each library file lists its pending
 /// copy operations. The result also gives each host file of the folder
 /// that is not a copy of a library file, with the same two marks.
+/// The time that a pending file expires, or `None` for each other file
+/// (ADR 0105 item 8). A pending file is a local asset that came in after the
+/// mode `off` began and that no host has. It expires 7 days after its
+/// import. This is a display value of the row.
+fn pending_expiry(
+    w: &Workspace,
+    file: &LibraryFile,
+    off_since: Option<i64>,
+    no_copy: bool,
+) -> Option<i64> {
+    (w.collection.asset_rules().is_some()
+        && file.local
+        && studio_core::assets::is_asset(&file.media_type)
+        && no_copy
+        && off_since.is_some_and(|since| file.imported_at >= since))
+    .then(|| file.imported_at + studio_core::assets::PENDING_SECONDS)
+}
+
 pub(crate) async fn list_release_files(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -3215,6 +3250,7 @@ pub(crate) async fn list_release_files(
         let addresses = feed_address_list(compared.as_ref());
         let lengths = feed_lengths(compared.as_ref());
 
+        let off_since = w.collection.assets_off_since()?;
         let mut files = Vec::new();
         let mut remote_count = 0_u64;
         let mut remote_bytes = 0_u64;
@@ -3257,12 +3293,19 @@ pub(crate) async fn list_release_files(
                     })
                 })
                 .collect();
+            // ADR 0105 item 8: a pending file is a local asset that came in
+            // after the mode `off` began and that no host has. It expires 7
+            // days after its import.
+            let expires_at = pending_expiry(w, file, off_since, copies.is_empty());
             files.push(json!({
                 "id": file.id.0,
                 "path": file.path,
                 "size": file.size,
                 "media_type": file.media_type,
                 "local": file.local,
+                "imported_at": file.imported_at,
+                "removed_at": file.removed_at,
+                "expires_at": expires_at,
                 "connector_id": planned.as_ref().map(|p| p.connector_id.0),
                 "source_url": file.source_url,
                 "length_in_feed": file
@@ -3863,6 +3906,7 @@ fn download_json(
 /// before a restart are in the list too.
 pub(crate) async fn list_downloads(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
+        require_held_assets(w)?;
         let id = FeedId(id);
         w.collection.feed(id)?;
         let queue = Arc::clone(&w.downloads);
@@ -3928,6 +3972,7 @@ pub(crate) async fn start_downloads(
     Json(body): Json<StartDownloads>,
 ) -> ApiResult {
     let (queue, queued) = blocking(shared, move |w| {
+        require_held_assets(w)?;
         let id = FeedId(id);
         w.collection.feed(id)?;
         let hosts = w.hosts()?;
@@ -3977,6 +4022,7 @@ pub(crate) async fn stop_download(
     Path((id, file)): Path<(i64, i64)>,
 ) -> Result<StatusCode, ApiError> {
     let queue = blocking(shared, move |w| {
+        require_held_assets(w)?;
         let file = feed_library_file(&w.collection, FeedId(id), file)?;
         w.collection.remove_download(file.id)?;
         Ok((Arc::clone(&w.downloads), file.id))
@@ -4017,6 +4063,7 @@ fn difference_json(w: &Workspace, difference: &folder_scan::Difference) -> Resul
 /// not change (ADR 0038 items 13 to 15).
 pub(crate) async fn scan_library(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
+        require_held_assets(w)?;
         let library = w.library()?;
         let found = folder_scan::scan(&w.collection, &library)?;
         let differences = found
@@ -4100,6 +4147,7 @@ pub(crate) async fn library_changes(
     Json(body): Json<LibraryChange>,
 ) -> ApiResult {
     blocking(shared, move |w| {
+        require_held_assets(w)?;
         let id = FeedId(id);
         w.collection.feed(id)?;
         let library = w.library()?;
@@ -4338,6 +4386,7 @@ pub(crate) async fn import_file(
     temp_path: PathBuf,
     file_name: String,
     replace: bool,
+    restore: Option<String>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     // The guard removes the temporary file at the end of this function,
     // also after an error of the import or the collection.
@@ -4375,9 +4424,23 @@ pub(crate) async fn import_file(
 
     blocking(shared, move |w| {
         let _guard = guard;
-        import_upload(w, FeedId(id), imported, replace)
+        import_upload(w, FeedId(id), imported, replace, restore.as_deref())
     })
     .await
+}
+
+/// ADR 0105 item 10: "Add the File Again" must give the removed file.
+fn check_restore(
+    w: &Workspace,
+    id: FeedId,
+    path: &str,
+    imported: &media::Imported,
+) -> Result<(), ApiError> {
+    let mut files = vec![(imported.file_name.as_str(), imported.path.as_path())];
+    if let Some(lossless) = imported.lossless.as_ref() {
+        files.push((lossless.file_name.as_str(), lossless.path.as_path()));
+    }
+    Ok(pipeline::check_restore(&w.collection, id, path, &files)?)
 }
 
 /// The blocking steps of an upload, with the workspace locked: the public
@@ -4385,11 +4448,16 @@ pub(crate) async fn import_file(
 /// into the library (ADR 0026, ADR 0032 items 1 to 5 and 10, ADR 0033
 /// items 1 to 7, ADR 0034, ADR 0036 items 5, 9 and 10). With `replace`,
 /// a different file at the same name gets the hash name (ADR 0040 item 3).
+#[expect(
+    clippy::too_many_lines,
+    reason = "the import of the main file and the lossless file is one sequence"
+)]
 fn import_upload(
     w: &mut Workspace,
     id: FeedId,
     imported: media::Imported,
     replace: bool,
+    restore: Option<&str>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let import = if replace {
         pipeline::import_replacement_into_library
@@ -4414,6 +4482,9 @@ fn import_upload(
     let library = w.library()?;
     give_release_folder(w, id, &row, feed_path)?;
 
+    if let Some(path) = restore {
+        check_restore(w, id, path, &imported)?;
+    }
     let main_before = library_file_at(w, id, &imported.file_name)?;
     let main = import(
         &w.collection,

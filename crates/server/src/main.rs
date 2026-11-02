@@ -12,7 +12,9 @@
 //!   (more than one time, default `wss://relay.nsec.app`) are optional.
 //!   Limit options: `--session-idle-days` (default 7), `--session-max-days`
 //!   (default 30), `--vault-idle-minutes` (default 10), `--storage-limit-gib`
-//!   (default 10) and `--argon2-concurrency` (default 2).
+//!   (default 10) and `--argon2-concurrency` (default 2). The option
+//!   `--hold-assets off|on` (default `off`) sets whether the server keeps
+//!   audio files and images (ADR 0105).
 //! - `invite --data-dir PATH`: print one new single-use invite code.
 
 // The handlers give an axum response as the error. The response is large by design.
@@ -116,6 +118,7 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         hub: options.hub.clone(),
         rules,
         storage_limit: options.storage_limit,
+        hold_assets: options.hold_assets,
         nip46_relays: options.nip46_relays.clone(),
         accounts: Arc::clone(&accounts),
     });

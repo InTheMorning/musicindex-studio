@@ -38,6 +38,8 @@ pub struct UserSettings {
     pub rules: PublicRules,
     /// The most bytes in the folder of a user (ADR 0055 item 21).
     pub storage_limit: u64,
+    /// False for `--hold-assets off` (ADR 0105 item 1).
+    pub hold_assets: bool,
     /// The relays for a `nostrconnect://` address (ADR 0056 item 13).
     pub nip46_relays: Vec<String>,
     /// The database that keeps the index of the app tokens (ADR 0058
@@ -210,7 +212,8 @@ fn open_user(
             storage_limit: settings.storage_limit,
             folder: path.to_path_buf(),
             library_root: path.join("library"),
-        });
+            hold_assets: settings.hold_assets,
+        })?;
     #[cfg(test)]
     if pass_all {
         workspace = workspace.with_address_check(Arc::new(PassAll));

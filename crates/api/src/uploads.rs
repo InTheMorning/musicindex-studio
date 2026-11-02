@@ -108,9 +108,36 @@ async fn check_room(rules: Option<ServerRules>, extra: u64) -> Result<(), ApiErr
 pub(crate) struct StartUpload {
     name: String,
     size: u64,
-    /// True for the new audio file of a track (ADR 0040 item 3).
+    /// `true` for the new audio file of a track (ADR 0040 item 3). The
+    /// path of a removed pending file for "Add the File Again" (ADR 0105
+    /// item 10).
     #[serde(default)]
-    replace: bool,
+    replace: Replace,
+}
+
+/// The `replace` field of the start of an upload.
+#[derive(Deserialize, Default)]
+#[serde(untagged)]
+enum Replace {
+    /// No replacement.
+    #[default]
+    No,
+    /// `true` or `false`.
+    Flag(bool),
+    /// The path of a removed pending file.
+    Path(String),
+}
+
+impl Replace {
+    /// The text that the upload row keeps. `"true"` is a replacement, and
+    /// any other text is the path of a file to add again.
+    fn kept(&self) -> Option<String> {
+        match self {
+            Self::Flag(true) => Some("true".to_owned()),
+            Self::Path(path) => Some(path.clone()),
+            Self::No | Self::Flag(false) => None,
+        }
+    }
 }
 
 /// `POST /feeds/{id}/uploads`: start an upload (ADR 0059 item 1).
@@ -138,12 +165,28 @@ pub(crate) async fn start_upload(
         feed_id: FeedId(id),
         name,
         size: body.size,
-        replace: body.replace.then(|| "true".to_owned()),
+        replace: body.replace.kept(),
         received: Vec::new(),
         updated_at: crate::announcer::now(),
     };
+    let restore = row.replace.clone().filter(|text| text != "true");
     blocking(Arc::clone(&shared), move |w| {
         w.collection.feed(FeedId(id))?;
+        // ADR 0105 item 10: the file to add again must be a removed file.
+        if let Some(path) = restore {
+            let removed = w
+                .collection
+                .library_files(FeedId(id))?
+                .iter()
+                .any(|file| file.path == path && !file.local && file.removed_at.is_some());
+            if !removed {
+                return Err(ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    "not_removed",
+                    format!("{path} is not a file that Studio removed"),
+                ));
+            }
+        }
         Ok(())
     })
     .await?;
@@ -296,6 +339,7 @@ pub(crate) async fn finish_upload(
         final_path,
         row.name,
         row.replace.is_some(),
+        row.replace.filter(|text| text != "true"),
     )
     .await
 }
@@ -328,20 +372,68 @@ pub(crate) fn clean_expired(w: &Workspace, now: u64) -> Result<usize, ApiError> 
     Ok(rows.len())
 }
 
+/// Remove the bytes of each pending file that is older than 7 days at
+/// `now` (ADR 0105 items 8, 10 and 11). This is the hourly step. It reads
+/// the collection and the library folder only: it makes no connector and
+/// does not touch the vault. It does nothing when the workspace holds
+/// assets, or has no library folder.
+pub(crate) fn sweep_pending(w: &Workspace, now: i64) -> Result<(), ApiError> {
+    if w.holds_assets() {
+        return Ok(());
+    }
+    let Ok(library) = w.library() else {
+        return Ok(());
+    };
+    studio_core::assets::expire_pending(&w.collection, &library, now)
+        .map(|_| ())
+        .map_err(|e| ApiError::internal(e.to_string()))
+}
+
+/// Remove the bytes of each asset that a host has with the same SHA-256
+/// (ADR 0105 items 5 and 13). This is the step at the start. A host that
+/// needs a secret counts as locked, so the step does not read or touch the
+/// vault (ADR 0055 item 16). A file whose host gives no answer stays on the
+/// server. The function does nothing when the workspace holds assets, or
+/// has no library folder.
+pub(crate) fn sweep_hosted(w: &Workspace) -> Result<(), ApiError> {
+    if w.holds_assets() {
+        return Ok(());
+    }
+    let Ok(library) = w.library() else {
+        return Ok(());
+    };
+    let hosts = w.hosts_without_secrets()?;
+    let find = |file: &studio_core::collection::LibraryFile| {
+        Ok(studio_core::assets::find_copy(&w.collection, &hosts, file).unwrap_or(None))
+    };
+    studio_core::assets::remove_hosted(&w.collection, &library, None, &find)
+        .map(|_| ())
+        .map_err(|e| ApiError::internal(e.to_string()))
+}
+
 /// Start the thread that cleans expired uploads at the start and each
 /// hour. The thread holds a weak link, and it ends when the workspace is
 /// gone.
 pub(crate) fn spawn_cleaner(shared: &Arc<Mutex<Workspace>>) {
     let weak = Arc::downgrade(shared);
     std::thread::spawn(move || {
+        let mut first = true;
         loop {
             let Some(shared) = weak.upgrade() else {
                 return;
             };
             if let Ok(w) = lock_workspace(&shared) {
-                let _ = clean_expired(&w, crate::announcer::now());
+                let now = crate::announcer::now();
+                let _ = clean_expired(&w, now);
+                // The two steps are independent: an error in one does not
+                // skip the other. The host check runs at the start only.
+                if first {
+                    let _ = sweep_hosted(&w);
+                }
+                let _ = sweep_pending(&w, i64::try_from(now).unwrap_or(i64::MAX));
             }
             drop(shared);
+            first = false;
             std::thread::sleep(CLEAN_INTERVAL);
         }
     });

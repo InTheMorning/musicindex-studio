@@ -18,7 +18,9 @@ use axum::response::{IntoResponse, Response};
 use futures_util::stream::unfold;
 use serde::Deserialize;
 use serde_json::json;
+use studio_core::collection::LibraryFileId;
 use studio_core::feed::is_web_address;
+use studio_core::inventory;
 use studio_core::web::Web;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
@@ -33,13 +35,22 @@ const TICKET_LIFETIME: Duration = Duration::from_hours(1);
 /// The size of one block that the route sends.
 const BLOCK_BYTES: usize = 64 * 1024;
 
-/// The media tickets of one workspace. A ticket holds one address and its
+/// What a ticket opens: an address for the audio player, or a library file
+/// for the download to a device. A ticket for a file holds the ID of the
+/// file and no address (ADR 0105 item 15).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Target {
+    Address(String),
+    File(i64),
+}
+
+/// The media tickets of one workspace. A ticket holds one target and its
 /// end time. Each user has one workspace, so a ticket belongs to one user
 /// (ADR 0062 item 29). Studio keeps the tickets in memory only.
 #[derive(Debug)]
 pub(crate) struct Tickets {
     lifetime: Duration,
-    tickets: HashMap<String, (String, Instant)>,
+    tickets: HashMap<String, (Target, Instant)>,
 }
 
 impl Default for Tickets {
@@ -60,45 +71,91 @@ impl Tickets {
     /// Make a ticket for `url`. The call removes each ticket that
     /// expired.
     pub(crate) fn issue(&mut self, url: &str, now: Instant) -> Result<String, ApiError> {
+        self.insert(Target::Address(url.to_owned()), now)
+    }
+
+    /// Make a ticket for the download of one library file (ADR 0105
+    /// item 15). The ticket holds the file ID.
+    pub(crate) fn issue_file(&mut self, file: i64, now: Instant) -> Result<String, ApiError> {
+        self.insert(Target::File(file), now)
+    }
+
+    fn insert(&mut self, target: Target, now: Instant) -> Result<String, ApiError> {
         self.tickets.retain(|_, (_, expires)| now < *expires);
         let ticket = random_hex::<16>()?;
         self.tickets
-            .insert(ticket.clone(), (url.to_owned(), now + self.lifetime));
+            .insert(ticket.clone(), (target, now + self.lifetime));
         Ok(ticket)
     }
 
     /// The address of a ticket that exists and has not expired.
     pub(crate) fn address(&self, ticket: &str, now: Instant) -> Option<&str> {
-        self.tickets
-            .get(ticket)
-            .filter(|(_, expires)| now < *expires)
-            .map(|(url, _)| url.as_str())
+        match self.tickets.get(ticket) {
+            Some((Target::Address(url), expires)) if now < *expires => Some(url.as_str()),
+            _ => None,
+        }
+    }
+
+    /// The library file of a ticket that exists and has not expired.
+    pub(crate) fn file(&self, ticket: &str, now: Instant) -> Option<i64> {
+        match self.tickets.get(ticket) {
+            Some((Target::File(id), expires)) if now < *expires => Some(*id),
+            _ => None,
+        }
     }
 }
 
 #[derive(Deserialize)]
 pub(crate) struct TicketRequest {
-    url: String,
+    /// The address for the audio player.
+    #[serde(default)]
+    url: Option<String>,
+    /// The ID of a library file, for the download to a device (ADR 0105
+    /// item 15).
+    #[serde(default)]
+    file: Option<i64>,
 }
 
-/// Make a media ticket for one address. The address must be correct by
-/// ADR 0023 item 2. The route uses the usual access of the API.
+/// Make a media ticket for one address, or for one library file. The
+/// address must be correct by ADR 0023 item 2. The route uses the usual
+/// access of the API.
 pub(crate) async fn make_ticket(
     State(shared): State<Shared>,
     Json(body): Json<TicketRequest>,
 ) -> ApiResult {
-    if !is_web_address(&body.url) {
+    let url = match (body.url, body.file) {
+        (Some(url), None) => url,
+        (None, Some(file)) => return make_file_ticket(shared, file).await,
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_ticket_request",
+                "give either url or file",
+            ));
+        }
+    };
+    if !is_web_address(&url) {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_address",
-            format!("{} is not a correct web address", body.url),
+            format!("{url} is not a correct web address"),
         ));
     }
     blocking(shared, move |w| {
         // A ticket holds the address with no OP3 prefix, so that the player
         // does not make a download for OP3 (ADR 0076 item 3).
-        let plain = studio_core::media::plain_address(&body.url);
+        let plain = studio_core::media::plain_address(&url);
         let ticket = w.tickets.issue(&plain, Instant::now())?;
+        Ok(Json(json!({ "ticket": ticket })))
+    })
+    .await
+}
+
+/// Make a ticket for the download of a library file (ADR 0105 item 15).
+async fn make_file_ticket(shared: Shared, file: i64) -> ApiResult {
+    blocking(shared, move |w| {
+        let file = w.collection.library_file(LibraryFileId(file))?;
+        let ticket = w.tickets.issue_file(file.id.0, Instant::now())?;
         Ok(Json(json!({ "ticket": ticket })))
     })
     .await
@@ -352,5 +409,114 @@ async fn from_host(url: String, web: Web, ask: Ask) -> Result<Response, ApiError
     }
     set_header(headers, header::ACCEPT_RANGES, "bytes");
     set_header(headers, header::CACHE_CONTROL, "no-store");
+    Ok(response)
+}
+
+/// Where the bytes of a file download are.
+enum Download {
+    /// A file of the release folder.
+    Folder(PathBuf),
+    /// The bytes of the copy on a host, read through its connector.
+    Bytes(Vec<u8>),
+}
+
+/// The value of `Content-Disposition` for a file name: `attachment` with a
+/// quoted ASCII name and the full name in UTF-8 (RFC 6266).
+fn attachment(name: &str) -> String {
+    use std::fmt::Write as _;
+    let plain: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_graphic() || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .map(|c| if matches!(c, '"' | '\\') { '_' } else { c })
+        .collect();
+    let mut encoded = String::new();
+    for byte in name.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+            encoded.push(char::from(byte));
+        } else {
+            let _ = write!(encoded, "%{byte:02X}");
+        }
+    }
+    format!("attachment; filename=\"{plain}\"; filename*=UTF-8''{encoded}")
+}
+
+/// Send the bytes of one library file for a file ticket, with
+/// `Content-Disposition: attachment` (ADR 0105 item 15). The route reads the
+/// local bytes, or the copy on a host through its connector. It writes no
+/// file. The route is outside the access layer: the ticket is the access,
+/// and a ticket belongs to the workspace of one user.
+pub(crate) async fn download(
+    State(shared): State<Shared>,
+    Query(query): Query<AudioQuery>,
+) -> Result<Response, ApiError> {
+    // A connector cannot move between threads, so one blocking task reads
+    // the host. It drops the workspace lock before the read.
+    let (file, source) = tokio::task::spawn_blocking(move || {
+        let w = lock_workspace(&shared)?;
+        let id = w
+            .tickets
+            .file(&query.ticket, Instant::now())
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::FORBIDDEN,
+                    "ticket_not_valid",
+                    "the media ticket is unknown or expired: ask for a new ticket",
+                )
+            })?;
+        let file = w.collection.library_file(LibraryFileId(id))?;
+        if file.local {
+            let folder = w.collection.feed(file.feed_id)?.folder.ok_or_else(|| {
+                ApiError::internal(format!("feed {} has no release folder", file.feed_id.0))
+            })?;
+            let path = w.library()?.path(&folder, &file.path);
+            return Ok::<_, ApiError>((file, Download::Folder(path)));
+        }
+        let missing = |file: &studio_core::collection::LibraryFile| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                "file_missing",
+                format!(
+                    "{} is not on this server and no file host has a copy",
+                    file.path
+                ),
+            )
+        };
+        let hosts = w.hosts()?;
+        let copy = inventory::copies(&w.collection, &hosts, &file)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| missing(&file))?;
+        drop(w);
+        let read = hosts
+            .get(copy.connector_id)?
+            .read(&copy.path)?
+            .ok_or_else(|| missing(&file))?;
+        Ok((file, Download::Bytes(read.bytes)))
+    })
+    .await
+    .map_err(|e| ApiError::internal(e.to_string()))??;
+    let mut response = match source {
+        Download::Folder(path) => from_folder(&path, &file.media_type, Ask::Whole).await?,
+        Download::Bytes(bytes) => {
+            let length = bytes.len().to_string();
+            let mut response = Response::new(Body::from(bytes));
+            let headers = response.headers_mut();
+            set_header(headers, header::CONTENT_TYPE, &file.media_type);
+            set_header(headers, header::CONTENT_LENGTH, &length);
+            set_header(headers, header::CACHE_CONTROL, "no-store");
+            response
+        }
+    };
+    set_header(
+        response.headers_mut(),
+        header::CONTENT_DISPOSITION,
+        &attachment(&file.path),
+    );
     Ok(response)
 }

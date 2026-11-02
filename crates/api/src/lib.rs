@@ -325,6 +325,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
     // (ADR 0062 item 29).
     let audio = Router::new()
         .route("/media/audio", get(media::audio))
+        .route("/media/download", get(media::download))
         .with_state(Arc::clone(&shared));
     let router = Router::new()
         .nest("/api/v1", api)

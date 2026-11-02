@@ -13,6 +13,8 @@ services:
       - 0.0.0.0:8080
       - --public-origin
       - ${STUDIO_PUBLIC_ORIGIN}
+      - --hold-assets
+      - ${STUDIO_HOLD_ASSETS:-off}
       - --argon2-concurrency
       - ${STUDIO_ARGON2_CONCURRENCY:-2}
       - --client-address-header

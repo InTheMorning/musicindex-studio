@@ -101,6 +101,10 @@ pub struct ServeOptions {
     pub vault_idle: Duration,
     /// The most bytes in the folder of a user (ADR 0055 item 21).
     pub storage_limit: u64,
+    /// False for `--hold-assets off`, the default: the server keeps an
+    /// audio file or an image only until the write that sends it (ADR 0105
+    /// item 1).
+    pub hold_assets: bool,
     /// The most Argon2id derivations at the same time (ADR 0055 item 22).
     pub argon2_concurrency: usize,
     /// How long a request waits for a derivation before it gets 503.
@@ -139,6 +143,15 @@ fn number(name: &str, text: &str) -> Result<u64, String> {
         .ok_or_else(|| format!("{name} needs a whole number from 1 to 1000000"))
 }
 
+/// Read `on` or `off` as true or false (ADR 0105 item 1).
+fn on_or_off(text: &str) -> Result<bool, String> {
+    match text {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err("--hold-assets needs on or off".to_owned()),
+    }
+}
+
 /// Read the command line, without the program name.
 ///
 /// # Errors
@@ -160,6 +173,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
     let mut vault_idle_minutes = 10;
     let mut storage_limit_gib = 10;
     let mut argon2_concurrency = 2;
+    let mut hold_assets = false;
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or(format!("{name} needs a value"));
         match (command.as_str(), arg.as_str()) {
@@ -197,6 +211,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             ("serve", "--storage-limit-gib") => {
                 storage_limit_gib = number("--storage-limit-gib", &value("--storage-limit-gib")?)?;
             }
+            ("serve", "--hold-assets") => hold_assets = on_or_off(&value("--hold-assets")?)?,
             ("serve", "--argon2-concurrency") => {
                 argon2_concurrency =
                     number("--argon2-concurrency", &value("--argon2-concurrency")?)?;
@@ -225,6 +240,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             session_max: i64::try_from(session_max_days).unwrap_or(i64::MAX) * DAY,
             vault_idle: Duration::from_secs(vault_idle_minutes * 60),
             storage_limit: storage_limit_gib.saturating_mul(GIB),
+            hold_assets,
             argon2_concurrency: usize::try_from(argon2_concurrency).unwrap_or(usize::MAX),
             argon2_wait: Duration::from_secs(10),
             musicindex,
@@ -278,6 +294,7 @@ mod tests {
         assert_eq!(options.session_max, 30 * 86_400);
         assert_eq!(options.vault_idle, Duration::from_secs(600));
         assert_eq!(options.storage_limit, 10 * 1024 * 1024 * 1024);
+        assert!(!options.hold_assets, "ADR 0105 item 1: the default is off");
         assert_eq!(options.argon2_concurrency, 2);
         assert_eq!(options.argon2_wait, Duration::from_secs(10));
         assert_eq!(options.nip46_relays, ["wss://relay.nsec.app"]);
@@ -314,6 +331,21 @@ mod tests {
         assert_eq!(options.argon2_concurrency, 1);
         assert!(parse(args(&format!("{line} --argon2-concurrency 0"))).is_err());
         assert!(parse(args(&format!("{line} --storage-limit-gib x"))).is_err());
+    }
+
+    #[test]
+    fn the_hold_assets_option_takes_on_or_off() {
+        let line = "serve --data-dir d --public-origin https://a.example";
+        let Ok(Command::Serve(on)) = parse(args(&format!("{line} --hold-assets on"))) else {
+            panic!("expected serve");
+        };
+        assert!(on.hold_assets, "ADR 0105 item 1: `on` holds assets");
+        let Ok(Command::Serve(off)) = parse(args(&format!("{line} --hold-assets off"))) else {
+            panic!("expected serve");
+        };
+        assert!(!off.hold_assets);
+        assert!(parse(args(&format!("{line} --hold-assets maybe"))).is_err());
+        assert!(parse(args(&format!("{line} --hold-assets"))).is_err());
     }
 
     #[test]

@@ -86,7 +86,9 @@ fn app_with_rules(storage_limit: u64) -> App {
             storage_limit,
             folder: data.path().to_path_buf(),
             library_root: data.path().join("library"),
-        });
+            hold_assets: true,
+        })
+        .unwrap();
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
         data,
@@ -7326,7 +7328,9 @@ async fn the_handle_reports_the_storage_and_locks_an_idle_vault() {
             storage_limit: 1 << 30,
             folder: data.path().to_path_buf(),
             library_root: data.path().join("library"),
-        });
+            hold_assets: true,
+        })
+        .unwrap();
     let (_router, handle) = crate::workspace_router(workspace);
     handle.create_vault(Some(PASSPHRASE), false).await.unwrap();
     assert!(handle.storage_used().await > 0);
@@ -11478,4 +11482,518 @@ async fn a_vault_creation_and_a_recovery_unlock_each_count_as_a_recent_unlock() 
     lock(&app).await;
     let (status, _) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
     assert_eq!(status, StatusCode::LOCKED);
+}
+
+// ---- A server that holds no assets (task 070, ADR 0105) ----
+
+/// An app with the rules of a server. `hold` is `--hold-assets on`.
+fn app_assets(
+    hold: bool,
+    ticket_lifetime: Option<std::time::Duration>,
+) -> (App, crate::WorkspaceHandle) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
+    let mut workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(None)
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_server_rules(crate::ServerRules {
+            storage_limit: 1 << 30,
+            folder: data.path().to_path_buf(),
+            library_root: data.path().join("library"),
+            hold_assets: hold,
+        })
+        .unwrap();
+    if let Some(lifetime) = ticket_lifetime {
+        workspace = workspace.with_ticket_lifetime(lifetime);
+    }
+    let (workspace_routes, handle) = crate::workspace_router(workspace);
+    let router =
+        crate::ui_router()
+            .merge(workspace_routes)
+            .layer(axum::middleware::from_fn_with_state(
+                Access::with_token(TOKEN, 4100),
+                crate::access::check,
+            ));
+    (
+        App {
+            router,
+            data,
+            feeds,
+        },
+        handle,
+    )
+}
+
+/// Like [`set_up`], for a server app. The server has no local folder host
+/// in its API, so the test adds the connector through the collection file.
+async fn set_up_server(app: &App) -> i64 {
+    let (status, _) = call(
+        app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let folder = studio_core::connector::LocalFolder::new(
+        app.feeds.path(),
+        Some("https://music.example".to_owned()),
+    );
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let connector = collection
+        .add_connector(
+            studio_core::connector::LocalFolder::KIND,
+            "Home",
+            &folder.config(),
+            None,
+        )
+        .unwrap();
+    drop(collection);
+    let (status, feed) = call(
+        app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector.0, "path": "album.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    set_library_root(app);
+    feed["id"].as_i64().unwrap()
+}
+
+/// Put the uploaded file in the draft as the enclosure of the first track.
+async fn use_as_enclosure(app: &App, id: i64, file: &Value) {
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, saved) = call(
+        app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+}
+
+/// Write the draft of a feed with the ID of its current diff.
+async fn write_now(app: &App, id: i64) -> (StatusCode, Value) {
+    let (_, diff) = call(app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await
+}
+
+async fn release_file(app: &App, id: i64, path: &str) -> Value {
+    let (status, body) = call(app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["files"]
+        .as_array()
+        .and_then(|files| files.iter().find(|f| f["path"] == path))
+        .cloned()
+        .unwrap_or_else(|| panic!("no file {path} in {body}"))
+}
+
+fn download_request(ticket: &str) -> Request<Body> {
+    Request::builder()
+        .uri(format!("/media/download?ticket={ticket}"))
+        .header(header::HOST, HOST)
+        .body(Body::empty())
+        .unwrap()
+}
+
+async fn file_ticket(app: &App, file: i64) -> String {
+    let (status, body) = call(
+        app,
+        "POST",
+        "/api/v1/media/tickets",
+        Some(json!({ "file": file })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["ticket"].as_str().unwrap().to_owned()
+}
+
+/// The path of each file under `root`, for a comparison before and after.
+fn files_under(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(folder) = pending.pop() {
+        for entry in std::fs::read_dir(&folder).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+#[tokio::test]
+async fn status_gives_hold_assets_false_with_off_and_true_with_on_and_on_the_desktop() {
+    let (off, _) = app_assets(false, None);
+    let (status, body) = call(&off, "GET", "/api/v1/status", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["hold_assets"], false,
+        "ADR 0105 item 1: status gives hold_assets false with `off`"
+    );
+    let (on, _) = app_assets(true, None);
+    let (_, body) = call(&on, "GET", "/api/v1/status", None).await;
+    assert_eq!(body["hold_assets"], true);
+    let (_, body) = call(&app(), "GET", "/api/v1/status", None).await;
+    assert_eq!(
+        body["hold_assets"], true,
+        "ADR 0105 item 2: the desktop holds assets"
+    );
+}
+
+#[tokio::test]
+async fn with_off_the_download_routes_and_the_folder_scan_give_403_not_on_server() {
+    let (app, _) = app_assets(false, None);
+    let id = set_up_server(&app).await;
+    let routes = [
+        ("GET", format!("/api/v1/feeds/{id}/downloads"), None),
+        (
+            "POST",
+            format!("/api/v1/feeds/{id}/downloads"),
+            Some(json!({ "all": true })),
+        ),
+        ("DELETE", format!("/api/v1/feeds/{id}/downloads/1"), None),
+        ("POST", "/api/v1/library/scan".to_owned(), None),
+        (
+            "POST",
+            format!("/api/v1/feeds/{id}/library-changes"),
+            Some(json!({ "action": "forget", "file": 1 })),
+        ),
+    ];
+    for (method, path, body) in routes {
+        let (status, body) = call(&app, method, &path, body).await;
+        assert_eq!(
+            status,
+            StatusCode::FORBIDDEN,
+            "ADR 0105 item 14: {method} {path} gives 403 with `off`. Call require_held_assets first. {body}"
+        );
+        assert_eq!(body["error"]["code"], "not_on_server", "{method} {path}");
+    }
+    // With `on`, the routes work as before.
+    let (on, _) = app_assets(true, None);
+    let id = set_up_server(&on).await;
+    let (status, _) = call(&on, "GET", &format!("/api/v1/feeds/{id}/downloads"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = call(&on, "POST", "/api/v1/library/scan", None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_download_route_sends_a_file_from_its_host_and_writes_no_file() {
+    let (app, _) = app_assets(false, None);
+    let id = set_up_server(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    let file_id = file["library_file_id"].as_i64().unwrap();
+
+    // A pending file comes from the release folder.
+    let ticket = file_ticket(&app, file_id).await;
+    let (status, headers, body) = send_raw(&app, download_request(&ticket)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, bytes);
+    assert_eq!(
+        headers[header::CONTENT_DISPOSITION],
+        "attachment; filename=\"tagged.mp3\"; filename*=UTF-8''tagged.mp3"
+    );
+
+    // After the write the server has no bytes. The route reads the copy on
+    // the host through its connector.
+    use_as_enclosure(&app, id, &file).await;
+    let (status, written) = write_now(&app, id).await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+    let row = release_file(&app, id, "tagged.mp3").await;
+    assert_eq!(
+        row["local"], false,
+        "ADR 0105 item 5: the write removes the bytes of the sent asset"
+    );
+    assert!(
+        !app.data.path().join("library/album/tagged.mp3").exists(),
+        "ADR 0105 item 5: the release folder has no audio after the write"
+    );
+    let before = files_under(app.data.path());
+    let ticket = file_ticket(&app, file_id).await;
+    let (status, headers, body) = send_raw(&app, download_request(&ticket)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body, bytes,
+        "ADR 0105 item 15: the route sends the bytes of the copy on the host"
+    );
+    assert_eq!(headers[header::CONTENT_TYPE], "audio/mpeg");
+    assert!(
+        headers[header::CONTENT_DISPOSITION]
+            .to_str()
+            .unwrap()
+            .starts_with("attachment;")
+    );
+    assert_eq!(
+        files_under(app.data.path()),
+        before,
+        "ADR 0105 item 15: the download route writes no file on the server"
+    );
+}
+
+#[tokio::test]
+async fn the_download_route_refuses_an_unknown_ticket_a_ticket_of_another_user_and_an_expired_ticket()
+ {
+    let (first, _) = app_assets(false, None);
+    let id = set_up_server(&first).await;
+    let (status, file) = upload(
+        &first,
+        id,
+        "tagged.mp3",
+        std::fs::read(media_path("tagged.mp3")).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    let file_id = file["library_file_id"].as_i64().unwrap();
+    let ticket = file_ticket(&first, file_id).await;
+
+    // The workspace of another user does not know the ticket.
+    let (second, _) = app_assets(false, None);
+    let second_id = set_up_server(&second).await;
+    let (status, _) = upload(
+        &second,
+        second_id,
+        "tagged.mp3",
+        std::fs::read(media_path("tagged.mp3")).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    for (name, app, ticket) in [
+        ("another user", &second, ticket.as_str()),
+        (
+            "an unknown ticket",
+            &first,
+            "0123456789abcdef0123456789abcdef",
+        ),
+    ] {
+        let (status, body, _) = send(app, download_request(ticket)).await;
+        assert_eq!(
+            status,
+            StatusCode::FORBIDDEN,
+            "ADR 0105 item 15: {name} gives 403. The ticket store belongs to one workspace. {body}"
+        );
+        assert_eq!(body["error"]["code"], "ticket_not_valid");
+    }
+    // The ticket of an address is not a ticket for a file.
+    let address = ticket_for(&first, "https://music.example/a.mp3").await;
+    let (status, _, _) = send(&first, download_request(&address)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // A ticket that is valid for no time is expired at its first use.
+    let (expired, _) = app_assets(false, Some(std::time::Duration::ZERO));
+    let expired_id = set_up_server(&expired).await;
+    let (status, file) = upload(
+        &expired,
+        expired_id,
+        "tagged.mp3",
+        std::fs::read(media_path("tagged.mp3")).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    let ticket = file_ticket(&expired, file["library_file_id"].as_i64().unwrap()).await;
+    let (status, body, _) = send(&expired, download_request(&ticket)).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "ADR 0105 item 15: an expired ticket gives 403 {body}"
+    );
+    assert_eq!(body["error"]["code"], "ticket_not_valid");
+
+    // A ticket for a file that does not exist is refused when it is made.
+    let (status, _) = call(
+        &first,
+        "POST",
+        "/api/v1/media/tickets",
+        Some(json!({ "file": 9999 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// A pending file at 6 days keeps its bytes. At 8 days the hourly step
+/// removes them. "Add the File Again" gives the row its bytes and clears
+/// `removed_at`, and the write then succeeds (ADR 0105 item 10).
+#[tokio::test]
+#[expect(clippy::too_many_lines, reason = "the test follows one user flow")]
+async fn add_the_file_again_gives_a_removed_file_its_bytes_and_the_write_then_succeeds() {
+    let (app, handle) = app_assets(false, None);
+    let id = set_up_server(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    use_as_enclosure(&app, id, &file).await;
+    let folder_file = app.data.path().join("library/album/tagged.mp3");
+    assert!(folder_file.exists());
+    let row = release_file(&app, id, "tagged.mp3").await;
+    assert_eq!(row["local"], true);
+    let imported = row["imported_at"].as_i64().unwrap();
+    assert_eq!(
+        row["expires_at"].as_i64(),
+        Some(imported + 7 * 86_400),
+        "ADR 0105 item 8: a pending file expires 7 days after its import"
+    );
+
+    let day = 86_400;
+    handle
+        .with_workspace(move |w| crate::uploads::sweep_pending(w, imported + 6 * day).unwrap())
+        .await;
+    assert!(
+        folder_file.exists(),
+        "ADR 0105 item 8: a pending file at 6 days keeps its bytes"
+    );
+    handle
+        .with_workspace(move |w| crate::uploads::sweep_pending(w, imported + 8 * day).unwrap())
+        .await;
+    assert!(
+        !folder_file.exists(),
+        "ADR 0105 item 10: no bytes at 8 days"
+    );
+    let row = release_file(&app, id, "tagged.mp3").await;
+    assert_eq!(row["local"], false);
+    assert_eq!(row["removed_at"].as_i64(), Some(imported + 8 * day));
+
+    // The draft keeps the address, and the write refuses it.
+    let (status, body) = write_now(&app, id).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "file_missing");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("tagged.mp3")
+    );
+
+    // A wrong file, or a file that Studio did not remove, does not work.
+    let (status, started) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/uploads"),
+        Some(json!({ "name": "tagged.mp3", "size": 5, "replace": "other.mp3" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{started}");
+    assert_eq!(started["error"]["code"], "not_removed");
+    let (status, started) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/uploads"),
+        Some(json!({ "name": "tagged.mp3", "size": 5, "replace": "tagged.mp3" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    let wrong = started["upload"].as_str().unwrap().to_owned();
+    let (status, _) = put_part(&app, &wrong, 0, b"wrong".to_vec()).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/uploads/{wrong}/finish"),
+        None,
+    )
+    .await;
+    assert_ne!(status, StatusCode::CREATED, "{body}");
+    assert!(!folder_file.exists());
+
+    // The same file again, with `replace` for its path.
+    let (status, started) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/uploads"),
+        Some(json!({ "name": "tagged.mp3", "size": bytes.len(), "replace": "tagged.mp3" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    let upload_id = started["upload"].as_str().unwrap().to_owned();
+    let (status, _) = put_part(&app, &upload_id, 0, bytes.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/uploads/{upload_id}/finish"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(
+        body["library_file_id"], row["id"],
+        "ADR 0105 item 10: the file keeps its row"
+    );
+    assert_eq!(std::fs::read(&folder_file).unwrap(), bytes);
+    let row = release_file(&app, id, "tagged.mp3").await;
+    assert_eq!(
+        row["local"], true,
+        "ADR 0105 item 10: the row has its bytes"
+    );
+    assert_eq!(row["removed_at"], Value::Null);
+    assert!(row["imported_at"].as_i64().unwrap() >= imported);
+    assert!(incoming_is_empty(&app));
+
+    let (status, written) = write_now(&app, id).await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+    assert_eq!(
+        std::fs::read(app.feeds.path().join("album/tagged.mp3")).unwrap(),
+        bytes
+    );
+}
+
+/// ADR 0055 item 16: the hourly step and the step at the start do not use
+/// the vault, so they do not extend the vault window.
+#[tokio::test]
+async fn the_asset_sweeps_do_not_change_the_last_use_of_the_vault() {
+    let (app, handle) = app_assets(false, None);
+    let id = set_up_server(&app).await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    // A host that has a secret in the vault.
+    collection
+        .add_connector(
+            studio_core::connector::LocalFolder::KIND,
+            "Secret",
+            "{}",
+            Some("secret-1"),
+        )
+        .unwrap();
+    drop(collection);
+    let _ = id;
+    let before = handle.with_workspace(|w| w.vault_last_used()).await;
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let after = handle
+        .with_workspace(|w| {
+            crate::uploads::sweep_pending(w, i64::MAX / 2).unwrap();
+            crate::uploads::sweep_hosted(w).unwrap();
+            w.vault_last_used()
+        })
+        .await;
+    assert_eq!(
+        before, after,
+        "ADR 0055 item 16: a sweep must not touch the vault. Use hosts_without_secrets."
+    );
 }

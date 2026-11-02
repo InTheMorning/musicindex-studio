@@ -86,6 +86,9 @@ pub enum PipelineErrorKind {
     /// A host operation of the draft waits for the download of a remote
     /// library file (ADR 0038 item 12).
     WaitingForDownload,
+    /// The draft refers to a pending file that Studio removed from the
+    /// server at the end of its 7 days (ADR 0105 item 10).
+    FileMissing,
     /// A host needs a secret from the vault, and the vault is locked
     /// (ADR 0017).
     VaultLocked,
@@ -1948,7 +1951,16 @@ fn copy_operation(
         return Ok(None);
     };
     let file = collection.library_file(library_file_id)?;
-    let waiting = !file.local || file.sha256.is_none();
+    // ADR 0105 item 6: with `off`, the copy of a file that a host has reads
+    // the file from that host, so it does not wait for a download.
+    let from_host = !file.local
+        && file.removed_at.is_none()
+        && collection.asset_rules().is_some()
+        && crate::assets::recorded_copy(collection, &file)
+            .ok()
+            .flatten()
+            .is_some();
+    let waiting = (!file.local && !from_host) || file.sha256.is_none();
     if !waiting {
         let sha256 = file.sha256.as_deref().unwrap_or_default();
         let on_host = host_has_file(
@@ -2272,6 +2284,57 @@ pub fn import_replacement_into_library(
     )
 }
 
+/// Check that one of the new files is the removed pending file at `path`:
+/// it has the same name and the same SHA-256 (ADR 0105 item 10). The user
+/// adds the file again with an upload. `files` gives the name and the
+/// path of each file that the import will put in the library.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NotFound`] when the feed has no removed
+/// pending file at `path`. Gives [`PipelineErrorKind::FileExists`] when no
+/// new file has the name and the SHA-256 of that file.
+pub fn check_restore(
+    collection: &Collection,
+    id: FeedId,
+    path: &str,
+    files: &[(&str, &Path)],
+) -> Result<(), PipelineError> {
+    let row = collection
+        .library_files(id)?
+        .into_iter()
+        .find(|file| file.path == path && !file.local && file.removed_at.is_some())
+        .ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::NotFound,
+                format!("{path} is not a file that Studio removed"),
+            )
+        })?;
+    let wrong = || {
+        PipelineError::new(
+            PipelineErrorKind::FileExists,
+            format!(
+                "this is not the file {path} that Studio removed: the name or the bytes differ"
+            ),
+        )
+    };
+    let (_, source) = files
+        .iter()
+        .find(|(name, _)| *name == path)
+        .ok_or_else(wrong)?;
+    let sha256 = crate::digest::sha256_file(source).map_err(|error| {
+        PipelineError::new(
+            PipelineErrorKind::Connector,
+            format!("{}: cannot read the file: {error}", source.display()),
+        )
+    })?;
+    if row.sha256.as_deref() == Some(sha256.as_str()) {
+        Ok(())
+    } else {
+        Err(wrong())
+    }
+}
+
 /// What an import does when a different file is at its name in the
 /// release folder.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2329,9 +2392,23 @@ fn import_file(
     let existing = files.into_iter().find(|file| file.path == file_name);
     let library_file_id = match existing {
         Some(file) if file.sha256.as_deref() == Some(sha256.as_str()) => {
-            // The same file, imported again. Studio keeps the one copy,
-            // and removes the file that the caller sent (ADR 0036 item 5).
-            let _ = std::fs::remove_file(source);
+            if file.removed_at.is_some() && !file.local {
+                // ADR 0105 item 10: the user adds a removed pending file
+                // again. The row gets its bytes, a new import time and no
+                // removal time.
+                library
+                    .put_file(&folder, file_name, source)
+                    .map_err(|error| {
+                        PipelineError::new(PipelineErrorKind::Connector, error.to_string())
+                    })?;
+                let stamp = file_stamp(&library.path(&folder, file_name));
+                collection.restore_library_file(file.id, stamp.as_deref())?;
+            } else {
+                // The same file, imported again. Studio keeps the one copy,
+                // and removes the file that the caller sent (ADR 0036
+                // item 5).
+                let _ = std::fs::remove_file(source);
+            }
             file.id
         }
         Some(_) => {
@@ -2670,6 +2747,17 @@ pub fn write_draft_signed(
             "the draft changed after the diff was approved; approve the new diff",
         ));
     }
+    // ADR 0105 item 10: a pending file that Studio removed stops the write.
+    let missing = removed_pending_files(collection, &operations)?;
+    if !missing.is_empty() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::FileMissing,
+            format!(
+                "these files are not on the server any more; add them again: {}",
+                missing.join(", ")
+            ),
+        ));
+    }
     // ADR 0038 item 12: no file changes while a download is not complete.
     if let Some(waiting) = operations.iter().find(|operation| operation.waiting) {
         return Err(PipelineError::new(
@@ -2883,7 +2971,35 @@ pub fn write_draft_signed(
         inventory::scan(collection, hosts, connector_id)?;
     }
 
+    // ADR 0105 item 5: with `off`, the bytes of each sent asset go from the
+    // server. The feed is written, so an error here does not fail the
+    // write. The next start removes the bytes (ADR 0105 item 13).
+    remove_sent_assets(collection, hosts, library, &operations);
+
     Ok(version)
+}
+
+/// Remove the local bytes of each asset that the write sent, when a host
+/// has a copy with the same SHA-256 (ADR 0105 item 5). The function reads
+/// the host copy again through its connector, so that the removal never
+/// depends on a stale record.
+fn remove_sent_assets(
+    collection: &Collection,
+    hosts: &Hosts,
+    library: &Library,
+    operations: &[HostOperation],
+) {
+    if collection.asset_rules().is_none() {
+        return;
+    }
+    let sent: Vec<LibraryFileId> = operations
+        .iter()
+        .filter(|operation| matches!(operation.kind, OperationKind::Upload | OperationKind::Copy))
+        .filter_map(|operation| operation.library_file_id.map(LibraryFileId))
+        .collect();
+    let find =
+        |file: &crate::collection::LibraryFile| crate::assets::find_copy(collection, hosts, file);
+    let _ = crate::assets::remove_hosted(collection, library, Some(&sent), &find);
 }
 
 /// Write one change that a show grant covers, with no diff that the user
@@ -3368,6 +3484,77 @@ fn pointer_bytes(draft: &DraftRow, new_url: &str) -> Result<Vec<u8>, PipelineErr
     Ok(doc.write().into_bytes())
 }
 
+/// The paths of the files of `operations` that Studio removed from the
+/// server at the end of their 7 days (ADR 0105 item 10).
+fn removed_pending_files(
+    collection: &Collection,
+    operations: &[HostOperation],
+) -> Result<Vec<String>, PipelineError> {
+    let mut paths = Vec::new();
+    for operation in operations {
+        if !matches!(operation.kind, OperationKind::Upload | OperationKind::Copy) {
+            continue;
+        }
+        let Some(id) = operation.library_file_id else {
+            continue;
+        };
+        let file = collection.library_file(LibraryFileId(id))?;
+        if !file.local && file.removed_at.is_some() {
+            paths.push(file.path);
+        }
+    }
+    Ok(paths)
+}
+
+/// Removes its file when it goes out of scope. A copy or a move of a file
+/// that the server does not hold uses one, in `incoming/`. The file goes
+/// after the operation, also after an error (ADR 0105 item 6).
+struct TemporaryFile(std::path::PathBuf);
+
+impl Drop for TemporaryFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+/// Read the copy of a file that is not in the library from its host into a
+/// temporary file in the `incoming/` folder (ADR 0105 item 6).
+fn temporary_copy(
+    collection: &Collection,
+    hosts: &Hosts,
+    file: &crate::collection::LibraryFile,
+    incoming: &Path,
+) -> Result<TemporaryFile, PipelineError> {
+    let missing = || {
+        PipelineError::new(
+            PipelineErrorKind::Connector,
+            format!(
+                "{} is not on the server and no file host has a copy",
+                file.path
+            ),
+        )
+    };
+    let copy = inventory::copies(collection, hosts, file)?
+        .into_iter()
+        .next()
+        .ok_or_else(missing)?;
+    let read = hosts
+        .get(copy.connector_id)?
+        .read(&copy.path)?
+        .ok_or_else(missing)?;
+    let io_error = |error: std::io::Error| {
+        PipelineError::new(
+            PipelineErrorKind::Connector,
+            format!("{}: cannot write the temporary file: {error}", file.path),
+        )
+    };
+    std::fs::create_dir_all(incoming).map_err(io_error)?;
+    let name = format!("copy-{}-{}.tmp", file.id.0, unix_now());
+    let guard = TemporaryFile(incoming.join(name));
+    std::fs::write(&guard.0, &read.bytes).map_err(io_error)?;
+    Ok(guard)
+}
+
 /// Put each upload and each copy of `operations` on its host: the first
 /// step of [`write_draft`] (ADR 0036 item 15).
 ///
@@ -3402,7 +3589,17 @@ fn put_uploads_and_copies(
                 format!("feed {} has no release folder yet", row.id.0),
             )
         })?;
-        let library_path = library.path(folder, &file.path);
+        // ADR 0105 item 6: a file that the server does not hold comes from
+        // its host. The temporary file goes at the end of this step.
+        let temporary = match collection.asset_rules() {
+            Some(rules) if !file.local && file.removed_at.is_none() => {
+                Some(temporary_copy(collection, hosts, &file, &rules.incoming)?)
+            }
+            _ => None,
+        };
+        let library_path = temporary
+            .as_ref()
+            .map_or_else(|| library.path(folder, &file.path), |t| t.0.clone());
         let read_error = |error: std::io::Error| {
             PipelineError::new(
                 PipelineErrorKind::Connector,

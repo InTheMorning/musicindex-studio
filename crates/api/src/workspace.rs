@@ -431,6 +431,9 @@ pub struct ServerRules {
     pub folder: PathBuf,
     /// The only library folder that the user can have.
     pub library_root: PathBuf,
+    /// False for `--hold-assets off`: the server keeps an audio file or an
+    /// image only until the write that sends it (ADR 0105 item 1).
+    pub hold_assets: bool,
 }
 
 impl ServerRules {
@@ -758,10 +761,26 @@ impl Workspace {
 
     /// Use the rules of the server: no local folder host, one library
     /// folder and a storage limit (ADR 0055 items 21, 24 and 25).
-    #[must_use]
-    pub fn with_server_rules(mut self, rules: ServerRules) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the collection cannot keep the mode of
+    /// ADR 0105.
+    pub fn with_server_rules(mut self, rules: ServerRules) -> Result<Self, ApiError> {
+        let asset_rules = (!rules.hold_assets).then(|| studio_core::collection::AssetRules {
+            incoming: self.incoming_dir.clone(),
+        });
+        let now = i64::try_from(crate::announcer::now()).unwrap_or(i64::MAX);
+        self.collection.set_asset_rules(asset_rules, now)?;
         self.rules = Some(rules);
-        self
+        Ok(self)
+    }
+
+    /// True when the workspace holds assets: the desktop, and a server with
+    /// `--hold-assets on` (ADR 0105 items 1 and 2).
+    #[must_use]
+    pub fn holds_assets(&self) -> bool {
+        self.rules.as_ref().is_none_or(|rules| rules.hold_assets)
     }
 
     /// Call `hook` after each add and each removal of a connected app
@@ -799,6 +818,15 @@ impl Workspace {
         if let Some(hook) = &self.app_hook {
             (hook.0)(change);
         }
+    }
+
+    /// The time of the last use of a vault secret. Only a test reads it.
+    #[cfg(test)]
+    pub(crate) fn vault_last_used(&self) -> Instant {
+        *self
+            .vault_used
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Record that a secret of the vault is in use now.
@@ -1090,14 +1118,26 @@ impl Workspace {
     /// # Errors
     ///
     /// Gives an [`ApiError`] when the collection or a connector fails.
+    pub(crate) fn hosts_with(&self, signing: Signing) -> Result<Hosts, ApiError> {
+        self.hosts_for(signing, true)
+    }
+
+    /// The connector of each host that needs no secret. A host with a secret
+    /// is marked as locked, and the vault is not read or touched, so that
+    /// the vault window does not change (ADR 0055 item 16). The sweep of
+    /// ADR 0105 uses this.
+    pub(crate) fn hosts_without_secrets(&self) -> Result<Hosts, ApiError> {
+        self.hosts_for(Signing::default(), false)
+    }
+
     #[expect(
         clippy::needless_pass_by_value,
         reason = "each host gets its own copy of the signing"
     )]
-    pub(crate) fn hosts_with(&self, signing: Signing) -> Result<Hosts, ApiError> {
+    fn hosts_for(&self, signing: Signing, use_secrets: bool) -> Result<Hosts, ApiError> {
         let mut hosts = Hosts::new();
         for row in self.collection.connectors()? {
-            if row.secret_ref.is_some() && self.vault.is_none() {
+            if row.secret_ref.is_some() && (self.vault.is_none() || !use_secrets) {
                 hosts.insert_locked(row.id);
                 continue;
             }

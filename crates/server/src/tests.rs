@@ -50,6 +50,8 @@ fn app_with_rules(
         session_max: 30 * 86_400,
         vault_idle: std::time::Duration::from_secs(600),
         storage_limit: 10 * 1024 * 1024 * 1024,
+        // The tests of the server keep the library as before ADR 0105.
+        hold_assets: true,
         argon2_concurrency: 2,
         argon2_wait: std::time::Duration::from_secs(10),
         // Port 9 answers nothing, so no test reaches a real host.
@@ -316,6 +318,33 @@ async fn a_media_ticket_works_only_for_the_session_of_its_user() {
     let no_csrf = send(&app, c).await;
     assert_eq!(no_csrf.status, StatusCode::FORBIDDEN);
     assert_eq!(no_csrf.code(), "csrf_required");
+}
+
+/// ADR 0105: the option reaches the status of the user, and the download
+/// route for a file ticket needs a session like the audio route.
+#[tokio::test]
+async fn the_hold_assets_option_reaches_the_status_and_the_download_route_needs_a_session() {
+    for hold in [false, true] {
+        let app = app_with(Signup::Invite, |options| options.hold_assets = hold);
+        let who = new_user(&app, "one@example.org", PASS_ONE).await;
+        let status = api(&app, &who, "GET", "/api/v1/status", None).await;
+        assert_eq!(status.status, StatusCode::OK);
+        assert_eq!(
+            status.json["hold_assets"], hold,
+            "ADR 0105 item 1: the status gives the option of the server"
+        );
+        let none = send(&app, call("GET", "/media/download?ticket=x", None)).await;
+        assert_eq!(
+            none.status,
+            StatusCode::UNAUTHORIZED,
+            "ADR 0105 item 15: the server dispatches /media/download to the media route. Add the path to session::dispatch."
+        );
+        let mut c = call("GET", "/media/download?ticket=x", None);
+        c.token = Some(&who.0);
+        let unknown = send(&app, c).await;
+        assert_eq!(unknown.status, StatusCode::FORBIDDEN);
+        assert_eq!(unknown.code(), "ticket_not_valid");
+    }
 }
 
 #[tokio::test]

@@ -190,6 +190,8 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::VaultLocked => (StatusCode::LOCKED, "vault_locked"),
             // ADR 0038 item 12: a copy waits for the download of its file.
             PipelineErrorKind::WaitingForDownload => (StatusCode::CONFLICT, "waiting_for_download"),
+            // ADR 0105 item 10: a pending file that Studio removed.
+            PipelineErrorKind::FileMissing => (StatusCode::CONFLICT, "file_missing"),
             // ADR 0050 item 12: the signed events for the planned events.
             PipelineErrorKind::SignatureMissing => (StatusCode::CONFLICT, "signature_required"),
             PipelineErrorKind::SignatureInvalid => {

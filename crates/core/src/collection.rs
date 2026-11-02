@@ -455,7 +455,18 @@ DELETE FROM saved_recipients;
     r"
 ALTER TABLE change_sets ADD COLUMN person_id INTEGER REFERENCES people(id) ON DELETE SET NULL;
 ",
+    // ADR 0105 item 8 and item 10: the time of the import and the time of
+    // the removal of a pending file. A row from before gets the time of
+    // this migration.
+    r"
+ALTER TABLE library_files ADD COLUMN imported_at INTEGER;
+ALTER TABLE library_files ADD COLUMN removed_at INTEGER;
+UPDATE library_files SET imported_at = CAST(strftime('%s', 'now') AS INTEGER);
+",
 ];
+
+/// The setting that holds the time that the mode `off` of ADR 0105 began.
+const ASSETS_OFF_SINCE: &str = "assets_off_since";
 
 /// The index in `MIGRATIONS` of the migration that makes the people. After
 /// it, Studio refills the credit index from the library copies, because SQL
@@ -813,6 +824,13 @@ pub struct LibraryFile {
     /// as `{size}-{mtime_ns}`. `None` for a remote file, and for a row
     /// from before schema version 6 (ADR 0038 item 13).
     pub stamp: Option<String>,
+    /// The time of the import, an upload `finish` or a replacement, in
+    /// seconds after the Unix epoch. A row from before the migration has
+    /// the time of the migration (ADR 0105 item 8).
+    pub imported_at: i64,
+    /// The time that Studio removed the bytes of a pending file at the end
+    /// of its 7 days (ADR 0105 item 10). `None` for each other file.
+    pub removed_at: Option<i64>,
 }
 
 /// A download that is not complete (ADR 0038 item 9).
@@ -931,6 +949,18 @@ pub struct KnownRecipient {
 /// The collection database.
 pub struct Collection {
     db: Connection,
+    /// The rules of a server that holds no assets. `None` means that the
+    /// workspace holds assets (ADR 0105 item 1).
+    asset_rules: Option<AssetRules>,
+}
+
+/// The rules of a workspace that holds no assets (ADR 0105). A workspace
+/// that holds assets has none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetRules {
+    /// The folder of the temporary files of a copy and a move (ADR 0105
+    /// item 6).
+    pub incoming: std::path::PathBuf,
 }
 
 impl fmt::Debug for Collection {
@@ -1008,7 +1038,10 @@ impl Collection {
 
     fn prepare(db: Connection) -> Result<Self, CollectionError> {
         db.pragma_update(None, "foreign_keys", true)?;
-        let mut collection = Self { db };
+        let mut collection = Self {
+            db,
+            asset_rules: None,
+        };
         collection.migrate()?;
         Ok(collection)
     }
@@ -2242,8 +2275,8 @@ impl Collection {
     ) -> Result<LibraryFileId, CollectionError> {
         let size = i64::try_from(size).unwrap_or(i64::MAX);
         self.db.execute(
-            "INSERT INTO library_files (feed_id, path, size, sha256, media_type, local, source_url, added_at, stamp)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO library_files (feed_id, path, size, sha256, media_type, local, source_url, added_at, stamp, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?8)",
             params![feed.0, path, size, sha256, media_type, local, source_url, now(), stamp],
         )?;
         Ok(LibraryFileId(self.db.last_insert_rowid()))
@@ -2371,6 +2404,109 @@ impl Collection {
             ));
         }
         Ok(())
+    }
+
+    /// Record that Studio removed the local bytes of an asset (ADR 0105
+    /// items 5 and 10): `local` becomes false and the stamp goes. The
+    /// size and the SHA-256 stay. With `source_url`, the row keeps the
+    /// address of the copy on the host. With `removed_at`, the row records
+    /// the time of the removal of a pending file.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the file does not
+    /// exist.
+    pub fn set_library_file_removed(
+        &self,
+        id: LibraryFileId,
+        source_url: Option<&str>,
+        removed_at: Option<i64>,
+    ) -> Result<(), CollectionError> {
+        let changed = self.db.execute(
+            "UPDATE library_files
+             SET local = 0, stamp = NULL, source_url = COALESCE(?2, source_url), removed_at = ?3
+             WHERE id = ?1",
+            params![id.0, source_url, removed_at],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("library file {} does not exist", id.0),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Record that a removed pending file has its bytes again: `local`
+    /// becomes true, `imported_at` is now and `removed_at` goes (ADR 0105
+    /// item 10).
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the file does not
+    /// exist.
+    pub fn restore_library_file(
+        &self,
+        id: LibraryFileId,
+        stamp: Option<&str>,
+    ) -> Result<(), CollectionError> {
+        let changed = self.db.execute(
+            "UPDATE library_files
+             SET local = 1, stamp = ?2, imported_at = ?3, removed_at = NULL
+             WHERE id = ?1",
+            params![id.0, stamp, now()],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("library file {} does not exist", id.0),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Use the rules of a workspace that holds no assets, or `None` for a
+    /// workspace that holds assets (ADR 0105 item 1). With the rules,
+    /// the function records the time that the mode `off` began, if it
+    /// did not begin before. A pending file is a file that came in after
+    /// this time. A file from before stays (ADR 0105 items 8, 12 and 13).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_asset_rules(
+        &mut self,
+        rules: Option<AssetRules>,
+        now: i64,
+    ) -> Result<(), CollectionError> {
+        let began = self.setting(ASSETS_OFF_SINCE)?.is_some();
+        match (&rules, began) {
+            (Some(_), false) => self.set_setting(ASSETS_OFF_SINCE, &Value::from(now))?,
+            (None, true) => {
+                self.db
+                    .execute("DELETE FROM settings WHERE key = ?1", [ASSETS_OFF_SINCE])?;
+            }
+            _ => {}
+        }
+        self.asset_rules = rules;
+        Ok(())
+    }
+
+    /// The rules of a workspace that holds no assets. `None` means that
+    /// the workspace holds assets (ADR 0105 item 1).
+    #[must_use]
+    pub fn asset_rules(&self) -> Option<&AssetRules> {
+        self.asset_rules.as_ref()
+    }
+
+    /// The time that the mode `off` began, in seconds after the Unix
+    /// epoch. `None` while the workspace holds assets.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn assets_off_since(&self) -> Result<Option<i64>, CollectionError> {
+        Ok(self.setting(ASSETS_OFF_SINCE)?.and_then(|v| v.as_i64()))
     }
 
     /// Record a download as queued. A download that failed before is
@@ -3507,10 +3643,12 @@ fn library_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryFile> {
         connector_id: r.get::<_, Option<i64>>(8)?.map(ConnectorId),
         added_at: r.get(9)?,
         stamp: r.get(10)?,
+        imported_at: r.get::<_, Option<i64>>(11)?.unwrap_or(r.get::<_, i64>(9)?),
+        removed_at: r.get(12)?,
     })
 }
 
-const LIBRARY_FILE_SELECT: &str = "SELECT id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at, stamp FROM library_files";
+const LIBRARY_FILE_SELECT: &str = "SELECT id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at, stamp, imported_at, removed_at FROM library_files";
 
 fn host_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HostFile> {
     let size: i64 = r.get(2)?;
@@ -4440,6 +4578,45 @@ mod tests {
             Vec::new()
         );
         assert!(!collection.feed(FeedId(2)).unwrap().roles_confirmed);
+    }
+
+    /// ADR 0105 item 8: the migration gives each row from before it an
+    /// import time, and no removal time.
+    #[test]
+    fn the_asset_migration_gives_each_library_file_from_before_an_import_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let before = MIGRATIONS.len() - 1;
+        for migration in &MIGRATIONS[..before] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(before).unwrap())
+            .unwrap();
+        db.execute_batch(
+            "INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0);
+             INSERT INTO library_files (id, feed_id, path, size, sha256, media_type, local, added_at)
+             VALUES (1, 1, 'a.mp3', 10, 'abc', 'audio/mpeg', 1, 5),
+                    (2, 1, 'b.mp3', 10, 'def', 'audio/mpeg', 1, 6);",
+        )
+        .unwrap();
+        drop(db);
+
+        let time = now();
+        let collection = Collection::open(&path).unwrap();
+        let files = collection.library_files(FeedId(1)).unwrap();
+        assert_eq!(
+            files.len(),
+            2,
+            "ADR 0105 item 8: the migration keeps each row"
+        );
+        for file in files {
+            assert!(
+                file.imported_at >= time - 5 && file.imported_at <= now() + 5,
+                "ADR 0105 item 8: a row from before the migration gets the time of the migration"
+            );
+            assert_eq!(file.removed_at, None);
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0105](../adr/0105-a-public-server-holds-no-assets.md). It uses ADR 0007, ADR 0033 and ADR 0036 items 6, 7 and 15. It also uses ADR 0040, ADR 0059 item 4, ADR 0062 item 29 and ADR 0071.
 
-Status: Not started.
+Status: In progress. Packets 070a and 070b are complete.
 
 ## Goal
 

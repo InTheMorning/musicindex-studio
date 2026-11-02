@@ -121,6 +121,7 @@ client_max_body_size 9m;
 | `--session-max-days N` | `30` | A session ends after this time in total. |
 | `--vault-idle-minutes N` | `10` | The vault locks after this time with no use of a secret. |
 | `--storage-limit-gib N` | `10` | The largest size of one user folder. |
+| `--hold-assets off\|on` | `off` | With `off`, the server keeps an audio file or an image only until the write that sends it, for a maximum of 7 days. With `on`, the server keeps the files in the library of the user. |
 | `--argon2-concurrency N` | `2` | The number of Argon2id derivations at the same time. |
 | `--musicindex URL` | the musicindex.org API | A different musicindex API. |
 | `--podcastindex-hub URL` | the Podcast Index hub | A different hub for the announcements. |

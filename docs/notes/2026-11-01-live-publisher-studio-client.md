@@ -84,9 +84,24 @@ The crate calls these routes. The live publisher does not call them directly.
 | `TooManyAttempts` | More than 60 requests in one minute. | Wait one minute, then send again. |
 | `Network` | Studio did not answer. | Send again with a new request. The crate signs a new event. |
 
-## Open Points For The Live Publisher
+## Open Points For The Live Publisher And v4vmm
 
-- Where it keeps the Studio address and the key of each account.
-- What it does when Studio refuses a write during a show.
-- When it reads the shows again, for example after a restart.
-- Which `AppSigner` it uses.
+v4vmm starts and restarts the live publisher as a service (v4vmm ADR 0059). v4vmm does not connect to Studio. Each repository decides its own points in its own decision records. Studio needs no answer to start task 073.
+
+| Point | Question | Owner |
+| --- | --- | --- |
+| The pairing control | Does the user pair in a terminal with `studio connect`, or does v4vmm give a "Connect to Studio" control that runs it? | Live publisher and v4vmm |
+| The storage of the key | Which `AppSigner` does the live publisher use: `FileSigner`, systemd credentials or the key store of the operating system? Where does it keep the Studio address of each account? | Live publisher |
+| The show of a grant | How does the live publisher find the grant of the show that v4vmm attaches? The grant gives the feed and the `guid` of the live item. | Live publisher and v4vmm |
+| A refused write | What does the live publisher do when Studio refuses a write at the start of a show, for example because the feed has a draft with changes? Does it try again, and how often? | Live publisher |
+| The message to the user | How does the user see a refused write or `NotGranted` during the show? v4vmm shows the status of the services, so it can show this message. | v4vmm |
+| Studio does not answer | What does the live publisher do when Studio is down at the start or the end of a show? The relay payloads continue, but the feed keeps its old status. | Live publisher |
+| A restart | When does the live publisher read the shows again, for example after v4vmm restarts it? | Live publisher |
+| The clock | Does the live publisher examine the clock of the computer before a show? Studio refuses a request that is more than 60 seconds from its own time. | Live publisher |
+
+## What Studio Shows The User
+
+Studio gives these signals. The live publisher and v4vmm can refer to them in their own messages. The mockups are screens 9 to 11 in `.studio-dev/mockup-110/site/grant.js`. The operator accepted them on 2026-11-01.
+
+- While a grant is active and the feed has a draft with changes, each editor page of the feed shows a notice: "Live Publisher cannot start Friday Night Signals while this draft has changes". The notice gives the start time of the show.
+- When Studio refuses a granted write, the list of granted writes on the live show page shows the cause, for example "Not started: the feed had a draft with changes".

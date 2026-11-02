@@ -4,7 +4,7 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator, from the mockups in `.studio-dev/mockup-110/site/grant.js`, screens 6 to 8.
-- Amended: 2026-11-01 by the operator, from the security review of the plan on the same day. The mockups of screens 1 to 3, 6, 6b, 7 and 8 give its screens. The amendment changes each section of the decision, and closes SEC-09. The app gets a pairing text from Studio, and a grant names one app and fixes its live value address. A shared client crate does the protocol for the app.
+- Amended: 2026-11-01 by the operator, from the security review of the plan on the same day. The mockups of screens 1 to 3, 6 to 6c and 7 to 11 give its screens. The amendment changes each section of the decision, and closes SEC-09. The app gets a pairing text from Studio, and a grant names one app and fixes its live value address. A shared client crate does the protocol for the app.
 - Changes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 9 (the token of a connected app) and item 12 (the apps of a grant). [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) items 4, 5, 8, 9, 11, 15, 17, 18, 19 and 20 (the app key, the wrappers, a new app, a removed app, the granted write, the apps from before, the routes, the index, the limits and the text of ADR 0003 item 4). [ADR 0107](0107-a-user-can-export-and-import-an-account.md) items 2 and 14 (the index of app tokens and the apps after an import).
 - Uses: [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) item 6 (a signed event of kind 27235), [ADR 0013](0013-vault-format-and-cryptography.md) (the vault format), ADR 0106 (a recent unlock, written by [task 069](../tasks/studio-v1-task-069-account-protection.md)) and the [research note on host secrets under a show grant](../research/2026-11-01-connected-app-host-secrets.md).
 
@@ -109,6 +109,11 @@
 38. The server permits 60 requests for each app public key in each minute. It permits 20 requests with an unknown key, a signature that is not correct or a wrong code, for each client address in each hour. After that, it gives 429 `too_many_attempts`.
 39. An import of an account (ADR 0107) keeps the name of each app, and sets each app to "Connect Again". The import keeps no grant. The account page lists the apps with this notice, in place of the notice of ADR 0107 item 14.
 
+### Signals To The User
+
+40. While a grant is active and its feed has a draft with changes, each editor page of that feed shows a notice at the top (screens 9 and 10). The notice names the app and the show, and gives the start time of the show. The core gives this state with the feed, so that the UI has no copy of the rule of ADR 0054 item 16.
+41. When Studio refuses a granted write, the list of granted writes of ADR 0054 item 17 shows the app, the cause and the time (screen 11). The causes are a draft with changes, a grant that ended, a live value that item 26 refuses, and a grant vault that does not open.
+
 ## Alternatives Considered
 
 - Keep the token, and add "Last used" and "Make a New Token". Not chosen by the operator. The user still copies a secret by hand.
@@ -132,6 +137,7 @@
 - A copied request stops working after 60 seconds, and Studio refuses a repeated event, also after a restart.
 - A stolen private key file of the app still works until the user removes the app. It can start and end a granted show, and set the live value to an address on the live value origin of the app. It cannot send the boosts to a different origin. "Last used" and the list of granted writes of ADR 0054 item 17 show its use.
 - The live publisher uses `studio-app-client`. It adds a command that takes the pairing text and its live value origin, and it selects its key storage. That work belongs to its own repository. The [handoff note](../notes/2026-11-01-live-publisher-studio-client.md) describes the interface.
+- A draft with changes still stops a granted write, as ADR 0054 item 16 gives. Item 40 tells the user before the show, and item 41 tells the user after a refusal.
 - Task 073 gives the work in Studio. It comes after task 068 and task 069.
 
 ## Acceptance Criteria
@@ -152,9 +158,11 @@ Mechanical:
 - A server test: a sign-in key of an account cannot be an app key.
 - A server test: an app with a token gets `app_key_required`. After the migration, a request signed with the key that HKDF derives from the old token gets 401.
 - A server test: after an import, each app is "Connect Again" and the account has no grant.
-- A Node test: the Connected apps model and the grant line give the lines of screens 1 to 3, 6, 6b, 7 and 8.
+- A Node test: the Connected apps model and the grant line give the lines of screens 1 to 3, 6 to 6c, 7 and 8.
+- An API test: with an active grant and a draft with changes, the feed state gives the draft notice. A granted write then fails, and the list of granted writes holds the cause.
+- A Node test: the model of an editor page gives the notice of item 40 only when the feed state gives it.
 - `cargo test --doc -p studio-app-client` runs the examples of the crate documentation.
 
-Visual: screens 1 to 3, 6, 6b, 7 and 8 of the mockups, at 1100 px and at 390 px with touch, in the two themes.
+Visual: screens 1 to 3, 6 to 6c and 7 to 11 of the mockups, at 1100 px and at 390 px with touch, in the two themes.
 
 Human: the operator connects the live publisher with a pairing text, runs a show with a grant, and sees "Last used" change. The live publisher cannot set a live value on a different origin.

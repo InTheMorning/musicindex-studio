@@ -10,7 +10,7 @@ A connected app pairs with a pairing text from Studio, and signs each request wi
 
 ## Context
 
-- The mockups are in `.studio-dev/mockup-110/site/grant.js`. Git ignores that folder. The operator accepted screens 1 to 3, 6, 6b, 6c, 7 and 8 on 2026-11-01. Use their texts.
+- The mockups are in `.studio-dev/mockup-110/site/grant.js`. Git ignores that folder. The operator accepted screens 1 to 3, 6 to 6c and 7 to 11 on 2026-11-01. Use their texts.
 - `crates/core/src/apps.rs` makes a token, keeps its SHA-256, and derives an app key from the token with HKDF-SHA-256 (`app_keys`). `crates/core/src/grant_vault.rs` adds one NIP-44 wrapper for each app key, and opens a grant vault with a token.
 - `sync_one_grant` in `crates/api/src/workspace.rs` adds a wrapper for each app with a key to each grant vault. After this task, a grant vault has only the wrapper of the app that the grant names.
 - `put_show_live_value` in `crates/api/src/routes.rs` examines only that `uri` and `protocol` are not empty.
@@ -36,6 +36,8 @@ A connected app pairs with a pairing text from Studio, and signs each request wi
 9. A module in the core checks a signed request. It examines the event of kind 27235, its signature and its time within 60 seconds. It compares the `u` and `method` tags exactly with the expected address and method. It refuses a request with a body and no `payload` tag with the SHA-256 of the raw body. The function gives the public key. The server sign-in and the app routes use the same function.
 10. A replay store in the collection keeps each accepted event ID for 120 seconds. The store records an ID before the route runs, and refuses an ID that it has (ADR 0110 item 15).
 11. The core refuses a granted live value with `live_value_invalid` in each condition of ADR 0110 item 26. The check is in the core, not in the route.
+12. While a grant is active and the feed has a draft with changes, the feed state gives `grant_blocked_by_draft`. It holds the app name, the show title and the start time (ADR 0110 item 40).
+13. Each refused granted write adds an entry to the list of granted writes, with the app, the cause and the time (ADR 0110 item 41).
 
 ### 073b: The client crate
 
@@ -98,7 +100,9 @@ A connected app pairs with a pairing text from Studio, and signs each request wi
    - What to do when a computer is lost or a key is stolen: select "Remove" on that app. The grants of the app end at once.
    - How to read "Last used" and the list of granted writes on the live show page.
    - How to change the live value address: remove the app and connect it again.
-8. `docs/user-guide/live-shows.md` links to the grant part of the connected apps page.
+8. Each editor page of a feed shows the notice of screens 9 and 10 when the feed state gives `grant_blocked_by_draft`. The notice uses the neutral `notice` style.
+9. The list of granted writes on the live show page shows a refused write with its cause, as screen 11.
+10. `docs/user-guide/live-shows.md` links to the grant part of the connected apps page. It tells the user to write or discard each draft of the feed before a show, and explains the notice and the refused writes.
 
 ## Files
 
@@ -128,10 +132,11 @@ Mechanical:
 - A core test: the live value check refuses each condition of ADR 0110 item 26.
 - A client test: `PairingText::parse` refuses a text with no origin or no code, and reads `k7m2 q9xd`, `K7M2-Q9XD` and `K7M2Q9XO` as the same code. `FileSigner` makes its file with mode 0600.
 - A core test: a used code gives `app_code_used`, and a code after Done gives `app_code_invalid`.
+- A core test: with an active grant and a draft with changes, the feed state gives `grant_blocked_by_draft`. A refused granted write adds its cause to the list.
 - A Node test: the pairing text uses `SecretInput`, and the Connected apps model gives the lines of screen 6c after the pairing.
 - `cargo test --doc -p studio-app-client` passes.
 - The four commit checks pass.
 
-Visual, with `tools/drive-ui.mjs` at 1100 px and at 390 px with touch, in the two themes: screens 1 to 3, 6, 6b, 6c, 7 and 8 of the mockups. `$edges()`, `$overflow()` and `$fieldText()` are empty.
+Visual, with `tools/drive-ui.mjs` at 1100 px and at 390 px with touch, in the two themes: screens 1 to 3, 6 to 6c and 7 to 11 of the mockups. `$edges()`, `$overflow()` and `$fieldText()` are empty.
 
 Human: the human test of ADR 0110, after the live publisher has its client.

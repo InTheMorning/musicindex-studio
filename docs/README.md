@@ -117,6 +117,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0112: A credit role comes from a list](adr/0112-a-credit-role-comes-from-a-list.md)
 - [ADR 0113: The page of a person suggests a picture and an information address](adr/0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md)
 - [ADR 0114: The review shows the changes in words and marks the changed part of a line](adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md)
+- [ADR 0115: A changed value keeps the escape form of its source](adr/0115-a-changed-value-keeps-the-escape-form-of-its-source.md)
 
 ## Plans
 
@@ -329,6 +330,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 075: Check the feeds of a person](tasks/studio-v1-task-075-check-the-feeds-of-a-person.md)
 - [Studio v1 task 076: Picture and address suggestions](tasks/studio-v1-task-076-picture-and-address-suggestions.md)
 - [Studio v1 task 077: The review in words and the marked lines](tasks/studio-v1-task-077-review-in-words.md)
+- [Studio v1 task 078: A changed value keeps its escape form](tasks/studio-v1-task-078-escape-form.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

@@ -12,6 +12,7 @@ use crate::collection::{Collection, CollectionError, ConnectorId, ConnectorRow, 
 use crate::connector::{
     self, ConnectorError, LocalFolder, NsiteHost, S3Bucket, S3Config, SftpConfig, SftpHost,
 };
+use crate::net::NetPolicy;
 use crate::nostr_events;
 use crate::vault::OpenVault;
 
@@ -180,6 +181,7 @@ pub fn apply_folder_address(
     collection: &mut Collection,
     id: ConnectorId,
     vault: Option<&OpenVault>,
+    policy: &NetPolicy,
 ) -> Result<FolderAddress, AddressError> {
     let row = collection.connector(id)?;
     let linked: Vec<FeedRow> = collection
@@ -210,7 +212,7 @@ pub fn apply_folder_address(
     } else {
         FolderAddress::Unknown
     };
-    let made = connector::from_row(&collection.connector(id)?, vault)?;
+    let made = connector::from_row(&collection.connector(id)?, vault, policy)?;
     for feed in &linked {
         if let Some(path) = &feed.path {
             collection.set_address(
@@ -484,7 +486,7 @@ mod tests {
             "https://m.example/feeds/b.xml",
             None,
         );
-        let outcome = apply_folder_address(&mut collection, id, None).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap();
         let url = "https://m.example/feeds".to_owned();
         assert_eq!(
             outcome,
@@ -504,7 +506,7 @@ mod tests {
         assert_eq!(disagreements(&collection, id), Vec::new());
         // A second match keeps the inferred address.
         assert_eq!(
-            apply_folder_address(&mut collection, id, None).unwrap(),
+            apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap(),
             FolderAddress::Inferred { url, new: false }
         );
     }
@@ -516,7 +518,7 @@ mod tests {
             "https://cdn.example/b.xml",
             None,
         );
-        let outcome = apply_folder_address(&mut collection, id, None).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap();
         assert_eq!(outcome, FolderAddress::Different);
         assert_eq!(folder_url(&collection.connector(id).unwrap()), None);
         assert_eq!(collection.feed(third).unwrap().public_url, None);
@@ -530,7 +532,7 @@ mod tests {
             "https://cdn.example/b.xml",
             Some("https://m.example"),
         );
-        let outcome = apply_folder_address(&mut collection, id, None).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap();
         assert_eq!(
             outcome,
             FolderAddress::Typed {

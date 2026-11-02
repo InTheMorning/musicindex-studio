@@ -154,11 +154,6 @@ pub(crate) async fn start_upload(
             "a file can have 2 GiB at most",
         ));
     }
-    let (incoming, rules) = blocking(Arc::clone(&shared), |w| {
-        Ok((w.incoming_dir.clone(), w.rules.clone()))
-    })
-    .await?;
-    check_room(rules, body.size).await?;
     let upload = random_id()?;
     let row = UploadRow {
         id: upload.clone(),
@@ -170,7 +165,18 @@ pub(crate) async fn start_upload(
         updated_at: crate::announcer::now(),
     };
     let restore = row.replace.clone().filter(|text| text != "true");
-    blocking(Arc::clone(&shared), move |w| {
+    // The check of the room and the staging file of full size are one step
+    // under the lock of the workspace (ADR 0055 item 21). The file counts
+    // against the limit from the moment that it has its size, so a second
+    // start at the same time sees the space of the first. The file goes
+    // out when the upload ends, stops or expires.
+    blocking(shared, move |w| {
+        if let Some(rules) = &w.rules {
+            let used = rules.used();
+            if used >= rules.storage_limit || used.saturating_add(row.size) > rules.storage_limit {
+                return Err(storage_full());
+            }
+        }
         w.collection.feed(FeedId(id))?;
         // ADR 0105 item 10: the file to add again must be a removed file.
         if let Some(path) = restore {
@@ -187,26 +193,22 @@ pub(crate) async fn start_upload(
                 ));
             }
         }
+        std::fs::create_dir_all(&w.incoming_dir).map_err(|e| ApiError::internal(e.to_string()))?;
+        let path = part_path(&w.incoming_dir, &row.id);
+        let file = std::fs::File::create(&path).map_err(|e| ApiError::internal(e.to_string()))?;
+        let sized = file.set_len(row.size);
+        drop(file);
+        let added = match sized {
+            Ok(()) => w.collection.add_upload(&row).map_err(ApiError::from),
+            Err(e) => Err(ApiError::internal(e.to_string())),
+        };
+        if let Err(error) = added {
+            let _ = std::fs::remove_file(&path);
+            return Err(error);
+        }
         Ok(())
     })
     .await?;
-    tokio::fs::create_dir_all(&incoming)
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
-    let path = part_path(&incoming, &upload);
-    let file = tokio::fs::File::create(&path)
-        .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
-    let sized = file.set_len(row.size).await;
-    drop(file);
-    let added = match sized {
-        Ok(()) => blocking(shared, move |w| Ok(w.collection.add_upload(&row)?)).await,
-        Err(e) => Err(ApiError::internal(e.to_string())),
-    };
-    if let Err(error) = added {
-        let _ = tokio::fs::remove_file(&path).await;
-        return Err(error);
-    }
     Ok((
         StatusCode::CREATED,
         Json(json!({ "upload": upload, "part_size": PART_SIZE })),

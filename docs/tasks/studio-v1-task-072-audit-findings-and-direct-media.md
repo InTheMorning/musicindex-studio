@@ -2,7 +2,7 @@
 
 Decision: [ADR 0109](../adr/0109-images-and-audio-load-from-their-hosts.md) for packet 072e. The other packets correct defects against ADR 0013 items 13 and 14, ADR 0054 item 13 and ADR 0055 items 9 and 21. They also correct defects against ADR 0057 and ADR 0066. They add no rule.
 
-Status: Not started.
+Status: In progress. Packets 072a to 072d are complete.
 
 ## Goal
 

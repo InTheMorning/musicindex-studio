@@ -501,6 +501,7 @@ pub fn check_blossom_servers(servers: &[String], policy: &NetPolicy) -> Result<(
 pub fn from_row(
     row: &ConnectorRow,
     vault: Option<&OpenVault>,
+    policy: &NetPolicy,
 ) -> Result<Box<dyn Connector>, ConnectorError> {
     from_row_in(
         row,
@@ -508,7 +509,7 @@ pub fn from_row(
             vault,
             blobs: Vec::new(),
             signing: nostr_events::Signing::default(),
-            policy: NetPolicy::Open,
+            policy: policy.clone(),
         },
     )
 }
@@ -685,7 +686,9 @@ mod tests {
 
     #[test]
     fn from_row_refuses_a_row_with_a_secret_and_a_locked_vault() {
-        let error = from_row(&row(Some("host-1")), None).err().unwrap();
+        let error = from_row(&row(Some("host-1")), None, &NetPolicy::Open)
+            .err()
+            .unwrap();
         assert_eq!(error.kind(), ConnectorErrorKind::Unauthorized);
     }
 

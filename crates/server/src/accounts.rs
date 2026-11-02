@@ -82,6 +82,14 @@ const MIGRATIONS: &[&str] = &[
         created_at INTEGER NOT NULL
     );
 ",
+    // A user folder that an account deletion could not remove. The server
+    // tries again at each start (task 072c item 3).
+    "
+    CREATE TABLE leftover_folders (
+        folder TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL
+    );
+",
 ];
 
 /// A challenge is valid for this many seconds (ADR 0056 item 5).
@@ -972,6 +980,64 @@ impl Accounts {
             tx.execute(sql, [account_id]).map_err(|e| e.to_string())?;
         }
         tx.commit().map_err(|e| e.to_string())
+    }
+
+    /// Record a user folder that stays on the disk after an account
+    /// deletion. The server removes it at the next start.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn add_leftover_folder(&self, folder: &str) -> Result<(), String> {
+        self.db()
+            .execute(
+                "INSERT OR IGNORE INTO leftover_folders (folder, created_at) VALUES (?1, ?2)",
+                params![folder, now()],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// The recorded folders that stay on the disk.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn leftover_folders(&self) -> Result<Vec<String>, String> {
+        let db = self.db();
+        let mut statement = db
+            .prepare("SELECT folder FROM leftover_folders ORDER BY folder")
+            .map_err(|e| e.to_string())?;
+        statement
+            .query_map([], |r| r.get(0))
+            .and_then(Iterator::collect)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Try again to remove each recorded folder in `users_dir`. A removed
+    /// folder goes out of the record. A folder that stays gives one log
+    /// line. The function gives the number of folders that stay.
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn remove_leftover_folders(&self, users_dir: &Path) -> Result<usize, String> {
+        let mut left = 0;
+        for folder in self.leftover_folders()? {
+            match std::fs::remove_dir_all(users_dir.join(&folder)) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    eprintln!("studio-server: the user folder {folder} is still not removed: {e}");
+                    left += 1;
+                    continue;
+                }
+            }
+            self.db()
+                .execute("DELETE FROM leftover_folders WHERE folder = ?1", [&folder])
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(left)
     }
 
     /// Keep the hash of an app token for an account.

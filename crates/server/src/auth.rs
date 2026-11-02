@@ -246,7 +246,7 @@ fn identity_of(state: &Shared, account_id: i64) -> Result<Option<Identity>, Stri
 #[derive(Deserialize)]
 struct SignUp {
     email: String,
-    passphrase: String,
+    passphrase: Zeroizing<String>,
     #[serde(default)]
     invite: Option<String>,
     #[serde(default)]
@@ -368,7 +368,7 @@ async fn make_user(
 #[derive(Deserialize)]
 struct SignIn {
     email: String,
-    passphrase: String,
+    passphrase: Zeroizing<String>,
 }
 
 async fn sign_in(State(state): State<Shared>, request: Request) -> Response {
@@ -517,7 +517,10 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
     // The account is gone, so no request can reach the user. A folder that
     // stays on the disk is an operator task and not an error for the user.
     if let Err(error) = user.handle.delete_folder().await {
-        eprintln!("studio-server: a user folder was not removed: {error:?}");
+        // The server records the folder, and it tries again at each start
+        // (task 072c item 3).
+        eprintln!("studio-server: the user folder {folder} was not removed: {error:?}");
+        let _ = state.accounts.add_leftover_folder(&folder);
     }
     state.users.forget(session.account_id).await;
     let gone = state.nip46.remove_account(session.account_id);
@@ -527,7 +530,7 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
 
 #[derive(Deserialize)]
 struct Strength {
-    passphrase: String,
+    passphrase: Zeroizing<String>,
 }
 
 /// The strength of a passphrase for the sign-up page, before the user has a
@@ -1240,7 +1243,7 @@ async fn nip46_unlock(State(state): State<Shared>, request: Request) -> Response
 #[derive(Deserialize)]
 struct RecoverySignIn {
     account: String,
-    recovery_key: String,
+    recovery_key: Zeroizing<String>,
 }
 
 /// The account of a recovery sign-in: an email address or an `npub`.

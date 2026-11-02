@@ -55,8 +55,12 @@ fn setup(off: bool) -> Setup {
     let connector_id = collection
         .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
         .unwrap();
-    let connector =
-        connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
+    let connector = connector::from_row(
+        &collection.connector(connector_id).unwrap(),
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
     let mut hosts = Hosts::new();
     hosts.insert(connector_id, Box::new(folder));
     // The library is not under the host folder, so a library file is not a

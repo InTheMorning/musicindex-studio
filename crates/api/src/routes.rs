@@ -125,7 +125,7 @@ pub(crate) async fn status(State(shared): State<Shared>) -> ApiResult {
 
 #[derive(Deserialize)]
 pub(crate) struct CreateVault {
-    passphrase: String,
+    passphrase: Zeroizing<String>,
     #[serde(default)]
     recovery_key: bool,
 }
@@ -148,7 +148,7 @@ pub(crate) async fn create_vault(
 
 #[derive(Deserialize)]
 pub(crate) struct Strength {
-    passphrase: String,
+    passphrase: Zeroizing<String>,
 }
 
 /// The strength of a passphrase (ADR 0018). The response contains no part
@@ -159,7 +159,7 @@ pub(crate) async fn passphrase_strength(Json(body): Json<Strength>) -> ApiResult
 
 #[derive(Deserialize)]
 pub(crate) struct Unlock {
-    passphrase: String,
+    passphrase: Zeroizing<String>,
 }
 
 pub(crate) async fn unlock_vault(
@@ -175,7 +175,7 @@ pub(crate) async fn unlock_vault(
 
 #[derive(Deserialize)]
 pub(crate) struct NewPassphrase {
-    passphrase: String,
+    passphrase: Zeroizing<String>,
 }
 
 /// Replace the passphrase of the open vault (ADR 0018). The rule for the
@@ -398,7 +398,7 @@ pub(crate) struct NewSftp {
     base_url: Option<String>,
     login: SftpLogin,
     private_key: Option<String>,
-    passphrase: Option<String>,
+    passphrase: Option<Zeroizing<String>>,
     password: Option<String>,
     host_key: String,
 }
@@ -1197,6 +1197,7 @@ pub(crate) async fn update_connector(
                     &mut w.collection,
                     id,
                     w.vault.as_ref(),
+                    &w.net_policy,
                 )?;
             }
         }
@@ -1286,7 +1287,12 @@ fn set_connector_base_url(
     }
     w.collection
         .set_connector_config(row.id, &config.to_string())?;
-    studio_core::address::apply_folder_address(&mut w.collection, row.id, w.vault.as_ref())?;
+    studio_core::address::apply_folder_address(
+        &mut w.collection,
+        row.id,
+        w.vault.as_ref(),
+        &w.net_policy,
+    )?;
     Ok(())
 }
 
@@ -2000,6 +2006,7 @@ pub(crate) async fn match_connector(
             &mut w.collection,
             row.id,
             w.vault.as_ref(),
+            &w.net_policy,
         )?;
         // A new host gets its inventory immediately, so that the Files
         // page shows its copies (ADR 0036 item 6).
@@ -2838,7 +2845,13 @@ pub(crate) async fn put_library(
         })?;
         let report = if existing_root.is_none() {
             let hosts = w.hosts()?;
-            migrate::into_library(&w.collection, &hosts, &library, &w.imports_dir)?
+            migrate::into_library(
+                &w.collection,
+                &hosts,
+                &library,
+                &w.imports_dir,
+                &w.web,
+            )?
         } else {
             migrate::MoveReport::default()
         };
@@ -5988,6 +6001,13 @@ pub(crate) async fn put_show_live_value(
                 "give the uri and the protocol of the live value",
             ));
         }
+        live::check_live_value(uri, protocol).map_err(|e| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_live_value",
+                e.to_string(),
+            )
+        })?;
         let change = grant::GrantChange::SetLiveValue {
             uri: uri.to_owned(),
             protocol: protocol.to_owned(),

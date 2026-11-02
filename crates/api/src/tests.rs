@@ -6819,6 +6819,54 @@ async fn granted_show_in(app: &App, id: i64, live_xml: &dyn Fn() -> String) -> (
     (guid, body["token"].as_str().unwrap().to_owned())
 }
 
+/// The live value has one rule in the core, for the route of the app and
+/// for the live item page (task 072d).
+#[tokio::test]
+async fn the_core_refuses_a_long_or_control_live_value_for_the_app_and_the_page() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (_, token) = granted_show(&app, id).await;
+    let (_, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
+    let grant_id = shows[0]["grant_id"].as_i64().unwrap();
+    let long = "a".repeat(2049);
+    for value in [
+        json!({ "uri": long, "protocol": "socket.io" }),
+        json!({ "uri": "wss://example.com/value", "protocol": "p".repeat(65) }),
+        json!({ "uri": "wss://example.com/\nvalue", "protocol": "socket.io" }),
+    ] {
+        let (status, body) = app_call(
+            &app,
+            "PUT",
+            &format!("/app/v1/shows/{grant_id}/live-value"),
+            &token,
+            Some(value),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert_eq!(
+            body["error"]["code"], "invalid_live_value",
+            "ADR 0054 item 13: the core must refuse a long or control live value with invalid_live_value. Call live::check_live_value in the route."
+        );
+    }
+
+    let base = format!("/api/v1/feeds/{id}");
+    let (_, draft) = call(&app, "GET", &format!("{base}/draft"), None).await;
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["live_value"] = json!({ "uri": long, "protocol": "socket.io" });
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(
+        body["error"]["code"], "invalid_live_value",
+        "ADR 0054 item 13: the draft save must refuse a long or control live value. Call live::check_live_values in replace_model."
+    );
+}
+
 #[tokio::test]
 #[expect(
     clippy::too_many_lines,
@@ -7853,6 +7901,66 @@ async fn uploads_that_are_open_together_cannot_go_over_the_storage_limit() {
         StatusCode::INSUFFICIENT_STORAGE,
         "{statuses:?}"
     );
+}
+
+/// Many starts at the same time cannot go over the storage limit (task 072b,
+/// ADR 0055 item 21).
+#[tokio::test]
+async fn starts_at_the_same_time_cannot_go_over_the_storage_limit() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    server.set(
+        "/d.xml",
+        200,
+        feed_with_one_enclosure(&server.url("/a.mp3"), 5000).into_bytes(),
+    );
+    let app = app_with_rules(10 << 20);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/d.xml")] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let id = body["added"][0]["id"].as_i64().unwrap();
+    let path = format!("/api/v1/feeds/{id}/uploads");
+    let start = || {
+        call(
+            &app,
+            "POST",
+            &path,
+            Some(json!({ "name": "a.mp3", "size": 4 << 20 })),
+        )
+    };
+    let results = tokio::join!(
+        start(),
+        start(),
+        start(),
+        start(),
+        start(),
+        start(),
+        start(),
+        start()
+    );
+    let statuses = [
+        results.0.0,
+        results.1.0,
+        results.2.0,
+        results.3.0,
+        results.4.0,
+        results.5.0,
+        results.6.0,
+        results.7.0,
+    ];
+    let created = statuses
+        .iter()
+        .filter(|status| **status == StatusCode::CREATED)
+        .count();
+    assert!(
+        created <= 2,
+        "ADR 0055 item 21: the check of the room and the staging file must be one step under the lock of the workspace. {created} of 8 starts passed a limit of 2 files: {statuses:?}"
+    );
+    assert_eq!(created, 2, "{statuses:?}");
 }
 
 /// An upload with no new part for 24 hours has no row and no file after

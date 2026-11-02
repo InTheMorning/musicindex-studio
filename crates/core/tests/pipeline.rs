@@ -71,8 +71,12 @@ fn setup_with(feed_xml: &str) -> Setup {
     let connector_id = collection
         .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
         .unwrap();
-    let connector =
-        connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
+    let connector = connector::from_row(
+        &collection.connector(connector_id).unwrap(),
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
     let mut hosts = Hosts::new();
     hosts.insert(connector_id, Box::new(folder));
     let library = Library::open(dir.path().join("library")).unwrap();
@@ -303,8 +307,12 @@ fn new_setup() -> (
     let connector_id = collection
         .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
         .unwrap();
-    let connector =
-        connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
+    let connector = connector::from_row(
+        &collection.connector(connector_id).unwrap(),
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
     let mut hosts = Hosts::new();
     hosts.insert(connector_id, Box::new(folder));
     let library = Library::open(dir.path().join("library")).unwrap();
@@ -1713,7 +1721,12 @@ fn move_setup(redirecting: bool) -> MoveSetup {
         .add_connector(LocalFolder::KIND, "B", &folder_b.config(), None)
         .unwrap();
     let redirects: Redirects = Redirects::default();
-    let reader = connector::from_row(&collection.connector(a).unwrap(), None).unwrap();
+    let reader = connector::from_row(
+        &collection.connector(a).unwrap(),
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
     let mut hosts = Hosts::new();
     if redirecting {
         hosts.insert(
@@ -1951,7 +1964,12 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
     )
     .unwrap();
 
-    let reader = connector::from_row(&s.collection.connector(s.b).unwrap(), None).unwrap();
+    let reader = connector::from_row(
+        &s.collection.connector(s.b).unwrap(),
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
     pipeline::start_draft(&s.collection, reader.as_ref(), s.feed).unwrap();
     s.collection
         .add_draft_operation(s.feed, DraftOperationKind::Delete, None, s.a, "album.xml")
@@ -2817,8 +2835,12 @@ fn a_feed_and_a_host_with_no_public_address_give_no_address_and_the_write_succee
     let connector_id = collection
         .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
         .unwrap();
-    let connector =
-        connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
+    let connector = connector::from_row(
+        &collection.connector(connector_id).unwrap(),
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
     let mut hosts = Hosts::new();
     hosts.insert(connector_id, Box::new(folder));
     let library = Library::open(dir.path().join("library")).unwrap();

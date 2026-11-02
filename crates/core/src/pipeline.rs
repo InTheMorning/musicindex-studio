@@ -60,6 +60,9 @@ pub enum PipelineErrorKind {
     /// A live item has no start, no content link, or a status that is not
     /// `pending`, `live` or `ended` (ADR 0054 item 4).
     BadLiveItem,
+    /// A live value has a long address or protocol, or a control character
+    /// (task 072d).
+    InvalidLiveValue,
     /// The live file changed after the draft started.
     Conflict,
     /// The feed file is not a feed that Studio can read.
@@ -942,6 +945,8 @@ pub fn replace_model(
     let invalid = |message: String| PipelineError::new(PipelineErrorKind::InvalidModel, message);
     sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
     keep_identity(&current, &mut sent).map_err(invalid)?;
+    live::check_live_values(&sent)
+        .map_err(|e| PipelineError::new(PipelineErrorKind::InvalidLiveValue, e.to_string()))?;
     number_tracks(&current, &mut sent);
     keep_cover_form(&current, &mut sent);
     keep_explicit_form(&current, &mut sent);
@@ -3123,6 +3128,9 @@ fn apply_grant_change(
         GrantChange::GoLive => live::set_status(live_item, LiveStatus::Live).map_err(bad_status),
         GrantChange::End => live::set_status(live_item, LiveStatus::Ended).map_err(bad_status),
         GrantChange::SetLiveValue { uri, protocol } => {
+            live::check_live_value(uri, protocol).map_err(|e| {
+                PipelineError::new(PipelineErrorKind::InvalidLiveValue, e.to_string())
+            })?;
             live_item.live_value = Some(crate::feed::LiveValue {
                 uri: Some(uri.clone()),
                 protocol: Some(protocol.clone()),

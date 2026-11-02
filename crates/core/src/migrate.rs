@@ -145,6 +145,7 @@ pub fn into_library(
     hosts: &Hosts,
     library: &Library,
     store_root: &Path,
+    web: &Web,
 ) -> Result<MoveReport, MigrateError> {
     let feeds = collection.feeds()?;
     let mut taken: HashSet<String> = feeds
@@ -163,6 +164,7 @@ pub fn into_library(
             hosts,
             library,
             store_root,
+            web,
             feed,
             &mut taken,
             &mut report,
@@ -188,11 +190,16 @@ pub fn into_library(
 
 /// Move one feed into the library: steps 1 to 5 for a feed with a host, or
 /// the address of a read-only feed otherwise.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the function has the context of into_library and the Web of the workspace"
+)]
 fn move_feed(
     collection: &Collection,
     hosts: &Hosts,
     library: &Library,
     store_root: &Path,
+    web: &Web,
     feed: &FeedRow,
     taken: &mut HashSet<String>,
     report: &mut MoveReport,
@@ -220,7 +227,7 @@ fn move_feed(
             // call.
             give_folder(collection, feed.id, &folder, report)
         }
-        _ => move_read_only_feed(collection, library, feed, taken, report),
+        _ => move_read_only_feed(collection, library, web, feed, taken, report),
     }
 }
 
@@ -299,6 +306,7 @@ fn move_pending_files(
 fn move_read_only_feed(
     collection: &Collection,
     library: &Library,
+    web: &Web,
     feed: &FeedRow,
     taken: &mut HashSet<String>,
     report: &mut MoveReport,
@@ -306,7 +314,6 @@ fn move_read_only_feed(
     let Some(url) = feed.public_url.as_deref() else {
         return Ok(());
     };
-    let web = Web::new();
     let limit = u64::try_from(MAX_FEED_BYTES).unwrap_or(u64::MAX);
     let file = web.get(url, limit).map_err(|e| e.to_string())?;
     // The function names the folder, writes the feed XML and records the
@@ -450,7 +457,14 @@ mod tests {
 
         let host_before = snapshot_dir(s.host_dir.path());
 
-        let report = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
+        let report = into_library(
+            &s.collection,
+            &s.hosts,
+            &s.library,
+            s.store_dir.path(),
+            &Web::new(),
+        )
+        .unwrap();
         assert_eq!(report.release_folders, 2);
         assert_eq!(report.feed_files, 2);
         assert_eq!(report.moved_files, 1);
@@ -490,7 +504,14 @@ mod tests {
         assert_eq!(snapshot_dir(s.host_dir.path()), host_before);
 
         // A second call does nothing.
-        let second = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
+        let second = into_library(
+            &s.collection,
+            &s.hosts,
+            &s.library,
+            s.store_dir.path(),
+            &Web::new(),
+        )
+        .unwrap();
         assert_eq!(second, MoveReport::default());
         let row_one_again = s.collection.feed(feed_one).unwrap();
         assert_eq!(row_one_again.folder.as_deref(), Some("album-one"));
@@ -498,7 +519,14 @@ mod tests {
         // A feed with no folder after the table is gone moves with no
         // pending file, for example after the user sets the library again.
         s.collection.set_feed_folder_none_for_test(feed_one);
-        let third = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
+        let third = into_library(
+            &s.collection,
+            &s.hosts,
+            &s.library,
+            s.store_dir.path(),
+            &Web::new(),
+        )
+        .unwrap();
         assert!(third.errors.is_empty(), "{:?}", third.errors);
         assert_eq!(third.feed_files, 1);
     }
@@ -531,7 +559,14 @@ mod tests {
             .add_feed(None, Some((missing_connector, "gone.xml")))
             .unwrap();
 
-        let report = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
+        let report = into_library(
+            &s.collection,
+            &s.hosts,
+            &s.library,
+            s.store_dir.path(),
+            &Web::new(),
+        )
+        .unwrap();
         assert_eq!(report.feed_files, 1);
         assert_eq!(report.errors.len(), 1);
         assert_eq!(report.errors[0].feed_id, broken);
@@ -549,7 +584,14 @@ mod tests {
             .unwrap();
         s.hosts.insert(missing_connector, Box::new(gone_folder));
 
-        let second = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
+        let second = into_library(
+            &s.collection,
+            &s.hosts,
+            &s.library,
+            s.store_dir.path(),
+            &Web::new(),
+        )
+        .unwrap();
         assert_eq!(second.errors, Vec::new());
         assert_eq!(second.feed_files, 1);
         let row = s.collection.feed(broken).unwrap();
@@ -568,7 +610,14 @@ mod tests {
         let url = server.url("/album.xml");
         let feed = s.collection.add_feed(Some(&url), None).unwrap();
 
-        let report = into_library(&s.collection, &s.hosts, &s.library, s.store_dir.path()).unwrap();
+        let report = into_library(
+            &s.collection,
+            &s.hosts,
+            &s.library,
+            s.store_dir.path(),
+            &Web::new(),
+        )
+        .unwrap();
         assert_eq!(report.release_folders, 1);
         assert_eq!(report.feed_files, 1);
         assert_eq!(report.errors, Vec::new());
@@ -579,5 +628,30 @@ mod tests {
             std::fs::read(s.library.path(&folder, "album.xml")).unwrap(),
             b"<rss>remote</rss>"
         );
+    }
+
+    #[test]
+    fn into_library_follows_the_network_policy_for_a_read_only_feed() {
+        let mut s = setup();
+        let server = TestServer::start(Vec::new());
+        server.set("/album.xml", 200, b"<rss>remote</rss>".to_vec());
+        let url = server.url("/album.xml");
+        let feed = s.collection.add_feed(Some(&url), None).unwrap();
+
+        let web = Web::with_policy(&crate::net::NetPolicy::public());
+        let report = into_library(
+            &s.collection,
+            &s.hosts,
+            &s.library,
+            s.store_dir.path(),
+            &web,
+        )
+        .unwrap();
+        assert_eq!(
+            report.release_folders, 0,
+            "ADR 0057 item 1: the move of a read-only feed must use the Web of the workspace"
+        );
+        assert_eq!(report.errors.len(), 1);
+        assert!(s.collection.feed(feed).unwrap().folder.is_none());
     }
 }

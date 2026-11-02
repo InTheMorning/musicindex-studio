@@ -23,8 +23,12 @@ fn setup() -> Setup {
     let connector_id = collection
         .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
         .unwrap();
-    let connector =
-        connector::from_row(&collection.connector(connector_id).unwrap(), None).unwrap();
+    let connector = connector::from_row(
+        &collection.connector(connector_id).unwrap(),
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
     Setup {
         _dir: dir,
         collection,

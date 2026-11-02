@@ -182,6 +182,12 @@ To restore, stop the server, put the folder back with the owner `studio` and the
 
 An existing Docker volume keeps the mode of its folder. Docker copies the mode of the image folder only into a new volume. The server repairs the modes at its start (ADR 0104): it sets `<data>`, `<data>/users` and each user folder to `0700`, and each `vault.json` to `0600`. Check the result with `docker exec` and `stat -c %a /data /data/users /data/users/*/vault.json`. The result is 700, 700 and 600.
 
+### Account deletion
+
+A deletion of an account removes the user folder. It does not erase the disk. The removed files stay in the free blocks of the disk until the disk writes over them. A copy of the disk can also hold them.
+
+The server tries the removal of the folder three times. When the folder stays, the server records its name in `server.sqlite`, writes one log line for the operator and tries again at each start. The log line starts with `studio-server: the user folder`. Find the cause, for example an incorrect owner or mode, and restart the server.
+
 ### Personal data of people who are not users
 
 Each `collection.sqlite` holds personal data about people who are not users of Studio.

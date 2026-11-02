@@ -151,7 +151,10 @@ fn is_global_v6(ip: Ipv6Addr) -> bool {
         // ff00::/8
         || (segments[0] & 0xff00) == 0xff00
         // 2001:db8::/32
-        || (segments[0] == 0x2001 && segments[1] == 0x0db8);
+        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+        // ::/96 (IPv4-compatible) and 2002::/16 (6to4) hold an IPv4 address.
+        || segments[..6] == [0; 6]
+        || segments[0] == 0x2002;
     !refused
 }
 
@@ -374,6 +377,10 @@ mod tests {
             "::ffff:10.0.0.1",
             "64:ff9b::10.0.0.1",
             "64:ff9b::a00:1",
+            "::10.0.0.1",
+            "::a00:1",
+            "2002:a00:1::1",
+            "2002::1",
         ];
         for text in refused {
             assert!(!is_global(ip(text)), "{text}");

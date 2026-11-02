@@ -10,10 +10,19 @@ use axum::response::Response;
 use crate::error::ApiError;
 
 /// The access rules of one local API.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Access {
     token: Arc<str>,
     port: u16,
+}
+
+impl std::fmt::Debug for Access {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Access")
+            .field("token", &"<hidden>")
+            .field("port", &self.port)
+            .finish()
+    }
 }
 
 impl Access {
@@ -120,4 +129,18 @@ pub(crate) fn random_hex<const N: usize>() -> Result<String, ApiError> {
             let _ = write!(text, "{b:02x}");
             text
         }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_output_shows_no_token() {
+        let text = format!("{:?}", Access::with_token("secret-token-value", 4100));
+        assert!(
+            !text.contains("secret-token-value"),
+            "ADR 0013 item 14: the Debug output of Access must not show the token. Write a manual Debug that hides it."
+        );
+    }
 }

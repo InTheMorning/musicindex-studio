@@ -1059,10 +1059,15 @@ mod tests {
             config: connector(&server, "").config(),
             secret_ref: secret_ref.map(str::to_owned),
         };
-        let made = super::super::from_row(&row(Some("host-1")), Some(&vault)).unwrap();
+        let made = super::super::from_row(
+            &row(Some("host-1")),
+            Some(&vault),
+            &crate::net::NetPolicy::Open,
+        )
+        .unwrap();
         made.write("a.txt", b"x", &Expected::Absent).unwrap();
         assert_eq!(server.object("a.txt").as_deref(), Some(&b"x"[..]));
-        let error = super::super::from_row(&row(None), Some(&vault))
+        let error = super::super::from_row(&row(None), Some(&vault), &crate::net::NetPolicy::Open)
             .err()
             .unwrap();
         assert_eq!(error.kind(), ConnectorErrorKind::InvalidConfig);

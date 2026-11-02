@@ -206,7 +206,6 @@ fn token_from(headers: &HeaderMap) -> Option<String> {
 }
 
 /// An active session.
-#[derive(Debug)]
 pub struct Session {
     /// The session token. Do not log it.
     pub token: String,
@@ -214,6 +213,16 @@ pub struct Session {
     pub account_id: i64,
     /// True when the session can only add a new sign-in method.
     pub restricted: bool,
+}
+
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("token", &"<hidden>")
+            .field("account_id", &self.account_id)
+            .field("restricted", &self.restricted)
+            .finish()
+    }
 }
 
 /// The routes that a restricted session reaches, as a method and a path
@@ -590,5 +599,24 @@ pub async fn dispatch(State(state): State<Shared>, request: Request) -> Response
         media(State(state), request).await
     } else {
         failure(StatusCode::NOT_FOUND, "not_found", "no such route")
+    }
+}
+
+#[cfg(test)]
+mod debug_tests {
+    use super::*;
+
+    #[test]
+    fn debug_output_shows_no_token() {
+        let session = Session {
+            token: "secret-token-value".to_owned(),
+            account_id: 1,
+            restricted: false,
+        };
+        let text = format!("{session:?}");
+        assert!(
+            !text.contains("secret-token-value"),
+            "ADR 0055 item 9: the Debug output of Session must not show the token. Write a manual Debug that hides it."
+        );
     }
 }

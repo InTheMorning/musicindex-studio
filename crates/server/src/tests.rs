@@ -1388,6 +1388,49 @@ async fn an_event_with_a_wrong_signature_does_not_block_its_public_key() {
 }
 
 #[tokio::test]
+async fn a_folder_that_stays_after_a_deletion_is_recorded_and_removed_at_the_next_start() {
+    use std::os::unix::fs::PermissionsExt;
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let (_, folder) = app.state.accounts.folders().unwrap().remove(0);
+    let path = app.state.users.folder_path(&folder);
+    let users_dir = path.parent().unwrap().to_path_buf();
+    // The user folder cannot go out of a parent that has no write mode.
+    std::fs::set_permissions(&users_dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let mut delete = call(
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": "a@example.org" })),
+    );
+    delete.token = Some(&who.0);
+    delete.csrf = Some(&who.1);
+    let done = send(&app, delete).await;
+    assert_eq!(done.status, StatusCode::NO_CONTENT, "{}", done.text);
+    assert_eq!(
+        app.state.accounts.leftover_folders().unwrap(),
+        vec![folder.clone()],
+        "ADR 0055 item 9: a user folder that stays after an account deletion must be recorded in server.sqlite. Call add_leftover_folder when delete_folder fails."
+    );
+    assert_eq!(
+        app.state
+            .accounts
+            .remove_leftover_folders(&users_dir)
+            .unwrap(),
+        1
+    );
+    std::fs::set_permissions(&users_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(
+        app.state
+            .accounts
+            .remove_leftover_folders(&users_dir)
+            .unwrap(),
+        0
+    );
+    assert!(!path.exists());
+    assert_eq!(app.state.accounts.leftover_folders().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn a_nostr_account_can_delete_itself_with_its_public_key() {
     let app = app(Signup::Open);
     let keys = new_keys();

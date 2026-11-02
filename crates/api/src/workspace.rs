@@ -392,8 +392,23 @@ impl WorkspaceHandle {
                 .rules
                 .as_ref()
                 .ok_or_else(|| ApiError::internal("the workspace has no user folder"))?;
-            std::fs::remove_dir_all(&rules.folder)
-                .map_err(|e| ApiError::internal(format!("the user folder: {e}")))
+            // The removal runs three times. A folder that is gone counts as
+            // removed (ADR 0055 item 9, task 072c).
+            let mut last = None;
+            for attempt in 0..3 {
+                if attempt > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                match std::fs::remove_dir_all(&rules.folder) {
+                    Ok(()) => return Ok(()),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(e) => last = Some(e),
+                }
+            }
+            Err(ApiError::internal(format!(
+                "the user folder: {}",
+                last.map_or_else(String::new, |e| e.to_string())
+            )))
         })
         .await
     }
@@ -753,11 +768,11 @@ impl Workspace {
             grants_dir,
             collection: Collection::open(&data_dir.join("collection.sqlite"))?,
             vault: None,
-            web: Web::new(),
-            hub_web: Web::new(),
+            web: Web::with_policy(&NetPolicy::Open),
+            hub_web: Web::with_policy(&NetPolicy::Open),
             net_policy: NetPolicy::Open,
             address_check: None,
-            index: MusicIndex::new(Web::new(), DEFAULT_API),
+            index: MusicIndex::new(Web::with_policy(&NetPolicy::Open), DEFAULT_API),
             lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
             nip05_scheme: "https",
             keysend_scheme: Some("https"),
@@ -886,7 +901,7 @@ impl Workspace {
     /// operator gives this address, so the client keeps the policy `Open`.
     #[must_use]
     pub fn with_musicindex(mut self, base: &str) -> Self {
-        self.index = MusicIndex::new(Web::new(), base);
+        self.index = MusicIndex::new(Web::with_policy(&NetPolicy::Open), base);
         self
     }
 

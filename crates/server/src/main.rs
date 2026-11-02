@@ -103,6 +103,8 @@ async fn run() -> Result<(), String> {
 /// policy `Public`. Only a test build gives exceptions.
 fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Shared, String> {
     let accounts = Arc::new(accounts::Accounts::open(&options.data_dir)?);
+    // A folder that an older deletion could not remove (task 072c item 3).
+    accounts.remove_leftover_folders(&options.data_dir.join("users"))?;
     // The passphrase is random and nobody keeps it.
     let mut dummy = OpenVault::create(&accounts::random_hex(16)?).map_err(|e| e.to_string())?;
     // A recovery sign-in with an unknown account opens this vault with the

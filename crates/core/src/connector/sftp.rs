@@ -1069,9 +1069,10 @@ mod tests {
         for login in [SftpLogin::Key, SftpLogin::Password] {
             let config =
                 serde_json::to_string(&config(&server, Path::new("/srv"), login)).expect("JSON");
-            let error = super::super::from_row(&row(config, None), None)
-                .err()
-                .expect("an error");
+            let error =
+                super::super::from_row(&row(config, None), None, &crate::net::NetPolicy::Open)
+                    .err()
+                    .expect("an error");
             assert_eq!(error.kind(), ConnectorErrorKind::InvalidConfig, "{login:?}");
         }
     }
@@ -1085,8 +1086,12 @@ mod tests {
         let mut vault = OpenVault::create("correct horse battery staple 2026").expect("a vault");
         vault.put("host-1", secret.as_bytes()).expect("a secret");
         let config = serde_json::to_string(&config(&server, &root, SftpLogin::Key)).expect("JSON");
-        let connector = super::super::from_row(&row(config, Some("host-1")), Some(&vault))
-            .expect("a connector");
+        let connector = super::super::from_row(
+            &row(config, Some("host-1")),
+            Some(&vault),
+            &crate::net::NetPolicy::Open,
+        )
+        .expect("a connector");
         connector
             .write("a.txt", b"one", &Expected::Absent)
             .expect("a write");
@@ -1098,7 +1103,9 @@ mod tests {
         let server = TestSshd::start();
         let config = serde_json::to_string(&config(&server, Path::new("/srv"), SftpLogin::Agent))
             .expect("JSON");
-        assert!(super::super::from_row(&row(config, None), None).is_ok());
+        assert!(
+            super::super::from_row(&row(config, None), None, &crate::net::NetPolicy::Open).is_ok()
+        );
     }
 
     #[test]

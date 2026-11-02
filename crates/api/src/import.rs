@@ -482,13 +482,13 @@ pub enum Credential {
 pub struct ImportOpen {
     /// The passphrase.
     #[serde(default)]
-    pub passphrase: Option<String>,
+    pub passphrase: Option<Zeroizing<String>>,
     /// The recovery key.
     #[serde(default)]
-    pub recovery_key: Option<String>,
+    pub recovery_key: Option<Zeroizing<String>>,
     /// The vault key as base64, from a NIP-07 signer.
     #[serde(default)]
-    pub key: Option<String>,
+    pub key: Option<Zeroizing<String>>,
     /// A NIP-46 connection ID. The server only.
     #[serde(default)]
     pub connection: Option<String>,
@@ -511,13 +511,11 @@ impl ImportOpen {
         let given = [
             self.passphrase
                 .as_ref()
-                .map(|t| Credential::Passphrase(Zeroizing::new(t.clone()))),
+                .map(|t| Credential::Passphrase(t.clone())),
             self.recovery_key
                 .as_ref()
-                .map(|t| Credential::RecoveryKey(Zeroizing::new(t.clone()))),
-            self.key
-                .as_ref()
-                .map(|t| Credential::Key(Zeroizing::new(t.clone()))),
+                .map(|t| Credential::RecoveryKey(t.clone())),
+            self.key.as_ref().map(|t| Credential::Key(t.clone())),
         ];
         let mut given: Vec<Credential> = given.into_iter().flatten().collect();
         if given.len() == 1 && self.connection.is_none() {
@@ -691,4 +689,31 @@ pub(crate) async fn open_import(
         })))
     })
     .await
+}
+
+#[cfg(test)]
+mod debug_tests {
+    use super::*;
+
+    #[test]
+    fn debug_output_of_an_import_body_shows_no_secret() {
+        let body: ImportOpen = serde_json::from_str(
+            r#"{"passphrase":"secret-one","recovery_key":"secret-two","key":"secret-three"}"#,
+        )
+        .unwrap();
+        let text = format!(
+            "{body:?} {:?}",
+            body.credential()
+                .map(|c| format!("{c:?}"))
+                .unwrap_or_default()
+        );
+        for secret in ["secret-one", "secret-two", "secret-three"] {
+            assert!(
+                !text.contains(secret),
+                "ADR 0013 item 14: the Debug output of ImportOpen must not show a secret. Keep each secret field in Zeroizing, which hides its text in Debug."
+            );
+        }
+        let credential = Credential::Passphrase(Zeroizing::new("secret-four".to_owned()));
+        assert!(!format!("{credential:?}").contains("secret-four"));
+    }
 }

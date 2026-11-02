@@ -100,6 +100,56 @@ pub fn set_status(item: &mut LiveItem, next: LiveStatus) -> Result<(), LiveError
     Ok(())
 }
 
+/// The most characters of the address of a live value.
+pub const MAX_LIVE_VALUE_URI: usize = 2048;
+/// The most characters of the protocol of a live value.
+pub const MAX_LIVE_VALUE_PROTOCOL: usize = 64;
+
+/// Check the address and the protocol of a live value (task 072d). The
+/// rule has no test for an empty text, because a draft can hold a value that
+/// the user did not finish.
+///
+/// # Errors
+///
+/// Gives an error for an address of more than [`MAX_LIVE_VALUE_URI`]
+/// characters, a protocol of more than [`MAX_LIVE_VALUE_PROTOCOL`]
+/// characters, or a control character in either.
+pub fn check_live_value(uri: &str, protocol: &str) -> Result<(), LiveError> {
+    let refuse = |message: String| Err(LiveError { message });
+    if uri.chars().count() > MAX_LIVE_VALUE_URI {
+        return refuse(format!(
+            "The live value address has more than {MAX_LIVE_VALUE_URI} characters."
+        ));
+    }
+    if protocol.chars().count() > MAX_LIVE_VALUE_PROTOCOL {
+        return refuse(format!(
+            "The live value protocol has more than {MAX_LIVE_VALUE_PROTOCOL} characters."
+        ));
+    }
+    if uri.chars().chain(protocol.chars()).any(char::is_control) {
+        return refuse("The live value has a control character.".to_owned());
+    }
+    Ok(())
+}
+
+/// Check the live value of each live item of a feed with
+/// [`check_live_value`].
+///
+/// # Errors
+///
+/// Gives the first error of [`check_live_value`].
+pub fn check_live_values(feed: &Feed) -> Result<(), LiveError> {
+    for Entry { value: live, .. } in &feed.live_items {
+        if let Some(value) = &live.live_value {
+            check_live_value(
+                value.uri.as_deref().unwrap_or_default(),
+                value.protocol.as_deref().unwrap_or_default(),
+            )?;
+        }
+    }
+    Ok(())
+}
+
 /// Give the problems of the live items of a feed.
 #[must_use]
 pub fn problems(feed: &Feed) -> Vec<LiveProblem> {
@@ -144,6 +194,17 @@ pub fn problems(feed: &Feed) -> Vec<LiveProblem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_live_value_has_a_limit_and_no_control_character() {
+        assert!(check_live_value("wss://example.com/value", "socket.io").is_ok());
+        assert!(check_live_value("", "").is_ok());
+        assert!(check_live_value(&"a".repeat(MAX_LIVE_VALUE_URI), "p").is_ok());
+        assert!(check_live_value(&"a".repeat(MAX_LIVE_VALUE_URI + 1), "p").is_err());
+        assert!(check_live_value("u", &"a".repeat(MAX_LIVE_VALUE_PROTOCOL + 1)).is_err());
+        assert!(check_live_value("wss://a\n.example", "p").is_err());
+        assert!(check_live_value("u", "p\u{7}").is_err());
+    }
 
     #[test]
     fn a_new_live_item_is_pending_with_a_uuid() {

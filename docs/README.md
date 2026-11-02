@@ -381,6 +381,7 @@ This is the index of the project documents. The user guide is in the root [READM
 Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-each-release-candidate-has-a-notes-file.md)).
 
 - [0.1.0-rc.9](releases/0.1.0-rc.9.md)
+- [0.1.0-rc.10](releases/0.1.0-rc.10.md)
 
 ## Research
 

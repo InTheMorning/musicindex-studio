@@ -89,6 +89,11 @@ The crate calls these routes. The live publisher does not call them directly.
 
 v4vmm starts and restarts the live publisher as a service (v4vmm ADR 0059). v4vmm does not connect to Studio. Each repository decides its own points in its own decision records. Studio needs no answer to start task 073.
 
+Two tasks hold these points, and each task writes its decision record first:
+
+- `musicindex-live-publisher`: `docs/tasks/studio-client-task-001-studio-client.md`. Its packet a writes publisher ADR 0018.
+- `v4vmm`: `docs/tasks/adr-0059-task-020-studio-connection.md`. Its packet a amends v4vmm ADR 0059.
+
 | Point | Question | Owner |
 | --- | --- | --- |
 | The pairing control | Does the user pair in a terminal with `studio connect`, or does v4vmm give a "Connect to Studio" control that runs it? | Live publisher and v4vmm |

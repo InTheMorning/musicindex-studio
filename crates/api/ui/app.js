@@ -3820,6 +3820,8 @@ function UnlockSheet({ session, reason, onDone }) {
     finish(true);
   });
   const passError = splitError(error, ['wrong_key']);
+  // A password manager finds its entry by the username. The form thus holds
+  // the email of the account in a hidden field, as the sign-in form does.
   const signerError = error && error.code === 'wrong_key' && methods.includes('nip07') && !methods.includes('passphrase') ? error : null;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="unlock-title" onClose=${() => finish(false)}>
     <header>
@@ -3830,6 +3832,8 @@ function UnlockSheet({ session, reason, onDone }) {
       <p>This step needs the vault. Your passphrase, your signer or your passkey opens it.</p>
       ${reason && html`<p class="hint" role="status">${reason}</p>`}
       ${methods.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase}>
+        ${session && session.email && html`<input class="visually-hidden" type="email" autocomplete="username" value=${session.email}
+          readonly tabindex="-1" aria-hidden="true" />`}
         <${SecretField} id="unlock-sheet-passphrase" label="Passphrase" autocomplete="current-password" required autofocus
           error=${passError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
         <div class="actions"><button class="button primary" type="submit" disabled=${busy || !passphrase}>${busy ? 'Unlocking…' : 'Unlock'}</button></div>

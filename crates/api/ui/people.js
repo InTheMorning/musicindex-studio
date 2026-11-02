@@ -288,6 +288,11 @@ export function changeRow(set, people = [], payees = []) {
 // change set, else the People page (ADR 0099 item 12).
 export const afterDiscard = (set) => (set && set.person_id != null ? { name: 'person', id: set.person_id } : { name: 'people' });
 
+// The view in the place of the page of a person that is gone: Back can open
+// the page of a person after a merge or a delete. `merged` maps the ID of a
+// merged person to the ID of the person that kept its items.
+export const afterMissing = (id, merged) => (merged.has(String(id)) ? { name: 'person', id: merged.get(String(id)) } : { name: 'people' });
+
 // The choices of "Member of": each publisher feed, A to Z, as
 // [value, label] pairs. `None` is the placeholder of the menu.
 export function memberChoices(feeds) {

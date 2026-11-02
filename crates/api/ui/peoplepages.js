@@ -21,8 +21,12 @@ import {
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, personFieldsBody, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
   personChoices, addToTitle, ADD_TO_HINT, NO_PERSON_TEXT, addItemsLabel, addToRows, addSelectedCount, addItemsBody, MORE_HINT,
-  moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody,
+  moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
 } from './people.js';
+
+// The merges of this page load: the ID of each merged person, to the ID of
+// the person that kept its items.
+const merged = new Map();
 
 // The round picture of a person. A person with no picture, or a picture that
 // Studio cannot read, shows the initials of the name.
@@ -504,6 +508,9 @@ export function PersonPage({ id, feeds, go }) {
   ]);
   // Each change of a link reads the person again (task 065 item 5).
   const act = (work) => run(async () => { try { await work(); } finally { await reload(); } });
+  // Back can open a person that a merge or a delete removed.
+  const missing = !data && error && error.status === 404;
+  useEffect(() => { if (missing) go(afterMissing(id, merged), { replace: true }); }, [missing]);
   if (!data) {
     return html`<div><${Bar}><span class="bar-title">Person</span><//><section class="section">
       <${ErrorNotice} error=${error} />${!error && html`<p class="empty" role="status">Loading the person…</p>`}</section></div>`;
@@ -620,6 +627,7 @@ function MergeForm({ person, onCancel, onMerged }) {
   const result = other ? mergeResult(person, other) : null;
   const merge = () => run(async () => {
     await api(`/people/${person.id}/merge`, { method: 'POST', body: mergeBody(otherId) });
+    merged.set(String(otherId), person.id);
     onMerged();
   });
   return html`<header>

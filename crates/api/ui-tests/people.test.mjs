@@ -186,7 +186,7 @@ test('the result line leaves out a count of 0 and names one part', () => {
 
 import {
   initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeTitle, feedsToWrite,
-  changeRow, afterDiscard, memberChoices, makeSheetTitle, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
+  changeRow, afterDiscard, afterMissing, memberChoices, makeSheetTitle, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
 } from '../ui/people.js';
 
 test('the search matches the name, an address and a key, with no regard to capitals', () => {
@@ -225,6 +225,13 @@ test('a change row gives the operation, the subject and the feeds to write', () 
 test('Discard opens the person of a person change set, else People (ADR 0099 item 12)', () => {
   assert.deepEqual(afterDiscard({ person_id: 7 }), { name: 'person', id: 7 });
   assert.deepEqual(afterDiscard({ person_id: null }), { name: 'people' });
+});
+
+test('a person that is gone opens the person that kept its items, else People', () => {
+  const merged = new Map([['4', 9]]);
+  assert.deepEqual(afterMissing(4, merged), { name: 'person', id: 9 });
+  assert.deepEqual(afterMissing('4', merged), { name: 'person', id: 9 });
+  assert.deepEqual(afterMissing(5, merged), { name: 'people' });
 });
 
 test('the sheet Make a Person gives its texts, rows and menu', () => {

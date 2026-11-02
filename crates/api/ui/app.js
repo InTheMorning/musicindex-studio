@@ -1816,7 +1816,7 @@ function NoToken() {
 
 // Does a media query apply? This follows each change, such as a resize or a
 // turn of the device.
-function useMedia(query) {
+export function useMedia(query) {
   const [matches, setMatches] = useState(() => matchMedia(query).matches);
   useEffect(() => {
     const media = matchMedia(query);
@@ -2826,7 +2826,7 @@ function ChangeSetPage({ id, go, onChanged }) {
             ${!shown && html`<p class="hint" role="status">Loading the changes…</p>`}
             ${shown && shown.error && html`<${ErrorNotice} error=${shown.error} />`}
             ${shown && shown.diff && (shown.diff.changed
-              ? html`<${DiffView} unified=${shown.diff.unified} />`
+              ? html`<${DiffView} diff=${shown.diff} />`
               : html`<p class="hint">The draft is the same as the hosted file.</p>`)}
           </div>
         </details>`;

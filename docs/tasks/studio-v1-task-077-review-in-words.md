@@ -3,9 +3,10 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Review Of A Write".
 Decision: [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md). It uses [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18.
 
-Status: In progress. Packet 077a is complete. Notes from the reviews:
+Status: In progress. Packets 077a and 077b are complete. The screenshot visual check of 077b passed on 2026-11-02. Notes from the reviews:
 
 - 077a: the parts use the character mode of `similar` with semantic cleanup. The word mode marked parts of the credit text that did not change. A changed attribute covers only the start tag of its element (`ElementSpan::tag_end`). The groups follow the sequence of the table of the model keys. The planning model corrected the count of the uncovered changes: the first count did not count a changed line next to a covered line. With no live file, each line of the draft is covered.
+- 077b: the planning model gave the link "Show N more lines" the target size of its profile, and the sign `⋯` of the mockup. Each view menu of a page follows the last selection. A change of a title writes `'` as `&apos;`, and the marks show this change.
 
 ## Goal
 

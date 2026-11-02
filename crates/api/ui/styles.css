@@ -935,9 +935,15 @@ textarea:focus { background: var(--fill); }
   font-size: var(--text-callout);
   line-height: 1.5;
 }
-.diff span { display: block; padding: 0 14px; border-left: 3px solid transparent; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff .line { display: block; padding: 0 14px; border-left: 3px solid transparent; white-space: pre-wrap; overflow-wrap: anywhere; }
 .diff .add { border-left-color: var(--diff-add); background: var(--diff-add-bg); }
 .diff .remove { border-left-color: var(--diff-remove); background: var(--diff-remove-bg); }
+.diff .ins, .diff .del { border-radius: 3px; padding: 0 1px; color: inherit; }
+.diff .ins { background: color-mix(in srgb, var(--diff-add) 38%, transparent); }
+.diff .del { background: color-mix(in srgb, var(--diff-remove) 38%, transparent); text-decoration: line-through; }
+.diff .more { display: inline-flex; align-items: center; min-height: var(--target); color: var(--accent); }
+.viewbar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; justify-content: space-between; margin: 12px 0; }
+.viewbar .field { flex: 1 1 220px; margin: 0; }
 
 .snapshots { list-style: none; display: grid; gap: 8px; }
 .snapshots li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

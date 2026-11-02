@@ -4,7 +4,8 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { api, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
+import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, commonIndent, stripIndent, moreLabel } from './review.js';
+import { api, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
@@ -1297,13 +1298,81 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
 
 // ---- The diff, the write and the snapshots, in sheets (ADR 0029) ----
 
-export function DiffView({ unified }) {
-  const lines = unified.split('\n');
-  return html`<pre class="diff" tabindex="0" aria-label="Changes between the hosted file and the draft">${lines.map((line) => {
-    const kind = line.startsWith('+') && !line.startsWith('+++') ? 'add'
-      : line.startsWith('-') && !line.startsWith('---') ? 'remove' : '';
-    return html`<span class=${kind}>${line}\n</span>`;
-  })}</pre>`;
+const VIEW_KEY = 'studio.review.view';
+const VIEW_EVENT = 'studio-review-view';
+let viewCounter = 0;
+
+// The last view of the user, kept on this device only (ADR 0114 item 8).
+function storedView() {
+  try {
+    return normalizeView(localStorage.getItem(VIEW_KEY));
+  } catch {
+    return 'simplified';
+  }
+}
+
+function useReviewView() {
+  const [view, setView] = useState(storedView);
+  useEffect(() => {
+    const onChange = () => setView(storedView());
+    window.addEventListener(VIEW_EVENT, onChange);
+    return () => window.removeEventListener(VIEW_EVENT, onChange);
+  }, []);
+  const choose = (next) => {
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // The choice then lasts for this page only.
+    }
+    setView(next);
+    window.dispatchEvent(new Event(VIEW_EVENT));
+  };
+  return [view, choose];
+}
+
+// The lines of a review: the view menu, the lines with the changed parts
+// marked, and the links that open the hidden lines (ADR 0114 items 8 to 13).
+// `diff` is the answer of the diff route.
+export function DiffView({ diff }) {
+  const [view, chooseView] = useReviewView();
+  const [whole, setWhole] = useState(false);
+  const [opened, setOpened] = useState(() => new Set());
+  const narrow = useMedia('(max-width: 760px)');
+  const idRef = useRef(null);
+  if (idRef.current === null) {
+    viewCounter += 1;
+    idRef.current = `review-view-${viewCounter}`;
+  }
+  const rows = shownLines(diff.lines || [], view);
+  const segments = runs(rows, whole);
+  const open = (id) => setOpened((prev) => new Set(prev).add(id));
+  const shown = segments.flatMap((s) => (s.hidden ? (opened.has(s.id) ? s.rows : []) : [s.row]));
+  const indent = narrow ? commonIndent(shown) : 0;
+  const line = (row, key) => html`<span key=${key} class=${`line ${row.kind === 'same' ? '' : row.kind}`}>${row.sign} ${
+    (indent ? stripIndent(row.parts, indent) : row.parts).map((part, i) => (part.changed
+      ? html`<mark key=${i} class=${row.kind === 'remove' ? 'del' : 'ins'}>${part.text}</mark>`
+      : part.text))}\n</span>`;
+  return html`<div class="review-lines">
+    <div class="viewbar">
+      <div class="field">
+        <label for=${idRef.current}>View</label>
+        <div class="field-body">
+          <span class="hint" id=${`${idRef.current}-hint`}>${VIEW_HINTS[view]}</span>
+          <select id=${idRef.current} value=${view} aria-describedby=${`${idRef.current}-hint`}
+            onChange=${(e) => chooseView(normalizeView(e.target.value))}>
+            ${VIEWS.map((v) => html`<option value=${v}>${VIEW_LABELS[v]}</option>`)}
+          </select>
+        </div>
+      </div>
+      <button class="button" type="button" onClick=${() => setWhole(!whole)}>${whole ? 'Show Only the Changes' : 'Show the Whole File'}</button>
+    </div>
+    <pre class="diff" tabindex="0" aria-label="Changes between the hosted file and the draft">${segments.map((s, index) => {
+      if (!s.hidden) return line(s.row, `r${index}`);
+      if (opened.has(s.id)) return s.rows.map((row, i) => line(row, `o${s.id}-${i}`));
+      return html`<span key=${`h${s.id}`} class="line"><a class="more" href=${`#diff-run-${s.id}`}
+        onClick=${(e) => { e.preventDefault(); open(s.id); }}><span aria-hidden="true">⋯ </span>${moreLabel(s.count)}</a>\n</span>`;
+    })}</pre>
+  </div>`;
 }
 
 // ---- Host operations, in the diff sheet and the Files page (task 021g,
@@ -1674,7 +1743,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
-        ? html`<${DiffView} unified=${diff.unified} />`
+        ? html`<${DiffView} diff=${diff} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
       ${waiting && html`<p class="hint" role="status">Wait for each download, then write.</p>`}
       ${diff && toSign.length > 0 && html`<p class="hint" role="status">${signSummary(toSign.length)}</p>`}

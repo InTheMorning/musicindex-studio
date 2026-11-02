@@ -106,6 +106,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0100: Each release candidate has a notes file](adr/0100-each-release-candidate-has-a-notes-file.md)
 - [ADR 0102: Delete a person changes no feed](adr/0102-delete-a-person-changes-no-feed.md)
 - [ADR 0103: One person collects the items of many suggestions](adr/0103-one-person-collects-the-items-of-many-suggestions.md)
+- [ADR 0105: A public server holds no assets](adr/0105-a-public-server-holds-no-assets.md)
 
 ## Plans
 
@@ -309,6 +310,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 066: The People pickers](tasks/studio-v1-task-066-people-pickers.md)
 - [Studio v1 task 067: The findings of the first People test](tasks/studio-v1-task-067-people-test-findings.md)
 - [Studio v1 task 068: Key material on the disk](tasks/studio-v1-task-068-key-material-on-disk.md)
+- [Studio v1 task 069: Account protection](tasks/studio-v1-task-069-account-protection.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

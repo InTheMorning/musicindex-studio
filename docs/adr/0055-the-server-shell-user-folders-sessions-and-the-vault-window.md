@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-26
 - Owner: operator
+- Changed by: [ADR 0105](0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Item 21: the storage limit counts the pending files, the files that no host has, the temporary files and the databases.
 
 ## Context
 

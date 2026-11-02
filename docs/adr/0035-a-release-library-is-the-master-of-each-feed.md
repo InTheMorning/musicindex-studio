@@ -6,6 +6,8 @@
 - Amended: 2026-10-26 by operator decision. [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 3 answers item 4: the server keeps the library of each user in the user folder.
 - Amended: 2026-10-27 by operator decision. [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) item 8: a move from a read-only feed sets no redirect and writes no pointer file. Items 19 and 20 do not apply to that move.
 
+- Changed by: [ADR 0105](0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Item 2: the host is the master of each file.
+
 ## Context
 
 Studio edits a hosted feed on its host. The feed file and its imported files are on one connected folder, and the release folder is on that host ([ADR 0026](0026-import-music-files-through-the-draft.md), [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md) item 4). Studio keeps an imported file only until the write. An import does not replace a file on the host ([ADR 0034](0034-an-import-reuses-the-same-file-on-the-host.md)).

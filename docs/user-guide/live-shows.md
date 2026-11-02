@@ -59,6 +59,22 @@ When the show is over, select **End the Show** and write in the same way.
 Neither button changes the file host until you write.
 See [Review and write your changes](review-and-write.md).
 
+## Before a show with a grant
+
+When you give a grant to a connected app, the app starts and ends the show for you.
+See [Give a grant for a show](connected-apps.md#give-a-grant-for-a-show).
+Studio refuses a granted change while the feed has a draft with changes.
+
+1. Before the show, write or discard each draft of the feed.
+2. Select **Review** and **Write to the File Host** to write. Select **Discard the Draft** to discard.
+
+While a grant is active and the feed has a draft with changes, each page of the feed shows a notice.
+It names the app and the show and gives the start time. For example: "Live Publisher cannot start Friday Night Signals while this draft has changes".
+The notice goes away when the draft has no change.
+
+When Studio refuses a granted change, the section **Grant** lists it with the cause.
+See [See what a grant did](connected-apps.md#see-what-a-grant-did).
+
 ## Add the recording
 
 After a show ends, the page has the section **Recording**.

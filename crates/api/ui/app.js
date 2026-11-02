@@ -18,6 +18,7 @@ import {
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
+import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { PeoplePage, PersonPage, WhereUsedPage, WalletPage } from './peoplepages.js';
@@ -2184,27 +2185,57 @@ function NostrPanel() {
   </article>`;
 }
 
-// The connected apps (ADR 0054 items 7 to 10). "Make the token" shows the
-// token one time. The token stays in the state of this panel only.
+// The connected apps (ADR 0054 items 7 to 10, ADR 0110 items 5 to 11). The
+// user gives a name. Studio then shows the pairing text one time, and the
+// app pairs with its own key. The pairing text stays in the state of this
+// panel only. It goes out of the state when the app pairs, when the user
+// selects Done and when the panel closes. The only write to the clipboard is
+// in `copy`, which the Copy button calls.
 function ConnectedAppsPanel() {
   const [apps, setApps] = useState(null);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [made, setMade] = useState(null);
+  const [phase, setPhase] = useState('waiting');
   const [copied, setCopied] = useState(false);
   const { busy, error, run } = useAction();
   const load = () => api('/apps').then(setApps);
   useEffect(() => { load(); }, []);
+  const timeText = (seconds) => new Date(seconds * 1000).toLocaleString();
+  const clockText = (seconds) => new Date(seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // While the app waits, read its state every 2 seconds. The app pairs when
+  // its state is not `waiting`. A missing app (404) means that the code ended.
+  const waitingId = made && phase === 'waiting' ? made.id : null;
+  useEffect(() => {
+    if (waitingId === null) return undefined;
+    const timer = setInterval(async () => {
+      let next;
+      try {
+        next = pairingPhase(await api(`/apps/${waitingId}`));
+      } catch (e) {
+        if (e.status !== 404) return;
+        next = pairingPhase(null);
+      }
+      if (next === 'waiting') return;
+      setPhase(next);
+      setMade((current) => (current && current.id === waitingId ? { ...current, pairingText: null } : current));
+      setCopied(false);
+      load().catch(() => {});
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [waitingId]);
+  const start = (appName) => run(async () => {
+    const result = await api('/apps', { method: 'POST', body: { name: appName } });
+    setMade({ id: result.id, name: result.name, pairingText: result.pairing_text });
+    setPhase('waiting');
+    setCopied(false);
+    setAdding(false);
+    setName('');
+    await load();
+  });
   const make = (event) => {
     event.preventDefault();
-    run(async () => {
-      const result = await api('/apps', { method: 'POST', body: { name: name.trim() } });
-      setMade(result);
-      setCopied(false);
-      setAdding(false);
-      setName('');
-      await load();
-    });
+    start(name.trim());
   };
   const remove = async (app) => {
     if (!await askConfirm(CONFIRMS.removeApp(app.name))) return;
@@ -2214,56 +2245,64 @@ function ConnectedAppsPanel() {
       await load();
     });
   };
-  // An app from before the app key has no key. "Connect again" removes it
-  // and makes a new app with the same name and a new token (ADR 0058 item 15).
-  const connectAgain = async (app) => {
-    if (!await askConfirm(CONFIRMS.newAppToken(app.name))) return;
-    run(async () => {
-      await api(`/apps/${app.id}`, { method: 'DELETE' });
-      const result = await api('/apps', { method: 'POST', body: { name: app.name } });
-      setMade(result);
-      setCopied(false);
-      await load();
-    });
-  };
+  // An app from before the key pairs has a token, which Studio refuses. The
+  // button removes it and makes a pairing text for the same name.
+  const connectAgain = (app) => run(async () => {
+    await api(`/apps/${app.id}`, { method: 'DELETE' });
+    await start(app.name);
+  });
   const copy = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(made.token).then(() => setCopied(true), () => {});
+    if (navigator.clipboard && made && made.pairingText) {
+      navigator.clipboard.writeText(made.pairingText).then(() => setCopied(true), () => {});
     }
   };
+  const done = () => run(async () => {
+    const id = made.id;
+    const removes = doneRemovesApp(phase);
+    setMade(null);
+    if (removes) await api(`/apps/${id}`, { method: 'DELETE' }).catch((e) => { if (e.status !== 404) throw e; });
+    await load();
+  });
   if (!apps) return null;
+  const notice = made && pairingNotice(made, phase);
   return html`<article class="panel">
     <h2>Connected apps</h2>
     ${apps.length === 0 && !adding && html`<p class="hint">No app is connected.</p>`}
     ${apps.length > 0 && html`<ul class="app-list">
-      ${apps.map((a) => html`<li key=${a.id}>
-        <span class="app-name">${a.name}
-          ${!a.has_key && html`<span class="hint">This app has no key, so it cannot use a grant.</span>`}</span>
-        <span class="app-buttons">
-          ${!a.has_key && html`<button class="button action" type="button" disabled=${busy}
-            aria-label=${`Connect the app ${a.name} again`} onClick=${() => connectAgain(a)}>Connect Again</button>`}
-          <button class="button destructive" type="button" disabled=${busy}
-            aria-label=${`Remove the app ${a.name}`} onClick=${() => remove(a)}>Remove</button>
-        </span>
-      </li>`)}
+      ${apps.map((a) => {
+        const lines = appRowLines(a, timeText, clockText);
+        return html`<li key=${a.id}>
+          <span class="app-name">${a.name}
+            <span class="hint">Key <span class="mono">${lines.key}</span></span>
+            <span class="hint">${lines.status}</span>
+            ${lines.address && html`<span class="hint">Live value address <span class="mono">${lines.address}</span></span>`}</span>
+          <span class="app-buttons">
+            ${lines.connectAgain && html`<button class="button action" type="button" disabled=${busy}
+              aria-label=${`Connect the app ${a.name} again`} onClick=${() => connectAgain(a)}>Connect Again</button>`}
+            <button class="button destructive" type="button" disabled=${busy}
+              aria-label=${`Remove the app ${a.name}`} onClick=${() => remove(a)}>Remove</button>
+          </span>
+        </li>`;
+      })}
     </ul>`}
-    ${made && html`<div class="notice" role="status">
-      <strong>The token of “${made.name}”</strong>
-      <${SecretInput} id="app-token" name=${`the token of ${made.name}`} class="mono token-field" readonly
-        aria-label=${`Token of ${made.name}`} value=${made.token} onFocus=${(e) => e.target.select()} />
-      <p class="hint">Give this token to the app now. Studio does not show it again.</p>
+    ${notice && html`<div class="notice" role="status">
+      <strong>${notice.title}</strong>
+      ${notice.text && html`<${SecretInput} id="app-pairing-text" name="the pairing text" class="mono token-field" readonly
+        aria-label="Pairing text" value=${notice.text} />`}
+      <p class="hint">${notice.hint}</p>
       <div class="actions">
-        <button class="button" type="button" onClick=${copy}>${copied ? 'Copied' : 'Copy'}</button>
-        <button class="button" type="button" onClick=${() => setMade(null)}>Done</button>
+        ${notice.copy && html`<button class="button" type="button" onClick=${copy}>${copied ? 'Copied' : 'Copy'}</button>`}
+        <button class="button" type="button" disabled=${busy} onClick=${done}>Done</button>
       </div>
     </div>`}
     ${adding
       ? html`<form class="form" onSubmit=${make}>
           <${Field} id="app-name" label="Name of the app" required autocomplete="off"
+            hint="A name for this computer or this copy of the app."
             value=${name} onInput=${(e) => setName(e.target.value)} />
           <div class="actions">
             <button class="button primary" type="submit" disabled=${busy || name.trim() === ''}>
-              ${busy ? 'Making…' : 'Make the Token'}</button>
+              ${busy ? 'Making…' : 'Make Pairing Text'}</button>
             <button class="button" type="button" disabled=${busy} onClick=${() => setAdding(false)}>Cancel</button>
           </div>
         </form>`

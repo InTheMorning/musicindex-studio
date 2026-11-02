@@ -115,16 +115,17 @@ export function grantActive(grant, liveItem, now) {
 // The state of a grant in one sentence. `timeText` turns a time in seconds
 // into text in the language of the user. The caller gives it, so that this
 // module has no date formatting that depends on the browser.
-export function grantSummary(grant, liveItem, now, timeText) {
+export function grantSummary(grant, liveItem, now, timeText, appName = null) {
   if (!grant) return 'No grant.';
+  const who = appName || 'The app';
   if (grant.ended_at !== null && grant.ended_at !== undefined) {
     return `The grant ended at ${timeText(grant.ended_at)}.`;
   }
   const limit = grantLimit(liveItem);
   if (limit !== null && limit <= now) return `The grant ended at ${timeText(limit)}.`;
   return limit === null
-    ? 'Connected apps can start and end this show.'
-    : `Connected apps can start and end this show until ${timeText(limit)}.`;
+    ? `${who} can start and end this show.`
+    : `${who} can start and end this show until ${timeText(limit)}.`;
 }
 
 const WRITE_TEXT = {
@@ -134,8 +135,31 @@ const WRITE_TEXT = {
   remove_live_value: 'Removed the live value',
 };
 
-// One granted write as a line: the app, the change and the time.
+// What a refused change says: the change that did not happen.
+const REFUSED_TEXT = {
+  go_live: 'Not started',
+  end: 'Not ended',
+  set_live_value: 'Live value not set',
+  remove_live_value: 'Live value not removed',
+};
+
+// The cause of a refused granted write (ADR 0110 item 43). The core gives
+// the cause name.
+const CAUSE_TEXT = {
+  draft_with_changes: 'the feed had a draft with changes',
+  grant_ended: 'the grant had ended',
+  live_value_invalid: 'Studio refused the live value',
+  vault_not_open: 'the grant vault did not open',
+};
+
+// One granted write as a line: the app, the change and the time. A refused
+// write has a `cause`, and the line gives it (screen 11).
 export function grantWriteText(write, timeText) {
+  if (write.cause) {
+    const what = REFUSED_TEXT[write.change] || 'Change not made';
+    const why = CAUSE_TEXT[write.cause] || 'Studio refused the change';
+    return `${write.app_name} · ${what}: ${why} · ${timeText(write.written_at)}`;
+  }
   return `${write.app_name} · ${WRITE_TEXT[write.change] || write.change} · ${timeText(write.written_at)}`;
 }
 

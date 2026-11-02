@@ -11,6 +11,7 @@ import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './peo
 import { withCids, STATUS } from './draft.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
+import { grantControl, draftBlockedNotice } from './apps.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
@@ -1415,28 +1416,45 @@ function AnnounceLines({ diff }) {
   </div>`;
 }
 
-// The grant check box of each pending show of the draft (ADR 0054 item 11).
-// The check box asks the grant route and takes the new diff from its
-// response, so the sheet needs no second request. `diff.grants` gives the
-// GUID of each show that has a grant request.
+// The grant control of each pending show of the draft (ADR 0054 item 11,
+// ADR 0110 item 19). `grantControl` of `apps.js` chooses the control: a
+// check box for one app, a select menu for two or more apps and a disabled
+// menu for no app. The control asks the grant route and takes the new diff
+// from its response, so the sheet needs no second request. `diff.grants`
+// gives the GUID of each show that has a grant request, and `diff.apps` and
+// `diff.grant_apps` give the active apps and the app of each grant.
 // A host with "My signer" cannot do a granted write (ADR 0058 item 14).
-// `signerHost` is true for that host. The box is then disabled, with the
+// `signerHost` is true for that host. The control is then disabled, with the
 // reason, unless the draft already has the grant. The user can remove it.
-function GrantChecks({ feedId, model, diff, apps, busy, signerHost, onDiff, run }) {
-  const box = grantBoxState(signerHost);
+function GrantChecks({ feedId, model, diff, busy, signerHost, onDiff, run }) {
   const shows = ((model && model.live_items) || []).filter((l) => l.status === 'pending' && l.item && l.item.guid);
   if (shows.length === 0) return null;
-  const change = (guid, on) => run(async () => {
-    onDiff(await api(`/feeds/${feedId}/grants/${encodeURIComponent(guid)}`, { method: on ? 'PUT' : 'DELETE' }));
+  const change = (guid, appId) => run(async () => {
+    const path = `/feeds/${feedId}/grants/${encodeURIComponent(guid)}`;
+    onDiff(await api(path, appId === null ? { method: 'DELETE' } : { method: 'PUT', body: { app_id: appId } }));
   });
   return html`<div class="group grant-checks">
-    ${shows.map((l) => html`<div key=${l.item.guid}>
-      <label class="check"><input type="checkbox" disabled=${busy || (box.disabled && !diff.grants.includes(l.item.guid))}
-        checked=${diff.grants.includes(l.item.guid)} onChange=${(e) => change(l.item.guid, e.target.checked)} />
-        <span>Let connected apps start and end this show, and set its live value${shows.length > 1 ? `: ${l.item.title || 'Untitled show'}` : ''}</span></label>
-    </div>`)}
-    ${box.note && html`<p class="hint">${box.note}</p>`}
-    ${apps && apps.length === 0 && html`<p class="hint">No app is connected. Connect an app in Settings.</p>`}
+    ${shows.map((l) => {
+      const guid = l.item.guid;
+      const c = grantControl({
+        apps: diff.apps || [], grantApps: diff.grant_apps || {}, guid,
+        signerNote: grantBoxState(signerHost).note,
+        showTitle: shows.length > 1 ? l.item.title : undefined,
+      });
+      const id = `grant-${guid}`;
+      return html`<div key=${guid}>
+        ${c.kind === 'check'
+          ? html`<label class="check"><input type="checkbox" disabled=${busy || c.disabled} checked=${c.checked}
+              onChange=${(e) => change(guid, e.target.checked ? c.appId : null)} />
+              <span>${c.label}</span></label>`
+          : html`<div class="field"><label for=${id}>${c.label}</label>
+              <div class="field-body"><select id=${id} disabled=${busy || c.disabled} value=${c.value}
+                onChange=${(e) => change(guid, e.target.value === '' ? null : Number(e.target.value))}>
+                ${c.options.map((o) => html`<option value=${o.value}>${o.text}</option>`)}
+              </select></div></div>`}
+        ${c.notes.map((note) => html`<p class="hint" key=${note}>${note}</p>`)}
+      </div>`;
+    })}
   </div>`;
 }
 
@@ -1492,11 +1510,6 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
-  // The connected apps, for the hint of the grant check box.
-  const [apps, setApps] = useState(null);
-  useEffect(() => {
-    if (open) api('/apps').then(setApps, () => setApps(null));
-  }, [open]);
   // The progress of the signer while a write signs the planned events.
   const [progress, setProgress] = useState(null);
   // A diff is for one draft. After a user edit, the diff is not current.
@@ -1659,7 +1672,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       ${hasWork && draft.model && draft.hidden && html`<div class="notice" role="status">
         <strong>This feed is hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
-      ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} apps=${apps} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
+      ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} unified=${diff.unified} />`
         : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
@@ -2828,6 +2841,10 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     return () => window.removeEventListener(ANNOUNCE_RELOAD, loadGrants);
   }, [feed.id, guid]);
   const grant = (grants || []).find((g) => g.item_guid === guid) || null;
+  // The name of the app of the grant.
+  const [appList, setAppList] = useState([]);
+  useEffect(() => { api('/apps').then(setAppList, () => {}); }, [feed.id, guid]);
+  const grantApp = grant && appList.find((a) => a.id === grant.app_id);
   const nowSeconds = Date.now() / 1000;
   const grantText = (seconds) => new Date(seconds * 1000).toLocaleString();
   const stopGrant = async () => {
@@ -2868,7 +2885,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
 
     ${grants && guid && html`<section class="page-section"><h2>Grant</h2>
       <div class="group">
-        <p class="live-line">${grantSummary(grant, live, nowSeconds, grantText)}</p>
+        <p class="live-line">${grantSummary(grant, live, nowSeconds, grantText, grantApp ? grantApp.name : null)}</p>
         ${grant && grant.writes.length > 0 && html`<ul class="grant-writes">
           ${grant.writes.map((write, index) => html`<li key=${index}>${grantWriteText(write, grantText)}</li>`)}
         </ul>`}
@@ -3774,6 +3791,10 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     go({ name: 'feed', id: feed.id });
   };
   return html`<${PickerContext.Provider} value=${{ feedId: feed.id, connectors, draft, onOpsChanged }}><div class="page">
+    ${draft.grantBlocked && (() => {
+      const n = draftBlockedNotice(draft.grantBlocked, draft.grantBlocked.start ? timeText(draft.grantBlocked.start) : null);
+      return html`<div class="notice" role="status"><strong>${n.title}</strong> ${n.text}</div>`;
+    })()}
     ${body}
     ${artwork && !staleArtwork && html`<${ArtworkSheet} feed=${feed} model=${model} update=${update} bad=${draft.bad} artwork=${artwork}
       trackIndex=${artworkTrack} onClose=${() => onArtwork(null)} />`}

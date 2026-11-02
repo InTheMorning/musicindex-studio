@@ -10,12 +10,8 @@ export const CONFIRMS = {
     'Remove from Collection'),
   removeApp: (name) => destructive(
     `Remove the app “${name}”?`,
-    'Its token stops working. The app can no longer change your live shows.',
+    'The grants of the app end at once. The app can no longer change your live shows.',
     'Remove the App'),
-  newAppToken: (name) => destructive(
-    `Make a new token for “${name}”?`,
-    'The old token stops working. Give the new token to the app.',
-    'Make a New Token'),
   removeFileHost: (name) => destructive(
     `Remove the file host “${name}”?`,
     'Studio forgets this file host. The files on it do not change.',

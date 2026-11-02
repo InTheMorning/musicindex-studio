@@ -1665,7 +1665,10 @@ button.outline-feed {
 .group > .field > .hint { grid-column: 1 / -1; margin: 0; }
 
 /* The list of connected apps and the one-time token field. */
-.app-list { list-style: none; display: grid; gap: 8px; }
+.app-list { list-style: none; display: grid; gap: 0; }
+/* Thin separators divide the rows (ADR 0029). */
+.app-list li { padding: 10px 0; }
+.app-list li + li { border-top: 1px solid var(--sep); }
 .app-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .app-list .app-name { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .app-list .app-name .hint { margin: 0; }

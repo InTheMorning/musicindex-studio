@@ -34,7 +34,7 @@ test('no Field has the label of a secret value', () => {
 test('each known secret value uses a secret component', () => {
   const app = sources.find((s) => s.name === 'app.js').text;
   const ids = ['passphrase', 'confirm', 's3-key', 's3-secret', 'sftp-key', 'sftp-passphrase',
-    'sftp-password', '${`${idPrefix}-secret`}', 'unlock', 'app-token', 'sign-in-passphrase',
+    'sftp-password', '${`${idPrefix}-secret`}', 'unlock', 'app-pairing-text', 'sign-in-passphrase',
     'recovery-key', 'recovery-key-shown', 'add-method-passphrase', 'sign-up-passphrase',
     'unlock-sheet-passphrase'];
   for (const id of ids) {

@@ -124,6 +124,9 @@ export function useDraft(feedId) {
   const [hidden, setHidden] = useState(false);
   // The count of the tracks with the OP3 prefix (ADR 0076 item 7).
   const [op3Tracks, setOp3Tracks] = useState(null);
+  // The state `grant_blocked_by_draft` of the feed, or null (ADR 0110 item
+  // 42). The core gives it with each draft.
+  const [grantBlocked, setGrantBlocked] = useState(null);
   // Whether the feed has a host, or a host choice (ADR 0067 item 6).
   const [hasHost, setHasHost] = useState(true);
   // Each address field that is not correct, by its model path (ADR 0023).
@@ -151,6 +154,7 @@ export function useDraft(feedId) {
     setChanged(draft.changed);
     setHidden(draft.hidden);
     setOp3Tracks(draft.op3_tracks || null);
+    setGrantBlocked(draft.grant_blocked_by_draft || null);
     setHasHost(draft.has_host !== false);
     setBad(badFields(draft));
     setStatus('saved');
@@ -185,6 +189,7 @@ export function useDraft(feedId) {
     setChanged(false);
     setHidden(false);
     setOp3Tracks(null);
+    setGrantBlocked(null);
     setBad([]);
     setError(null);
     setEdits(0);
@@ -211,6 +216,7 @@ export function useDraft(feedId) {
     setChanged(saved.changed);
     setHidden(saved.hidden);
     setOp3Tracks(saved.op3_tracks || null);
+    setGrantBlocked(saved.grant_blocked_by_draft || null);
     if (saved.has_host !== undefined) setHasHost(saved.has_host);
     setBad(badFields(saved));
   };
@@ -250,5 +256,5 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush]);
 
-  return { model, changed, hidden, op3Tracks, hasHost, bad, status, error, edits, update, flush, load, show };
+  return { model, changed, hidden, op3Tracks, grantBlocked, hasHost, bad, status, error, edits, update, flush, load, show };
 }

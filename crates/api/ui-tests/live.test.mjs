@@ -92,13 +92,15 @@ test('the summary of a grant covers each case', () => {
   const open = { id: 1, item_guid: 'g-1', created_at: 5, ended_at: null, writes: [] };
   const now = startSeconds;
   assert.equal(grantSummary(null, live, now, stamp), 'No grant.');
+  assert.equal(grantSummary(open, live, now, stamp, 'Live Publisher'),
+    `Live Publisher can start and end this show until ${stamp(startSeconds + day)}.`);
   assert.equal(grantSummary(open, live, now, stamp),
-    `Connected apps can start and end this show until ${stamp(startSeconds + day)}.`);
+    `The app can start and end this show until ${stamp(startSeconds + day)}.`);
   assert.equal(grantSummary({ ...open, ended_at: 77 }, live, now, stamp), 'The grant ended at t77.');
   assert.equal(grantSummary(open, live, startSeconds + day + 1, stamp),
     `The grant ended at ${stamp(startSeconds + day)}.`);
-  assert.equal(grantSummary(open, { ...live, start: null }, now, stamp),
-    'Connected apps can start and end this show.');
+  assert.equal(grantSummary(open, { ...live, start: null }, now, stamp, 'Live Publisher'),
+    'Live Publisher can start and end this show.');
   assert.equal(grantActive(open, live, now), true);
   assert.equal(grantActive(open, live, startSeconds + day), false);
   assert.equal(grantActive({ ...open, ended_at: 1 }, live, now), false);
@@ -111,6 +113,19 @@ test('the text of a granted write names the app, the change and the time', () =>
   assert.equal(grantWriteText(write('end'), stamp), 'Show tool · Ended the show · t9');
   assert.equal(grantWriteText(write('set_live_value'), stamp), 'Show tool · Set the live value · t9');
   assert.equal(grantWriteText(write('remove_live_value'), stamp), 'Show tool · Removed the live value · t9');
+});
+
+test('a refused write gives its cause (ADR 0110 item 43, screen 11)', () => {
+  const refused = (change, cause) => ({ app_name: 'Live Publisher', change, written_at: 9, cause });
+  assert.equal(grantWriteText(refused('go_live', 'draft_with_changes'), stamp),
+    'Live Publisher · Not started: the feed had a draft with changes · t9');
+  assert.equal(grantWriteText(refused('end', 'grant_ended'), stamp),
+    'Live Publisher · Not ended: the grant had ended · t9');
+  assert.equal(grantWriteText(refused('set_live_value', 'live_value_invalid'), stamp),
+    'Live Publisher · Live value not set: Studio refused the live value · t9');
+  assert.equal(grantWriteText(refused('remove_live_value', 'vault_not_open'), stamp),
+    'Live Publisher · Live value not removed: the grant vault did not open · t9');
+  assert.equal(grantWriteText({ ...refused('go_live', null) }, stamp), 'Live Publisher · Went live · t9');
 });
 
 test('the grant box is disabled for a host with My signer, with the reason', () => {

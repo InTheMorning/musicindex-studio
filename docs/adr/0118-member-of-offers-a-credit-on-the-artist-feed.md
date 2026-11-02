@@ -4,6 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screens 7 and 8 of the mockups in `.studio-dev/mockup-lookup/site/`.
+- Amended: 2026-11-02 by the operator, after the visual check of task 081. Items 11 and 12 come from that check.
 - Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 3, the hint of "Member of".
 - Uses: [ADR 0098](0098-the-people-module.md) items 2, 6 and 8 for the membership and the change sets. [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change set. [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 10 for the credits of a person. [ADR 0112](0112-a-credit-role-comes-from-a-list.md) for the role. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for Save. [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) for a read-only feed. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers.
 
@@ -38,12 +39,16 @@
 8. The page of a publisher feed gets the section "Members", with the tier `details`, before the section `details`. `crates/api/ui/pages.js` gives its place.
 9. Each person with a membership of a publisher feed is a member of it. Each person with a credit in the channel of the feed is also a member. The core gives the list. Each row shows the picture, the name and the usual role. It also shows "in the credits of this feed" or "only in Studio". A row opens the page of the person.
 10. The note of the section is "The people that are members of this {role word}. A member that is not in the credits is only in Studio." The role word is the label of the feed, in lowercase. With no member, the section does not show.
+11. When the core makes the change set of item 5, it first links the credit name of the new credit to the person: the name, the information address and the Nostr key of the credit. A person that has that credit name keeps it. A credit name of a different person stops the change set, and the core makes no draft. The remove of item 6 then finds the credit. The remove of a person finds only the credits of its credit names and its Nostr keys (ADR 0098).
+12. The change set of item 5 keeps its own operation, `credit_feed`. The review page and the list "Changes to write" give it the title "Add to the Credits".
 
 ## Alternatives Considered
 
 - A credit that Studio adds at each Save, with no sheet. Not chosen: each write needs a diff that the user has seen (ADR 0007), and the credit puts personal data in a public feed.
 - The credit as the only record of a membership, with no row in `person_members`. Not chosen: a read-only feed cannot get the credit, and the user can keep a membership in Studio only.
 - A separate operation in "Change your feeds", with no sheet after Save. Not chosen by the operator: the operator selected the sheet after Save.
+- For item 11, a remove that also finds each credit with the name of the person. Not chosen by the operator: it changes Rename, Remove and Correct of each feed. It can also change the credit of a different person with the same name.
+- For item 12, the title "Add to All Releases" of the operation `add_to_releases`. Not chosen: the change set adds a credit to one artist feed, not to its releases.
 
 ## Consequences
 
@@ -51,7 +56,9 @@
 - The core gives the members of a publisher feed, from `person_members` and from the index of the credits.
 - `pages.js` gets the section `members` on the publisher page.
 - The membership and the credit can be different. Item 9 shows each condition, and "Check your feeds" does not change.
-- A task file gives the work.
+- Item 11 adds a credit name to the person when the user selects "Review in 1 Feed". A Discard of the change set keeps that credit name.
+- A channel credit can have the name of the person, but no credit name of the person. That credit also gives the remove sheet of item 6, and that change set changes no feed. The page of the person shows that credit in "More from your feeds", where the user can add the credit name.
+- Task 081 and task 082 give the work.
 
 ## Non-goals
 
@@ -66,6 +73,8 @@ Mechanical:
 - A core test: the change set adds one `podcast:person` to the channel of a publisher feed with the role and its group, and removes it. A read and a write with no other edit keep the other bytes.
 - A core test: the members of a publisher feed hold each person with a membership and each person with a channel credit, with the condition of each.
 - An API test: the members route and the change set route.
+- A core test: the change set of item 5 links the credit name, and a remove after its write removes the credit (item 11). A credit name of a different person stops it, with no draft.
+- A Node test: the title of the operation `credit_feed` is "Add to the Credits" (item 12).
 - A Node test: the sheet opens after a Save that adds a membership, and not when the feed has the credit or is read-only. The model gives the texts of items 2, 4 and 10.
 - A Node test: `pages.js` puts `members` in the tier sequence of the publisher page.
 - The four commit checks pass.

@@ -337,6 +337,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 079: Save and Discard on the page of a person](tasks/studio-v1-task-079-person-save-and-discard.md)
 - [Studio v1 task 080: Find on musicindex](tasks/studio-v1-task-080-find-on-musicindex.md)
 - [Studio v1 task 081: The credit of a member and the members of a feed](tasks/studio-v1-task-081-member-credit.md)
+- [Studio v1 task 082: The credit name and the title of a member credit](tasks/studio-v1-task-082-credit-name-and-title.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

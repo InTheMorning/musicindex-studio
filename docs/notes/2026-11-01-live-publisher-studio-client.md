@@ -30,7 +30,7 @@ These rules come from ADR 0110 item 32. The crate README gives the same list.
 - Use one pairing for each computer or copy of the app.
 - Keep the grant vault key in memory only. The crate does this. Do not copy it out of the crate.
 - Log no pairing text, signed event, request body or grant vault key.
-- Keep the clock of the computer correct. Studio refuses a request that is more than 60 seconds from its own time.
+- Keep the clock of the computer correct. Studio refuses a request that is more than 60 seconds from its own time. The crate corrects a difference of 5 minutes or less by itself, and gives a warning above 30 seconds. Show that warning to the user.
 
 ## Read The Pairing Text
 
@@ -75,7 +75,8 @@ The crate calls these routes. The live publisher does not call them directly.
 | --- | --- | --- |
 | `CodeInvalid` | The pairing text is not correct or expired, or the user selected Done before the pairing. | Ask the user for a new pairing text. |
 | `CodeUsed` | A program used this pairing text in the last 15 minutes. | Tell the user that a different program possibly used it. The user removes that app in Studio, and makes a new pairing text. |
-| `SignatureInvalid` | The clock is wrong, or Studio does not know the key. | Examine the clock. If the clock is correct, ask the user to connect the app again. |
+| `ClockWrong` | The clock differs from the clock of Studio by more than 5 minutes. | Tell the user to turn on the automatic time of the computer. |
+| `SignatureInvalid` | Studio does not know the key, also after a clock correction. | Ask the user to connect the app again. |
 | `KeyRequired` | The app uses a token from before ADR 0110. | Ask the user to connect the app again. |
 | `KeyInUse` | A different account uses this key. | Make a new key, and pair again. |
 | `LiveValueInvalid` | The live value is not on the live value origin, or its protocol is not permitted. | Examine the relay setting. To change the origin, the user connects the app again. |
@@ -97,7 +98,7 @@ v4vmm starts and restarts the live publisher as a service (v4vmm ADR 0059). v4vm
 | The message to the user | How does the user see a refused write or `NotGranted` during the show? v4vmm shows the status of the services, so it can show this message. | v4vmm |
 | Studio does not answer | What does the live publisher do when Studio is down at the start or the end of a show? The relay payloads continue, but the feed keeps its old status. | Live publisher |
 | A restart | When does the live publisher read the shows again, for example after v4vmm restarts it? | Live publisher |
-| The clock | Does the live publisher examine the clock of the computer before a show? Studio refuses a request that is more than 60 seconds from its own time. | Live publisher |
+| The clock warning | Where does the user see the clock warning of the crate, and the error `ClockWrong`? A `whoami` before the show finds a wrong clock early. | Live publisher and v4vmm |
 
 ## What Studio Shows The User
 

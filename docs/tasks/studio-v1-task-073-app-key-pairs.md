@@ -25,7 +25,7 @@ A connected app pairs with a pairing text from Studio, and signs each request wi
 
 ### 073a: The core
 
-1. A migration of the collection gives `connected_apps` the columns `pubkey`, `state` (`waiting`, `active` or `token`), `code_hash`, `code_expires_at`, `live_value_origin`, `last_used_at` and `last_address`. It removes the token hash. An app from before the migration gets `state` `token` and no `pubkey`. Each of its wrappers goes out of each grant vault, and each grant from before ends (ADR 0110 items 35 and 36).
+1. A migration of the collection gives `connected_apps` the columns `pubkey`, `state` (`waiting`, `active` or `token`), `code_hash`, `code_expires_at`, `live_value_origin`, `last_used_at` and `last_address`. It removes the token hash. An app from before the migration gets `state` `token` and no `pubkey`. Each of its wrappers goes out of each grant vault, and each grant from before ends (ADR 0110 items 37 and 38).
 2. `apps::start_pairing(collection, name)` makes a waiting app and a code of ADR 0110 item 6. It keeps the SHA-256 of the code, and gives the code one time. `app_keys` and the token code go out.
 3. `apps::pair(collection, code, pubkey, live_value_origin)` finds the waiting app from the hash of the code. It refuses an expired code and a key that is not a valid secp256k1 public key. It also refuses an origin that is not `https` or `wss` with a host and no path. It keeps the key as lowercase hexadecimal, and makes the app active. A waiting app with an expired code goes out at each call and at each start.
 4. `apps::normalize_code(text)` applies the rules of ADR 0110 item 9. `start_pairing` and `pair` use it before the hash.
@@ -34,10 +34,10 @@ A connected app pairs with a pairing text from Studio, and signs each request wi
 7. `grant_vault::make` and the changes of ADR 0058 item 7 add only the wrapper of the app that the grant names. `grant_vault::open_with_key(file, key)` opens a grant vault with the grant vault key. `grant_vault::wrapper(file, app_id)` gives the wrapper of one app. A grant vault file gets mode 0600 (ADR 0110 item 22).
 8. `apps::short_key(pubkey)` gives the first 9 and the last 4 characters of the `npub`.
 9. A module in the core checks a signed request. It examines the event of kind 27235, its signature and its time within 60 seconds. It compares the `u` and `method` tags exactly with the expected address and method. It refuses a request with a body and no `payload` tag with the SHA-256 of the raw body. The function gives the public key. The server sign-in and the app routes use the same function.
-10. A replay store in the collection keeps each accepted event ID for 120 seconds. The store records an ID before the route runs, and refuses an ID that it has (ADR 0110 item 15).
+10. A replay store in the collection keeps each accepted event ID for 120 seconds. The store records an ID before the route runs, and refuses an ID that it has (ADR 0110 item 15). The collection also keeps the latest accepted `created_at` of each app. The check refuses an event that is more than 60 seconds earlier than that time (ADR 0110 item 13).
 11. The core refuses a granted live value with `live_value_invalid` in each condition of ADR 0110 item 26. The check is in the core, not in the route.
-12. While a grant is active and the feed has a draft with changes, the feed state gives `grant_blocked_by_draft`. It holds the app name, the show title and the start time (ADR 0110 item 40).
-13. Each refused granted write adds an entry to the list of granted writes, with the app, the cause and the time (ADR 0110 item 41).
+12. While a grant is active and the feed has a draft with changes, the feed state gives `grant_blocked_by_draft`. It holds the app name, the show title and the start time (ADR 0110 item 42).
+13. Each refused granted write adds an entry to the list of granted writes, with the app, the cause and the time (ADR 0110 item 43).
 
 ### 073b: The client crate
 
@@ -45,11 +45,13 @@ A connected app pairs with a pairing text from Studio, and signs each request wi
 2. A trait `AppSigner` signs an event and gives the public key. The crate gives `FileSigner`, which keeps a key in a file with mode 0600 in a folder with mode 0700. An app can give its own signer, for example for the key store of the operating system (ADR 0110 item 2).
 3. `PairingText::parse(text)` reads the full pairing text, or the code alone with an origin that the app gives. It applies the rules of ADR 0110 item 9. `Client::pair(pairing_text, signer, live_value_origin)` sends `POST /app/v1/pair`, and gives a `Client` for that Studio.
 4. A module `input` reads a pairing text only as ADR 0110 items 33 and 34 give. `input::prompt()` reads from the terminal with no echo. `input::from_clipboard()` reads the clipboard, and clears it if it still holds the pairing text. The clipboard function is behind the crate feature `clipboard`. The crate has no function that takes a pairing text from a command argument or an environment variable.
-5. `Client` signs each request as ADR 0110 item 12 gives, with a new event for each request. It has `whoami`, `shows`, `set_status`, `set_live_value` and `remove_live_value`.
-6. Before the first write of a grant, `Client` gets the wrapper and decrypts it. It keeps the grant vault key in memory in a `Zeroizing` value. It clears the key when the grant ends, or when a write gives 404 or 423 (ADR 0110 item 29).
-7. Each error has a type. The types are `CodeInvalid`, `CodeUsed`, `SignatureInvalid`, `KeyRequired`, `KeyInUse`, `LiveValueInvalid`, `NotGranted`, `VaultLocked`, `TooManyAttempts` and `Network`. No error text holds a pairing text, an event or a key.
-8. The crate documentation has an example of each step, from the pairing to the end of a show. It lists the rules of ADR 0110 item 32. Each example runs as a doc test.
-9. The crate README tells an app developer: what the user does, what the app keeps, what the app never logs, and what to do for each error during a show.
+5. `PairingText::parse` and `Client` refuse a Studio origin that is not `https`, except a loopback address (ADR 0110 item 35).
+6. `Client` signs each request as ADR 0110 item 12 gives, with a new event for each request. It has `whoami`, `shows`, `set_status`, `set_live_value` and `remove_live_value`.
+7. `Client` corrects the clock as ADR 0110 item 36 gives. It reads the `Date` header of a 401 answer, and makes a correction of 5 minutes or less. It sends the request again one time only. It gives a warning through a callback of the app when the difference is more than 30 seconds.
+8. Before the first write of a grant, `Client` gets the wrapper and decrypts it. It keeps the grant vault key in memory in a `Zeroizing` value. It clears the key when the grant ends, or when a write gives 404 or 423 (ADR 0110 item 29).
+9. Each error has a type. The types are `CodeInvalid`, `CodeUsed`, `ClockWrong`, `SignatureInvalid`, `KeyRequired`, `KeyInUse`, `LiveValueInvalid`, `NotGranted`, `VaultLocked`, `TooManyAttempts` and `Network`. No error text holds a pairing text, an event or a key.
+10. The crate documentation has an example of each step, from the pairing to the end of a show. It lists the rules of ADR 0110 item 32. Each example runs as a doc test.
+11. The crate README tells an app developer: what the user does, what the app keeps, what the app never logs, and what to do for each error during a show.
 
 ### 073c: The API
 
@@ -73,7 +75,7 @@ A connected app pairs with a pairing text from Studio, and signs each request wi
 3. A pairing with the Nostr sign-in key of an account gives 400 `app_key_is_sign_in_key`.
 4. `POST /api/v1/apps` needs a recent unlock (ADR 0106). Without it, it gives 401 `unlock_required`.
 5. The server permits 60 requests for each app public key in each minute. For each client address, it permits 20 requests in each hour with an unknown key, a signature that is not correct or a wrong code. `allow_app` uses the public key in place of the token hash.
-6. An import of an account (ADR 0107) sets each app to `token` state with no key, so that the app shows "Connect Again". The import keeps no grant (ADR 0110 item 39). If task 071 is complete, change its import. If not, add this step to task 071.
+6. An import of an account (ADR 0107) sets each app to `token` state with no key, so that the app shows "Connect Again". The import keeps no grant (ADR 0110 item 41). If task 071 is complete, change its import. If not, add this step to task 071.
 
 ### 073e: The UI and the user guide
 
@@ -134,6 +136,9 @@ Mechanical:
 - A core test: a used code gives `app_code_used`, and a code after Done gives `app_code_invalid`.
 - A core test: with an active grant and a draft with changes, the feed state gives `grant_blocked_by_draft`. A refused granted write adds its cause to the list.
 - A Node test: the pairing text uses `SecretInput`, and the Connected apps model gives the lines of screen 6c after the pairing.
+- A client test against the test API: with a clock that is 3 minutes wrong, a request succeeds after one correction and gives the warning. With a clock that is 10 minutes wrong, the client gives `ClockWrong` and sends no second request. A forged `Date` header on a second 401 does not cause a third request.
+- A client test: `Client` refuses an `http` origin that is not a loopback address.
+- A core test: after a change of the server clock back by one hour, an event that Studio accepted before is refused.
 - `cargo test --doc -p studio-app-client` passes.
 - The four commit checks pass.
 

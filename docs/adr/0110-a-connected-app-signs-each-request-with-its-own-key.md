@@ -62,8 +62,9 @@
     - The `u` or `method` tag is not the same as the request, character for character.
     - The request has a body and the event has no `payload` tag, or the `payload` tag is not the SHA-256 of the body.
     - Studio accepted the same event ID in the last 120 seconds.
+    - The `created_at` is more than 60 seconds earlier than the latest `created_at` that Studio accepted from that app. This stops an old request after a change of the server clock.
 14. Studio refuses a body larger than 64 KiB before it calculates the hash. Studio calculates the hash before it reads the JSON.
-15. The workspace keeps the accepted event IDs for 120 seconds in its collection, not in memory, so that a restart does not clear them. Studio records an event ID before the route runs. A request that fails after that point uses up its event, and the app signs a new event.
+15. The workspace keeps the accepted event IDs for 120 seconds, and the latest accepted `created_at` of each app, in its collection, not in memory, so that a restart does not clear them. Studio records an event ID before the route runs. A request that fails after that point uses up its event, and the app signs a new event.
 16. `/app/v1/` accepts no other credential. `/api/` and `/auth/` refuse the header of item 12.
 17. No log holds a request body, an `Authorization` header, a signed event, a pairing text or a grant vault key.
 18. Studio records the time and the client address of the last accepted request of each app. Connected apps shows them, with the short key and the live value origin (screen 7). Only the user of the account sees them.
@@ -97,22 +98,24 @@
     - From a terminal prompt that does not show the typed or pasted text.
     - From the clipboard. After the read, the crate clears the clipboard if it still holds the pairing text.
 34. The crate accepts the full pairing text, or the code alone when the app already knows the Studio origin. The crate refuses a pairing text in a command argument or an environment variable, because a shell history and a process list keep them. The crate shows no part of the code after the read.
+35. The crate refuses a Studio origin that is not `https`, except a loopback address of the desktop shell. The grant vault key and the `Date` header of Studio thus never cross a network without TLS.
+36. When Studio refuses a request with 401, the crate reads the time of Studio from the `Date` header of the answer. If the difference from its own clock is 5 minutes or less, it signs the request again with the corrected time, and sends it one time. It keeps that correction for the next requests, and examines it again at each 401. When the difference is more than 30 seconds, the crate gives a warning that names the difference, so that the app can tell the user to correct the clock. When the difference is more than 5 minutes, the crate makes no correction, and gives the error `ClockWrong`.
 
 ### Apps From Before This ADR
 
-35. An app with a token, from before this ADR, shows "Connect Again" (screen 8). `/app/v1/` refuses its token with 401 `app_key_required`. A migration removes the token hashes, and each wrapper of a token key goes out of each grant vault.
-36. The migration also clears the public key of each token app, and ends each grant from before. A token app thus has no key that Studio accepts.
+37. An app with a token, from before this ADR, shows "Connect Again" (screen 8). `/app/v1/` refuses its token with 401 `app_key_required`. A migration removes the token hashes, and each wrapper of a token key goes out of each grant vault.
+38. The migration also clears the public key of each token app, and ends each grant from before. A token app thus has no key that Studio accepts.
 
 ### Limits, The Index And An Import
 
-37. `server.sqlite` keeps an index from each public key to its account, and from each code hash to its waiting app. The server makes the index again from the collections at each start, in place of the index of token hashes (ADR 0058 item 18, ADR 0107 item 2).
-38. The server permits 60 requests for each app public key in each minute. It permits 20 requests with an unknown key, a signature that is not correct or a wrong code, for each client address in each hour. After that, it gives 429 `too_many_attempts`.
-39. An import of an account (ADR 0107) keeps the name of each app, and sets each app to "Connect Again". The import keeps no grant. The account page lists the apps with this notice, in place of the notice of ADR 0107 item 14.
+39. `server.sqlite` keeps an index from each public key to its account, and from each code hash to its waiting app. The server makes the index again from the collections at each start, in place of the index of token hashes (ADR 0058 item 18, ADR 0107 item 2).
+40. The server permits 60 requests for each app public key in each minute. It permits 20 requests with an unknown key, a signature that is not correct or a wrong code, for each client address in each hour. After that, it gives 429 `too_many_attempts`.
+41. An import of an account (ADR 0107) keeps the name of each app, and sets each app to "Connect Again". The import keeps no grant. The account page lists the apps with this notice, in place of the notice of ADR 0107 item 14.
 
 ### Signals To The User
 
-40. While a grant is active and its feed has a draft with changes, each editor page of that feed shows a notice at the top (screens 9 and 10). The notice names the app and the show, and gives the start time of the show. The core gives this state with the feed, so that the UI has no copy of the rule of ADR 0054 item 16.
-41. When Studio refuses a granted write, the list of granted writes of ADR 0054 item 17 shows the app, the cause and the time (screen 11). The causes are a draft with changes, a grant that ended, a live value that item 26 refuses, and a grant vault that does not open.
+42. While a grant is active and its feed has a draft with changes, each editor page of that feed shows a notice at the top (screens 9 and 10). The notice names the app and the show, and gives the start time of the show. The core gives this state with the feed, so that the UI has no copy of the rule of ADR 0054 item 16.
+43. When Studio refuses a granted write, the list of granted writes of ADR 0054 item 17 shows the app, the cause and the time (screen 11). The causes are a draft with changes, a grant that ended, a live value that item 26 refuses, and a grant vault that does not open.
 
 ## Alternatives Considered
 
@@ -134,10 +137,11 @@
 - No long-term secret goes from Studio to the app, or from the app to the user. The pairing text is valid one time, for 15 minutes.
 - A stolen session cannot add an app without a recent unlock. Only the app that has the pairing text can register a key.
 - A grant applies only to the app that it names. A new app or a backup copy gets no grant that exists. To give a show to a different copy, the user approves a diff with a new grant.
-- A copied request stops working after 60 seconds, and Studio refuses a repeated event, also after a restart.
+- A copied request stops working after 60 seconds, and Studio refuses a repeated event, also after a restart or a change of the server clock.
+- A clock difference of 5 minutes or less causes a warning, not a failed show. A forged `Date` header can only delay a request of the app by 5 minutes or less, and only with a TLS connection that the attacker already controls.
 - A stolen private key file of the app still works until the user removes the app. It can start and end a granted show, and set the live value to an address on the live value origin of the app. It cannot send the boosts to a different origin. "Last used" and the list of granted writes of ADR 0054 item 17 show its use.
 - The live publisher uses `studio-app-client`. It adds a command that takes the pairing text and its live value origin, and it selects its key storage. That work belongs to its own repository. The [handoff note](../notes/2026-11-01-live-publisher-studio-client.md) describes the interface.
-- A draft with changes still stops a granted write, as ADR 0054 item 16 gives. Item 40 tells the user before the show, and item 41 tells the user after a refusal.
+- A draft with changes still stops a granted write, as ADR 0054 item 16 gives. Item 40 tells the user before the show, and item 43 tells the user after a refusal.
 - Task 073 gives the work in Studio. It comes after task 068 and task 069.
 
 ## Acceptance Criteria
@@ -147,6 +151,8 @@ Mechanical:
 - An API test, through `studio-app-client`: a pairing with a correct code makes an active app, and the signed requests succeed.
 - An API test: each condition of item 13 gives 401 `app_signature_invalid`.
 - An API test: a repeated event in 120 seconds is refused, also after the workspace loads again.
+- An API test: after the server clock goes back by one hour, an event that Studio accepted before is refused.
+- A client test: the crate corrects a clock difference of 5 minutes or less with one second request, and gives `ClockWrong` above 5 minutes.
 - An API test: a pairing with an expired code, a used code or an unknown code gives 401 `app_code_invalid`.
 - An API test: a granted write with the grant vault key in the signed body succeeds. A wrong key gives 423 `vault_locked`, as before.
 - An API test: an app that the grant does not name gets 404 for that grant, and no wrapper.
@@ -160,7 +166,7 @@ Mechanical:
 - A server test: after an import, each app is "Connect Again" and the account has no grant.
 - A Node test: the Connected apps model and the grant line give the lines of screens 1 to 3, 6 to 6c, 7 and 8.
 - An API test: with an active grant and a draft with changes, the feed state gives the draft notice. A granted write then fails, and the list of granted writes holds the cause.
-- A Node test: the model of an editor page gives the notice of item 40 only when the feed state gives it.
+- A Node test: the model of an editor page gives the notice of item 42 only when the feed state gives it.
 - `cargo test --doc -p studio-app-client` runs the examples of the crate documentation.
 
 Visual: screens 1 to 3, 6 to 6c and 7 to 11 of the mockups, at 1100 px and at 390 px with touch, in the two themes.

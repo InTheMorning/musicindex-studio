@@ -109,6 +109,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0105: A public server holds no assets](adr/0105-a-public-server-holds-no-assets.md)
 - [ADR 0107: A user can export and import an account](adr/0107-a-user-can-export-and-import-an-account.md)
 - [ADR 0108: People data at rest stays plain](adr/0108-people-data-at-rest-stays-plain.md)
+- [ADR 0109: Images and audio load from their hosts](adr/0109-images-and-audio-load-from-their-hosts.md)
+- [ADR 0110: A connected app signs each request with its own key](adr/0110-a-connected-app-signs-each-request-with-its-own-key.md)
 
 ## Plans
 
@@ -315,6 +317,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 069: Account protection](tasks/studio-v1-task-069-account-protection.md)
 - [Studio v1 task 070: A server that holds no assets](tasks/studio-v1-task-070-hold-no-assets.md)
 - [Studio v1 task 071: Account export and import](tasks/studio-v1-task-071-account-export-and-import.md)
+- [Studio v1 task 072: Audit findings and direct media](tasks/studio-v1-task-072-audit-findings-and-direct-media.md)
+- [Studio v1 task 073: Connected apps with key pairs](tasks/studio-v1-task-073-app-key-pairs.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)
@@ -382,7 +386,12 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [Phase 12 authentication research, 2026-10-26](research/2026-10-26-phase-12-auth-research.md)
 - [MSP 2.0 parity and Nostr identities, 2026-10-28](research/2026-10-28-msp-parity-and-nostr-identities.md)
 - [Keysend and Lightning address recipients, 2026-10-31](research/2026-10-31-keysend-and-lightning-address-recipients.md)
+- [Host secrets under a show grant, 2026-11-01](research/2026-11-01-connected-app-host-secrets.md)
 - [People module design note, 2026-11-01](research/2026-11-01-people-module-design-note.md)
+
+## Notes
+
+- [Handoff: the Studio client of the live publisher, 2026-11-01](notes/2026-11-01-live-publisher-studio-client.md)
 
 ## Archive
 

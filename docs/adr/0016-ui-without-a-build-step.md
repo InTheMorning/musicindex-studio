@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator. The operator gave this choice to the agent on 2026-10-22.
+- Changed by: [ADR 0109](0109-images-and-audio-load-from-their-hosts.md). Item 4: images and audio load from their `https` addresses. Scripts, styles, fonts and frames load only from Studio.
 
 ## Context
 

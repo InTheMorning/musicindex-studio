@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-26
 - Owner: operator
+- Changed by: [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md). Items 4, 5, 11, 15, 17, 18 and 19 change. The app key is the key of the app, and each request is signed. The app sends the grant vault key in a signed write, and the index holds public keys.
 
 ## Context
 

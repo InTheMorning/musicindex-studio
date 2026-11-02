@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
+- Changed by: [ADR 0109](0109-images-and-audio-load-from-their-hosts.md). Items 26 to 29: the player loads a file from its `https` address. A media ticket holds a library file ID, and the audio route sends only a file that Studio holds.
 
 ## Context
 

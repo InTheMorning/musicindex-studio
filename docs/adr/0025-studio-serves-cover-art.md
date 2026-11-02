@@ -4,6 +4,7 @@
 - Date: 2026-10-22
 - Owner: operator
 - Amended: 2026-10-27 by operator decision. [ADR 0060](0060-the-album-cover-keeps-the-form-of-its-feed.md) items 2 and 7 replace item 1 for the cover of the album. The cover comes from `itunes:image` or from the RSS `<image>`, and an item with no art shows that cover.
+- Changed by: [ADR 0109](0109-images-and-audio-load-from-their-hosts.md). The UI loads an image from its `https` address. The image route stays only for a file that Studio holds.
 
 ## Context
 

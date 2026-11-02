@@ -53,6 +53,10 @@ pub struct Users {
     /// A test sets this, so that a write does not request a public address.
     #[cfg(test)]
     pub pass_all_addresses: std::sync::atomic::AtomicBool,
+    /// A test sets this, so that it controls the time of the recent unlock
+    /// (ADR 0106 item 2). A workspace that opens later uses it.
+    #[cfg(test)]
+    pub test_clock: std::sync::Mutex<Option<studio_api::Clock>>,
 }
 
 impl Users {
@@ -64,6 +68,8 @@ impl Users {
             open: Mutex::new(HashMap::new()),
             #[cfg(test)]
             pass_all_addresses: std::sync::atomic::AtomicBool::new(false),
+            #[cfg(test)]
+            test_clock: std::sync::Mutex::new(None),
         }
     }
 
@@ -92,6 +98,8 @@ impl Users {
         let pass_all = self
             .pass_all_addresses
             .load(std::sync::atomic::Ordering::SeqCst);
+        #[cfg(test)]
+        let clock = self.test_clock.lock().unwrap().clone();
         let user = tokio::task::spawn_blocking(move || {
             open_user(
                 &settings,
@@ -99,6 +107,8 @@ impl Users {
                 account_id,
                 #[cfg(test)]
                 pass_all,
+                #[cfg(test)]
+                clock,
             )
         })
         .await
@@ -176,6 +186,7 @@ fn open_user(
     path: &std::path::Path,
     account_id: i64,
     #[cfg(test)] pass_all: bool,
+    #[cfg(test)] clock: Option<studio_api::Clock>,
 ) -> Result<OpenUser, ApiError> {
     // The workspace tells the index when the user adds or removes an app.
     let accounts = Arc::clone(&settings.accounts);
@@ -203,6 +214,10 @@ fn open_user(
     #[cfg(test)]
     if pass_all {
         workspace = workspace.with_address_check(Arc::new(PassAll));
+    }
+    #[cfg(test)]
+    if let Some(clock) = clock {
+        workspace = workspace.with_clock(clock);
     }
     workspace = workspace.with_nip46_relays(settings.nip46_relays.clone());
     if let Some(base) = &settings.musicindex {

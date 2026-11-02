@@ -57,6 +57,15 @@ impl ApiError {
         Self::new(StatusCode::LOCKED, "vault_locked", "unlock the vault first")
     }
 
+    /// 401: the last unlock is older than 5 minutes (ADR 0106 item 2).
+    pub(crate) fn unlock_required() -> Self {
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            "unlock_required",
+            "unlock the vault again to change how you sign in",
+        )
+    }
+
     pub(crate) fn vault_required() -> Self {
         Self::new(
             StatusCode::CONFLICT,

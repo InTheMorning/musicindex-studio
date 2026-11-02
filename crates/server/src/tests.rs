@@ -852,7 +852,7 @@ async fn a_sign_in_gets_503_busy_when_no_permit_comes() {
 }
 
 #[tokio::test]
-async fn ten_failed_sign_ins_block_the_account_also_for_the_correct_passphrase() {
+async fn ten_failed_sign_ins_from_one_address_block_that_address_for_the_email() {
     let app = app(Signup::Invite);
     new_user(&app, "a@example.org", PASS_ONE).await;
     for _ in 0..10 {
@@ -860,16 +860,56 @@ async fn ten_failed_sign_ins_block_the_account_also_for_the_correct_passphrase()
         assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
         assert_eq!(reply.code(), "sign_in_failed");
     }
-    // A different address of the client does not help.
-    let mut eleventh = sign_in_call("a@example.org", PASS_ONE);
-    eleventh.addr = "10.0.0.99:4000";
-    let reply = send(&app, eleventh).await;
-    assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
+    // The same address stays blocked, also for the correct passphrase.
+    let same = send(&app, sign_in_call("a@example.org", PASS_ONE)).await;
+    assert_eq!(same.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(same.code(), "too_many_attempts");
+    // A different address signs in. A third party cannot block the user
+    // (ADR 0106 item 4: limit the pair of account and address).
+    let mut other_address = sign_in_call("a@example.org", PASS_ONE);
+    other_address.addr = "10.0.0.99:4000";
+    let reply = send(&app, other_address).await;
+    assert_eq!(
+        reply.status,
+        StatusCode::OK,
+        "ADR 0106 item 4: failures from one address must not block the email from another address. Count the pair of account and address in Attempts."
+    );
+    // Another account is free from the first address.
+    new_user(&app, "b@example.org", PASS_TWO).await;
+    assert_eq!(
+        send(&app, sign_in_call("b@example.org", PASS_TWO))
+            .await
+            .status,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn a_hundred_failed_sign_ins_from_many_addresses_block_the_email() {
+    let app = app(Signup::Invite);
+    new_user(&app, "a@example.org", PASS_ONE).await;
+    for i in 0..100 {
+        let mut call = sign_in_call("a@example.org", PASS_TWO);
+        // Nine failures for each address, so that no pair and no address
+        // reaches its own limit.
+        let address = format!("10.1.{}.{}:4000", i / 9, i % 9 + 1);
+        call.addr = &address;
+        let reply = send(&app, call).await;
+        assert_eq!(reply.code(), "sign_in_failed", "failure {i}");
+    }
+    let mut fresh = sign_in_call("a@example.org", PASS_ONE);
+    fresh.addr = "10.9.9.9:4000";
+    let reply = send(&app, fresh).await;
+    assert_eq!(
+        reply.status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "ADR 0106 item 4: 100 failures from all addresses must block the email. Count the account in Attempts."
+    );
     assert_eq!(reply.code(), "too_many_attempts");
     // Another account is free.
     new_user(&app, "b@example.org", PASS_TWO).await;
     let mut other = sign_in_call("b@example.org", PASS_TWO);
-    other.addr = "10.0.0.99:4000";
+    other.addr = "10.9.9.9:4000";
     assert_eq!(send(&app, other).await.status, StatusCode::OK);
 }
 
@@ -1295,7 +1335,7 @@ async fn an_account_with_no_vault_file_gets_a_new_vault_at_the_next_sign_in() {
 async fn the_failures_of_a_nostr_key_are_counted_and_the_key_is_blocked() {
     let app = app(Signup::Open);
     let keys = new_keys();
-    for _ in 0..crate::limits::ACCOUNT_LIMIT {
+    for _ in 0..crate::limits::PAIR_LIMIT {
         let reply = nostr_call(&app, good_event(&keys, &"00".repeat(32)), None).await;
         assert_eq!(reply.code(), "challenge_invalid");
     }
@@ -1308,7 +1348,7 @@ async fn the_failures_of_a_nostr_key_are_counted_and_the_key_is_blocked() {
 async fn an_event_with_a_wrong_signature_does_not_block_its_public_key() {
     let app = app(Signup::Open);
     let keys = new_keys();
-    for _ in 0..crate::limits::ACCOUNT_LIMIT {
+    for _ in 0..crate::limits::PAIR_LIMIT {
         let mut event = good_event(&keys, &"00".repeat(32));
         event["sig"] = json!("00".repeat(64));
         let reply = nostr_call(&app, event, None).await;
@@ -1564,7 +1604,7 @@ async fn an_unknown_account_a_wrong_key_and_no_vault_file_give_the_same_error() 
 }
 
 #[tokio::test]
-async fn ten_failed_recovery_sign_ins_block_the_account_also_for_the_correct_key() {
+async fn ten_failed_recovery_sign_ins_from_one_address_block_it_also_for_the_correct_key() {
     let app = app(Signup::Invite);
     let key = user_with_recovery(&app, "a@example.org", PASS_ONE).await;
     let wrong = "0000-0000-0000-0000-0000-0000-0000-0000";
@@ -1572,8 +1612,7 @@ async fn ten_failed_recovery_sign_ins_block_the_account_also_for_the_correct_key
         let reply = send(&app, recovery_call("a@example.org", wrong)).await;
         assert_eq!(reply.code(), "sign_in_failed");
     }
-    let mut next = recovery_call("a@example.org", &key);
-    next.addr = "10.0.0.99:4000";
+    let next = recovery_call("a@example.org", &key);
     let reply = send(&app, next).await;
     assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(reply.code(), "too_many_attempts");
@@ -2127,17 +2166,21 @@ async fn false_assertions_do_not_block_the_account_of_the_credential() {
 async fn false_assertions_from_one_address_block_that_address() {
     let app = app(Signup::Invite);
     let forger = Device::new(4);
+    let mut last = String::new();
     for _ in 0..30 {
         let options = passkey_options(&app, None).await;
+        last = options.json["challenge"].as_str().unwrap().to_owned();
         let body = json!({
-            "assertion": forger.assertion(options.json["challenge"].as_str().unwrap(), 0),
+            "assertion": forger.assertion(&last, 0),
             "prf_output": forger.prf(options.json["prf_salt"].as_str().unwrap()),
         });
         send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
     }
-    let options = passkey_options(&app, None).await;
+    // The 31st challenge request of the address gives 429 (ADR 0106 item
+    // 5), so the last request reuses a challenge. The address block comes
+    // before the check of the challenge.
     let body = json!({
-        "assertion": forger.assertion(options.json["challenge"].as_str().unwrap(), 0),
+        "assertion": forger.assertion(&last, 0),
     });
     let reply = send(&app, call("POST", "/auth/v1/passkey", Some(body))).await;
     assert_eq!(reply.status, StatusCode::TOO_MANY_REQUESTS);
@@ -3049,4 +3092,155 @@ async fn the_app_rows_follow_the_user_and_come_back_after_a_restart() {
     )
     .await;
     assert_eq!(ok.status, StatusCode::OK, "{:?}", ok.json);
+}
+
+/// A clock that a test moves. The app uses it for the rule of the recent
+/// unlock (ADR 0106 item 2). Set it before the first sign-up.
+fn clock_of(app: &App) -> std::sync::Arc<std::sync::atomic::AtomicU64> {
+    let start = std::time::Instant::now();
+    let offset = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let shared = std::sync::Arc::clone(&offset);
+    *app.state.users.test_clock.lock().unwrap() = Some(studio_api::Clock::new(move || {
+        start + std::time::Duration::from_secs(shared.load(std::sync::atomic::Ordering::SeqCst))
+    }));
+    offset
+}
+
+#[tokio::test]
+async fn a_passkey_change_and_an_account_deletion_need_an_unlock_in_the_last_five_minutes() {
+    let app = app(Signup::Invite);
+    let offset = clock_of(&app);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let one = Device::new(1);
+    let two = Device::new(2);
+    let added = add_passkey(&app, &who, &one, "One").await;
+    assert_eq!(added.status, StatusCode::CREATED, "{:?}", added.json);
+    // Six minutes later the vault is open, but the unlock is old.
+    offset.store(6 * 60, std::sync::atomic::Ordering::SeqCst);
+    let path = |d: &Device| format!("/auth/v1/passkeys/{}", d.credential_id());
+    let removed = api(&app, &who, "DELETE", &path(&one), None).await;
+    assert_eq!(
+        removed.status,
+        StatusCode::UNAUTHORIZED,
+        "ADR 0106 item 2: passkey_remove must need an unlock in the last 5 minutes. Call require_recent_unlock in the route."
+    );
+    assert_eq!(removed.code(), "unlock_required");
+    let options = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/passkeys/options",
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(
+        options.code(),
+        "unlock_required",
+        "ADR 0106 item 2: the options of a new passkey must need a recent unlock."
+    );
+    let delete = api(
+        &app,
+        &who,
+        "POST",
+        "/auth/v1/account/delete",
+        Some(json!({ "confirm": "a@example.org" })),
+    )
+    .await;
+    assert_eq!(
+        delete.code(),
+        "unlock_required",
+        "ADR 0106 item 2: the deletion of an account must need a recent unlock."
+    );
+    assert_eq!(app.state.accounts.folders().unwrap().len(), 1);
+    // A new unlock makes the changes work.
+    let unlock = api(
+        &app,
+        &who,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASS_ONE })),
+    )
+    .await;
+    assert_eq!(unlock.status, StatusCode::OK, "{:?}", unlock.json);
+    let added = add_passkey(&app, &who, &two, "Two").await;
+    assert_eq!(added.status, StatusCode::CREATED, "{:?}", added.json);
+    let removed = api(&app, &who, "DELETE", &path(&one), None).await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn a_new_passphrase_and_a_removed_passkey_end_the_other_sessions() {
+    let app = app(Signup::Invite);
+    let first = new_user(&app, "a@example.org", PASS_ONE).await;
+    let second = who_of(&send(&app, sign_in_call("a@example.org", PASS_ONE)).await);
+    let status = api(&app, &second, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.status, StatusCode::OK);
+    let changed = api(
+        &app,
+        &first,
+        "POST",
+        "/api/v1/vault/passphrase",
+        Some(json!({ "passphrase": PASS_TWO })),
+    )
+    .await;
+    assert_eq!(changed.status, StatusCode::OK, "{:?}", changed.json);
+    let status = api(&app, &second, "GET", "/api/v1/status", None).await;
+    assert_eq!(
+        status.status,
+        StatusCode::UNAUTHORIZED,
+        "ADR 0106 item 3: a new passphrase must end the other sessions. Call end_other_sessions after the change."
+    );
+    let status = api(&app, &first, "GET", "/api/v1/status", None).await;
+    assert_eq!(
+        status.status,
+        StatusCode::OK,
+        "ADR 0106 item 3: the current session must continue."
+    );
+    // The removal of a passkey does the same.
+    let device = Device::new(1);
+    add_passkey(&app, &first, &device, "One").await;
+    let third = who_of(&send(&app, sign_in_call("a@example.org", PASS_TWO)).await);
+    let status = api(&app, &third, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.status, StatusCode::OK);
+    let path = format!("/auth/v1/passkeys/{}", device.credential_id());
+    let removed = api(&app, &first, "DELETE", &path, None).await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT);
+    let status = api(&app, &third, "GET", "/api/v1/status", None).await;
+    assert_eq!(
+        status.status,
+        StatusCode::UNAUTHORIZED,
+        "ADR 0106 item 3: the removal of a method must end the other sessions. Call end_other_sessions after the removal."
+    );
+    let status = api(&app, &first, "GET", "/api/v1/status", None).await;
+    assert_eq!(status.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_31st_challenge_of_one_address_in_five_minutes_gives_429() {
+    let app = app(Signup::Open);
+    for i in 0..30 {
+        let reply = send(&app, call("POST", "/auth/v1/challenge", None)).await;
+        assert_eq!(reply.status, StatusCode::OK, "challenge {i}");
+    }
+    let blocked = send(&app, call("POST", "/auth/v1/challenge", None)).await;
+    assert_eq!(
+        blocked.status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "ADR 0106 item 5: the 31st challenge of one address must give 429. Count the address in the challenge route."
+    );
+    assert_eq!(blocked.code(), "too_many_attempts");
+    // The passkey options share the counter of the address.
+    let options = send(
+        &app,
+        call("POST", "/auth/v1/passkey/options", Some(json!({}))),
+    )
+    .await;
+    assert_eq!(
+        options.status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "ADR 0106 item 5: the passkey sign-in options must use the same counter."
+    );
+    let mut other = call("POST", "/auth/v1/challenge", None);
+    other.addr = "10.0.0.99:4000";
+    assert_eq!(send(&app, other).await.status, StatusCode::OK);
 }

@@ -136,6 +136,7 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         client_header: options.client_address_header.clone(),
         nip46,
         app_limits: limits::AppLimits::default(),
+        challenges: limits::ChallengeLimits::default(),
     }))
 }
 

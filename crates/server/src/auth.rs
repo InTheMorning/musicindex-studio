@@ -484,12 +484,9 @@ async fn delete_account(State(state): State<Shared>, request: Request) -> Respon
         Ok(user) => user,
         Err(error) => return error.into_response(),
     };
-    match user.handle.vault_state().await {
-        Ok(studio_api::VaultState::Open) => {}
-        Ok(_) => {
-            return failure(StatusCode::LOCKED, "vault_locked", "unlock the vault first");
-        }
-        Err(error) => return error.into_response(),
+    // ADR 0106 item 2: the deletion needs an unlock in the last 5 minutes.
+    if let Err(error) = user.handle.require_recent_unlock().await {
+        return error.into_response();
     }
     if state.accounts.delete_account(session.account_id).is_err() {
         return internal("the account database failed");
@@ -527,7 +524,11 @@ async fn strength(State(state): State<Shared>, request: Request) -> Response {
 }
 
 /// Give a challenge for a sign-in event (ADR 0056 item 5).
-async fn challenge(State(state): State<Shared>) -> Response {
+async fn challenge(State(state): State<Shared>, request: Request) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
+    if !state.challenges.allow(&address) {
+        return limits::too_many_attempts();
+    }
     match state.accounts.create_challenge() {
         Ok(Some((challenge, expires_at))) => axum::Json(json!({
             "challenge": challenge,
@@ -1178,13 +1179,8 @@ async fn nip46_unlock(State(state): State<Shared>, request: Request) -> Response
         Ok(user) => user,
         Err(error) => return error.into_response(),
     };
-    match user.handle.vault_state().await {
-        Ok(studio_api::VaultState::Open) => {
-            return axum::Json(json!({ "vault": "open" })).into_response();
-        }
-        Ok(_) => {}
-        Err(error) => return error.into_response(),
-    }
+    // An open vault still needs the signer: the unlock is a recent unlock
+    // (ADR 0106 item 1).
     let ciphertext = match user.handle.nostr_ciphertext(&pubkey).await {
         Ok(Some(ciphertext)) => ciphertext,
         Ok(None) => {
@@ -1462,8 +1458,13 @@ async fn passkey_add_options(State(state): State<Shared>, request: Request) -> R
         Ok(session) => session,
         Err(response) => return response,
     };
-    if let Err(response) = open_vault_user(&state, &session).await {
-        return response;
+    match open_vault_user(&state, &session).await {
+        Ok(user) => {
+            if let Err(error) = user.handle.require_recent_unlock().await {
+                return error.into_response();
+            }
+        }
+        Err(response) => return response,
     }
     let db_failed = |_: String| internal("the account database failed");
     let (email, pubkey) = match identity_of(&state, session.account_id) {
@@ -1637,6 +1638,10 @@ async fn passkey_add(State(state): State<Shared>, request: Request) -> Response 
         Ok(user) => user,
         Err(response) => return response,
     };
+    // ADR 0106 item 2: a new passkey needs an unlock in the last 5 minutes.
+    if let Err(error) = user.handle.require_recent_unlock().await {
+        return error.into_response();
+    }
     let Some(prf_output) = decode_prf(body.prf_output.as_ref()) else {
         return passkey_no_prf();
     };
@@ -1759,6 +1764,10 @@ async fn passkey_remove(
         Ok(user) => user,
         Err(response) => return response,
     };
+    // ADR 0106 item 2: a removal needs an unlock in the last 5 minutes.
+    if let Err(error) = user.handle.require_recent_unlock().await {
+        return error.into_response();
+    }
     match state.accounts.passkey(&credential_id) {
         Ok(Some(row)) if row.account_id == session.account_id => {}
         Ok(_) => {
@@ -1784,7 +1793,13 @@ async fn passkey_remove(
         .accounts
         .delete_passkey(session.account_id, &credential_id)
     {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(_) => {
+            // ADR 0106 item 3: a removal ends the other sessions.
+            if let Err(response) = session::end_other_sessions(&state, &session).await {
+                return response;
+            }
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(_) => internal("the account database failed"),
     }
 }
@@ -1793,6 +1808,10 @@ async fn passkey_remove(
 /// (ADR 0056 items 5 and 24). With a session, the options name the
 /// passkeys of the account.
 async fn passkey_sign_in_options(State(state): State<Shared>, request: Request) -> Response {
+    let address = limits::client_address(state.client_header.as_deref(), &request);
+    if !state.challenges.allow(&address) {
+        return limits::too_many_attempts();
+    }
     let allow = match session::resolve(&state, request.headers()).await {
         Ok(Resolved::Active(session)) => match state.accounts.passkeys_of(session.account_id) {
             Ok(rows) => rows.into_iter().map(|row| row.credential_id).collect(),

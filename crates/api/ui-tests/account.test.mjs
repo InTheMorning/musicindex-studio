@@ -7,8 +7,9 @@ import {
   accountName, deleteConfirmation, recoveryAccount, addMethodChoices, recoveryErrorText,
   toBase64Url, fromBase64Url, creationOptions, requestOptions, registrationPayload,
   assertionPayload, prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
-  nip46State, nip46ErrorText, isBunkerAddress, qrSource,
+  nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from '../ui/account.js';
+import { readFileSync } from 'node:fs';
 
 const PUBKEY = '7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e';
 
@@ -350,4 +351,32 @@ test('qrSource gives a data address for SVG text and nothing for no text', () =>
   assert.ok(!source.includes('<'));
   assert.equal(qrSource(''), '');
   assert.equal(qrSource(undefined), '');
+});
+
+test('the answer unlock_required asks for a recent unlock and the sheet says why', () => {
+  assert.equal(UNLOCK_AGAIN_TEXT, 'Unlock Studio again to change how you sign in.');
+  assert.equal(needsRecentUnlock({ status: 401, code: 'unlock_required' }), true,
+    'ADR 0106 item 4: 401 unlock_required must open the unlock sheet. Fix needsRecentUnlock in account.js.');
+  assert.equal(needsRecentUnlock({ status: 401, code: 'session_required' }), false);
+  assert.equal(needsRecentUnlock({ status: 423, code: 'vault_locked' }), false);
+  assert.equal(needsRecentUnlock(null), false);
+  assert.notEqual(authErrorText('unlock_required'), authErrorText('no_such_code'));
+});
+
+test('app.js sends a request again after an unlock that unlock_required asked for', () => {
+  const text = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(text, /serverMode && needsRecentUnlock/,
+    'ADR 0106 item 7: the desktop must ask for the unlock too. Do not limit unlock_required to serverMode in withUnlock.');
+  assert.match(text, /needsRecentUnlock\(error\)[^\n]*askUnlock\(UNLOCK_AGAIN_TEXT\)\) continue/,
+    'ADR 0106 item 4: withUnlock in app.js must handle unlock_required like vault_locked. Call askUnlock(UNLOCK_AGAIN_TEXT) and continue.');
+  assert.match(text, /reason=\$\{unlockAsk\.reason\}/,
+    'ADR 0106 item 4: the unlock sheet must show the reason text.');
+});
+
+test('the desktop unlock sheet offers the passphrase', () => {
+  assert.deepEqual(unlockMethods({ mode: 'local' }, false), ['passphrase'],
+    'ADR 0106 item 7: the desktop asks for an unlock with its passphrase. Return the passphrase for the local session in unlockMethods.');
+  const text = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.match(text, /view === 'local'\) && html`<\$\{UnlockSheet\}/,
+    'ADR 0106 item 7: App must show the unlock sheet in the desktop shell.');
 });

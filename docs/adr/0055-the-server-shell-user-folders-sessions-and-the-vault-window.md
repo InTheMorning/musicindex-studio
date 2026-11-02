@@ -66,7 +66,7 @@ On 2026-10-26 the operator selected the decisions below.
 
 21. Each user has a storage limit for the user folder. The default is 10 GiB, and the operator can change it. An upload or a download that goes over the limit stops with 507 `storage_full`.
 22. The server runs a maximum of 2 Argon2id derivations at the same time. The operator can change the number. A sign-in that must wait more than 10 seconds gets 503 `busy`.
-23. The server permits 10 failed sign-ins for each account in each hour, and 30 for each client address in each hour. After that, it gives 429 `too_many_attempts`. The client address comes from the header that the operator names for the reverse proxy.
+23. Changed by [ADR 0106](0106-a-sensitive-account-change-needs-a-recent-unlock.md) item 5. The server permits 10 failed sign-ins for each pair of account and client address in each hour, 100 for each account from all addresses, and 30 for each client address. After that, it gives 429 `too_many_attempts`. The client address comes from the header that the operator names for the reverse proxy.
 
 ### Functions Of The Desktop Only
 

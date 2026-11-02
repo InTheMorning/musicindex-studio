@@ -215,7 +215,7 @@ impl WorkspaceHandle {
     ) -> Result<(), ApiError> {
         let credential_id = credential_id.to_owned();
         self.run(move |w| {
-            w.require_open_vault()?;
+            w.require_recent_unlock()?;
             let vault = w
                 .vault
                 .as_mut()
@@ -236,7 +236,7 @@ impl WorkspaceHandle {
     pub async fn remove_passkey_wrapper(&self, credential_id: &str) -> Result<bool, ApiError> {
         let credential_id = credential_id.to_owned();
         self.run(move |w| {
-            w.require_open_vault()?;
+            w.require_recent_unlock()?;
             let vault = w
                 .vault
                 .as_mut()
@@ -249,6 +249,17 @@ impl WorkspaceHandle {
         .await
     }
 
+    /// Give 401 `unlock_required` when the last unlock is older than 5
+    /// minutes (ADR 0106 item 2). The server calls it before a change of the
+    /// sign-in methods.
+    ///
+    /// # Errors
+    ///
+    /// Gives an [`ApiError`] when the vault is not open or the unlock is old.
+    pub async fn require_recent_unlock(&self) -> Result<(), ApiError> {
+        self.run(|w| w.require_recent_unlock()).await
+    }
+
     /// The vault key as base64, for the remote signer of the user to
     /// encrypt with NIP-44 (ADR 0056 item 11). The text clears its memory
     /// when it goes out of scope.
@@ -258,7 +269,7 @@ impl WorkspaceHandle {
     /// Gives an [`ApiError`] when the vault is not open.
     pub async fn signer_key(&self) -> Result<Zeroizing<String>, ApiError> {
         self.run(|w| {
-            w.require_open_vault()?;
+            w.require_recent_unlock()?;
             let key = w
                 .vault
                 .as_ref()
@@ -279,7 +290,7 @@ impl WorkspaceHandle {
     pub async fn add_nostr_wrapper(&self, pubkey: &str, ciphertext: &str) -> Result<(), ApiError> {
         let (pubkey, ciphertext) = (pubkey.to_owned(), ciphertext.to_owned());
         self.run(move |w| {
-            w.require_open_vault()?;
+            w.require_recent_unlock()?;
             let vault = w
                 .vault
                 .as_mut()
@@ -514,6 +525,31 @@ pub enum AppChange {
     },
 }
 
+/// The clock of the workspace. It gives the time for the rule of the recent
+/// unlock (ADR 0106 item 2). A test gives a clock that it controls.
+#[derive(Clone)]
+pub struct Clock(Arc<dyn Fn() -> Instant + Send + Sync>);
+
+impl Clock {
+    /// Make a clock from a function.
+    pub fn new(now: impl Fn() -> Instant + Send + Sync + 'static) -> Self {
+        Self(Arc::new(now))
+    }
+
+    fn now(&self) -> Instant {
+        (self.0)()
+    }
+}
+
+impl std::fmt::Debug for Clock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Clock(..)")
+    }
+}
+
+/// How long an unlock counts as recent (ADR 0106 item 2).
+pub(crate) const RECENT_UNLOCK: Duration = Duration::from_mins(5);
+
 /// A function that the workspace calls after a change of the app list. The
 /// server gives one. The desktop gives none (ADR 0058 item 16).
 #[derive(Clone)]
@@ -592,6 +628,11 @@ pub struct Workspace {
     pub(crate) app_hook: Option<AppHook>,
     /// The time of the last use of a vault secret (ADR 0055 item 16).
     vault_used: Mutex<Instant>,
+    /// The clock of the recent unlock (ADR 0106 item 2).
+    clock: Clock,
+    /// The time of the last unlock in the current vault window. A lock
+    /// clears it (ADR 0106 item 1).
+    unlocked_at: Option<Instant>,
     /// The NIP-46 signer of the user, or the wait for one (ADR 0056
     /// item 17). A route clones the `Arc` and then unlocks the workspace.
     pub(crate) signer: SignerSlot,
@@ -707,6 +748,8 @@ impl Workspace {
             rules: None,
             app_hook: None,
             vault_used: Mutex::new(Instant::now()),
+            clock: Clock::new(Instant::now),
+            unlocked_at: None,
             signer: SignerSlot::None,
             nip46_relays: vec![DEFAULT_NIP46_RELAY.to_owned()],
             signer_generation: 0,
@@ -727,6 +770,28 @@ impl Workspace {
     pub fn with_app_hook(mut self, hook: AppHook) -> Self {
         self.app_hook = Some(hook);
         self
+    }
+
+    /// Use `clock` for the rule of the recent unlock (ADR 0106 item 2).
+    #[must_use]
+    pub fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// Record an unlock of the vault now (ADR 0106 item 1).
+    fn mark_unlocked(&mut self) {
+        self.unlocked_at = Some(self.clock.now());
+    }
+
+    /// Give 401 `unlock_required` when the last unlock is older than 5
+    /// minutes, or when the vault is not open (ADR 0106 item 2).
+    pub(crate) fn require_recent_unlock(&self) -> Result<(), ApiError> {
+        self.require_open_vault()?;
+        match self.unlocked_at {
+            Some(at) if self.clock.now().saturating_duration_since(at) < RECENT_UNLOCK => Ok(()),
+            _ => Err(ApiError::unlock_required()),
+        }
     }
 
     /// Tell the hook about a change of the app list.
@@ -896,6 +961,7 @@ impl Workspace {
         };
         self.vault = Some(vault);
         self.touch_vault();
+        self.mark_unlocked();
         self.save_vault()?;
         Ok(recovery)
     }
@@ -904,6 +970,7 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_passphrase(passphrase)?);
         self.touch_vault();
+        self.mark_unlocked();
         self.sync_grant_vaults(None);
         Ok(())
     }
@@ -912,6 +979,7 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_key(key_base64)?);
         self.touch_vault();
+        self.mark_unlocked();
         self.sync_grant_vaults(None);
         Ok(())
     }
@@ -924,6 +992,7 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_passkey(credential_id, prf_output)?);
         self.touch_vault();
+        self.mark_unlocked();
         self.sync_grant_vaults(None);
         Ok(())
     }
@@ -943,18 +1012,15 @@ impl Workspace {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_recovery_key(recovery_key)?);
         self.touch_vault();
+        self.mark_unlocked();
         self.sync_grant_vaults(None);
         Ok(())
     }
 
-    /// Replace the passphrase of the open vault, and save the vault.
+    /// Replace the passphrase of the open vault, and save the vault. The
+    /// last unlock must be recent (ADR 0106 item 2).
     pub(crate) fn set_passphrase(&mut self, passphrase: &str) -> Result<(), ApiError> {
-        if self.vault.is_none() {
-            return Err(match self.vault_state() {
-                VaultState::Absent => ApiError::vault_required(),
-                _ => ApiError::vault_locked(),
-            });
-        }
+        self.require_recent_unlock()?;
         let vault = self
             .vault
             .as_mut()
@@ -966,6 +1032,7 @@ impl Workspace {
 
     pub(crate) fn lock(&mut self) {
         self.vault = None;
+        self.unlocked_at = None;
     }
 
     /// Give the workspace its library folder. A new account has no library

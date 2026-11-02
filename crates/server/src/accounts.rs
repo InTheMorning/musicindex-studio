@@ -989,6 +989,32 @@ impl Accounts {
             .map(|_| ())
             .map_err(|e| e.to_string())
     }
+
+    /// Remove each session of the account except the one with
+    /// `keep_token_hash`. Gives the token hashes that the call removed
+    /// (ADR 0106 item 3).
+    ///
+    /// # Errors
+    ///
+    /// Gives a message when the database fails.
+    pub fn delete_other_sessions(
+        &self,
+        account_id: i64,
+        keep_token_hash: &str,
+    ) -> Result<Vec<String>, String> {
+        let db = self.db();
+        let mut statement = db
+            .prepare(
+                "DELETE FROM sessions WHERE account_id = ?1 AND token_hash <> ?2
+                 RETURNING token_hash",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map(params![account_id, keep_token_hash], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<String>, _>>()
+            .map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(test)]

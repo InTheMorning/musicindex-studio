@@ -6649,6 +6649,7 @@ fn bearer_request(path: &str, token: Option<&str>, host: &str) -> Request<Body> 
 #[tokio::test]
 async fn the_apps_routes_add_list_and_remove_an_app_and_only_the_post_gives_the_token() {
     let app = app();
+    make_vault(&app).await;
     let (status, body) = call(&app, "POST", "/api/v1/apps", Some(json!({"name": " "}))).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "invalid_name");
@@ -6682,6 +6683,7 @@ async fn the_apps_routes_add_list_and_remove_an_app_and_only_the_post_gives_the_
 #[tokio::test]
 async fn whoami_needs_the_token_of_a_connected_app() {
     let app = app();
+    make_vault(&app).await;
     let (_, body) = call(
         &app,
         "POST",
@@ -7981,6 +7983,27 @@ fn grant_files(app: &App) -> Vec<String> {
     names
 }
 
+/// Add an app as the route does, but with no recent unlock. The route needs
+/// one (ADR 0106 item 2), and these tests need an app that a closed vault
+/// holds.
+async fn add_app_while_locked(handle: &crate::WorkspaceHandle, name: &str) -> (StatusCode, Value) {
+    let name = name.to_owned();
+    handle
+        .with_workspace(move |w| {
+            let (app, token) = studio_core::apps::add_app(&w.collection, &name).unwrap();
+            w.app_changed(&crate::workspace::AppChange::Added {
+                app_id: app.id,
+                token_hash: studio_core::apps::token_hash(&token),
+            });
+            w.sync_grant_vaults(None);
+            (
+                StatusCode::CREATED,
+                json!({ "id": app.id, "has_key": app.has_key, "token": token }),
+            )
+        })
+        .await
+}
+
 async fn lock(app: &App) {
     let (status, _) = call(app, "POST", "/api/v1/vault/lock", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -8089,10 +8112,10 @@ async fn a_granted_write_does_not_use_the_open_user_vault() {
 #[tokio::test]
 async fn an_app_that_the_user_adds_during_a_grant_writes_after_the_next_unlock() {
     let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, _handle) = app_with_handle();
+    let (app, handle) = app_with_handle();
     let (_, show) = sftp_show(&app, &mut server).await;
     lock(&app).await;
-    let (status, added) = call(&app, "POST", "/api/v1/apps", Some(json!({"name": "Two"}))).await;
+    let (status, added) = add_app_while_locked(&handle, "Two").await;
     assert_eq!(status, StatusCode::CREATED);
     let second = added["token"].as_str().unwrap().to_owned();
     let second_id = added["id"].as_i64().unwrap();
@@ -8245,10 +8268,10 @@ async fn no_file_and_no_row_has_an_app_token_or_a_grant_vault_key() {
 #[tokio::test]
 async fn an_app_lists_the_shows_of_its_grants_while_the_user_vault_is_locked() {
     let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, _handle) = app_with_handle();
+    let (app, handle) = app_with_handle();
     let (_, show) = sftp_show(&app, &mut server).await;
     lock(&app).await;
-    let (status, added) = call(&app, "POST", "/api/v1/apps", Some(json!({"name": "Two"}))).await;
+    let (status, added) = add_app_while_locked(&handle, "Two").await;
     assert_eq!(status, StatusCode::CREATED);
     let second = added["token"].as_str().unwrap().to_owned();
 
@@ -11324,4 +11347,135 @@ fn an_open_repairs_the_modes_of_an_older_installation() {
         0o600,
         "ADR 0104 item 2: Workspace::open must set the mode 0600 on an existing vault.json."
     );
+}
+
+/// A clock that a test moves. The offset is in seconds after the start.
+fn test_clock() -> (crate::Clock, std::sync::Arc<std::sync::atomic::AtomicU64>) {
+    let start = std::time::Instant::now();
+    let offset = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let shared = std::sync::Arc::clone(&offset);
+    let clock = crate::Clock::new(move || {
+        start + std::time::Duration::from_secs(shared.load(std::sync::atomic::Ordering::SeqCst))
+    });
+    (clock, offset)
+}
+
+fn app_with_clock(clock: crate::Clock) -> (App, crate::WorkspaceHandle) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_clock(clock);
+    let (workspace_routes, handle) = crate::workspace_router(workspace);
+    let router =
+        crate::ui_router()
+            .merge(workspace_routes)
+            .layer(axum::middleware::from_fn_with_state(
+                Access::with_token(TOKEN, 4100),
+                crate::access::check,
+            ));
+    (
+        App {
+            router,
+            data,
+            feeds,
+        },
+        handle,
+    )
+}
+
+const SENSITIVE: [(&str, &str); 3] = [
+    ("POST", "/api/v1/vault/signer-key"),
+    ("POST", "/api/v1/vault/passphrase"),
+    ("POST", "/api/v1/apps"),
+];
+
+fn sensitive_body(path: &str) -> Option<Value> {
+    match path {
+        "/api/v1/vault/passphrase" => Some(json!({ "passphrase": "staple orange umbrella river" })),
+        "/api/v1/apps" => Some(json!({ "name": "Show tool" })),
+        _ => None,
+    }
+}
+
+#[tokio::test]
+async fn a_sensitive_change_needs_an_unlock_in_the_last_five_minutes() {
+    let (clock, offset) = test_clock();
+    let (app, _handle) = app_with_clock(clock);
+    make_vault(&app).await;
+    for (method, path) in SENSITIVE {
+        let (status, body) = call(&app, method, path, sensitive_body(path)).await;
+        assert!(
+            status.is_success(),
+            "ADR 0106 item 2: {path} must work right after the unlock: {body}"
+        );
+    }
+    // Six minutes later the vault is still open, but the unlock is old.
+    offset.store(6 * 60, std::sync::atomic::Ordering::SeqCst);
+    for (method, path) in SENSITIVE {
+        let (status, body) = call(&app, method, path, sensitive_body(path)).await;
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "ADR 0106 item 2: {path} must give 401 unlock_required with an unlock older than 5 minutes. Call require_recent_unlock in the route."
+        );
+        assert_eq!(body["error"]["code"], "unlock_required", "{path}");
+    }
+    // A new unlock makes the changes work again. The passphrase is the
+    // current one here, because the first loop changed it.
+    lock(&app).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": "staple orange umbrella river" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for (method, path) in SENSITIVE {
+        let (status, body) = call(&app, method, path, sensitive_body(path)).await;
+        assert!(
+            status.is_success(),
+            "ADR 0106 item 2: {path} must work after a new unlock: {body}"
+        );
+    }
+    // Four minutes after that unlock the change still works.
+    offset.store(10 * 60 - 1, std::sync::atomic::Ordering::SeqCst);
+    let (status, body) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
+    assert!(status.is_success(), "ADR 0106 item 2: {body}");
+}
+
+#[tokio::test]
+async fn a_vault_creation_and_a_recovery_unlock_each_count_as_a_recent_unlock() {
+    let (clock, offset) = test_clock();
+    let (app, handle) = app_with_clock(clock);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE, "recovery_key": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let recovery = body["recovery_key"].as_str().unwrap().to_owned();
+    let (status, body) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0106 item 1: the creation of a vault is an unlock. Mark the unlock in create_vault: {body}"
+    );
+    lock(&app).await;
+    offset.store(3600, std::sync::atomic::Ordering::SeqCst);
+    handle.unlock_with_recovery_key(&recovery).await.unwrap();
+    let (status, body) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0106 item 1: a recovery unlock is an unlock. Mark the unlock in unlock_with_recovery_key: {body}"
+    );
+    // A lock clears the time, so a lock and no unlock gives 423.
+    lock(&app).await;
+    let (status, _) = call(&app, "POST", "/api/v1/vault/signer-key", None).await;
+    assert_eq!(status, StatusCode::LOCKED);
 }

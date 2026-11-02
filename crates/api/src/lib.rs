@@ -25,7 +25,7 @@ pub use access::Access;
 pub use axum::Router;
 pub use error::ApiError;
 pub use workspace::{
-    AppChange, AppHook, ServerRules, VaultState, Workspace, WorkspaceHandle, private_dir,
+    AppChange, AppHook, Clock, ServerRules, VaultState, Workspace, WorkspaceHandle, private_dir,
 };
 
 /// Serve a router until the process stops.

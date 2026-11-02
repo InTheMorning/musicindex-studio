@@ -142,7 +142,9 @@ A user has five sign-in methods: email with a passphrase, NIP-07, NIP-46, a pass
 
 The server has these limits:
 
-- 10 failed sign-ins for one account, or 30 for one client address, in one hour. After that, a sign-in gets 429 `too_many_attempts`.
+- 10 failed sign-ins for one pair of account and client address, 100 for one account from all addresses, or 30 for one client address, in one hour. After that, a sign-in gets 429 `too_many_attempts`. A third party at one address thus blocks only its own address for that account ([ADR 0106](../adr/0106-a-sensitive-account-change-needs-a-recent-unlock.md)).
+- 30 challenges for each client address in 5 minutes, for the Nostr and passkey sign-in. After that, the route gets 429 `too_many_attempts`.
+- A sensitive account change needs an unlock in the last 5 minutes. The server gives 401 `unlock_required` after that time, and the UI asks the user to unlock. A new passphrase and the removal of a sign-in method end each other session of the account.
 - A wait of 10 seconds for an Argon2id permit. After that, a request gets 503 `busy`.
 - 4 pending NIP-46 connections for each client address.
 - 60 requests for each connected app in each minute, and 20 unknown app tokens for each client address in each hour.

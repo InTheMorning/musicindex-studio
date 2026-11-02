@@ -60,6 +60,8 @@ pub struct ServerState {
     pub nip46: Nip46Sessions,
     /// The request counters of the apps (ADR 0058 item 18).
     pub app_limits: limits::AppLimits,
+    /// The challenges that each client address asked for (ADR 0106 item 5).
+    pub challenges: limits::ChallengeLimits,
 }
 
 /// The shared state.
@@ -380,6 +382,29 @@ pub async fn forget_signers(
     }
 }
 
+/// End each session of the account except `session`, and forget their
+/// NIP-46 signers (ADR 0106 item 3). A new passphrase and the removal of a
+/// method call it.
+///
+/// # Errors
+///
+/// Gives a 500 response when the account database fails.
+pub async fn end_other_sessions(state: &ServerState, session: &Session) -> Result<(), Response> {
+    let keep = accounts::sha256_hex(&session.token);
+    let Ok(ended) = state
+        .accounts
+        .delete_other_sessions(session.account_id, &keep)
+    else {
+        return Err(internal("the account database failed"));
+    };
+    let gone: Vec<_> = ended
+        .iter()
+        .filter_map(|hash| state.nip46.remove_session(hash))
+        .collect();
+    forget_signers(state, gone).await;
+    Ok(())
+}
+
 /// The active session of a request, or the response to send.
 ///
 /// # Errors
@@ -505,6 +530,8 @@ pub async fn api(State(state): State<Shared>, request: Request) -> Response {
     } else {
         None
     };
+    let changes_passphrase =
+        request.method() == Method::POST && request.uri().path() == "/api/v1/vault/passphrase";
     let lifts = session.restricted && adds_method(request.method(), request.uri().path());
     let request = if lifts {
         match usable_method(&state, &session, request).await {
@@ -518,6 +545,13 @@ pub async fn api(State(state): State<Shared>, request: Request) -> Response {
         Ok(response) => response,
         Err(never) => match never {},
     };
+    // A new passphrase ends the other sessions (ADR 0106 item 3).
+    if changes_passphrase
+        && response.status().is_success()
+        && let Err(response) = end_other_sessions(&state, &session).await
+    {
+        return response;
+    }
     // The limit ends only when the method was added.
     if lifts && response.status().is_success() {
         let hash = accounts::sha256_hex(&session.token);

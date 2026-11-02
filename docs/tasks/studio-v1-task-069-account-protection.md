@@ -2,7 +2,7 @@
 
 Decision: ADR 0055 item 23 (limits), ADR 0056 items 3, 5, 10 and 11 (methods, challenges and the vault key for a signer). Packet a writes ADR 0106 first. ADR 0106 changes ADR 0055 item 23 and adds the rule of a recent unlock.
 
-Status: Not started.
+Status: Complete. The mechanical criteria pass, and the screenshot visual check is done. The human test is open.
 
 ## Goal
 

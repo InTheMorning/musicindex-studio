@@ -13,7 +13,7 @@ import {
   recoveryAccount, addMethodChoices, recoveryErrorText,
   toBase64Url, creationOptions, requestOptions, registrationPayload, assertionPayload,
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
-  nip46State, nip46ErrorText, isBunkerAddress, qrSource,
+  nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
 import { isLiveItem } from './live.js';
@@ -70,8 +70,9 @@ class ApiError extends Error {
 
 let serverMode = false;
 let csrfToken = null;
-// `App` sets these two functions. `onUnlockNeeded` gives a promise that is
-// true after an unlock and false when the user closes the unlock sheet.
+// `App` sets these two functions. `onUnlockNeeded(reason)` gives a promise
+// that is true after an unlock and false when the user closes the unlock
+// sheet. `reason` is a text for the sheet, or null.
 let onUnlockNeeded = null;
 let onSessionLost = null;
 let unlocking = null;
@@ -83,14 +84,15 @@ function applySession(session) {
 }
 
 // Ask for an unlock. Parallel requests share one sheet.
-function askUnlock() {
+function askUnlock(reason = null) {
   if (!onUnlockNeeded) return Promise.resolve(false);
-  if (!unlocking) unlocking = onUnlockNeeded().finally(() => { unlocking = null; });
+  if (!unlocking) unlocking = onUnlockNeeded(reason).finally(() => { unlocking = null; });
   return unlocking;
 }
 
 // Run a request. On a server, the answer 423 `vault_locked` opens the unlock
-// sheet, and after an unlock the request runs one more time. If the user
+// sheet, and after an unlock the request runs one more time. The answer 401
+// `unlock_required` does the same, in both shells, and the sheet says why (ADR 0106 items 4 and 7). If the user
 // closes the sheet, the request gives its error. The answer 401
 // `session_required` or `session_ended` shows the sign-in page.
 async function withUnlock(work) {
@@ -99,6 +101,7 @@ async function withUnlock(work) {
       return await work();
     } catch (error) {
       if (serverMode && error.status === 423 && error.code === 'vault_locked' && attempt === 0 && await askUnlock()) continue;
+      if (needsRecentUnlock(error) && attempt === 0 && await askUnlock(UNLOCK_AGAIN_TEXT)) continue;
       if (serverMode && error.status === 401 && (error.code === 'session_required' || error.code === 'session_ended') && onSessionLost) {
         onSessionLost();
       }
@@ -3631,7 +3634,7 @@ function SignedOut({ session, onSignedIn }) {
 
 // The unlock sheet (ADR 0056 items 7 and 10). `onDone(true)` follows an
 // unlock. `onDone(false)` follows a close of the sheet.
-function UnlockSheet({ session, onDone }) {
+function UnlockSheet({ session, reason, onDone }) {
   const ref = useSheet(true);
   const [passphrase, setPassphrase] = useState('');
   const { busy, error, run } = useAction();
@@ -3677,6 +3680,7 @@ function UnlockSheet({ session, onDone }) {
     </header>
     <div class="body">
       <p>This step needs the vault. Your passphrase, your signer or your passkey opens it.</p>
+      ${reason && html`<p class="hint" role="status">${reason}</p>`}
       ${methods.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase}>
         <${SecretField} id="unlock-sheet-passphrase" label="Passphrase" autocomplete="current-password" required autofocus
           error=${passError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
@@ -3906,11 +3910,13 @@ function App() {
   }, []);
   useEffect(() => { reload(); }, [reload]);
   // A pending unlock ends when the user is no longer signed in.
+  // The sheet shows in the shell only. A request in another view gets its error.
   useEffect(() => {
-    if (unlockAsk && !(session && session.signed_in)) { unlockAsk.resolve(false); setUnlockAsk(null); }
+    const inShell = session && (session.mode === 'local' || (session.signed_in && bootView(session, null) === 'shell'));
+    if (unlockAsk && !inShell) { unlockAsk.resolve(false); setUnlockAsk(null); }
   }, [session, unlockAsk]);
   useEffect(() => {
-    onUnlockNeeded = () => new Promise((resolve) => setUnlockAsk({ resolve }));
+    onUnlockNeeded = (reason) => new Promise((resolve) => setUnlockAsk({ resolve, reason: reason || null }));
     onSessionLost = () => {
       csrfToken = null;
       setSession((current) => (current && current.mode === 'server'
@@ -3940,7 +3946,7 @@ function App() {
     setUnlockAsk(null);
     if (ok) setEpoch((n) => n + 1);
   };
-  return html`${body}<${ConfirmHost} />${unlockAsk && view === 'shell' && html`<${UnlockSheet} session=${session} onDone=${closeUnlock} />`}`;
+  return html`${body}<${ConfirmHost} />${unlockAsk && (view === 'shell' || view === 'local') && html`<${UnlockSheet} session=${session} reason=${unlockAsk.reason} onDone=${closeUnlock} />`}`;
 }
 
 render(html`<${App} />`, document.getElementById('app'));

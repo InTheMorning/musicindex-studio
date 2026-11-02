@@ -61,7 +61,17 @@ const AUTH_ERRORS = {
   last_method: 'This is the last way to sign in to the account. Add a different method first.',
   invalid_name: 'Give the passkey a name of 1 to 64 characters.',
   vault_locked: 'Unlock the vault first.',
+  unlock_required: 'This change needs a new unlock. Unlock Studio or sign in again, then try again.',
 };
+
+// The text of the unlock sheet after the answer 401 `unlock_required`
+// (ADR 0106 item 4).
+export const UNLOCK_AGAIN_TEXT = 'Unlock Studio again to change how you sign in.';
+
+// True for the answer that asks for a recent unlock (ADR 0106 item 2).
+export function needsRecentUnlock(error) {
+  return !!error && error.status === 401 && error.code === 'unlock_required';
+}
 
 const NIP46_ERRORS = {
   address_not_public: 'The server cannot connect to this relay, because it is not a public address.',
@@ -122,6 +132,8 @@ export function authErrorText(code) {
 // has `PublicKeyCredential`. The method `nip46` shows when the session has a
 // connected remote signer (`session.signer`).
 export function unlockMethods(session, hasNip07, hasPasskeys = false) {
+  // The desktop has one vault with a passphrase and no account (ADR 0106 item 7).
+  if (session && session.mode === 'local') return ['passphrase'];
   const methods = [];
   if (session && session.email) methods.push('passphrase');
   if (session && session.pubkey && hasNip07) methods.push('nip07');

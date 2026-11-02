@@ -246,7 +246,7 @@ pub(crate) async fn add_nostr_wrapper(
                 "give a public key and a ciphertext",
             ));
         }
-        require_open_vault(w)?;
+        w.require_recent_unlock()?;
         if let Some(vault) = w.vault.as_mut() {
             vault.add_nostr_wrapper(&body.pubkey, &body.ciphertext);
         }
@@ -260,7 +260,7 @@ pub(crate) async fn add_nostr_wrapper(
 /// route that gives the vault key. The signer encrypts it with NIP-44.
 pub(crate) async fn signer_key(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
-        require_open_vault(w)?;
+        w.require_recent_unlock()?;
         let vault = w
             .vault
             .as_ref()
@@ -269,16 +269,6 @@ pub(crate) async fn signer_key(State(shared): State<Shared>) -> ApiResult {
         Ok(Json(json!({ "key": vault.key_for_signer().as_str() })))
     })
     .await
-}
-
-fn require_open_vault(w: &Workspace) -> Result<(), ApiError> {
-    if w.vault.is_some() {
-        return Ok(());
-    }
-    Err(match w.vault_state() {
-        crate::workspace::VaultState::Absent => ApiError::vault_required(),
-        _ => ApiError::vault_locked(),
-    })
 }
 
 /// The connectors. Each connector lists the linked feeds with an address
@@ -5458,6 +5448,8 @@ pub(crate) async fn add_app(
     Json(body): Json<AppBody>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     blocking(shared, move |w| {
+        // ADR 0106 item 2: a new app is a sensitive change.
+        w.require_recent_unlock()?;
         let (app, token) =
             apps::add_app(&w.collection, &body.name).map_err(|e| match e.kind() {
                 CollectionErrorKind::Invalid => ApiError::new(

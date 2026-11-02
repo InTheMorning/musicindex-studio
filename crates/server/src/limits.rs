@@ -1,5 +1,6 @@
-//! The limits of the server: the Argon2id derivations, the failed sign-ins
-//! and the address of the client (ADR 0055 items 22 and 23).
+//! The limits of the server: the Argon2id derivations, the failed sign-ins,
+//! the challenges and the address of the client (ADR 0055 item 22, ADR 0106
+//! items 4 and 5).
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -13,8 +14,12 @@ use tokio::sync::OwnedSemaphorePermit;
 
 use crate::session::{ServerState, failure};
 
-/// The failed sign-ins that one account can have in one window.
-pub const ACCOUNT_LIMIT: usize = 10;
+/// The failed sign-ins that one account can have from one client address in
+/// one window (ADR 0106 item 4).
+pub const PAIR_LIMIT: usize = 10;
+/// The failed sign-ins that one account can have from all addresses in one
+/// window (ADR 0106 item 4).
+pub const ACCOUNT_LIMIT: usize = 100;
 /// The failed sign-ins that one client address can have in one window.
 pub const ADDRESS_LIMIT: usize = 30;
 /// The length of the window.
@@ -22,8 +27,9 @@ const WINDOW: Duration = Duration::from_hours(1);
 /// The longest client address that the counter keeps.
 const MAX_ADDRESS_CHARS: usize = 64;
 
-/// The failed sign-ins of each account and of each client address. The
-/// counter lives in memory only, so a restart clears it.
+/// The failed sign-ins of each pair of account and client address, of each
+/// account and of each client address. The counter lives in memory only, so
+/// a restart clears it.
 #[derive(Debug, Default)]
 pub struct Attempts {
     failures: Mutex<HashMap<String, Vec<Instant>>>,
@@ -46,19 +52,27 @@ impl Attempts {
         times.len()
     }
 
-    /// True when the account or the address has too many failures in the
-    /// window. A sign-in then gets 429 with no derivation.
+    /// True when the pair of account and address, the account or the address
+    /// has too many failures in the window. A sign-in then gets 429 with no
+    /// derivation. A third party at one address blocks only its own pair
+    /// (ADR 0106 item 4).
     pub fn blocked(&self, account: &str, address: &str) -> bool {
         let mut map = self.lock();
-        Self::count(&mut map, &account_key(account)) >= ACCOUNT_LIMIT
+        Self::count(&mut map, &pair_key(account, address)) >= PAIR_LIMIT
+            || Self::count(&mut map, &account_key(account)) >= ACCOUNT_LIMIT
             || Self::count(&mut map, &address_key(address)) >= ADDRESS_LIMIT
     }
 
-    /// Count one failed sign-in for the account and for the address.
+    /// Count one failed sign-in for the pair, for the account and for the
+    /// address.
     pub fn record_failure(&self, account: &str, address: &str) {
         let mut map = self.lock();
         let now = Instant::now();
-        for key in [account_key(account), address_key(address)] {
+        for key in [
+            pair_key(account, address),
+            account_key(account),
+            address_key(address),
+        ] {
             map.entry(key).or_default().push(now);
         }
     }
@@ -78,6 +92,46 @@ fn account_key(account: &str) -> String {
 
 fn address_key(address: &str) -> String {
     format!("address:{address}")
+}
+
+fn pair_key(account: &str, address: &str) -> String {
+    format!("pair:{address}|{account}")
+}
+
+/// The challenges that one client address can ask for in one challenge
+/// window (ADR 0106 item 5).
+pub const CHALLENGE_LIMIT: usize = 30;
+/// The length of the challenge window.
+const CHALLENGE_WINDOW: Duration = Duration::from_mins(5);
+
+/// The challenges that each client address asked for. The counter lives in
+/// memory only, so a restart clears it.
+#[derive(Debug, Default)]
+pub struct ChallengeLimits {
+    asked: Mutex<HashMap<String, Vec<Instant>>>,
+}
+
+impl ChallengeLimits {
+    /// Count one challenge for the address. Gives false when the address is
+    /// over its limit in the window.
+    pub fn allow(&self, address: &str) -> bool {
+        let mut map = lock_map(&self.asked);
+        let times = map.entry(address.to_owned()).or_default();
+        times.retain(|time| time.elapsed() < CHALLENGE_WINDOW);
+        if times.len() >= CHALLENGE_LIMIT {
+            return false;
+        }
+        times.push(Instant::now());
+        true
+    }
+
+    /// Forget the entries with no challenge in the window.
+    pub fn prune(&self) {
+        lock_map(&self.asked).retain(|_, times| {
+            times.retain(|time| time.elapsed() < CHALLENGE_WINDOW);
+            !times.is_empty()
+        });
+    }
 }
 
 /// The requests that one app can make in one minute (ADR 0058 item 18).
@@ -205,20 +259,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_account_is_blocked_after_ten_failures_and_an_address_after_thirty() {
+    fn a_pair_is_blocked_after_ten_failures_an_account_after_a_hundred_and_an_address_after_thirty()
+    {
         let attempts = Attempts::default();
-        for _ in 0..ACCOUNT_LIMIT - 1 {
+        for _ in 0..PAIR_LIMIT - 1 {
             attempts.record_failure("a@example.org", "1.1.1.1");
         }
         assert!(!attempts.blocked("a@example.org", "1.1.1.1"));
         attempts.record_failure("a@example.org", "1.1.1.1");
-        assert!(attempts.blocked("a@example.org", "2.2.2.2"));
-        assert!(!attempts.blocked("b@example.org", "2.2.2.2"));
+        assert!(
+            attempts.blocked("a@example.org", "1.1.1.1"),
+            "ADR 0106 item 4: ten failures block the pair of account and address."
+        );
+        assert!(
+            !attempts.blocked("a@example.org", "2.2.2.2"),
+            "ADR 0106 item 4: a different address must not be blocked by the pair."
+        );
+        assert!(!attempts.blocked("b@example.org", "1.1.1.1"));
         for i in 0..ADDRESS_LIMIT {
             attempts.record_failure(&format!("{i}@example.org"), "3.3.3.3");
         }
         assert!(attempts.blocked("new@example.org", "3.3.3.3"));
         attempts.prune();
         assert!(attempts.blocked("new@example.org", "3.3.3.3"));
+    }
+
+    #[test]
+    fn a_hundred_failures_from_many_addresses_block_the_account() {
+        let attempts = Attempts::default();
+        for i in 0..ACCOUNT_LIMIT {
+            attempts.record_failure("a@example.org", &format!("10.0.{}.{}", i / 250, i % 250));
+        }
+        assert!(
+            attempts.blocked("a@example.org", "9.9.9.9"),
+            "ADR 0106 item 4: 100 failures from all addresses block the account."
+        );
+        assert!(!attempts.blocked("b@example.org", "9.9.9.9"));
     }
 }

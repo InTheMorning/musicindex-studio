@@ -108,6 +108,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0103: One person collects the items of many suggestions](adr/0103-one-person-collects-the-items-of-many-suggestions.md)
 - [ADR 0104: Key material stays off the disk](adr/0104-key-material-stays-off-the-disk.md)
 - [ADR 0105: A public server holds no assets](adr/0105-a-public-server-holds-no-assets.md)
+- [ADR 0106: A sensitive account change needs a recent unlock](adr/0106-a-sensitive-account-change-needs-a-recent-unlock.md)
 - [ADR 0107: A user can export and import an account](adr/0107-a-user-can-export-and-import-an-account.md)
 - [ADR 0108: People data at rest stays plain](adr/0108-people-data-at-rest-stays-plain.md)
 - [ADR 0109: Images and audio load from their hosts](adr/0109-images-and-audio-load-from-their-hosts.md)

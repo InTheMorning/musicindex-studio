@@ -3,7 +3,11 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Review Of A Write".
 Decision: [ADR 0115](../adr/0115-a-changed-value-keeps-the-escape-form-of-its-source.md). It uses [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md).
 
-Status: Not started.
+Status: Complete, with the screenshot visual check on 2026-11-02. The human test is open. Notes from the review:
+
+- `EscapeForm` and `Text::with_form` are `pub(crate)`, not private, because `Text` is a public type. `EscapeForm` is `Copy`, so it moves by value.
+- The review added one rule of XML 1.0, section 2.4: text cannot contain the literal string `]]>`. Thus a `>` after `]]` in text is always `&gt;`, also when the source form is literal. A core test examines it.
+- Visual check: the feed `HeyCitizen's Lo-Fi Beats` of the 077 check data, with a literal apostrophe. The title changed to `HeyCitizen's Lo-Fi Hip-Hop Beats` at 1100 px, in the light theme. The draft keeps the literal apostrophe, and the review marks only `Hip-Hop `.
 
 ## Goal
 

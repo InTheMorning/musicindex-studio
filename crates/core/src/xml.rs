@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
-use quick_xml::escape::{escape, resolve_predefined_entity};
+use quick_xml::escape::resolve_predefined_entity;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::{Reader, XmlVersion};
 
@@ -122,6 +122,98 @@ pub enum Node {
     Markup(String),
 }
 
+/// The form of a kept character in a source value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Form {
+    /// The source wrote the entity or a character reference.
+    Entity,
+    /// The source wrote the character itself.
+    Literal,
+}
+
+/// The form that a source value uses for each kept character (ADR 0115).
+///
+/// `None` means that the source has no form for that character. The writer
+/// then uses the entity.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct EscapeForm {
+    apos: Option<Form>,
+    quot: Option<Form>,
+    gt: Option<Form>,
+}
+
+impl EscapeForm {
+    /// Read the form of each kept character from raw source text.
+    ///
+    /// The first occurrence of a character, or of a reference to it, gives
+    /// the form.
+    fn of_raw(raw: &str) -> Self {
+        let mut form = Self::default();
+        let mut rest = raw;
+        while let Some(c) = rest.chars().next() {
+            let (found, used) = if c == '&' {
+                match rest.find(';').and_then(|semi| {
+                    let name = &rest[1..semi];
+                    let ch = if let Some(number) = name.strip_prefix('#') {
+                        let code = match number.strip_prefix(['x', 'X']) {
+                            Some(hex) => u32::from_str_radix(hex, 16).ok(),
+                            None => number.parse().ok(),
+                        };
+                        char::from_u32(code?)?
+                    } else {
+                        resolve_predefined_entity(name)?.chars().next()?
+                    };
+                    Some((ch, semi + 1))
+                }) {
+                    Some((ch, used)) => (Some((ch, Form::Entity)), used),
+                    None => (None, 1),
+                }
+            } else {
+                (Some((c, Form::Literal)), c.len_utf8())
+            };
+            if let Some((ch, how)) = found {
+                let slot = match ch {
+                    '\'' => Some(&mut form.apos),
+                    '"' => Some(&mut form.quot),
+                    '>' => Some(&mut form.gt),
+                    _ => None,
+                };
+                if let Some(slot) = slot {
+                    slot.get_or_insert(how);
+                }
+            }
+            rest = &rest[used..];
+        }
+        form
+    }
+}
+
+/// Escape a value for the writer.
+///
+/// The function always writes `&amp;` and `&lt;`, and `&quot;` in an
+/// attribute. It writes each other kept character in the form of `form`.
+/// Text cannot contain the literal string `]]>`, so a `>` after `]]` in
+/// text is always `&gt;`.
+fn escape_with(value: &str, form: EscapeForm, attribute: bool) -> Cow<'_, str> {
+    if !value.contains(['&', '<', '>', '\'', '"']) {
+        return Cow::Borrowed(value);
+    }
+    let mut out = String::with_capacity(value.len() + 8);
+    for c in value.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '"' if attribute || form.quot != Some(Form::Literal) => out.push_str("&quot;"),
+            '\'' if form.apos != Some(Form::Literal) => out.push_str("&apos;"),
+            '>' if form.gt != Some(Form::Literal) || (!attribute && out.ends_with("]]")) => {
+                out.push_str("&gt;");
+            }
+            other => out.push(other),
+        }
+    }
+    Cow::Owned(out)
+}
+
 /// Character data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Text {
@@ -133,8 +225,14 @@ impl Text {
     /// Make escaped character data from a plain value.
     #[must_use]
     pub fn new(value: &str) -> Self {
+        Self::with_form(value, EscapeForm::default())
+    }
+
+    /// Make escaped character data in the escape form of a source value.
+    #[must_use]
+    pub(crate) fn with_form(value: &str, form: EscapeForm) -> Self {
         Self {
-            raw: escape(value).into_owned(),
+            raw: escape_with(value, form, false).into_owned(),
             cdata: false,
         }
     }
@@ -191,6 +289,8 @@ impl Text {
 pub struct Attribute {
     name: String,
     value: String,
+    /// The escape form of the source text of the value.
+    form: EscapeForm,
 }
 
 impl Attribute {
@@ -312,6 +412,7 @@ impl Element {
                 self.attributes.push(Attribute {
                     name: name.to_owned(),
                     value: v.to_owned(),
+                    form: EscapeForm::default(),
                 });
                 self.drop_start_tag();
             }
@@ -372,7 +473,15 @@ impl Element {
         let text = if cdata {
             Text::new_cdata(value)
         } else {
-            Text::new(value)
+            let source: String = self
+                .children
+                .iter()
+                .filter_map(|n| match n {
+                    Node::Text(t) if !t.cdata => Some(t.raw.as_str()),
+                    _ => None,
+                })
+                .collect();
+            Text::with_form(value, EscapeForm::of_raw(&source))
         };
         self.children = vec![Node::Text(text)];
     }
@@ -424,7 +533,7 @@ impl Element {
             out.push(' ');
             out.push_str(&a.name);
             out.push_str("=\"");
-            out.push_str(&escape(a.value.as_str()));
+            out.push_str(&escape_with(&a.value, a.form, true));
             out.push('"');
         }
         if empty {
@@ -712,6 +821,7 @@ impl<'s> Parser<'s> {
         for attribute in tag.attributes() {
             let attribute = attribute.map_err(|e| self.error(e.to_string()))?;
             let key = attribute.key.as_ref().to_owned();
+            let form = EscapeForm::of_raw(&attribute.value);
             // An entity that XML does not define stays as written, as in text.
             let value = attribute
                 .normalized_value(XmlVersion::Implicit1_0)
@@ -721,7 +831,11 @@ impl<'s> Parser<'s> {
             } else if let Some(prefix) = key.strip_prefix("xmlns:") {
                 scope.push((prefix.to_owned(), value.clone()));
             }
-            attributes.push(Attribute { name: key, value });
+            attributes.push(Attribute {
+                name: key,
+                value,
+                form,
+            });
         }
         let prefix = name.rsplit_once(':').map_or("", |(p, _)| p);
         let namespace = scope
@@ -1017,5 +1131,71 @@ mod tests {
         let mut doc = Document::parse("<a><![CDATA[old]]></a>").unwrap();
         doc.root_mut().set_text("new & more");
         assert_eq!(doc.write(), "<a><![CDATA[new & more]]></a>");
+    }
+
+    fn changed_title(source: &str, value: &str) -> String {
+        let mut doc = Document::parse(source).unwrap();
+        doc.root_mut().set_text(value);
+        doc.write()
+    }
+
+    #[test]
+    fn a_changed_text_keeps_the_apostrophe_form_of_its_source() {
+        assert_eq!(
+            changed_title("<t>HeyCitizen's</t>", "HeyCitizen's Beats"),
+            "<t>HeyCitizen's Beats</t>"
+        );
+        assert_eq!(
+            changed_title("<t>HeyCitizen&apos;s</t>", "HeyCitizen's Beats"),
+            "<t>HeyCitizen&apos;s Beats</t>"
+        );
+    }
+
+    #[test]
+    fn a_character_reference_gives_the_entity_form() {
+        assert_eq!(
+            changed_title("<t>It&#39;s</t>", "It's it"),
+            "<t>It&apos;s it</t>"
+        );
+        assert_eq!(
+            changed_title("<t>It&#x27;s</t>", "It's it"),
+            "<t>It&apos;s it</t>"
+        );
+    }
+
+    #[test]
+    fn a_literal_greater_than_in_text_stays_literal() {
+        assert_eq!(changed_title("<t>a > b</t>", "a > c"), "<t>a > c</t>");
+        assert_eq!(changed_title("<t>a &gt; b</t>", "a > c"), "<t>a &gt; c</t>");
+        assert_eq!(
+            changed_title("<t>a > b</t>", "x]]> y > z"),
+            "<t>x]]&gt; y > z</t>"
+        );
+    }
+
+    #[test]
+    fn a_changed_attribute_keeps_the_form_of_each_other_attribute() {
+        for name in ["Joe's", "Joe&apos;s"] {
+            let source = format!("<a name=\"{name}\" split=\"1\"/>");
+            let mut doc = Document::parse(&source).unwrap();
+            doc.root_mut().set_attribute("split", Some("2"));
+            assert_eq!(doc.write(), format!("<a name=\"{name}\" split=\"2\"/>"));
+        }
+    }
+
+    #[test]
+    fn a_new_value_uses_the_entity_and_an_attribute_quote_is_escaped() {
+        let mut doc = Document::parse("<a x='say \"hi\"'/>").unwrap();
+        doc.root_mut().set_attribute("y", Some("Joe's"));
+        doc.root_mut().set_attribute("x", Some("say \"yo\""));
+        assert_eq!(
+            doc.write(),
+            "<a x=\"say &quot;yo&quot;\" y=\"Joe&apos;s\"/>"
+        );
+        let mut new = Element::new("t", None);
+        new.set_text("It's \"q\"");
+        let mut out = String::new();
+        new.write(&mut out, &mut None);
+        assert_eq!(out, "<t>It&apos;s &quot;q&quot;</t>");
     }
 }

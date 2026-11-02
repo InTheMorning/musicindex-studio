@@ -54,12 +54,13 @@ const PAGES = {
   ],
   person: () => [
     { id: 'profile', tier: 'identity' },
-    { id: 'actions', tier: 'identity' },
-    { id: 'where', tier: 'identity' },
+    { id: 'check', tier: 'identity' },
     { id: 'more', tier: 'content' },
     { id: 'payment', tier: 'content' },
     { id: 'credits', tier: 'details' },
     { id: 'support', tier: 'details' },
+    { id: 'member', tier: 'details' },
+    { id: 'change', tier: 'setup' },
     { id: 'delete', tier: 'limits' },
   ],
   'studio-settings': ({ server, holdAssets = true }) => [

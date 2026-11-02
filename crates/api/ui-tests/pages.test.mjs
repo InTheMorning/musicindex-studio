@@ -118,3 +118,10 @@ test('the person page has more with the tier content before payment (ADR 0103 it
     'ADR 0103 item 11: more comes before payment. Fix the page person in crates/api/ui/pages.js.');
   assert.equal(tierError('person', seq), null);
 });
+
+test('the person page follows the sequence of ADR 0111 item 1 (task 075b)', () => {
+  const seq = pageSequence('person');
+  assert.deepEqual(seq.map((s) => s.id), ['profile', 'check', 'more', 'payment', 'credits', 'support', 'member', 'change', 'delete'],
+    'ADR 0111 item 1: fix the page person in crates/api/ui/pages.js.');
+  assert.equal(tierError('person', seq), null);
+});

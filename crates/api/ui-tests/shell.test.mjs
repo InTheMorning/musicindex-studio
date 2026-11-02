@@ -431,7 +431,7 @@ test('Settings is current on the view settings', () => {
 });
 
 test('People is current on each view of its area (ADR 0099 item 1)', () => {
-  for (const name of ['people', 'person', 'where-used', 'wallet', 'change-set']) {
+  for (const name of ['people', 'person', 'check', 'wallet', 'change-set']) {
     const panel = leftPanel({ view: { name }, feeds: [], model: null, vaultOpen: true });
     const people = panel.bottom.find((e) => e.id === 'people');
     assert.equal(people.current, true, `ADR 0099 item 1: People is current on the view ${name}.`);
@@ -450,7 +450,7 @@ test('the narrow stack of the People area (ADR 0099 items 1 and 5)', () => {
   assert.deepEqual(narrowStack({ name: 'person', id: 4 }), [root, people, { name: 'person', id: 4 }]);
   assert.deepEqual(narrowStack({ name: 'wallet', recipient: { address: 'a' } }), [root, people, { name: 'wallet', recipient: { address: 'a' } }]);
   assert.deepEqual(narrowStack({ name: 'change-set', id: 3 }), [root, people, { name: 'change-set', id: 3 }]);
-  assert.deepEqual(narrowStack({ name: 'where-used', id: 4 }), [root, people, { name: 'person', id: 4 }, { name: 'where-used', id: 4 }]);
+  assert.deepEqual(narrowStack({ name: 'check', id: 4 }), [root, people, { name: 'person', id: 4 }, { name: 'check', id: 4 }]);
 });
 
 test('the Role menu gives Artist, Label or Custom for a set of roles', () => {

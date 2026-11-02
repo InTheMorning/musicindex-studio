@@ -21,7 +21,7 @@ import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
-import { PeoplePage, PersonPage, WhereUsedPage, WalletPage } from './peoplepages.js';
+import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf } from './cover.js';
@@ -1311,8 +1311,9 @@ export function useRoleList() {
 // list, then "Other role…" with a text field and a group menu (ADR 0112).
 // `onChange(role, group)` gets the display names, or empty text. The text of
 // "Other role" goes to `onChange` when the field loses the focus, as the
-// other text fields do. `hint` replaces the hint of an empty role.
-export function RoleMenu({ id, label = 'Role', role, group, hint, onChange }) {
+// other text fields do. `hint` replaces the hint of an empty role. `status`
+// is an optional `{ text, error }` below the menu.
+export function RoleMenu({ id, label = 'Role', role, group, hint, status, onChange }) {
   const list = useRoleList();
   const [otherPicked, setOtherPicked] = useState(false);
   const [otherText, setOtherText] = useState(role ?? '');
@@ -1336,6 +1337,7 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, onChange }) {
             ${g.options.map(([value, text]) => html`<option value=${value}>${text}</option>`)}</optgroup>`)}
           <option value=${options.other[0]}>${OTHER_ROLE}</option>
         </select>
+        ${status && status.text && html`<span class=${status.error ? 'field-error' : 'hint'} role="status">${status.text}</span>`}
       </div>
     </div>
     ${choice === 'other' && html`<${Field} id=${`${id}-other`} label="Other role" hint=${OTHER_HINT} value=${otherText}
@@ -1863,9 +1865,10 @@ const ICONS = {
   'lock-open': () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" />`,
   copy: () => html`<rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />`,
   check: () => html`<path d="M20 6 9 17l-5-5" />`,
+  alert: () => html`<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" />`,
 };
 
-function Icon({ name }) {
+export function Icon({ name }) {
   return html`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]?.()}</svg>`;
 }
@@ -3332,8 +3335,8 @@ function Shell({ vault, onLock }) {
     main = html`<${PeoplePage} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'person') {
     main = html`<${PersonPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
-  } else if (view.name === 'where-used') {
-    main = html`<${WhereUsedPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
+  } else if (view.name === 'check') {
+    main = html`<${CheckPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'wallet') {
     main = html`<${WalletPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'change-set') {

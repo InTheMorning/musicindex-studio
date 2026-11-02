@@ -46,11 +46,9 @@ test('ADR 0108 item 3: the People page of a server starts with the line about th
   assert.ok(!peopleSections({}).includes('note'));
 });
 
-test('the page person has the sections of ADR 0099 item 4 in tier sequence', () => {
+test('the page person has no feed list with check boxes', () => {
   const sections = pageSequence('person');
-  assert.deepEqual(sections.map((s) => s.id), ['profile', 'actions', 'where', 'more', 'payment', 'credits', 'support', 'delete']);
-  assert.equal(tierError('person', sections), null);
-  assert.ok(!sections.some((s) => /feeds|check/.test(s.id)),
+  assert.ok(!sections.some((s) => /feeds/.test(s.id)),
     'ADR 0099 item 6: the page of a person has no feed list with check boxes. Remove the section from crates/api/ui/pages.js.');
 });
 
@@ -249,7 +247,8 @@ test('the sheet Make a Person gives its texts, rows and menu', () => {
 
 // ---- Task 065c: the page of a person and its sheets ----
 import {
-  keyValue, keyFromValue, memberLine, memberText, walletGroups, addressOptions, usedText, keyEvidenceText, whereRow,
+  keyValue, keyFromValue, memberLine, memberText, walletGroups, addressOptions, usedText, keyEvidenceText, checkRow,
+  saveStatus, checkGroups, findingLine, checkFeedLines, checkKeys, memberChange,
   feedRows, levelRows, feedsHeading, SHEET_TITLES, sheetStart, sheetBody, sheetReady, LINK_FORMS, linkFields,
   linkStart, linkBody, linkReady, personFieldsBody, profileLine, changeLine, addIntro,
 } from '../ui/people.js';
@@ -301,10 +300,59 @@ test('a wallet gives its addresses, the Lightning addresses first', () => {
   assert.deepEqual(alone[0].members.map((m) => m.key.address), ['02ab']);
 });
 
-test('the evidence of a key and the row Where used have their texts', () => {
+test('the evidence of a key and the row Check your feeds have their texts', () => {
   assert.equal(keyEvidenceText('user'), 'Added by you');
   assert.equal(keyEvidenceText('nostr'), 'Found in a Nostr profile');
-  assert.deepEqual(whereRow(MK), { title: 'Where used', lines: ['Pays in 2 feeds · Credited in 2 feeds'], count: '3 feeds' });
+  const lines = (n) => checkRow({ ...MK, needs_correction: n }).lines;
+  assert.deepEqual(lines(0), [{ text: 'Each feed is correct', error: false }, { text: 'Pays in 2 feeds · Credited in 2 feeds', error: false }]);
+  assert.deepEqual(lines(1)[0], { text: '1 feed needs a correction', error: true });
+  assert.deepEqual(lines(2)[0], { text: '2 feeds need a correction', error: true });
+  const row = checkRow(MK);
+  assert.equal(row.title, 'Check your feeds');
+  assert.equal(row.count, '3 feeds');
+});
+
+test('the status of a field after a save (ADR 0111 item 2)', () => {
+  assert.deepEqual(saveStatus(null, 'name'), { text: '', error: false });
+  assert.deepEqual(saveStatus({ key: 'name', ok: true }, 'name'), { text: 'Saved', error: false });
+  assert.deepEqual(saveStatus({ key: 'name', ok: true }, 'img'), { text: '', error: false });
+  assert.deepEqual(saveStatus({ key: 'img', ok: false, message: 'Not an address' }, 'img'), { text: 'Not an address', error: true });
+  assert.equal(saveStatus({ key: 'img', ok: false }, 'img').error, true);
+});
+
+test('the lines of each finding and the group of each state (ADR 0111 items 9 to 11)', () => {
+  const profiles = new Map([['npub1abcdefghijklmnop', { npub: 'npub1abcdefghijklmnop', name: 'City Radio' }]]);
+  assert.deepEqual(findingLine({ kind: 'credit_key', role: 'Host', npub: '' }, 'Ann'), { text: 'No Nostr key in the credit', error: true });
+  assert.deepEqual(findingLine({ kind: 'credit_key', role: 'Host', npub: 'npub1abcdefghijklmnop' }, 'Ann', profiles),
+    { text: 'Nostr key of City Radio · not the key of Ann', error: true });
+  assert.equal(findingLine({ kind: 'credit_details', role: 'Host', img: true, href: true }, 'Ann').text,
+    'The picture and information address in the credit differs from Ann');
+  assert.equal(findingLine({ kind: 'credit_details', role: 'Host', img: false, href: true }, 'Ann').text,
+    'The information address in the credit differs from Ann');
+  assert.equal(findingLine({ kind: 'credit_role' }, 'Ann').error, true);
+  const key = KEY('mk@x.example');
+  assert.deepEqual(findingLine({ kind: 'not_default', key }, 'Ann'), { text: 'Pays Lightning address mk@x.example · not your default address', error: false });
+  assert.equal(findingLine({ kind: 'not_default', key }, 'Ann', null, 'not_default').text, 'Pays Lightning address mk@x.example · the same wallet as your default address');
+  assert.deepEqual(findingLine({ kind: 'other_wallet', key }, 'Ann'), { text: 'Pays Lightning address mk@x.example · not a wallet of Ann', error: true });
+  const check = { feeds: [
+    { feed_id: 1, state: 'correct', findings: [] },
+    { feed_id: 2, state: 'not_default', findings: [{ kind: 'not_default', key }] },
+    { feed_id: 3, state: 'needs_correction', findings: [{ kind: 'credit_key', role: 'Host', npub: 'npub1abcdefghijklmnop' }, { kind: 'credit_role' }] },
+  ] };
+  assert.deepEqual(checkGroups(check).map((g) => [g.title, g.feeds.map((f) => f.feed_id)]),
+    [['Needs a correction', [3]], ['Not your default address', [2]], ['Correct', [1]]]);
+  assert.deepEqual(checkGroups({ feeds: [check.feeds[0]] }).map((g) => g.title), ['Correct']);
+  assert.deepEqual(checkGroups(null), []);
+  assert.deepEqual(checkKeys(check), ['npub1abcdefghijklmnop']);
+  assert.deepEqual(checkFeedLines(check.feeds[2], ['Album'], 'Ann', profiles).map((l) => l.error), [false, true, true]);
+});
+
+test('Member of labels each feed with its first role and changes the membership (ADR 0111 item 3)', () => {
+  assert.deepEqual(memberChoices([{ id: 2, medium: 'publisher', title: 'HeyCitizen', publisher_roles: ['artist', 'label'] }]), [['2', 'HeyCitizen · Artist']]);
+  assert.deepEqual(memberChange({ members: [3] }, '5'), { add: 5, remove: [3] });
+  assert.deepEqual(memberChange({ members: [3] }, '3'), { add: null, remove: [] });
+  assert.deepEqual(memberChange({ members: [3] }, ''), { add: null, remove: [3] });
+  assert.deepEqual(memberChange({ members: [] }, '5'), { add: 5, remove: [] });
 });
 
 test('the feed rows give the type first, each selected', () => {
@@ -367,6 +415,8 @@ test('the forms of a link give the fields and the body', () => {
 test('a change of one field sends the four fields of the person', () => {
   assert.deepEqual(personFieldsBody(MK, { usual_role: 'Fiddle' }), { name: 'Mary Kate', usual_role: 'Fiddle', usual_group: '', img: '', href: '' });
   assert.deepEqual(profileLine(MK, { 3: 'The Ultras' }), { role: 'Vocals', members: [{ id: 3, title: 'The Ultras' }] });
+  assert.deepEqual(profileLine(MK, { 3: 'The Ultras' }, [{ id: 3, medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true }]),
+    { role: 'Vocals', members: [{ id: 3, title: 'The Ultras', dot: 'artist', role: 'Artist' }] });
 });
 
 test('the review line of a change set of a person names the operation', () => {

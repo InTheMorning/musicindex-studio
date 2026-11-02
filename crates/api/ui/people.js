@@ -294,11 +294,27 @@ export const afterDiscard = (set) => (set && set.person_id != null ? { name: 'pe
 export const afterMissing = (id, merged) => (merged.has(String(id)) ? { name: 'person', id: merged.get(String(id)) } : { name: 'people' });
 
 // The choices of "Member of": each publisher feed, A to Z, as
-// [value, label] pairs. `None` is the placeholder of the menu.
+// [value, label] pairs. A feed with a role shows its first role, for example
+// "HeyCitizen · Artist" (ADR 0111 item 3). `None` is the placeholder of the
+// menu.
 export function memberChoices(feeds) {
   return (feeds || []).filter((f) => f.medium === 'publisher')
     .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }))
-    .map((f) => [String(f.id), f.title || 'Untitled feed']);
+    .map((f) => {
+      const title = f.title || 'Untitled feed';
+      return [String(f.id), (f.publisher_roles || []).length > 0 ? `${title} · ${firstRole(f)}` : title];
+    });
+}
+
+// The first role of a feed, as the label of its type.
+const firstRole = (feed) => feedKind(feed).label.split(' · ')[0];
+
+// The change of the membership when the user picks a feed in "Member of": the
+// feed to add, and the feeds to remove. An empty pick removes each membership.
+export function memberChange(person, picked) {
+  const target = picked === '' || picked == null ? null : Number(picked);
+  const current = person.members || [];
+  return { add: target !== null && !current.includes(target) ? target : null, remove: current.filter((id) => id !== target) };
 }
 
 // ---- The profiles of Nostr keys (ADR 0099 item 3, ADR 0103 items 17 and 18) ----
@@ -468,14 +484,20 @@ export function keyEvidenceText(evidence) {
   }
 }
 
-// The lines of the section "Where used" on the page of a person.
-export function whereRow(person) {
+// The navigation row "Check your feeds" on the page of a person (ADR 0111
+// item 12). `needs_correction` is the count from `GET /people/{id}`. A line
+// with `error` shows in the error color.
+export function checkRow(person) {
   const pays = (person.pays || []).length;
   const credited = (person.credited || []).length;
+  const bad = person.needs_correction || 0;
   return {
-    title: 'Where used',
-    lines: [`Pays in ${feedCount(pays)} · Credited in ${feedCount(credited)}`],
-    count: feedCount(typeof person.feeds === 'number' ? person.feeds : new Set([...(person.pays || []), ...(person.credited || [])]).size),
+    title: 'Check your feeds',
+    lines: [
+      bad > 0 ? { text: `${bad === 1 ? '1 feed needs' : `${bad} feeds need`} a correction`, error: true } : { text: 'Each feed is correct', error: false },
+      { text: `Pays in ${feedCount(pays)} · Credited in ${feedCount(credited)}`, error: false },
+    ],
+    count: feedCount(feedsOf(person)),
   };
 }
 
@@ -619,13 +641,102 @@ export const personFieldsBody = (person, change = {}) => ({
 });
 
 // The line of the usual role of a person, and the publisher feeds of which
-// the person is a member, as `{ role, members: [{ id, title }] }`.
-export function profileLine(person, titles) {
+// the person is a member, as `{ role, members: [{ id, title, dot, role }] }`.
+// `feeds` is the feed list of the shell. A member with a feed in the list
+// also gets the dot class and the first role of the feed (ADR 0111 item 1).
+export function profileLine(person, titles, feeds = []) {
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
   return {
     role: (person.usual_role || '').trim(),
-    members: (person.members || []).map((id) => ({ id, title: titleOf(titles, id) })),
+    members: (person.members || []).map((id) => {
+      const member = { id, title: titleOf(titles, id) };
+      const feed = byId.get(id);
+      if (feed) {
+        member.dot = feedKind(feed).dot;
+        if ((feed.publisher_roles || []).length > 0) member.role = firstRole(feed);
+      }
+      return member;
+    }),
   };
 }
+
+// The hint of the first field of a person (ADR 0111 item 2).
+export const FIELDS_HINT = 'Studio saves each field when you leave it.';
+
+// The hint of "Member of" (ADR 0111 item 3).
+export const MEMBER_HINT = 'The artist or label that this person is in. Studio changes no feed.';
+
+// The status of a field after a save. `save` is null before a save, or
+// `{ key, ok: true }`, or `{ key, ok: false, message }` for the field `key`.
+// The result is `{ text, error }`. A field that was not saved has no text.
+export function saveStatus(save, key) {
+  if (!save || save.key !== key) return { text: '', error: false };
+  return save.ok ? { text: 'Saved', error: false } : { text: save.message || 'Studio could not save this field', error: true };
+}
+
+// ---- The page "Check your feeds" (ADR 0111 items 9 to 13) ----
+
+export const CHECK_GROUPS = [
+  ['needs_correction', 'Needs a correction'],
+  ['not_default', 'Not your default address'],
+  ['correct', 'Correct'],
+];
+
+// The intro of the page.
+export const checkIntro = (name) => `Studio compares each feed with ${name}: the Nostr key and the picture of each credit, and the address of each payment.`;
+
+// The groups of the check, in the sequence of ADR 0111 item 11. A group with
+// no feed is left out.
+export function checkGroups(check) {
+  const feeds = (check && check.feeds) || [];
+  return CHECK_GROUPS.map(([state, title]) => ({ state, title, feeds: feeds.filter((f) => f.state === state) }))
+    .filter((g) => g.feeds.length > 0);
+}
+
+// The line of one finding as `{ text, error }`. An error finding shows in the
+// error color. `not_default` is the neutral finding. `profiles` is the
+// `profileMap` of the shown keys, or null. The core finds each difference.
+export function findingLine(finding, name, profiles = null, state = 'needs_correction') {
+  switch (finding.kind) {
+    case 'credit_key': {
+      if (!finding.npub) return { text: 'No Nostr key in the credit', error: true };
+      const who = profileName(finding.npub, profiles) || shortKey(finding.npub);
+      return { text: `Nostr key of ${who} · not the key of ${name}`, error: true };
+    }
+    case 'credit_details': {
+      const text = [finding.img && 'picture', finding.href && 'information address'].filter(Boolean).join(' and ');
+      return { text: `The ${text} in the credit differs from ${name}`, error: true };
+    }
+    case 'credit_role': return { text: 'No role in the credit', error: true };
+    case 'not_default': {
+      // In its own group, the line says that the wallet is the same.
+      const tail = state === 'not_default' ? 'the same wallet as your default address' : 'not your default address';
+      return { text: `Pays ${addressText(finding.key)} · ${tail}`, error: false };
+    }
+    case 'other_wallet': return { text: `Pays ${addressText(finding.key)} · not a wallet of ${name}`, error: true };
+    default: return { text: '', error: false };
+  }
+}
+
+// The lines of a feed row of the check: the lines of the places, then one line
+// for each finding.
+export function checkFeedLines(entry, placeLines, name, profiles = null) {
+  return [...placeLines.map((text) => ({ text, error: false })),
+    ...(entry.findings || []).map((f) => findingLine(f, name, profiles, entry.state))];
+}
+
+// The keys of the findings, for the profile lookup.
+export const checkKeys = (check) => [...new Set(((check && check.feeds) || [])
+  .flatMap((f) => f.findings || []).filter((f) => f.kind === 'credit_key' && f.npub).map((f) => f.npub))];
+
+// The lines of the sections "Change your feeds" (ADR 0111 item 4).
+export const CHANGE_ROWS = [
+  ['use_address', 'Pay a different address of this person in your feeds.'],
+  ['rename', 'Change the name of this person in the payments and the credits.'],
+  ['add_to_releases', 'Add this person to each release of an artist or label.'],
+  ['remove', 'Remove this person from the payments or the credits of your feeds.'],
+];
+export const CHANGE_NOTE = 'Each operation shows the feeds and a review before Studio writes.';
 
 const joinList = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 

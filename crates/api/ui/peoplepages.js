@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
-import { api, assetMode, askConfirm, Bar, ChoiceSelect, CopyButton, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { api, assetMode, askConfirm, Bar, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
@@ -17,11 +17,12 @@ import {
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices, makeSheetTitle,
   makeSheetHint, creditItemRow, payeeItemRow, keyItemRow, toggledItem, dismissBody, addPersonBody,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions,
-  usedText, keyEvidenceText, whereRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
+  usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, personFieldsBody, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
   personChoices, addToTitle, ADD_TO_HINT, NO_PERSON_TEXT, addItemsLabel, addToRows, addSelectedCount, addItemsBody, MORE_HINT,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
+  memberChange, saveStatus, FIELDS_HINT, MEMBER_HINT, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
 } from './people.js';
 
 // The merges of this page load: the ID of each merged person, to the ID of
@@ -35,7 +36,6 @@ export function PersonArt({ person, large = false }) {
   return html`<span class=${large ? 'person-art large' : 'person-art'} aria-hidden="true">${src ? html`<img src=${src} alt="" />` : initials(person.name)}</span>`;
 }
 
-// One row of a list: a button with the lines of its model.
 // The profiles of Nostr keys, from `POST /nostr/resolve`. The value is null
 // while the request runs and when it fails, so that a row shows the short key
 // only (task 067d item 3).
@@ -69,9 +69,15 @@ function KeyRowView({ npub, profiles, name, action, note }) {
     <${CopyButton} text=${npub} label="the Nostr key" />${action}</div>`;
 }
 
+// One row of a list: a button with the lines of its model. A line is text, or
+// `{ text, error }`. An error line shows in the error color, with the warning
+// icon.
 function ListRow({ title, lines, count, lead, onClick }) {
+  const line = (l, i) => (typeof l === 'string'
+    ? html`<span class="summary" key=${i}>${l}</span>`
+    : html`<span class=${l.error ? 'summary check-error' : 'summary'} key=${i}>${l.error && html`<${Icon} name="alert" />`}${l.text}</span>`);
   return html`<button class="link-row" type="button" onClick=${onClick}>${lead}
-    <span class="text"><span class="label">${title}</span>${lines.map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span>
+    <span class="text"><span class="label">${title}</span>${lines.map(line)}</span>
     ${count && html`<span class="count">${count}</span>`}<span class="go">›</span></button>`;
 }
 
@@ -329,19 +335,31 @@ const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="b
 
 // The fields of a person. A text field sends the fields with
 // `PATCH /people/{id}` when it loses the focus. The usual role is a menu and
-// sends them at once.
+// sends them at once. `onSave` gives `{ ok, message }`. After a save, the field
+// shows its status (ADR 0111 item 2).
 function PersonFields({ person, onSave }) {
   const [values, setValues] = useState(() => personFieldsBody(person));
+  const [save, setSave] = useState(null);
   useEffect(() => { setValues(personFieldsBody(person)); }, [person.name, person.usual_role, person.usual_group, person.img, person.href]);
+  const commit = async (key, body) => {
+    const result = await onSave(body);
+    setSave({ key, ok: result.ok, message: result.message });
+  };
+  const status = (key) => {
+    const { text, error } = saveStatus(save, key);
+    return text && html`<span class=${error ? 'field-error' : 'hint'} role="status">${text}</span>`;
+  };
   const field = (id, label, key, hint) => html`<${Field} id=${id} label=${label} hint=${hint} value=${values[key]}
-    onInput=${(e) => setValues({ ...values, [key]: e.target.value })}
-    onChange=${(e) => { if (e.target.value !== person[key]) onSave(personFieldsBody(person, { [key]: e.target.value })); }} />`;
+    onInput=${(e) => { setSave(null); setValues({ ...values, [key]: e.target.value }); }}
+    onChange=${(e) => { if (e.target.value !== person[key]) commit(key, personFieldsBody(person, { [key]: e.target.value })); }}>${status(key)}<//>`;
   return html`<div class="group rows">
-    ${field('person-name', 'Name', 'name')}
+    ${field('person-name', 'Name', 'name', FIELDS_HINT)}
     <${RoleMenu} id="person-role" label="Usual role" role=${values.usual_role} group=${values.usual_group} hint="The start value of a new credit."
+      status=${saveStatus(save, 'usual_role')}
       onChange=${(role, group) => {
+        setSave(null);
         setValues({ ...values, usual_role: role, usual_group: group });
-        if (role !== person.usual_role || group !== (person.usual_group || '')) onSave(personFieldsBody(person, { usual_role: role, usual_group: group }));
+        if (role !== person.usual_role || group !== (person.usual_group || '')) commit('usual_role', personFieldsBody(person, { usual_role: role, usual_group: group }));
       }} />
     ${field('person-img', 'Picture address', 'img')}
     ${field('person-href', 'Information address', 'href')}</div>`;
@@ -523,12 +541,31 @@ export function PersonPage({ id, feeds, go }) {
   const { person, recipients } = data;
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
   const groups = walletGroups(person, recipients);
-  const profile = profileLine(person, titles);
-  const where = whereRow(person);
+  const profile = profileLine(person, titles, feeds);
+  const check = checkRow(person);
   const remove = (kind, linkId) => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' }));
   const removeButton = (kind, linkId, label) => html`<button class="button" type="button" aria-label=${label}
     onClick=${() => remove(kind, linkId)}>Remove</button>`;
   const open = (kind) => setSheet(kind);
+  // A save of the fields gives the result to the field that was saved.
+  const saveFields = async (body) => {
+    let result = { ok: true };
+    await act(async () => {
+      try {
+        await api(`/people/${id}`, { method: 'PATCH', body });
+      } catch (e) {
+        result = { ok: false, message: e && e.message };
+        throw e;
+      }
+    });
+    return result;
+  };
+  // A new membership replaces the old one, through the routes of the links.
+  const changeMember = (picked) => act(async () => {
+    const { add, remove: gone } = memberChange(person, picked);
+    if (add !== null) await api(`/people/${id}/members`, { method: 'POST', body: { feed_id: add } });
+    for (const feedId of gone) await api(`/people/${id}/members/${feedId}`, { method: 'DELETE' });
+  });
   // The delete changes no feed (ADR 0102). Then the People page opens.
   const deletePerson = () => run(async () => {
     if (!await askConfirm(CONFIRMS.deletePerson(person.name))) return;
@@ -539,17 +576,12 @@ export function PersonPage({ id, feeds, go }) {
     profile: () => html`<header class="person-head"><${PersonArt} person=${person} large />
       <div class="text"><h1>${person.name}</h1>
         ${(profile.role || profile.members.length > 0) && html`<p class="hint">${profile.role}${profile.role && profile.members.length > 0 && ' · '}${profile.members.map((m, i) =>
-          html`${i > 0 && ', '}Member of <button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>`)}</p>`}
+          html`${i > 0 && ', '}<span class=${`dot ${m.dot || 'feed'}`} aria-hidden="true"></span><button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>${m.role && ` · ${m.role}`}`)}</p>`}
         ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span> · ${keyEvidenceText(k.evidence)}</span>
           <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
       </div></header>`,
-    actions: () => html`<div class="actions recipient-actions">
-      <button class="button action" type="button" onClick=${() => open('use_address')}>Use This Address</button>
-      <button class="button action" type="button" onClick=${() => open('rename')}>Rename</button>
-      <button class="button action" type="button" onClick=${() => open('add_to_releases')}>Add to All Releases</button>
-      <button class="button destructive" type="button" onClick=${() => open('remove')}>Remove from Feeds</button></div>`,
-    where: () => html`<div class="group"><${ListRow} title=${where.title} lines=${where.lines} count=${where.count}
-      onClick=${() => go({ name: 'where-used', id: person.id })} /></div>`,
+    check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count}
+      onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
     more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>
       <p class="hint">${MORE_HINT}</p>
       <div class="group">${moreRows(more, titles, profiles, person.name).map((row) => html`<div class="link-row static key-line" key=${row.key}>
@@ -574,7 +606,7 @@ export function PersonPage({ id, feeds, go }) {
         })}>Add to Wallet</button>`} /></div>`)}
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => setLinking('wallets')} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
-      <${PersonFields} person=${person} onSave=${(body) => act(() => api(`/people/${id}`, { method: 'PATCH', body }))} />
+      <${PersonFields} person=${person} onSave=${saveFields} />
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<div class="group">
         ${person.credit_names.map((c) => html`<div class="link-row static" key=${`c${c.id}`}><span class="text"><span class="label">Credit name</span>
           ${c.name && html`<span class="summary">${c.name}</span>`}${c.href && html`<span class="summary">${c.href}</span>`}${c.npub && html`<span class="summary mono">${shortKey(c.npub)}</span>`}</span>
@@ -589,6 +621,13 @@ export function PersonPage({ id, feeds, go }) {
           <span class="label">${l.label || 'Support link'}</span><span class="summary address-text">${l.url}</span></span>
           ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div>`)}
         <${AddRow} title="Add a Support Link" onClick=${() => setLinking('support-links')} /></div></section>`,
+    member: () => html`<section class="page-section"><h2>Artist or label</h2><div class="group rows">
+      <${ChoiceSelect} id="person-member" label="Member of" value=${person.members.length > 0 ? String(person.members[0]) : ''} placeholder="None"
+        hint=${MEMBER_HINT} options=${memberChoices(feeds)} onChange=${changeMember} /></div></section>`,
+    change: () => html`<section class="page-section"><h2>Change your feeds</h2>
+      <p class="hint">${CHANGE_NOTE}</p>
+      <div class="group">${CHANGE_ROWS.map(([kind, line]) => html`<${ListRow} key=${kind} title=${SHEET_TITLES[kind]} lines=${[line]}
+        onClick=${() => open(kind)} />`)}</div></section>`,
     delete: () => html`<section class="page-section"><div class="actions">
       <button class="button" type="button" onClick=${() => setMerging(true)}>Merge with a Person</button>
       <button class="button destructive" type="button" onClick=${deletePerson}>Delete Person</button></div></section>`,
@@ -657,22 +696,37 @@ function MergeForm({ person, onCancel, onMerged }) {
     </footer>`;
 }
 
-// The page "Where used" (ADR 0099 item 5): each feed of the person, with no
-// check box. A row opens the feed in the editor.
-export function WhereUsedPage({ id, feeds, go }) {
+// The page "Check your feeds" (ADR 0111 items 9 to 13). The core compares each
+// feed with the person. A row opens the feed in the editor. The button
+// "Correct N Feeds" comes with the sheet of the correction.
+export function CheckPage({ id, feeds, go }) {
   const [person, setPerson] = useState(null);
+  const [check, setCheck] = useState(null);
   const { error, run } = useAction();
-  useEffect(() => { run(async () => setPerson(await api(`/people/${id}`))); }, [id]);
-  const rows = person ? feedRows(person.places, feeds) : [];
-  return html`<div><${Bar}><span class="bar-title">Where used</span><//><section class="section">
+  useEffect(() => {
+    run(async () => {
+      const [p, c] = await Promise.all([api(`/people/${id}`), api(`/people/${id}/check`)]);
+      setPerson(p);
+      setCheck(c);
+    });
+  }, [id]);
+  const profiles = useProfiles(checkKeys(check));
+  const rows = new Map((person ? feedRows(person.places, feeds) : []).map((r) => [r.id, r]));
+  const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
+  const groups = checkGroups(check);
+  return html`<div><${Bar}><span class="bar-title">Check your feeds</span><//><section class="section">
     <${ErrorNotice} error=${error} />
-    ${person === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}
-    ${person && html`<header class="recipient-head"><h1>Where used</h1>
-        <p class="hint">${person.name} · ${rows.length === 1 ? '1 feed' : `${rows.length} feeds`}</p></header>
-      ${rows.length === 0 && html`<p class="empty">No feed uses this person.</p>`}
-      ${rows.length > 0 && html`<div class="group">${rows.map((row) => html`<${ListRow} key=${row.id} title=${row.title} lines=${row.lines}
-        onClick=${() => go({ name: 'feed', id: row.id })} />`)}</div>`}
-      <p class="hint">${`A feed opens in the editor. To change ${person.name} in many feeds, use the buttons on the page of the person.`}</p>`}
+    ${(person === null || check === null) && !error && html`<p class="empty" role="status">Checking the feeds…</p>`}
+    ${person && check && html`<header class="recipient-head"><h1>Check your feeds</h1>
+        <p class="hint">${checkIntro(person.name)}</p></header>
+      ${groups.length === 0 && html`<p class="empty">No feed uses this person.</p>`}
+      ${groups.map((g) => html`<section class="page-section" key=${g.state}><h2>${g.title}</h2>
+        <div class="group">${g.feeds.map((entry) => {
+          const row = rows.get(entry.feed_id);
+          const place = row ? (entry.state === 'correct' ? row.lines : row.lines.slice(0, 1)) : [];
+          return html`<${ListRow} key=${entry.feed_id} title=${row ? row.title : titles.get(entry.feed_id) || `Feed ${entry.feed_id}`}
+            lines=${checkFeedLines(entry, place, person.name, profiles)} onClick=${() => go({ name: 'feed', id: entry.feed_id })} />`;
+        })}</div></section>`)}`}
   </section></div>`;
 }
 

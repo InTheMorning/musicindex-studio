@@ -1775,6 +1775,9 @@ button.outline-feed {
 .link-row .status.writing { color: var(--accent); }
 .link-row .status.failed { color: var(--error); font-weight: 500; }
 .link-row .summary.field-error { color: var(--error); white-space: normal; overflow-wrap: anywhere; }
+.link-row .summary.check-error { display: flex; gap: 6px; align-items: center; color: var(--error); }
+.link-row .summary.check-error .icon { flex: none; width: 16px; height: 16px; }
+.person-head .dot { display: inline-block; vertical-align: middle; margin-inline: 2px 4px; }
 .change-diff { padding: 4px 16px 12px; position: relative; }
 .change-diff .diff { margin: 0; }
 

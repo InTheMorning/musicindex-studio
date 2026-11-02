@@ -235,7 +235,7 @@ export function isFeedView(view) {
 
 // The views of the People area. People is current on each of them (ADR 0099
 // item 1).
-export const PEOPLE_VIEWS = ['people', 'person', 'where-used', 'wallet', 'change-set'];
+export const PEOPLE_VIEWS = ['people', 'person', 'check', 'wallet', 'change-set'];
 
 // The left panel (ADR 0039 items 1, 5 and 6). With no open feed it gives the
 // destinations. With an open feed, or the outline view, it gives the outline
@@ -713,7 +713,7 @@ export function narrowStack(view) {
     case 'person':
     case 'wallet':
     case 'change-set': return [root, { name: 'people' }, view];
-    case 'where-used': return [root, { name: 'people' }, { name: 'person', id: view.id }, view];
+    case 'check': return [root, { name: 'people' }, { name: 'person', id: view.id }, view];
     case 'outline': return view.from ? [root, ...levelPages([...view.from.trail, view.from.group]), view] : [root, releases, view];
     case 'feed': return view.from
       ? [root, ...levelPages([...view.from.trail, view.from.group]), { name: 'outline', id: view.id, from: view.from }, view]

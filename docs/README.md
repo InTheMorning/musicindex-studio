@@ -107,6 +107,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0102: Delete a person changes no feed](adr/0102-delete-a-person-changes-no-feed.md)
 - [ADR 0103: One person collects the items of many suggestions](adr/0103-one-person-collects-the-items-of-many-suggestions.md)
 - [ADR 0105: A public server holds no assets](adr/0105-a-public-server-holds-no-assets.md)
+- [ADR 0107: A user can export and import an account](adr/0107-a-user-can-export-and-import-an-account.md)
+- [ADR 0108: People data at rest stays plain](adr/0108-people-data-at-rest-stays-plain.md)
 
 ## Plans
 
@@ -311,6 +313,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 067: The findings of the first People test](tasks/studio-v1-task-067-people-test-findings.md)
 - [Studio v1 task 068: Key material on the disk](tasks/studio-v1-task-068-key-material-on-disk.md)
 - [Studio v1 task 069: Account protection](tasks/studio-v1-task-069-account-protection.md)
+- [Studio v1 task 070: A server that holds no assets](tasks/studio-v1-task-070-hold-no-assets.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

@@ -42,7 +42,7 @@ The UI starts on Releases and shows the outline of an open feed. Below Releases,
 
 | Path | Contents |
 | --- | --- |
-| `crates/core` | `studio-core`. The feed model is in `feed`, `xml` and `guid`. The other modules are `vault`, `collection`, `people` (the people of a user and the suggestions), `address` (feed addresses), `connector`, `media`, `library`, `inventory`, `migrate`, `pipeline` (the write), `announce` (the announcement queue), `playlist` (the track sources of a playlist), `live` (the live item rules), `apps` (connected apps) and `grant` (show grants). `net` has the network policy, `nip46` has the NIP-46 client, and `grant_vault` has the grant vaults. No HTTP server code and no UI code. |
+| `crates/core` | `studio-core`. The feed model is in `feed`, `xml` and `guid`. The other modules are `vault`, `collection`, `people` (the people of a user and the suggestions), `address` (feed addresses), `connector`, `media`, `library`, `inventory`, `migrate`, `pipeline` (the write), `announce` (the announcement queue), `playlist` (the track sources of a playlist), `live` (the live item rules), `roles` (the credit role list), `apps` (connected apps) and `grant` (show grants). `net` has the network policy, `nip46` has the NIP-46 client, and `grant_vault` has the grant vaults. No HTTP server code and no UI code. |
 | `crates/core/tests/corpus` | Published feeds for the round-trip tests. `manifest.json` gives the source URL, the fetch time and the SHA-256 of each file. |
 | `crates/api` | `studio-api`: the JSON API over the core, and the UI files in `crates/api/ui/` |
 | `crates/api/ui-tests` | The Node tests of the UI model modules ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)) |

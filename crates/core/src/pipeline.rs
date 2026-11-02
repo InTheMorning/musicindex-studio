@@ -29,6 +29,7 @@ use crate::library::{Library, file_stamp};
 use crate::live::{self, LiveStatus};
 use crate::media::{op3_prefix, plain_address};
 use crate::nostr_events::npub_text;
+use crate::roles;
 use crate::xml::{Document, ParseError};
 
 /// The kind of a [`PipelineError`].
@@ -957,6 +958,7 @@ pub fn replace_model(
     apply_pub_date_time(&current, &mut sent).map_err(invalid)?;
     apply_duration_seconds(&current, &mut sent);
     keep_key_form(&current, &mut sent);
+    apply_role_group(&current, &mut sent);
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
@@ -1170,6 +1172,59 @@ fn keep_key_form(current: &Feed, sent: &mut Feed) {
             .map(|t| t.value.value.as_str());
         form(old, &mut entry.value.value);
     }
+    for entry in &mut sent.items {
+        let before = entry.key().and_then(|k| current.items.get(k));
+        persons(
+            before.map(|i| i.persons.as_slice()),
+            &mut entry.value.persons,
+        );
+    }
+    for entry in &mut sent.live_items {
+        let before = entry.key().and_then(|k| current.live_items.get(k));
+        persons(
+            before.map(|l| l.item.persons.as_slice()),
+            &mut entry.value.item.persons,
+        );
+    }
+}
+
+/// Write the role and the group of a credit with a role of the list
+/// (ADR 0112 item 4). The step acts on a new credit, and on a credit whose
+/// `role` or `group` differs from the credit with the same key in the draft.
+/// For such a credit with a role of the list, a sent group that is a group
+/// of the role stays. Else the group is the first group of the role. The
+/// role and the group become lowercase text. A credit with a role that is
+/// not of the list stays as it was sent. A credit that does not change keeps
+/// its bytes. The step applies to the channel, to each item and to each
+/// live item.
+fn apply_role_group(current: &Feed, sent: &mut Feed) {
+    fn persons(before: Option<&[Entry<Person>]>, sent: &mut [Entry<Person>]) {
+        for entry in sent {
+            let old = entry
+                .key()
+                .and_then(|k| before.and_then(|list| list.get(k)));
+            if old.is_some_and(|o| o.role == entry.value.role && o.group == entry.value.group) {
+                continue;
+            }
+            let Some(role) = entry.value.role.as_deref() else {
+                continue;
+            };
+            let groups = roles::groups_of(role);
+            let Some(first) = groups.first() else {
+                continue;
+            };
+            let group = entry
+                .value
+                .group
+                .as_deref()
+                .and_then(|g| groups.iter().find(|name| roles::is_group(g, name)))
+                .unwrap_or(first);
+            let (role, group) = (roles::wire(role), roles::wire(group));
+            entry.value.role = Some(role);
+            entry.value.group = Some(group);
+        }
+    }
+    persons(Some(&current.persons), &mut sent.persons);
     for entry in &mut sent.items {
         let before = entry.key().and_then(|k| current.items.get(k));
         persons(

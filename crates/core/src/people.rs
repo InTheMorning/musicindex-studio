@@ -187,6 +187,8 @@ pub struct Person {
     pub name: String,
     /// The usual role, as raw text.
     pub usual_role: String,
+    /// The usual group for the usual role, as raw text (ADR 0112 item 7).
+    pub usual_group: String,
     /// The picture address, or empty text.
     pub img: String,
     /// The information address, or empty text.
@@ -214,6 +216,8 @@ pub struct PersonFields {
     pub name: String,
     /// The usual role.
     pub usual_role: String,
+    /// The usual group for the usual role.
+    pub usual_group: String,
     /// The picture address.
     pub img: String,
     /// The information address.
@@ -276,6 +280,7 @@ fn clean_fields(fields: &PersonFields) -> Result<PersonFields, CollectionError> 
     Ok(PersonFields {
         name: name.to_owned(),
         usual_role: fields.usual_role.trim().to_owned(),
+        usual_group: fields.usual_group.trim().to_owned(),
         img: fields.img.trim().to_owned(),
         href: fields.href.trim().to_owned(),
     })
@@ -284,10 +289,11 @@ fn clean_fields(fields: &PersonFields) -> Result<PersonFields, CollectionError> 
 fn insert_person(db: &Connection, fields: &PersonFields) -> Result<PersonId, CollectionError> {
     let fields = clean_fields(fields)?;
     db.execute(
-        "INSERT INTO people (name, usual_role, img, href, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO people (name, usual_role, usual_group, img, href, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             fields.name,
             fields.usual_role,
+            fields.usual_group,
             fields.img,
             fields.href,
             now()
@@ -321,13 +327,14 @@ pub fn change_person(
 ) -> Result<(), CollectionError> {
     let fields = clean_fields(fields)?;
     let changed = collection.db().execute(
-        "UPDATE people SET name = ?2, usual_role = ?3, img = ?4, href = ?5 WHERE id = ?1",
+        "UPDATE people SET name = ?2, usual_role = ?3, usual_group = ?6, img = ?4, href = ?5 WHERE id = ?1",
         params![
             id.0,
             fields.name,
             fields.usual_role,
             fields.img,
-            fields.href
+            fields.href,
+            fields.usual_group
         ],
     )?;
     if changed == 0 {
@@ -405,7 +412,7 @@ fn wallets_of(db: &Connection, id: PersonId) -> Result<Vec<PersonWallet>, Collec
 fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError> {
     let mut person = db
         .query_row(
-            "SELECT name, usual_role, img, href, default_address, default_custom_key, default_custom_value
+            "SELECT name, usual_role, img, href, default_address, default_custom_key, default_custom_value, usual_group
              FROM people WHERE id = ?1",
             [id.0],
             |r| {
@@ -416,6 +423,7 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
                     id,
                     name: r.get(0)?,
                     usual_role: r.get(1)?,
+                    usual_group: r.get(7)?,
                     img: r.get(2)?,
                     href: r.get(3)?,
                     default_address: address.map(|address| RecipientKey {
@@ -2304,6 +2312,8 @@ pub struct ExportPerson {
     pub name: String,
     /// The usual role, as raw text.
     pub usual_role: String,
+    /// The usual group for the usual role, as raw text.
+    pub usual_group: String,
     /// The picture address, or empty text.
     pub img: String,
     /// The information address, or empty text.
@@ -2382,6 +2392,7 @@ pub fn export<S: BuildHasher>(
             default_address: default_address(&person, lookups),
             name: person.name,
             usual_role: person.usual_role,
+            usual_group: person.usual_group,
             img: person.img,
             href: person.href,
             wallets,

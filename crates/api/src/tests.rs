@@ -9880,6 +9880,20 @@ async fn new_person(app: &App, name: &str) -> i64 {
 }
 
 #[tokio::test]
+async fn the_role_list_gives_the_music_group_first() {
+    let app = app();
+    let (status, body) = call(&app, "GET", "/api/v1/roles", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let groups = body["groups"].as_array().unwrap();
+    assert_eq!(
+        groups[0]["name"], "Music",
+        "ADR 0112 item 3: GET /roles must give the group Music first. Check studio_core::roles::groups."
+    );
+    assert_eq!(groups[0]["roles"][1], "Vocalist");
+    assert_eq!(groups.len(), 12);
+}
+
+#[tokio::test]
 async fn a_person_is_added_read_changed_and_removed() {
     let app = app();
     let id = new_person(&app, " Ann ").await;
@@ -9903,13 +9917,14 @@ async fn a_person_is_added_read_changed_and_removed() {
         &app,
         "PATCH",
         &format!("/api/v1/people/{id}"),
-        Some(json!({ "name": "Ann B", "usual_role": "vocals" })),
+        Some(json!({ "name": "Ann B", "usual_role": "vocals", "usual_group": "music" })),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (_, body) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
     assert_eq!(body["name"], "Ann B");
     assert_eq!(body["usual_role"], "vocals");
+    assert_eq!(body["usual_group"], "music");
 
     let (status, body) = call(
         &app,

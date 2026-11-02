@@ -978,3 +978,49 @@ fn a_person_with_no_default_address_gives_an_invalid_request_for_a_payee() {
     assert!(make_person_change_set(&s.collection, &mut starter, id, &operation, &s.feeds).is_err());
     assert_eq!(s.collection.change_set_rows().unwrap().len(), 0);
 }
+
+#[test]
+fn add_to_releases_writes_the_usual_role_and_the_usual_group() {
+    let s = setup();
+    let operation = PersonOperation::AddToReleases {
+        payee_percent: None,
+        credit: true,
+        support_link: None,
+    };
+    let make = |name: &str, role: &str, group: &str| {
+        let id = people::add_person(
+            &s.collection,
+            &PersonFields {
+                name: name.into(),
+                usual_role: role.into(),
+                usual_group: group.into(),
+                ..PersonFields::default()
+            },
+        )
+        .unwrap();
+        let (_, op) = person_operation(&s.collection, id, &operation, &no_lookups()).unwrap();
+        let RecipientOperation::AddToReleases {
+            credit: Some(credit),
+            ..
+        } = op
+        else {
+            panic!("ADR 0112 item 6: AddToReleases must carry a credit.");
+        };
+        (credit.role, credit.group)
+    };
+    assert_eq!(
+        make("A", "Vocalist", ""),
+        ("vocalist".to_owned(), "music".to_owned()),
+        "ADR 0112 item 6: a usual role of the list with no usual group must get the first group of the role."
+    );
+    assert_eq!(
+        make("B", "Editor", "Video Post-Production"),
+        ("editor".to_owned(), "video post-production".to_owned()),
+        "ADR 0112 item 6: AddToReleases must write the usual group."
+    );
+    assert_eq!(
+        make("C", "Field Recordist", "Sound"),
+        ("Field Recordist".to_owned(), "Sound".to_owned()),
+        "ADR 0112 item 6: a usual role that is not of the list must keep its text and its group."
+    );
+}

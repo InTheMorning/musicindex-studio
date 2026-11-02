@@ -17,6 +17,7 @@ use crate::keysend::{self, Lookup};
 use crate::people::{self, Identity, PersonId};
 use crate::pipeline::{self, PipelineError, PipelineErrorKind};
 use crate::publisher::Catalog;
+use crate::roles;
 
 /// The identity of a recipient (ADR 0027 item 3). An empty custom key or
 /// custom value is the same as none.
@@ -246,6 +247,10 @@ pub struct NewCredit {
     pub name: String,
     /// `role`.
     pub role: String,
+    /// `group`. An empty text gives no attribute. The draft save gives a
+    /// role of the list its group (ADR 0112 item 6).
+    #[serde(default)]
+    pub group: String,
     /// `img`.
     pub img: String,
     /// `href`.
@@ -728,10 +733,10 @@ fn add_to_releases(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperat
             feed.persons.push(Entry::new(Person {
                 name: credit.name.clone(),
                 role: text(&credit.role),
+                group: text(&credit.group),
                 img: text(&credit.img),
                 href: text(&credit.href),
                 npub: text(&credit.npub),
-                ..Person::default()
             }));
             Ok(())
         };
@@ -1114,6 +1119,23 @@ fn wallet_type(person: &people::Person, key: &RecipientKey) -> String {
         )
 }
 
+/// The role and the group of the credit that a person gives (ADR 0112
+/// items 5 and 7). A usual role that is not of the list stays as it is, with
+/// the usual group. A usual role of the list gets the usual group when it is
+/// a group of the role, else its first group. Both become the wire form.
+fn usual_role_and_group(person: &people::Person) -> (String, String) {
+    let role = person.usual_role.as_str();
+    let groups = roles::groups_of(role);
+    let Some(first) = groups.first() else {
+        return (role.to_owned(), person.usual_group.clone());
+    };
+    let group = groups
+        .iter()
+        .find(|g| roles::is_group(&person.usual_group, g))
+        .unwrap_or(first);
+    (roles::wire(role), roles::wire(group))
+}
+
 /// The [`RecipientOperation::AddToReleases`] of a person: the payee, the
 /// credit and the support link that the request selects.
 fn add_snapshot(
@@ -1138,9 +1160,11 @@ fn add_snapshot(
         }
         None => None,
     };
+    let (role, group) = usual_role_and_group(person);
     let new_credit = credit.then(|| NewCredit {
         name: person.name.clone(),
-        role: person.usual_role.clone(),
+        role,
+        group,
         img: person.img.clone(),
         href: person.href.clone(),
         npub: person
@@ -1345,6 +1369,7 @@ fn set_person_name(collection: &Collection, id: PersonId, name: &str) -> Result<
         &people::PersonFields {
             name: name.to_owned(),
             usual_role: person.usual_role,
+            usual_group: person.usual_group,
             img: person.img,
             href: person.href,
         },
@@ -2115,6 +2140,7 @@ mod tests {
             credit: Some(NewCredit {
                 name: "Ann".into(),
                 role: "vocals".into(),
+                group: String::new(),
                 img: String::new(),
                 href: String::new(),
                 npub: String::new(),

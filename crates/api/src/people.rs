@@ -128,6 +128,15 @@ pub(crate) async fn get_person(State(shared): State<Shared>, Path(id): Path<i64>
     .await
 }
 
+/// The role list of a credit (ADR 0112 item 3). It needs no open vault.
+pub(crate) async fn list_roles() -> Json<Value> {
+    let groups: Vec<Value> = studio_core::roles::groups()
+        .iter()
+        .map(|g| json!({ "name": g.name, "roles": g.roles }))
+        .collect();
+    Json(json!({ "groups": groups }))
+}
+
 pub(crate) async fn change_person(
     State(shared): State<Shared>,
     Path(id): Path<i64>,

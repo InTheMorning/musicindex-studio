@@ -1,7 +1,7 @@
 //! Edits of a draft through the JSON model with entry keys (ADR 0022).
 
 use studio_core::collection::{Collection, DraftRow, FeedId};
-use studio_core::feed::{AlternateEnclosure, Enclosure, Entry, Feed, Item, Source};
+use studio_core::feed::{AlternateEnclosure, Enclosure, Entry, Feed, Item, Person, Source};
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::pipeline::{self, PipelineErrorKind};
@@ -569,4 +569,87 @@ fn a_new_track_puts_its_alternate_enclosures_before_its_duration() {
     );
     let text = draft_text(&collection, id);
     assert!(text.contains(&expected), "{text}");
+}
+
+// ---- The group of a credit role (ADR 0112) ----
+
+/// A person with the given name, role and group.
+fn credit(name: &str, role: Option<&str>, group: Option<&str>) -> Entry<Person> {
+    Entry::new(Person {
+        name: name.to_owned(),
+        role: role.map(str::to_owned),
+        group: group.map(str::to_owned),
+        ..Person::default()
+    })
+}
+
+#[test]
+fn a_new_credit_with_a_role_of_the_list_gets_the_wire_role_and_group() {
+    let (collection, id) = draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.persons.push(credit("Ann", Some("Vocalist"), None));
+    model
+        .persons
+        .push(credit("Bob", Some("Editor"), Some("Video Post-Production")));
+    model.items[0]
+        .persons
+        .push(credit("Cy", Some("Composer"), Some("Music")));
+    pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let text = draft_text(&collection, id);
+    assert!(
+        text.contains(">Ann</podcast:person>")
+            && text.contains("role=\"vocalist\" group=\"music\""),
+        "ADR 0112 item 4: a role of the list must get its group at the draft save. Check apply_role_group. {text}"
+    );
+    assert!(
+        text.contains("role=\"editor\" group=\"video post-production\""),
+        "ADR 0112 item 4: a sent group of the role must stay. Check apply_role_group. {text}"
+    );
+    assert!(
+        text.contains("role=\"composer\" group=\"audio post-production\""),
+        "ADR 0112 item 4: a group that is not a group of the role must become the first group. Check apply_role_group. {text}"
+    );
+}
+
+#[test]
+fn a_credit_that_the_user_does_not_change_keeps_its_bytes() {
+    let (collection, id) = draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.persons.push(credit("Ann", Some("Vocalist"), None));
+    pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    // Put a role of the list with no group and a mixed case into the draft
+    // text, as an older feed has it.
+    let mut row = collection.draft(id).unwrap().unwrap();
+    let text = String::from_utf8(row.draft_xml.clone())
+        .unwrap()
+        .replace("role=\"vocalist\" group=\"music\"", "role=\"Vocalist\"");
+    row.draft_xml = text.clone().into_bytes();
+    collection.save_draft(id, &row).unwrap();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model.items[0].title = Some("One (live)".to_owned());
+    pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let after = draft_text(&collection, id);
+    assert!(
+        after.contains("role=\"Vocalist\"") && !after.contains("group=\"music\""),
+        "ADR 0012 and ADR 0112 item 4: a credit that does not change must keep its bytes. Check that apply_role_group skips it. {after}"
+    );
+}
+
+#[test]
+fn a_role_that_is_not_of_the_list_keeps_its_sent_role_and_group() {
+    let (collection, id) = draft();
+    let (feed, revision) = pipeline::draft_model(&collection, id).unwrap();
+    let mut model = sent(&feed);
+    model
+        .persons
+        .push(credit("Dee", Some("Field Recordist"), Some("Sound")));
+    pipeline::replace_model(&collection, id, &revision, model).unwrap();
+    let text = draft_text(&collection, id);
+    assert!(
+        text.contains("role=\"Field Recordist\"") && text.contains("group=\"Sound\""),
+        "ADR 0112 item 4: a role that is not of the list must keep its sent role and group. Check apply_role_group. {text}"
+    );
 }

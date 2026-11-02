@@ -504,6 +504,11 @@ DELETE FROM draft_grants;
 ALTER TABLE draft_grants ADD COLUMN app_id INTEGER;
 ALTER TABLE grant_writes ADD COLUMN cause TEXT;
 ",
+    // ADR 0112 item 7: a person keeps a usual group for a usual role. A
+    // person from before gets an empty group.
+    r"
+ALTER TABLE people ADD COLUMN usual_group TEXT NOT NULL DEFAULT '';
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -4230,8 +4235,7 @@ mod tests {
     #[test]
     fn the_relative_library_migration_has_its_index() {
         assert_eq!(
-            RELATIVE_LIBRARY_MIGRATION,
-            MIGRATIONS.len() - 2,
+            MIGRATIONS[RELATIVE_LIBRARY_MIGRATION], "SELECT 1;",
             "ADR 0107 item 1: RELATIVE_LIBRARY_MIGRATION must be the index of its entry in MIGRATIONS"
         );
     }
@@ -5221,11 +5225,41 @@ mod tests {
 
     #[test]
     fn the_app_keys_migration_has_its_index() {
-        assert_eq!(
-            APP_KEYS_MIGRATION,
-            MIGRATIONS.len() - 1,
+        assert!(
+            MIGRATIONS[APP_KEYS_MIGRATION].contains("connected_apps_new"),
             "ADR 0110 items 37 and 38: APP_KEYS_MIGRATION must be the index of its entry in MIGRATIONS"
         );
+    }
+
+    #[test]
+    fn the_usual_group_migration_gives_each_person_an_empty_group() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..=APP_KEYS_MIGRATION] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(APP_KEYS_MIGRATION + 1).unwrap(),
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO people (name, usual_role, img, href, created_at) VALUES ('Ann', 'Vocalist', '', '', 0)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        let people = crate::people::people(&collection).unwrap();
+        assert_eq!(
+            people[0].usual_group, "",
+            "ADR 0112 item 7: a person from before must get an empty usual group. Check the migration after APP_KEYS_MIGRATION."
+        );
+        assert_eq!(people[0].usual_role, "Vocalist");
     }
 
     /// Make a collection at the schema before the migration of the app keys,

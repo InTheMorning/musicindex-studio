@@ -36,7 +36,7 @@ These choices are fixed. Do not change them.
     - `WELCOME`: the texts of ADR 0119 items 2 and 3, and the rows `music`, `label` and `online`, each with `icon`, `title` and `line`.
     - `welcomeSteps(path)`: the three step names of ADR 0119 item 4, for `music` or `label`.
     - `hostStep(connectors)`: `'pick'` with no connector, `'skip'` with one, `'menu'` with two or more (ADR 0119 item 6).
-    - `HOST_ROWS(serverMode)`: the rows "Nostr (Blossom)" ("Store the files on Blossom servers, signed with your Nostr key."), "S3 or Cloudflare R2" ("Your own storage bucket.") and "My own server" ("SFTP, or a folder on this computer." on the desktop, and "An SFTP server." on a server). Each row gives the host type of `AddHostForm`.
+    - `HOST_ROWS(serverMode)`: three rows, in this sequence, and the first row is the primary row. "My own server": on the desktop "A folder on this computer, to try Studio first. Or your own SFTP server.", with the host type `local`, and on a server "Your own SFTP server.", with the host type `sftp`. "Nostr (Blossom)": "Blossom servers keep the files. You sign each upload with your Nostr key." "S3 or Cloudflare R2": "A storage bucket at Amazon S3, Cloudflare R2 or a similar provider." On the desktop, the form of a local folder has a link to the SFTP form.
     - `welcomeBody(path, name, connectorId)`: the body of `POST /feeds/new`: `medium: 'publisher'`, `role: 'artist'` or `'label'`, `title` and `author` equal to the name, `path` from `feedFileStart(name)`, and `connector_id`.
     - `nextStep(feed)`: `'album'` for a publisher feed with the role `artist` and no release, `'label'` for the role `label` with no release, else `null`. It reads the roles and the `child_ids` that the core gives.
 2. The Releases page shows the Welcome page in the place of "No releases yet." when `showWelcome(feeds)` is true. The Welcome page is a page of rows, not a form. The large row is a `button.link-row` with an icon of 44 px, a title and one line.
@@ -57,6 +57,7 @@ Mechanical:
 - A Node test: `welcomeBody` gives the role of the path, the name as title and author, and the path of `feedFileStart`.
 - A Node test: `nextStep` for an artist with no release, a label with no release, and an artist with a release.
 - A Node test: no text of `WELCOME`, `HOST_ROWS` or the steps has the word "feed".
+- A Node test: the sequence of `HOST_ROWS`, and the two lines of "My own server".
 - The test of title case, the test of the page rule and the tier test still pass.
 - The four commit checks pass.
 

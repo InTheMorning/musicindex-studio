@@ -4,6 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screens 2 to 6 of the mockups in `.studio-dev/mockup-start/site/`.
+- Amended: 2026-11-02 by the operator: "My own server" is the first row of item 6.
 - Changes: [ADR 0072](0072-add-a-feed-opens-from-releases.md), the empty Releases page. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) does not change for a user with feeds.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the first write. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the file host forms. [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) and [ADR 0083](0083-hosting-is-a-first-class-role.md) for the roles. [ADR 0107](0107-a-user-can-export-and-import-an-account.md) for the import.
 
@@ -26,7 +27,7 @@
     - Musician: "Your name", "Where it lives", "Your first album".
     - Label: "Label name", "Where it lives", "Your first artist".
 5. Step 1 asks for the name ("Artist name" or "Label name") and an optional picture. The musician sheet has the hint "A band is one artist. Add the members later, in People."
-6. Step 2, "Where it lives", has the text "Studio does not keep your music. It puts your {artist page or label page} and your songs on a file host that you choose. You can move them later." It shows one row for each file host type, with the customary choice first: "Nostr (Blossom)", "S3 or Cloudflare R2", and "My own server" (SFTP or a local folder). A row opens the form of that file host (ADR 0045). With one connected file host, step 2 does not show. With two or more, step 2 is a select menu.
+6. Step 2, "Where it lives", has the text "Studio does not keep your music. It puts your {artist page or label page} and your songs on a file host that you choose. You can move them later." It shows one row for each file host type. "My own server" is first, because a folder on this computer lets a user try Studio before the user selects a hosting provider. Then come "Nostr (Blossom)" and "S3 or Cloudflare R2". The lines are in the task file. A row opens the form of that file host (ADR 0045). With one connected file host, step 2 does not show. With two or more, step 2 is a select menu.
 7. After step 2, the core makes the publisher feed as a draft, with the role `artist` or `label`. The sheet uses the route of the form that makes a feed. Studio writes nothing. The feed file gets its start value from the name (ADR 0073 item 8).
 8. Then the page of the new feed opens. The toolbar shows the draft status and "Review", as on each editor page. The page has one large row at its top:
     - Musician: "Add your first album", with "Drop the songs in. Studio reads their names and order, and makes the album page." and the button "Add an Album".

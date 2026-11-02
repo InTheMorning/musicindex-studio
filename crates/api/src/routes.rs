@@ -2591,6 +2591,9 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
     Ok(Json(json!({
         "id": diff.id.as_str(),
         "unified": diff.unified,
+        "fields": diff.fields,
+        "lines": diff.lines,
+        "uncovered": diff.uncovered,
         "changed": diff.changed,
         "files": diff.files,
         "operations": diff.operations,

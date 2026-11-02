@@ -381,7 +381,16 @@ impl Element {
         self.source_start = None;
     }
 
-    fn write(&self, out: &mut String) {
+    fn write(&self, out: &mut String, spans: &mut Option<Spans>) {
+        let slot = spans.as_mut().map(|s| s.open(out.len()));
+        let tag_end = self.write_inner(out, spans);
+        if let (Some(spans), Some(slot)) = (spans.as_mut(), slot) {
+            spans.close(slot, tag_end, out.len());
+        }
+    }
+
+    /// Write the element. Gives the byte offset where its start tag ends.
+    fn write_inner(&self, out: &mut String, spans: &mut Option<Spans>) -> usize {
         match (&self.source_start, &self.source_end) {
             (Some(start), SourceEnd::SelfClosing) if self.children.is_empty() => {
                 out.push_str(start);
@@ -389,14 +398,15 @@ impl Element {
             (Some(start), SourceEnd::Tag(_)) => out.push_str(start),
             _ if self.children.is_empty() && !matches!(self.source_end, SourceEnd::Tag(_)) => {
                 self.write_new_start(out, true);
-                return;
+                return out.len();
             }
             _ => self.write_new_start(out, false),
         }
+        let tag_end = out.len();
         if self.children.is_empty() && matches!(self.source_end, SourceEnd::SelfClosing) {
-            return;
+            return tag_end;
         }
-        write_nodes(&self.children, out);
+        write_nodes(&self.children, out, spans);
         if let SourceEnd::Tag(end) = &self.source_end {
             out.push_str(end);
         } else {
@@ -404,6 +414,7 @@ impl Element {
             out.push_str(&self.name);
             out.push('>');
         }
+        tag_end
     }
 
     fn write_new_start(&self, out: &mut String, empty: bool) {
@@ -467,13 +478,62 @@ fn unescape_tolerant(raw: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
-fn write_nodes(nodes: &[Node], out: &mut String) {
+fn write_nodes(nodes: &[Node], out: &mut String, spans: &mut Option<Spans>) {
+    let mut index = 0;
     for node in nodes {
         match node {
-            Node::Element(e) => e.write(out),
+            Node::Element(e) => {
+                if let Some(spans) = spans.as_mut() {
+                    spans.path.push(index);
+                }
+                e.write(out, spans);
+                if let Some(spans) = spans.as_mut() {
+                    spans.path.pop();
+                }
+                index += 1;
+            }
             Node::Text(t) => t.write(out),
             Node::Markup(m) => out.push_str(m),
         }
+    }
+}
+
+/// The place of one element in the text that [`Document::write_with_spans`]
+/// gives (ADR 0114 item 9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElementSpan {
+    /// The index of each element on the way from the root: the position
+    /// among the child elements of the parent. The root has an empty path.
+    pub path: Vec<usize>,
+    /// The byte offset where the start tag begins.
+    pub start: usize,
+    /// The byte offset where the start tag ends.
+    pub tag_end: usize,
+    /// The byte offset where the element ends, after its end tag.
+    pub end: usize,
+}
+
+/// The recorder of the element spans of one write.
+struct Spans {
+    path: Vec<usize>,
+    found: Vec<ElementSpan>,
+}
+
+impl Spans {
+    /// Record the start of an element. Gives the slot to close.
+    fn open(&mut self, start: usize) -> usize {
+        self.found.push(ElementSpan {
+            path: self.path.clone(),
+            start,
+            tag_end: start,
+            end: start,
+        });
+        self.found.len() - 1
+    }
+
+    fn close(&mut self, slot: usize, tag_end: usize, end: usize) {
+        self.found[slot].tag_end = tag_end;
+        self.found[slot].end = end;
     }
 }
 
@@ -524,13 +584,29 @@ impl Document {
     /// Write the document.
     #[must_use]
     pub fn write(&self) -> String {
+        self.write_recorded(&mut None)
+    }
+
+    /// Write the document, and give the byte range of each element in the
+    /// text. The text is the text of [`Document::write`].
+    #[must_use]
+    pub fn write_with_spans(&self) -> (String, Vec<ElementSpan>) {
+        let mut spans = Some(Spans {
+            path: Vec::new(),
+            found: Vec::new(),
+        });
+        let text = self.write_recorded(&mut spans);
+        (text, spans.map(|s| s.found).unwrap_or_default())
+    }
+
+    fn write_recorded(&self, spans: &mut Option<Spans>) -> String {
         let mut out = String::new();
         if self.bom {
             out.push('\u{feff}');
         }
-        write_nodes(&self.prolog, &mut out);
-        self.root.write(&mut out);
-        write_nodes(&self.epilog, &mut out);
+        write_nodes(&self.prolog, &mut out, &mut None);
+        self.root.write(&mut out, spans);
+        write_nodes(&self.epilog, &mut out, &mut None);
         out
     }
 }
@@ -842,6 +918,21 @@ pub(crate) fn indent_before(children: &[Node], index: usize) -> Option<Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_spans_give_the_byte_range_of_each_element() {
+        let source = "<?xml version=\"1.0\"?>\n<a x=\"1\">\n  <b/>\n  <c>t</c>\n</a>\n";
+        let doc = Document::parse(source).unwrap();
+        let (text, spans) = doc.write_with_spans();
+        assert_eq!(text, doc.write());
+        let range = |path: &[usize]| {
+            let span = spans.iter().find(|s| s.path == path).unwrap();
+            (&text[span.start..span.end], &text[span.start..span.tag_end])
+        };
+        assert_eq!(range(&[]).1, "<a x=\"1\">");
+        assert_eq!(range(&[0]), ("<b/>", "<b/>"));
+        assert_eq!(range(&[1]), ("<c>t</c>", "<c>"));
+    }
 
     #[test]
     fn a_changed_attribute_keeps_the_space_before_the_close() {

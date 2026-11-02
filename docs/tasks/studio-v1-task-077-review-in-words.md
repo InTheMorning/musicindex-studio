@@ -3,7 +3,9 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Review Of A Write".
 Decision: [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md). It uses [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18.
 
-Status: Not started.
+Status: In progress. Packet 077a is complete. Notes from the reviews:
+
+- 077a: the parts use the character mode of `similar` with semantic cleanup. The word mode marked parts of the credit text that did not change. A changed attribute covers only the start tag of its element (`ElementSpan::tag_end`). The groups follow the sequence of the table of the model keys. The planning model corrected the count of the uncovered changes: the first count did not count a changed line next to a covered line. With no live file, each line of the draft is covered.
 
 ## Goal
 
@@ -31,7 +33,7 @@ Human test, by the operator, on `studio.musicindex.org` after the deploy:
 
 - A **changed line** is a removed line or an added line of the line diff of the live file and the draft.
 - A **field change** is one difference between the typed model of the live file and the typed model of the draft (ADR 0114 item 1).
-- A **covered line** is a changed line that a field change explains (ADR 0114 item 4). An **uncovered change** is a run of adjacent changed lines with no covered line.
+- A **covered line** is a changed line that a field change explains (ADR 0114 item 4). An **uncovered change** is a run of adjacent changed lines that are not covered.
 - A **pair** is a removed line and the added line that replaces it. A pair occurs in a replacement of the line diff with the same number of removed and added lines.
 
 ## Packet 077a: The Field Changes And The Lines
@@ -55,7 +57,7 @@ These choices are fixed. Do not change them.
     - An item and a live item match by `guid`. An item with no `guid` matches by position.
     - The entries of each other list match through a sequence diff of their values, with `similar::capture_diff_slices`. In a replacement with the same number of old and new entries, the k-th old entry matches the k-th new entry. Each other old entry is removed, and each other new entry is added.
     - The same rules apply to a list in an entry, for example the recipients of a value block or the credits of an item.
-5. `FieldGroup` has `kind`, `name: Option<String>`, `position: Option<usize>` and `changes: Vec<FieldChange>`. The groups have these kinds, in the sequence of the file:
+5. `FieldGroup` has `kind`, `name: Option<String>`, `position: Option<usize>` and `changes: Vec<FieldChange>`. The groups have these kinds, in the sequence of the table of item 8:
     - `field`: one channel field that is not a list, for example `title` or `owner`. `name` is the key of the field.
     - `credits`: the channel credits (`persons`) of one name. `name` is the name of the credit.
     - `track`: one item. `position` is its position in the draft, from 1, or in the live file for a removed item. `name` is its title.
@@ -231,7 +233,7 @@ These choices are fixed. Do not change them.
 1. In "Simplified", `DiffView` shows the section "What changes", then the section "Changed lines". "Detailed" shows only the lines.
 2. `review.js` gives `fieldRows(groups, profiles)`. It gives one row group for each `FieldGroup`:
     - The label of a group: the word of the field for `field`, "Credits · {name}" for `credits`, "Track {position}" for `track`, "Live item" for `live`, and the word of the list for `list`.
-    - The line of a change: the word of its path, then the old value, "→", and the new value. A missing value is "none". An added entry reads "Added", and a removed entry reads "Removed". The label of a credit row is its role.
+    - The line of a change: the word of its path, then the old value, "→", and the new value. The path of a live item starts with `item.`, and the word does not include that prefix. A missing value is "none". An added entry reads "Added", and a removed entry reads "Removed". The label of a credit row is its role.
 3. A word table in `review.js` gives a word for each key of the serialized model, in the words of the editor. Examples are `npub` "Nostr key" and `title` "Title". A key with no word shows the key.
 4. A group with more than two changes of the same path and the same new value gives one summary line first, for example "6 credits get the Nostr key City Radio". The group then shows two changes, and the others in one collapsed `details` line, for example "4 more credits: songwriter, composer, guitarist, keyboardist" (ADR 0114 item 2).
 5. A value of the path `npub` shows the profile name and the short key, for example "City Radio (npub12um…f5ck)". The view reads the profiles with `useProfiles`. Before the answer, or with no profile, it shows the short key only. A change of a credit key also shows `keyWarning(npub, profiles, name)` in the error color, with `name` the name of the credit (ADR 0114 item 3).

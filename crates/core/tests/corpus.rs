@@ -248,3 +248,17 @@ fn parse_duration_reads_each_itunes_duration_of_the_corpus() {
     }
     assert!(read > 0, "the corpus has no itunes:duration");
 }
+
+#[test]
+fn each_corpus_feed_writes_the_same_text_with_its_spans() {
+    for (name, bytes) in corpus() {
+        let doc = Document::parse_bytes(&bytes).unwrap();
+        let (text, spans) = doc.write_with_spans();
+        assert!(
+            text.as_bytes() == bytes && text == doc.write(),
+            "{name}: the text with spans is not the text of write"
+        );
+        let root = spans.iter().find(|s| s.path.is_empty()).expect("a root");
+        assert!(root.start < root.tag_end && root.tag_end <= root.end && root.end <= text.len());
+    }
+}

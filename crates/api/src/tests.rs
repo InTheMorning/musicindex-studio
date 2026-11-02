@@ -614,6 +614,20 @@ async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written()
     )
     .await;
     assert!(diff["unified"].as_str().unwrap().contains("+<rss"));
+    // The diff also gives the field changes, the lines and the guard count
+    // (ADR 0114).
+    let title_group = diff["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|group| group["name"] == "title")
+        .expect("the new feed adds the title");
+    assert_eq!(title_group["kind"], "field");
+    assert_eq!(title_group["changes"][0]["new"], "New Album");
+    let lines = diff["lines"].as_array().unwrap();
+    assert_ne!(lines.len(), 0);
+    assert!(lines.iter().all(|line| line["kind"] == "added"));
+    assert!(diff["uncovered"].is_u64());
 
     // On 2026-10-23 the review of task 018d found that a discard of this
     // draft left a release that Studio could not edit: no draft and no

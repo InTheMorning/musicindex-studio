@@ -317,6 +317,14 @@ pub struct Diff {
     /// grant of the draft for a `pending` live item of the draft
     /// (ADR 0054 item 11).
     pub grants: Vec<String>,
+    /// The field changes of the draft, in groups (ADR 0114 item 1).
+    pub fields: Vec<crate::review::FieldGroup>,
+    /// Each line of the live file and the draft, with its marked parts
+    /// (ADR 0114 item 6).
+    pub lines: Vec<crate::review::DiffLine>,
+    /// The number of changes that the field changes do not explain
+    /// (ADR 0114 item 4).
+    pub uncovered: usize,
 }
 
 /// How the host from before points to the new address of the feed XML
@@ -1491,6 +1499,7 @@ pub fn diff_at(
         .context_radius(3)
         .header("live", "draft")
         .to_string();
+    let review = crate::review::review(&draft.base_xml, &draft.draft_xml);
     Ok(Diff {
         id: diff_id,
         unified,
@@ -1503,6 +1512,9 @@ pub fn diff_at(
         announce_skip,
         events,
         grants,
+        fields: review.fields,
+        lines: review.lines,
+        uncovered: review.uncovered,
     })
 }
 

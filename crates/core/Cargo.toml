@@ -47,5 +47,8 @@ testing = []
 studio-core = { path = ".", features = ["testing"] }
 tempfile = "3"
 
+[target.'cfg(unix)'.dev-dependencies]
+rustix = { version = "1", features = ["process"] }
+
 [lints]
 workspace = true

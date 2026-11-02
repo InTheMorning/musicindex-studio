@@ -39,8 +39,7 @@ LABEL org.opencontainers.image.revision=$STUDIO_REVISION \
 RUN apk add --no-cache ca-certificates \
  && addgroup -S studio \
  && adduser -S -G studio studio \
- && mkdir -p /data \
- && chown studio:studio /data
+ && install -d -m 0700 -o studio -g studio /data
 
 WORKDIR /data
 COPY --from=builder /build/target/release/studio-server /usr/local/bin/studio-server

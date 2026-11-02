@@ -177,11 +177,18 @@ For a backup with no change during the copy, stop the server, copy the full fold
 
 To restore, stop the server, put the folder back with the owner `studio` and the mode `0700`, and start the server.
 
+An existing Docker volume keeps the mode of its folder. Docker copies the mode of the image folder only into a new volume. The server repairs the modes at its start (ADR 0104): it sets `<data>`, `<data>/users` and each user folder to `0700`, and each `vault.json` to `0600`. Check the result with `docker exec` and `stat -c %a /data /data/users /data/users/*/vault.json`. The result is 700, 700 and 600.
+
 ## 7. Memory
 
 Each Argon2id derivation uses 64 MiB. `--argon2-concurrency 2` thus needs 128 MiB for the derivations. Increase it only when the computer has the memory for it.
 
-The vault key of a user is in memory while the vault window is open. `LimitCORE=0` in the unit stops core dumps, so a crash does not write a key to the disk. Do not enable swap to an unencrypted disk on this computer.
+The vault key of a user is in memory while the vault window is open. Two mechanisms prevent a core dump, so a crash does not write a key to the disk (ADR 0104):
+
+- The server marks its process not dumpable at its start, on Linux. This works also when the host sends core dumps to `systemd-coredump`.
+- The core limit is 0. The unit of the installation without Docker has `LimitCORE=0`. `deploy/compose.yml` has `ulimits: { core: 0 }`.
+
+Do not enable swap to an unencrypted disk on this computer.
 
 ## 8. The Private-Network Guard
 

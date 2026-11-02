@@ -57,7 +57,21 @@ async fn main() -> ExitCode {
     }
 }
 
+/// Mark the process as not dumpable, so that no core dump holds a vault
+/// key (ADR 0104 item 1).
+///
+/// # Errors
+///
+/// Gives a message when the system refuses the call.
+fn harden_process() -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
+        .map_err(|e| format!("the process cannot become not dumpable: {e}"))?;
+    Ok(())
+}
+
 async fn run() -> Result<(), String> {
+    harden_process()?;
     let args: Vec<String> = std::env::args().skip(1).collect();
     // The same two options as `studio-desktop`. The image smoke test of
     // ADR 0066 runs them.
@@ -143,4 +157,44 @@ async fn serve(options: ServeOptions) -> Result<(), String> {
     axum::serve(listener, service)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod hardening_tests {
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_start_step_marks_the_process_not_dumpable() {
+        super::harden_process().unwrap();
+        assert_eq!(
+            rustix::process::dumpable_behavior().unwrap(),
+            rustix::process::DumpableBehavior::NotDumpable,
+            "ADR 0104 item 1: the server must be not dumpable. Call harden_process() at the start of run()."
+        );
+    }
+
+    #[test]
+    fn the_compose_file_sets_the_core_limit_to_0() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../deploy/compose.yml");
+        let text = std::fs::read_to_string(path).unwrap();
+        let service = text
+            .split("\nvolumes:")
+            .next()
+            .unwrap()
+            .split("\n  studio:")
+            .nth(1)
+            .expect("the service studio");
+        let lines: Vec<&str> = service
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.starts_with('#'))
+            .collect();
+        let at = lines.iter().position(|l| l.starts_with("ulimits:"));
+        let has_core = at.is_some_and(|i| {
+            lines[i].contains("core: 0") || lines.get(i + 1).is_some_and(|l| l.contains("core: 0"))
+        });
+        assert!(
+            has_core,
+            "ADR 0104 item 1: the service studio needs `ulimits: {{ core: 0 }}` in deploy/compose.yml."
+        );
+    }
 }

@@ -250,7 +250,12 @@ impl VaultFile {
         let mut temporary = path.as_os_str().to_owned();
         temporary.push(".tmp");
         let temporary = Path::new(&temporary);
-        let mut file = fs::File::create(temporary).map_err(VaultError::io)?;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        // ADR 0104 item 2: only the owner can read a vault file.
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        let mut file = options.open(temporary).map_err(VaultError::io)?;
         file.write_all(self.to_json().as_bytes())
             .map_err(VaultError::io)?;
         file.sync_all().map_err(VaultError::io)?;

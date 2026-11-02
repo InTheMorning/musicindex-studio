@@ -29,5 +29,8 @@ studio-core = { workspace = true, features = ["testing"] }
 http-body-util = "0.1"
 tempfile = "3"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
 [lints]
 workspace = true

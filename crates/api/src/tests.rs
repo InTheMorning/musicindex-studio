@@ -11279,3 +11279,49 @@ async fn the_recipient_list_marks_a_fee() {
     assert_eq!(entry("03bb")["addresses"][0]["fee"], true, "{list}");
     assert_eq!(entry("02aa")["fee"], false, "{list}");
 }
+
+#[cfg(unix)]
+fn mode_of(path: &std::path::Path) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+}
+
+#[cfg(unix)]
+#[test]
+fn a_new_workspace_folder_and_grants_have_the_mode_0700() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    Workspace::open(&data).unwrap();
+    for path in [data.clone(), data.join("grants")] {
+        assert_eq!(
+            mode_of(&path),
+            0o700,
+            "ADR 0104 item 2: {} must have the mode 0700. Make it with private_dir() in Workspace::open.",
+            path.display()
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_open_repairs_the_modes_of_an_older_installation() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let vault = data.join("vault.json");
+    std::fs::write(&vault, "{}").unwrap();
+    std::fs::set_permissions(&vault, std::fs::Permissions::from_mode(0o644)).unwrap();
+    Workspace::open(&data).unwrap();
+    assert_eq!(
+        mode_of(&data),
+        0o700,
+        "ADR 0104 item 2: Workspace::open must set the mode 0700 on an existing data folder."
+    );
+    assert_eq!(
+        mode_of(&vault),
+        0o600,
+        "ADR 0104 item 2: Workspace::open must set the mode 0600 on an existing vault.json."
+    );
+}

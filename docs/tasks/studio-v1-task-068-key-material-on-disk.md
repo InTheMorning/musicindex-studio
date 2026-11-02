@@ -2,7 +2,7 @@
 
 Decision: ADR 0013 items 10, 13 and 15 (no plain secret in a file, keys only in memory), ADR 0055 item 2 (one user folder for each account) and ADR 0066 (the server image). Packet a writes ADR 0104 first. ADR 0104 makes the two guards of this task binding rules.
 
-Status: Not started.
+Status: Complete. The human test on the VPS is open.
 
 ## Goal
 

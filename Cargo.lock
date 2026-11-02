@@ -2332,6 +2332,7 @@ dependencies = [
  "nostr",
  "quick-xml",
  "rusqlite",
+ "rustix",
  "rusty-s3",
  "secp256k1",
  "serde",
@@ -2353,6 +2354,7 @@ name = "studio-desktop"
 version = "0.1.0-rc.9"
 dependencies = [
  "directories",
+ "rustix",
  "studio-api",
  "tokio",
 ]
@@ -2368,6 +2370,7 @@ dependencies = [
  "nostr",
  "p256",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",

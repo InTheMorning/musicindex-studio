@@ -13,6 +13,8 @@ services:
       - 0.0.0.0:8080
       - --public-origin
       - ${STUDIO_PUBLIC_ORIGIN}
+      - --argon2-concurrency
+      - ${STUDIO_ARGON2_CONCURRENCY:-2}
       - --client-address-header
       - X-Real-IP
     restart: unless-stopped
@@ -24,6 +26,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # No core dump holds a vault key (ADR 0104). The process also marks
+    # itself not dumpable.
+    ulimits: { core: 0 }
     volumes:
       - studio-data:/data
     ports:

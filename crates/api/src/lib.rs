@@ -24,7 +24,9 @@ use axum::routing::{delete, get, post, put};
 pub use access::Access;
 pub use axum::Router;
 pub use error::ApiError;
-pub use workspace::{AppChange, AppHook, ServerRules, VaultState, Workspace, WorkspaceHandle};
+pub use workspace::{
+    AppChange, AppHook, ServerRules, VaultState, Workspace, WorkspaceHandle, private_dir,
+};
 
 /// Serve a router until the process stops.
 ///

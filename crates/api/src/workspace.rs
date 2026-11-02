@@ -643,6 +643,23 @@ const NEW_HUB: &str = announce::DEFAULT_HUB;
 #[cfg(test)]
 const NEW_HUB: &str = "http://127.0.0.1:9/pubnotify";
 
+/// Make a folder and its missing parents, and give the folder the mode 0700
+/// on Unix (ADR 0104 item 2). An existing folder gets the mode too.
+///
+/// # Errors
+///
+/// Gives the error of the file system.
+pub fn private_dir(path: &Path) -> std::io::Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(path)?;
+    #[cfg(unix)]
+    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+    Ok(())
+}
+
 impl Workspace {
     /// Open the workspace in `data_dir`, and make the folder if necessary.
     ///
@@ -650,11 +667,24 @@ impl Workspace {
     ///
     /// Gives an [`ApiError`] when the folder or the collection cannot be opened.
     pub fn open(data_dir: &Path) -> Result<Self, ApiError> {
-        std::fs::create_dir_all(data_dir)
+        private_dir(data_dir)
             .map_err(|e| ApiError::internal(format!("{}: {e}", data_dir.display())))?;
+        let grants_dir = data_dir.join("grants");
+        private_dir(&grants_dir)
+            .map_err(|e| ApiError::internal(format!("{}: {e}", grants_dir.display())))?;
+        // ADR 0104 item 2: repair the vault file of an older installation.
+        #[cfg(unix)]
+        match std::fs::set_permissions(
+            data_dir.join("vault.json"),
+            std::os::unix::fs::PermissionsExt::from_mode(0o600),
+        ) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(ApiError::internal(format!("vault.json: {e}"))),
+        }
         Ok(Self {
             vault_path: data_dir.join("vault.json"),
-            grants_dir: data_dir.join("grants"),
+            grants_dir,
             collection: Collection::open(&data_dir.join("collection.sqlite"))?,
             vault: None,
             web: Web::new(),
@@ -1289,7 +1319,7 @@ impl Workspace {
             .put(record, key.as_bytes())
             .map_err(|e| e.to_string())?;
         self.save_vault().map_err(|e| e.code())?;
-        std::fs::create_dir_all(&self.grants_dir).map_err(|e| e.to_string())?;
+        private_dir(&self.grants_dir).map_err(|e| e.to_string())?;
         file.save(path).map_err(|e| e.to_string())?;
         Ok(())
     }

@@ -206,7 +206,10 @@ impl Accounts {
     /// Gives a message when the file cannot be opened or has a newer
     /// schema.
     pub fn open(data_dir: &Path) -> Result<Self, String> {
-        std::fs::create_dir_all(data_dir).map_err(|e| format!("{}: {e}", data_dir.display()))?;
+        // ADR 0104 item 2: only the owner can read the data folder.
+        for folder in [data_dir.to_path_buf(), data_dir.join("users")] {
+            studio_api::private_dir(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
+        }
         let db = Connection::open(data_dir.join("server.sqlite")).map_err(|e| e.to_string())?;
         Self::prepare(db)
     }
@@ -991,6 +994,24 @@ impl Accounts {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_data_folder_and_users_have_the_mode_0700() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("data");
+        Accounts::open(&data).unwrap();
+        for path in [data.clone(), data.join("users")] {
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(
+                mode,
+                0o700,
+                "ADR 0104 item 2: {} must have the mode 0700. Make it with studio_api::private_dir() in Accounts::open.",
+                path.display()
+            );
+        }
+    }
 
     #[test]
     fn an_invite_works_one_time_and_the_database_keeps_its_hash() {

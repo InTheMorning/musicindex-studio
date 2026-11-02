@@ -68,6 +68,21 @@ You can also use these options.
 | `--version` | Prints the version of Studio and stops. |
 | `--help` | Prints the options and stops. |
 
+## Keep a full library on your computer
+
+Studio on your computer keeps a library folder. This folder holds the audio files and the images of your releases.
+A server can keep no audio and no images. Then your computer holds the full library.
+
+1. Connect the same file hosts in Studio on your computer. See [Connect a file host](hosts.md).
+2. Add the feeds that you want to keep. See [Add feeds](add-feeds.md).
+3. Open a release. Select **Files** in the outline.
+4. Select **Download All** to download each file that is not in the library.
+5. Select **Stop All** to stop the downloads.
+
+You can also select **Download** for one file.
+To keep a file from a server, select **Download to This Device** on that server.
+See [Manage the files of a release](release-files.md).
+
 ## Stop Studio
 
 Press Ctrl+C in the terminal.

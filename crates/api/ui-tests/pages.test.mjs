@@ -83,6 +83,17 @@ test('studio-settings has account only on a server', () => {
   assert.deepEqual(ids(false), ['apps', 'announcements', 'nostr', 'library']);
 });
 
+test('a server that holds no assets shows files on this server in the tier limits (ADR 0105 item 17)', () => {
+  const sections = pageSequence('studio-settings', { server: true, holdAssets: false });
+  assert.deepEqual(sections.map((s) => s.id), ['account', 'apps', 'announcements', 'nostr', 'files']);
+  assert.equal(sections.at(-1).tier, 'limits');
+  assert.equal(tierError('studio-settings', sections), null);
+  const on = pageSequence('studio-settings', { server: true, holdAssets: true }).map((s) => s.id);
+  assert.ok(on.includes('library') && !on.includes('files'));
+  const desktop = pageSequence('studio-settings', { server: false, holdAssets: false }).map((s) => s.id);
+  assert.ok(desktop.includes('library') && !desktop.includes('files'));
+});
+
 test('hosts starts with cards', () => {
   assert.equal(pageSequence('hosts')[0].id, 'cards');
 });

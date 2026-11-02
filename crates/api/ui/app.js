@@ -1,6 +1,7 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { pageSequence } from './pages.js';
+import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
 import {
@@ -70,6 +71,9 @@ class ApiError extends Error {
 
 let serverMode = false;
 let csrfToken = null;
+// False for a server with `--hold-assets off` (ADR 0105). `Studio` sets it
+// from the status route before it shows the shell.
+let holdAssets = true;
 // `App` sets these two functions. `onUnlockNeeded(reason)` gives a promise
 // that is true after an unlock and false when the user closes the unlock
 // sheet. `reason` is a text for the sheet, or null.
@@ -81,6 +85,12 @@ let unlocking = null;
 function applySession(session) {
   serverMode = session.mode === 'server';
   csrfToken = serverMode && session.signed_in !== false ? session.csrf || null : null;
+}
+
+// The mode of the server for the pages: `server` is true on a server, and
+// `holdAssets` is false when the server keeps no audio and no images.
+export function assetMode() {
+  return { server: serverMode, holdAssets: !serverMode || holdAssets };
 }
 
 // Ask for an unlock. Parallel requests share one sheet.
@@ -1985,6 +1995,24 @@ function FolderFeeds({ connector, onAdded }) {
 // A move of the library to a new folder is not part of this version, so
 // this panel shows the folder as a fact and lets the user change only the
 // download limits.
+// The Settings section of a server that holds no assets (ADR 0105 item 17).
+function FilesOnServerPanel() {
+  const [storage, setStorage] = useState(undefined);
+  useEffect(() => {
+    api('/status').then((status) => setStorage(status.storage || null), () => setStorage(null));
+  }, []);
+  if (storage === undefined) return null;
+  return html`<article class="panel">
+    <h2>Files on this server</h2>
+    <p class="hint">${SERVER_FILES_NOTE}</p>
+    <div class="group rows">
+      ${serverFilesRows(storage, sizeText).map((row) => html`<div class="link-row static" key=${row.label}>
+        <span class="text"><span class="label">${row.label}</span><span class="summary">${row.summary}</span></span>
+      </div>`)}
+    </div>
+  </article>`;
+}
+
 function LibraryPanel() {
   const [library, setLibrary] = useState(null);
   const [maxMb, setMaxMb] = useState('');
@@ -2435,11 +2463,12 @@ function SettingsPage() {
     announcements: AnnouncePanel,
     nostr: NostrPanel,
     library: LibraryPanel,
+    files: FilesOnServerPanel,
   };
   return html`<div>
     <${Bar}><span class="bar-title">Settings</span><//>
     <section class="section">
-      ${pageSequence('studio-settings', { server: serverMode }).map((section) => {
+      ${pageSequence('studio-settings', assetMode()).map((section) => {
         const Panel = panels[section.id];
         return html`<${Panel} key=${section.id} />`;
       })}
@@ -3096,6 +3125,8 @@ function Shell({ vault, onLock }) {
   const [differences, setDifferences] = useState([]);
   const [noticeClosed, setNoticeClosed] = useState(false);
   const rescan = useCallback(async () => {
+    // A server that holds no assets has no folder scan (ADR 0105 item 14).
+    if (!assetMode().holdAssets) return [];
     const result = await api('/library/scan', { method: 'POST' });
     setDifferences(result.differences);
     return result.differences;
@@ -3805,6 +3836,7 @@ function Studio({ epoch }) {
   const load = useCallback(async () => {
     try {
       const [nextStatus, nextLibrary] = await Promise.all([api('/status'), api('/library')]);
+      holdAssets = nextStatus.hold_assets !== false;
       setStatus(nextStatus);
       setLibrary(nextLibrary);
       setError(null);

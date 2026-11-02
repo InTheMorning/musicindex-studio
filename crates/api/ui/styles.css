@@ -1090,6 +1090,18 @@ select option { background: var(--level-3); color: var(--text); }
 .entry-row > summary .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-row > summary .sub { color: var(--muted); font-size: var(--text-callout); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-row > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
+/* On a server that holds no assets, the status of a file is the most
+   important information of its row. At a narrow width, it goes on a second
+   line below the name (ADR 0105 item 18). */
+@media (max-width: 760px) {
+  .entry-row > summary:has(> .file-status) {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 2px;
+  }
+  .entry-row > summary > .file-status { grid-column: 3; grid-row: 2; white-space: normal; }
+}
 /* A link row in an open entry, such as "Nostr" (ADR 0074), starts at the
    inner space of the entry, as each field of the entry does. */
 .entry-row > .form > .link-row { padding-inline: 0; }
@@ -1604,7 +1616,7 @@ button.outline-feed {
    error color on its own row only, not an entity color (ADR 0018). */
 .host-op-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 16px; flex-wrap: wrap; }
 .host-op-row .kind { flex: none; width: 4.5rem; font-weight: 600; }
-.host-op-row .text { flex: 1; min-width: 0; display: grid; }
+.host-op-row .text { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .host-op-row .title { font-weight: 600; }
 .host-op-row .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
 .host-op-row .size { flex: none; color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }

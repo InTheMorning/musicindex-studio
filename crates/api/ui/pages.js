@@ -62,18 +62,22 @@ const PAGES = {
     { id: 'support', tier: 'details' },
     { id: 'delete', tier: 'limits' },
   ],
-  'studio-settings': ({ server }) => [
+  'studio-settings': ({ server, holdAssets = true }) => [
     ...(server ? [{ id: 'account', tier: 'setup' }] : []),
     { id: 'apps', tier: 'setup' },
     { id: 'announcements', tier: 'setup' },
     { id: 'nostr', tier: 'setup' },
-    { id: 'library', tier: 'limits' },
+    // A server with `--hold-assets off` has no downloads into the library, so
+    // the section "Files on this server" takes the place of the library
+    // limits (ADR 0105 items 14 and 17).
+    server && !holdAssets ? { id: 'files', tier: 'limits' } : { id: 'library', tier: 'limits' },
   ],
 };
 
 // The sections of the page `name`, in their sequence. Each call gives a new
 // copy, so a caller can change the copy. The page `studio-settings` leaves out
-// `account` when `options.server` is false. The other pages ignore `options`.
+// `account` when `options.server` is false. It shows `files` in the place of
+// `library` when `options.server` is true and `options.holdAssets` is false. The other pages ignore `options`.
 export function pageSequence(name, options = {}) {
   return PAGES[name](options);
 }

@@ -5,8 +5,9 @@ This page shows the files of the release and the file hosts that hold them.
 Use this page to keep copies on more than one file host.
 You can also move a release to a different file host.
 
-Each button of this page also works on a server.
-On a server, the library folder is in your account on the server. It is not on your computer.
+Each button of this page also works on a server that keeps your files.
+On that server, the library folder is in your account on the server. It is not on your computer.
+A server can also keep no audio and no images. See [A server that keeps no audio and no images](#a-server-that-keeps-no-audio-and-no-images).
 
 ## What the page shows
 
@@ -72,6 +73,65 @@ The limit includes the library files, the downloads and the music files that you
 When the account is full, a download fails with "storage_full: the storage limit of this account is reached".
 An import of a music file then shows "the storage limit of this account is reached".
 Remove files that you do not use, or get a larger limit from the operator.
+
+## A server that keeps no audio and no images
+
+A server has one of two modes. The operator of the server sets the mode.
+
+- **Keeps your files.** The server keeps your audio files and images in your account. This page works as this guide describes above.
+- **Keeps no audio and no images.** The server keeps a file only until the write that sends it to a file host. This is the default mode.
+
+In the second mode, the page starts with the notice "This server keeps no audio and no images."
+The server also keeps the feed XML, the drafts and the versions.
+Your file hosts and your own computer keep your files. Keep your own copy of each file.
+Settings has the section **Files on this server**. It shows the rule and the space that your account uses.
+
+In this mode, the page has no **Download All**, no **Download** and no **Scan the Library Folder**.
+The server has no library folder.
+
+### The status of a file
+
+Each file shows one status on its line:
+
+| Status | Meaning |
+| --- | --- |
+| On its file host | A file host has the file. The server keeps no copy. |
+| Waits for the write | The server has the file, and no file host has it. The status gives the date when Studio removes the file. |
+| On this server only | The server has the file, and no file host has it. This status is for a file from before the mode change. |
+| Removed from this server | Studio removed the file after 7 days. |
+
+On a narrow screen, the status is on a second line below the name of the file.
+
+### The expiry of a new file
+
+A new file waits on the server until you write the draft.
+Studio sends a file to a file host only after you read the changes and write.
+If you do not write in 7 days from the import, Studio removes the file from the server.
+The draft keeps the address of the file.
+
+When Studio removes a file that the draft uses, the page shows "1 file of this draft is missing."
+Studio cannot write the draft until you add the file again. Studio does not change the draft by itself.
+
+1. Open the file on the page **Files**. It shows "Removed from this server".
+2. Select **Add the File Again**.
+3. Select the same file from your computer. The name and the content must be the same as before.
+
+If you select a different file, Studio shows an error and keeps the draft as it is.
+
+### Before you write
+
+The review sheet tells you that Studio removes its copies of the sent files after the write.
+The sheet **Add tracks** tells you the same rule before you send the files.
+
+### Download to This Device
+
+Open a file on a server and select **Download to This Device**.
+Your browser saves the file on your computer.
+The server reads the file from its own storage or from the file host that has a copy. It does not keep a new copy.
+This button shows on a server in the two modes. It does not show in the desktop app.
+
+To keep a full library of your files, use Studio on your computer.
+See [Keep a full library on your computer](start-on-desktop.md#keep-a-full-library-on-your-computer).
 
 ## Other files on the file hosts
 

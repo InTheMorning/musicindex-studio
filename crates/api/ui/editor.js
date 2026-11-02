@@ -4,7 +4,7 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { api, askConfirm, CopyButton, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
+import { api, assetMode, askConfirm, CopyButton, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
@@ -20,6 +20,10 @@ import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
+import {
+  fileState, fileStatus, canDownloadToDevice, canCopyOrMove, missingCount, missingNotice, reviewNotice, dayText,
+  SERVER_NOTICE, ADD_TRACKS_NOTICE, ENTRY_TEXT,
+} from './assets.js';
 import { isExplicit } from './explicit.js';
 import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
@@ -1259,6 +1263,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
           onChange=${(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         <label for="import-input" class="button action">＋ Choose Music and Image Files</label>
       </div>
+      ${!assetMode().holdAssets && html`<div class="notice" role="status">${ADD_TRACKS_NOTICE}</div>`}
       ${rows.length === 0 && html`<button class="button link" type="button" onClick=${onAddress}>The Audio Is Already Online</button>`}
       ${rows.length === 0 && html`<p class="hint">Select the files to import.</p>`}
       ${rows.length > 0 && html`<div class="group">
@@ -1587,6 +1592,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   // skips a deletion that `diff.blocked` names, and the user sees it here.
   const addressesBlocked = draft.bad.length > 0;
   const stale = error && error.code === 'diff_not_approved';
+  // The files that the write sends. On a server that holds no assets,
+  // Studio then removes its copies (ADR 0105 item 19).
+  const sentCount = diff && !assetMode().holdAssets ? diff.operations.filter((op) => op.kind === 'upload').length : 0;
   const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
@@ -1615,6 +1623,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
+      ${sentCount > 0 && html`<div class="notice" role="status">${reviewNotice(sentCount)}</div>`}
       ${choosing && html`<div class="group rows">
         <p class="hint">Studio cannot write to the file host of this feed. Connect that file host, or move the feed to a file host that you connected.</p>
         <div class="actions">
@@ -3201,17 +3210,23 @@ function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUn
 // The entry shows one "Copy to" button for each host that has no copy of
 // the file and no pending copy of it yet (ADR 0037). Each pending copy of
 // the file, from `pending_copies`, shows its own row with "Undo".
-function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDownload, onStop, onOperation, onUndo, onChanged }) {
+function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDownload, onStop, onOperation, onUndo, onChanged, onAgain, onSave }) {
+  // On a server that holds no assets, the status line names the state of
+  // the file (ADR 0105). `mode.holdAssets` is true on the desktop.
+  const mode = assetMode();
+  const state = fileState(file, mode);
+  const status = fileStatus(file, mode) ?? (file.local
+    ? `${file.copies.length} ${file.copies.length === 1 ? 'copy' : 'copies'}`
+    : downloadSummary(download));
   const summary = html`<span class="badge">${formatLabel(file.media_type)}</span>
     <span class="title">${file.path}</span>
-    <span class="sub">${file.in_use ? 'In use' : 'Not in use'} · ${file.local
-      ? `${file.copies.length} ${file.copies.length === 1 ? 'copy' : 'copies'}`
-      : downloadSummary(download)}</span>`;
+    <span class=${state === null ? 'sub' : 'sub file-status'}>${file.in_use ? 'In use' : 'Not in use'} · ${status}</span>`;
+  const hostName = connectorName(connectors, file.own_connector_id ?? defaultHost);
   const reference = (connectorId) => onOperation({ op: 'reference', file: file.id, connector_id: connectorId, from_url: file.url });
   const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
   // A copy or a move of a remote file asks first (ADR 0038 item 12). The
   // size comes from the row.
-  const askFirst = async () => file.local
+  const askFirst = async () => file.local || !mode.holdAssets
     || await askConfirm(CONFIRMS.downloadFirst(file.size > 0 ? fileSize(file.size) : null));
   const copyTo = async (connectorId) => {
     if (await askFirst()) onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
@@ -3229,16 +3244,24 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDo
     ...file.copies.map((c) => c.connector_id),
     ...file.pending_copies.map((p) => p.connector_id),
   ];
-  const copyTargets = connectors.filter((c) => !takenHosts.includes(c.id));
+  const copyTargets = canCopyOrMove(file) ? connectors.filter((c) => !takenHosts.includes(c.id)) : [];
   return html`<${EntryRow} group="library-files" cid=${file.id} summary=${summary}>
     <div class="file-rows">
-      ${!file.local && html`<p class="hint">Not in the library. Studio uses the file on its file host.</p>`}
-      ${!file.local && html`<${DownloadControls} download=${download} busy=${busy}
+      ${state === 'removed' && html`<div class="notice error" role="alert"><strong>${ENTRY_TEXT.removed().strong}</strong> ${ENTRY_TEXT.removed().text}</div>
+        <${AddFileAgain} file=${file} busy=${busy} onAgain=${onAgain} />`}
+      ${state === 'pending' && ENTRY_TEXT.pending(dayText(file.expires_at), hostName).map((text) => html`<p class="hint" key=${text}>${text}</p>`)}
+      ${state === 'on_host' && html`<p class="hint">${ENTRY_TEXT.on_host(connectorName(connectors, file.copies[0].connector_id))}</p>`}
+      ${state === 'server_only' && html`<div class="notice error" role="alert"><strong>${ENTRY_TEXT.server_only(hostName).strong}</strong> ${ENTRY_TEXT.server_only(hostName).text}</div>`}
+      ${!file.local && mode.holdAssets && html`<p class="hint">Not in the library. Studio uses the file on its file host.</p>`}
+      ${!file.local && mode.holdAssets && html`<${DownloadControls} download=${download} busy=${busy}
         onDownload=${() => onDownload(file.id)} onStop=${() => onStop(file.id)} />`}
       ${sizeDiffers && html`<p class="hint">The feed gives ${fileSize(file.length_in_feed)}. The file is ${fileSize(file.size)}.</p>`}
-      ${file.local && file.copies.length === 0 && file.pending_copies.length === 0
+      ${file.local && file.copies.length === 0 && file.pending_copies.length === 0 && state === null
         && html`<p class="hint">Studio sends this file to its file host when you write.</p>`}
-      ${file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
+      ${canDownloadToDevice(file, mode) && html`<div class="actions">
+        <button class="button action" type="button" disabled=${busy} onClick=${() => onSave(file.id)}>Download to This Device</button>
+      </div>`}
+      ${canCopyOrMove(file) && file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
         connectors=${connectors} busy=${busy} onMoveTo=${moveTo} onReference=${reference} onDelete=${del} onUndo=${onUndo} />`)}
       ${file.pending_copies.map((pending) => html`<div class="copy-row" key=${`pending-${pending.operation_id}`}>
         <span class="title">Copy to ${connectorName(connectors, pending.connector_id)} pending</span>
@@ -3261,6 +3284,28 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDo
       </div>
     </div>
   <//>`;
+}
+
+// "Add the File Again" for a removed file (ADR 0105 item 10). The user
+// selects the same file. The upload route checks the name and the bytes.
+function AddFileAgain({ file, busy, onAgain }) {
+  const input = useRef(null);
+  const [sent, setSent] = useState(null);
+  const again = useAction();
+  const choose = (e) => {
+    const [picked] = e.target.files;
+    e.target.value = '';
+    if (!picked) return;
+    setSent(0);
+    again.run(() => onAgain(file, picked, setSent)).finally(() => setSent(null));
+  };
+  return html`<div class="actions">
+    <input ref=${input} class="visually-hidden" type="file" tabindex="-1" aria-label=${`Select ${file.path} again`}
+      accept=${file.media_type || undefined} onChange=${choose} />
+    <button class="button action" type="button" disabled=${busy || again.busy} onClick=${() => input.current.click()}>
+      ${again.busy ? `Adding… ${progressPercent(sent || 0, file.size)}%` : 'Add the File Again'}</button>
+  </div>
+  <${ErrorNotice} error=${again.error} />`;
 }
 
 // A host file of the release folder that is not a copy of a library file
@@ -3380,6 +3425,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   // not in the list now, is complete or stopped. The page then loads the
   // files route again. A failed download stays in the list.
   const loadDownloads = async () => {
+    // A server that holds no assets has no downloads (ADR 0105 item 14).
+    if (!assetMode().holdAssets) return;
     try {
       const list = (await api(`/feeds/${feed.id}/downloads`)).downloads;
       const active = new Set(list.filter((d) => d.state !== 'failed').map((d) => d.file_id));
@@ -3442,6 +3489,28 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   });
 
   const runLibraryScan = () => scan.run(async () => { await onRescan(); await load(); });
+
+  // "Add the File Again": the upload routes take the path of the removed
+  // file in `replace` (ADR 0105 item 10). The core checks the name and the
+  // bytes. The shell loads the draft again, since the row has its bytes now.
+  const addAgain = async (file, picked, onProgress) => {
+    await sendInParts(feed.id, picked, { replace: file.path, onProgress });
+    await load();
+    onOpsChanged();
+  };
+
+  // "Download to This Device": get a ticket for the file, and open the
+  // download route in a hidden link. The browser saves the response
+  // (ADR 0105 item 15).
+  const saveToDevice = (fileId) => run(async () => {
+    const { ticket } = await api('/media/tickets', { method: 'POST', body: { file: fileId } });
+    const link = document.createElement('a');
+    link.href = `/media/download?ticket=${encodeURIComponent(ticket)}`;
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  });
 
   // Send the decision of the user for one difference. Then scan again and
   // load the files again. A new file replaces the bytes of the feed, so
@@ -3510,9 +3579,13 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   if (!data) return html`<section class="page-section"><p class="hint" role="status">Loading the files…</p></section>`;
 
   const defaultHost = data.files_connector_id ?? feed.connector_id;
+  const mode = assetMode();
+  const missing = mode.holdAssets ? 0 : missingCount(data.files);
   const feedHost = data.feed_move ? data.feed_move.connector_id : feed.connector_id;
 
-  return html`${differences.length > 0 && html`<section class="page-section"><h2>Changes in the library folder</h2>
+  return html`${!mode.holdAssets && html`<div class="notice" role="status"><strong>${SERVER_NOTICE.strong}</strong> ${SERVER_NOTICE.text}</div>`}
+    ${missing > 0 && html`<div class="notice error" role="alert"><strong>${missingNotice(missing).strong}</strong> ${missingNotice(missing).text}</div>`}
+    ${differences.length > 0 && html`<section class="page-section"><h2>Changes in the library folder</h2>
       <div class="group">
         ${differences.map((difference) => html`<${ChangeRow}
           key=${`${difference.kind}-${difference.file ?? difference.path}`} difference=${difference}
@@ -3524,8 +3597,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       <div class="actions">
         <button class="button action" type="button" disabled=${scan.busy} onClick=${runScan}>
           ${scan.busy ? 'Scanning…' : 'Scan the File Hosts'}</button>
-        <button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
-          Scan the Library Folder</button>
+        ${mode.holdAssets && html`<button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
+          Scan the Library Folder</button>`}
       </div>
       <${ErrorNotice} error=${scan.error} />
       <${ErrorNotice} error=${opError} />
@@ -3553,7 +3626,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     </section>
 
     <section class="page-section"><h2>Library files</h2>
-      ${data.remote_count > 0 && html`<div class="notice download-notice">
+      ${mode.holdAssets && data.remote_count > 0 && html`<div class="notice download-notice">
         <span>${activeCount > 0
           ? `Downloading ${activeCount} ${activeCount === 1 ? 'file' : 'files'}…`
           : `${data.remote_count} ${data.remote_count === 1 ? 'file is' : 'files are'} not in the library (${fileSize(data.remote_bytes)}).`}</span>
@@ -3569,6 +3642,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
           connectors=${connectors} busy=${busy} onOperation=${addOperation} onUndo=${undoOperation}
           download=${downloads.find((d) => d.file_id === file.id)}
           onDownload=${(fileId) => startDownloads({ files: [fileId] })} onStop=${stopDownload}
+          onAgain=${addAgain} onSave=${saveToDevice}
           onChanged=${(path, body) => setFileHost(path, body)} />`)}
       </div>`}
     </section>

@@ -2,7 +2,11 @@
 
 Decision: [ADR 0105](../adr/0105-a-public-server-holds-no-assets.md). It uses ADR 0007, ADR 0033 and ADR 0036 items 6, 7 and 15. It also uses ADR 0040, ADR 0059 item 4, ADR 0062 item 29 and ADR 0071.
 
-Status: In progress. Packets 070a and 070b are complete.
+Status: Complete, in four packets, with the screenshot visual check of 070c on 2026-11-01. The human test is open. Notes from 070c:
+
+- The status route also gives `storage` (`used` and `limit`, or `null` on the desktop), because the Settings section needs the space in use.
+- The files route gives `in_use` true for a removed file that the draft uses. Without this, the Files page cannot count the missing files.
+- A server with `off` shows the section "Files on this server" in the place of the section "Library" of Settings, because the limits of the library apply to downloads.
 
 ## Goal
 
@@ -57,7 +61,7 @@ With `--hold-assets off`, the server keeps an audio file or an image only until 
 
 ## Files
 
-Change: `crates/server/src/config.rs`, `crates/server/src/users.rs`, `crates/api/src/workspace.rs`, `crates/api/src/routes.rs`, `crates/api/src/media.rs`, `crates/api/src/lib.rs`, `crates/core/src/collection.rs`, `crates/core/src/library.rs`, `crates/core/src/pipeline.rs`, `crates/core/src/download.rs`, `crates/api/ui/editor.js`, `crates/api/ui/app.js`, `crates/api/ui/pages.js`, a new UI model module and its Node test, `deploy/compose.yml`, `deploy/env.example`, `docs/runbooks/studio-server.md`, `docs/user-guide/release-files.md`, `docs/user-guide/start-on-desktop.md`.
+Change: `crates/server/src/config.rs`, `crates/server/src/users.rs`, `crates/api/src/workspace.rs`, `crates/api/src/routes.rs`, `crates/api/src/media.rs`, `crates/api/src/lib.rs`, `crates/core/src/collection.rs`, `crates/core/src/library.rs`, `crates/core/src/pipeline.rs`, `crates/core/src/download.rs`, `crates/api/ui/editor.js`, `crates/api/ui/app.js`, `crates/api/ui/pages.js`, `crates/api/ui/assets.js` (the model module) with `crates/api/ui-tests/assets.test.mjs`, `crates/api/src/ui.rs`, `crates/api/ui/styles.css`, `deploy/compose.yml`, `deploy/env.example`, `docs/runbooks/studio-server.md`, `docs/user-guide/release-files.md`, `docs/user-guide/start-on-desktop.md`.
 
 ## Constraints
 

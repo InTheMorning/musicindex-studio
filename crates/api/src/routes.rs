@@ -109,6 +109,12 @@ pub(crate) async fn status(State(shared): State<Shared>) -> ApiResult {
             "version": env!("CARGO_PKG_VERSION"),
             // ADR 0105 item 1: false on a server with `--hold-assets off`.
             "hold_assets": w.holds_assets(),
+            // The space in use and the limit of a server user, for the
+            // Settings section "Files on this server" (ADR 0105 item 17).
+            // `null` on the desktop.
+            "storage": w.rules.as_ref().map(|rules| {
+                json!({ "used": rules.used(), "limit": rules.storage_limit })
+            }),
             "vault": w.vault_state(),
             "connectors": w.collection.connectors()?.len(),
             "feeds": w.collection.feeds()?.len(),
@@ -3097,7 +3103,11 @@ fn file_in_use(
     addresses: &[String],
 ) -> Result<bool, ApiError> {
     Ok(remote_file_in_use(collection, hosts, file, addresses)?
-        || (has_host && file.local && pipeline::library_file_in_use(collection, hosts, file)?))
+        // A removed pending file has no local bytes, and the draft can still use
+        // its address (ADR 0105 item 10).
+        || (has_host
+            && (file.local || file.removed_at.is_some())
+            && pipeline::library_file_in_use(collection, hosts, file)?))
 }
 
 /// The query of the picker routes: `kind` is `image` or `audio`.

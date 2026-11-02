@@ -11664,6 +11664,15 @@ async fn status_gives_hold_assets_false_with_off_and_true_with_on_and_on_the_des
         body["hold_assets"], true,
         "ADR 0105 item 2: the desktop holds assets"
     );
+    assert!(
+        body["storage"].is_null(),
+        "the desktop has no storage rules"
+    );
+    let (_, body) = call(&off, "GET", "/api/v1/status", None).await;
+    assert!(
+        body["storage"]["used"].is_u64() && body["storage"]["limit"].is_u64(),
+        "ADR 0105 item 17: a server gives the space in use and the limit"
+    );
 }
 
 #[tokio::test]
@@ -11878,6 +11887,10 @@ async fn add_the_file_again_gives_a_removed_file_its_bytes_and_the_write_then_su
     let row = release_file(&app, id, "tagged.mp3").await;
     assert_eq!(row["local"], false);
     assert_eq!(row["removed_at"].as_i64(), Some(imported + 8 * day));
+    assert_eq!(
+        row["in_use"], true,
+        "ADR 0105 item 10: the draft still uses a removed file, so the Files page counts it as missing"
+    );
 
     // The draft keeps the address, and the write refuses it.
     let (status, body) = write_now(&app, id).await;

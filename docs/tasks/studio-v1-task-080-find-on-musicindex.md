@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0117](../adr/0117-the-page-of-a-person-finds-values-on-musicindex.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md) and [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md).
 
-Status: Not started. It starts after the commit of [task 079](studio-v1-task-079-person-save-and-discard.md). Packet 080a extends the save of packet 079a, and packet 080b uses the pending changes of packet 079b. The planning model examines the packets again after that commit.
+Status: In progress. [Task 079](studio-v1-task-079-person-save-and-discard.md) is committed. Packet 080a extends the save of packet 079a, and packet 080b uses the pending changes of packet 079b. The planning model examined the packets again on 2026-11-02, and changed item 2 of packet 080b.
 
 ## Goal
 
@@ -123,7 +123,7 @@ These choices are fixed. Do not change them.
     - `fillRows(values, pending)`: one row for each value of ADR 0117 item 9, with `selectable`, `selected` (the start values of item 11), the text of item 12 for a row that cannot be selected, and the warning line of a wallet.
     - `fillLabel(count)`: "Fill 1 Field" or "Fill N Fields".
     - `fillSource(values)`: "From musicindex: the {word} feed {title}", with the lowercase word of the kind.
-2. `savedValues` of task 079 gets `wallets: []` and `keys: []`. A fill adds to them. `pendingKeys` counts each added wallet and key. `saveBody` sends them.
+2. `savedValues` of task 079 gets `wallets: []` and `keys: []`. A fill adds to them. `isPending` compares these two lists by their length, not with `!==`. `pendingKeys` counts each added wallet and key, and `pendingStatus` gets that count. `saveBody(saved, values)` sends them. `LEAVE_NAMES` gets a name for an added wallet and an added key. The page changes its values only through the `update` function of task 079, which uses the current state.
 3. The `profile` section gets "Find on musicindex" (`button action`) below the role line and the key lines.
 4. The search sheet has the title "Find on musicindex: {name}" and a search field that starts with the name. Below the field are the hint of the mockup and one `page-section` for each level with rows. A level with no row does not show. It sends the search when it opens and 300 ms after the last change of the text. A row is a `ListRow` with the picture, the title, the type line with its dot, and `hasLine`. The only button is "Cancel".
 5. A row opens the values sheet "From musicindex: {title}". It has the feed row with the type line and the link "Open on musicindex.org" to `https://musicindex.org/#feed={guid}` (`target="_blank"`, `rel="noopener"`). The section "Fill" has the check box rows of `fillRows`, then the note of ADR 0117 item 13. The buttons are "Back" (normal) and the label of `fillLabel` (primary), which is disabled with no selected row.

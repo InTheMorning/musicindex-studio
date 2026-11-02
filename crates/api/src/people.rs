@@ -86,6 +86,9 @@ fn person_json(
         value["pays"] = json!(uses.pays);
         value["credited"] = json!(uses.credited);
         value["places"] = json!(uses.places);
+        // ADR 0111 item 12: the number of feeds that need a correction.
+        value["needs_correction"] =
+            json!(people::check(collection, person, lookups)?.needs_correction());
     }
     Ok(value)
 }
@@ -124,6 +127,18 @@ pub(crate) async fn get_person(State(shared): State<Shared>, Path(id): Path<i64>
         let person = people::person(&w.collection, PersonId(id))?;
         let lookups = lookups(&w.collection)?;
         Ok(Json(person_json(&w.collection, &person, &lookups, false)?))
+    })
+    .await
+}
+
+/// The check of the feeds of one person (ADR 0111 items 9 to 13). The route
+/// reads the collection and makes no request.
+pub(crate) async fn check_person(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let person = people::person(&w.collection, PersonId(id))?;
+        let lookups = lookups(&w.collection)?;
+        let check = people::check(&w.collection, &person, &lookups)?;
+        Ok(Json(json!(check)))
     })
     .await
 }

@@ -10269,6 +10269,40 @@ async fn items_are_added_to_a_person_and_a_conflict_gives_409() {
 }
 
 #[tokio::test]
+async fn the_check_route_gives_the_state_of_each_feed() {
+    let (app, connector) = publisher_app().await;
+    let (credit, payee) = credit_and_payee_feeds(&app, connector).await;
+    let ann = new_person(&app, "Ann").await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{ann}/keys"),
+        Some(json!({ "npub": "npub1ann" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, check) = call(&app, "GET", &format!("/api/v1/people/{ann}/check"), None).await;
+    assert_eq!(status, StatusCode::OK, "{check}");
+    let feeds = check["feeds"].as_array().unwrap();
+    let credited = feeds
+        .iter()
+        .find(|f| f["feed_id"] == json!(credit))
+        .unwrap();
+    assert_eq!(credited["state"], "needs_correction", "{check}");
+    assert_eq!(credited["findings"][0]["kind"], "credit_key", "{check}");
+    // The payee feed has no wallet of the person, so the check lists no
+    // payee finding for it.
+    assert!(
+        feeds.iter().all(|f| f["feed_id"] != json!(payee)),
+        "{check}"
+    );
+    let (_, person) = call(&app, "GET", &format!("/api/v1/people/{ann}"), None).await;
+    assert_eq!(person["needs_correction"], 1, "{person}");
+    let (status, _) = call(&app, "GET", "/api/v1/people/999/check", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn the_more_route_gives_the_items_of_the_feeds_that_match_a_person() {
     let (app, connector) = publisher_app().await;
     credit_and_payee_feeds(&app, connector).await;
@@ -10371,6 +10405,7 @@ async fn each_people_route_needs_the_token() {
         ("POST", "/api/v1/people/suggestions/dismiss"),
         ("POST", "/api/v1/people/1/changes"),
         ("POST", "/api/v1/people/1/changes/preview"),
+        ("GET", "/api/v1/people/1/check"),
         ("POST", "/api/v1/people/1/items"),
         ("GET", "/api/v1/people/1/more"),
         ("POST", "/api/v1/people/1/merge"),

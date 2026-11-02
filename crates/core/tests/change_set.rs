@@ -1024,3 +1024,240 @@ fn add_to_releases_writes_the_usual_role_and_the_usual_group() {
         "ADR 0112 item 6: a usual role that is not of the list must keep its text and its group."
     );
 }
+
+/// A feed with a person credit, and one payee for each case of ADR 0111.
+const CORRECT_FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">
+  <channel>
+    <title>Album</title>
+    <podcast:medium>music</podcast:medium>
+    <podcast:person role=\"vocalist\" href=\"https://old.example\" npub=\"npub1city\">Ann</podcast:person>
+    <podcast:person>Ann</podcast:person>
+    <podcast:value type=\"lightning\" method=\"keysend\">
+      <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"second\" split=\"30\" fee=\"true\"/>
+      <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"first\" split=\"20\"/>
+      <podcast:valueRecipient name=\"ann\" type=\"node\" address=\"stranger\" split=\"50\"/>
+    </podcast:value>
+  </channel>
+</rss>
+";
+
+fn correct_feed() -> studio_core::feed::Feed {
+    let doc = studio_core::xml::Document::parse(CORRECT_FEED).unwrap();
+    studio_core::feed::Feed::read(&doc).unwrap()
+}
+
+fn correct_person(s: &Setup) -> people::PersonId {
+    let id = people::add_person(
+        &s.collection,
+        &PersonFields {
+            name: "Ann".into(),
+            usual_role: "Vocalist".into(),
+            img: "https://img.example/ann.png".into(),
+            href: "https://ann.example".into(),
+            ..PersonFields::default()
+        },
+    )
+    .unwrap();
+    for address in ["first", "second"] {
+        people::add_wallet(
+            &s.collection,
+            id,
+            &plain(address),
+            "node",
+            people::LinkEvidence::User,
+        )
+        .unwrap();
+    }
+    people::add_key(&s.collection, id, "npub1ann").unwrap();
+    id
+}
+
+fn correct(
+    s: &Setup,
+    id: people::PersonId,
+    operation: &PersonOperation,
+) -> (Wallet, RecipientOperation) {
+    person_operation(&s.collection, id, operation, &no_lookups()).unwrap()
+}
+
+#[test]
+fn correct_applies_only_the_selected_changes_and_keeps_a_role() {
+    let s = setup();
+    let id = correct_person(&s);
+    let (wallet, op) = correct(
+        &s,
+        id,
+        &PersonOperation::Correct {
+            key: Some("npub1ann".into()),
+            payment: false,
+            details: false,
+            role: false,
+            other_payees: false,
+        },
+    );
+    let mut feed = correct_feed();
+    assert!(change_set::apply(&mut feed, &wallet, &op).is_changed());
+    assert_eq!(feed.persons[0].value.npub.as_deref(), Some("npub1ann"));
+    assert_eq!(feed.persons[1].value.npub.as_deref(), Some("npub1ann"));
+    assert_eq!(
+        feed.persons[0].value.href.as_deref(),
+        Some("https://old.example"),
+        "ADR 0111 item 15: Correct must change only the selected parts."
+    );
+    assert_eq!(feed.persons[1].value.role, None);
+    assert_eq!(
+        feed.values[0].value.recipients[2].value.address.as_deref(),
+        Some("stranger")
+    );
+}
+
+#[test]
+fn correct_gives_a_credit_with_no_role_the_usual_role_and_keeps_the_other_roles() {
+    let s = setup();
+    let id = correct_person(&s);
+    let (wallet, op) = correct(
+        &s,
+        id,
+        &PersonOperation::Correct {
+            key: None,
+            payment: false,
+            details: true,
+            role: true,
+            other_payees: false,
+        },
+    );
+    let mut feed = correct_feed();
+    assert!(change_set::apply(&mut feed, &wallet, &op).is_changed());
+    assert_eq!(
+        feed.persons[0].value.role.as_deref(),
+        Some("vocalist"),
+        "ADR 0111 item 17: Correct must keep the role of a credit that has one."
+    );
+    assert_eq!(feed.persons[1].value.role.as_deref(), Some("vocalist"));
+    assert_eq!(feed.persons[1].value.group.as_deref(), Some("music"));
+    assert_eq!(
+        feed.persons[0].value.href.as_deref(),
+        Some("https://ann.example")
+    );
+    assert_eq!(
+        feed.persons[1].value.img.as_deref(),
+        Some("https://img.example/ann.png")
+    );
+}
+
+#[test]
+fn correct_with_other_payees_keeps_the_split_and_the_fee() {
+    let s = setup();
+    let id = correct_person(&s);
+    let (wallet, op) = correct(
+        &s,
+        id,
+        &PersonOperation::Correct {
+            key: None,
+            payment: true,
+            details: false,
+            role: false,
+            other_payees: true,
+        },
+    );
+    let mut feed = correct_feed();
+    assert!(change_set::apply(&mut feed, &wallet, &op).is_changed());
+    let list: Vec<(String, String, bool)> = feed.values[0]
+        .value
+        .recipients
+        .iter()
+        .map(|e| {
+            (
+                e.value.address.clone().unwrap(),
+                e.value.split.clone().unwrap(),
+                e.value.fee.is_some(),
+            )
+        })
+        .collect();
+    // The fee recipient stays apart. The other two merge: 20 + 50.
+    assert_eq!(
+        list,
+        [
+            ("first".to_owned(), "30".to_owned(), true),
+            ("first".to_owned(), "70".to_owned(), false)
+        ],
+        "ADR 0111 item 15: Correct must keep the split and the fee of each payee."
+    );
+}
+
+#[test]
+fn correct_gives_not_changed_for_a_feed_with_no_change_and_refuses_a_wrong_key() {
+    let s = setup();
+    let id = correct_person(&s);
+    let (wallet, op) = correct(
+        &s,
+        id,
+        &PersonOperation::Correct {
+            key: None,
+            payment: true,
+            details: true,
+            role: true,
+            other_payees: true,
+        },
+    );
+    let mut feed =
+        studio_core::feed::Feed::read(&studio_core::xml::Document::parse(FEED).unwrap()).unwrap();
+    let outcome = change_set::apply(&mut feed, &wallet, &op);
+    assert!(
+        !outcome.is_changed(),
+        "ADR 0111 item 16: a feed with no change must give Not changed."
+    );
+    let error = person_operation(
+        &s.collection,
+        id,
+        &PersonOperation::Correct {
+            key: Some("npub1other".into()),
+            payment: false,
+            details: false,
+            role: false,
+            other_payees: false,
+        },
+        &no_lookups(),
+    )
+    .unwrap_err();
+    assert!(format!("{error}").contains("not a key of the person"));
+    let (_, nothing) = correct(
+        &s,
+        id,
+        &PersonOperation::Correct {
+            key: None,
+            payment: false,
+            details: false,
+            role: false,
+            other_payees: false,
+        },
+    );
+    assert!(change_set::check_operation(&nothing).is_err());
+}
+
+#[test]
+fn correct_writes_through_a_change_set() {
+    let s = setup_with(CORRECT_FEED);
+    let id = correct_person(&s);
+    let mut starter = start(&s);
+    let set = make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &PersonOperation::Correct {
+            key: Some("npub1ann".into()),
+            payment: true,
+            details: false,
+            role: false,
+            other_payees: false,
+        },
+        &s.feeds,
+    )
+    .unwrap();
+    assert!(
+        set.feeds.iter().all(|f| f.outcome.is_changed()),
+        "ADR 0111 item 16: Correct must make a change set with a diff for each feed."
+    );
+    assert_eq!(set.person, Some(id));
+}

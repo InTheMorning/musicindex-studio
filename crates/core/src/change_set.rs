@@ -179,6 +179,71 @@ pub enum RecipientOperation {
         /// The credits of the person.
         credits: CreditMatch,
     },
+    /// Correct the feeds of a person (ADR 0111 items 15 to 17). Each field
+    /// that is `None` or `false` stays as it is.
+    Correct {
+        /// The key that each credit of the person gets.
+        npub: Option<String>,
+        /// True when each recipient of the wallet gets `address`.
+        payment: bool,
+        /// True when each payee of a name in `credits.names` gets
+        /// `address`.
+        other_payees: bool,
+        /// The default address and its type. It is `Some` when `payment` or
+        /// `other_payees` is true.
+        address: Option<CorrectAddress>,
+        /// The picture that each credit gets.
+        img: Option<String>,
+        /// The information address that each credit gets.
+        href: Option<String>,
+        /// The role and the group that a credit with no role gets.
+        role: Option<CorrectRole>,
+        /// The credits of the person.
+        credits: CorrectMatch,
+    },
+}
+
+/// The address that [`RecipientOperation::Correct`] writes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CorrectAddress {
+    /// The `address`.
+    pub address: String,
+    /// The `customKey`.
+    pub custom_key: Option<String>,
+    /// The `customValue`.
+    pub custom_value: Option<String>,
+    /// The `type`.
+    pub recipient_type: String,
+}
+
+/// The role and the group that [`RecipientOperation::Correct`] gives a
+/// credit with no role.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CorrectRole {
+    /// The role.
+    pub role: String,
+    /// The group, or empty text.
+    pub group: String,
+}
+
+/// The credits and the payees of a person for
+/// [`RecipientOperation::Correct`] (ADR 0111 item 10). A credit also matches
+/// by the normal name of the person or of a credit name, whatever its key.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CorrectMatch {
+    /// The credits that [`CreditMatch`] finds.
+    pub credits: CreditMatch,
+    /// The normal names of the person and of its credit names.
+    pub names: Vec<String>,
+}
+
+impl CorrectMatch {
+    /// True when `person` matches `credits`, or has a normal name in
+    /// `names`.
+    #[must_use]
+    pub fn matches(&self, person: &Person) -> bool {
+        self.credits.matches(person) || self.names.contains(&people::normal_name(&person.name))
+    }
 }
 
 /// The credits of a person (ADR 0098 item 6). The change set keeps the
@@ -555,7 +620,84 @@ fn apply_block(
             Some(payee) => add_payee(block, wallet, payee.to_recipient(), payee.percent),
             None => BlockResult::Skipped(Cause::NothingSelected),
         },
+        RecipientOperation::Correct { .. } => correct_in_block(block, wallet, operation),
     }
+}
+
+/// The block part of [`RecipientOperation::Correct`].
+fn correct_in_block(
+    block: &mut ValueBlock,
+    wallet: &Wallet,
+    operation: &RecipientOperation,
+) -> BlockResult {
+    match operation {
+        RecipientOperation::Correct {
+            payment,
+            other_payees,
+            address: Some(address),
+            credits,
+            ..
+        } => correct_block(
+            block,
+            wallet,
+            address,
+            *payment,
+            other_payees.then_some(credits.names.as_slice()),
+        ),
+        _ => BlockResult::Skipped(Cause::NothingSelected),
+    }
+}
+
+/// Give the default address to each recipient of the wallet (`payment`) and
+/// to each recipient with a name of `payee_names` that the wallet does not
+/// have. The name, the split and the fee stay. Recipients that then have the
+/// key merge, as in Use this address.
+fn correct_block(
+    block: &mut ValueBlock,
+    wallet: &Wallet,
+    address: &CorrectAddress,
+    payment: bool,
+    payee_names: Option<&[String]>,
+) -> BlockResult {
+    let is_payee = |recipient: &Recipient| {
+        !wallet.matches(recipient)
+            && payee_names.is_some_and(|names| {
+                recipient
+                    .name
+                    .as_deref()
+                    .is_some_and(|n| names.contains(&people::normal_name(n)))
+            })
+    };
+    let new_key = RecipientKey {
+        address: address.address.clone(),
+        custom_key: address.custom_key.clone(),
+        custom_value: address.custom_value.clone(),
+    };
+    if !block
+        .recipients
+        .iter()
+        .any(|e| (payment && wallet.matches(&e.value)) || is_payee(&e.value))
+    {
+        return BlockResult::Skipped(Cause::NoRecipient);
+    }
+    let mut changed = block.clone();
+    for entry in &mut changed.recipients {
+        if (payment && wallet.matches(&entry.value)) || is_payee(&entry.value) {
+            entry.value.address = Some(new_key.address.clone());
+            entry.value.custom_key = non_empty(new_key.custom_key.as_ref());
+            entry.value.custom_value = non_empty(new_key.custom_value.as_ref());
+            entry.value.recipient_type = Some(address.recipient_type.clone());
+        }
+    }
+    merge_recipients(&mut changed, &new_key);
+    if changed == *block {
+        return BlockResult::Skipped(Cause::HasNewAddress);
+    }
+    if is_lnaddress_type(Some(&address.recipient_type)) {
+        set_lnaddress_method(&mut changed);
+    }
+    *block = changed;
+    BlockResult::Changed
 }
 
 /// Add the recipient to a block that has no recipient of the wallet, and
@@ -646,6 +788,11 @@ fn wants_blocks(operation: &RecipientOperation) -> bool {
     match operation {
         RecipientOperation::RenamePerson { payment, .. } => *payment,
         RecipientOperation::RemovePerson { payee, .. } => *payee,
+        RecipientOperation::Correct {
+            payment,
+            other_payees,
+            ..
+        } => *payment || *other_payees,
         _ => true,
     }
 }
@@ -676,8 +823,74 @@ fn apply_credits(persons: &mut Vec<Entry<Person>>, operation: &RecipientOperatio
             persons.retain(|e| !credits.matches(&e.value));
             persons.len() != before
         }
+        RecipientOperation::Correct {
+            npub,
+            img,
+            href,
+            role,
+            credits,
+            ..
+        } => {
+            let mut changed = false;
+            for entry in persons.iter_mut().filter(|e| credits.matches(&e.value)) {
+                changed |= correct_credit(
+                    &mut entry.value,
+                    npub.as_deref(),
+                    img.as_deref(),
+                    href.as_deref(),
+                    role.as_ref(),
+                );
+            }
+            changed
+        }
         _ => false,
     }
+}
+
+/// Set `new` in `field` when it differs. Gives true on a change.
+fn set_text(field: &mut Option<String>, new: &str) -> bool {
+    if field.as_deref().map(str::trim) == Some(new.trim()) {
+        return false;
+    }
+    *field = Some(new.to_owned());
+    true
+}
+
+/// Correct one credit. A credit that has a role keeps it (ADR 0111
+/// item 17). Gives true when the credit changed.
+fn correct_credit(
+    credit: &mut Person,
+    npub: Option<&str>,
+    img: Option<&str>,
+    href: Option<&str>,
+    role: Option<&CorrectRole>,
+) -> bool {
+    let mut changed = false;
+    if let Some(npub) = npub
+        && credit
+            .npub
+            .as_deref()
+            .is_none_or(|n| !n.trim().eq_ignore_ascii_case(npub))
+    {
+        credit.npub = Some(npub.to_owned());
+        changed = true;
+    }
+    if let Some(img) = img {
+        changed |= set_text(&mut credit.img, img);
+    }
+    if let Some(href) = href {
+        changed |= set_text(&mut credit.href, href);
+    }
+    if let Some(role) = role
+        && credit.role.as_deref().is_none_or(|r| r.trim().is_empty())
+    {
+        credit.role = Some(role.role.clone());
+        if !role.group.is_empty() {
+            credit.group = Some(role.group.clone());
+        }
+        changed = true;
+    }
+    changed
 }
 
 /// Add the parts of Add to all releases to the channel. Each selected part
@@ -944,7 +1157,12 @@ pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -
             credit: true,
             ..
         }
-        | RecipientOperation::RemovePerson { payee: false, .. } => Cause::NoCredit,
+        | RecipientOperation::RemovePerson { payee: false, .. }
+        | RecipientOperation::Correct {
+            payment: false,
+            other_payees: false,
+            ..
+        } => Cause::NoCredit,
         _ => pick_cause(&causes, operation),
     })
 }
@@ -1098,6 +1316,25 @@ pub enum PersonOperation {
         /// True to remove the credits of the person.
         credit: bool,
     },
+    /// Correct the feeds of a person (ADR 0111 item 16).
+    Correct {
+        /// A key of the person. Each credit of the person gets it.
+        #[serde(default)]
+        key: Option<String>,
+        /// True when each recipient of the person uses the default address.
+        #[serde(default)]
+        payment: bool,
+        /// True when each credit of the person gets the picture and the
+        /// information address of the person.
+        #[serde(default)]
+        details: bool,
+        /// True when each credit with no role gets the usual role.
+        #[serde(default)]
+        role: bool,
+        /// True when each payee of the name uses the default address.
+        #[serde(default)]
+        other_payees: bool,
+    },
 }
 
 /// The type of a wallet address of a person: the type of the wallet row
@@ -1195,6 +1432,63 @@ fn add_snapshot(
     })
 }
 
+/// The [`RecipientOperation::Correct`] of a person. `selected` is the
+/// request: `payment`, `details`, `role` and `other_payees`.
+fn correct_snapshot(
+    person: &people::Person,
+    default: Option<&RecipientKey>,
+    key: Option<&str>,
+    selected: (bool, bool, bool, bool),
+    credits: CreditMatch,
+) -> Result<RecipientOperation, PipelineError> {
+    let (payment, details, role, other_payees) = selected;
+    let npub = match key.map(|k| k.trim().to_lowercase()) {
+        Some(npub) if !npub.is_empty() => {
+            if !person.keys.iter().any(|k| k.npub == npub) {
+                return Err(invalid("the key is not a key of the person"));
+            }
+            Some(npub)
+        }
+        _ => None,
+    };
+    let address = if payment || other_payees {
+        let key = default.ok_or_else(|| invalid("the person has no default address"))?;
+        Some(CorrectAddress {
+            address: key.address.clone(),
+            custom_key: non_empty(key.custom_key.as_ref()),
+            custom_value: non_empty(key.custom_value.as_ref()),
+            recipient_type: wallet_type(person, key),
+        })
+    } else {
+        None
+    };
+    let value = |text: &str| {
+        let text = text.trim();
+        (details && !text.is_empty()).then(|| text.to_owned())
+    };
+    let (usual_role, group) = usual_role_and_group(person);
+    let mut names: Vec<String> = std::iter::once(person.name.as_str())
+        .chain(person.credit_names.iter().map(|c| c.name.as_str()))
+        .map(people::normal_name)
+        .filter(|n| !n.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+    Ok(RecipientOperation::Correct {
+        npub,
+        payment,
+        other_payees,
+        address,
+        img: value(&person.img),
+        href: value(&person.href),
+        role: (role && !usual_role.trim().is_empty()).then_some(CorrectRole {
+            role: usual_role,
+            group,
+        }),
+        credits: CorrectMatch { credits, names },
+    })
+}
+
 /// Make the snapshot of a person operation: the wallet of the person and
 /// the [`RecipientOperation`] with each value of the person. The change set
 /// keeps these values, so it does not change when the person changes
@@ -1280,6 +1574,19 @@ pub fn person_operation<S: BuildHasher>(
             credit: *credit,
             credits,
         },
+        PersonOperation::Correct {
+            key,
+            payment,
+            details,
+            role,
+            other_payees,
+        } => correct_snapshot(
+            &person,
+            default.as_ref(),
+            key.as_deref(),
+            (*payment, *details, *role, *other_payees),
+            credits,
+        )?,
     };
     Ok((wallet, snapshot))
 }
@@ -1418,6 +1725,19 @@ pub fn check_operation(operation: &RecipientOperation) -> Result<(), PipelineErr
         RecipientOperation::RemovePerson { payee, credit, .. } if !payee && !credit => {
             Err(invalid("nothing is selected"))
         }
+        RecipientOperation::Correct {
+            npub: None,
+            payment: false,
+            other_payees: false,
+            img: None,
+            href: None,
+            role: None,
+            ..
+        } => Err(invalid("nothing is selected")),
+        RecipientOperation::Correct {
+            address: Some(address),
+            ..
+        } => check_address(&address.address, &address.recipient_type),
         RecipientOperation::AddToReleases {
             payee,
             credit,

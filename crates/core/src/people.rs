@@ -1605,6 +1605,238 @@ pub fn uses<S: BuildHasher>(
     })
 }
 
+/// The state of a feed in the check of a person (ADR 0111 item 9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckState {
+    /// The feed has at least one finding that is not neutral.
+    NeedsCorrection,
+    /// The feed has only the neutral finding `not_default`.
+    NotDefault,
+    /// The feed agrees with the person.
+    Correct,
+}
+
+/// One difference between a feed and a person (ADR 0111 item 9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Finding {
+    /// A credit of the person has no key, or a key that the person does not
+    /// have.
+    CreditKey {
+        /// The role of the credit, or empty text.
+        role: String,
+        /// The `npub` of the credit, or empty text.
+        npub: String,
+    },
+    /// A credit of the person has a picture or an information address that
+    /// differs from the value of the person.
+    CreditDetails {
+        /// The role of the credit, or empty text.
+        role: String,
+        /// True when the picture differs.
+        img: bool,
+        /// True when the information address differs.
+        href: bool,
+    },
+    /// A credit of the person has no role.
+    CreditRole,
+    /// A recipient of a wallet of the person does not use the default
+    /// address. This finding is neutral.
+    NotDefault {
+        /// The key of the recipient.
+        key: RecipientKey,
+    },
+    /// A recipient has the name of the person, but not a wallet of the
+    /// person.
+    OtherWallet {
+        /// The key of the recipient.
+        key: RecipientKey,
+    },
+}
+
+/// The check of one feed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FeedCheck {
+    /// The feed.
+    pub feed_id: FeedId,
+    /// The state, from `findings`.
+    pub state: CheckState,
+    /// The differences. A `correct` feed has none.
+    pub findings: Vec<Finding>,
+}
+
+/// The check of the feeds of a person, by feed ID.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct PersonCheck {
+    /// Each feed that pays a wallet of the person, credits the person or has
+    /// a finding.
+    pub feeds: Vec<FeedCheck>,
+}
+
+impl PersonCheck {
+    /// The number of feeds with the state `needs_correction`.
+    #[must_use]
+    pub fn needs_correction(&self) -> usize {
+        self.feeds
+            .iter()
+            .filter(|f| f.state == CheckState::NeedsCorrection)
+            .count()
+    }
+}
+
+/// The state of a feed from its findings.
+fn check_state(findings: &[Finding]) -> CheckState {
+    if findings
+        .iter()
+        .any(|f| !matches!(f, Finding::NotDefault { .. }))
+    {
+        CheckState::NeedsCorrection
+    } else if findings.is_empty() {
+        CheckState::Correct
+    } else {
+        CheckState::NotDefault
+    }
+}
+
+/// The findings of the credits of a person, with the feed of each. A credit
+/// with no finding gives the feed and `None`.
+fn credit_findings(
+    collection: &Collection,
+    person: &Person,
+    person_names: &HashSet<String>,
+) -> Result<Vec<(i64, Option<Finding>)>, CollectionError> {
+    let identities: HashSet<&str> = person
+        .credit_names
+        .iter()
+        .map(|c| c.identity.as_str())
+        .collect();
+    let npubs: HashSet<&str> = person.keys.iter().map(|k| k.npub.as_str()).collect();
+    let img = person.img.trim();
+    let href = person.href.trim();
+    let mut found = Vec::new();
+    for row in collection.feed_credits()? {
+        let npub = row.npub.to_lowercase();
+        let named = Identity::of(&row.name, &row.href, &row.npub)
+            .is_some_and(|i| identities.contains(i.key().as_str()))
+            || person_names.contains(&normal_name(&row.name));
+        if !(named || (!npub.is_empty() && npubs.contains(npub.as_str()))) {
+            continue;
+        }
+        let feed = row.feed_id.0;
+        found.push((feed, None));
+        if !npubs.is_empty() && !npubs.contains(npub.as_str()) {
+            found.push((
+                feed,
+                Some(Finding::CreditKey {
+                    role: row.role.clone(),
+                    npub: row.npub.clone(),
+                }),
+            ));
+        }
+        let img_differs = !img.is_empty() && row.img != img;
+        let href_differs = !href.is_empty() && row.href != href;
+        if img_differs || href_differs {
+            found.push((
+                feed,
+                Some(Finding::CreditDetails {
+                    role: row.role.clone(),
+                    img: img_differs,
+                    href: href_differs,
+                }),
+            ));
+        }
+        if row.role.is_empty() {
+            found.push((feed, Some(Finding::CreditRole)));
+        }
+    }
+    Ok(found)
+}
+
+/// Compare each feed with `person` (ADR 0111 items 9 and 10). A credit of
+/// the person has a credit name or a key of the person, or the normal name
+/// of the person or of a credit name. This function reads the index of the
+/// collection and makes no request.
+///
+/// The check of payees needs a default address, because the correction of a
+/// payee writes it.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn check<S: BuildHasher>(
+    collection: &Collection,
+    person: &Person,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<PersonCheck, CollectionError> {
+    let wallets: HashSet<(String, String, String)> = person
+        .wallets
+        .iter()
+        .map(|w| parts(&keysend::wallet_key(&w.key, lookups)))
+        .collect();
+    let default = default_address(person, lookups).map(|key| parts(&key));
+    let names: HashSet<String> = std::iter::once(person.name.as_str())
+        .chain(person.credit_names.iter().map(|c| c.name.as_str()))
+        .map(normal_name)
+        .filter(|n| !n.is_empty())
+        .collect();
+    let mut found: BTreeMap<i64, Vec<Finding>> = BTreeMap::new();
+    let mut add = |feed: i64, finding: Option<Finding>| {
+        let list = found.entry(feed).or_default();
+        if let Some(finding) = finding
+            && !list.contains(&finding)
+        {
+            list.push(finding);
+        }
+    };
+
+    if let Some(default) = &default {
+        let mut statement = collection.db().prepare(
+            "SELECT feed_id, address, custom_key, custom_value, name FROM feed_recipients
+             ORDER BY feed_id, address, custom_key, custom_value",
+        )?;
+        let rows = statement.query_map([], |r| {
+            let custom_key: String = r.get(2)?;
+            let custom_value: String = r.get(3)?;
+            Ok((
+                r.get::<_, i64>(0)?,
+                RecipientKey {
+                    address: r.get(1)?,
+                    custom_key: Some(custom_key).filter(|t| !t.is_empty()),
+                    custom_value: Some(custom_value).filter(|t| !t.is_empty()),
+                },
+                r.get::<_, Option<String>>(4)?,
+            ))
+        })?;
+        for row in rows {
+            let (feed, key, name) = row?;
+            if wallets.contains(&parts(&keysend::wallet_key(&key, lookups))) {
+                let finding = (parts(&key) != *default).then_some(Finding::NotDefault { key });
+                add(feed, finding);
+            } else if name.is_some_and(|n| names.contains(&normal_name(&n))) {
+                add(feed, Some(Finding::OtherWallet { key }));
+            }
+        }
+    }
+
+    for (feed, finding) in credit_findings(collection, person, &names)? {
+        add(feed, finding);
+    }
+
+    let feeds = found
+        .into_iter()
+        .map(|(feed, findings)| {
+            let state = check_state(&findings);
+            FeedCheck {
+                feed_id: FeedId(feed),
+                state,
+                findings,
+            }
+        })
+        .collect();
+    Ok(PersonCheck { feeds })
+}
+
 /// The suggestions of people from the credits and the recipients of the
 /// feeds (ADR 0098 items 12 to 16). This function makes no person and no
 /// link.
@@ -2796,6 +3028,131 @@ mod tests {
         })
         .sum();
         (people(collection).unwrap().len(), links)
+    }
+
+    fn credit_row(
+        collection: &Collection,
+        feed_id: i64,
+        name: &str,
+        role: &str,
+        img: &str,
+        npub: &str,
+    ) {
+        feed(collection, feed_id);
+        collection
+            .db()
+            .execute(
+                "INSERT INTO feed_credits (feed_id, name, role, href, npub, img, seen_at)
+                 VALUES (?1, ?2, ?3, '', ?4, ?5, 0)",
+                params![feed_id, name, role, npub, img],
+            )
+            .unwrap();
+    }
+
+    fn checked(collection: &Collection, id: PersonId) -> PersonCheck {
+        let person = person(collection, id).unwrap();
+        check(collection, &person, &lookup_map(collection).unwrap()).unwrap()
+    }
+
+    fn feed_check(list: &PersonCheck, feed_id: i64) -> &FeedCheck {
+        list.feeds
+            .iter()
+            .find(|f| f.feed_id.0 == feed_id)
+            .expect("ADR 0111 item 9: the check must list this feed. Check people::check.")
+    }
+
+    #[test]
+    fn check_finds_a_wrong_key_a_missing_key_a_picture_and_a_missing_role() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(
+            &collection,
+            &PersonFields {
+                name: "Ann".into(),
+                img: "ann.png".into(),
+                ..PersonFields::default()
+            },
+        )
+        .unwrap();
+        add_key(&collection, ann, "npub1ann").unwrap();
+        credit_row(&collection, 1, "ann", "vocals", "ann.png", "npub1city");
+        credit_row(&collection, 2, "Ann", "vocals", "ann.png", "");
+        credit_row(&collection, 3, "Ann", "vocals", "old.png", "npub1ann");
+        credit_row(&collection, 4, "Ann", "", "ann.png", "NPUB1ANN");
+        credit_row(&collection, 5, "Ann", "vocals", "ann.png", "npub1ann");
+        credit_row(&collection, 6, "Bob", "vocals", "x.png", "npub1bob");
+        let list = checked(&collection, ann);
+        assert_eq!(
+            feed_check(&list, 1).findings,
+            [Finding::CreditKey {
+                role: "vocals".into(),
+                npub: "npub1city".into()
+            }],
+            "ADR 0111 item 10: a credit with the name of the person and a wrong key must be a finding."
+        );
+        assert_eq!(
+            feed_check(&list, 2).findings,
+            [Finding::CreditKey {
+                role: "vocals".into(),
+                npub: String::new()
+            }]
+        );
+        assert_eq!(
+            feed_check(&list, 3).findings,
+            [Finding::CreditDetails {
+                role: "vocals".into(),
+                img: true,
+                href: false
+            }]
+        );
+        assert_eq!(feed_check(&list, 4).findings, [Finding::CreditRole]);
+        assert_eq!(feed_check(&list, 4).state, CheckState::NeedsCorrection);
+        assert_eq!(feed_check(&list, 5).state, CheckState::Correct);
+        assert!(list.feeds.iter().all(|f| f.feed_id.0 != 6));
+        assert_eq!(list.needs_correction(), 4);
+    }
+
+    #[test]
+    fn a_person_with_no_key_gives_no_key_finding() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        credit_row(&collection, 1, "Ann", "vocals", "", "");
+        credit_row(&collection, 2, "Ann", "vocals", "", "npub1other");
+        let list = checked(&collection, ann);
+        assert_eq!(feed_check(&list, 1).state, CheckState::Correct);
+        assert_eq!(
+            feed_check(&list, 2).state,
+            CheckState::Correct,
+            "ADR 0111 item 9: the key check needs a key of the person."
+        );
+    }
+
+    #[test]
+    fn check_gives_not_default_for_a_member_and_other_wallet_for_a_payee_of_the_name() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
+        found(&collection, "ann@example.com", "node-1");
+        payee(&collection, 1, "node-1", "Ann");
+        payee(&collection, 2, "ann@example.com", "Ann");
+        payee(&collection, 3, "node-9", " ANN ");
+        payee(&collection, 4, "node-8", "Bob");
+        let list = checked(&collection, ann);
+        assert_eq!(feed_check(&list, 1).state, CheckState::Correct);
+        assert_eq!(feed_check(&list, 2).state, CheckState::NotDefault);
+        assert_eq!(
+            feed_check(&list, 2).findings,
+            [Finding::NotDefault {
+                key: key("ann@example.com")
+            }],
+            "ADR 0111 item 9: a different member of the wallet must be the neutral finding."
+        );
+        assert_eq!(feed_check(&list, 3).state, CheckState::NeedsCorrection);
+        assert_eq!(
+            feed_check(&list, 3).findings,
+            [Finding::OtherWallet { key: key("node-9") }]
+        );
+        assert!(list.feeds.iter().all(|f| f.feed_id.0 != 4));
+        assert_eq!(list.needs_correction(), 1);
     }
 
     #[test]

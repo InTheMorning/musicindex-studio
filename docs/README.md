@@ -113,6 +113,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0108: People data at rest stays plain](adr/0108-people-data-at-rest-stays-plain.md)
 - [ADR 0109: Images and audio load from their hosts](adr/0109-images-and-audio-load-from-their-hosts.md)
 - [ADR 0110: A connected app signs each request with its own key](adr/0110-a-connected-app-signs-each-request-with-its-own-key.md)
+- [ADR 0111: The page of a person checks the feeds](adr/0111-the-page-of-a-person-checks-the-feeds.md)
+- [ADR 0112: A credit role comes from a list](adr/0112-a-credit-role-comes-from-a-list.md)
 
 ## Plans
 

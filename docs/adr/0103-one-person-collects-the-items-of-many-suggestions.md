@@ -7,6 +7,7 @@
 - Changes: [ADR 0098](0098-the-people-module.md) items 12 and 14, the grouping of the suggestions and the make of a person. [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 3 and 4, the sheet "Make a Person" and the page of a person.
 - Supersedes: [ADR 0101](../archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md). Items 1 to 7 of ADR 0101 are items 1 to 7 of this ADR.
 - Uses: [ADR 0102](0102-delete-a-person-changes-no-feed.md) for "Delete Person", and [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers.
+- Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Items 8 and 9: one sheet "Check: {name}" with the menu "Person" replaces the sheets "Make a Person" and "Add to a Person".
 
 ## Context
 

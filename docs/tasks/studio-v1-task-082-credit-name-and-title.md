@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0118](../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md) items 11 and 12. They come from the visual check of [task 081](studio-v1-task-081-member-credit.md).
 
-Status: Not started.
+Status: Complete. Packets 082a and 082b are committed. The screenshot visual check passed on 2026-11-02. The human test is open.
 
 ## Goal
 

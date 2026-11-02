@@ -259,6 +259,8 @@ export function changeTitle(operation) {
     case 'use_address': return 'Use This Address';
     case 'rename_person': return 'Rename';
     case 'add_to_releases': return 'Add to All Releases';
+    // The credit of a member on its artist or label feed (ADR 0118 item 12).
+    case 'credit_feed': return 'Add to the Credits';
     case 'remove_person': return 'Remove';
     default: return 'Change';
   }
@@ -937,6 +939,7 @@ export function changeLine(set, name) {
       if (op.support_link) parts.push('a support link');
       return `Add ${who} as ${joinList(parts)} in ${feedCount(n)}`;
     }
+    case 'credit_feed': return `Add ${who} as a credit in ${feedCount(n)}`;
     case 'remove_person': {
       const parts = [op.payee && 'a payee', op.credit && 'a credit'].filter(Boolean);
       return `Remove ${who} as ${joinList(parts)} from ${feedCount(n)}`;

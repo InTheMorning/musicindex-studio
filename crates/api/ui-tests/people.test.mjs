@@ -441,6 +441,11 @@ test('the usual role line and the membership of a person', () => {
     { role: 'Vocals', members: [{ id: 3, title: 'The Ultras', dot: 'artist', role: 'Artist' }] });
 });
 
+test('the credit of a member has its own title and line (ADR 0118 item 12)', () => {
+  assert.equal(changeTitle({ kind: 'credit_feed' }), 'Add to the Credits');
+  assert.equal(changeLine({ feeds: [{}], operation: { kind: 'credit_feed' } }, 'DuhLaurien'), 'Add DuhLaurien as a credit in 1 feed');
+});
+
 test('the review line of a change set of a person names the operation', () => {
   const feeds = [{}, {}];
   assert.equal(changeLine({ feeds, operation: { kind: 'rename_person', name: 'Ann Ultra', payment: true, credit: true } }, 'Ann'),

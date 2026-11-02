@@ -47,6 +47,7 @@ The UI starts on Releases and shows the outline of an open feed. Below Releases,
 | `crates/api` | `studio-api`: the JSON API over the core, and the UI files in `crates/api/ui/` |
 | `crates/api/ui-tests` | The Node tests of the UI model modules ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)) |
 | `crates/server` | `studio-server`: the server shell. It keeps `server.sqlite` and one user folder for each account. |
+| `crates/app-client` | `studio-app-client`: the client of a connected app (ADR 0110). It signs each request with the key of the app. It does not depend on `studio-core`. |
 | `crates/desktop` | `studio-desktop`: the desktop shell. It runs the local API and prints the UI address. Its default data folder is the local data folder of the operating system. Tauri comes in the Desktop Shell phase. |
 | `.github/workflows` | `ci.yml` runs the four checks. `desktop-release.yml` builds the desktop archives and makes a draft GitHub Release from a `v*` tag. |
 | `docs/` | ADRs, plans, tasks, reviews, runbooks, release notes (`docs/releases/`) and research. The index is `docs/README.md`. |

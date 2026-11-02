@@ -2,7 +2,7 @@
 
 Decision: [ADR 0110](../adr/0110-a-connected-app-signs-each-request-with-its-own-key.md), with its amendment of 2026-11-01. It uses ADR 0054, ADR 0056 item 6, ADR 0058, ADR 0078, ADR 0106 and ADR 0107.
 
-Status: In progress. Packet 073a is complete. It started after [task 068](studio-v1-task-068-key-material-on-disk.md) (the file modes) and [task 069](studio-v1-task-069-account-protection.md) (the recent unlock of ADR 0106).
+Status: In progress. Packets 073a and 073b are complete. It started after [task 068](studio-v1-task-068-key-material-on-disk.md) (the file modes) and [task 069](studio-v1-task-069-account-protection.md) (the recent unlock of ADR 0106).
 
 ## Goal
 
@@ -132,7 +132,7 @@ Mechanical:
 - A core test: `apps::pair` refuses an expired code, a used code, a wrong origin and a key that is not valid.
 - A core test: a grant vault has only the wrapper of the app that the grant names.
 - A core test: the live value check refuses each condition of ADR 0110 item 26.
-- A client test: `PairingText::parse` refuses a text with no origin or no code, and reads `k7m2 q9xd`, `K7M2-Q9XD` and `K7M2Q9XO` as the same code. `FileSigner` makes its file with mode 0600.
+- A client test: `PairingText::parse` refuses a text with no origin or no code, and reads `k7m2 q9xd` and `K7M2-Q9XD` as the same code, and `K7M2Q9XO` as `K7M2-Q9X0` (ADR 0110 item 9). `FileSigner` makes its file with mode 0600.
 - A core test: a used code gives `app_code_used`, and a code after Done gives `app_code_invalid`.
 - A core test: with an active grant and a draft with changes, the feed state gives `grant_blocked_by_draft`. A refused granted write adds its cause to the list.
 - A Node test: the pairing text uses `SecretInput`, and the Connected apps model gives the lines of screen 6c after the pairing.

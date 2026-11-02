@@ -1,0 +1,36 @@
+[package]
+name = "studio-app-client"
+description = "Client for a connected app of musicindex-studio (ADR 0110)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+readme = "README.md"
+
+# This crate does not depend on studio-core, studio-api or a server crate,
+# so that an app gets a small dependency tree (ADR 0110 item 28).
+[dependencies]
+nostr.workspace = true
+ureq = "3.5"
+base64 = "0.23"
+getrandom = "0.4"
+secp256k1.workspace = true
+sha2 = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zeroize = "1.9"
+arboard = { version = "3.6", default-features = false, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["termios", "stdio", "fs"] }
+
+[features]
+# `input::from_clipboard` (ADR 0110 item 33).
+clipboard = ["dep:arboard"]
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

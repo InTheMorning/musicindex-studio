@@ -314,6 +314,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 068: Key material on the disk](tasks/studio-v1-task-068-key-material-on-disk.md)
 - [Studio v1 task 069: Account protection](tasks/studio-v1-task-069-account-protection.md)
 - [Studio v1 task 070: A server that holds no assets](tasks/studio-v1-task-070-hold-no-assets.md)
+- [Studio v1 task 071: Account export and import](tasks/studio-v1-task-071-account-export-and-import.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

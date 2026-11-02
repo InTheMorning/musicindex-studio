@@ -4,6 +4,7 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
+- Amended: 2026-11-01 by the operator, from the mockups in `.studio-dev/mockup-107/site/move.js`. Item 4: an export of a vault that cannot move needs a recovery key first. Item 3: the desktop export is in Settings. Item 9: the desktop import is only on the empty Releases page.
 - Changes: [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 2 and 3 (the user folder and its library), and item 7 (sign-up).
 - Uses: [ADR 0003](0003-user-unlocked-secret-vault.md) item 5 (one vault format in the two shells), [ADR 0013](0013-vault-format-and-cryptography.md), [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) (the sign-in methods and the wrappers), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) (grant vaults and the index of app tokens), [ADR 0059](0059-uploads-in-parts-and-the-home-screen-app.md) (uploads in parts) and [ADR 0105](0105-a-public-server-holds-no-assets.md) (a server that holds no assets).
 
@@ -25,8 +26,8 @@
 
 ### The Export
 
-3. The account page has "Export Account", in the two shells. The export needs an unlock in the last 5 minutes, as each sensitive account change does (task 069).
-4. Before the export, the sheet examines the wrappers of the vault. A vault can have no passphrase wrapper, no recovery wrapper and no Nostr wrapper. Then the sheet tells the user that the vault cannot open on a different server. It offers "Make a Recovery Key" before the export.
+3. On a server, the Account panel of Settings has "Export Account". On the desktop, Settings has the section "Move Studio" with "Export Studio". The export needs an unlock in the last 5 minutes, as each sensitive account change does (task 069).
+4. Before the export, the sheet examines the wrappers of the vault. A vault can have no passphrase wrapper, no recovery wrapper and no Nostr wrapper. Then the sheet tells the user that the vault cannot open on a different server. The export then needs a recovery key first. The sheet has only "Make a Recovery Key" and "Cancel". Studio shows the new key one time, then makes the file. Thus each archive has a wrapper that opens on a different server.
 5. The sheet tells the user that the archive holds the collection with no encryption: the feeds, the drafts, the versions and the people. The vault and the grant vaults stay encrypted.
 6. The archive is one `tar` file. It holds:
    - `manifest.json`: the archive format version, the Studio version, the schema version of the collection and the time of the export. It also holds the email of the account and the public key of each Nostr method. It holds no secret and no wrapper.
@@ -38,7 +39,7 @@
 
 ### The Import
 
-9. "Import Account" is on the sign-up page of a server and on the first start of the desktop. On a server with invite codes, the import needs an invite code, as a sign-up does (ADR 0055 item 7).
+9. "Import an Account" is on the sign-up page of a server. On the desktop, it is on the Releases page only while the collection has no feed, so that an import cannot replace data. A user with data uses a new data folder (`--data-dir`). On a server with invite codes, the import needs an invite code, as a sign-up does (ADR 0055 item 7).
 10. The browser sends the archive through the upload routes of ADR 0059. The storage limit applies (ADR 0055 item 21).
 11. Studio refuses the archive in these conditions, with 422 `archive_invalid` and the cause:
     - The manifest has an unknown format version, or a collection schema that is newer than this Studio.

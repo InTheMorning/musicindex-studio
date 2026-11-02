@@ -41,7 +41,7 @@ Add ADR 0106 to `docs/README.md` and to AGENTS.md in the same commit. Mark ADR 0
 
 1. `Workspace` keeps `unlocked_at: Option<Instant>`. Each unlock route and each vault creation sets it. A lock clears it.
 2. Add `require_recent_unlock(w)` adjacent to `require_open_vault` in `crates/api/src/routes.rs`. It gives 401 `unlock_required` when the unlock is older than 5 minutes.
-3. `set_passphrase`, `signer_key` and the route of a new recovery key call it. On the server, `passkey_add`, `passkey_remove`, the routes of a Nostr method and the account deletion call it.
+3. `set_passphrase` and `signer_key` call it. The route of a new recovery key does not exist yet. Task 071 adds it with this check. On the server, `passkey_add`, `passkey_remove`, the routes of a Nostr method and the account deletion call it.
 4. The UI handles `unlock_required` as it handles 423 `vault_locked`: it asks for an unlock, then it sends the request again. The text of the unlock sheet says why: "Unlock Studio again to change how you sign in." Put the text in the module of the sign-in texts.
 5. The desktop uses the same rule. The desktop has no other sessions, so item 3 of ADR 0106 does nothing there.
 

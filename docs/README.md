@@ -118,6 +118,9 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0113: The page of a person suggests a picture and an information address](adr/0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md)
 - [ADR 0114: The review shows the changes in words and marks the changed part of a line](adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md)
 - [ADR 0115: A changed value keeps the escape form of its source](adr/0115-a-changed-value-keeps-the-escape-form-of-its-source.md)
+- [ADR 0116: The page of a person has Save and Discard](adr/0116-the-page-of-a-person-has-save-and-discard.md)
+- [ADR 0117: The page of a person finds values on musicindex](adr/0117-the-page-of-a-person-finds-values-on-musicindex.md)
+- [ADR 0118: "Member of" offers a credit on the artist feed](adr/0118-member-of-offers-a-credit-on-the-artist-feed.md)
 
 ## Plans
 

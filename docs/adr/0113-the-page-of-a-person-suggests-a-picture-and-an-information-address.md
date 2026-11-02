@@ -4,6 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screen 9 of the mockups in `.studio-dev/mockup-people-2/site/`.
+- Changed by: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md). Item 8: "Use" makes a pending change, and Save keeps it.
 - Uses: [ADR 0098](0098-the-people-module.md) items 5, 6, 10 and 19. [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 10 for the credits of a person. [ADR 0109](0109-images-and-audio-load-from-their-hosts.md) for the preview. [ADR 0028](0028-summary-lines-and-one-open-entry.md) for the collapsed line. [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the requests.
 
 ## Context

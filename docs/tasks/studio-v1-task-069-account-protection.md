@@ -31,6 +31,7 @@ Write ADR 0106 "A sensitive account change needs a recent unlock". It states the
    - the vault key for a signer (`POST /api/v1/vault/signer-key`)
    - the add or the removal of a passkey, a Nostr method or a recovery key
    - the deletion of the account
+   - the add of a connected app (`POST /api/v1/apps`, [ADR 0110](../adr/0110-a-connected-app-signs-each-request-with-its-own-key.md) item 2)
 3. After a new passphrase, or after the removal of a method, the server ends each other session of the account. The current session continues.
 4. ADR 0055 item 23 changes. The server permits 10 failed sign-ins for each pair of account and client address in each hour. It permits 100 failed sign-ins for each account from all addresses in each hour. The limit of 30 for each client address does not change.
 5. The challenge routes permit 30 challenges for each client address in each 5 minutes. The global cap stays.

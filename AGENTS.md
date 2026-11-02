@@ -81,7 +81,7 @@ Keep development and check data in `.studio-dev/` at the repository root. Git ig
 ## Design Philosophy
 
 - Studio connects to hosts. It does not host files. The user can move files between hosts at any time ([ADR 0009](docs/adr/0009-studio-connects-to-hosts-and-moves-files.md)).
-- The user controls the secrets. Only the user can open the vault. Under a show grant, the key of a connected app of the user opens a grant vault with one host secret ([ADR 0003](docs/adr/0003-user-unlocked-secret-vault.md), [ADR 0058](docs/adr/0058-grant-vaults-and-connected-apps-on-the-server.md), [ADR 0110](docs/adr/0110-a-connected-app-signs-each-request-with-its-own-key.md)).
+- The user controls the secrets. Only the user can open the vault. Under a show grant, the key of a connected app that the grant names opens a grant vault with one host secret ([ADR 0003](docs/adr/0003-user-unlocked-secret-vault.md), [ADR 0058](docs/adr/0058-grant-vaults-and-connected-apps-on-the-server.md), [ADR 0110](docs/adr/0110-a-connected-app-signs-each-request-with-its-own-key.md)).
 - Feed identity does not change. Studio keeps the feed GUID and each item GUID ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md)).
 - No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md), [ADR 0054](docs/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - Studio uses the musicindex.org "Afterglow" visual direction ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).

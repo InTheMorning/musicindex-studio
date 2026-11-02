@@ -10,7 +10,7 @@ Studio closes the lower findings of the security audit of 2026-11-01, and the UI
 
 ## Context
 
-The security audit of 2026-11-01 found these items. The report is not in the repository. Tasks 068, 069 and 071 close SEC-01 to SEC-06 and SEC-17. This task closes the others, except SEC-09.
+The security audit of 2026-11-01 found these items. The report is not in the repository. Tasks 068, 069 and 071 close SEC-01 to SEC-06 and SEC-17. Task 073 closes SEC-09. This task closes the others.
 
 | ID | Finding | Packet |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ The security audit of 2026-11-01 found these items. The report is not in the rep
 | SEC-15 | The Rust base image, `cargo-chef` and the CI actions are not pinned, and the deploy uses a tag. | 072f |
 | SEC-16 | A failed folder removal at account deletion is only logged. | 072c |
 
-SEC-09 stays accepted while one program connects ([ADR 0110](../adr/0110-a-connected-app-signs-each-request-with-its-own-key.md) item 15).
+SEC-09 closes with task 073: a grant applies only to the apps that it names ([ADR 0110](../adr/0110-a-connected-app-signs-each-request-with-its-own-key.md) item 17).
 
 ## Packets
 

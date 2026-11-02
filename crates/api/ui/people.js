@@ -12,11 +12,15 @@ const feedCount = (n) => plural(n, 'feed', 'feeds');
 // The text of the empty list of people (ADR 0099 item 2).
 export const PEOPLE_EMPTY = 'No people yet. Check a suggestion above, or add a person.';
 
+// The line at the top of the People page on a server (ADR 0108 item 3).
+export const PEOPLE_SERVER_NOTE = 'The operator of this server can read the people that you keep.';
+
 // The IDs of the sections of the People page, in the sequence of ADR 0099
 // item 2. A section with no data is left out, but `people` always shows,
 // because it gives the empty text. With no person, the suggestions come first.
-export function peopleSections({ people = [], suggestions = [], changes = [], payees = [] } = {}) {
-  const ids = ['search', 'actions'];
+export function peopleSections({ people = [], suggestions = [], changes = [], payees = [], server = false } = {}) {
+  // On a server, the page starts with the line of ADR 0108 item 3.
+  const ids = [...(server ? ['note'] : []), 'search', 'actions'];
   if (changes.length > 0) ids.push('changes');
   const hasSuggestions = suggestions.length > 0;
   if (hasSuggestions && people.length === 0) ids.push('suggestions');

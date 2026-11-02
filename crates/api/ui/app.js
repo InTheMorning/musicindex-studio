@@ -26,7 +26,11 @@ import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from '
 import { coverOf, coverNote } from './cover.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
-import { RETRY_DELAYS, findUpload, missingParts, partRange, receivedBytes } from './upload.js';
+import { RETRY_DELAYS, findUpload, missingParts, partCount, partRange, receivedBytes } from './upload.js';
+import {
+  exportView, EXPORT_DONE, RECOVERY_KEY_TEXT, importedNotice, showsImportNotice, sendingText, CHECKING_TEXT,
+  importFacts, importOpenView, importErrorText, importSelectText, IMPORT_HINT, DESKTOP_IMPORT_HINT,
+} from './move.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, mosaicCells, otherFeedText, feedCover,
@@ -2462,6 +2466,7 @@ function SettingsPage() {
     apps: ConnectedAppsPanel,
     announcements: AnnouncePanel,
     nostr: NostrPanel,
+    move: MovePanel,
     library: LibraryPanel,
     files: FilesOnServerPanel,
   };
@@ -2860,8 +2865,12 @@ const SORT_LABELS = { order: 'Feed Order', newest: 'Newest', az: 'A to Z' };
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
 function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed }) {
   const [sortOpen, setSortOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const sortButton = useRef(null);
   const inGroup = group !== undefined;
+  // The desktop offers the import only while the collection has no feed
+  // (ADR 0107 item 9). The core refuses it otherwise.
+  const canImport = !assetMode().server && feeds.length === 0;
   const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, view: list.view, marked, group });
   const head = releases.head;
   const title = head ? head.title : 'Releases';
@@ -2932,8 +2941,11 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">
             <p class="empty">No releases yet.</p>
-            <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button></div>
+            <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button>
+              ${canImport && html`<button class="button action" type="button" onClick=${() => setImporting(true)}>Import an Account</button>`}</div>
+            ${canImport && html`<p class="hint">${DESKTOP_IMPORT_HINT}</p>`}
           </div>`}
+      ${importing && html`<${ImportFlow} onBack=${() => setImporting(false)} />`}
     </section>
   </div>`;
 }
@@ -3228,9 +3240,11 @@ function Shell({ vault, onLock }) {
 
 // The text of a failed auth request. Studio shows its own text for each
 // code of the auth routes.
-function AuthNotice({ error }) {
+function AuthNotice({ error, importing = false }) {
   if (!error) return null;
-  const text = error.code === 'offline' || error.code === 'signer' ? error.message : nip46ErrorText(error.code);
+  const text = error.code === 'offline' || error.code === 'signer'
+    ? error.message
+    : (importing && importErrorText(error.code, error.message)) || nip46ErrorText(error.code);
   return html`<div class="notice error" role="alert">${text}</div>`;
 }
 
@@ -3289,7 +3303,7 @@ function nip46Stop(connection) {
 // starts a `nostrconnect://` connection at once, and the user can paste a
 // bunker address instead. `onDone` follows a sign-in, and `onBack` follows
 // the Stop button.
-function Nip46Page({ title, invite, recoveryKey, onDone, onBack }) {
+function Nip46Page({ title, invite, recoveryKey, onDone, onBack, onConnected = null }) {
   const [link, setLink] = useState(null);
   const [bunker, setBunker] = useState('');
   const [phase, setPhase] = useState('starting');
@@ -3302,6 +3316,13 @@ function Nip46Page({ title, invite, recoveryKey, onDone, onBack }) {
   const signIn = async (connection) => {
     setPhase('signing');
     try {
+      // The import of an account opens the vault of the file with the
+      // connection, in place of a sign-in.
+      if (onConnected) {
+        await onConnected(connection);
+        current.current = null;
+        return;
+      }
       const result = await authCall(`/nip46/${connection}/signin`, { body: { invite: invite || null, recovery_key: !!recoveryKey } });
       current.current = null;
       csrfToken = result.csrf;
@@ -3377,8 +3398,8 @@ function Nip46Page({ title, invite, recoveryKey, onDone, onBack }) {
     </form>
     ${phase === 'waiting' && html`<p role="status">Waiting for the signer…</p>`}
     ${phase === 'connecting' && html`<p role="status">Connecting to the signer…</p>`}
-    ${phase === 'signing' && html`<p role="status">Signing in. Allow the request in your signer app.</p>`}
-    <${AuthNotice} error=${paste.error || qr.error} />
+    ${phase === 'signing' && html`<p role="status">${onConnected ? 'Opening the vault. Allow the request in your signer app.' : 'Signing in. Allow the request in your signer app.'}</p>`}
+    <${AuthNotice} error=${paste.error || qr.error} importing=${!!onConnected} />
     <div class="actions">
       ${(waiting || phase === 'failed') && html`<button class="button" type="button" onClick=${onBack}>${waiting ? 'Stop' : 'Back'}</button>`}
       ${phase === 'failed' && html`<button class="button action" type="button" onClick=${start}>Try Again</button>`}
@@ -3588,7 +3609,7 @@ function AddMethodPage() {
   </div></main>`;
 }
 
-function SignUpPage({ signup, onDone, onSignIn }) {
+function SignUpPage({ signup, onDone, onSignIn, onImport }) {
   const [email, setEmail] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [invite, setInvite] = useState('');
@@ -3642,6 +3663,7 @@ function SignUpPage({ signup, onDone, onSignIn }) {
       <button class="button action" type="button" disabled=${busy || (needInvite && invite.trim() === '')}
         onClick=${() => setRemote(true)}>Sign Up with Amber or a Bunker</button>
     </div>
+    <div class="actions"><button class="button action" type="button" disabled=${busy} onClick=${onImport}>Import an Account</button></div>
     <button class="button link" type="button" onClick=${onSignIn}>I Have an Account</button>
   </form></main>`;
 }
@@ -3660,7 +3682,10 @@ function SignedOut({ session, onSignedIn }) {
     ? html`<${SignInPage} onDone=${done} onSignUp=${() => setPage('sign_up')} onRecovery=${() => setPage('recovery')} />`
     : page === 'recovery'
       ? html`<${RecoveryPage} onDone=${onSignedIn} onBack=${() => setPage('sign_in')} />`
-      : html`<${SignUpPage} signup=${session.signup} onDone=${done} onSignIn=${() => setPage('sign_in')} />`;
+      : page === 'import'
+        ? html`<${ImportFlow} signup=${session.signup} onDone=${onSignedIn} onBack=${() => setPage('sign_up')} />`
+        : html`<${SignUpPage} signup=${session.signup} onDone=${done} onSignIn=${() => setPage('sign_in')}
+          onImport=${() => setPage('import')} />`;
 }
 
 // The unlock sheet (ADR 0056 items 7 and 10). `onDone(true)` follows an
@@ -3786,9 +3811,14 @@ function PasskeyList() {
 function AccountPanel() {
   const { session, reload } = useContext(SessionContext);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [typed, setTyped] = useState('');
   const { busy, error, run } = useAction();
   const confirmation = deleteConfirmation(session, typed);
+  const closeNotice = () => run(async () => {
+    await authCall('/import-notice/close');
+    await reload();
+  });
   const byEmail = !!session.email;
   const signOut = () => run(async () => {
     await authCall('/signout');
@@ -3805,6 +3835,15 @@ function AccountPanel() {
   return html`<article class="panel">
     <h2>Account</h2>
     <dl class="facts"><dt>${byEmail ? 'Email address' : 'Nostr key'}</dt><dd class="mono">${accountName(session)}</dd></dl>
+    ${showsImportNotice(session) && html`<div class="notice" role="status">
+      <strong>${importedNotice({ origin: location.origin, passkeys: hasPasskeys }).strong}</strong>
+      ${importedNotice({ origin: location.origin, passkeys: hasPasskeys }).text}
+      <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${closeNotice}>Close</button></div>
+    </div>`}
+    <div class="form"><h3>Move this account</h3>
+      <p class="hint">Make one file with your feeds, drafts, versions, people and vault. Import it on a different server, or in Studio desktop.</p>
+      <div class="actions"><button class="button action" type="button" disabled=${busy} onClick=${() => setExporting(true)}>Export Account</button></div></div>
+    ${exporting && html`<${ExportSheet} onClose=${() => setExporting(false)} />`}
     ${hasPasskeys && html`<${PasskeyList} />`}
     ${deleting
       ? html`<form class="form" onSubmit=${remove}>
@@ -3822,6 +3861,268 @@ function AccountPanel() {
         </div>`}
     <${AuthNotice} error=${error} />
   </article>`;
+}
+
+// ---- Export and import of an account (ADR 0107) ----
+
+// The sheet that exports the account (screens 1 to 3). It reads the facts,
+// asks for a recovery key when no method opens the vault on a different
+// server, and then starts the download of the archive.
+function ExportSheet({ onClose }) {
+  const ref = useSheet(true);
+  const [facts, setFacts] = useState(null);
+  const [include, setInclude] = useState(true);
+  const [recoveryKey, setRecoveryKey] = useState(null);
+  const [kept, setKept] = useState(false);
+  const [done, setDone] = useState(false);
+  const { busy, error, run } = useAction();
+  const load = () => run(async () => { setFacts(await api('/account/export-facts')); });
+  useEffect(() => { load(); }, []);
+  const view = facts && exportView(facts, { server: serverMode, includeAssets: include });
+  const makeKey = () => run(async () => {
+    const made = await api('/vault/recovery-key', { method: 'POST' });
+    setKept(false);
+    setRecoveryKey(made.recovery_key);
+  });
+  // The vault can move now, so the sheet reads the facts again.
+  const afterKey = () => run(async () => {
+    setFacts(await api('/account/export-facts'));
+    setRecoveryKey(null);
+  });
+  const send = () => run(async () => {
+    const made = await api('/account/export', { method: 'POST', body: { include_assets: view.checkbox ? include : true } });
+    const link = document.createElement('a');
+    link.href = `/media/download?ticket=${encodeURIComponent(made.ticket)}`;
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setDone(true);
+  });
+  const title = view ? view.title : (serverMode ? 'Export Account' : 'Export Studio');
+  let body = null;
+  let footer = html`<button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>`;
+  if (done) {
+    body = html`<div class="notice" role="status"><strong>${EXPORT_DONE.strong}</strong> ${EXPORT_DONE.text}</div>`;
+    footer = html`<button class="button primary" type="button" onClick=${() => ref.current.close()}>Close</button>`;
+  } else if (recoveryKey) {
+    body = html`<div class="form">
+      <p>${RECOVERY_KEY_TEXT}</p>
+      <${SecretText} id="export-recovery-key" className="recovery" label="Recovery key" name="recovery key" value=${recoveryKey} />
+      <label class="check"><input type="checkbox" checked=${kept} onChange=${(e) => setKept(e.target.checked)} />
+        I wrote down the recovery key in a safe place</label></div>`;
+    footer = html`<button class="button primary" type="button" disabled=${busy || !kept} onClick=${afterKey}>Continue</button>`;
+  } else if (view) {
+    body = html`${view.intro && html`<p>${view.intro}</p>`}
+      <div class=${`notice${view.error ? ' error' : ''}`} role="status"><strong>${view.notice.strong}</strong> ${view.notice.text}</div>
+      ${view.rows.length > 0 && html`<div class="group rows">${view.rows.map((row) => html`<div key=${row.label} class="link-row static">
+        <span class="text"><span class="label">${row.label}</span><span class="summary">${row.summary}</span></span></div>`)}</div>`}
+      ${view.checkbox && html`<label class="check"><input type="checkbox" checked=${include} onChange=${(e) => setInclude(e.target.checked)} /> ${view.checkbox}</label>`}
+      ${view.size && html`<p class="hint">${view.size}</p>`}
+      <p class="hint">${view.hint}</p>`;
+    footer = html`<button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="button" disabled=${busy}
+        onClick=${view.screen === 'warn' ? makeKey : send}>${view.primary}</button>`;
+  } else if (!error) {
+    body = html`<p class="empty" role="status">Reading the account…</p>`;
+  }
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="export-title" onClose=${onClose}>
+    <header>
+      <h2 id="export-title">${title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">${body}<${ErrorNotice} error=${error} /></div>
+    <footer>${footer}</footer>
+  </dialog>`;
+}
+
+// The section "Move Studio" of the Settings page on the desktop (ADR 0107
+// item 3). A server has "Export Account" in the Account panel.
+function MovePanel() {
+  const [open, setOpen] = useState(false);
+  return html`<article class="panel">
+    <h2>Move Studio</h2>
+    <p class="hint">Make one file with your feeds, drafts, versions, people and vault. Import it on a server, or in Studio on a different computer.</p>
+    <div class="actions"><button class="button action" type="button" onClick=${() => setOpen(true)}>Export Studio</button></div>
+    ${open && html`<${ExportSheet} onClose=${() => setOpen(false)} />`}
+  </article>`;
+}
+
+// A call of an import route: the auth routes of a server need no session,
+// and the desktop uses its API with the access token.
+function importCall(path, options = {}) {
+  return serverMode
+    ? exchange(`/auth/v1/import${path}`, {}, { method: 'POST', ...options })
+    : api(`/import${path}`, { method: 'POST', ...options });
+}
+
+// Send the archive in parts (ADR 0059). The result is the ID of the upload.
+// A failed part is sent again like the part of a feed upload.
+async function sendImport(file, invite, onProgress) {
+  const made = await importCall('', { body: { size: file.size, invite: invite || null } });
+  try {
+    for (let n = 0; n < partCount(file.size, made.part_size); n += 1) {
+      const range = partRange(n, file.size, made.part_size);
+      for (let tries = 0; ; tries += 1) {
+        try {
+          await importCall(`/${made.upload}/parts/${n}`, { method: 'PUT', body: file.slice(range.start, range.end) });
+          break;
+        } catch (e) {
+          if (!canTryAgain(e) || tries >= RETRY_DELAYS.length) throw e;
+          await wait(RETRY_DELAYS[tries]);
+        }
+      }
+      onProgress(range.end);
+    }
+  } catch (e) {
+    importCall(`/${made.upload}`, { method: 'DELETE' }).catch(() => {});
+    throw e;
+  }
+  return made.upload;
+}
+
+// The frame of an import page: a page with a card on a server, a sheet on the
+// desktop.
+function ImportShell({ title, intro, onClose, children }) {
+  const ref = useSheet(true);
+  if (serverMode) {
+    return html`<main class="center"><div class="card">
+      <${Brand} />
+      <div><h1>${title}</h1><p>${intro}</p></div>
+      ${children}
+    </div></main>`;
+  }
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="import-title" onClose=${onClose}>
+    <header>
+      <h2 id="import-title">${title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body"><p>${intro}</p>${children}</div>
+  </dialog>`;
+}
+
+// "Import an Account" (ADR 0107 items 9 to 14, screens 5 to 7). The first
+// step selects the file and sends it. The second step opens the vault of the
+// file. On a server, `onDone` follows the new session. The desktop reads its
+// state again.
+function ImportFlow({ signup, onDone, onBack }) {
+  const server = serverMode;
+  const needInvite = server && signup === 'invite';
+  const [invite, setInvite] = useState('');
+  const [sending, setSending] = useState(null);
+  const [check, setCheck] = useState(null);
+  const [mode, setMode] = useState(null);
+  const [passphrase, setPassphrase] = useState('');
+  const [recoveryKey, setRecoveryKey] = useState('');
+  const [email, setEmail] = useState('');
+  const [remote, setRemote] = useState(false);
+  const picker = useRef(null);
+  const pick = useAction();
+  const open = useAction();
+
+  const choose = (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    pick.run(async () => {
+      setSending({ name: file.name, size: file.size, sent: 0, checking: false });
+      try {
+        const upload = await sendImport(file, needInvite ? invite.trim() : null,
+          (sent) => setSending((current) => ({ ...current, sent })));
+        setSending((current) => ({ ...current, checking: true }));
+        setCheck(await importCall(`/${upload}/check`));
+      } catch (e) {
+        setSending(null);
+        throw e;
+      }
+    });
+  };
+
+  // End the import that waits, so that the server removes the file.
+  const leave = () => {
+    if (check) importCall(`/${check.upload}`, { method: 'DELETE' }).catch(() => {});
+    onBack();
+  };
+
+  const view = check && importOpenView(check, { server, hasNip07: !!window.nostr, mode });
+  const finish = async (credential) => {
+    const body = { ...credential };
+    if (view.needsEmail && (credential.passphrase !== undefined || credential.recovery_key !== undefined)) {
+      body.email = normalEmail(email);
+    }
+    const result = await importCall(`/${check.upload}/open`, { body });
+    if (server) {
+      csrfToken = result.csrf;
+      onDone();
+    } else {
+      location.reload();
+    }
+  };
+  const submit = (event) => {
+    event.preventDefault();
+    open.run(() => finish(view.secret === 'recovery' ? { recovery_key: recoveryKey.trim() } : { passphrase }));
+  };
+  const bySigner = () => open.run(async () => {
+    const signer = window.nostr;
+    if (!signer.nip44) {
+      throw new ApiError(0, 'signer', 'This signer does not support NIP-44. Studio needs NIP-44 to open the vault.');
+    }
+    let pubkey;
+    let key;
+    try {
+      pubkey = await signer.getPublicKey();
+      const wrapper = check.nostr_wrappers.find((w) => w.pubkey === pubkey);
+      if (!wrapper) throw new ApiError(0, 'pubkey_not_in_archive', importErrorText('pubkey_not_in_archive'));
+      key = await signer.nip44.decrypt(pubkey, wrapper.ciphertext);
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      throw new ApiError(0, 'signer', 'The signer did not decrypt the vault key.');
+    }
+    await finish(server ? { key, pubkey } : { key });
+  });
+
+  if (remote) {
+    return html`<${Nip46Page} title="Open the vault with Amber or a bunker" invite=${null} recoveryKey=${false}
+      onConnected=${(connection) => finish({ connection })} onDone=${() => {}} onBack=${() => setRemote(false)} />`;
+  }
+
+  if (!check) {
+    const row = sending && { label: sending.name, summary: sending.checking ? CHECKING_TEXT : sendingText(sending.sent, sending.size) };
+    return html`<${ImportShell} title="Import an account" intro=${importSelectText(server)} onClose=${onBack}>
+      <div class="form">
+        ${needInvite && html`<${Field} id="import-invite" label="Invite code" autocomplete="off" required
+          value=${invite} onInput=${(e) => setInvite(e.target.value)} />`}
+        <input ref=${picker} type="file" accept=".tar,application/x-tar" hidden onChange=${choose} />
+        <div class="actions"><button class="button action" type="button" disabled=${pick.busy || (needInvite && invite.trim() === '')}
+          onClick=${() => picker.current.click()}>Select the File</button></div>
+        ${row && html`<div class="group rows"><div class="link-row static">
+          <span class="text"><span class="label">${row.label}</span><span class="summary">${row.summary}</span></span></div></div>`}
+        <${AuthNotice} error=${pick.error} importing=${true} />
+        <p class="hint">${IMPORT_HINT}</p>
+        <button class="button link" type="button" onClick=${onBack}>${server ? 'Back to Sign Up' : 'Cancel'}</button>
+      </div>
+    <//>`;
+  }
+
+  return html`<${ImportShell} title="Open the vault of the file" intro=${view.intro} onClose=${leave}>
+    <form class="form" onSubmit=${submit}>
+      <div class="group rows">${importFacts(check).map((fact) => html`<div key=${fact.label} class="link-row static">
+        <span class="text"><span class="label">${fact.label}</span><span class="summary">${fact.summary}</span></span></div>`)}</div>
+      ${view.needsEmail && html`<${Field} id="import-email" label="Email address" type="email" autocomplete="username" required
+        value=${email} onInput=${(e) => setEmail(e.target.value)} />`}
+      ${view.secret === 'passphrase' && html`<${SecretField} id="import-passphrase" label="Passphrase" autocomplete="current-password" required autofocus
+        value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />`}
+      ${view.secret === 'recovery' && html`<${SecretField} id="import-recovery-key" label="Recovery key" autocomplete="off" required autofocus
+        value=${recoveryKey} onInput=${(e) => setRecoveryKey(e.target.value)} />`}
+      ${view.primary && html`<div class="actions"><button class="button primary" type="submit"
+        disabled=${open.busy || (view.secret === 'passphrase' ? !passphrase : !recoveryKey.trim()) || (view.needsEmail && !email.trim())}>${open.busy ? 'Opening the Vault…' : view.primary}</button></div>`}
+      ${view.others.map((other) => html`<div key=${other.id} class="actions"><button class="button action" type="button" disabled=${open.busy}
+        onClick=${other.id === 'nip07' ? bySigner : other.id === 'nip46' ? () => setRemote(true) : () => setMode(other.id)}>${other.label}</button></div>`)}
+      ${view.noMethod && html`<p class="hint">This browser has no way to open the vault of the file. Use a signer extension or a different computer.</p>`}
+      <${AuthNotice} error=${open.error} importing=${true} />
+      <button class="button link" type="button" onClick=${leave}>Cancel</button>
+    </form>
+  <//>`;
 }
 
 // ---- App ----

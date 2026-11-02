@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
-import { api, askConfirm, Bar, ChoiceSelect, CopyButton, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { api, assetMode, askConfirm, Bar, ChoiceSelect, CopyButton, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
@@ -13,7 +13,7 @@ import {
   walletSheetReady, recipientTitle,
 } from './recipients.js';
 import {
-  peopleSections, PEOPLE_EMPTY, suggestionRow, personRow, makePersonStart, makePersonBody, initials,
+  peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, initials,
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices, makeSheetTitle,
   makeSheetHint, creditItemRow, payeeItemRow, keyItemRow, toggledItem, dismissBody, addPersonBody,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions,
@@ -103,8 +103,9 @@ export function PeoplePage({ feeds, go }) {
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
   const people = data ? filterPeople(data.people, query) : [];
   const payees = data ? filterPayees(payeesWithNoPerson(data.recipients), query) : [];
-  const sections = data ? peopleSections({ people, suggestions: data.suggestions, changes: data.changes, payees }) : [];
+  const sections = data ? peopleSections({ people, suggestions: data.suggestions, changes: data.changes, payees, server: assetMode().server }) : [];
   const sectionViews = {
+    note: () => html`<p class="hint">${PEOPLE_SERVER_NOTE}</p>`,
     search: () => html`<div class="field search-field"><div class="field-body">
       <input type="search" aria-label="Search people, addresses and keys" placeholder="Search people, addresses and keys"
         value=${query} onInput=${(e) => setQuery(e.target.value)} /></div></div>`,

@@ -369,6 +369,8 @@ textarea.masked { -webkit-text-security: disc; }
    error only. */
 .notice.error { border: 1px solid var(--error); }
 .notice strong { display: block; }
+/* A button in a notice, such as "Close" of the notice after an import. */
+.notice > .actions { margin-top: 10px; }
 
 .eyebrow {
   display: inline-flex;

@@ -182,6 +182,18 @@ To restore, stop the server, put the folder back with the owner `studio` and the
 
 An existing Docker volume keeps the mode of its folder. Docker copies the mode of the image folder only into a new volume. The server repairs the modes at its start (ADR 0104): it sets `<data>`, `<data>/users` and each user folder to `0700`, and each `vault.json` to `0600`. Check the result with `docker exec` and `stat -c %a /data /data/users /data/users/*/vault.json`. The result is 700, 700 and 600.
 
+### Personal data of people who are not users
+
+Each `collection.sqlite` holds personal data about people who are not users of Studio.
+The People module of a user keeps their names, credit names, wallets, Nostr keys and support links.
+It also keeps the links that the user made between the identities of one person.
+Studio does not encrypt these data at rest, and the operator can read them ([ADR 0108](../adr/0108-people-data-at-rest-stays-plain.md)).
+The People page of a user tells the user this.
+
+The backups of the data folder hold the same data. Keep each backup as safe as the server.
+The archive of "Export Account" holds the collection with no encryption too ([ADR 0107](../adr/0107-a-user-can-export-and-import-an-account.md)).
+The server sends the archive to the user and keeps no copy of it.
+
 ## 7. Memory
 
 Each Argon2id derivation uses 64 MiB. `--argon2-concurrency 2` thus needs 128 MiB for the derivations. Increase it only when the computer has the memory for it.

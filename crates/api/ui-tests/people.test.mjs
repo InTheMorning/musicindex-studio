@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  peopleSections, PEOPLE_EMPTY, suggestionRow, personRow, makePersonStart, makePersonBody, sheetFeeds,
+  peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
@@ -35,6 +35,15 @@ test('with no person, the suggestions come before the people', () => {
 test('a section with no data is left out, but people always shows', () => {
   assert.deepEqual(peopleSections({}), ['search', 'actions', 'people']);
   assert.equal(PEOPLE_EMPTY, 'No people yet. Check a suggestion above, or add a person.');
+});
+
+test('ADR 0108 item 3: the People page of a server starts with the line about the operator, and the desktop has none', () => {
+  assert.equal(PEOPLE_SERVER_NOTE, 'The operator of this server can read the people that you keep.');
+  assert.deepEqual(peopleSections({ server: true }), ['note', 'search', 'actions', 'people'],
+    'ADR 0108 item 3: a server shows the line first. Fix peopleSections in crates/api/ui/people.js.');
+  assert.ok(!peopleSections({ server: false }).includes('note'),
+    'ADR 0108 item 3: the desktop has no such line. Fix peopleSections in crates/api/ui/people.js.');
+  assert.ok(!peopleSections({}).includes('note'));
 });
 
 test('the page person has the sections of ADR 0099 item 4 in tier sequence', () => {

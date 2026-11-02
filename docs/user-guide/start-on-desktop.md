@@ -83,6 +83,31 @@ You can also select **Download** for one file.
 To keep a file from a server, select **Download to This Device** on that server.
 See [Manage the files of a release](release-files.md).
 
+## Move Studio to a different computer
+
+Studio can make one file with your feeds, drafts, versions, people and vault.
+The file holds your feeds, drafts and people with no encryption. Keep the file safe.
+
+1. Select **Settings** and find **Move Studio**.
+2. Select **Export Studio**.
+3. Read the facts. Clear **Include the audio and images** to make a smaller file.
+4. Select **Export Studio**, and keep the file that your browser downloads.
+
+To import a file, start Studio with an empty data folder. Use `--data-dir` with a new folder.
+An import is possible only while the collection has no feed. It cannot replace data.
+
+1. Open **Releases**. The page is empty.
+2. Select **Import an Account**.
+3. Select **Select the File**, and select the file of **Export Account** from a server or of **Export Studio**.
+4. Read the facts of the file.
+5. Open the vault of the file with its passphrase or with its recovery key.
+6. Select **Open and Import**.
+
+Studio then has your feeds, drafts, versions, people, vault and connected apps.
+The import changes no feed and writes nothing to your file hosts.
+If the data folder has a vault, Studio asks you to unlock it first.
+If the collection has a feed, Studio shows "This Studio has feeds. Import into a new data folder."
+
 ## Stop Studio
 
 Press Ctrl+C in the terminal.

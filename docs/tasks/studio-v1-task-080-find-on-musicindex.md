@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0117](../adr/0117-the-page-of-a-person-finds-values-on-musicindex.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md) and [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md).
 
-Status: In progress. [Task 079](studio-v1-task-079-person-save-and-discard.md) is committed. Packet 080a extends the save of packet 079a, and packet 080b uses the pending changes of packet 079b. The planning model examined the packets again on 2026-11-02, and changed item 2 of packet 080b.
+Status: Complete. Packets 080a and 080b are committed. The screenshot visual check passed on 2026-11-02. The human test is open.
 
 ## Goal
 

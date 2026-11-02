@@ -1421,6 +1421,9 @@ fn the_ui_names_no_other_server_and_sends_the_token() {
                 // The prefix that `media.js` removes from an address, so that
                 // the player makes no download for OP3 (ADR 0076 item 3).
                 .filter(|s| !s.starts_with("https://op3.dev/e"))
+                // The link that the user opens to a feed on musicindex.org
+                // (ADR 0117 item 8). The UI does not load it.
+                .filter(|s| !s.starts_with("https://musicindex.org/#feed="))
                 .collect();
             assert!(
                 found.is_empty(),

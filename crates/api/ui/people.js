@@ -4,7 +4,7 @@
 // gives each outcome (ADR 0065).
 
 import { shortKey } from './nostrkey.js';
-import { feedKind, isPublisher } from './shell.js';
+import { feedKind, isPublisher, roleWord } from './shell.js';
 import { placesText } from './recipients.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -635,22 +635,38 @@ export function savedValues(person) {
     href: person.href ?? '',
     default_address: person.default_address ? keyValue(person.default_address) : '',
     member: (person.members || []).length > 0 ? String(person.members[0]) : '',
+    // The wallets and the Nostr keys that a fill adds (ADR 0117 item 14).
+    wallets: [],
+    keys: [],
   };
 }
 
 // The controls of the page, in their sequence. The usual role and its group
 // are one control. The field controls are sent in the `fields` of a save.
-const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'member'];
+const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'member', 'wallets', 'keys'];
 const FIELD_CONTROLS = ['name', 'usual_role', 'img', 'href'];
+// The list controls. Each added item is one pending change.
+const LIST_NAMES = { wallets: 'wallet', keys: 'npub' };
 
-// Whether one control has a value that differs from the saved value.
+const listLength = (list) => (list || []).length;
+
+// Whether one control has a value that differs from the saved value. A list
+// control compares its lengths.
 export function isPending(saved, values, control) {
   if (control === 'usual_role') return values.usual_role !== saved.usual_role || values.usual_group !== saved.usual_group;
+  if (control in LIST_NAMES) return listLength(values[control]) !== listLength(saved[control]);
   return values[control] !== saved[control];
 }
 
-// The controls with a pending change.
-export const pendingKeys = (saved, values) => CONTROLS.filter((control) => isPending(saved, values, control));
+// The pending changes, one entry for each control. Each added wallet and
+// each added Nostr key is one entry of its own.
+export const pendingKeys = (saved, values) => CONTROLS.flatMap((control) => {
+  if (control in LIST_NAMES) {
+    const added = listLength(values[control]) - listLength(saved[control]);
+    return Array.from({ length: Math.max(0, added) }, () => LIST_NAMES[control]);
+  }
+  return isPending(saved, values, control) ? [control] : [];
+});
 
 // The status of the toolbar of the page (ADR 0116 item 3).
 export const pendingStatus = (count) => (count === 0 ? 'No changes' : plural(count, 'change not saved', 'changes not saved'));
@@ -666,6 +682,10 @@ export function saveBody(saved, values) {
   }
   if (keys.includes('default_address')) body.default_address = values.default_address === '' ? null : keyFromValue(values.default_address);
   if (keys.includes('member')) body.member = values.member === '' ? null : Number(values.member);
+  if (keys.includes('wallet')) {
+    body.wallets = values.wallets.slice(listLength(saved.wallets)).map((w) => ({ key: w.key, recipient_type: w.recipient_type }));
+  }
+  if (keys.includes('npub')) body.keys = values.keys.slice(listLength(saved.keys));
   return body;
 }
 
@@ -677,13 +697,15 @@ const LEAVE_NAMES = {
   href: 'the information address',
   default_address: 'the default address',
   member: 'the artist or label',
+  wallet: 'a wallet',
+  npub: 'a Nostr key',
 };
 
 // The text of the leave sheet. It names each control with a pending change
 // (ADR 0116 item 8).
 export function leaveText(name, keys) {
   const changes = plural(keys.length, 'change', 'changes');
-  return `${name} has ${changes} that ${keys.length === 1 ? 'is' : 'are'} not saved: ${joinList(keys.map((key) => LEAVE_NAMES[key]))}.`;
+  return `${name} has ${changes} that ${keys.length === 1 ? 'is' : 'are'} not saved: ${joinList([...new Set(keys.map((key) => LEAVE_NAMES[key]))])}.`;
 }
 
 // The line of the usual role of a person, and the publisher feeds of which
@@ -1326,3 +1348,163 @@ export function mergeResult(keep, other) {
 
 // The body of `POST /people/{id}/merge`.
 export const mergeBody = (otherId) => ({ other: Number(otherId) });
+
+// ---- Find on musicindex (ADR 0117, task 080b) ----
+
+// The text of the search sheet (ADR 0117 item 2).
+export const FIND_HINT = 'Studio searches the artist and label feeds on musicindex.org. Select the feed of this person.';
+export const FIND_EMPTY = 'No artist or label feed on musicindex has this name.';
+export const FIND_WAIT = 'Searching…';
+export const FILL_NOTE = 'Studio puts the values in the fields. Select Save to keep them. Studio changes no feed.';
+
+// The levels of the search sheet, in sequence (ADR 0117 items 4 and 6).
+export const LOOKUP_LEVELS = [
+  { level: 'role', heading: 'Verified role', note: 'The feed and its albums link to each other, and both give the role.' },
+  { level: 'two_way', heading: 'Verified two-way links', note: 'The feed and its albums link to each other, but they give no role.' },
+  { level: 'name_only', heading: 'Name only', note: 'Only the name matches. No album links back to this feed.' },
+];
+
+// The rows of a search in their levels. A level with no row is left out. In
+// a level, the rows keep the sequence of the search (ADR 0117 item 4).
+export const lookupGroups = (rows) => LOOKUP_LEVELS
+  .map((group) => ({ ...group, rows: (rows || []).filter((row) => row.level === group.level) }))
+  .filter((group) => group.rows.length > 0);
+
+// The dot class and the type line of a row (ADR 0117 item 4). The dot of a
+// role is filled. The dots of the other kinds are hollow.
+export function lookupKind(row) {
+  const kind = row.kind || {};
+  switch (kind.type) {
+    case 'role': {
+      const roles = kind.roles || [];
+      const [one, many] = roles[0] === 'label' ? ['release', 'releases'] : ['album', 'albums'];
+      const count = row.albums == null ? '' : ` · ${plural(row.albums, one, many)}`;
+      return { dot: roles[0] || 'feed', text: `${roles.map(roleWord).join(' · ')}${count}` };
+    }
+    case 'inferred_artist': {
+      const count = row.albums == null ? '' : ` · ${plural(row.albums, 'album', 'albums')}`;
+      return { dot: 'artist hollow', text: `Inferred artist${count}` };
+    }
+    case 'no_role': return { dot: 'feed hollow', text: 'Feed · two-way links, no role' };
+    default: return { dot: 'feed hollow', text: 'Unverified link' };
+  }
+}
+
+const VALUE_WORDS = [['picture', 'a picture'], ['website', 'a website'], ['wallet', 'a wallet'], ['npub', 'a Nostr key']];
+
+// The host of a row, then the values that it has (ADR 0117 item 7). The
+// result is `null` for a row with no detail.
+export function hasLine(row) {
+  const has = row.has || {};
+  const words = VALUE_WORDS.filter(([key]) => has[key]).map(([, word]) => word);
+  const parts = [row.host, words.length > 0 ? joinList(words) : null].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+// The start value, the state and the words of each value of a feed (ADR 0117
+// items 9 to 12).
+const ALREADY_VALUE = 'Already the value of this person';
+const ALREADY_WALLET = 'Already a wallet of this person';
+const NO_KEY = 'This feed gives no Nostr key. Use “Add a Nostr Key” to search the Nostr profiles.';
+const NO_ADDRESS = 'This wallet has no address, so Studio cannot save it.';
+const PAYS_ARTIST = 'The feed pays the artist. Make sure that the artist is this person.';
+const WALLET_WORDS = { lnaddress: 'Lightning address', node: 'Lightning node' };
+const KEYSEND_WORDS = { found: 'Checked with keysend', no_data: 'No keysend data', failed: 'The keysend check failed' };
+
+// A value of another person has the name of that person (ADR 0098 item 6).
+const otherName = (state) => (state && typeof state === 'object' && state.other_person ? state.other_person.name : null);
+const isWebAddress = (value) => typeof value === 'string' && /^https?:\/\//i.test(value);
+
+// The rows of the values sheet (ADR 0117 items 9 to 12). `pending` gives the
+// values of the page: a picture or an information address starts selected
+// when its field is empty, and a wallet or a Nostr key starts selected when a
+// fill has added it already.
+export function fillRows(values, pending) {
+  const rows = [];
+  const picture = values.picture;
+  if (picture && isWebAddress(picture.value)) {
+    const current = picture.state === 'current';
+    rows.push({
+      id: 'img', title: 'Picture', value: picture.value, lines: current ? [ALREADY_VALUE] : [],
+      selectable: !current, selected: !current && pending.img === '', art: picture.value,
+    });
+  }
+  const website = values.website;
+  if (website && isWebAddress(website.value)) {
+    const current = website.state === 'current';
+    rows.push({
+      id: 'href', title: 'Information address', value: website.value, lines: [current ? ALREADY_VALUE : 'The link of the feed'],
+      selectable: !current, selected: !current && pending.href === '',
+    });
+  }
+  (values.wallets || []).forEach((wallet, index) => {
+    const state = wallet.state;
+    const owned = state === 'current' || state === 'has_wallet';
+    const name = otherName(state);
+    const selectable = !!wallet.key && !owned && name === null;
+    let status;
+    if (owned) status = ALREADY_WALLET;
+    else if (name !== null) status = `A wallet of ${name}`;
+    else if (!wallet.key) status = NO_ADDRESS;
+    const split = /^\d+$/.test(wallet.split || '') ? ` · ${wallet.split}%` : '';
+    const lines = [`The value block of the feed${split}`];
+    if (wallet.lookup) lines.push(KEYSEND_WORDS[wallet.lookup]);
+    lines.push(selectable ? PAYS_ARTIST : status);
+    rows.push({
+      id: `wallet:${index}`, title: 'Wallet', value: wallet.value, lines: [WALLET_WORDS[wallet.recipient_type] || 'Wallet', ...lines],
+      selectable, selected: selectable && pending.wallets.some((w) => keyValue(w.key) === keyValue(wallet.key)),
+      wallet: { key: wallet.key, recipient_type: wallet.recipient_type },
+    });
+  });
+  const npub = values.npub;
+  if (!npub) {
+    rows.push({ id: 'npub', title: 'Nostr key', value: null, lines: [NO_KEY], selectable: false, selected: false });
+  } else {
+    const current = npub.state === 'current';
+    const name = otherName(npub.state);
+    let lines = [];
+    if (current) lines = [ALREADY_VALUE];
+    else if (name !== null) lines = [`A Nostr key of ${name}`];
+    rows.push({
+      id: 'npub', title: 'Nostr key', value: npub.value, mono: true, npub: npub.value, lines,
+      // A key of a different person has no check box, as a wallet of a
+      // different person (ADR 0117 item 12). The core refuses it at the save.
+      selectable: !current && name === null, selected: !current && name === null && pending.keys.includes(npub.value),
+    });
+  }
+  return rows;
+}
+
+// The text of the Fill button, for the number of selected rows (ADR 0117 item 13).
+export const fillLabel = (count) => `Fill ${plural(count, 'Field', 'Fields')}`;
+
+// The rows that a fill adds to the pending values (ADR 0117 item 14). `checked`
+// gives the IDs of the checked rows. A picture or an information address
+// replaces its field. A wallet or a Nostr key is added to its list, once.
+export function fillPatch(rows, checked, pending) {
+  const on = rows.filter((row) => row.selectable && checked.includes(row.id));
+  const patch = {};
+  const picture = on.find((row) => row.id === 'img');
+  if (picture) patch.img = picture.value;
+  const website = on.find((row) => row.id === 'href');
+  if (website) patch.href = website.value;
+  const wallets = on.filter((row) => row.wallet)
+    .map((row) => row.wallet)
+    .filter((wallet) => !pending.wallets.some((w) => keyValue(w.key) === keyValue(wallet.key)));
+  if (wallets.length > 0) patch.wallets = [...pending.wallets, ...wallets];
+  const npubs = on.filter((row) => row.npub).map((row) => row.npub).filter((npub) => !pending.keys.includes(npub));
+  if (npubs.length > 0) patch.keys = [...pending.keys, ...npubs];
+  return patch;
+}
+
+// The line of a filled field (ADR 0117 item 14). A row with no kind word
+// gives the line with the word "feed" only.
+export function fillSource(row) {
+  const kind = row.kind || {};
+  const word = kind.type === 'role' ? ((kind.roles || [])[0] || '').toLowerCase() : (kind.type === 'inferred_artist' ? 'artist' : '');
+  const title = row.title || 'Untitled feed';
+  return word ? `From musicindex: the ${word} feed ${title}` : `From musicindex: the feed ${title}`;
+}
+
+// The link of a feed on musicindex.org (ADR 0117 item 8).
+export const musicindexFeedUrl = (guid) => `https://musicindex.org/#feed=${encodeURIComponent(guid)}`;

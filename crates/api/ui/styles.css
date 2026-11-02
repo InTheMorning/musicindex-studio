@@ -1793,6 +1793,9 @@ button.outline-feed {
 .link-row .summary.check-error { display: flex; gap: 6px; align-items: center; color: var(--error); }
 .link-row .summary.check-error .icon { flex: none; width: 16px; height: 16px; }
 .person-head .dot { display: inline-block; vertical-align: middle; margin-inline: 2px 4px; }
+/* The type dot before the type line of a row, as in the musicindex lookup
+   (ADR 0117 item 7). */
+.summary > .dot { display: inline-block; vertical-align: middle; margin-inline-end: 6px; }
 .change-diff { padding: 4px 16px 12px; position: relative; }
 .change-diff .diff { margin: 0; }
 

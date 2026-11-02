@@ -45,6 +45,22 @@ A control with a change has a mark at its start edge.
 - **Merge with a Person** moves the items of a different person to this person.
 - **Delete Person** deletes the person. No feed changes.
 
+## Find on musicindex
+
+Select **Find on musicindex** on the page of a person. Studio searches the artist and label feeds on musicindex.org for the name that you type. The search changes no feed. It adds nothing to your collection.
+
+The feeds are in three levels:
+
+- **Verified role**: the feed and its albums link to each other. They give the role.
+- **Verified two-way links**: the feed and its albums link to each other, but they give no role.
+- **Name only**: only the name matches. No album links back to this feed.
+
+Select a feed to see its values. Select the check box of each value that you want. Then select **Fill** with the number of fields. Studio puts each value in its field, and the field shows the feed that gave the value. Select **Save** to keep the values. Select **Discard** to remove them.
+
+- A picture and an information address start selected when the field is empty.
+- A wallet and a Nostr key start not selected. Make sure that the artist of a wallet is this person.
+- A value that the person has has no check box. A wallet of a different person has no check box.
+
 ## Check your feeds
 
 Select **Check your feeds** to compare each feed with the person.

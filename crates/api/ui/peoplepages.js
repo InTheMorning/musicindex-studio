@@ -27,6 +27,7 @@ import {
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, MEMBER_HINT, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
 } from './people.js';
 
 // The merges of this page load: the ID of each merged person, to the ID of
@@ -283,8 +284,9 @@ const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="b
 // information address. The values are pending changes of the page (ADR 0116
 // item 1). `update` changes them, and the page saves them. A pending control
 // has a mark. "Use" of a suggestion changes the value only (ADR 0113 item 8).
-function PersonFields({ values, saved, update, detail, profiles, titles, feeds }) {
-  const field = (id, label, key) => html`<${Field} id=${id} label=${label} value=${values[key]}
+function PersonFields({ values, saved, update, detail, profiles, titles, feeds, sources = {} }) {
+  // A filled field shows the line of its source until Save or Discard (ADR 0117 item 14).
+  const field = (id, label, key) => html`<${Field} id=${id} label=${label} value=${values[key]} hint=${sources[key]}
     class=${isPending(saved, values, key) ? 'pending' : undefined}
     onInput=${(e) => update({ [key]: e.target.value })} />`;
   // The suggestions of the core for one field.
@@ -478,6 +480,115 @@ function usePerson(id) {
   return { data, error, run, reload: () => read().catch(() => {}) };
 }
 
+// The sheet "Find on musicindex: {name}" (ADR 0117 items 2 to 4). It is open
+// while `query` is not null. Its search runs when it opens, and 300 ms after
+// each change of the text.
+function FindSheet({ open, personId, name, query, onQuery, onClose, onPick }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="find-title" onClose=${onClose}>
+    ${open && html`<${FindForm} personId=${personId} name=${name} query=${query} onQuery=${onQuery}
+      onCancel=${() => ref.current.close()} onPick=${onPick} />`}
+  </dialog>`;
+}
+
+function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+  const first = useRef(true);
+  useEffect(() => {
+    const text = query.trim();
+    if (text === '') { setRows([]); setError(null); return undefined; }
+    let live = true;
+    const load = () => api(`/people/${personId}/musicindex?q=${encodeURIComponent(text)}`).then(
+      (result) => { if (live) { setRows(result.rows || []); setError(null); } },
+      (e) => { if (live) { setRows([]); setError(e); } },
+    );
+    const timer = setTimeout(load, first.current ? 0 : 300);
+    first.current = false;
+    return () => { live = false; clearTimeout(timer); };
+  }, [query]);
+  return html`<header><h2 id="find-title">${`Find on musicindex: ${name}`}</h2></header>
+    <div class="body">
+      <div class="group rows"><${Field} id="find-query" label="Name" type="search" value=${query}
+        onInput=${(e) => onQuery(e.target.value)} /></div>
+      <p class="hint">${FIND_HINT}</p>
+      <${ErrorNotice} error=${error} />
+      ${rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
+      ${rows !== null && rows.length === 0 && !error && html`<p class="empty">${FIND_EMPTY}</p>`}
+      ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
+        <h2>${group.heading}</h2><p class="hint">${group.note}</p>
+        <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row)} />`)}</div>
+      </section>`)}
+    </div>
+    <footer><button class="button" type="button" onClick=${onCancel}>Cancel</button></footer>`;
+}
+
+// A row of a search: the picture, the title, the type line with its dot, and
+// the line of the values (ADR 0117 items 4 and 7).
+function LookupRow({ row, onClick }) {
+  const kind = lookupKind(row);
+  const detail = hasLine(row);
+  return html`<button class="link-row" type="button" onClick=${onClick}>
+    <${PersonArt} person=${{ img: row.image_url, name: row.title || '' }} />
+    <span class="text"><span class="label">${row.title || 'Untitled feed'}</span>
+      <span class="summary"><span class=${`dot ${kind.dot}`} aria-hidden="true"></span>${kind.text}</span>
+      ${detail && html`<span class="summary">${detail}</span>`}</span>
+    <span class="go">›</span></button>`;
+}
+
+// The sheet "From musicindex: {title}" (ADR 0117 items 8 to 14). It is open
+// while `row` is not null.
+function ValuesSheet({ personId, row, shown, onBack, onClose, onFill }) {
+  const ref = useSheet(row !== null);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="values-title" onClose=${onClose}>
+    ${row && html`<${ValuesForm} key=${row.feed_guid} personId=${personId} row=${row} shown=${shown} onBack=${onBack} onFill=${onFill} />`}
+  </dialog>`;
+}
+
+function ValuesForm({ personId, row, shown, onBack, onFill }) {
+  const [values, setValues] = useState(null);
+  const [checked, setChecked] = useState([]);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api(`/people/${personId}/musicindex/${encodeURIComponent(row.feed_guid)}`).then((result) => {
+      if (!live) return;
+      setValues(result);
+      setChecked(fillRows(result, shown).filter((r) => r.selected).map((r) => r.id));
+    }, (e) => { if (live) setError(e); });
+    return () => { live = false; };
+  }, [row.feed_guid]);
+  const rows = values ? fillRows(values, shown) : [];
+  const count = rows.filter((r) => r.selectable && checked.includes(r.id)).length;
+  const toggle = (id) => setChecked((current) => (current.includes(id) ? current.filter((c) => c !== id) : [...current, id]));
+  const kind = lookupKind(row);
+  const title = row.title || 'Untitled feed';
+  return html`<header><h2 id="values-title">${`From musicindex: ${title}`}</h2></header>
+    <div class="body">
+      <div class="group"><div class="link-row static"><${PersonArt} person=${{ img: row.image_url, name: title }} />
+        <span class="text"><span class="label">${title}</span>
+          <span class="summary"><span class=${`dot ${kind.dot}`} aria-hidden="true"></span>${kind.text}</span>
+          <span class="summary"><a href=${musicindexFeedUrl(row.feed_guid)} target="_blank" rel="noopener">Open on musicindex.org</a></span></span></div></div>
+      <${ErrorNotice} error=${error} />
+      ${values && html`<section class="page-section"><h2>Fill</h2>
+        <div class="group rows">${rows.map((r) => html`<${FillRow} key=${r.id} row=${r} checked=${checked.includes(r.id)}
+          onToggle=${() => toggle(r.id)} />`)}</div>
+        <p class="hint">${FILL_NOTE}</p></section>`}
+    </div>
+    <footer><button class="button" type="button" onClick=${onBack}>Back</button>
+      <button class="button primary" type="button" disabled=${count === 0} onClick=${() => onFill(fillPatch(rows, checked, shown), fillSource(row))}>${fillLabel(count)}</button></footer>`;
+}
+
+// A row of the Fill section. A row that cannot be selected has no check box.
+function FillRow({ row, checked, onToggle }) {
+  const lead = row.art ? html`<${PersonArt} person=${{ img: row.art, name: row.title }} />` : null;
+  const text = html`<span class="text"><span class="label">${row.title}</span>
+    ${row.value && html`<span class="summary mono address-text">${row.value}</span>`}
+    ${row.lines.map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span>`;
+  if (!row.selectable) return html`<div class="link-row static">${lead}${text}</div>`;
+  return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onToggle} />${lead}${text}</label>`;
+}
+
 // The page of a person (ADR 0099 item 4). The sections come from
 // `pageSequence('person')`.
 export function PersonPage({ id, feeds, go }) {
@@ -487,6 +598,10 @@ export function PersonPage({ id, feeds, go }) {
   const [linking, setLinking] = useState(null);
   const [more, setMore] = useState([]);
   const [merging, setMerging] = useState(false);
+  // The search of "Find on musicindex" (its text, or null when closed), and the
+  // row that the values sheet shows (ADR 0117 items 2 and 8).
+  const [finding, setFinding] = useState(null);
+  const [picked, setPicked] = useState(null);
   const loadMore = () => api(`/people/${id}/more`).then((r) => setMore(r.items || []), () => setMore([]));
   useEffect(() => { loadMore(); }, [id]);
   const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => setSuggestions(r.suggestions || []), () => setSuggestions([]));
@@ -515,13 +630,25 @@ export function PersonPage({ id, feeds, go }) {
   const [values, setValues] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveFailure, setSaveFailure] = useState(null);
-  useEffect(() => { if (data) { setValues(savedValues(data.person)); setSaveFailure(null); } }, [data]);
+  // The line of each filled field. Save, Discard and a new read clear it.
+  const [sources, setSources] = useState({});
+  useEffect(() => { if (data) { setValues(savedValues(data.person)); setSaveFailure(null); setSources({}); } }, [data]);
   const saved = data ? savedValues(data.person) : null;
   const shown = values || saved;
   const keys = saved ? pendingKeys(saved, shown) : [];
   const dirty = keys.length > 0;
   const update = (patch) => { setSaveFailure(null); setValues((current) => ({ ...(current || saved), ...patch })); };
-  const discard = () => { setValues(saved); setSaveFailure(null); };
+  const discard = () => { setValues(saved); setSaveFailure(null); setSources({}); };
+  // A fill makes pending changes, and closes the values sheet (ADR 0117 item 14).
+  const fill = (patch, source) => {
+    update(patch);
+    setSources((current) => ({
+      ...current,
+      ...(patch.img !== undefined ? { img: source } : {}),
+      ...(patch.href !== undefined ? { href: source } : {}),
+    }));
+    setPicked(null);
+  };
   // Save sends each pending change in one request (ADR 0116 item 5). A failure
   // keeps the pending changes, and shows the error.
   const save = async () => {
@@ -578,13 +705,14 @@ export function PersonPage({ id, feeds, go }) {
     go({ name: 'people' });
   });
   const sections = {
-    profile: () => html`<header class="person-head"><${PersonArt} person=${person} large />
+    profile: () => html`<${Fragment}><header class="person-head"><${PersonArt} person=${person} large />
       <div class="text"><h1>${person.name}</h1>
         ${(profile.role || profile.members.length > 0) && html`<p class="hint">${profile.role}${profile.role && profile.members.length > 0 && ' · '}${profile.members.map((m, i) =>
           html`${i > 0 && ', '}<span class=${`dot ${m.dot || 'feed'}`} aria-hidden="true"></span><button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>${m.role && ` · ${m.role}`}`)}</p>`}
         ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span> · ${keyEvidenceText(k.evidence)}</span>
           <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
-      </div></header>`,
+      </div></header>
+      <div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>Find on musicindex</button></div><//>`,
     check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count}
       onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
     more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>
@@ -603,6 +731,8 @@ export function PersonPage({ id, feeds, go }) {
       ${groups.map((g) => html`<div class="group" key=${g.id}>${g.members.map((m) => html`<${AddressRow} key=${JSON.stringify(m.key)}
           member=${m.member} count=${usedText(m.count)} />`)}
         <div class="actions"><button class="button" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
+      ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>
+        <span class="text"><span class="label">Wallet</span><span class="summary mono address-text">${w.key.address}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
       ${suggestions.map((s) => html`<div class="group" key=${s.address}><${AddressRow} member=${{ address: s.address, recipient_type: 'lnaddress' }}
         note=${profileAddressNote(s.npub, profiles)} />
         <div class="actions"><button class="button action" type="button" onClick=${() => act(async () => {
@@ -616,7 +746,7 @@ export function PersonPage({ id, feeds, go }) {
         })}>Dismiss</button></div></div>`)}
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => withLeave(() => setLinking('wallets'))} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
-      <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} />
+      <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources} />
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<div class="group">
         ${person.credit_names.map((c) => html`<div class="link-row static" key=${`c${c.id}`}><span class="text"><span class="label">Credit name</span>
           ${c.name && html`<span class="summary">${c.name}</span>`}${c.href && html`<span class="summary">${c.href}</span>`}${c.npub && html`<span class="summary mono">${shortKey(c.npub)}</span>`}</span>
@@ -624,6 +754,8 @@ export function PersonPage({ id, feeds, go }) {
           ${removeButton('credit-names', c.id, `Remove the credit name ${c.name}`)}</div>`)}
         ${person.keys.map((k) => html`<${KeyRowView} key=${`k${k.id}`} npub=${k.npub} profiles=${profiles} name=${person.name}
           note=${keyEvidenceText(k.evidence)} action=${removeButton('keys', k.id, `Remove the Nostr key ${shortKey(k.npub)}`)} />`)}</div>`}
+      ${shown.keys.length > 0 && html`<div class="group">${shown.keys.map((npub) => html`<div class="link-row static" key=${`p${npub}`}>
+        <span class="text"><span class="label">Nostr key</span><span class="summary mono">${shortKey(npub)}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
       <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => withLeave(() => setLinking('credit-names'))} />
         <${AddRow} title="Add a Nostr Key" onClick=${() => withLeave(() => setLinking('keys'))} /></div></section>`,
     support: () => html`<section class="page-section"><h2>Support links</h2>
@@ -654,7 +786,11 @@ export function PersonPage({ id, feeds, go }) {
   <${LinkSheet} kind=${linking} personId=${person.id} onClose=${() => setLinking(null)}
     onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />
   <${MergeSheet} open=${merging} person=${person} onClose=${() => setMerging(false)}
-    onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} /></div>`;
+    onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} />
+  <${FindSheet} open=${finding !== null && picked === null} personId=${person.id} name=${person.name} query=${finding || ''}
+    onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} />
+  <${ValuesSheet} personId=${person.id} row=${picked} shown=${shown}
+    onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} /></div>`;
 }
 
 // The sheet "Merge with {name}" (ADR 0103 items 14 to 16). The core moves the

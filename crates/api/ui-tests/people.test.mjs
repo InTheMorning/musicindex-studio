@@ -250,6 +250,7 @@ import {
   savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, findingLine, checkFeedLines, checkKeys,
   feedRows, levelRows, feedsHeading, SHEET_TITLES, sheetStart, sheetBody, sheetReady, LINK_FORMS, linkFields,
   linkStart, linkBody, linkReady, profileLine, changeLine, addIntro,
+  lookupKind, lookupGroups, LOOKUP_LEVELS, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
 } from '../ui/people.js';
 
 const KEY = (address, custom_value = null) => ({ address, custom_key: null, custom_value });
@@ -315,6 +316,7 @@ test('the saved values and the pending changes of a person (ADR 0116 items 1 to 
   const saved = savedValues(MK);
   assert.deepEqual(saved, {
     name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), member: '3',
+    wallets: [], keys: [],
   });
   assert.deepEqual(pendingKeys(saved, saved), []);
   assert.equal(saveBody(saved, saved), null);
@@ -954,3 +956,144 @@ test('the key of Correct the Feeds is never a key with the warning by default (A
   const line = correctOptions(only, { ...fields, key: true }, profiles).find((o) => o.id === 'key').line;
   assert.match(line, /City Radio\. The profile name is not "HeyCitizen"\. Check this key\./);
 });
+
+// ---- Task 080b: Find on musicindex (ADR 0117) ----
+
+const ROW = (kind, extra = {}) => ({
+  feed_guid: 'g1', title: 'DuhLaurien', image_url: null, level: 'role', kind, albums: 3, host: 'wavlake.com',
+  has: { picture: true, website: true, wallet: true, npub: false }, ...extra,
+});
+
+test('the dot and the type line of each kind of row (ADR 0117 item 4)', () => {
+  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['artist'] })), { dot: 'artist', text: 'Artist · 3 albums' });
+  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['label'] }, { albums: 1 })), { dot: 'label', text: 'Label · 1 release' });
+  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['label'] }, { albums: 2 })), { dot: 'label', text: 'Label · 2 releases' });
+  assert.deepEqual(lookupKind(ROW({ type: 'inferred_artist' }, { albums: 1 })), { dot: 'artist hollow', text: 'Inferred artist · 1 album' });
+  assert.deepEqual(lookupKind(ROW({ type: 'no_role' }, { level: 'two_way', albums: 2 })), { dot: 'feed hollow', text: 'Feed · two-way links, no role' });
+  assert.deepEqual(lookupKind(ROW({ type: 'unverified' }, { level: 'name_only', albums: null })), { dot: 'feed hollow', text: 'Unverified link' });
+});
+
+test('the groups of a search keep the three levels in sequence and leave out an empty level (ADR 0117 item 4)', () => {
+  assert.deepEqual(LOOKUP_LEVELS.map((l) => l.heading), ['Verified role', 'Verified two-way links', 'Name only']);
+  const rows = [
+    ROW({ type: 'unverified' }, { feed_guid: 'c', level: 'name_only' }),
+    ROW({ type: 'role', roles: ['artist'] }, { feed_guid: 'a' }),
+    ROW({ type: 'no_role' }, { feed_guid: 'b', level: 'two_way' }),
+    ROW({ type: 'role', roles: ['label'] }, { feed_guid: 'd' }),
+  ];
+  const groups = lookupGroups(rows);
+  assert.deepEqual(groups.map((g) => g.heading), ['Verified role', 'Verified two-way links', 'Name only']);
+  assert.deepEqual(groups[0].rows.map((r) => r.feed_guid), ['a', 'd'], 'ADR 0117 item 4: a level keeps the sequence of the search.');
+  assert.deepEqual(lookupGroups([rows[1]]).map((g) => g.heading), ['Verified role']);
+  assert.deepEqual(lookupGroups([]), []);
+});
+
+test('the host and the values of a row, or null with no detail (ADR 0117 item 7)', () => {
+  assert.equal(hasLine(ROW({ type: 'role', roles: ['artist'] })), 'wavlake.com · a picture, a website and a wallet');
+  assert.equal(hasLine(ROW({ type: 'role', roles: ['artist'] }, { has: { picture: true, website: false, wallet: false, npub: false } })), 'wavlake.com · a picture');
+  assert.equal(hasLine(ROW({ type: 'role', roles: ['artist'] }, { host: null, has: { picture: false, website: false, wallet: false, npub: false } })), null);
+  assert.equal(hasLine(ROW({ type: 'role', roles: ['artist'] }, { has: { picture: false, website: false, wallet: false, npub: false } })), 'wavlake.com');
+});
+
+const RAW = (state = 'new') => ({ value: 'v', state });
+const PENDING = savedValues(MK);
+
+test('the start values and the rows of a fill (ADR 0117 items 9 to 12)', () => {
+  const values = {
+    title: 'DuhLaurien',
+    picture: { value: 'https://x.example/p.jpg', state: 'new' },
+    website: { value: 'https://duh.example', state: 'current' },
+    wallets: [
+      { value: 'duh@x.example', name: null, recipient_type: 'lnaddress', split: '100', lookup: 'found', key: KEY('duh@x.example'), state: 'new' },
+      { value: '02ff', name: null, recipient_type: 'node', split: '5', lookup: null, key: KEY('02ff'), state: 'has_wallet' },
+      { value: '03ee', name: null, recipient_type: 'node', split: '1', lookup: null, key: KEY('03ee'), state: { other_person: { id: 9, name: 'Ann' } } },
+      { value: 'zz', name: null, recipient_type: 'node', split: null, lookup: null, key: null, state: 'new' },
+    ],
+    npub: null,
+  };
+  const rows = fillRows(values, PENDING);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId.img.selected, true, 'ADR 0117 item 11: the picture starts selected when its field is empty.');
+  assert.equal(byId.href.selectable, false, 'ADR 0117 item 12: the current value has no check box.');
+  assert.deepEqual(byId.href.lines, ['Already the value of this person']);
+  assert.equal(byId['wallet:0'].selectable, true);
+  assert.equal(byId['wallet:0'].selected, false, 'ADR 0117 item 11: a wallet starts not selected.');
+  assert.deepEqual(byId['wallet:0'].lines.slice(0, 2), ['Lightning address', 'The value block of the feed · 100%']);
+  assert.ok(byId['wallet:0'].lines.includes('Checked with keysend'));
+  assert.ok(byId['wallet:0'].lines.includes('The feed pays the artist. Make sure that the artist is this person.'));
+  assert.equal(byId['wallet:1'].selectable, false);
+  assert.ok(byId['wallet:1'].lines.includes('Already a wallet of this person'));
+  assert.equal(byId['wallet:2'].selectable, false);
+  assert.ok(byId['wallet:2'].lines.includes('A wallet of Ann'));
+  assert.equal(byId['wallet:3'].selectable, false, 'A wallet with no key cannot be selected.');
+  assert.equal(byId.npub.selectable, false, 'A feed with no Nostr key has no check box.');
+  assert.deepEqual(byId.npub.lines, ['This feed gives no Nostr key. Use “Add a Nostr Key” to search the Nostr profiles.']);
+  const filled = fillRows({ ...values, picture: { value: 'https://x.example/p.jpg', state: 'new' } }, { ...PENDING, img: 'https://old.example/p.jpg' });
+  assert.equal(filled.find((r) => r.id === 'img').selected, false, 'A picture starts not selected when its field has a value.');
+});
+
+test('a value that is not an http or https address is not in the rows (ADR 0117 item 10)', () => {
+  const rows = fillRows({ picture: { value: 'ftp://x.example/p.jpg', state: 'new' }, website: { value: 'javascript:1', state: 'new' }, wallets: [], npub: null }, PENDING);
+  assert.deepEqual(rows.map((r) => r.id), ['npub']);
+});
+
+test('a Nostr key of a feed has a check box and starts not selected (ADR 0117 items 9 and 11)', () => {
+  const rows = fillRows({ wallets: [], npub: { value: 'npub1z', state: 'new' } }, PENDING);
+  assert.equal(rows[0].selectable, true);
+  assert.equal(rows[0].selected, false);
+  assert.deepEqual(rows[0].lines, []);
+  const other = fillRows({ wallets: [], npub: { value: 'npub1z', state: { other_person: { id: 9, name: 'Ann' } } } }, PENDING);
+  assert.equal(other[0].selectable, false, 'A Nostr key of a different person has no check box, as a wallet of a different person.');
+  assert.deepEqual(other[0].lines, ['A Nostr key of Ann']);
+});
+
+test('the label of the Fill button for the number of fields (ADR 0117 item 13)', () => {
+  assert.equal(fillLabel(1), 'Fill 1 Field');
+  assert.equal(fillLabel(0), 'Fill 0 Fields');
+  assert.equal(fillLabel(2), 'Fill 2 Fields');
+});
+
+test('a fill makes pending changes, and the save sends the added wallets and keys (ADR 0116, ADR 0117 item 14)', () => {
+  const values = {
+    picture: { value: 'https://x.example/p.jpg', state: 'new' },
+    website: { value: 'https://duh.example', state: 'new' },
+    wallets: [{ value: 'duh@x.example', name: null, recipient_type: 'lnaddress', split: '100', lookup: 'found', key: KEY('duh@x.example'), state: 'new' }],
+    npub: { value: 'npub1z', state: 'new' },
+  };
+  const rows = fillRows(values, PENDING);
+  const patch = fillPatch(rows, ['img', 'href', 'wallet:0', 'npub'], PENDING);
+  assert.deepEqual(patch, {
+    img: 'https://x.example/p.jpg', href: 'https://duh.example',
+    wallets: [{ key: KEY('duh@x.example'), recipient_type: 'lnaddress' }], keys: ['npub1z'],
+  });
+  const values2 = { ...PENDING, ...patch };
+  assert.deepEqual(pendingKeys(PENDING, values2), ['img', 'href', 'wallet', 'npub']);
+  assert.equal(pendingStatus(pendingKeys(PENDING, values2).length), '4 changes not saved');
+  assert.deepEqual(saveBody(PENDING, values2), {
+    fields: { name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: 'https://duh.example' },
+    wallets: [{ key: KEY('duh@x.example'), recipient_type: 'lnaddress' }],
+    keys: ['npub1z'],
+  });
+  assert.equal(leaveText('Mary Kate', pendingKeys(PENDING, values2)),
+    'Mary Kate has 4 changes that are not saved: the picture address, the information address, a wallet and a Nostr key.');
+  assert.deepEqual(fillPatch(rows, ['wallet:0'], values2), {}, 'A wallet that the page has already is not added twice.');
+  assert.deepEqual(fillPatch(rows, [], PENDING), {});
+});
+
+test('a fill sends no request (ADR 0117 item 15)', () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = () => { throw new Error('a fill must not send a request'); };
+  try {
+    fillPatch(fillRows({ picture: { value: 'https://x.example/p.jpg', state: 'new' }, wallets: [], npub: null }, PENDING), ['img'], PENDING);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('the source line of a filled field names the kind of the row (ADR 0117 item 14)', () => {
+  assert.equal(fillSource({ title: 'DuhLaurien', kind: { type: 'role', roles: ['artist'] } }), 'From musicindex: the artist feed DuhLaurien');
+  assert.equal(fillSource({ title: 'Duh Trio', kind: { type: 'inferred_artist' } }), 'From musicindex: the artist feed Duh Trio');
+  assert.equal(fillSource({ title: null, kind: { type: 'no_role' } }), 'From musicindex: the feed Untitled feed');
+  assert.equal(musicindexFeedUrl('a b'), 'https://musicindex.org/#feed=a%20b');
+});
+

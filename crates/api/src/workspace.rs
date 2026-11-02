@@ -1070,7 +1070,9 @@ impl Workspace {
         let text = root
             .to_str()
             .ok_or_else(|| ApiError::internal("the library folder is not valid text"))?;
-        self.collection.set_setting("library_root", &json!(text))?;
+        let stored = self.collection.library_root_setting(Path::new(text));
+        self.collection
+            .set_setting("library_root", &json!(stored))?;
         Ok(())
     }
 
@@ -1440,16 +1442,13 @@ impl Workspace {
     /// [`ApiError`] when the collection fails or Studio cannot open the
     /// folder.
     pub(crate) fn library(&self) -> Result<Library, ApiError> {
-        let root = self.collection.setting("library_root")?.ok_or_else(|| {
+        let root = self.collection.library_root()?.ok_or_else(|| {
             ApiError::new(
                 StatusCode::CONFLICT,
                 "no_library",
                 "Studio has no library folder yet. Set one first.",
             )
         })?;
-        let root = root
-            .as_str()
-            .ok_or_else(|| ApiError::internal("the library_root setting is not a string"))?;
         Library::open(root).map_err(|error| ApiError::internal(error.to_string()))
     }
 

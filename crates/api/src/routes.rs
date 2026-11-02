@@ -2746,7 +2746,10 @@ pub(crate) async fn list_announcements(
 /// The library setting and the download limits (ADR 0036 items 1 and 17).
 pub(crate) async fn get_library(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
-        let root = w.collection.setting("library_root")?.unwrap_or(Value::Null);
+        let root = w
+            .collection
+            .library_root()?
+            .map_or(Value::Null, |p| json!(p.to_string_lossy()));
         let default_root = library::default_root().and_then(|p| p.to_str().map(str::to_owned));
         let max = download_limit(&w.collection, "download_max_file_bytes")?;
         let min = download_limit(&w.collection, "download_min_free_bytes")?;
@@ -2804,8 +2807,10 @@ pub(crate) async fn put_library(
     Json(body): Json<SetLibrary>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        let existing = w.collection.setting("library_root")?;
-        let existing_root = existing.as_ref().and_then(Value::as_str).map(str::to_owned);
+        let existing_root = w
+            .collection
+            .library_root()?
+            .map(|p| p.to_string_lossy().into_owned());
         // The server has one library folder for each user (ADR 0055 item 25).
         if let Some(rules) = &w.rules
             && rules.library_root.to_str() != Some(body.root.trim())
@@ -2837,7 +2842,8 @@ pub(crate) async fn put_library(
         } else {
             migrate::MoveReport::default()
         };
-        w.collection.set_setting("library_root", &json!(root))?;
+        let stored = w.collection.library_root_setting(std::path::Path::new(&root));
+        w.collection.set_setting("library_root", &json!(stored))?;
         // Each feed with a release folder now gets its remote file records
         // (ADR 0038 item 3).
         w.record_all_remote_files();

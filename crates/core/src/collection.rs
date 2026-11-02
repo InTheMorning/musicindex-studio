@@ -463,7 +463,32 @@ ALTER TABLE library_files ADD COLUMN imported_at INTEGER;
 ALTER TABLE library_files ADD COLUMN removed_at INTEGER;
 UPDATE library_files SET imported_at = CAST(strftime('%s', 'now') AS INTEGER);
 ",
+    // ADR 0107 item 1: `library_root` becomes a path relative to the data
+    // folder. SQL cannot do it. `run_migrations` does it after this entry.
+    "SELECT 1;",
 ];
+
+/// `root` as a relative path under `data_dir`, when it is a folder inside
+/// it. The comparison also tries the resolved paths.
+fn relative_to_data(data_dir: Option<&Path>, root: &Path) -> Option<String> {
+    let data_dir = data_dir?;
+    let plain = |relative: &Path| {
+        let text = relative.to_str()?;
+        (!text.is_empty()
+            && relative
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_))))
+        .then(|| text.to_owned())
+    };
+    if let Ok(relative) = root.strip_prefix(data_dir)
+        && let Some(text) = plain(relative)
+    {
+        return Some(text);
+    }
+    let data = data_dir.canonicalize().ok()?;
+    let root = root.canonicalize().ok()?;
+    plain(root.strip_prefix(&data).ok()?)
+}
 
 /// The setting that holds the time that the mode `off` of ADR 0105 began.
 const ASSETS_OFF_SINCE: &str = "assets_off_since";
@@ -472,6 +497,11 @@ const ASSETS_OFF_SINCE: &str = "assets_off_since";
 /// it, Studio refills the credit index from the library copies, because SQL
 /// cannot read a feed.
 const PEOPLE_MIGRATION: usize = 20;
+
+/// The index in `MIGRATIONS` of the migration that makes `library_root`
+/// relative (ADR 0107 item 1). SQL cannot read the data folder, so the
+/// migration has no statement. Studio does the change after it, in code.
+const RELATIVE_LIBRARY_MIGRATION: usize = 23;
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -952,6 +982,9 @@ pub struct Collection {
     /// The rules of a server that holds no assets. `None` means that the
     /// workspace holds assets (ADR 0105 item 1).
     asset_rules: Option<AssetRules>,
+    /// The folder of the collection file. A relative `library_root` is
+    /// relative to it (ADR 0107 item 1). `None` for a collection in memory.
+    data_dir: Option<PathBuf>,
 }
 
 /// The rules of a workspace that holds no assets (ADR 0105). A workspace
@@ -1024,7 +1057,12 @@ impl Collection {
     /// Gives a [`CollectionError`] when the file cannot be opened, or when it
     /// has a schema version newer than this code.
     pub fn open(path: &Path) -> Result<Self, CollectionError> {
-        Self::prepare(Connection::open(path)?)
+        let data_dir = path
+            .parent()
+            .map(Path::to_path_buf)
+            .filter(|dir| !dir.as_os_str().is_empty())
+            .or_else(|| Some(PathBuf::from(".")));
+        Self::prepare(Connection::open(path)?, data_dir)
     }
 
     /// Open a collection in memory, for tests and previews.
@@ -1033,14 +1071,15 @@ impl Collection {
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn open_in_memory() -> Result<Self, CollectionError> {
-        Self::prepare(Connection::open_in_memory()?)
+        Self::prepare(Connection::open_in_memory()?, None)
     }
 
-    fn prepare(db: Connection) -> Result<Self, CollectionError> {
+    fn prepare(db: Connection, data_dir: Option<PathBuf>) -> Result<Self, CollectionError> {
         db.pragma_update(None, "foreign_keys", true)?;
         let mut collection = Self {
             db,
             asset_rules: None,
+            data_dir,
         };
         collection.migrate()?;
         Ok(collection)
@@ -1085,6 +1124,69 @@ impl Collection {
             if index == PEOPLE_MIGRATION {
                 self.refill_credits()?;
             }
+            if index == RELATIVE_LIBRARY_MIGRATION {
+                self.relativize_library_root()?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The library folder, from the setting `library_root`. A relative
+    /// setting is relative to the data folder (ADR 0107 item 1).
+    ///
+    /// A relative setting with a segment other than a plain name is
+    /// refused, because an imported collection is not trusted.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails, when the setting is
+    /// not text, or when a relative setting is not safe.
+    pub fn library_root(&self) -> Result<Option<PathBuf>, CollectionError> {
+        let Some(value) = self.setting("library_root")? else {
+            return Ok(None);
+        };
+        let text = value
+            .as_str()
+            .ok_or_else(|| CollectionError::new("the library_root setting is not a string"))?;
+        let path = Path::new(text);
+        if path.is_absolute() {
+            return Ok(Some(path.to_path_buf()));
+        }
+        let plain = !text.is_empty()
+            && path
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)));
+        if !plain {
+            return Err(CollectionError::new(
+                "ADR 0107 item 1: a relative library_root must hold plain folder names only",
+            ));
+        }
+        Ok(Some(match &self.data_dir {
+            Some(dir) => dir.join(path),
+            None => path.to_path_buf(),
+        }))
+    }
+
+    /// The text that Studio stores for `root` as `library_root`: a path
+    /// relative to the data folder when `root` is in it, else `root` as it
+    /// is (ADR 0107 item 1).
+    #[must_use]
+    pub fn library_root_setting(&self, root: &Path) -> String {
+        relative_to_data(self.data_dir.as_deref(), root)
+            .unwrap_or_else(|| root.to_string_lossy().into_owned())
+    }
+
+    /// Change an absolute `library_root` in the data folder to a relative
+    /// path. A path outside the data folder stays as it is.
+    fn relativize_library_root(&self) -> Result<(), CollectionError> {
+        let Some(Value::String(text)) = self.setting("library_root")? else {
+            return Ok(());
+        };
+        if !Path::new(&text).is_absolute() {
+            return Ok(());
+        }
+        if let Some(relative) = relative_to_data(self.data_dir.as_deref(), Path::new(&text)) {
+            self.set_setting("library_root", &Value::String(relative))?;
         }
         Ok(())
     }
@@ -1094,11 +1196,7 @@ impl Collection {
     /// one time. A feed with no library copy, or with a copy that does not
     /// parse, gets no row.
     fn refill_credits(&mut self) -> Result<(), CollectionError> {
-        let Some(root) = self
-            .setting("library_root")?
-            .and_then(|v| v.as_str().map(PathBuf::from))
-            .filter(|root| root.is_dir())
-        else {
+        let Some(root) = self.library_root()?.filter(|root| root.is_dir()) else {
             return Ok(());
         };
         let Ok(library) = Library::open(root) else {
@@ -3946,6 +4044,68 @@ mod tests {
         db
     }
 
+    /// Make a database at the version before the relative library migration,
+    /// with `library_root` set to `root`.
+    fn before_relative_library(path: &Path, root: &str) {
+        let db = Connection::open(path).unwrap();
+        for migration in &MIGRATIONS[..RELATIVE_LIBRARY_MIGRATION] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(RELATIVE_LIBRARY_MIGRATION).unwrap(),
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES ('library_root', ?1)",
+            [serde_json::json!(root).to_string()],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_relative_library_migration_has_its_index() {
+        assert_eq!(
+            RELATIVE_LIBRARY_MIGRATION,
+            MIGRATIONS.len() - 1,
+            "ADR 0107 item 1: RELATIVE_LIBRARY_MIGRATION must be the index of its entry in MIGRATIONS"
+        );
+    }
+
+    #[test]
+    fn the_migration_makes_a_library_in_the_data_folder_relative_and_keeps_one_outside() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("data");
+        std::fs::create_dir_all(data.join("library")).unwrap();
+        let path = data.join("collection.sqlite");
+        before_relative_library(&path, data.join("library").to_str().unwrap());
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(
+            collection.setting("library_root").unwrap(),
+            Some(serde_json::json!("library")),
+            "ADR 0107 item 1: a library in the data folder must become a relative path"
+        );
+        assert_eq!(
+            collection.library_root().unwrap(),
+            Some(data.join("library"))
+        );
+        drop(collection);
+
+        let outside = dir.path().join("music");
+        std::fs::create_dir_all(&outside).unwrap();
+        let other = dir.path().join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        let path = other.join("collection.sqlite");
+        before_relative_library(&path, outside.to_str().unwrap());
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(
+            collection.setting("library_root").unwrap(),
+            Some(serde_json::json!(outside.to_str().unwrap())),
+            "ADR 0107 item 1: a library outside the data folder must stay absolute"
+        );
+    }
+
     #[test]
     fn the_people_migration_is_the_one_that_makes_the_people() {
         assert!(MIGRATIONS[PEOPLE_MIGRATION].contains("CREATE TABLE people"));
@@ -4587,7 +4747,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let before = MIGRATIONS.len() - 1;
+        let before = MIGRATIONS.len() - 2;
         for migration in &MIGRATIONS[..before] {
             db.execute_batch(migration).unwrap();
         }
@@ -4689,7 +4849,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 1;
+        let previous = MIGRATIONS.len() - 2;
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }

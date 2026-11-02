@@ -26,6 +26,9 @@ secp256k1 = { version = "0.30", default-features = false, features = ["std"] }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 # QR code as SVG for the nostrconnect address (ADR 0056 item 13).
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+# The archive of an account (ADR 0107 item 6). No default features: the
+# module reads and writes each entry itself and never calls `unpack`.
+tar = { version = "0.4", default-features = false }
 # WebSocket client for relays, and the test relay.
 tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 

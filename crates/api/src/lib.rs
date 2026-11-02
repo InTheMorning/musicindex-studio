@@ -233,6 +233,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             get(routes::get_change_set).delete(routes::discard_change_set),
         )
         .route("/feeds/{id}/level", get(routes::feed_level))
+        .route("/feeds/{id}/members", get(people::feed_members))
         .route("/recipients/saved", post(routes::save_recipient))
         .route(
             "/recipients/saved/{id}",

@@ -1860,6 +1860,60 @@ fn person_normal_names(person: &Person) -> HashSet<String> {
         .collect()
 }
 
+/// A person with a membership of a publisher feed, or with a credit in its
+/// channel (ADR 0118 item 9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FeedMember {
+    /// The ID of the person.
+    pub person_id: PersonId,
+    /// The name of the person.
+    pub name: String,
+    /// The picture address of the person, or empty text.
+    pub img: String,
+    /// The usual role of the person, as raw text.
+    pub usual_role: String,
+    /// True when the person is a member of the feed in Studio.
+    pub member: bool,
+    /// True when the channel of the feed has a credit of the person.
+    pub in_credits: bool,
+}
+
+/// The members of a publisher feed, by name (ADR 0118 item 9). A feed that
+/// is not a publisher feed has no member.
+///
+/// `feed_credits` has no column for the place of a credit. Each indexed
+/// credit of a publisher feed therefore counts as a channel credit.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::NotFound`] for a feed that does not exist.
+pub fn feed_members(
+    collection: &Collection,
+    feed_id: FeedId,
+) -> Result<Vec<FeedMember>, CollectionError> {
+    if collection.feed(feed_id)?.medium.as_deref() != Some("publisher") {
+        return Ok(Vec::new());
+    }
+    let mut list = Vec::new();
+    for person in people(collection)? {
+        let member = person.members.contains(&feed_id);
+        let in_credits = person_credits(collection, &person, &person_normal_names(&person))?
+            .iter()
+            .any(|row| row.feed_id == feed_id);
+        if member || in_credits {
+            list.push(FeedMember {
+                person_id: person.id,
+                name: person.name,
+                img: person.img,
+                usual_role: person.usual_role,
+                member,
+                in_credits,
+            });
+        }
+    }
+    Ok(list)
+}
+
 /// The findings of the credits of a person, with the feed of each. A credit
 /// with no finding gives the feed and `None`.
 fn credit_findings(
@@ -3432,6 +3486,50 @@ mod tests {
                 params![feed_id, address, name],
             )
             .unwrap();
+    }
+
+    /// A publisher feed with the ID `id`. A credit helper keeps the medium.
+    fn publisher(collection: &Collection, id: i64) {
+        collection
+            .db()
+            .execute(
+                "INSERT OR IGNORE INTO feeds (id, medium, created_at) VALUES (?1, 'publisher', 0)",
+                [id],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn feed_members_give_a_membership_a_credit_or_both_with_the_condition_of_each() {
+        let collection = Collection::open_in_memory().unwrap();
+        publisher(&collection, 1);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_person(&collection, &fields("Bob")).unwrap();
+        let cy = add_person(&collection, &fields("Cy")).unwrap();
+        add_person(&collection, &fields("Dee")).unwrap();
+        add_member(&collection, ann, FeedId(1)).unwrap();
+        add_member(&collection, cy, FeedId(1)).unwrap();
+        credit(&collection, 1, "Bob", "", "", "");
+        credit(&collection, 1, "Cy", "", "", "");
+        // A credit of another feed is not a member of this feed.
+        credit(&collection, 2, "Dee", "", "", "");
+        let list = feed_members(&collection, FeedId(1)).unwrap();
+        let condition: Vec<(&str, bool, bool)> = list
+            .iter()
+            .map(|m| (m.name.as_str(), m.member, m.in_credits))
+            .collect();
+        assert_eq!(
+            condition,
+            [
+                ("Ann", true, false),
+                ("Bob", false, true),
+                ("Cy", true, true)
+            ],
+            "ADR 0118 item 9: a membership, a credit, or both must give a member with each condition."
+        );
+        assert_eq!(list[0].person_id, ann);
+        assert_eq!(feed_members(&collection, FeedId(2)).unwrap(), Vec::new());
+        assert!(feed_members(&collection, FeedId(99)).is_err());
     }
 
     fn suggest(collection: &Collection) -> Vec<Suggestion> {

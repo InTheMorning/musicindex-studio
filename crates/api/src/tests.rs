@@ -10488,6 +10488,7 @@ async fn each_people_route_needs_the_token() {
         ("POST", "/api/v1/people/1/items"),
         ("GET", "/api/v1/people/1/more"),
         ("POST", "/api/v1/people/1/merge"),
+        ("GET", "/api/v1/feeds/1/members"),
     ];
     for (method, path) in routes {
         let request = Request::builder()
@@ -10982,6 +10983,84 @@ async fn the_preview_of_a_person_operation_changes_no_draft_and_the_change_set_l
     assert_eq!(row["outcome"]["parts"][1]["part"], "credit");
     let (_, list) = call(&app, "GET", "/api/v1/change-sets", None).await;
     assert_eq!(list[0]["person_id"], id, "{list}");
+}
+
+/// A publisher feed with the credit of `Ann` in its channel, and an album.
+#[tokio::test]
+async fn the_members_route_gives_each_membership_and_each_channel_credit() {
+    let (app, connector) = publisher_app().await;
+    let band_xml = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+        <title>Band</title><podcast:guid>band-081</podcast:guid>\
+        <podcast:medium>publisher</podcast:medium>\
+        <podcast:person role=\"vocalist\" npub=\"npub1ann\">Ann</podcast:person>\
+        <item><guid>band-081-t1</guid><title>Release</title></item></channel></rss>";
+    let band = add_paid_feed(&app, connector, "band.xml", band_xml).await;
+    let album = add_paid_feed(
+        &app,
+        connector,
+        "album.xml",
+        &paid_feed("Album", "ga", &[], &[], ""),
+    )
+    .await;
+    let ann = new_person(&app, "Ann").await;
+    let bob = new_person(&app, "Bob").await;
+    for person in [ann, bob] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/people/{person}/members"),
+            Some(json!({ "feed_id": band })),
+        )
+        .await;
+        assert!(status.is_success(), "{body}");
+    }
+
+    let (status, body) = call(&app, "GET", &format!("/api/v1/feeds/{band}/members"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let members = body["members"].as_array().unwrap();
+    assert_eq!(members.len(), 2, "{body}");
+    assert_eq!(members[0]["name"], "Ann", "{body}");
+    assert_eq!(members[0]["member"], true, "{body}");
+    assert_eq!(members[0]["in_credits"], true, "{body}");
+    assert_eq!(members[1]["name"], "Bob", "{body}");
+    assert_eq!(members[1]["member"], true, "{body}");
+    assert_eq!(members[1]["in_credits"], false, "{body}");
+
+    let (status, body) = call(&app, "GET", &format!("/api/v1/feeds/{album}/members"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["members"], json!([]), "{body}");
+
+    // ADR 0118 item 5: a channel credit needs a publisher feed.
+    let credit = json!({
+        "operation": { "kind": "credit_feed", "role": "Vocalist", "group": "" },
+        "feed_ids": [album],
+    });
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{bob}/changes"),
+        Some(credit.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+
+    let credit = json!({
+        "operation": { "kind": "credit_feed", "role": "Vocalist", "group": "" },
+        "feed_ids": [band],
+    });
+    let (status, set) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{bob}/changes"),
+        Some(credit),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    assert_eq!(
+        change_row(&set, band)["outcome"]["outcome"],
+        "changed",
+        "{set}"
+    );
 }
 
 #[tokio::test]

@@ -1267,9 +1267,24 @@ pub fn make_person_change_set(
     operation: &PersonOperation,
     feeds: &[FeedId],
 ) -> Result<ChangeSet, PipelineError> {
+    if matches!(operation, PersonOperation::CreditFeed { .. }) {
+        check_credit_feed(collection, feeds)?;
+    }
     let lookups = lookup_map(collection)?;
     let (wallet, snapshot) = person_operation(collection, id, operation, &lookups)?;
     build_change_set(collection, start, &wallet, &snapshot, Some(id), feeds)
+}
+
+/// Refuse a channel credit for other than one publisher feed (ADR 0118
+/// item 5). The check runs before any draft is made.
+fn check_credit_feed(collection: &Collection, feeds: &[FeedId]) -> Result<(), PipelineError> {
+    let [feed] = feeds else {
+        return Err(invalid("a channel credit needs one publisher feed"));
+    };
+    if collection.feed(*feed)?.medium.as_deref() != Some("publisher") {
+        return Err(invalid("a channel credit needs a publisher feed"));
+    }
+    Ok(())
 }
 
 /// The stored keysend lookups, by lowercase address.
@@ -1316,6 +1331,16 @@ pub enum PersonOperation {
         /// True to remove the credits of the person.
         credit: bool,
     },
+    /// Add the credit of the person to the channel of one publisher feed
+    /// (ADR 0118 item 5). The request gives the role and the group.
+    CreditFeed {
+        /// The role of the credit. A role of the role list gets its group
+        /// from the list.
+        role: String,
+        /// The group of the credit. It is used only when the role has it as
+        /// one of its groups.
+        group: String,
+    },
     /// Correct the feeds of a person (ADR 0111 item 16).
     Correct {
         /// A key of the person. Each credit of the person gets it.
@@ -1361,16 +1386,38 @@ fn wallet_type(person: &people::Person, key: &RecipientKey) -> String {
 /// the usual group. A usual role of the list gets the usual group when it is
 /// a group of the role, else its first group. Both become the wire form.
 fn usual_role_and_group(person: &people::Person) -> (String, String) {
-    let role = person.usual_role.as_str();
+    role_and_group(&person.usual_role, &person.usual_group)
+}
+
+/// The role and the group of a credit, from a role and a group of a request
+/// or of a person. A role of the list gets the group when it is a group of
+/// the role, else its first group (ADR 0112 items 4 and 7).
+fn role_and_group(role: &str, group: &str) -> (String, String) {
     let groups = roles::groups_of(role);
     let Some(first) = groups.first() else {
-        return (role.to_owned(), person.usual_group.clone());
+        return (role.to_owned(), group.to_owned());
     };
-    let group = groups
+    let chosen = groups
         .iter()
-        .find(|g| roles::is_group(&person.usual_group, g))
+        .find(|g| roles::is_group(group, g))
         .unwrap_or(first);
-    (roles::wire(role), roles::wire(group))
+    (roles::wire(role), roles::wire(chosen))
+}
+
+/// The credit of a person, with the role and the group that it gets.
+fn credit_of(person: &people::Person, role: String, group: String) -> NewCredit {
+    NewCredit {
+        name: person.name.clone(),
+        role,
+        group,
+        img: person.img.clone(),
+        href: person.href.clone(),
+        npub: person
+            .keys
+            .first()
+            .map(|k| k.npub.clone())
+            .unwrap_or_default(),
+    }
 }
 
 /// The [`RecipientOperation::AddToReleases`] of a person: the payee, the
@@ -1398,18 +1445,7 @@ fn add_snapshot(
         None => None,
     };
     let (role, group) = usual_role_and_group(person);
-    let new_credit = credit.then(|| NewCredit {
-        name: person.name.clone(),
-        role,
-        group,
-        img: person.img.clone(),
-        href: person.href.clone(),
-        npub: person
-            .keys
-            .first()
-            .map(|k| k.npub.clone())
-            .unwrap_or_default(),
-    });
+    let new_credit = credit.then(|| credit_of(person, role, group));
     let link = match support_link {
         Some(link_id) => {
             let link = person
@@ -1574,6 +1610,15 @@ pub fn person_operation<S: BuildHasher>(
             credit: *credit,
             credits,
         },
+        PersonOperation::CreditFeed { role, group } => {
+            let (role, group) = role_and_group(role, group);
+            RecipientOperation::AddToReleases {
+                payee: None,
+                credit: Some(credit_of(&person, role, group)),
+                support_link: None,
+                credits,
+            }
+        }
         PersonOperation::Correct {
             key,
             payment,

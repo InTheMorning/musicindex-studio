@@ -1261,3 +1261,180 @@ fn correct_writes_through_a_change_set() {
     );
     assert_eq!(set.person, Some(id));
 }
+
+/// A publisher feed with no credit.
+const PUBLISHER: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">
+  <channel>
+    <title>Band</title>
+    <podcast:guid>5a3b1c2d-0000-5000-8000-000000000081</podcast:guid>
+    <podcast:medium>publisher</podcast:medium>
+    <item>
+      <title>Release</title>
+      <guid>release-1</guid>
+    </item>
+  </channel>
+</rss>
+";
+
+/// A publisher feed with the credit of `Ann` in its channel.
+const PUBLISHER_WITH_CREDIT: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">
+  <channel>
+    <title>Band</title>
+    <podcast:guid>5a3b1c2d-0000-5000-8000-000000000081</podcast:guid>
+    <podcast:medium>publisher</podcast:medium>
+    <podcast:person role=\"vocalist\" group=\"music\" npub=\"npub1ann\">Ann</podcast:person>
+    <item>
+      <title>Release</title>
+      <guid>release-1</guid>
+    </item>
+  </channel>
+</rss>
+";
+
+/// A person named `Ann` with one Nostr key and no wallet.
+fn ann(s: &Setup) -> people::PersonId {
+    let id = people::add_person(
+        &s.collection,
+        &PersonFields {
+            name: "Ann".into(),
+            usual_role: "Vocalist".into(),
+            img: "https://img.example/ann.png".into(),
+            ..PersonFields::default()
+        },
+    )
+    .unwrap();
+    people::add_key(&s.collection, id, "npub1ann").unwrap();
+    id
+}
+
+fn credit_feed(role: &str, group: &str) -> PersonOperation {
+    PersonOperation::CreditFeed {
+        role: role.into(),
+        group: group.into(),
+    }
+}
+
+/// The text that `after` has and `before` has not, when `after` is `before`
+/// with one inserted text. Gives `None` for any other change.
+fn inserted_text<'a>(before: &str, after: &'a str) -> Option<&'a str> {
+    let prefix = before
+        .bytes()
+        .zip(after.bytes())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let longest = before.len().min(after.len()) - prefix;
+    let suffix = before
+        .bytes()
+        .rev()
+        .zip(after.bytes().rev())
+        .take_while(|(a, b)| a == b)
+        .count()
+        .min(longest);
+    let removed = before.len() - prefix - suffix;
+    (removed == 0).then(|| &after[prefix..after.len() - suffix])
+}
+
+#[test]
+fn credit_feed_adds_one_person_with_the_role_and_its_group() {
+    let s = setup_with(PUBLISHER);
+    let id = ann(&s);
+    let mut starter = start(&s);
+    let set = make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &credit_feed("Vocalist", ""),
+        &s.feeds[..1],
+    )
+    .unwrap();
+    assert!(set.feeds[0].outcome.is_changed());
+    let (feed, _) = pipeline::draft_model(&s.collection, s.feeds[0]).unwrap();
+    assert_eq!(feed.persons.len(), 1);
+    let credit = &feed.persons[0].value;
+    assert_eq!(credit.name, "Ann");
+    assert_eq!(credit.role.as_deref(), Some("vocalist"));
+    assert_eq!(credit.group.as_deref(), Some("music"));
+    assert_eq!(credit.npub.as_deref(), Some("npub1ann"));
+    assert_eq!(credit.img.as_deref(), Some("https://img.example/ann.png"));
+}
+
+#[test]
+fn credit_feed_keeps_the_other_bytes_of_the_feed() {
+    let s = setup_with(PUBLISHER);
+    let before = fs::read_to_string(s.dir.path().join("one.xml")).unwrap();
+    let id = ann(&s);
+    let mut starter = start(&s);
+    make_person_change_set(
+        &s.collection,
+        &mut starter,
+        id,
+        &credit_feed("Vocalist", "Music"),
+        &s.feeds[..1],
+    )
+    .unwrap();
+    let draft = s.collection.draft(s.feeds[0]).unwrap().unwrap();
+    let after = String::from_utf8(draft.draft_xml).unwrap();
+    let inserted = inserted_text(&before, &after)
+        .expect("ADR 0118 item 5: the credit must be the only change to the feed.");
+    assert!(inserted.contains("role=\"vocalist\""), "{inserted}");
+    assert!(inserted.contains("group=\"music\""), "{inserted}");
+}
+
+#[test]
+fn remove_credit_feed_removes_the_credit_of_the_person() {
+    let s = setup_with(PUBLISHER_WITH_CREDIT);
+    let id = ann(&s);
+    let mut starter = start(&s);
+    let remove = PersonOperation::Remove {
+        payee: false,
+        credit: true,
+    };
+    let set =
+        make_person_change_set(&s.collection, &mut starter, id, &remove, &s.feeds[..1]).unwrap();
+    assert!(set.feeds[0].outcome.is_changed());
+    let (feed, _) = pipeline::draft_model(&s.collection, s.feeds[0]).unwrap();
+    assert!(
+        feed.persons.is_empty(),
+        "ADR 0118 item 6: the credit must go."
+    );
+}
+
+#[test]
+fn credit_feed_refuses_two_feeds_or_an_album_and_makes_no_draft() {
+    let publishers = setup_each(&[PUBLISHER, PUBLISHER]);
+    let id = ann(&publishers);
+    let mut starter = start(&publishers);
+    assert!(
+        make_person_change_set(
+            &publishers.collection,
+            &mut starter,
+            id,
+            &credit_feed("Vocalist", ""),
+            &publishers.feeds,
+        )
+        .is_err(),
+        "ADR 0118 item 5: a channel credit needs one feed."
+    );
+    let album = setup();
+    let id = ann(&album);
+    let mut starter = start(&album);
+    assert!(
+        make_person_change_set(
+            &album.collection,
+            &mut starter,
+            id,
+            &credit_feed("Vocalist", ""),
+            &album.feeds[..1],
+        )
+        .is_err(),
+        "ADR 0118 item 5: a channel credit needs a publisher feed."
+    );
+    for feed in &publishers.feeds {
+        assert!(publishers.collection.draft(*feed).unwrap().is_none());
+    }
+    assert!(album.collection.draft(album.feeds[0]).unwrap().is_none());
+    assert_eq!(publishers.collection.change_set_rows().unwrap().len(), 0);
+    assert_eq!(album.collection.change_set_rows().unwrap().len(), 0);
+}

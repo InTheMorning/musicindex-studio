@@ -703,6 +703,16 @@ pub(crate) async fn make_changes(
     .await
 }
 
+/// The members of a publisher feed (ADR 0118 item 9). A feed that is not a
+/// publisher feed gives no member.
+pub(crate) async fn feed_members(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        let members = people::feed_members(&w.collection, FeedId(id))?;
+        Ok(Json(json!({ "members": members })))
+    })
+    .await
+}
+
 /// The outcome of a person operation for each feed. The route applies the
 /// operation to a copy of the model of each feed. It saves nothing and makes
 /// no draft.

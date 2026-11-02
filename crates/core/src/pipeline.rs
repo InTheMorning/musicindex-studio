@@ -1383,7 +1383,7 @@ pub fn diff_at(
         plan_announcements(collection, hosts, &feed_row, feed_move.as_ref())?;
     extra.extend(announce_bytes(&announcements, announce_skip));
     let grants = draft_grant_list(collection, id, &feed)?;
-    extra.extend(grant_bytes(&grants));
+    extra.extend(grant_bytes(&grant_apps(collection, id, &grants)?));
     let files = upload_files(collection, &operations)?;
     let diff_id = diff_id(&draft, &extra);
     let changes = host_changes(
@@ -1710,16 +1710,36 @@ fn draft_grant_list(
     Ok(grants)
 }
 
+/// The app that each grant of `grants` names (ADR 0110 item 19).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn grant_apps(
+    collection: &Collection,
+    id: FeedId,
+    grants: &[String],
+) -> Result<Vec<(String, Option<i64>)>, PipelineError> {
+    grants
+        .iter()
+        .map(|guid| Ok((guid.clone(), collection.draft_grant_app(id, guid)?)))
+        .collect()
+}
+
 /// The bytes that [`diff_id`] adds for the show grants, in the form of
-/// [`announce_bytes`]. A change of a grant of the draft after the diff
-/// changes the ID (ADR 0054 item 11).
-fn grant_bytes(grants: &[String]) -> Vec<u8> {
+/// [`announce_bytes`]. A change of a grant of the draft, or of its app, after
+/// the diff changes the ID (ADR 0054 item 11, ADR 0110 item 19).
+fn grant_bytes(grants: &[(String, Option<i64>)]) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.push(0);
     bytes.extend_from_slice(b"grants");
-    for guid in grants {
+    for (guid, app_id) in grants {
         bytes.push(0);
         bytes.extend_from_slice(guid.as_bytes());
+        bytes.push(0);
+        if let Some(app_id) = app_id {
+            bytes.extend_from_slice(app_id.to_string().as_bytes());
+        }
     }
     bytes
 }
@@ -2745,7 +2765,10 @@ pub fn write_draft_signed(
         plan_announcements(collection, hosts, &row, feed_move.as_ref())?;
     extra.extend(announce_bytes(&announcements, announce_skip));
     let grants = draft_grant_list(collection, id, &feed)?;
-    extra.extend(grant_bytes(&grants));
+    // The apps of the grants are read now. The draft goes out later in this
+    // function, and its grants go with it.
+    let grant_apps = grant_apps(collection, id, &grants)?;
+    extra.extend(grant_bytes(&grant_apps));
     if &diff_id(&draft, &extra) != approved {
         return Err(PipelineError::new(
             PipelineErrorKind::DiffNotApproved,
@@ -2960,7 +2983,7 @@ pub fn write_draft_signed(
     // each grant whose live item is not in the written feed, or has the
     // status `ended` (ADR 0054 item 14). This occurs before the scans, so
     // that a failed scan does not lose the record.
-    record_grants(collection, id, &feed, &grants, now)?;
+    record_grants(collection, id, &feed, &grant_apps, now)?;
 
     // Step 6: the feed is written, and each step on a host passed. The
     // announcements go into the queue before the scans, so that a failed
@@ -3056,13 +3079,29 @@ pub fn write_granted(
     now: u64,
 ) -> Result<Version, PipelineError> {
     let apply = |feed: &mut Feed| apply_grant_change(feed, item_guid, change);
-    let version = write_granted_with(
-        collection, hosts, library, addresses, feed_id, item_guid, apply, now,
-    )?;
+    let written_at = i64::try_from(now).unwrap_or(i64::MAX);
+    // ADR 0110 item 26: the live value check is in the core. It runs
+    // before the host read, with the origin that the grant keeps.
+    let checked = check_granted_change(collection, feed_id, item_guid, change);
+    let version = match checked.and_then(|()| {
+        write_granted_with(
+            collection, hosts, library, addresses, feed_id, item_guid, apply, now,
+        )
+    }) {
+        Ok(version) => version,
+        Err(error) => {
+            // ADR 0110 item 43: a refused write adds its cause to the list.
+            if let Some(cause) = refusal_of(error.kind())
+                && let Some(grant) = grant::grant_for(collection, feed_id, item_guid)?
+            {
+                grant::add_refusal(collection, grant.id, app_name, change, cause, written_at)?;
+            }
+            return Err(error);
+        }
+    };
     let grant = grant::grant_for(collection, feed_id, item_guid)?.ok_or_else(|| {
         PipelineError::new(PipelineErrorKind::GrantNotActive, "the grant is not there")
     })?;
-    let written_at = i64::try_from(now).unwrap_or(i64::MAX);
     // Step 6: the record of the granted write (ADR 0054 item 17).
     grant::add_write(collection, grant.id, app_name, change, written_at)?;
     if *change == GrantChange::End {
@@ -3096,6 +3135,36 @@ pub fn write_granted_edit(
     write_granted_with(
         collection, hosts, library, addresses, feed_id, item_guid, edit, now,
     )
+}
+
+/// Check a granted live value against the live value origin that the grant
+/// keeps (ADR 0110 item 26). Another change needs no check. A grant that is
+/// not there, or has ended, gives no error here: the write then gives
+/// [`PipelineErrorKind::GrantNotActive`].
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::InvalidLiveValue`] for a live value that
+/// [`live::check_granted_live_value`] refuses.
+fn check_granted_change(
+    collection: &Collection,
+    feed_id: FeedId,
+    item_guid: &str,
+    change: &GrantChange,
+) -> Result<(), PipelineError> {
+    let GrantChange::SetLiveValue { uri, protocol } = change else {
+        return Ok(());
+    };
+    let Some(grant) = grant::grant_for(collection, feed_id, item_guid)? else {
+        return Ok(());
+    };
+    if grant.ended_at.is_some() {
+        return Ok(());
+    }
+    // A grant with no origin has no address that it permits.
+    let origin = grant.live_value_origin.as_deref().unwrap_or_default();
+    live::check_granted_live_value(uri, protocol, origin)
+        .map_err(|e| PipelineError::new(PipelineErrorKind::InvalidLiveValue, e.to_string()))
 }
 
 /// Apply a granted change to the live item with this `guid`.
@@ -3141,6 +3210,17 @@ fn apply_grant_change(
             live_item.live_value = None;
             Ok(())
         }
+    }
+}
+
+/// The cause of a refused granted write, from the error of the write
+/// (ADR 0110 item 43). An error with no cause in the list gives `None`.
+fn refusal_of(kind: PipelineErrorKind) -> Option<grant::Refusal> {
+    match kind {
+        PipelineErrorKind::DraftOpen => Some(grant::Refusal::DraftWithChanges),
+        PipelineErrorKind::GrantNotActive => Some(grant::Refusal::GrantEnded),
+        PipelineErrorKind::InvalidLiveValue => Some(grant::Refusal::LiveValueRefused),
+        _ => None,
     }
 }
 
@@ -3281,8 +3361,81 @@ fn user_draft_has_change(
     Ok(!draft_grant_list(collection, id, &feed)?.is_empty())
 }
 
+/// The state of a feed whose active show grant a draft with changes blocks
+/// (ADR 0110 item 42). The UI shows a notice with these values and keeps no
+/// copy of the rule of ADR 0054 item 16.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GrantBlock {
+    /// The state name in the feed state: always `grant_blocked_by_draft`.
+    pub state: &'static str,
+    /// The ID of the blocked grant.
+    pub grant_id: i64,
+    /// The name of the app that the grant names.
+    pub app_name: String,
+    /// The title of the show.
+    pub show_title: Option<String>,
+    /// The start time of the show, as the feed gives it.
+    pub start: Option<String>,
+}
+
+/// The state `grant_blocked_by_draft` of a feed (ADR 0110 item 42): an
+/// active show grant exists and the feed has a draft with changes. `hosted`
+/// is the feed file that the host gives now, and `now` is the time in
+/// seconds since the Unix epoch. Gives `None` when no active grant is
+/// blocked.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the hosted file is not a feed or the
+/// collection fails.
+pub fn grant_blocked_by_draft(
+    collection: &Collection,
+    id: FeedId,
+    hosted: &[u8],
+    now: u64,
+) -> Result<Option<GrantBlock>, PipelineError> {
+    let open: Vec<_> = grant::grants(collection, id)?
+        .into_iter()
+        .filter(|show| show.ended_at.is_none())
+        .collect();
+    if open.is_empty() {
+        return Ok(None);
+    }
+    let hosted_feed = Feed::read(&Document::parse_bytes(hosted)?)?;
+    let mut blocked = None;
+    for show in open {
+        if grant::active(collection, id, &show.item_guid, &hosted_feed, now)?.is_some() {
+            blocked = Some(show);
+            break;
+        }
+    }
+    let Some(show) = blocked else {
+        return Ok(None);
+    };
+    let Some(draft) = collection.draft(id)? else {
+        return Ok(None);
+    };
+    if !user_draft_has_change(collection, id, &draft, hosted)? {
+        return Ok(None);
+    }
+    let live = grant::live_item(&hosted_feed, &show.item_guid);
+    let app_name = match show.app_id {
+        Some(app_id) => crate::apps::app(collection, app_id)?.map(|app| app.name),
+        None => None,
+    };
+    Ok(Some(GrantBlock {
+        state: "grant_blocked_by_draft",
+        grant_id: show.id,
+        app_name: app_name.unwrap_or_default(),
+        show_title: live.and_then(|live| live.item.title.clone()),
+        start: live.and_then(|live| live.start.clone()),
+    }))
+}
+
 /// Record the grants of a write, and end each grant that the written feed
-/// ends (ADR 0054 items 12 and 14).
+/// ends (ADR 0054 items 12 and 14). Each grant names its app and keeps the
+/// live value origin of that app at the approval (ADR 0110 items 19 and
+/// 25). A grant whose app is not active now is not recorded.
 ///
 /// # Errors
 ///
@@ -3291,12 +3444,21 @@ fn record_grants(
     collection: &Collection,
     id: FeedId,
     written: &Feed,
-    grants: &[String],
+    grants: &[(String, Option<i64>)],
     now: u64,
 ) -> Result<(), PipelineError> {
     let now = i64::try_from(now).unwrap_or(i64::MAX);
-    for guid in grants {
-        grant::record(collection, id, guid, now)?;
+    for (guid, app_id) in grants {
+        let Some(app) = app_id
+            .map(|app_id| crate::apps::app(collection, app_id))
+            .transpose()?
+            .flatten()
+        else {
+            continue;
+        };
+        if let (crate::apps::AppState::Active, Some(origin)) = (app.state, &app.live_value_origin) {
+            grant::record(collection, id, guid, app.id, origin, now)?;
+        }
     }
     for open in grant::grants(collection, id)? {
         if open.ended_at.is_some() {

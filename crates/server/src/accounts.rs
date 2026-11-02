@@ -1040,38 +1040,6 @@ impl Accounts {
         Ok(left)
     }
 
-    /// Keep the hash of an app token for an account.
-    ///
-    /// # Errors
-    ///
-    /// Gives a message when the database fails.
-    pub fn add_app_token(
-        &self,
-        token_hash: &str,
-        account_id: i64,
-        app_id: i64,
-    ) -> Result<(), String> {
-        self.db()
-            .execute(
-                "INSERT OR REPLACE INTO app_tokens (token_hash, account_id, app_id) VALUES (?1, ?2, ?3)",
-                params![token_hash, account_id, app_id],
-            )
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    }
-
-    /// Remove the hash of an app token.
-    ///
-    /// # Errors
-    ///
-    /// Gives a message when the database fails.
-    pub fn remove_app_token(&self, token_hash: &str) -> Result<(), String> {
-        self.db()
-            .execute("DELETE FROM app_tokens WHERE token_hash = ?1", [token_hash])
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    }
-
     /// The account and the app ID of an app token hash.
     ///
     /// # Errors

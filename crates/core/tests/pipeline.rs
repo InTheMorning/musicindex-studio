@@ -2961,6 +2961,26 @@ fn during_show() -> u64 {
     u64::try_from(studio_core::datetime::parse_time(SHOW_START).unwrap()).unwrap() + 60
 }
 
+/// The live value origin of the active app of the grant tests.
+const APP_ORIGIN: &str = "wss://example.com";
+
+/// Make an active connected app with a new key (ADR 0110 item 10). Gives its
+/// ID.
+fn new_app(s: &Setup) -> i64 {
+    let secret = loop {
+        let mut bytes = [0_u8; 32];
+        getrandom::fill(&mut bytes).unwrap();
+        if let Ok(secret) = nostr::prelude::SecretKey::from_slice(&bytes) {
+            break secret;
+        }
+    };
+    let key = nostr::prelude::Keys::new(secret).public_key().to_hex();
+    let (_, code) = studio_core::apps::start_pairing(&s.collection, "Show tool").unwrap();
+    studio_core::apps::pair(&s.collection, &code, &key, APP_ORIGIN)
+        .unwrap()
+        .id
+}
+
 /// A draft with a pending live item with a content link.
 fn draft_with_show(s: &Setup) -> String {
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
@@ -2982,7 +3002,8 @@ fn draft_with_show(s: &Setup) -> String {
 /// `guid` of the live item.
 fn write_granted_show(s: &mut Setup) -> String {
     let guid = draft_with_show(s);
-    s.collection.add_draft_grant(s.feed, &guid).unwrap();
+    let app = new_app(s);
+    s.collection.add_draft_grant(s.feed, &guid, app).unwrap();
     let diff =
         pipeline::diff_at(&s.collection, &s.hosts, &s.library, s.feed, during_show()).unwrap();
     assert_eq!(diff.grants, std::slice::from_ref(&guid));
@@ -3046,8 +3067,9 @@ fn a_written_draft_grant_becomes_an_active_grant_and_the_draft_grants_go_out() {
 fn a_draft_grant_for_an_item_that_is_not_pending_is_not_in_the_diff() {
     let s = setup();
     let guid = draft_with_show(&s);
+    let app = new_app(&s);
     s.collection
-        .add_draft_grant(s.feed, "no-such-item")
+        .add_draft_grant(s.feed, "no-such-item", app)
         .unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.grants, Vec::<String>::new());
@@ -3055,7 +3077,8 @@ fn a_draft_grant_for_an_item_that_is_not_pending_is_not_in_the_diff() {
         f.live_items[0].value.status = Some("live".into());
     })
     .unwrap();
-    s.collection.add_draft_grant(s.feed, &guid).unwrap();
+    let app = new_app(&s);
+    s.collection.add_draft_grant(s.feed, &guid, app).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.grants, Vec::<String>::new());
 }
@@ -3066,7 +3089,8 @@ fn a_change_of_the_draft_grant_after_the_diff_gives_diff_not_approved() {
     let guid = draft_with_show(&s);
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.grants, Vec::<String>::new());
-    s.collection.add_draft_grant(s.feed, &guid).unwrap();
+    let app = new_app(&s);
+    s.collection.add_draft_grant(s.feed, &guid, app).unwrap();
     let error = pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
@@ -3152,6 +3176,160 @@ fn granted_writes_go_live_set_the_live_value_and_end_the_show() {
 }
 
 #[test]
+fn a_written_grant_names_its_app_and_keeps_the_origin_of_that_app() {
+    let mut s = setup();
+    let guid = draft_with_show(&s);
+    let app = new_app(&s);
+    let other = new_app(&s);
+    s.collection.add_draft_grant(s.feed, &guid, app).unwrap();
+    let first =
+        pipeline::diff_at(&s.collection, &s.hosts, &s.library, s.feed, during_show()).unwrap();
+    // A different app in the draft grant gives a different diff ID.
+    s.collection.add_draft_grant(s.feed, &guid, other).unwrap();
+    let second =
+        pipeline::diff_at(&s.collection, &s.hosts, &s.library, s.feed, during_show()).unwrap();
+    assert_ne!(
+        first.id, second.id,
+        "ADR 0110 item 19: the app of a grant must be part of the diff ID. Add the app ID to grant_bytes."
+    );
+    pipeline::write_draft_signed(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        &second.id,
+        &[],
+        during_show(),
+        None,
+    )
+    .unwrap();
+    let record = grant::grant_for(&s.collection, s.feed, &guid)
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.app_id, Some(other));
+    assert_eq!(record.live_value_origin.as_deref(), Some(APP_ORIGIN));
+}
+
+#[test]
+fn a_live_value_off_the_origin_of_the_grant_is_refused_and_listed() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = live(&s);
+    let now = during_show();
+    let hint = "ADR 0110 item 26: pipeline::write_granted must refuse this live value with InvalidLiveValue. Call live::check_granted_live_value before the write.";
+    for (uri, protocol) in [
+        ("wss://evil.example/value", "socket.io"),
+        ("ws://example.com/value", "socket.io"),
+        ("https://example.com/value", "socket.io"),
+        ("wss://example.com:8443/value", "socket.io"),
+        ("wss://example.com/value", "socket io"),
+        ("wss://example.com/value", ""),
+        ("wss://example.com/value", &"p".repeat(33)),
+    ] {
+        let change = GrantChange::SetLiveValue {
+            uri: uri.into(),
+            protocol: protocol.into(),
+        };
+        let error = granted(&mut s, &guid, &change, now).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            PipelineErrorKind::InvalidLiveValue,
+            "{uri} {protocol}: {hint}"
+        );
+    }
+    assert_eq!(live(&s), before);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    let record = grant::grant_for(&s.collection, s.feed, &guid)
+        .unwrap()
+        .unwrap();
+    let list = grant::writes(&s.collection, record.id).unwrap();
+    assert_eq!(
+        list.len(),
+        7,
+        "each refused write must add an entry (ADR 0110 item 43)"
+    );
+    assert!(
+        list.iter()
+            .all(|w| w.cause.as_deref() == Some("live_value_invalid"))
+    );
+    assert!(
+        list.iter()
+            .all(|w| w.change == "set_live_value" && w.app_name == "Show tool")
+    );
+    // A value on the origin is written.
+    let ok = GrantChange::SetLiveValue {
+        uri: "wss://example.com/value".into(),
+        protocol: "socket.io".into(),
+    };
+    granted(&mut s, &guid, &ok, now + 1).unwrap();
+    assert!(live(&s).contains("wss://example.com/value"));
+}
+
+#[test]
+fn a_refused_granted_write_adds_its_cause_to_the_list_of_granted_writes() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let record = grant::grant_for(&s.collection, s.feed, &guid)
+        .unwrap()
+        .unwrap();
+    // A draft with changes.
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Changed".into())).unwrap();
+    let error = granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::DraftOpen);
+    // A grant that is not active any more.
+    let end = u64::try_from(studio_core::datetime::parse_time(SHOW_END).unwrap()).unwrap();
+    let error = granted(&mut s, &guid, &GrantChange::GoLive, end + 24 * 3600 + 1).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::GrantNotActive);
+    let list = grant::writes(&s.collection, record.id).unwrap();
+    let causes: Vec<_> = list.iter().map(|w| w.cause.as_deref()).collect();
+    assert_eq!(
+        causes,
+        [Some("draft_with_changes"), Some("grant_ended")],
+        "ADR 0110 item 43: a refused granted write must add its cause. Call grant::add_refusal in write_granted."
+    );
+    assert!(
+        list.iter()
+            .all(|w| w.app_name == "Show tool" && w.change == "go_live")
+    );
+}
+
+#[test]
+fn an_active_grant_and_a_draft_with_changes_give_grant_blocked_by_draft() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let hosted = live(&s).into_bytes();
+    let blocked = |s: &Setup, now: u64| {
+        pipeline::grant_blocked_by_draft(&s.collection, s.feed, &hosted, now).unwrap()
+    };
+    assert_eq!(blocked(&s, during_show()), None, "no draft");
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    assert_eq!(blocked(&s, during_show()), None, "a draft with no change");
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Changed".into())).unwrap();
+    let found = blocked(&s, during_show()).expect("the state grant_blocked_by_draft");
+    assert_eq!(
+        found.state, "grant_blocked_by_draft",
+        "ADR 0110 item 42: the feed state must give grant_blocked_by_draft"
+    );
+    assert_eq!(found.app_name, "Show tool");
+    assert_eq!(found.show_title.as_deref(), Some("Show"));
+    assert_eq!(found.start.as_deref(), Some(SHOW_START));
+    let end = u64::try_from(studio_core::datetime::parse_time(SHOW_END).unwrap()).unwrap();
+    assert_eq!(
+        blocked(&s, end + 24 * 3600 + 1),
+        None,
+        "the grant is not active"
+    );
+    // An ended grant gives no state.
+    let record = grant::grant_for(&s.collection, s.feed, &guid)
+        .unwrap()
+        .unwrap();
+    grant::end(&s.collection, record.id, 1).unwrap();
+    assert_eq!(blocked(&s, during_show()), None);
+}
+
+#[test]
 fn a_change_of_the_title_with_a_granted_write_gives_not_covered() {
     let mut s = setup();
     let guid = write_granted_show(&mut s);
@@ -3221,7 +3399,8 @@ fn a_draft_with_only_a_grant_or_a_host_operation_is_a_change_and_an_empty_draft_
     )
     .unwrap();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
-    s.collection.add_draft_grant(s.feed, &other).unwrap();
+    let app = new_app(&s);
+    s.collection.add_draft_grant(s.feed, &other, app).unwrap();
     let error = granted(&mut s, &guid, &GrantChange::End, during_show()).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::DraftOpen);
     assert_eq!(s.collection.draft_grants(s.feed).unwrap(), [other]);

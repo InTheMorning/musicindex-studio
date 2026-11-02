@@ -63,9 +63,44 @@ pub struct ShowGrant {
     pub created_at: i64,
     /// The time when the grant ended, or `None` when it did not end.
     pub ended_at: Option<i64>,
+    /// The app that the grant names (ADR 0110 item 19). A grant from before
+    /// ADR 0110 has none, and it has ended.
+    pub app_id: Option<i64>,
+    /// The live value origin of that app at the approval (ADR 0110
+    /// item 25). A granted live value must be on this origin.
+    pub live_value_origin: Option<String>,
 }
 
-/// One granted write (ADR 0054 item 17).
+/// The cause that a refused granted write records (ADR 0110 item 43).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    /// The feed has a draft with changes (ADR 0054 item 16).
+    DraftWithChanges,
+    /// The grant ended, or it is not active.
+    GrantEnded,
+    /// The live value is not on the live value origin of the grant, or has
+    /// a wrong protocol (ADR 0110 item 26).
+    LiveValueRefused,
+    /// The grant vault does not open: the key is wrong, or the vault is
+    /// not there.
+    VaultNotOpen,
+}
+
+impl Refusal {
+    /// The text of the cause in the list of granted writes.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::DraftWithChanges => "draft_with_changes",
+            Self::GrantEnded => "grant_ended",
+            Self::LiveValueRefused => "live_value_invalid",
+            Self::VaultNotOpen => "vault_not_open",
+        }
+    }
+}
+
+/// One granted write (ADR 0054 item 17) or one refused granted write (ADR
+/// 0110 item 43).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GrantWrite {
     /// The ID of the record.
@@ -78,9 +113,13 @@ pub struct GrantWrite {
     pub change: String,
     /// The time of the write, in seconds since the Unix epoch.
     pub written_at: i64,
+    /// The cause of a refused write (a [`Refusal`] text), or `None` for a
+    /// write that happened.
+    pub cause: Option<String>,
 }
 
-const GRANT_COLUMNS: &str = "id, feed_id, item_guid, created_at, ended_at";
+const GRANT_COLUMNS: &str =
+    "id, feed_id, item_guid, created_at, ended_at, app_id, live_value_origin";
 
 fn grant_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ShowGrant> {
     Ok(ShowGrant {
@@ -89,11 +128,15 @@ fn grant_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ShowGrant> {
         item_guid: row.get(2)?,
         created_at: row.get(3)?,
         ended_at: row.get(4)?,
+        app_id: row.get(5)?,
+        live_value_origin: row.get(6)?,
     })
 }
 
-/// Record a grant at a write. A grant of the same live item that ended
-/// starts again, with no `ended_at`.
+/// Record a grant at a write. The grant names one app and keeps the live
+/// value origin of that app at the approval (ADR 0110 items 19 and 25). A
+/// grant of the same live item that ended starts again, with no `ended_at`,
+/// and with the new app and origin.
 ///
 /// # Errors
 ///
@@ -102,12 +145,16 @@ pub fn record(
     collection: &Collection,
     feed_id: FeedId,
     item_guid: &str,
+    app_id: i64,
+    live_value_origin: &str,
     now: i64,
 ) -> Result<(), CollectionError> {
     collection.db().execute(
-        "INSERT INTO show_grants (feed_id, item_guid, created_at, ended_at) VALUES (?1, ?2, ?3, NULL)
-         ON CONFLICT (feed_id, item_guid) DO UPDATE SET created_at = ?3, ended_at = NULL",
-        rusqlite::params![feed_id.0, item_guid, now],
+        "INSERT INTO show_grants (feed_id, item_guid, created_at, ended_at, app_id, live_value_origin)
+         VALUES (?1, ?2, ?3, NULL, ?4, ?5)
+         ON CONFLICT (feed_id, item_guid) DO UPDATE
+         SET created_at = ?3, ended_at = NULL, app_id = ?4, live_value_origin = ?5",
+        rusqlite::params![feed_id.0, item_guid, now, app_id, live_value_origin],
     )?;
     Ok(())
 }
@@ -209,6 +256,28 @@ pub fn add_write(
     Ok(())
 }
 
+/// Record a refused granted write with its cause (ADR 0110 item 43). The
+/// entry is in the list that [`writes`] gives.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn add_refusal(
+    collection: &Collection,
+    grant_id: i64,
+    app_name: &str,
+    change: &GrantChange,
+    cause: Refusal,
+    now: i64,
+) -> Result<(), CollectionError> {
+    collection.db().execute(
+        "INSERT INTO grant_writes (grant_id, app_name, change, written_at, cause)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![grant_id, app_name, change.as_str(), now, cause.as_str()],
+    )?;
+    Ok(())
+}
+
 /// The granted writes of a grant, the oldest first.
 ///
 /// # Errors
@@ -216,7 +285,7 @@ pub fn add_write(
 /// Gives a [`CollectionError`] when SQLite fails.
 pub fn writes(collection: &Collection, grant_id: i64) -> Result<Vec<GrantWrite>, CollectionError> {
     let mut statement = collection.db().prepare(
-        "SELECT id, grant_id, app_name, change, written_at FROM grant_writes
+        "SELECT id, grant_id, app_name, change, written_at, cause FROM grant_writes
          WHERE grant_id = ?1 ORDER BY id",
     )?;
     let rows = statement.query_map([grant_id], |row| {
@@ -226,6 +295,7 @@ pub fn writes(collection: &Collection, grant_id: i64) -> Result<Vec<GrantWrite>,
             app_name: row.get(2)?,
             change: row.get(3)?,
             written_at: row.get(4)?,
+            cause: row.get(5)?,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -411,6 +481,7 @@ mod tests {
     type Change = Box<dyn FnOnce(&mut Feed)>;
 
     const END: i64 = 1_793_534_400; // 2026-11-01T12:00:00Z
+    const ORIGIN: &str = "wss://live.example.com";
 
     #[test]
     fn a_grant_is_active_until_24_hours_after_the_end() {
@@ -419,7 +490,7 @@ mod tests {
         let hosted = feed();
         let at = |now: i64| active(&collection, id, "show-1", &hosted, now.try_into().unwrap());
         assert_eq!(at(END).unwrap(), None, "no grant yet");
-        record(&collection, id, "show-1", 5).unwrap();
+        record(&collection, id, "show-1", 1, ORIGIN, 5).unwrap();
         assert!(at(END).unwrap().is_some());
         assert!(at(END + GRANT_MARGIN - 1).unwrap().is_some());
         assert_eq!(at(END + GRANT_MARGIN).unwrap(), None);
@@ -428,7 +499,7 @@ mod tests {
         end(&collection, grant.id, 9).unwrap();
         assert_eq!(at(END).unwrap(), None, "an ended grant");
         // A new record starts the grant again.
-        record(&collection, id, "show-1", 10).unwrap();
+        record(&collection, id, "show-1", 1, ORIGIN, 10).unwrap();
         let again = at(END).unwrap().unwrap();
         assert_eq!(again.id, grant.id);
         assert_eq!(again.ended_at, None);
@@ -438,7 +509,7 @@ mod tests {
     fn a_grant_with_no_end_uses_the_start_and_a_bad_time_ends_it() {
         let mut collection = Collection::open_in_memory().unwrap();
         let id = collection.add_feed(None, None).unwrap();
-        record(&collection, id, "show-2", 1).unwrap();
+        record(&collection, id, "show-2", 1, ORIGIN, 1).unwrap();
         let start = parse_time("2026-11-02T10:00:00Z").unwrap();
         let mut hosted = feed();
         let now = u64::try_from(start + GRANT_MARGIN - 1).unwrap();
@@ -475,7 +546,7 @@ mod tests {
     fn a_grant_ends_when_the_item_leaves_the_feed_or_has_the_status_ended() {
         let mut collection = Collection::open_in_memory().unwrap();
         let id = collection.add_feed(None, None).unwrap();
-        record(&collection, id, "show-1", 1).unwrap();
+        record(&collection, id, "show-1", 1, ORIGIN, 1).unwrap();
         let now = u64::try_from(END).unwrap();
         let mut hosted = feed();
         show(&mut hosted).status = Some("ended".into());
@@ -585,7 +656,7 @@ mod tests {
     fn the_writes_of_a_grant_are_kept_in_sequence() {
         let mut collection = Collection::open_in_memory().unwrap();
         let id = collection.add_feed(None, None).unwrap();
-        record(&collection, id, "show-1", 1).unwrap();
+        record(&collection, id, "show-1", 1, ORIGIN, 1).unwrap();
         let grant = grant_for(&collection, id, "show-1").unwrap().unwrap();
         add_write(&collection, grant.id, "Tool", &GrantChange::GoLive, 2).unwrap();
         add_write(&collection, grant.id, "Tool", &GrantChange::End, 3).unwrap();
@@ -604,5 +675,56 @@ mod tests {
             std::slice::from_ref(&grant)
         );
         assert_eq!(super::grant(&collection, grant.id).unwrap(), Some(grant));
+    }
+
+    #[test]
+    fn a_grant_keeps_its_app_and_its_origin_and_a_new_record_replaces_them() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let id = collection.add_feed(None, None).unwrap();
+        record(&collection, id, "show-1", 7, ORIGIN, 1).unwrap();
+        let grant = grant_for(&collection, id, "show-1").unwrap().unwrap();
+        assert_eq!(grant.app_id, Some(7));
+        assert_eq!(grant.live_value_origin.as_deref(), Some(ORIGIN));
+        end(&collection, grant.id, 2).unwrap();
+        record(&collection, id, "show-1", 8, "https://other.example.com", 3).unwrap();
+        let again = grant_for(&collection, id, "show-1").unwrap().unwrap();
+        assert_eq!(
+            (again.id, again.app_id, again.ended_at),
+            (grant.id, Some(8), None)
+        );
+        assert_eq!(
+            again.live_value_origin.as_deref(),
+            Some("https://other.example.com")
+        );
+    }
+
+    #[test]
+    fn a_refused_write_is_in_the_list_with_its_cause() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let id = collection.add_feed(None, None).unwrap();
+        record(&collection, id, "show-1", 1, ORIGIN, 1).unwrap();
+        let grant = grant_for(&collection, id, "show-1").unwrap().unwrap();
+        add_write(&collection, grant.id, "Tool", &GrantChange::GoLive, 2).unwrap();
+        add_refusal(
+            &collection,
+            grant.id,
+            "Tool",
+            &GrantChange::End,
+            Refusal::DraftWithChanges,
+            3,
+        )
+        .unwrap();
+        let list = writes(&collection, grant.id).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].cause, None);
+        assert_eq!(list[1].cause.as_deref(), Some("draft_with_changes"));
+        assert_eq!((list[1].change.as_str(), list[1].written_at), ("end", 3));
+        for (cause, text) in [
+            (Refusal::GrantEnded, "grant_ended"),
+            (Refusal::LiveValueRefused, "live_value_invalid"),
+            (Refusal::VaultNotOpen, "vault_not_open"),
+        ] {
+            assert_eq!(cause.as_str(), text);
+        }
     }
 }

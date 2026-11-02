@@ -132,6 +132,79 @@ pub fn check_live_value(uri: &str, protocol: &str) -> Result<(), LiveError> {
     Ok(())
 }
 
+/// The most characters of the protocol of a granted live value (ADR 0110
+/// item 26).
+pub const MAX_GRANTED_PROTOCOL: usize = 32;
+
+/// The origin of a live value address as `scheme://host[:port]`, in
+/// lowercase, with no default port. Gives `None` when the text is not a
+/// `https` or `wss` address, or when it has a user name or a password.
+fn origin_of(text: &str) -> Option<String> {
+    let uri: ureq::http::Uri = text.parse().ok()?;
+    let scheme = uri.scheme_str()?.to_ascii_lowercase();
+    if scheme != "https" && scheme != "wss" {
+        return None;
+    }
+    let authority = uri.authority()?;
+    let host = authority.host();
+    if authority.as_str().contains('@') || host.is_empty() {
+        return None;
+    }
+    Some(match authority.port_u16() {
+        None | Some(443) => format!("{scheme}://{}", host.to_ascii_lowercase()),
+        Some(port) => format!("{scheme}://{}:{port}", host.to_ascii_lowercase()),
+    })
+}
+
+/// The origin of a live value origin text: the scheme, the host and the
+/// port, with no path, query, fragment or user name. The scheme must be
+/// `https` or `wss` (ADR 0110 item 24). Gives the origin in the form that
+/// [`check_granted_live_value`] compares, or `None`.
+#[must_use]
+pub fn normalize_origin(text: &str) -> Option<String> {
+    let rest = text.split_once("://")?.1;
+    if rest.is_empty()
+        || rest.contains(['/', '?', '#', '@'])
+        || text.chars().any(char::is_whitespace)
+    {
+        return None;
+    }
+    origin_of(text)
+}
+
+/// Check the live value that a connected app sets under a show grant
+/// (ADR 0110 item 26). `origin` is the live value origin that the grant
+/// keeps. The check first applies [`check_live_value`]. Then it refuses a
+/// protocol that is not 1 to [`MAX_GRANTED_PROTOCOL`] characters of
+/// letters, digits, `.` and `-`, and an address whose origin is not
+/// `origin`.
+///
+/// # Errors
+///
+/// Gives an error in each of those conditions.
+pub fn check_granted_live_value(uri: &str, protocol: &str, origin: &str) -> Result<(), LiveError> {
+    check_live_value(uri, protocol)?;
+    let refuse = |message: &str| {
+        Err(LiveError {
+            message: message.to_owned(),
+        })
+    };
+    let protocol_ok = !protocol.is_empty()
+        && protocol.chars().count() <= MAX_GRANTED_PROTOCOL
+        && protocol
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    if !protocol_ok {
+        return refuse(
+            "The live value protocol must have 1 to 32 characters: letters, digits, dots and hyphens.",
+        );
+    }
+    if origin_of(uri).as_deref() != Some(origin) {
+        return refuse("The live value address is not on the live value origin of the app.");
+    }
+    Ok(())
+}
+
 /// Check the live value of each live item of a feed with
 /// [`check_live_value`].
 ///
@@ -204,6 +277,69 @@ mod tests {
         assert!(check_live_value("u", &"a".repeat(MAX_LIVE_VALUE_PROTOCOL + 1)).is_err());
         assert!(check_live_value("wss://a\n.example", "p").is_err());
         assert!(check_live_value("u", "p\u{7}").is_err());
+    }
+
+    #[test]
+    fn a_granted_live_value_must_be_on_the_origin_of_the_grant() {
+        let origin = "wss://live.example.com";
+        let check = |uri: &str, protocol: &str| check_granted_live_value(uri, protocol, origin);
+        assert!(check("wss://live.example.com/value", "socket.io").is_ok());
+        assert!(check("wss://LIVE.example.com:443/v?x=1", "a-b.c").is_ok());
+        let cases = [
+            ("wss://other.example.com/value", "p", "other host"),
+            ("ws://live.example.com/value", "p", "ws scheme"),
+            ("https://live.example.com/value", "p", "other scheme"),
+            ("wss://live.example.com:8443/value", "p", "other port"),
+            ("wss://live.example.com@evil.example/", "p", "user name"),
+            ("wss://user@live.example.com/", "p", "user name, same host"),
+            ("wss://live.example.com.evil.example/", "p", "suffix host"),
+            ("/value", "p", "no host"),
+            ("", "p", "empty"),
+            ("wss://live.example.com/v", "", "empty protocol"),
+            ("wss://live.example.com/v", "a b", "space in protocol"),
+            ("wss://live.example.com/v", "a/b", "slash in protocol"),
+        ];
+        for (uri, protocol, name) in cases {
+            assert!(
+                check(uri, protocol).is_err(),
+                "ADR 0110 item 26: a granted live value with {name} must be refused. Fix check_granted_live_value."
+            );
+        }
+        assert!(check(&format!("wss://live.example.com/{}", "a".repeat(2048)), "p").is_err());
+        assert!(check("wss://live.example.com/v", &"a".repeat(33)).is_err());
+        assert!(check("wss://live.example.com/v", &"a".repeat(32)).is_ok());
+        assert!(check("wss://live.example.com/\u{7}", "p").is_err());
+    }
+
+    #[test]
+    fn an_origin_has_a_scheme_a_host_and_no_path() {
+        assert_eq!(
+            normalize_origin("https://Live.Example.com").as_deref(),
+            Some("https://live.example.com")
+        );
+        assert_eq!(
+            normalize_origin("wss://live.example.com:443").as_deref(),
+            Some("wss://live.example.com")
+        );
+        assert_eq!(
+            normalize_origin("https://live.example.com:8443").as_deref(),
+            Some("https://live.example.com:8443")
+        );
+        for text in [
+            "http://live.example.com",
+            "ws://live.example.com",
+            "https://live.example.com/",
+            "https://live.example.com/path",
+            "https://live.example.com?x=1",
+            "https://live.example.com#x",
+            "https://user@live.example.com",
+            "https://",
+            "live.example.com",
+            "",
+            "https://live example.com",
+        ] {
+            assert_eq!(normalize_origin(text), None, "{text}");
+        }
     }
 
     #[test]

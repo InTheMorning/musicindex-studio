@@ -2,7 +2,7 @@
 
 Decision: [ADR 0110](../adr/0110-a-connected-app-signs-each-request-with-its-own-key.md), with its amendment of 2026-11-01. It uses ADR 0054, ADR 0056 item 6, ADR 0058, ADR 0078, ADR 0106 and ADR 0107.
 
-Status: Not started. It starts after [task 068](studio-v1-task-068-key-material-on-disk.md) (the file modes) and [task 069](studio-v1-task-069-account-protection.md) (the recent unlock of ADR 0106).
+Status: In progress. Packet 073a is complete. It started after [task 068](studio-v1-task-068-key-material-on-disk.md) (the file modes) and [task 069](studio-v1-task-069-account-protection.md) (the recent unlock of ADR 0106).
 
 ## Goal
 

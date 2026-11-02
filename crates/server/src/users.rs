@@ -7,8 +7,7 @@ use std::sync::Arc;
 use axum::Router;
 use axum::response::{IntoResponse, Response};
 use studio_api::{
-    AccountIdentity, ApiError, AppChange, AppHook, ServerRules, Workspace, WorkspaceHandle,
-    workspace_router,
+    AccountIdentity, ApiError, ServerRules, Workspace, WorkspaceHandle, workspace_router,
 };
 use studio_core::collection::Collection;
 use studio_core::net::{NetPolicy, PublicRules};
@@ -198,21 +197,6 @@ fn open_user(
     #[cfg(test)] pass_all: bool,
     #[cfg(test)] clock: Option<studio_api::Clock>,
 ) -> Result<OpenUser, ApiError> {
-    // The workspace tells the index when the user adds or removes an app.
-    let accounts = Arc::clone(&settings.accounts);
-    let hook = AppHook::new(move |change| {
-        let done = match change {
-            AppChange::Added { app_id, token_hash } => {
-                accounts.add_app_token(token_hash, account_id, *app_id)
-            }
-            AppChange::Removed { token_hash, .. } => accounts.remove_app_token(token_hash),
-        };
-        if done.is_err() {
-            // The start of the server makes the rows again, so the app
-            // works after a restart.
-            eprintln!("studio-server: the index of the app tokens did not change");
-        }
-    });
     // The manifest of an export holds the email and the Nostr key (ADR 0107
     // item 6).
     let identity = AccountIdentity {
@@ -221,7 +205,6 @@ fn open_user(
     };
     let mut workspace = Workspace::open(path)?
         .with_identity(identity)
-        .with_app_hook(hook)
         .with_net_policy(NetPolicy::Public(settings.rules.clone()))
         .with_server_rules(ServerRules {
             storage_limit: settings.storage_limit,
@@ -252,9 +235,10 @@ fn open_user(
     Ok(OpenUser { router, handle })
 }
 
-/// Make the rows of the app tokens again from the `connected_apps` table of
-/// each user folder (ADR 0058 item 16). A folder with no collection, or
-/// one that cannot be read, keeps its rows.
+/// Clear the rows of the app tokens of each user (ADR 0110 item 37). An app
+/// token works no more, so the index holds no row.
+// 073d: the index holds the public key of each app and the code hash of each
+// waiting app, made again from the collections.
 pub fn rebuild_app_tokens(users: &Users, accounts: &Accounts) -> Result<(), String> {
     for (id, folder) in accounts.folders()? {
         rebuild_app_tokens_of(users, accounts, id, &folder)?;
@@ -262,25 +246,15 @@ pub fn rebuild_app_tokens(users: &Users, accounts: &Accounts) -> Result<(), Stri
     Ok(())
 }
 
-/// Make the rows of the app tokens of one account again. An import calls it
-/// for the imported apps, so that they work at once (ADR 0107 item 2).
+/// Clear the rows of the app tokens of one account. An import calls it, so
+/// that an imported app has no token row (ADR 0107 item 2).
 pub fn rebuild_app_tokens_of(
-    users: &Users,
+    _users: &Users,
     accounts: &Accounts,
     id: i64,
-    folder: &str,
+    _folder: &str,
 ) -> Result<(), String> {
-    let file = users.folder_path(folder).join("collection.sqlite");
-    if !file.exists() {
-        return Ok(());
-    }
-    let Ok(collection) = Collection::open(&file) else {
-        return Ok(());
-    };
-    let Ok(rows) = studio_core::apps::token_hashes(&collection) else {
-        return Ok(());
-    };
-    accounts.replace_app_tokens(id, &rows)
+    accounts.replace_app_tokens(id, &[])
 }
 
 /// An address check that passes each address. A test uses it, so that no

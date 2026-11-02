@@ -466,6 +466,44 @@ UPDATE library_files SET imported_at = CAST(strftime('%s', 'now') AS INTEGER);
     // ADR 0107 item 1: `library_root` becomes a path relative to the data
     // folder. SQL cannot do it. `run_migrations` does it after this entry.
     "SELECT 1;",
+    // ADR 0110 items 37 and 38: a connected app has a key pair. Each app from
+    // before gets the state `token` and no key. Its grants end. Studio removes
+    // the wrappers from the grant vault files after this entry, in code,
+    // because SQL cannot read a file. `connected_apps` is made again, because
+    // SQLite cannot drop the column `token_hash` that has a UNIQUE rule.
+    r"
+CREATE TABLE connected_apps_new (
+    -- AUTOINCREMENT: the ID of a removed app is never used again, because a
+    -- grant vault file names a wrapper by app ID.
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    pubkey TEXT,
+    state TEXT NOT NULL,
+    code_hash TEXT,
+    code_expires_at INTEGER,
+    live_value_origin TEXT,
+    last_used_at INTEGER,
+    last_address TEXT,
+    latest_event_at INTEGER
+);
+INSERT INTO connected_apps_new (id, name, created_at, state)
+SELECT id, name, created_at, 'token' FROM connected_apps;
+DROP TABLE connected_apps;
+ALTER TABLE connected_apps_new RENAME TO connected_apps;
+CREATE UNIQUE INDEX connected_apps_pubkey ON connected_apps (pubkey) WHERE pubkey IS NOT NULL;
+CREATE UNIQUE INDEX connected_apps_code ON connected_apps (code_hash) WHERE code_hash IS NOT NULL;
+CREATE TABLE app_events (
+    event_id TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+);
+ALTER TABLE show_grants ADD COLUMN app_id INTEGER;
+ALTER TABLE show_grants ADD COLUMN live_value_origin TEXT;
+UPDATE show_grants SET ended_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE ended_at IS NULL;
+DELETE FROM draft_grants;
+ALTER TABLE draft_grants ADD COLUMN app_id INTEGER;
+ALTER TABLE grant_writes ADD COLUMN cause TEXT;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -502,6 +540,11 @@ const PEOPLE_MIGRATION: usize = 20;
 /// relative (ADR 0107 item 1). SQL cannot read the data folder, so the
 /// migration has no statement. Studio does the change after it, in code.
 const RELATIVE_LIBRARY_MIGRATION: usize = 23;
+
+/// The index in `MIGRATIONS` of the migration that gives a connected app a
+/// key pair (ADR 0110 items 37 and 38). SQL cannot change a grant vault
+/// file, so Studio removes the wrappers after it, in code.
+const APP_KEYS_MIGRATION: usize = 24;
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1140,6 +1183,9 @@ impl Collection {
             if index == RELATIVE_LIBRARY_MIGRATION {
                 self.relativize_library_root()?;
             }
+            if index == APP_KEYS_MIGRATION {
+                self.remove_all_grant_wrappers();
+            }
         }
         Ok(())
     }
@@ -1187,6 +1233,39 @@ impl Collection {
     pub fn library_root_setting(&self, root: &Path) -> String {
         relative_to_data(self.data_dir.as_deref(), root)
             .unwrap_or_else(|| root.to_string_lossy().into_owned())
+    }
+
+    /// Remove each app wrapper from each grant vault file in the data
+    /// folder (ADR 0110 items 37 and 38). After the migration of the apps,
+    /// no app has a key that Studio accepts, so no wrapper is of use. An
+    /// error for one file does not stop the others: the grants have ended,
+    /// and the next sync of the grant vaults removes the file.
+    fn remove_all_grant_wrappers(&self) {
+        let Some(dir) = self.data_dir.as_ref().map(|dir| dir.join("grants")) else {
+            return;
+        };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+            let Ok(mut file) = crate::vault::VaultFile::load(&path) else {
+                continue;
+            };
+            let ids = file.app_ids();
+            if ids.is_empty() {
+                continue;
+            }
+            for id in ids {
+                file.remove_app_wrapper(id);
+            }
+            if let Err(error) = file.save(&path) {
+                eprintln!("studio: a grant vault file did not change at the migration: {error}");
+            }
+        }
     }
 
     /// Change an absolute `library_root` in the data folder to a relative
@@ -2273,17 +2352,46 @@ impl Collection {
     }
 
     /// Keep a show grant that the draft of a feed asks for (ADR 0054
-    /// item 11). A grant that is there already does not change.
+    /// item 11). The grant names one app (ADR 0110 item 19). A grant of the
+    /// same live item that is there already takes the new app.
     ///
     /// # Errors
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn add_draft_grant(&self, feed: FeedId, item_guid: &str) -> Result<(), CollectionError> {
+    pub fn add_draft_grant(
+        &self,
+        feed: FeedId,
+        item_guid: &str,
+        app_id: i64,
+    ) -> Result<(), CollectionError> {
         self.db.execute(
-            "INSERT OR IGNORE INTO draft_grants (feed_id, item_guid) VALUES (?1, ?2)",
-            params![feed.0, item_guid],
+            "INSERT INTO draft_grants (feed_id, item_guid, app_id) VALUES (?1, ?2, ?3)
+             ON CONFLICT (feed_id, item_guid) DO UPDATE SET app_id = ?3",
+            params![feed.0, item_guid, app_id],
         )?;
         Ok(())
+    }
+
+    /// The app that a show grant of the draft names, or `None` when the
+    /// draft has no such grant (ADR 0110 item 19).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn draft_grant_app(
+        &self,
+        feed: FeedId,
+        item_guid: &str,
+    ) -> Result<Option<i64>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT app_id FROM draft_grants WHERE feed_id = ?1 AND item_guid = ?2",
+                params![feed.0, item_guid],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten())
     }
 
     /// Remove a show grant from the draft of a feed. A grant that is not
@@ -4123,7 +4231,7 @@ mod tests {
     fn the_relative_library_migration_has_its_index() {
         assert_eq!(
             RELATIVE_LIBRARY_MIGRATION,
-            MIGRATIONS.len() - 1,
+            MIGRATIONS.len() - 2,
             "ADR 0107 item 1: RELATIVE_LIBRARY_MIGRATION must be the index of its entry in MIGRATIONS"
         );
     }
@@ -4802,7 +4910,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let before = MIGRATIONS.len() - 2;
+        let before = RELATIVE_LIBRARY_MIGRATION - 1;
         for migration in &MIGRATIONS[..before] {
             db.execute_batch(migration).unwrap();
         }
@@ -4904,7 +5012,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 2;
+        let previous = RELATIVE_LIBRARY_MIGRATION - 1;
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
@@ -5092,24 +5200,141 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 1;
-        for migration in &MIGRATIONS[..previous] {
+        for migration in &MIGRATIONS[..APP_KEYS_MIGRATION] {
             db.execute_batch(migration).unwrap();
         }
-        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
-            .unwrap();
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(APP_KEYS_MIGRATION).unwrap(),
+        )
+        .unwrap();
         drop(db);
 
         let collection = Collection::open(&path).unwrap();
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(crate::apps::apps(&collection).unwrap().len(), 0);
-        let (_, token) = crate::apps::add_app(&collection, "Tool").unwrap();
-        assert!(
-            crate::apps::app_for_token(&collection, &token)
-                .unwrap()
-                .is_some()
+        let (app, code) = crate::apps::start_pairing(&collection, "Tool").unwrap();
+        assert_eq!(app.state, crate::apps::AppState::Waiting);
+        assert!(!code.is_empty());
+    }
+
+    #[test]
+    fn the_app_keys_migration_has_its_index() {
+        assert_eq!(
+            APP_KEYS_MIGRATION,
+            MIGRATIONS.len() - 1,
+            "ADR 0110 items 37 and 38: APP_KEYS_MIGRATION must be the index of its entry in MIGRATIONS"
         );
     }
+
+    /// Make a collection at the schema before the migration of the app keys,
+    /// with a token app, an open grant and a grant vault file with two
+    /// wrappers.
+    fn before_app_keys(dir: &Path) -> PathBuf {
+        let path = dir.join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..APP_KEYS_MIGRATION] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(APP_KEYS_MIGRATION).unwrap(),
+        )
+        .unwrap();
+        db.execute_batch(
+            "INSERT INTO feeds (id, public_url, created_at) VALUES (1, 'https://example.com/a.xml', 0);
+             INSERT INTO connected_apps (id, name, token_hash, created_at, app_pubkey)
+             VALUES (1, 'Old', 'hash-one', 5, 'aa'), (2, 'Older', 'hash-two', 6, NULL);
+             INSERT INTO show_grants (id, feed_id, item_guid, created_at) VALUES (1, 1, 'show', 7);
+             INSERT INTO draft_grants (feed_id, item_guid) VALUES (1, 'show');
+             INSERT INTO grant_writes (grant_id, app_name, change, written_at) VALUES (1, 'Old', 'go_live', 8);",
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn the_app_keys_migration_makes_a_token_app_without_a_key_and_ends_its_grants() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = before_app_keys(dir.path());
+        let grants = dir.path().join("grants");
+        std::fs::create_dir_all(&grants).unwrap();
+        let mut vault = crate::vault::OpenVault::create_with_no_wrapper().unwrap();
+        vault.put("host", b"secret").unwrap();
+        let mut file = vault.file().clone();
+        file.set_app_wrapper(1, "sender", "ciphertext");
+        file.set_app_wrapper(2, "sender", "ciphertext");
+        file.save(&grants.join("1.json")).unwrap();
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        let apps = crate::apps::apps(&collection).unwrap();
+        assert_eq!(apps.len(), 2);
+        for app in &apps {
+            assert_eq!(
+                app.state,
+                crate::apps::AppState::Token,
+                "ADR 0110 item 37: an app from before must get the state token"
+            );
+            assert_eq!(
+                app.pubkey, None,
+                "ADR 0110 item 38: the migration must clear the public key of a token app"
+            );
+        }
+        assert_eq!(apps[0].name, "Old");
+        assert_eq!(apps[0].created_at, 5);
+        // The old token hash does not remain in the table.
+        let columns: Vec<String> = collection
+            .db()
+            .prepare("SELECT name FROM pragma_table_info('connected_apps')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(
+            !columns
+                .iter()
+                .any(|c| c.contains("token") || c == "app_pubkey")
+        );
+        // No token app can be found by a key, and the grants have ended.
+        assert_eq!(
+            crate::apps::app_for_pubkey(&collection, "aa").unwrap(),
+            None
+        );
+        let grant = crate::grant::grant_for(&collection, FeedId(1), "show")
+            .unwrap()
+            .unwrap();
+        assert!(
+            grant.ended_at.is_some(),
+            "ADR 0110 item 38: the migration must end each grant from before"
+        );
+        assert_eq!(grant.app_id, None);
+        assert_eq!(
+            collection.draft_grants(FeedId(1)).unwrap(),
+            Vec::<String>::new()
+        );
+        // The list of granted writes keeps its entry.
+        let writes = crate::grant::writes(&collection, grant.id).unwrap();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].cause, None);
+        // The wrappers went out of the grant vault file. The records stay.
+        let file = crate::vault::VaultFile::load(&grants.join("1.json")).unwrap();
+        assert_eq!(
+            file.app_ids(),
+            Vec::<i64>::new(),
+            "ADR 0110 item 37: the migration must remove each wrapper from each grant vault file"
+        );
+        // The old key still opens the file: only the wrapper changed.
+        assert!(file.open_with_key(&vault.key_for_signer()).is_ok());
+        // The migration does not run a second time.
+        drop(collection);
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(crate::apps::apps(&collection).unwrap().len(), 2);
+    }
+
     #[test]
     fn a_database_at_the_previous_schema_version_gets_the_grant_tables() {
         let dir = tempfile::tempdir().unwrap();
@@ -5126,9 +5351,11 @@ mod tests {
         let mut collection = Collection::open(&path).unwrap();
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         let feed = collection.add_feed(None, None).unwrap();
-        collection.add_draft_grant(feed, "b").unwrap();
-        collection.add_draft_grant(feed, "a").unwrap();
-        collection.add_draft_grant(feed, "a").unwrap();
+        collection.add_draft_grant(feed, "b", 1).unwrap();
+        collection.add_draft_grant(feed, "a", 1).unwrap();
+        collection.add_draft_grant(feed, "a", 2).unwrap();
+        assert_eq!(collection.draft_grant_app(feed, "a").unwrap(), Some(2));
+        assert_eq!(collection.draft_grant_app(feed, "none").unwrap(), None);
         assert_eq!(collection.draft_grants(feed).unwrap(), ["a", "b"]);
         collection.remove_draft_grant(feed, "b").unwrap();
         assert_eq!(collection.draft_grants(feed).unwrap(), ["a"]);
@@ -5136,7 +5363,7 @@ mod tests {
         collection.delete_draft(feed).unwrap();
         assert_eq!(collection.draft_grants(feed).unwrap(), Vec::<String>::new());
 
-        crate::grant::record(&collection, feed, "a", 1).unwrap();
+        crate::grant::record(&collection, feed, "a", 1, "wss://live.example.com", 1).unwrap();
         let grant = crate::grant::grant_for(&collection, feed, "a")
             .unwrap()
             .unwrap();

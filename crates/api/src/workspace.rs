@@ -479,23 +479,18 @@ impl std::fmt::Debug for AddressChecker {
     }
 }
 
-/// A change of the list of connected apps. The hash is the SHA-256 of the
-/// token, as the `connected_apps` table keeps it. It is never the token.
+/// A change of the list of connected apps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppChange {
     /// The user added an app.
     Added {
         /// The ID of the app.
         app_id: i64,
-        /// The hash of the token of the app.
-        token_hash: String,
     },
     /// The user removed an app.
     Removed {
         /// The ID of the app.
         app_id: i64,
-        /// The hash of the token of the app.
-        token_hash: String,
     },
 }
 
@@ -1286,20 +1281,21 @@ impl Workspace {
         self.grants_dir.join(format!("{grant_id}.json"))
     }
 
-    /// Open the grant vault of a show with the token of a connected app.
-    /// Gives `None` when the host of the feed XML needs no secret.
+    /// Open the grant vault of a show with the grant vault key. Gives
+    /// `None` when the host of the feed XML needs no secret.
     ///
     /// # Errors
     ///
     /// Gives 423 `vault_locked` when the host needs a secret and the grant
-    /// vault is not there, when the app has no wrapper in it, when the
-    /// token is not the token of the app, or when the grant vault does not
-    /// hold the secret (ADR 0058 item 13).
+    /// vault is not there, when the key does not open it, or when the grant
+    /// vault does not hold the secret (ADR 0058 item 13).
+    // 073c: the app must be the app that the grant names, and the key comes
+    // from the signed body.
     pub(crate) fn open_grant_vault(
         &self,
         show: &ShowGrant,
-        app_id: i64,
-        token: &str,
+        _app_id: i64,
+        key: &str,
     ) -> Result<Option<OpenVault>, ApiError> {
         let secret_ids = self.grant_secret_ids(show.feed_id)?;
         if secret_ids.is_empty() {
@@ -1307,7 +1303,7 @@ impl Workspace {
         }
         let file =
             VaultFile::load(&self.grant_path(show.id)).map_err(|_| ApiError::vault_locked())?;
-        let vault = grant_vault::open(file, app_id, token).map_err(|_| ApiError::vault_locked())?;
+        let vault = grant_vault::open_with_key(file, key).map_err(|_| ApiError::vault_locked())?;
         for id in &secret_ids {
             if !matches!(vault.get(id), Ok(Some(_))) {
                 return Err(ApiError::vault_locked());
@@ -1321,8 +1317,8 @@ impl Workspace {
     ///
     /// - With the user vault open, it makes each missing grant vault of an
     ///   active grant, makes again the grant vaults of the `refresh` feed,
-    ///   and adds each missing wrapper of an app that has a key.
-    /// - Always, it removes the wrapper of each removed app, and it removes
+    ///   and adds the missing wrapper of the app that the grant names.
+    /// - Always, it removes each wrapper of another app, and it removes
     ///   the grant vault and the record of each grant that is not active.
     ///
     /// An error goes into the log with no secret, and the next grant still
@@ -1431,6 +1427,11 @@ impl Workspace {
         let secret_ids = self.grant_secret_ids(show.feed_id).map_err(|e| e.code())?;
         let path = self.grant_path(show.id);
         let record = format!("{GRANT_RECORD_PREFIX}{}", show.id);
+        // A grant vault has only the wrapper of the app that the grant names
+        // (ADR 0110 item 20).
+        let app = apps
+            .iter()
+            .find(|app| Some(app.id) == show.app_id && app.state == apps::AppState::Active);
         if secret_ids.is_empty() {
             // A host with no secret needs no grant vault.
             let _ = std::fs::remove_file(&path);
@@ -1457,7 +1458,8 @@ impl Workspace {
                 _ => false,
             };
             if refresh == Some(show.feed_id) || !usable {
-                return self.make_grant_vault(&secret_ids, apps, &path, &record);
+                let app = app.ok_or("the app of the grant is not active")?;
+                return self.make_grant_vault(&secret_ids, app, &path, &record);
             }
         }
         let Some(file) = file.as_mut() else {
@@ -1465,17 +1467,15 @@ impl Workspace {
         };
         let mut changed = false;
         for id in file.app_ids() {
-            if !apps.iter().any(|app| app.id == id && app.has_key) {
+            if Some(id) != app.map(|app| app.id) {
                 changed |= grant_vault::remove_wrapper(file, id);
             }
         }
-        if let Some(key) = &key {
-            for app in apps.iter().filter(|app| app.has_key) {
-                if file.app_wrapper(app.id).is_none() {
-                    grant_vault::add_wrapper(file, key, app).map_err(|e| e.to_string())?;
-                    changed = true;
-                }
-            }
+        if let (Some(key), Some(app)) = (&key, app)
+            && file.app_wrapper(app.id).is_none()
+        {
+            grant_vault::add_wrapper(file, key, app).map_err(|e| e.to_string())?;
+            changed = true;
         }
         if changed {
             file.save(&path).map_err(|e| e.to_string())?;
@@ -1488,7 +1488,7 @@ impl Workspace {
     fn make_grant_vault(
         &mut self,
         secret_ids: &[String],
-        apps: &[apps::ConnectedApp],
+        app: &apps::ConnectedApp,
         path: &Path,
         record: &str,
     ) -> Result<(), String> {
@@ -1497,7 +1497,7 @@ impl Workspace {
             .as_mut()
             .ok_or_else(|| "the user vault is closed".to_owned())?;
         let ids: Vec<&str> = secret_ids.iter().map(String::as_str).collect();
-        let (file, key) = grant_vault::make(vault, &ids, apps).map_err(|e| e.to_string())?;
+        let (file, key) = grant_vault::make(vault, &ids, app).map_err(|e| e.to_string())?;
         // The key goes into the user vault first. A file that this key does
         // not open is made again at the next sync.
         vault

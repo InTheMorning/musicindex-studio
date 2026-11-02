@@ -12,6 +12,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::Deserialize;
 use serde_json::json;
 use studio_api::ui_router;
+use studio_core::signed_request::{self, ExpectedRequest, KIND_HTTP_AUTH};
 use studio_core::vault::{MIN_PASSPHRASE_CHARS, passphrase_strength};
 
 use std::sync::Arc;
@@ -566,11 +567,6 @@ async fn challenge(State(state): State<Shared>, request: Request) -> Response {
     }
 }
 
-/// The kind of a sign-in event (NIP-98).
-const KIND_HTTP_AUTH: u16 = 27_235;
-/// A sign-in event can differ this many seconds from the server time.
-const EVENT_WINDOW: u64 = 60;
-
 #[derive(Deserialize)]
 struct NostrSignIn {
     event: serde_json::Value,
@@ -605,21 +601,20 @@ fn tag_value<'a>(event: &'a nostr::prelude::Event, name: &str) -> Option<&'a str
 }
 
 /// Check the kind, the ID, the signature, the tags and the time of a
-/// sign-in event (ADR 0056 item 6). Gives the challenge of the event.
+/// sign-in event (ADR 0056 item 6). The check is the shared function of the
+/// signed requests of apps (ADR 0110 item 13). The sign-in event is in the
+/// body, so it cannot hold the hash of the body, and the payload check is
+/// off. Gives the challenge of the event.
 fn check_event<'a>(state: &Shared, event: &'a nostr::prelude::Event) -> Option<&'a str> {
     let url = format!("{}/auth/v1/nostr", state.origin.text);
-    let now = accounts::now().unsigned_abs();
-    let near = event.created_at.as_secs().abs_diff(now) <= EVENT_WINDOW;
-    let correct = event.kind.as_u16() == KIND_HTTP_AUTH
-        && near
-        && tag_value(event, "u") == Some(url.as_str())
-        && tag_value(event, "method") == Some("POST")
-        && event.verify().is_ok();
-    if correct {
-        tag_value(event, "challenge")
-    } else {
-        None
-    }
+    let expected = ExpectedRequest {
+        url: &url,
+        method: "POST",
+        body: None,
+        now: accounts::now().unsigned_abs(),
+    };
+    signed_request::check(event, &expected).ok()?;
+    tag_value(event, "challenge")
 }
 
 /// Sign up or sign in with a NIP-07 signer (ADR 0056 items 5, 6, 9 and 11).

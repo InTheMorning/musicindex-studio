@@ -40,6 +40,7 @@ pub mod playlist;
 pub mod profiles;
 pub mod publisher;
 pub mod remote;
+pub mod signed_request;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod vault;

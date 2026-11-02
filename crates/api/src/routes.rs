@@ -5523,7 +5523,10 @@ pub(crate) struct AppBody {
     name: String,
 }
 
-/// Add a connected app. This response is the only one that has the token.
+/// Add a connected app: a waiting app and its pairing code (ADR 0110
+/// item 6). This response is the only one that has the code.
+// 073c: this route gives the full pairing text (the public origin and the
+// code) and the new `GET` and `DELETE` routes of one app.
 pub(crate) async fn add_app(
     State(shared): State<Shared>,
     Json(body): Json<AppBody>,
@@ -5531,8 +5534,8 @@ pub(crate) async fn add_app(
     blocking(shared, move |w| {
         // ADR 0106 item 2: a new app is a sensitive change.
         w.require_recent_unlock()?;
-        let (app, token) =
-            apps::add_app(&w.collection, &body.name).map_err(|e| match e.kind() {
+        let (app, code) =
+            apps::start_pairing(&w.collection, &body.name).map_err(|e| match e.kind() {
                 CollectionErrorKind::Invalid => ApiError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "invalid_name",
@@ -5540,96 +5543,59 @@ pub(crate) async fn add_app(
                 ),
                 _ => ApiError::from(e),
             })?;
-        w.app_changed(&crate::workspace::AppChange::Added {
-            app_id: app.id,
-            token_hash: apps::token_hash(&token),
-        });
-        // Each grant vault gets the wrapper of the new app now, or at the
-        // next unlock (ADR 0058 item 8).
-        w.sync_grant_vaults(None);
+        w.app_changed(&crate::workspace::AppChange::Added { app_id: app.id });
         Ok((
             StatusCode::CREATED,
             Json(json!({
                 "id": app.id,
                 "name": app.name,
                 "created_at": app.created_at,
-                "has_key": app.has_key,
-                "token": token,
+                "state": app.state,
+                "code_expires_at": app.code_expires_at,
+                "code": code.as_str(),
             })),
         ))
     })
     .await
 }
 
-/// Remove a connected app. Its token stops working.
+/// Remove a connected app. Its grants end at once (ADR 0110 item 21).
 pub(crate) async fn remove_app(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
-        let token_hash = apps::token_hash_of(&w.collection, id)?;
         apps::remove_app(&w.collection, id)?;
-        if let Some(token_hash) = token_hash {
-            w.app_changed(&crate::workspace::AppChange::Removed {
-                app_id: id,
-                token_hash,
-            });
-        }
-        // Each grant vault loses the wrapper of the app (ADR 0058 item 9).
+        w.app_changed(&crate::workspace::AppChange::Removed { app_id: id });
+        // Each grant vault of the app goes with its grant (ADR 0110
+        // item 21).
         w.sync_grant_vaults(None);
         Ok(StatusCode::NO_CONTENT)
     })
     .await
 }
 
-/// The layer of the `/app/v1/` routes (ADR 0054 item 8). The layer of
-/// `/api/` has already checked the loopback `Host`. This layer needs the
-/// token of a connected app, and it puts the app into the request. The
-/// access token of the UI is not an app token, so it gives 401.
+/// The layer of the `/app/v1/` routes. ADR 0110 item 16: the layer accepts
+/// no token. It refuses each request until the signed request of
+/// ADR 0110 item 12 is built.
+// 073c: this layer checks `Authorization: Nostr <base64 event>` with
+// `studio_core::apps::authenticate`, and puts the app into the request.
 pub(crate) async fn app_check(
-    State(shared): State<Shared>,
-    mut request: Request,
-    next: axum::middleware::Next,
+    State(_shared): State<Shared>,
+    _request: Request,
+    _next: axum::middleware::Next,
 ) -> Result<Response, ApiError> {
-    let given = Zeroizing::new(
-        request
-            .headers()
-            .get(header::AUTHORIZATION)
-            .and_then(|h| h.to_str().ok())
-            .and_then(|h| h.strip_prefix("Bearer "))
-            .unwrap_or_default()
-            .to_owned(),
-    );
-    let unauthorized = || {
-        ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "app_unauthorized",
-            "ADR 0054: this route needs the token of a connected app",
-        )
-    };
-    if given.is_empty() {
-        return Err(unauthorized());
-    }
-    let token = AppToken(given);
-    let checked = token.clone();
-    let app = blocking(shared, move |w| {
-        Ok(apps::app_for_token(&w.collection, checked.as_str())?)
-    })
-    .await?;
-    let Some(app) = app else {
-        return Err(unauthorized());
-    };
-    // No later layer needs the header. The token stays in the extension,
-    // which clears its memory (ADR 0058 item 11).
-    request.headers_mut().remove(header::AUTHORIZATION);
-    request.extensions_mut().insert(app);
-    request.extensions_mut().insert(token);
-    Ok(next.run(request).await)
+    Err(ApiError::new(
+        StatusCode::UNAUTHORIZED,
+        "app_key_required",
+        "ADR 0110: this route needs a request that the key of a connected app signed",
+    ))
 }
 
-/// The token of the connected app that made the request. A granted write
-/// uses it to open the grant vault. The type clears its memory when it is
-/// dropped, and it shows no text in debug output.
+/// The grant vault key that a granted write uses to open the grant vault.
+/// The type clears its memory when it is dropped, and it shows no text in
+/// debug output.
+// 073c: the key comes from `grant_key` in the signed body of the request.
 #[derive(Clone)]
 pub(crate) struct AppToken(Zeroizing<String>);
 
@@ -5645,7 +5611,7 @@ impl std::fmt::Debug for AppToken {
     }
 }
 
-/// The app that the token names. It tests the layer of `/app/v1/`.
+/// The app that signed the request. It tests the layer of `/app/v1/`.
 pub(crate) async fn whoami(Extension(app): Extension<ConnectedApp>) -> Json<Value> {
     Json(json!({ "id": app.id, "name": app.name }))
 }
@@ -5674,7 +5640,20 @@ fn change_draft_grant(w: &Workspace, id: i64, guid: &str, add: bool) -> ApiResul
         ));
     }
     if add {
-        w.collection.add_draft_grant(id, guid)?;
+        // 073c: the review sheet sends the app. Now the grant names the one
+        // active app.
+        let active: Vec<_> = apps::apps(&w.collection)?
+            .into_iter()
+            .filter(|app| app.state == apps::AppState::Active)
+            .collect();
+        let [app] = active.as_slice() else {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "app_required",
+                "ADR 0110 item 19: a grant names one active app",
+            ));
+        };
+        w.collection.add_draft_grant(id, guid, app.id)?;
     } else {
         w.collection.remove_draft_grant(id, guid)?;
     }
@@ -5754,6 +5733,7 @@ pub(crate) async fn list_feed_grants(
                         "app_name": write.app_name,
                         "change": write.change,
                         "written_at": write.written_at,
+                        "cause": write.cause,
                     }))
                     .collect::<Vec<_>>(),
             }));

@@ -6672,20 +6672,8 @@ async fn the_platform_listing_route_changes_only_the_block_of_that_platform() {
     assert_eq!(body["error"]["code"], "not_found");
 }
 
-/// A request to a route with a given bearer token and no other header.
-fn bearer_request(path: &str, token: Option<&str>, host: &str) -> Request<Body> {
-    let mut builder = Request::builder()
-        .method("GET")
-        .uri(path)
-        .header(header::HOST, host);
-    if let Some(token) = token {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
-    }
-    builder.body(Body::empty()).unwrap()
-}
-
 #[tokio::test]
-async fn the_apps_routes_add_list_and_remove_an_app_and_only_the_post_gives_the_token() {
+async fn the_apps_routes_add_list_and_remove_an_app_and_only_the_post_gives_the_code() {
     let app = app();
     make_vault(&app).await;
     let (status, body) = call(&app, "POST", "/api/v1/apps", Some(json!({"name": " "}))).await;
@@ -6700,16 +6688,23 @@ async fn the_apps_routes_add_list_and_remove_an_app_and_only_the_post_gives_the_
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let token = body["token"].as_str().unwrap().to_owned();
-    assert_eq!(token.len(), 64);
+    let code = body["code"].as_str().unwrap().to_owned();
+    assert_eq!(code.len(), 9);
+    assert_eq!(body["state"], "waiting");
+    assert!(body.get("token").is_none());
     let id = body["id"].as_i64().unwrap();
 
     let (status, _, text) = send(&app, request("GET", "/api/v1/apps", None)).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(!text.contains(&token));
+    assert!(
+        !text.contains(&code),
+        "ADR 0110 item 7: the list of apps must not hold the pairing code"
+    );
     let list: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(list[0]["name"], "Show tool");
-    assert!(list[0].get("token").is_none());
+    assert_eq!(list[0]["state"], "waiting");
+    assert!(list[0].get("code").is_none());
+    assert!(list[0].get("code_hash").is_none());
     assert!(list[0].get("token_hash").is_none());
 
     let (status, _) = call(&app, "DELETE", &format!("/api/v1/apps/{id}"), None).await;
@@ -6718,175 +6713,42 @@ async fn the_apps_routes_add_list_and_remove_an_app_and_only_the_post_gives_the_
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+/// An app route refuses each request until 073c builds the signed request.
 #[tokio::test]
-async fn whoami_needs_the_token_of_a_connected_app() {
+async fn an_app_route_gives_401_app_key_required_for_a_bearer_header() {
     let app = app();
-    make_vault(&app).await;
-    let (_, body) = call(
-        &app,
-        "POST",
-        "/api/v1/apps",
-        Some(json!({"name": "Show tool"})),
-    )
-    .await;
-    let token = body["token"].as_str().unwrap().to_owned();
-    let id = body["id"].as_i64().unwrap();
-
-    let (status, body, text) =
-        send(&app, bearer_request("/app/v1/whoami", Some(&token), HOST)).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({"id": id, "name": "Show tool"}));
-    assert!(!text.contains(&token));
-
-    // The access token of the UI, no token and a wrong token.
-    for given in [Some(TOKEN), None, Some("wrong")] {
-        let (status, body, text) = send(&app, bearer_request("/app/v1/whoami", given, HOST)).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{given:?}");
-        assert_eq!(body["error"]["code"], "app_unauthorized");
-        assert!(!text.contains(&token));
-    }
-
-    // An app token does not open an `/api/` route.
-    let (status, body, _) = send(&app, bearer_request("/api/v1/status", Some(&token), HOST)).await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body["error"]["code"], "token_required");
-
-    // A host that is not loopback gets the refusal of ADR 0017.
     let (status, body, _) = send(
         &app,
-        bearer_request("/app/v1/whoami", Some(&token), "evil.example:4100"),
+        Request::builder()
+            .uri("/app/v1/whoami")
+            .header(header::HOST, HOST)
+            .header(header::AUTHORIZATION, "Bearer an-old-token")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body["error"]["code"], "host_not_allowed");
-
-    // A removed app does not pass.
-    call(&app, "DELETE", &format!("/api/v1/apps/{id}"), None).await;
-    let (status, _, _) = send(&app, bearer_request("/app/v1/whoami", Some(&token), HOST)).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        body["error"]["code"], "app_key_required",
+        "ADR 0110 item 37: an app route must refuse a token with app_key_required"
+    );
 }
 
-/// A request of a connected app, with its token and a JSON body.
-async fn app_call(
-    app: &App,
-    method: &str,
-    path: &str,
-    token: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let builder = Request::builder()
-        .method(method)
-        .uri(path)
-        .header(header::HOST, HOST)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"));
-    let request = match body {
-        Some(body) => builder
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap(),
-        None => builder.body(Body::empty()).unwrap(),
-    };
-    let (status, value, _) = send(app, request).await;
-    (status, value)
-}
-
-/// Write a pending show with its draft grant, and add a connected app.
-/// Gives the `guid` of the show and the token of the app.
-async fn granted_show(app: &App, id: i64) -> (String, String) {
-    granted_show_in(app, id, &|| live(app)).await
-}
-
-/// Like [`granted_show`], for a feed whose XML `live_xml` reads from the host.
-async fn granted_show_in(app: &App, id: i64, live_xml: &dyn Fn() -> String) -> (String, String) {
+/// The live value has one rule in the core, for the draft save (task 072d).
+#[tokio::test]
+async fn the_core_refuses_a_long_or_control_live_value_in_a_draft_save() {
+    let app = app();
+    let id = set_up(&app).await;
     let base = format!("/api/v1/feeds/{id}");
-    // The start is far in the future, so that the grant is active at the
-    // time of the test.
     let (status, draft) = call(
-        app,
+        &app,
         "POST",
         &format!("{base}/live-items"),
         Some(json!({ "title": "Show", "start": "2099-11-01T10:00:00Z" })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{draft}");
-    let guid = draft["model"]["live_items"][0]["item"]["guid"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let mut model = draft["model"].clone();
-    model["live_items"][0]["content_links"] =
-        json!([{ "href": "https://example.com/show", "label": "Watch" }]);
-    let (status, _) = call(
-        app,
-        "PUT",
-        &format!("{base}/draft"),
-        Some(json!({ "revision": draft["revision"], "model": model })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-
-    let (status, body) = call(app, "PUT", &format!("{base}/grants/t-1"), None).await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "invalid_grant");
-    let (status, diff) = call(app, "DELETE", &format!("{base}/grants/{guid}"), None).await;
-    assert_eq!(status, StatusCode::OK, "{diff}");
-    assert_eq!(diff["grants"], json!([]));
-    let (status, diff) = call(app, "PUT", &format!("{base}/grants/{guid}"), None).await;
-    assert_eq!(status, StatusCode::OK, "{diff}");
-    assert_eq!(diff["grants"], json!([guid]));
-    let (status, body) = call(
-        app,
-        "POST",
-        &format!("{base}/write"),
-        Some(json!({ "diff_id": diff["id"] })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(live_xml().contains("status=\"pending\""));
-
-    let (status, body) = call(
-        app,
-        "POST",
-        "/api/v1/apps",
-        Some(json!({"name": "Show tool"})),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
-    (guid, body["token"].as_str().unwrap().to_owned())
-}
-
-/// The live value has one rule in the core, for the route of the app and
-/// for the live item page (task 072d).
-#[tokio::test]
-async fn the_core_refuses_a_long_or_control_live_value_for_the_app_and_the_page() {
-    let app = app();
-    let id = set_up(&app).await;
-    let (_, token) = granted_show(&app, id).await;
-    let (_, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
-    let grant_id = shows[0]["grant_id"].as_i64().unwrap();
     let long = "a".repeat(2049);
-    for value in [
-        json!({ "uri": long, "protocol": "socket.io" }),
-        json!({ "uri": "wss://example.com/value", "protocol": "p".repeat(65) }),
-        json!({ "uri": "wss://example.com/\nvalue", "protocol": "socket.io" }),
-    ] {
-        let (status, body) = app_call(
-            &app,
-            "PUT",
-            &format!("/app/v1/shows/{grant_id}/live-value"),
-            &token,
-            Some(value),
-        )
-        .await;
-        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
-        assert_eq!(
-            body["error"]["code"], "invalid_live_value",
-            "ADR 0054 item 13: the core must refuse a long or control live value with invalid_live_value. Call live::check_live_value in the route."
-        );
-    }
-
-    let base = format!("/api/v1/feeds/{id}");
-    let (_, draft) = call(&app, "GET", &format!("{base}/draft"), None).await;
     let mut model = draft["model"].clone();
     model["live_items"][0]["live_value"] = json!({ "uri": long, "protocol": "socket.io" });
     let (status, body) = call(
@@ -6901,210 +6763,6 @@ async fn the_core_refuses_a_long_or_control_live_value_for_the_app_and_the_page(
         body["error"]["code"], "invalid_live_value",
         "ADR 0054 item 13: the draft save must refuse a long or control live value. Call live::check_live_values in replace_model."
     );
-}
-
-#[tokio::test]
-#[expect(
-    clippy::too_many_lines,
-    reason = "the test is one sequence of app requests"
-)]
-async fn a_connected_app_starts_a_show_sets_its_live_value_and_ends_it() {
-    let app = app();
-    let id = set_up(&app).await;
-    let (guid, token) = granted_show(&app, id).await;
-
-    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
-    assert_eq!(status, StatusCode::OK, "{shows}");
-    assert_eq!(shows.as_array().unwrap().len(), 1);
-    let show = &shows[0];
-    assert_eq!(show["feed_id"], id);
-    assert_eq!(show["feed_title"], "Album");
-    assert_eq!(show["item_guid"], guid.as_str());
-    assert_eq!(show["title"], "Show");
-    assert_eq!(show["status"], "pending");
-    assert_eq!(show["start"], "2099-11-01T10:00:00Z");
-    assert_eq!(show["end"], Value::Null);
-    assert_eq!(show["live_value"], Value::Null);
-    let grant_id = show["grant_id"].as_i64().unwrap();
-    let path = format!("/app/v1/shows/{grant_id}");
-
-    // The access token of the UI does not open an app route.
-    let (status, _) = app_call(&app, "GET", "/app/v1/shows", TOKEN, None).await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-    let (status, body) = app_call(
-        &app,
-        "POST",
-        &format!("/app/v1/shows/{}/status", grant_id + 100),
-        &token,
-        Some(json!({ "status": "live" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["error"]["code"], "no_grant");
-    let (status, body) = app_call(
-        &app,
-        "POST",
-        &format!("{path}/status"),
-        &token,
-        Some(json!({ "status": "pending" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["error"]["code"], "bad_status");
-    let (status, body) = app_call(
-        &app,
-        "POST",
-        &format!("{path}/status"),
-        &token,
-        Some(json!({ "status": "ended" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["error"]["code"], "bad_status");
-
-    let (status, body) = app_call(
-        &app,
-        "POST",
-        &format!("{path}/status"),
-        &token,
-        Some(json!({ "status": "live" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["status"], "live");
-    assert_eq!(body["live_value"], Value::Null);
-    assert!(body["version"].is_string());
-    assert!(live(&app).contains("status=\"live\""));
-
-    let value = json!({ "uri": "wss://example.com/value", "protocol": "socket.io" });
-    let (status, body) = app_call(
-        &app,
-        "PUT",
-        &format!("{path}/live-value"),
-        &token,
-        Some(value),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["live_value"]["uri"], "wss://example.com/value");
-    assert_eq!(body["live_value"]["protocol"], "socket.io");
-    let xml = live(&app);
-    assert!(xml.contains("uri=\"wss://example.com/value\""), "{xml}");
-    assert!(xml.contains("protocol=\"socket.io\""), "{xml}");
-
-    let (status, body) =
-        app_call(&app, "DELETE", &format!("{path}/live-value"), &token, None).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["live_value"], Value::Null);
-    assert!(!live(&app).contains("liveValue"));
-
-    let (status, body) = app_call(
-        &app,
-        "POST",
-        &format!("{path}/status"),
-        &token,
-        Some(json!({ "status": "ended" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["status"], "ended");
-    let xml = live(&app);
-    assert!(xml.contains("status=\"ended\""), "{xml}");
-    assert!(xml.contains(&guid), "{xml}");
-
-    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(shows, json!([]));
-    let (status, body) =
-        app_call(&app, "DELETE", &format!("{path}/live-value"), &token, None).await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["error"]["code"], "grant_ended");
-
-    let (status, grants) = call(&app, "GET", &format!("/api/v1/feeds/{id}/grants"), None).await;
-    assert_eq!(status, StatusCode::OK, "{grants}");
-    assert_eq!(grants[0]["id"], grant_id);
-    assert_eq!(grants[0]["item_guid"], guid.as_str());
-    assert!(grants[0]["ended_at"].is_i64());
-    let changes: Vec<&str> = grants[0]["writes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|w| {
-            assert_eq!(w["app_name"], "Show tool");
-            w["change"].as_str().unwrap()
-        })
-        .collect();
-    assert_eq!(
-        changes,
-        ["go_live", "set_live_value", "remove_live_value", "end"]
-    );
-}
-
-#[tokio::test]
-async fn stopping_a_grant_ends_it_for_the_connected_app() {
-    let app = app();
-    let id = set_up(&app).await;
-    let (guid, token) = granted_show(&app, id).await;
-    let (_, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
-    let grant_id = shows[0]["grant_id"].as_i64().unwrap();
-
-    let base = format!("/api/v1/feeds/{id}/grants");
-    let (status, body) = call(&app, "POST", &format!("{base}/no-such/end"), None).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["error"]["code"], "no_grant");
-    let (status, body) = call(&app, "POST", &format!("{base}/{guid}/end"), None).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["item_guid"], guid.as_str());
-    assert!(body["ended_at"].is_i64());
-
-    let (status, body) = app_call(
-        &app,
-        "POST",
-        &format!("/app/v1/shows/{grant_id}/status"),
-        &token,
-        Some(json!({ "status": "live" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["error"]["code"], "grant_ended");
-    let (status, grants) = call(&app, "GET", &base, None).await;
-    assert_eq!(status, StatusCode::OK);
-    assert!(grants[0]["ended_at"].is_i64());
-}
-
-#[tokio::test]
-async fn a_granted_change_while_the_user_has_a_changed_draft_gives_draft_open() {
-    let app = app();
-    let id = set_up(&app).await;
-    let (_, token) = granted_show(&app, id).await;
-    let (_, shows) = app_call(&app, "GET", "/app/v1/shows", &token, None).await;
-    let grant_id = shows[0]["grant_id"].as_i64().unwrap();
-    let draft = draft_model(&app, id).await;
-    let (status, edited) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
-    assert_eq!(status, StatusCode::OK);
-    let mut model = draft.clone();
-    model["title"] = json!("Album (Deluxe)");
-    let (status, _) = call(
-        &app,
-        "PUT",
-        &format!("/api/v1/feeds/{id}/draft"),
-        Some(json!({ "revision": edited["revision"], "model": model })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let before = live(&app);
-    let (status, body) = app_call(
-        &app,
-        "POST",
-        &format!("/app/v1/shows/{grant_id}/status"),
-        &token,
-        Some(json!({ "status": "live" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["error"]["code"], "draft_open");
-    assert_eq!(live(&app), before);
-    assert_eq!(draft_model(&app, id).await["title"], "Album (Deluxe)");
 }
 
 #[tokio::test]
@@ -8026,419 +7684,9 @@ async fn an_upload_older_than_24_hours_has_no_row_and_no_file_after_the_clean_st
     assert!(incoming.join(format!("{fresh}.part")).exists());
 }
 
-// ---- Grant vaults (task 036a) ----
-
-/// An app whose workspace the test can reach through a handle.
-fn app_with_handle() -> (App, crate::WorkspaceHandle) {
-    let data = tempfile::tempdir().unwrap();
-    let feeds = tempfile::tempdir().unwrap();
-    let workspace = Workspace::open(data.path())
-        .unwrap()
-        .with_musicindex("http://127.0.0.1:9")
-        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
-        .with_address_check(std::sync::Arc::new(PassAll));
-    let (workspace_routes, handle) = crate::workspace_router(workspace);
-    let router =
-        crate::ui_router()
-            .merge(workspace_routes)
-            .layer(axum::middleware::from_fn_with_state(
-                Access::with_token(TOKEN, 4100),
-                crate::access::check,
-            ));
-    (
-        App {
-            router,
-            data,
-            feeds,
-        },
-        handle,
-    )
-}
-
-/// A feed on an SFTP host of a test server, with a show and its grant. The
-/// user vault is open. Gives the feed, the connector, the token of the app
-/// and the grant ID. The feed XML is in the folder `root`.
-struct SftpShow {
-    root: std::path::PathBuf,
-    connector: i64,
-    token: String,
-    grant: i64,
-}
-
-async fn sftp_show(
-    app: &App,
-    server: &mut studio_core::testing::sshd::TestSshd,
-) -> (i64, SftpShow) {
-    make_vault(app).await;
-    let mut body = sftp_body(server);
-    let root = std::path::PathBuf::from(body["root"].as_str().unwrap());
-    std::fs::write(root.join("album.xml"), FEED).unwrap();
-    body["base_url"] = json!("https://cdn.example.com/feeds");
-    let (status, connector) = call(app, "POST", "/api/v1/connectors", Some(body)).await;
-    assert_eq!(status, StatusCode::CREATED, "{connector}");
-    let (status, feed) = call(
-        app,
-        "POST",
-        "/api/v1/feeds",
-        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{feed}");
-    set_library_root(app);
-    let id = feed["id"].as_i64().unwrap();
-    let read = root.clone();
-    let (_, token) = granted_show_in(app, id, &move || {
-        std::fs::read_to_string(read.join("album.xml")).unwrap()
-    })
-    .await;
-    let (status, grants) = call(app, "GET", &format!("/api/v1/feeds/{id}/grants"), None).await;
-    assert_eq!(status, StatusCode::OK, "{grants}");
-    let grant = grants[0]["id"].as_i64().unwrap();
-    (
-        id,
-        SftpShow {
-            root,
-            connector: connector["id"].as_i64().unwrap(),
-            token,
-            grant,
-        },
-    )
-}
-
-async fn set_status(app: &App, show: &SftpShow, token: &str, status: &str) -> (StatusCode, Value) {
-    app_call(
-        app,
-        "POST",
-        &format!("/app/v1/shows/{}/status", show.grant),
-        token,
-        Some(json!({ "status": status })),
-    )
-    .await
-}
-
-fn grant_files(app: &App) -> Vec<String> {
-    let mut names: Vec<String> = std::fs::read_dir(app.data.path().join("grants"))
-        .map(|dir| {
-            dir.flatten()
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect()
-        })
-        .unwrap_or_default();
-    names.sort();
-    names
-}
-
-/// Add an app as the route does, but with no recent unlock. The route needs
-/// one (ADR 0106 item 2), and these tests need an app that a closed vault
-/// holds.
-async fn add_app_while_locked(handle: &crate::WorkspaceHandle, name: &str) -> (StatusCode, Value) {
-    let name = name.to_owned();
-    handle
-        .with_workspace(move |w| {
-            let (app, token) = studio_core::apps::add_app(&w.collection, &name).unwrap();
-            w.app_changed(&crate::workspace::AppChange::Added {
-                app_id: app.id,
-                token_hash: studio_core::apps::token_hash(&token),
-            });
-            w.sync_grant_vaults(None);
-            (
-                StatusCode::CREATED,
-                json!({ "id": app.id, "has_key": app.has_key, "token": token }),
-            )
-        })
-        .await
-}
-
 async fn lock(app: &App) {
     let (status, _) = call(app, "POST", "/api/v1/vault/lock", None).await;
     assert_eq!(status, StatusCode::OK);
-}
-
-async fn unlock(app: &App) {
-    let (status, body) = call(
-        app,
-        "POST",
-        "/api/v1/vault/unlock",
-        Some(json!({ "passphrase": PASSPHRASE })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-}
-
-/// The IDs of the records of the user vault that keep a grant vault key.
-async fn grant_records(handle: &crate::WorkspaceHandle) -> Vec<String> {
-    handle
-        .with_workspace(|w| {
-            w.vault
-                .as_ref()
-                .map(|v| {
-                    v.ids()
-                        .filter(|id| id.starts_with("grant-vault/"))
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default()
-        })
-        .await
-}
-
-#[tokio::test]
-async fn a_connected_app_writes_through_the_grant_vault_while_the_user_vault_is_locked() {
-    let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, handle) = app_with_handle();
-    let (_, show) = sftp_show(&app, &mut server).await;
-    assert_eq!(grant_files(&app), [format!("{}.json", show.grant)]);
-    assert_eq!(
-        grant_records(&handle).await,
-        [format!("grant-vault/{}", show.grant)]
-    );
-    lock(&app).await;
-
-    let path = format!("/app/v1/shows/{}", show.grant);
-    let host_xml = || std::fs::read_to_string(show.root.join("album.xml")).unwrap();
-    let (status, body) = set_status(&app, &show, &show.token, "live").await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(host_xml().contains("status=\"live\""));
-    let value = json!({ "uri": "wss://example.com/value", "protocol": "socket.io" });
-    let (status, body) = app_call(
-        &app,
-        "PUT",
-        &format!("{path}/live-value"),
-        &show.token,
-        Some(value),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(host_xml().contains("uri=\"wss://example.com/value\""));
-    // The grant vault stays while the show runs.
-    assert_eq!(grant_files(&app), [format!("{}.json", show.grant)]);
-    let (status, body) = set_status(&app, &show, &show.token, "ended").await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(host_xml().contains("status=\"ended\""));
-
-    // After the end, the grant vault file is gone at once. The record goes
-    // at the next unlock.
-    assert_eq!(grant_files(&app), Vec::<String>::new());
-    unlock(&app).await;
-    assert_eq!(grant_records(&handle).await, Vec::<String>::new());
-}
-
-#[tokio::test]
-async fn a_granted_write_does_not_use_the_open_user_vault() {
-    let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, handle) = app_with_handle();
-    let (id, show) = sftp_show(&app, &mut server).await;
-    // The user vault is open but has lost the secret of the host. In memory
-    // only: the saved vault is not changed.
-    let connector = show.connector;
-    handle
-        .with_workspace(move |w| {
-            let secret_ref = w
-                .collection
-                .connector(studio_core::collection::ConnectorId(connector))
-                .unwrap()
-                .secret_ref
-                .unwrap();
-            assert!(w.vault.as_mut().unwrap().remove(&secret_ref));
-        })
-        .await;
-    let (status, body) = set_status(&app, &show, &show.token, "live").await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(
-        std::fs::read_to_string(show.root.join("album.xml"))
-            .unwrap()
-            .contains("status=\"live\"")
-    );
-    // The user needs the secret for a write of their own.
-    let (status, _) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
-    assert_ne!(status, StatusCode::INTERNAL_SERVER_ERROR);
-}
-
-#[tokio::test]
-async fn an_app_that_the_user_adds_during_a_grant_writes_after_the_next_unlock() {
-    let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, handle) = app_with_handle();
-    let (_, show) = sftp_show(&app, &mut server).await;
-    lock(&app).await;
-    let (status, added) = add_app_while_locked(&handle, "Two").await;
-    assert_eq!(status, StatusCode::CREATED);
-    let second = added["token"].as_str().unwrap().to_owned();
-    let second_id = added["id"].as_i64().unwrap();
-    assert_eq!(added["has_key"], true);
-
-    let (status, body) = set_status(&app, &show, &second, "live").await;
-    assert_eq!(status, StatusCode::LOCKED, "{body}");
-    assert_eq!(body["error"]["code"], "vault_locked");
-    // The first app still writes.
-    let (status, body) = set_status(&app, &show, &show.token, "live").await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-
-    unlock(&app).await;
-    let file = studio_core::vault::VaultFile::load(
-        &app.data
-            .path()
-            .join("grants")
-            .join(format!("{}.json", show.grant)),
-    )
-    .unwrap();
-    assert!(file.app_wrapper(second_id).is_some());
-    let value = json!({ "uri": "wss://example.com/value", "protocol": "socket.io" });
-    let (status, body) = app_call(
-        &app,
-        "PUT",
-        &format!("/app/v1/shows/{}/live-value", show.grant),
-        &second,
-        Some(value),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-
-    // The user removes the second app, with the vault locked. Its wrapper
-    // goes at once.
-    lock(&app).await;
-    let (status, _) = call(&app, "DELETE", &format!("/api/v1/apps/{second_id}"), None).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let file = studio_core::vault::VaultFile::load(
-        &app.data
-            .path()
-            .join("grants")
-            .join(format!("{}.json", show.grant)),
-    )
-    .unwrap();
-    assert!(file.app_wrapper(second_id).is_none());
-    let (status, _) = set_status(&app, &show, &second, "ended").await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn a_new_secret_of_the_host_reaches_the_grant_vault_after_update_connector() {
-    let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, handle) = app_with_handle();
-    let (_, show) = sftp_show(&app, &mut server).await;
-    let connector = show.connector;
-    // Change the secret in the user vault, as a new password does. Then call
-    // `update_connector`, which makes the grant vault again.
-    let set_secret = |secret: Option<String>| {
-        let handle = handle.clone();
-        async move {
-            handle
-                .with_workspace(move |w| {
-                    let secret_ref = w
-                        .collection
-                        .connector(studio_core::collection::ConnectorId(connector))
-                        .unwrap()
-                        .secret_ref
-                        .unwrap();
-                    let vault = w.vault.as_mut().unwrap();
-                    match secret {
-                        Some(new) => {
-                            vault.put(&secret_ref, new.as_bytes()).unwrap();
-                            None
-                        }
-                        None => Some(
-                            String::from_utf8(vault.get(&secret_ref).unwrap().unwrap().to_vec())
-                                .unwrap(),
-                        ),
-                    }
-                })
-                .await
-        }
-    };
-    let good = set_secret(None).await.unwrap();
-    set_secret(Some(
-        json!({ "private_key": "not a key", "passphrase": null }).to_string(),
-    ))
-    .await;
-    let (status, _) = call(
-        &app,
-        "PUT",
-        &format!("/api/v1/connectors/{connector}"),
-        Some(json!({ "name": "Server 2" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let (status, _) = set_status(&app, &show, &show.token, "live").await;
-    assert_ne!(status, StatusCode::OK);
-
-    set_secret(Some(good)).await;
-    let (status, _) = call(
-        &app,
-        "PUT",
-        &format!("/api/v1/connectors/{connector}"),
-        Some(json!({ "name": "Server 3" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    lock(&app).await;
-    let (status, body) = set_status(&app, &show, &show.token, "live").await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-}
-
-#[tokio::test]
-async fn no_file_and_no_row_has_an_app_token_or_a_grant_vault_key() {
-    let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, handle) = app_with_handle();
-    let (_, show) = sftp_show(&app, &mut server).await;
-    let key = handle
-        .with_workspace(move |w| {
-            let record = format!("grant-vault/{}", show.grant);
-            let bytes = w.vault.as_ref().unwrap().get(&record).unwrap().unwrap();
-            String::from_utf8(bytes.to_vec()).unwrap()
-        })
-        .await;
-    let key_bytes = key.as_bytes();
-    let token = show.token.clone();
-    let (status, _) = set_status(&app, &show, &token, "live").await;
-    assert_eq!(status, StatusCode::OK);
-    let mut files = 0;
-    let mut pending = vec![app.data.path().to_path_buf()];
-    while let Some(dir) = pending.pop() {
-        for entry in std::fs::read_dir(dir).unwrap().flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                pending.push(path);
-                continue;
-            }
-            let bytes = std::fs::read(&path).unwrap();
-            let has = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
-            assert!(!has(token.as_bytes()), "{}", path.display());
-            assert!(!has(key_bytes), "{}", path.display());
-            files += 1;
-        }
-    }
-    assert!(files >= 3, "the scan found {files} files");
-    assert!(data_files_text(&app).find(&token).is_none());
-}
-
-#[tokio::test]
-async fn an_app_lists_the_shows_of_its_grants_while_the_user_vault_is_locked() {
-    let mut server = studio_core::testing::sshd::TestSshd::start();
-    let (app, handle) = app_with_handle();
-    let (_, show) = sftp_show(&app, &mut server).await;
-    lock(&app).await;
-    let (status, added) = add_app_while_locked(&handle, "Two").await;
-    assert_eq!(status, StatusCode::CREATED);
-    let second = added["token"].as_str().unwrap().to_owned();
-
-    // The first app lists its show and goes live.
-    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &show.token, None).await;
-    assert_eq!(status, StatusCode::OK, "{shows}");
-    assert_eq!(shows.as_array().unwrap().len(), 1);
-    assert_eq!(shows[0]["grant_id"], show.grant);
-    assert_eq!(shows[0]["status"], "pending");
-    let (status, body) = set_status(&app, &show, &show.token, "live").await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-
-    // The second app has no wrapper yet. Its list is empty, with no error.
-    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &second, None).await;
-    assert_eq!(status, StatusCode::OK, "{shows}");
-    assert_eq!(shows, json!([]));
-
-    unlock(&app).await;
-    let (status, shows) = app_call(&app, "GET", "/app/v1/shows", &second, None).await;
-    assert_eq!(status, StatusCode::OK, "{shows}");
-    assert_eq!(shows.as_array().unwrap().len(), 1);
-    assert_eq!(shows[0]["status"], "live");
 }
 
 // ---- The file sources of the picker (task 039a, ADR 0062) ----

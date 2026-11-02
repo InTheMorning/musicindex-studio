@@ -325,8 +325,16 @@ pub fn change_person(
     id: PersonId,
     fields: &PersonFields,
 ) -> Result<(), CollectionError> {
+    update_fields(collection.db(), id, fields)
+}
+
+fn update_fields(
+    db: &Connection,
+    id: PersonId,
+    fields: &PersonFields,
+) -> Result<(), CollectionError> {
     let fields = clean_fields(fields)?;
-    let changed = collection.db().execute(
+    let changed = db.execute(
         "UPDATE people SET name = ?2, usual_role = ?3, usual_group = ?6, img = ?4, href = ?5 WHERE id = ?1",
         params![
             id.0,
@@ -940,7 +948,10 @@ pub fn add_member(
     id: PersonId,
     feed_id: FeedId,
 ) -> Result<(), CollectionError> {
-    let db = collection.db();
+    insert_member(collection.db(), id, feed_id)
+}
+
+fn insert_member(db: &Connection, id: PersonId, feed_id: FeedId) -> Result<(), CollectionError> {
     check_person(db, id)?;
     let medium: Option<Option<String>> = db
         .query_row("SELECT medium FROM feeds WHERE id = ?1", [feed_id.0], |r| {
@@ -995,12 +1006,20 @@ pub fn set_default_address(
     key: Option<&RecipientKey>,
 ) -> Result<(), CollectionError> {
     let lookups = lookup_map(collection)?;
-    let db = collection.db();
+    write_default_address(collection.db(), id, key, &lookups)
+}
+
+fn write_default_address(
+    db: &Connection,
+    id: PersonId,
+    key: Option<&RecipientKey>,
+    lookups: &HashMap<String, Lookup>,
+) -> Result<(), CollectionError> {
     let person = read_person(db, id)?;
     let (address, custom_key, custom_value) = match key {
         None => (None, "", ""),
         Some(key) => {
-            if !is_member(&person, key, &lookups) {
+            if !is_member(&person, key, lookups) {
                 return Err(CollectionError::invalid(
                     "the default address must be an address of a wallet of the person",
                 ));
@@ -1014,6 +1033,76 @@ pub fn set_default_address(
          WHERE id = ?1",
         params![id.0, address, custom_key, custom_value],
     )?;
+    Ok(())
+}
+
+/// The pending changes of the page of a person (ADR 0116). `None` means
+/// no change.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct PersonSave {
+    /// New fields.
+    pub fields: Option<PersonFields>,
+    /// A new default address. `Some(None)` removes it.
+    #[serde(deserialize_with = "double_option")]
+    pub default_address: Option<Option<RecipientKey>>,
+    /// The one membership to keep. `Some(None)` removes each membership.
+    #[serde(deserialize_with = "double_option")]
+    pub member: Option<Option<FeedId>>,
+}
+
+/// Read a present value, also `null`, as `Some`. A missing key stays `None`
+/// through `#[serde(default)]`.
+#[expect(
+    clippy::option_option,
+    reason = "ADR 0116: no change, remove and set are three different cases"
+)]
+fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+/// Apply the pending changes of a person in one transaction (ADR 0116
+/// item 5). A failure of one part changes nothing. The save writes no feed.
+///
+/// # Errors
+///
+/// Gives the error of the first part that fails: [`CollectionErrorKind::Invalid`]
+/// for a name of only spaces, a default address that is in no wallet, or a
+/// feed that is not a publisher feed, and [`CollectionErrorKind::NotFound`]
+/// for an unknown person or feed.
+pub fn save_person(
+    collection: &Collection,
+    id: PersonId,
+    save: &PersonSave,
+) -> Result<(), CollectionError> {
+    let lookups = lookup_map(collection)?;
+    let tx = collection.db().unchecked_transaction()?;
+    check_person(&tx, id)?;
+    if let Some(fields) = &save.fields {
+        update_fields(&tx, id, fields)?;
+    }
+    if let Some(key) = &save.member {
+        match key {
+            Some(feed) => {
+                insert_member(&tx, id, *feed)?;
+                tx.execute(
+                    "DELETE FROM person_members WHERE person_id = ?1 AND feed_id <> ?2",
+                    params![id.0, feed.0],
+                )?;
+            }
+            None => {
+                tx.execute("DELETE FROM person_members WHERE person_id = ?1", [id.0])?;
+            }
+        }
+    }
+    if let Some(key) = &save.default_address {
+        write_default_address(&tx, id, key.as_ref(), &lookups)?;
+    }
+    tx.commit()?;
     Ok(())
 }
 
@@ -3579,6 +3668,86 @@ mod tests {
         let list = suggest(&collection);
         assert_eq!(list.len(), 2);
         assert!(list.iter().all(|s| s.recipients.len() == 1));
+    }
+
+    fn publisher_and_album(collection: &mut Collection) -> (FeedId, FeedId) {
+        let album = collection.add_feed(None, None).unwrap();
+        let publisher = collection.add_feed(None, None).unwrap();
+        for (feed, medium) in [(album, "music"), (publisher, "publisher")] {
+            let doc = Document::parse(&format!(
+                "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+                 <podcast:medium>{medium}</podcast:medium></channel></rss>"
+            ))
+            .unwrap();
+            collection
+                .record_state(feed, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+                .unwrap();
+        }
+        (album, publisher)
+    }
+
+    #[test]
+    fn one_save_applies_the_fields_the_default_address_and_the_membership() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let (_, publisher) = publisher_and_album(&mut collection);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let key = RecipientKey {
+            address: "ann@example.com".to_owned(),
+            custom_key: None,
+            custom_value: None,
+        };
+        add_wallet(&collection, ann, &key, "lnaddress", LinkEvidence::User).unwrap();
+        let save = PersonSave {
+            fields: Some(fields("Ann B")),
+            default_address: Some(Some(key.clone())),
+            member: Some(Some(publisher)),
+        };
+        save_person(&collection, ann, &save).unwrap();
+        let saved = person(&collection, ann).unwrap();
+        assert_eq!(saved.name, "Ann B");
+        assert_eq!(saved.default_address, Some(key));
+        assert_eq!(saved.members, [publisher]);
+    }
+
+    #[test]
+    fn a_failed_save_changes_nothing() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let (album, _) = publisher_and_album(&mut collection);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let save = PersonSave {
+            fields: Some(fields("Ann B")),
+            member: Some(Some(album)),
+            ..PersonSave::default()
+        };
+        let error = save_person(&collection, ann, &save).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::Invalid);
+        assert_eq!(person(&collection, ann).unwrap().name, "Ann");
+    }
+
+    #[test]
+    fn a_save_keeps_one_membership_and_none_removes_each() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let (_, first) = publisher_and_album(&mut collection);
+        let (_, second) = publisher_and_album(&mut collection);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_member(&collection, ann, first).unwrap();
+        save_person(&collection, ann, &PersonSave::default()).unwrap();
+        assert_eq!(person(&collection, ann).unwrap().members, [first]);
+        let save = PersonSave {
+            member: Some(Some(second)),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        assert_eq!(person(&collection, ann).unwrap().members, [second]);
+        let save = PersonSave {
+            member: Some(None),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        assert_eq!(
+            person(&collection, ann).unwrap().members,
+            Vec::<FeedId>::new()
+        );
     }
 
     #[test]

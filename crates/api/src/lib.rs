@@ -185,6 +185,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
                 .patch(people::change_person)
                 .delete(people::remove_person),
         )
+        .route("/people/{id}/save", post(people::save_person))
         .route("/people/{id}/check", get(people::check_person))
         .route(
             "/people/{id}/default-address",

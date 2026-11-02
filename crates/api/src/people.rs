@@ -18,6 +18,7 @@ use studio_core::collection::{Collection, CollectionError, CollectionErrorKind, 
 use studio_core::keysend::Lookup;
 use studio_core::people::{
     self, LinkEvidence, MakePerson, MemberFeed, Person, PersonFields, PersonId, PersonItems,
+    PersonSave,
 };
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::profiles;
@@ -159,6 +160,20 @@ pub(crate) async fn change_person(
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
         people::change_person(&w.collection, PersonId(id), &fields).map_err(person_error)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+/// The body of `POST /people/{id}/save`: the pending changes of the page
+/// (ADR 0116). The core applies them in one transaction.
+pub(crate) async fn save_person(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(save): Json<PersonSave>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        people::save_person(&w.collection, PersonId(id), &save).map_err(person_error)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

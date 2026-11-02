@@ -9960,6 +9960,63 @@ async fn a_person_is_added_read_changed_and_removed() {
 }
 
 #[tokio::test]
+async fn one_save_changes_a_person() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let id = new_person(&app, "Ann").await;
+    let base = format!("/api/v1/people/{id}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{base}/save"),
+        Some(json!({
+            "fields": { "name": "Ann B", "img": "https://x.example/a.png" },
+            "member": label,
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (_, body) = call(&app, "GET", &base, None).await;
+    assert_eq!(body["name"], "Ann B");
+    assert_eq!(body["img"], "https://x.example/a.png");
+    assert_eq!(body["members"], json!([label]));
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{base}/save"),
+        Some(json!({ "fields": { "name": "  " } })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_person");
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("{base}/save"),
+        Some(json!({ "member": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, body) = call(&app, "GET", &base, None).await;
+    assert_eq!(body["members"], json!([]));
+    assert_eq!(body["name"], "Ann B");
+}
+
+#[tokio::test]
 async fn each_kind_of_link_is_added_and_removed() {
     let (app, connector) = publisher_app().await;
     let label = make_feed(
@@ -10412,6 +10469,7 @@ async fn each_people_route_needs_the_token() {
         ("PATCH", "/api/v1/people/1"),
         ("DELETE", "/api/v1/people/1"),
         ("PUT", "/api/v1/people/1/default-address"),
+        ("POST", "/api/v1/people/1/save"),
         ("POST", "/api/v1/people/1/wallets"),
         ("DELETE", "/api/v1/people/1/wallets/1"),
         ("GET", "/api/v1/people/suggestions"),

@@ -115,6 +115,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0110: A connected app signs each request with its own key](adr/0110-a-connected-app-signs-each-request-with-its-own-key.md)
 - [ADR 0111: The page of a person checks the feeds](adr/0111-the-page-of-a-person-checks-the-feeds.md)
 - [ADR 0112: A credit role comes from a list](adr/0112-a-credit-role-comes-from-a-list.md)
+- [ADR 0113: The page of a person suggests a picture and an information address](adr/0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md)
 
 ## Plans
 
@@ -325,6 +326,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 073: Connected apps with key pairs](tasks/studio-v1-task-073-app-key-pairs.md)
 - [Studio v1 task 074: The credit role list](tasks/studio-v1-task-074-credit-role-list.md)
 - [Studio v1 task 075: Check the feeds of a person](tasks/studio-v1-task-075-check-the-feeds-of-a-person.md)
+- [Studio v1 task 076: Picture and address suggestions](tasks/studio-v1-task-076-picture-and-address-suggestions.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

@@ -1336,7 +1336,14 @@ select.position:focus { background: var(--fill); }
   overflow-wrap: anywhere;
 }
 .head .text { flex: 1; min-width: 0; }
-.head h1 { font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: anywhere; }
+/* A title breaks inside a word only when the word is wider than the line. */
+.head h1 { font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: break-word; }
+/* At narrow width the text takes the full row beside the cover, so that a
+   button of the header goes to its own row. Without this rule, "Read Again"
+   took half the row and the title broke inside its words. */
+@media (max-width: 760px) {
+  .head .text { flex-basis: calc(100% - 56px - 18px); }
+}
 .head .sub { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The public address of a feed: a link that opens the feed in a new tab,
    and a button that copies it. The link is truncated, the button is not. */

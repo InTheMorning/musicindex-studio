@@ -745,7 +745,7 @@ test('the merge sheet gives the links of the other person and the result line', 
 import {
   NEW_PERSON, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson, checkSheetLabel, checkSheetReady,
   walletToPersonStart, walletToPersonReady, walletToPersonLabel, correctCount, correctButtonLabel, correctFeedIds,
-  correctStart, correctOptions, correctKeyChoices, correctBody, correctAnySelected, correctRows, correctFindingLines,
+  correctStart, correctOptions, otherPayeesLine, otherWalletCount, correctKeyChoices, correctBody, correctAnySelected, correctRows, correctFindingLines,
 } from '../ui/people.js';
 import { addWalletSections, walletBodyOf } from '../ui/recipients.js';
 
@@ -795,7 +795,7 @@ test('the sheet Correct the Feeds starts with the payees of the name not selecte
   const start = correctStart(CORRECT_PERSON);
   assert.deepEqual(start, { key: true, npub: 'npub1a', payment: true, details: true, role: true, other_payees: false });
   assert.deepEqual(correctOptions(CORRECT_PERSON, start).map((o) => o.label), [
-    'Nostr key', 'Payment address', 'Picture and information address', 'Role', 'Payees with this name that pay a different wallet']);
+    'Nostr key', 'Payment address', 'Picture and information address', 'Role', 'Replace other addresses named "HeyCitizen"']);
   assert.deepEqual(correctBody(start), { kind: 'correct', key: 'npub1a', payment: true, details: true, role: true, other_payees: false });
   assert.equal(correctBody({ ...start, key: false }).key, null);
   assert.equal(correctAnySelected({ ...start, key: false, payment: false, details: false, role: false }), false);
@@ -908,4 +908,15 @@ test('ADR 0113: the source lines name each source and join with a dot', async ()
   assert.equal(detailSourceLine([{ kind: 'member', feed_id: 9 }], 'href', null, titles, feeds), 'The link of the artist feed HeyCitizen');
   assert.equal(detailSourceLine([{ kind: 'profile', npub: 'npub1named' }, { kind: 'member', feed_id: 9 }], 'href', profiles, titles, feeds),
     'From the Nostr profile Hey Citizen · the link of the artist feed HeyCitizen');
+});
+
+test('the change of the payees of the name says what it replaces, and with which address (ADR 0111 item 15)', () => {
+  const key = { address: 'heycitizen@getalby.com' };
+  assert.equal(otherPayeesLine('HeyCitizen', key, 2),
+    '2 payments to the name "HeyCitizen" go to an address that is not in this person. Studio replaces them with heycitizen@getalby.com. Select this only when that address is yours too.');
+  assert.match(otherPayeesLine('HeyCitizen', key, 1), /^1 payment to the name "HeyCitizen" goes to .* Studio replaces it with heycitizen@getalby.com\./);
+  assert.match(otherPayeesLine('HeyCitizen', null, 0), /^A payment to the name .* with the default address\./);
+  const check = { feeds: [{ findings: [{ kind: 'other_wallet' }, { kind: 'credit_role' }] }, { findings: [{ kind: 'other_wallet' }] }] };
+  assert.equal(otherWalletCount(check), 2);
+  assert.equal(otherWalletCount(null), 0);
 });

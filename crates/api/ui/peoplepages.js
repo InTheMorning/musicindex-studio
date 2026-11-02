@@ -780,7 +780,7 @@ function CorrectForm({ person, check, titles, placeRows, go, onCancel }) {
       <section class="page-section"><h2>Changes</h2><div class="group rows">
         ${choices.length > 0 && html`<${ChoiceSelect} id="correct-key" label="Key" value=${fields.npub} options=${choices}
           onChange=${(npub) => set({ npub })} />`}
-        ${correctOptions(person, fields, profiles).map((o) => html`<${FeedCheckRow} key=${o.id} title=${o.label} text=${o.line}
+        ${correctOptions(person, fields, profiles, check).map((o) => html`<${FeedCheckRow} key=${o.id} title=${o.label} text=${o.line}
           checked=${fields[o.id]} onChange=${() => set({ [o.id]: !fields[o.id] })} />`)}</div></section>
       ${list === null && !previewError && html`<p class="empty" role="status">Checking the feeds…</p>`}
       ${list !== null && rows.length === 0 && !previewError && html`<p class="empty">${CORRECT_EMPTY}</p>`}

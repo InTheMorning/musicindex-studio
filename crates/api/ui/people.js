@@ -861,7 +861,22 @@ export function correctStart(person) {
 }
 
 // The check boxes of the sheet: `id`, `label` and `line`.
-export function correctOptions(person, fields, profiles = null) {
+// The line of the change "other_payees". `count` is the number of the
+// findings `other_wallet` of the check, and the address is the default
+// address of the person. The texts are display values only.
+export function otherPayeesLine(name, defaultAddress, count) {
+  const to = defaultAddress ? addressText(defaultAddress).replace(/^Lightning (address|node) /, '') : 'the default address';
+  const head = count === 1 ? `1 payment to the name "${name}" goes to an address that is not in this person. Studio replaces it`
+    : count > 1 ? `${count} payments to the name "${name}" go to an address that is not in this person. Studio replaces them`
+      : `A payment to the name "${name}" can go to an address that is not in this person. Studio replaces it`;
+  return `${head} with ${to}. Select this only when that address is yours too.`;
+}
+
+// The number of the findings `other_wallet` in the check of a person.
+export const otherWalletCount = (check) => ((check && check.feeds) || [])
+  .reduce((n, f) => n + (f.findings || []).filter((x) => x.kind === 'other_wallet').length, 0);
+
+export function correctOptions(person, fields, profiles = null, check = null) {
   const can = correctAvailable(person);
   const who = profileName(fields.npub, profiles) || shortKey(fields.npub || '');
   const role = trimmed(person.usual_role);
@@ -870,7 +885,7 @@ export function correctOptions(person, fields, profiles = null) {
     ['payment', 'Payment address', `Each payment of ${person.name} uses the default address`],
     ['details', 'Picture and information address', 'Each credit gets the picture and the information address of this person'],
     ['role', 'Role', role === '' ? 'Each credit with no role gets the usual role' : `Each credit with no role gets ${role}`],
-    ['other_payees', 'Payees with this name that pay a different wallet', 'Each such payee pays the default address. This changes who gets the payment'],
+    ['other_payees', `Replace other addresses named "${person.name}"`, otherPayeesLine(person.name, person.default_address, otherWalletCount(check))],
   ];
   return all.filter(([id]) => can[id]).map(([id, label, line]) => ({ id, label, line }));
 }

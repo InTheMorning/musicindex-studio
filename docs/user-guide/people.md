@@ -58,7 +58,7 @@ Select a feed to open it in the editor.
 
 1. Select **Correct N Feeds**. The sheet **Correct the Feeds** opens.
 2. Keep the check boxes that you want: **Nostr key**, **Payment address**, **Picture and information address** and **Role**.
-3. Select **Payees with this name that pay a different wallet** only if you want to move those payments. This box starts without a mark.
+3. Select **Replace other addresses named "{name}"** only when those addresses are yours too. Studio then pays your default address in their place. This box starts without a mark.
 4. Remove the mark from the check box of each feed that you do not want to change.
 5. Select **Review in N Feeds**. Then do the review and the write as usual.
 

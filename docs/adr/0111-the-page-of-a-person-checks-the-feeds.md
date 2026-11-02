@@ -4,6 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from the mockups in `.studio-dev/mockup-people-2/site/`.
+- Amended: 2026-11-02 by operator decision. Item 15: the change of the payees of the name reads "Replace other addresses named "{name}"". The old label said that a payee pays a wallet, and the operator did not understand it.
 - Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 3 to 5 and 7. These are the sheet of a suggestion, the page of a person, "Where used" and the page of a wallet with no person. [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md) items 8 and 9, "Add to a Person". [ADR 0098](0098-the-people-module.md) item 20, with one more operation.
 - Uses: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change set, [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) for the wallets, [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, and [ADR 0112](0112-a-credit-role-comes-from-a-list.md) for the roles.
 
@@ -70,7 +71,7 @@
     - "Payment address": each recipient of a wallet of the person uses the default address, as "Use this address" does.
     - "Picture and information address": each credit of the person gets the values of the person.
     - "Role": each credit of the person with no role gets the usual role and its group.
-    - "Payees with this name that pay a different wallet": each such recipient becomes the default address. This change starts not selected, because it changes who gets the payment.
+    - "Replace other addresses named "{name}"": each payee of the name gets the default address. The line gives the number of these payments and the default address. It ends with "Select this only when that address is yours too." This change starts not selected, because it changes who gets the payment.
 16. The correction is the operation "Correct" of the change set of ADR 0098 item 20. The core applies it, and each feed writes through `pipeline::write_draft` with the ID of its own diff. A feed with no change after the selected corrections is not in the list.
 17. The operation keeps the role of each credit that has a role, because one person can have a different role in each release.
 

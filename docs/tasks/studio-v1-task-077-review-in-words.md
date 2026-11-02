@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Review Of A Write".
 Decision: [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md). It uses [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18.
 
-Status: Complete, in three packets, with the screenshot visual checks of 077b and 077c on 2026-11-02. The human test is open. Notes from the reviews:
+Status: In progress. Packets 077a to 077c are complete, with the screenshot visual checks of 077b and 077c on 2026-11-02. Packet 077d is not started. The human test is open. Notes from the reviews:
 
 - 077a: the parts use the character mode of `similar` with semantic cleanup. The word mode marked parts of the credit text that did not change. A changed attribute covers only the start tag of its element (`ElementSpan::tag_end`). The groups follow the sequence of the table of the model keys. The planning model corrected the count of the uncovered changes: the first count did not count a changed line next to a covered line. With no live file, each line of the draft is covered.
 - 077b: the planning model gave the link "Show N more lines" the target size of its profile, and the sign `⋯` of the mockup. Each view menu of a page follows the last selection. A change of a title writes `'` as `&apos;`, and the marks show this change.
@@ -20,6 +20,7 @@ The planning model examines each packet before its commit. The packets go in thi
 1. 077a: the field changes, the lines with their parts and the cover of the lines (core and API).
 2. 077b: the lines of the diff, the two views, the hidden lines and the indent (UI).
 3. 077c: "What changes", the group summaries, the profile names and the guard row (UI).
+4. 077d: the warning of a key on a track credit (core and UI). The operator asked for it on 2026-11-02, after the review of 077c.
 
 Visual check of 077b and 077c, by the planning model, before each commit. The reference is `.studio-dev/mockup-diff/site/`, screens 1 to 4. The check uses 1100 px, and 390 px with touch, in the two themes. `$edges()`, `$overflow()` and `$fieldText()` are empty. The data is a feed with six credits of one name, and a draft that adds one `npub` to each credit. A second draft changes the title and adds a namespace declaration.
 
@@ -286,6 +287,79 @@ Do not touch:
 
 Acceptance criteria:
 - The mechanical criteria of packet 077c.
+
+Test commands:
+- cargo fmt --all --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test --workspace
+- tools/node --test crates/api/ui-tests/*.test.mjs
+
+At the end, report:
+1. files changed
+2. tests run
+3. behavior changed
+4. deviations from task
+5. unresolved concerns
+
+## Packet 077d: The Warning Of A Key On A Track Credit
+
+### Files
+
+Inspect: `crates/core/src/review.rs` (`FieldChange`, `match_changes`, `walk_table`, `entry_label`, the tests), `crates/core/src/feed/elements.rs` (`Person`: the text key `name`), `crates/api/ui/review.js` (`changeRow`, `fieldRows`), `crates/api/ui-tests/review.test.mjs`.
+
+Change: `crates/core/src/review.rs`, `crates/api/ui/review.js`, `crates/api/ui-tests/review.test.mjs`, the API test of the diff route only if it asserts the fields of a change.
+
+Do not change: `crates/api/ui/editor.js`, the ADRs, `crates/server`, the line diff, the cover and `uncovered`.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. `FieldChange` gets `name: Option<String>`. For a change of an entry of a `persons` list, in each group, it is the `name` of the credit: from the entry in the draft, or from the entry in the live file when the draft has no name. Each other change has `None`, and the JSON leaves out the key.
+2. `match_changes` and `walk_table` pass the credit name to the changes of a credit, as they pass the entry label now. `entry` stays the role of the credit.
+3. `changeRow` shows the warning of ADR 0103 item 18 for each change of the path `npub`, or of a path that ends in `.npub`, when the change has a new key. The name is `change.name`, else `group.name` of a `credits` group. With no name, the row shows no warning.
+4. The summary line and the collapsed line of 077c do not change.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- A core test: a draft that adds `npub` to two credits of one track gives one `track` group with two changes. Each change has `entry` = the role and `name` = the name of the credit.
+- A core test: a change of a channel credit has `name`, and a change of a recipient has no `name`.
+- A Node test: a track change of `persons.npub` with `name` "HeyCitizen" and a profile name "City Radio" shows the warning. With no profile, it shows no warning.
+- The four commit checks pass.
+
+Visual: the review of a draft that adds a key to a track credit, at 1100 px and at 390 px with touch, in the two themes. `$edges()`, `$overflow()` and `$fieldText()` are empty.
+
+### Prompt for lower-context coding model
+
+You are implementing one bounded task from a larger plan.
+
+Implement only this task. Do not redesign the architecture.
+
+Read:
+- AGENTS.md
+- docs/adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md (items 1 to 3)
+- docs/adr/0103-one-person-collects-the-items-of-many-suggestions.md (item 18)
+- docs/tasks/studio-v1-task-077-review-in-words.md (the Goal, the Words section and packet 077d only)
+- ~/.agents/skills/asd-ste100/SKILL.md
+- The files that the Files section of packet 077d names.
+
+Goal:
+- A change of the Nostr key of a track credit shows the warning of ADR 0103 item 18, as a change of an album credit does.
+
+Constraints:
+- Follow the Architecture section of packet 077d fully.
+- No feed rule in the UI (ADR 0065). The name comes from the core. The warning is a display aid.
+- Each comment and each test message is in ASD-STE100 Simplified Technical English.
+- Follow the Pragmatic Rust Guidelines of the `rust-dev` skill.
+
+Do not touch:
+- `crates/api/ui/editor.js`, the ADRs, `crates/server`.
+- Do not commit.
+
+Acceptance criteria:
+- The mechanical criteria of packet 077d.
 
 Test commands:
 - cargo fmt --all --check

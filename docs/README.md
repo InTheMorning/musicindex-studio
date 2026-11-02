@@ -323,6 +323,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 071: Account export and import](tasks/studio-v1-task-071-account-export-and-import.md)
 - [Studio v1 task 072: Audit findings and direct media](tasks/studio-v1-task-072-audit-findings-and-direct-media.md)
 - [Studio v1 task 073: Connected apps with key pairs](tasks/studio-v1-task-073-app-key-pairs.md)
+- [Studio v1 task 074: The credit role list](tasks/studio-v1-task-074-credit-role-list.md)
+- [Studio v1 task 075: Check the feeds of a person](tasks/studio-v1-task-075-check-the-feeds-of-a-person.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

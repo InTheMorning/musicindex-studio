@@ -27,6 +27,7 @@ import {
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, MEMBER_HINT, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
 } from './people.js';
@@ -936,13 +937,44 @@ function MergeForm({ person, onCancel, onMerged }) {
     </footer>`;
 }
 
-// The page "Check your feeds" (ADR 0111 items 9 to 13). The core compares each
-// feed with the person. A row opens the feed in the editor. The button
-// "Correct N Feeds" opens the sheet of the correction (ADR 0111 item 14).
+// One feed of the check with a difference. The entry opens in the list and
+// shows each difference, then the buttons (ADR 0120 items 1 to 3).
+function CheckEntry({ entry, feed, title, person, profiles, open, onToggle, onCorrect, go }) {
+  return html`<details class="disclosure" open=${open} onToggle=${(e) => onToggle(e.currentTarget.open)}>
+    <summary class="link-row"><span class="text"><span class="label">${title}</span>
+      <span class="summary">${checkSummary(entry, feed)}</span></span></summary>
+    <div class="change-diff">
+      ${differenceBlocks(entry, person.name, feed, profiles, person).map((block, i) => html`<${DifferenceBlock} key=${i} block=${block} />`)}
+    </div>
+    <div class="actions">
+      <button class="button primary" type="button" onClick=${onCorrect}>${useValuesLabel(person.name)}</button>
+      <button class="button" type="button" onClick=${() => go({ name: 'feed', id: entry.feed_id })}>${openLabel(feed)}</button>
+    </div>
+  </details>`;
+}
+
+// One difference: the position, the type of the value, then the two values.
+// The value of the feed is shown as the old value.
+function DifferenceBlock({ block }) {
+  return html`<div class="difference">
+    <div class="label">${block.place}</div>
+    <div class="summary">${block.what}</div>
+    <div class="diff">${block.lines.map((line) => html`<span class=${line.old ? 'line remove' : 'line add'}>${line.label} · ${line.value}</span>`)}</div>
+  </div>`;
+}
+
+// The page "Check your releases" (ADR 0111 items 9 to 13, ADR 0120). The core
+// compares each feed with the person. A feed with a difference opens in the list.
+// The button "Correct N Feeds" opens the sheet of the correction (ADR 0111
+// item 14). A feed that is correct opens the feed in the editor.
 export function CheckPage({ id, feeds, go }) {
   const [person, setPerson] = useState(null);
   const [check, setCheck] = useState(null);
-  const [correcting, setCorrecting] = useState(false);
+  // The sheet "Correct the Feeds": null when closed. `feedIds` is null for all
+  // feeds, or the one feed of an entry.
+  const [correcting, setCorrecting] = useState(null);
+  // The entry that is open. One entry is open at a time (ADR 0028).
+  const [openId, setOpenId] = useState(null);
   const { error, run } = useAction();
   useEffect(() => {
     run(async () => {
@@ -951,48 +983,58 @@ export function CheckPage({ id, feeds, go }) {
       setCheck(c);
     });
   }, [id]);
-  const profiles = useProfiles(checkKeys(check));
+  const profiles = useProfiles([...checkKeys(check), ...((person && person.keys) || []).map((k) => k.npub)]);
   const rows = new Map((person ? feedRows(person.places, feeds) : []).map((r) => [r.id, r]));
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
   const groups = checkGroups(check);
-  return html`<div><${Bar}><span class="bar-title">Check your feeds</span><//><section class="section">
+  const feedOf = (feedId) => (feeds || []).find((f) => f.id === feedId);
+  return html`<div><${Bar}><span class="bar-title">${CHECK_TITLE}</span><//><section class="section">
     <${ErrorNotice} error=${error} />
     ${(person === null || check === null) && !error && html`<p class="empty" role="status">Checking the feeds…</p>`}
-    ${person && check && html`<header class="recipient-head"><h1>Check your feeds</h1>
+    ${person && check && html`<header class="recipient-head"><h1>${CHECK_TITLE}</h1>
         <p class="hint">${checkIntro(person.name)}</p></header>
       ${correctCount(check) > 0 && html`<div class="actions"><button class="button primary" type="button"
-        onClick=${() => setCorrecting(true)}>${correctButtonLabel(correctCount(check))}</button></div>`}
+        onClick=${() => setCorrecting({ feedIds: null })}>${correctButtonLabel(correctCount(check))}</button></div>`}
       ${groups.length === 0 && html`<p class="empty">No feed uses this person.</p>`}
       ${groups.map((g) => html`<section class="page-section" key=${g.state}><h2>${g.title}</h2>
         <div class="group">${g.feeds.map((entry) => {
           const row = rows.get(entry.feed_id);
-          const place = row ? (entry.state === 'correct' ? row.lines : row.lines.slice(0, 1)) : [];
-          return html`<${ListRow} key=${entry.feed_id} title=${row ? row.title : titles.get(entry.feed_id) || `Feed ${entry.feed_id}`}
+          const title = row ? row.title : titles.get(entry.feed_id) || `Feed ${entry.feed_id}`;
+          if (entry.state !== 'correct') {
+            return html`<${CheckEntry} key=${entry.feed_id} entry=${entry} feed=${feedOf(entry.feed_id)} title=${title} person=${person}
+              profiles=${profiles} open=${openId === entry.feed_id}
+              onToggle=${(open) => setOpenId((current) => (open ? entry.feed_id : (current === entry.feed_id ? null : current)))}
+              onCorrect=${() => setCorrecting({ feedIds: [entry.feed_id] })} go=${go} />`;
+          }
+          const place = row ? row.lines : [];
+          return html`<${ListRow} key=${entry.feed_id} title=${title}
             lines=${checkFeedLines(entry, place, person.name, profiles)} onClick=${() => go({ name: 'feed', id: entry.feed_id })} />`;
         })}</div></section>`)}`}
   </section>
-  <${CorrectSheet} open=${correcting} person=${person} check=${check} titles=${titles} placeRows=${rows} go=${go}
-    onClose=${() => setCorrecting(false)} /></div>`;
+  <${CorrectSheet} open=${correcting !== null} feedIds=${correcting ? correcting.feedIds : null} person=${person} check=${check}
+    titles=${titles} placeRows=${rows} go=${go} onClose=${() => setCorrecting(null)} /></div>`;
 }
 
 // The sheet "Correct the Feeds: {name}" (ADR 0111 items 14 to 17). The
 // preview of the core lists the feeds that the selected corrections change.
-// The primary button makes the change set, and the review follows.
-function CorrectSheet({ open, person, check, titles, placeRows, go, onClose }) {
+// The primary button makes the change set, and the review follows. With
+// `feedIds`, the sheet covers only those feeds (ADR 0120 item 3).
+function CorrectSheet({ open, person, check, titles, placeRows, go, onClose, feedIds = null }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="correct-title" onClose=${onClose}>
     ${open && person && check && html`<${CorrectForm} person=${person} check=${check} titles=${titles} placeRows=${placeRows} go=${go}
-      onCancel=${() => ref.current.close()} />`}
+      onlyIds=${feedIds} onCancel=${() => ref.current.close()} />`}
   </dialog>`;
 }
 
-function CorrectForm({ person, check, titles, placeRows, go, onCancel }) {
+function CorrectForm({ person, check, titles, placeRows, go, onCancel, onlyIds = null }) {
   const [fields, setFields] = useState(() => correctStart(person));
   const [list, setList] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const { busy, error, run } = useAction();
   const profiles = useProfiles([...person.keys.map((k) => k.npub), ...checkKeys(check)]);
-  const feedIds = correctFeedIds(check);
+  // The feeds of the sheet: the one feed of an entry, or each feed that is not correct.
+  const feedIds = onlyIds || correctFeedIds(check);
   // When the profiles come, the key menu takes a key with no warning, until
   // the user changes a selection (ADR 0103 item 18).
   const touched = useRef(false);

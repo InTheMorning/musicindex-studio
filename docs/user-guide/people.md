@@ -71,11 +71,17 @@ Studio uses the data that it has. It does not connect to a relay or to a wallet.
 
 The page puts each feed in a group:
 
-- **Needs a correction**. A line in the error color shows each difference. A credit can have no key, a different key, a different picture or no role.
+- **Needs a correction**. A credit can have no key, a different key, a different picture or no role.
 - **Not your default address**. The feed pays the same wallet, but not with the default address. This is not an error.
 - **Correct**. The feed agrees with the person.
 
-Select a feed to open it in the editor.
+Select a feed in **Needs a correction** or **Not your default address** to see its differences. The entry opens in the list.
+Each difference shows the position, the type of value, the value of the feed and the value of the person. A missing value is **None**.
+
+Select **Use {name}'s Values** to correct only that feed. The sheet **Correct the Feeds** opens with that feed.
+Select **Open the Album** to open the feed in the editor. The button names the type of the feed: **Open the Playlist**, **Open the Artist Page** or **Open the Label Page**.
+
+Select a feed in **Correct** to open it in the editor.
 
 ## Correct N Feeds
 

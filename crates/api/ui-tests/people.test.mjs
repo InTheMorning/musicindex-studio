@@ -1183,3 +1183,90 @@ test('feedWord and memberRowLine give the words of the members list', () => {
   assert.equal(memberRowLine({ usual_role: '', in_credits: false }), 'Only in Studio');
   assert.equal(memberRowLine({ usual_role: 'Vocals', in_credits: false }), 'Vocals · only in Studio');
 });
+
+// ---- Task 084b: the entries of the check (ADR 0120) ----
+import {
+  releaseWord, checkSummary, placeText, differenceBlocks, openLabel, useValuesLabel,
+} from '../ui/people.js';
+
+test('the word of a release and the summary of an entry (ADR 0120 items 1 and 4)', () => {
+  assert.equal(releaseWord({ medium: 'music' }), 'album');
+  assert.equal(releaseWord({ medium: 'musicl' }), 'playlist');
+  assert.equal(releaseWord({ medium: 'publisher', publisher_roles: ['artist'] }), 'artist page');
+  assert.equal(releaseWord({ medium: 'publisher', publisher_roles: ['label'] }), 'label page');
+  const album = { medium: 'music' };
+  const two = { findings: [{ kind: 'credit_details' }, { kind: 'credit_key' }] };
+  assert.equal(checkSummary(two, album), 'Album · 2 credits differ');
+  assert.equal(checkSummary({ findings: [{ kind: 'credit_role' }] }, { medium: 'musicl' }), 'Playlist · 1 credit differs');
+  assert.equal(checkSummary({ findings: [{ kind: 'not_default' }] }, { medium: 'publisher', publisher_roles: ['artist'] }), 'Artist page · 1 payment differs');
+  assert.equal(checkSummary({ findings: [{ kind: 'credit_role' }, { kind: 'other_wallet' }] }, { medium: 'publisher', publisher_roles: ['label'] }),
+    'Label page · 1 credit and 1 payment differ');
+  assert.equal(openLabel({ medium: 'music' }), 'Open the Album');
+  assert.equal(openLabel({ medium: 'publisher', publisher_roles: ['label'] }), 'Open the Label Page');
+  assert.equal(useValuesLabel('DuhLaurien'), "Use DuhLaurien's Values");
+});
+
+test('the position of a credit: the channel, two items, five items (ADR 0120 item 2)', () => {
+  assert.equal(placeText([{ kind: 'channel' }]), 'Channel');
+  const item = (title) => ({ kind: 'item', guid: title, title });
+  assert.equal(placeText([item('Neon Diner'), item('Night Bus')]), 'Neon Diner, Night Bus');
+  assert.equal(placeText([item('A'), item('B'), item('C')]), 'A, B, C');
+  assert.equal(placeText([item('A'), item('B'), item('C'), item('D'), item('E')]), 'A, B and 3 more');
+  assert.equal(placeText([{ kind: 'item', guid: '', title: '' }]), 'Untitled item');
+});
+
+test('the blocks of a credit with a picture and an information address (ADR 0120 item 2)', () => {
+  const entry = { findings: [{
+    kind: 'credit_details', role: 'vocals', img: false, href: true, feed_img: '', feed_href: '', person_img: '',
+    person_href: 'https://duhlaurien.example', places: [{ kind: 'item', guid: 'g3', title: 'Neon Diner' }],
+  }] };
+  const blocks = differenceBlocks(entry, 'DuhLaurien', { medium: 'music' });
+  assert.deepEqual(blocks, [{
+    place: 'Neon Diner',
+    what: 'Credit · Vocals · information address',
+    lines: [
+      { label: 'In the album', value: 'None', old: true },
+      { label: 'DuhLaurien', value: 'https://duhlaurien.example', old: false },
+    ],
+  }]);
+  const both = { findings: [{ ...entry.findings[0], img: true, feed_img: 'https://old.example/a.jpg', person_img: 'https://a.example/a.jpg' }] };
+  const two = differenceBlocks(both, 'DuhLaurien', { medium: 'musicl' });
+  assert.deepEqual(two.map((b) => b.what), ['Credit · Vocals · picture', 'Credit · Vocals · information address']);
+  assert.equal(two[0].lines[0].label, 'In the playlist');
+  assert.equal(two[0].lines[0].value, 'https://old.example/a.jpg');
+});
+
+test('the blocks of a credit key and a credit role, with None for a missing value (ADR 0120 item 2)', () => {
+  const profiles = profilesOf({ name: 'City Radio' });
+  const entry = { findings: [
+    { kind: 'credit_key', role: 'host', group: 'person', npub: '', places: [{ kind: 'channel' }] },
+    { kind: 'credit_role', places: [{ kind: 'channel' }] },
+  ] };
+  const [key, role] = differenceBlocks(entry, 'Ann', { medium: 'music' }, profiles, { keys: [{ npub: NPUB }], usual_role: '' });
+  assert.deepEqual(key, {
+    place: 'Channel',
+    what: 'Credit · Host · Nostr key',
+    lines: [
+      { label: 'In the album', value: 'None', old: true },
+      { label: 'Ann', value: 'City Radio', old: false },
+    ],
+  });
+  assert.deepEqual(role.lines, [
+    { label: 'In the album', value: 'None', old: true },
+    { label: 'Ann', value: 'None', old: false },
+  ]);
+  assert.equal(role.what, 'Credit · No role');
+});
+
+test('the blocks of a payment: the address of the feed and the default address (ADR 0120 item 2)', () => {
+  const key = KEY('mk@x.example');
+  const blocks = differenceBlocks({ findings: [{ kind: 'other_wallet', key }] }, 'Ann', { medium: 'music' }, null, { default_address: null });
+  assert.deepEqual(blocks, [{
+    place: 'Payments',
+    what: 'Payment · not a wallet of Ann',
+    lines: [
+      { label: 'In the album', value: 'Lightning address mk@x.example', old: true },
+      { label: 'Ann', value: 'None', old: false },
+    ],
+  }]);
+});

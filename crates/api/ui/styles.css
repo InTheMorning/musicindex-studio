@@ -1579,6 +1579,12 @@ button.outline-feed {
   font-weight: 700;
 }
 .steps-line li.now .step-mark, .steps-line li.done .step-mark { background: var(--accent); color: #fff; box-shadow: none; }
+/* The differences of an entry of the check of a person (ADR 0120 items 2 and 3). */
+.disclosure > .actions { padding: 0 16px 12px; }
+.difference + .difference { margin-top: 12px; }
+.difference .diff { margin-top: 4px; }
+.difference > .label { font-weight: 600; }
+.difference > .summary { color: var(--muted); font-size: var(--text-footnote); }
 
 @media (max-width: 760px) {
   .page { padding: 8px 16px 24px; }

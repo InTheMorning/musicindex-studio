@@ -4,6 +4,7 @@
 // gives each outcome (ADR 0065).
 
 import { shortKey } from './nostrkey.js';
+import { titleCase } from './casing.js';
 import { feedKind, isPublisher, isReadOnly, roleWord } from './shell.js';
 import { placesText } from './recipients.js';
 
@@ -902,6 +903,113 @@ export function checkFeedLines(entry, placeLines, name, profiles = null) {
 // The keys of the findings, for the profile lookup.
 export const checkKeys = (check) => [...new Set(((check && check.feeds) || [])
   .flatMap((f) => f.findings || []).filter((f) => f.kind === 'credit_key' && f.npub).map((f) => f.npub))];
+
+// ---- The entries of the check (ADR 0120, task 084b) ----
+
+export const CHECK_TITLE = 'Check your releases';
+
+const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+// The word for the type of a feed in the check: "album", "playlist", "artist
+// page" or "label page" (ADR 0120 item 4). A feed with no known type is an
+// album.
+export function releaseWord(feed) {
+  if (feedKind(feed || {}).label === 'Playlist') return 'playlist';
+  if (!isPublisher(feed || {})) return 'album';
+  return (feed.publisher_roles || []).includes('label') ? 'label page' : 'artist page';
+}
+
+// The label of the button that opens the feed in the editor (ADR 0120 item 3).
+export const openLabel = (feed) => `Open the ${titleCase(releaseWord(feed))}`;
+
+// The label of the button that corrects one feed (ADR 0120 item 3).
+export const useValuesLabel = (name) => `Use ${name}'s Values`;
+
+// The type and the count of an entry of the check, for example "Album · 2
+// credits differ" (ADR 0120 item 1). The count uses the findings of the core.
+export function checkSummary(entry, feed) {
+  const findings = (entry && entry.findings) || [];
+  const credits = findings.filter((f) => f.kind.startsWith('credit_')).length;
+  const payments = findings.filter((f) => f.kind === 'not_default' || f.kind === 'other_wallet').length;
+  const counted = [credits > 0 && plural(credits, 'credit', 'credits'), payments > 0 && plural(payments, 'payment', 'payments')].filter(Boolean);
+  // One difference takes the singular verb, and more than one takes the plural.
+  const verb = counted.length === 1 && credits + payments === 1 ? 'differs' : 'differ';
+  const differ = counted.length > 0 ? `${joinList(counted)} ${verb}` : '';
+  return [capital(releaseWord(feed)), differ].filter(Boolean).join(' · ');
+}
+
+// The position of a credit: "Channel", or the title of each item. More than three
+// places give the first two and "and N more" (ADR 0120 item 2).
+export function placeText(places) {
+  const names = (places || []).map((p) => (p.kind === 'channel' ? 'Channel' : (p.title || '').trim() || 'Untitled item'));
+  if (names.length <= 3) return names.join(', ');
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
+}
+
+// The text of a value, or "None" for a missing value.
+const orNone = (text) => (String(text ?? '').trim() === '' ? 'None' : String(text));
+
+// The name of a Nostr key: the name of its profile, or the short key.
+const keyName = (npub, profiles) => profileName(npub, profiles) || shortKey(npub);
+
+// The blocks of the differences of one entry of the check (ADR 0120 item 2).
+// A credit with a picture and an information address that both differ gives
+// one block for each. `person` gives the keys and the usual role of the person.
+// The core gives each value. The function only chooses the text.
+export function differenceBlocks(entry, name, feed, profiles = null, person = {}) {
+  const feedLine = `In the ${releaseWord(feed)}`;
+  const blocks = [];
+  for (const f of (entry && entry.findings) || []) {
+    const role = String(f.role || '').trim();
+    const credit = ['Credit', role && capital(role)];
+    switch (f.kind) {
+      case 'credit_key': {
+        const personKeys = (person.keys || []).filter((k) => k.npub).map((k) => keyName(k.npub, profiles)).join(', ');
+        blocks.push({
+          place: placeText(f.places),
+          what: [...credit, 'Nostr key'].filter(Boolean).join(' · '),
+          lines: [{ label: feedLine, value: f.npub ? keyName(f.npub, profiles) : 'None', old: true },
+            { label: name, value: orNone(personKeys), old: false }],
+        });
+        break;
+      }
+      case 'credit_details': {
+        const parts = [
+          { changed: f.img, part: 'picture', feedValue: f.feed_img, personValue: f.person_img },
+          { changed: f.href, part: 'information address', feedValue: f.feed_href, personValue: f.person_href },
+        ];
+        for (const p of parts.filter((x) => x.changed)) {
+          blocks.push({
+            place: placeText(f.places),
+            what: [...credit, p.part].filter(Boolean).join(' · '),
+            lines: [{ label: feedLine, value: orNone(p.feedValue), old: true }, { label: name, value: orNone(p.personValue), old: false }],
+          });
+        }
+        break;
+      }
+      case 'credit_role':
+        blocks.push({
+          place: placeText(f.places),
+          what: 'Credit · No role',
+          lines: [{ label: feedLine, value: 'None', old: true }, { label: name, value: orNone(person.usual_role), old: false }],
+        });
+        break;
+      case 'not_default':
+      case 'other_wallet': {
+        const what = f.kind === 'other_wallet' ? `Payment · not a wallet of ${name}` : 'Payment · not the default address';
+        blocks.push({
+          place: 'Payments',
+          what,
+          lines: [{ label: feedLine, value: addressText(f.key), old: true },
+            { label: name, value: person.default_address ? addressText(person.default_address) : 'None', old: false }],
+        });
+        break;
+      }
+      default: break;
+    }
+  }
+  return blocks;
+}
 
 // The lines of the sections "Change your feeds" (ADR 0111 item 4).
 export const CHANGE_ROWS = [

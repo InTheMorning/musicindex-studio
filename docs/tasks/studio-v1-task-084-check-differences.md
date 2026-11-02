@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0120](../adr/0120-the-check-of-a-person-shows-each-difference.md).
 
-Status: Not started.
+Status: Complete. Packets 084a and 084b are committed. The screenshot visual check passed on 2026-11-02. The human test is open.
 
 ## Goal
 

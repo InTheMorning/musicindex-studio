@@ -116,6 +116,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0111: The page of a person checks the feeds](adr/0111-the-page-of-a-person-checks-the-feeds.md)
 - [ADR 0112: A credit role comes from a list](adr/0112-a-credit-role-comes-from-a-list.md)
 - [ADR 0113: The page of a person suggests a picture and an information address](adr/0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md)
+- [ADR 0114: The review shows the changes in words and marks the changed part of a line](adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md)
 
 ## Plans
 

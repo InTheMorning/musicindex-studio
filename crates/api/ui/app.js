@@ -155,6 +155,21 @@ async function exchange(url, headers, { method = 'GET', body, raw = false }) {
   return data;
 }
 
+// Save the file of a media ticket to this device (ADR 0105 item 15, ADR
+// 0107 item 7). The link has the `download` attribute, so the tab does not
+// navigate. A navigation stops each request of the page that has not ended,
+// and Studio then shows "Studio does not answer". The server gives the file
+// name, and `name` is only a start value for the browser.
+export function saveTicket(ticket, name = '') {
+  const link = document.createElement('a');
+  link.href = `/media/download?ticket=${encodeURIComponent(ticket)}`;
+  link.download = name;
+  link.hidden = true;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 export function api(path, options = {}) {
   // A change can add or remove a file that only Studio holds (ADR 0109
   // item 5), so the next read of that list asks again.
@@ -4107,12 +4122,7 @@ function ExportSheet({ onClose }) {
   });
   const send = () => run(async () => {
     const made = await api('/account/export', { method: 'POST', body: { include_assets: view.checkbox ? include : true } });
-    const link = document.createElement('a');
-    link.href = `/media/download?ticket=${encodeURIComponent(made.ticket)}`;
-    link.hidden = true;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    saveTicket(made.ticket, made.file_name);
     setDone(true);
   });
   const title = view ? view.title : (serverMode ? 'Export Account' : 'Export Studio');

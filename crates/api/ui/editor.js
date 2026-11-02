@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys } from './review.js';
-import { api, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
+import { api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
@@ -3670,17 +3670,11 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     onOpsChanged();
   };
 
-  // "Download to This Device": get a ticket for the file, and open the
-  // download route in a hidden link. The browser saves the response
-  // (ADR 0105 item 15).
+  // "Download to This Device": get a ticket for the file, and save it
+  // with `saveTicket` (ADR 0105 item 15).
   const saveToDevice = (fileId) => run(async () => {
     const { ticket } = await api('/media/tickets', { method: 'POST', body: { file: fileId } });
-    const link = document.createElement('a');
-    link.href = `/media/download?ticket=${encodeURIComponent(ticket)}`;
-    link.hidden = true;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    saveTicket(ticket);
   });
 
   // Send the decision of the user for one difference. Then scan again and

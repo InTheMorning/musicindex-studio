@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0118](../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0111](../adr/0111-the-page-of-a-person-checks-the-feeds.md) item 10 and [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md).
 
-Status: Not started. It starts after the commit of [task 079](studio-v1-task-079-person-save-and-discard.md), because the sheets open after the Save of packet 079b. It does not need task 080. The planning model examines the packets again after the commit of task 079.
+Status: Not started. [Task 079](studio-v1-task-079-person-save-and-discard.md) is committed. The sheets open after the Save of packet 079b. The task can start without task 080. It starts after task 080, because the two tasks change `people.rs` and `peoplepages.js`. The planning model examined the packets again on 2026-11-02, and changed items 2 and 3 of packet 081b.
 
 ## Goal
 
@@ -107,11 +107,10 @@ Do not change: the core, the API, the ADRs.
 These choices are fixed. Do not change them.
 
 1. `MEMBER_HINT` becomes "The artist or label that this person is in. After Save, Studio can add this person to the credits of that feed." `NEW_MEMBER_HINT` of the sheet "Make a Person" does not change, because that sheet has no Save.
-2. `people.js` gets `creditOffer(before, after, feed, members, personId)`. `before` and `after` are the membership as text before and after the Save. It gives `{ kind: 'add', feedId }`, `{ kind: 'remove', feedId }` or `null`:
-    - `add`: `after` is a feed, it differs from `before`, `isEditable(feed)` is true, and `members` has no row of the person with `in_credits`.
-    - `remove`: `before` is a feed, it differs from `after`, and `members` of that feed has a row of the person with `in_credits`.
-    - With both, the page shows `remove` first, then `add`.
-3. After a successful Save that changed the membership, the page reads `GET /feeds/{id}/members` for each feed of item 2, and opens the sheet of `creditOffer`.
+2. `people.js` gets `creditOffers(before, after, feeds, members, personId)`. `before` is the `member` of `savedValues` before the Save, and `after` is the `member` of the values that the Save sent (task 079). `feeds` is the feed list of the page. `members` maps each feed ID of `before` and `after` to its `GET /feeds/{id}/members` list. It gives a list of zero, one or two offers, with `remove` first:
+    - `{ kind: 'remove', feedId }`: `before` is a feed, it differs from `after`, and `members` of that feed has a row of the person with `in_credits`.
+    - `{ kind: 'add', feedId }`: `after` is a feed, it differs from `before`, and `isEditable` of that feed is `true`. Also, `members` of that feed has no row of the person with `in_credits`.
+3. After a successful Save that changed the membership, the page reads `GET /feeds/{id}/members` for each feed of item 2. It opens the sheet of each offer of `creditOffers`, one after the other. The next sheet opens when the user closes the sheet before it with "Not Now". "Review in 1 Feed" opens the change set, and the page shows no other sheet.
 4. The add sheet has these parts:
     - The title "Add {name} to the Credits of {feed}?" and the note of ADR 0118 item 4.
     - `RoleMenu`, with the usual role and group as start values.
@@ -130,7 +129,8 @@ These choices are fixed. Do not change them.
 
 Mechanical:
 
-- A Node test: `creditOffer` gives `add`, `remove`, both, and `null` for a read-only feed, for a feed with the credit, and for no change.
+- A Node test: `creditOffers` gives `add`, `remove`, and the two offers with `remove` first.
+- A Node test: `creditOffers` gives an empty list for a read-only feed, for a feed with the credit, and for no change.
 - A Node test: the texts of `MEMBER_HINT`, the titles of the two sheets and the note of item 10.
 - A Node test: `pages.js` puts `members` before `details` on the publisher page, and the tier test passes.
 - The test of title case still passes.

@@ -26,10 +26,10 @@ test('ChannelFields in editor.js has no field Language', () => {
 test('the page publisher gives the sections in the sequence of ADR 0075', () => {
   assert.deepEqual(
     pageSequence('publisher').map((s) => s.id),
-    ['channel', 'releases', 'details', 'role', 'feed'],
-    'ADR 0075 item 1: the publisher page must give channel, releases, details, role and feed. Fix the page publisher in crates/api/ui/pages.js.',
+    ['channel', 'releases', 'members', 'details', 'role', 'feed'],
+    'ADR 0118 item 8: the publisher page must give channel, releases, members, details, role and feed. Fix the page publisher in crates/api/ui/pages.js.',
   );
-  assert.deepEqual(pageSequence('publisher')[2].rows, ['recipients', 'credits']);
+  assert.deepEqual(pageSequence('publisher')[3].rows, ['recipients', 'credits']);
 });
 
 test('the page settings gives op3 after locked for an album only', () => {

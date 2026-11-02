@@ -1097,3 +1097,84 @@ test('the source line of a filled field names the kind of the row (ADR 0117 item
   assert.equal(musicindexFeedUrl('a b'), 'https://musicindex.org/#feed=a%20b');
 });
 
+
+// The credit of a member (ADR 0118 items 2, 4, 6, 9 and 10, task 081b).
+import {
+  creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation,
+  REMOVE_CREDIT_OPERATION, feedWord, memberSectionNote, memberRowLine, MEMBER_HINT,
+} from '../ui/people.js';
+
+const LABEL = { id: 3, medium: 'publisher', title: 'Band', connector_id: 'local', publisher_roles: ['artist'] };
+const READ_ONLY = { id: 4, medium: 'publisher', title: 'Old Band', connector_id: null, publisher_roles: ['artist'] };
+const OTHER = { id: 5, medium: 'publisher', title: 'Other Band', connector_id: 'local', publisher_roles: ['label'] };
+const FEEDS = [LABEL, READ_ONLY, OTHER];
+
+// The members of each feed: the person 7 with the membership, the credit, or both.
+const members = (rows) => new Map(rows);
+const PERSON = 7;
+
+test('creditOffers gives an add for a new membership with no credit', () => {
+  const m = members([['3', [{ person_id: PERSON, in_credits: false }]]]);
+  assert.deepEqual(creditOffers('', '3', FEEDS, m, PERSON), [{ kind: 'add', feedId: '3' }]);
+});
+
+test('creditOffers gives a remove for a removed membership with a credit', () => {
+  const m = members([['3', [{ person_id: PERSON, in_credits: true }]]]);
+  assert.deepEqual(creditOffers('3', '', FEEDS, m, PERSON), [{ kind: 'remove', feedId: '3' }]);
+});
+
+test('creditOffers gives the remove first, then the add, when the feed changes', () => {
+  const m = members([
+    ['3', [{ person_id: PERSON, in_credits: true }]],
+    ['5', [{ person_id: PERSON, in_credits: false }]],
+  ]);
+  assert.deepEqual(creditOffers('3', '5', FEEDS, m, PERSON), [
+    { kind: 'remove', feedId: '3' },
+    { kind: 'add', feedId: '5' },
+  ]);
+});
+
+test('creditOffers gives no offer for a read-only feed', () => {
+  const m = members([['4', [{ person_id: PERSON, in_credits: false }]]]);
+  assert.deepEqual(creditOffers('', '4', FEEDS, m, PERSON), []);
+});
+
+test('creditOffers gives no add when the feed has the credit of the person', () => {
+  const m = members([['3', [{ person_id: PERSON, in_credits: true }]]]);
+  assert.deepEqual(creditOffers('', '3', FEEDS, m, PERSON), []);
+});
+
+test('creditOffers gives no offer when the membership does not change', () => {
+  const m = members([['3', [{ person_id: PERSON, in_credits: true }]]]);
+  assert.deepEqual(creditOffers('3', '3', FEEDS, m, PERSON), []);
+  assert.deepEqual(creditOffers('', '', FEEDS, m, PERSON), []);
+});
+
+test('creditOffers ignores the rows of other persons', () => {
+  const m = members([['3', [{ person_id: 99, in_credits: true }]]]);
+  assert.deepEqual(creditOffers('3', '', FEEDS, m, PERSON), []);
+});
+
+test('the texts of the credit sheets and of Member of (ADR 0118 items 2, 4, 6 and 10)', () => {
+  assert.equal(MEMBER_HINT, 'The artist or label that this person is in. After Save, Studio can add this person to the credits of that feed.');
+  assert.equal(creditAddTitle('Sam', 'Band'), 'Add Sam to the Credits of Band?');
+  assert.equal(creditRemoveTitle('Sam', 'Band'), 'Remove Sam from the Credits of Band?');
+  assert.equal(creditAddNote('Sam', 'Band'), 'Sam is a member of Band in Studio. The credits of the artist feed can also show it, so that apps and musicindex.org can find Sam.');
+  assert.equal(creditPublicNote(false), 'The feed is public. The name, the picture and the information address go in it.');
+  assert.equal(creditPublicNote(true), 'The feed is public. The name, the picture, the information address and the Nostr key go in it.');
+  assert.equal(creditRemoveNote('Sam'), 'The artist feed then does not name Sam. Studio shows the review first.');
+  assert.equal(memberSectionNote('artist'), 'The people that are members of this artist. A member that is not in the credits is only in Studio.');
+});
+
+test('the operations of a credit and its removal', () => {
+  assert.deepEqual(creditOperation('Fiddle', 'Performer'), { kind: 'credit_feed', role: 'Fiddle', group: 'Performer' });
+  assert.deepEqual(REMOVE_CREDIT_OPERATION, { kind: 'remove', payee: false, credit: true });
+});
+
+test('feedWord and memberRowLine give the words of the members list', () => {
+  assert.equal(feedWord(LABEL), 'artist');
+  assert.equal(feedWord({ medium: 'publisher', publisher_roles: [] }), 'feed');
+  assert.equal(memberRowLine({ usual_role: 'Fiddle', in_credits: true }), 'Fiddle · in the credits of this feed');
+  assert.equal(memberRowLine({ usual_role: '', in_credits: false }), 'Only in Studio');
+  assert.equal(memberRowLine({ usual_role: 'Vocals', in_credits: false }), 'Vocals · only in Studio');
+});

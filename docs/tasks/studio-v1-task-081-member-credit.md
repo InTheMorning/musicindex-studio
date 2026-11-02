@@ -3,7 +3,10 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0118](../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0111](../adr/0111-the-page-of-a-person-checks-the-feeds.md) item 10 and [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md).
 
-Status: Not started. [Task 079](studio-v1-task-079-person-save-and-discard.md) is committed. The sheets open after the Save of packet 079b. The task can start without task 080. It starts after task 080, because the two tasks change `people.rs` and `peoplepages.js`. The planning model examined the packets again on 2026-11-02, and changed items 2 and 3 of packet 081b.
+Status: Complete. Packets 081a and 081b are committed. The screenshot visual check passed on 2026-11-02. The human test is open. The visual check found two open items, and the operator decides each:
+
+- The remove sheet opens when the channel has a credit with the name of the person. The operation `Remove { payee: false, credit: true }` matches only the linked credit names and Nostr keys of the person (`CreditMatch`). For a person with no linked credit name, the change set changes no feed.
+- The review page of a credit change set has the title "Add to All Releases", because the core keeps the operation `add_to_releases`.
 
 ## Goal
 
@@ -96,7 +99,7 @@ At the end, report:
 
 ### Files
 
-Inspect: `crates/api/ui/peoplepages.js` (`PersonPage`, the Save of task 079, `OperationForm` and its `go({ name: 'change-set', id })`, `RoleMenu`, `PersonArt`, `ListRow`), `crates/api/ui/people.js` (`saveBody`, `MEMBER_HINT`, `memberChoices`, `profileLine`), `crates/api/ui/shell.js` (`isEditable`, `isReadOnly`, `feedKind`), `crates/api/ui/editor.js` (`PublisherPage`, its sections and `showSections`), `crates/api/ui/pages.js` (the publisher page), `crates/api/ui-tests/people.test.mjs`, `crates/api/ui-tests/pages.test.mjs`, `.studio-dev/mockup-lookup/site/lookup.js` (`memberOffer`, `members`).
+Inspect: `crates/api/ui/peoplepages.js` (`PersonPage`, the Save of task 079, `OperationForm` and its `go({ name: 'change-set', id })`, `RoleMenu`, `PersonArt`, `ListRow`), `crates/api/ui/people.js` (`saveBody`, `MEMBER_HINT`, `memberChoices`, `profileLine`), `crates/api/ui/shell.js` (`isReadOnly`, `feedKind`), `crates/api/ui/editor.js` (`PublisherPage`, its sections and `showSections`), `crates/api/ui/pages.js` (the publisher page), `crates/api/ui-tests/people.test.mjs`, `crates/api/ui-tests/pages.test.mjs`, `.studio-dev/mockup-lookup/site/lookup.js` (`memberOffer`, `members`).
 
 Change: `crates/api/ui/peoplepages.js`, `crates/api/ui/people.js`, `crates/api/ui/editor.js`, `crates/api/ui/pages.js`, `crates/api/ui/styles.css` only if the visual check needs it, `crates/api/ui-tests/people.test.mjs`, `crates/api/ui-tests/pages.test.mjs`, `docs/user-guide/people.md`.
 
@@ -109,7 +112,7 @@ These choices are fixed. Do not change them.
 1. `MEMBER_HINT` becomes "The artist or label that this person is in. After Save, Studio can add this person to the credits of that feed." `NEW_MEMBER_HINT` of the sheet "Make a Person" does not change, because that sheet has no Save.
 2. `people.js` gets `creditOffers(before, after, feeds, members, personId)`. `before` is the `member` of `savedValues` before the Save, and `after` is the `member` of the values that the Save sent (task 079). `feeds` is the feed list of the page. `members` maps each feed ID of `before` and `after` to its `GET /feeds/{id}/members` list. It gives a list of zero, one or two offers, with `remove` first:
     - `{ kind: 'remove', feedId }`: `before` is a feed, it differs from `after`, and `members` of that feed has a row of the person with `in_credits`.
-    - `{ kind: 'add', feedId }`: `after` is a feed, it differs from `before`, and `isEditable` of that feed is `true`. Also, `members` of that feed has no row of the person with `in_credits`.
+    - `{ kind: 'add', feedId }`: `after` is a feed, it differs from `before`, and `isReadOnly` of that feed is `false` (ADR 0118 item 3, ADR 0067). Also, `members` of that feed has no row of the person with `in_credits`.
 3. After a successful Save that changed the membership, the page reads `GET /feeds/{id}/members` for each feed of item 2. It opens the sheet of each offer of `creditOffers`, one after the other. The next sheet opens when the user closes the sheet before it with "Not Now". "Review in 1 Feed" opens the change set, and the page shows no other sheet.
 4. The add sheet has these parts:
     - The title "Add {name} to the Credits of {feed}?" and the note of ADR 0118 item 4.

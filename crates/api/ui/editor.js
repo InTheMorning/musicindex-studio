@@ -8,7 +8,7 @@ import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, common
 import { api, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
-import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
+import { creditPickRows, supportPickRows, addPickLabel, filterRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
@@ -3131,6 +3131,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   // The feeds whose draft the last link or role change altered.
   const [changed, setChanged] = useState([]);
   const [chosen, setChosen] = useState('');
+  // The members of this feed, from `GET /feeds/{id}/members` (ADR 0118 item 9).
+  const [members, setMembers] = useState([]);
+  useEffect(() => {
+    let live = true;
+    api(`/feeds/${feed.id}/members`).then((r) => { if (live) setMembers(r.members || []); }, () => { if (live) setMembers([]); });
+    return () => { live = false; };
+  }, [feed.id]);
   const items = model.remote_items;
   // The releases in the sequence of the model (ADR 0041 item 10).
   const rows = items
@@ -3196,6 +3203,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
           explicit: () => html`<${ExplicitField} id="pub-explicit" model=${model} update=${update} />`,
         })}
       </div>
+    </section>`,
+    members: () => members.length > 0 && html`<section class="page-section"><h2>Members</h2>
+      <p class="hint">${memberSectionNote(feedWord(feed))}</p>
+      <div class="group">${members.map((m) => html`<button class="link-row" type="button" key=${m.person_id}
+        onClick=${() => go({ name: 'person', id: m.person_id })}>
+        <${PersonArt} person=${m} />
+        <span class="text"><span class="label">${m.name}</span><span class="summary">${memberRowLine(m)}</span></span><span class="go">›</span></button>`)}</div>
     </section>`,
     details: (s) => html`<section class="page-section"><h2>Details</h2>
       <div class="group">

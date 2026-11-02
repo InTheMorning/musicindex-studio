@@ -4,7 +4,7 @@
 // gives each outcome (ADR 0065).
 
 import { shortKey } from './nostrkey.js';
-import { feedKind, isPublisher, roleWord } from './shell.js';
+import { feedKind, isPublisher, isReadOnly, roleWord } from './shell.js';
 import { placesText } from './recipients.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -728,8 +728,70 @@ export function profileLine(person, titles, feeds = []) {
   };
 }
 
-// The hint of "Member of" (ADR 0111 item 3).
-export const MEMBER_HINT = 'The artist or label that this person is in. Studio changes no feed.';
+// The hint of "Member of" (ADR 0111 item 3, ADR 0118 item 2).
+export const MEMBER_HINT = 'The artist or label that this person is in. After Save, Studio can add this person to the credits of that feed.';
+
+// The offers of a credit after a Save that changes "Member of" (ADR 0118
+// items 2 and 6). `before` and `after` are the feed IDs of the membership
+// before and after the Save, as text, or ''. `feeds` is the feed list.
+// `members` is a Map from each feed ID to its `GET /feeds/{id}/members` list.
+// The result has `remove` first, and each offer is `{ kind, feedId }`.
+export function creditOffers(before, after, feeds, members, personId) {
+  const byId = new Map((feeds || []).map((f) => [String(f.id), f]));
+  // The row of the person in the members of a feed, or undefined.
+  const rowOf = (feedId) => ((members && members.get(String(feedId))) || []).find((m) => m.person_id === personId);
+  const offers = [];
+  if (before && before !== after && (rowOf(before) || {}).in_credits) {
+    offers.push({ kind: 'remove', feedId: before });
+  }
+  // A read-only feed gets no offer, because its change set cannot be written (ADR 0067).
+  const feed = after && after !== before ? byId.get(after) : undefined;
+  if (feed && !isReadOnly(feed) && !(rowOf(after) || {}).in_credits) {
+    offers.push({ kind: 'add', feedId: after });
+  }
+  return offers;
+}
+
+// The title of the sheet that adds a credit (ADR 0118 item 4).
+export const creditAddTitle = (name, feed) => `Add ${name} to the Credits of ${feed}?`;
+
+// The title of the sheet that removes a credit (ADR 0118 item 6).
+export const creditRemoveTitle = (name, feed) => `Remove ${name} from the Credits of ${feed}?`;
+
+// The note of the sheet that adds a credit (ADR 0118 item 4).
+export const creditAddNote = (name, feed) => `${name} is a member of ${feed} in Studio. The credits of the artist feed can also show it, so that apps and musicindex.org can find ${name}.`;
+
+// The note about the public data of a credit (ADR 0118 item 4). It names the
+// Nostr key only when the person has one.
+export const creditPublicNote = (hasKey) => (hasKey
+  ? 'The feed is public. The name, the picture, the information address and the Nostr key go in it.'
+  : 'The feed is public. The name, the picture and the information address go in it.');
+
+// The text of the sheet that removes a credit (ADR 0118 item 6).
+export const creditRemoveNote = (name) => `The artist feed then does not name ${name}. Studio shows the review first.`;
+
+// The body of the operation `credit_feed` of `POST /people/{id}/changes`.
+export const creditOperation = (role, group) => ({ kind: 'credit_feed', role, group });
+
+// The body of the operation that removes the credit of a person (ADR 0118 item 6).
+export const REMOVE_CREDIT_OPERATION = { kind: 'remove', payee: false, credit: true };
+
+// The word of a feed in the note of its members: the first role in lowercase,
+// or "feed" with no role (ADR 0118 item 10).
+export const feedWord = (feed) => ((feed.publisher_roles || []).length > 0
+  ? feedKind(feed).label.split(' · ')[0].toLowerCase()
+  : 'feed');
+
+// The note of the section "Members" (ADR 0118 item 10).
+export const memberSectionNote = (word) => `The people that are members of this ${word}. A member that is not in the credits is only in Studio.`;
+
+// The second line of a member row: its usual role, then whether the channel
+// of the feed has a credit of the person (ADR 0118 item 9).
+export function memberRowLine(member) {
+  const state = member.in_credits ? 'in the credits of this feed' : 'only in Studio';
+  const role = (member.usual_role || '').trim();
+  return role ? `${role} · ${state}` : `${state.charAt(0).toUpperCase()}${state.slice(1)}`;
+}
 
 // ---- The suggestions of the picture and the information address (ADR 0113) ----
 

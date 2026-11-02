@@ -28,6 +28,7 @@ import {
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, MEMBER_HINT, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
+  creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
 } from './people.js';
 
 // The merges of this page load: the ID of each merged person, to the ID of
@@ -602,6 +603,9 @@ export function PersonPage({ id, feeds, go }) {
   // row that the values sheet shows (ADR 0117 items 2 and 8).
   const [finding, setFinding] = useState(null);
   const [picked, setPicked] = useState(null);
+  // The credit offers of the last Save that changed "Member of" (ADR 0118).
+  // The first offer has its sheet open.
+  const [offers, setOffers] = useState([]);
   const loadMore = () => api(`/people/${id}/more`).then((r) => setMore(r.items || []), () => setMore([]));
   useEffect(() => { loadMore(); }, [id]);
   const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => setSuggestions(r.suggestions || []), () => setSuggestions([]));
@@ -653,16 +657,29 @@ export function PersonPage({ id, feeds, go }) {
   // keeps the pending changes, and shows the error.
   const save = async () => {
     if (!dirty) return;
+    const before = saved.member;
+    const after = shown.member;
     setSaving(true);
     setSaveFailure(null);
+    let saveDone = false;
     try {
       await api(`/people/${id}/save`, { method: 'POST', body: saveBody(saved, shown) });
+      saveDone = true;
       await reload();
     } catch (e) {
       setSaveFailure((e && e.message) || 'Studio could not save this person');
     } finally {
       setSaving(false);
     }
+    if (saveDone && before !== after) await offerCredits(before, after);
+  };
+  // The offers of a credit for a changed "Member of" (ADR 0118 items 2 and 3).
+  // A failed read of the members gives no offer for that feed.
+  const offerCredits = async (before, after) => {
+    const feedIds = [before, after].filter((feedId, i, all) => feedId && all.indexOf(feedId) === i);
+    const lists = await Promise.all(feedIds.map((feedId) => api(`/feeds/${feedId}/members`).then((r) => r.members || [], () => [])));
+    const members = new Map(feedIds.map((feedId, i) => [feedId, lists[i]]));
+    setOffers(creditOffers(before, after, feeds, members, Number(id)));
   };
   // Asks before the page leaves with a pending change (ADR 0116 items 8 and 11).
   // "Discard Changes" puts back the saved values, and gives true.
@@ -790,7 +807,81 @@ export function PersonPage({ id, feeds, go }) {
   <${FindSheet} open=${finding !== null && picked === null} personId=${person.id} name=${person.name} query=${finding || ''}
     onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} />
   <${ValuesSheet} personId=${person.id} row=${picked} shown=${shown}
-    onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} /></div>`;
+    onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} />
+  ${offers.length > 0 && html`<${CreditSheet} key=${`${offers[0].kind}${offers[0].feedId}`} offer=${offers[0]} person=${person}
+    feeds=${feeds} go=${go} onNotNow=${() => setOffers((current) => current.slice(1))} />`}</div>`;
+}
+
+// The sheets "Add {name} to the Credits of {feed}?" and "Remove {name} from
+// the Credits of {feed}?" (ADR 0118 items 4 to 7). The sheet is open while it
+// is shown. "Not Now" closes it, and changes no feed.
+function CreditSheet({ offer, person, feeds, go, onNotNow }) {
+  const ref = useSheet(true);
+  const feed = (feeds || []).find((f) => String(f.id) === offer.feedId);
+  const title = feed ? (feed.title || 'Untitled feed') : 'this feed';
+  const close = () => ref.current.close();
+  const adding = offer.kind === 'add';
+  return html`<dialog ref=${ref} class=${adding ? 'sheet' : 'sheet small'} aria-labelledby="credit-title" onClose=${onNotNow}>
+    <header>
+      <h2 id="credit-title">${adding ? creditAddTitle(person.name, title) : creditRemoveTitle(person.name, title)}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${close}>✕</button>
+    </header>
+    ${adding
+      ? html`<${CreditAddForm} person=${person} feedId=${offer.feedId} title=${title} go=${go} close=${close} />`
+      : html`<${CreditRemoveForm} person=${person} feedId=${offer.feedId} go=${go} close=${close} />`}
+  </dialog>`;
+}
+
+// The body of the sheet that adds a credit. The role starts with the usual
+// role of the person (ADR 0118 item 4).
+function CreditAddForm({ person, feedId, title, go, close }) {
+  const [role, setRole] = useState(person.usual_role || '');
+  const [group, setGroup] = useState(person.usual_group || '');
+  const { busy, error, run } = useAction();
+  const hasKey = person.keys.length > 0;
+  const review = () => run(async () => {
+    const made = await api(`/people/${person.id}/changes`, { method: 'POST', body: { operation: creditOperation(role, group), feed_ids: [Number(feedId)] } });
+    go({ name: 'change-set', id: made.id });
+  });
+  const roleLine = [role, group].filter((text) => text).join(' · ');
+  return html`<div class="body">
+      <p class="hint">${creditAddNote(person.name, title)}</p>
+      <div class="group rows"><${RoleMenu} id="credit-role" label="Role" role=${role} group=${group}
+        onChange=${(nextRole, nextGroup) => { setRole(nextRole); setGroup(nextGroup); }} /></div>
+      <section class="page-section"><h2>The credit</h2>
+        <div class="group"><div class="link-row static key-line">
+          <${PersonArt} person=${person} />
+          <span class="text"><span class="label">${person.name}</span>
+            ${roleLine && html`<span class="summary">${roleLine}</span>`}
+            ${person.img && html`<span class="summary address-text">${person.img}</span>`}
+            ${person.href && html`<span class="summary address-text">${person.href}</span>`}
+            ${hasKey && html`<span class="summary mono">${shortKey(person.keys[0].npub)}</span>`}</span>
+        </div></div>
+      </section>
+      <p class="hint">${creditPublicNote(hasKey)}</p>
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${close}>Not Now</button>
+      <button class="button primary" type="button" disabled=${busy || role === ''} onClick=${review}>Review in 1 Feed</button>
+    </footer>`;
+}
+
+// The body of the sheet that removes a credit (ADR 0118 item 6).
+function CreditRemoveForm({ person, feedId, go, close }) {
+  const { busy, error, run } = useAction();
+  const review = () => run(async () => {
+    const made = await api(`/people/${person.id}/changes`, { method: 'POST', body: { operation: REMOVE_CREDIT_OPERATION, feed_ids: [Number(feedId)] } });
+    go({ name: 'change-set', id: made.id });
+  });
+  return html`<div class="body">
+      <p class="hint">${creditRemoveNote(person.name)}</p>
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${close}>Not Now</button>
+      <button class="button primary" type="button" disabled=${busy} onClick=${review}>Review in 1 Feed</button>
+    </footer>`;
 }
 
 // The sheet "Merge with {name}" (ADR 0103 items 14 to 16). The core moves the

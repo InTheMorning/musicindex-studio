@@ -394,6 +394,7 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [0.1.0-rc.10](releases/0.1.0-rc.10.md)
 - [0.1.0-rc.11](releases/0.1.0-rc.11.md)
 - [0.1.0-rc.12](releases/0.1.0-rc.12.md)
+- [0.1.0-rc.13](releases/0.1.0-rc.13.md)
 
 ## Research
 

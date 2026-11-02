@@ -60,3 +60,74 @@ test('moreLabel and normalizeView', () => {
   assert.equal(normalizeView('x'), 'simplified');
   assert.equal(normalizeView('detailed'), 'detailed');
 });
+
+// ---- What changes (task 077c) ----
+import { readFileSync } from 'node:fs';
+import { fieldRows, guardRow, changeRow, KEY_WORDS, pathWord, inSentence } from '../ui/review.js';
+
+const KEY = 'npub1' + 'q'.repeat(58);
+const credit = (role) => ({ op: 'changed', path: 'npub', entry: role, old: null, new: KEY });
+const profiles = new Map([[KEY, { npub: KEY, name: 'City Radio' }]]);
+
+test('six changes of one key give a summary, two rows and a collapsed line', () => {
+  const roles = ['musician', 'audio engineer', 'songwriter', 'composer', 'guitarist', 'keyboardist'];
+  const [group] = fieldRows([{ kind: 'credits', name: 'City Radio', changes: roles.map(credit) }], profiles);
+  assert.equal(group.label, 'Credits · City Radio');
+  assert.equal(group.summary, '6 credits get the Nostr key City Radio');
+  assert.equal(group.rows.length, 2);
+  assert.equal(group.rows[0].label, 'musician');
+  assert.match(group.rows[0].text, /Nostr key: none → City Radio \(/);
+  assert.equal(group.more.summary, '4 more credits: songwriter, composer, guitarist, keyboardist');
+  assert.equal(group.more.rows.length, 4);
+});
+
+test('a title, an added entry and a removed entry have a line', () => {
+  const title = changeRow({ kind: 'field', name: 'title' }, { op: 'changed', path: '', old: 'A', new: 'B' });
+  assert.deepEqual(title, { label: 'Title', text: 'A → B', warning: null });
+  const live = changeRow({ kind: 'live', name: 'Show' }, { op: 'changed', path: 'item.title', entry: null, old: 'A', new: 'B' });
+  assert.equal(live.label, 'Title');
+  assert.equal(pathWord('item.title'), 'Title');
+  const add = changeRow({ kind: 'credits', name: 'X' }, { op: 'added', path: '', entry: 'mixer', old: null, new: { name: 'X' } });
+  assert.deepEqual([add.label, add.text], ['mixer', 'Added']);
+  const gone = changeRow({ kind: 'track', name: 'T', position: 1 }, { op: 'removed', path: 'persons', entry: null, old: { name: 'Zed' }, new: null });
+  assert.deepEqual([gone.label, gone.text], ['Credits', 'Removed: Zed']);
+});
+
+test('a key line shows the profile, the short key or the warning', () => {
+  const group = { kind: 'credits', name: 'HeyCitizen' };
+  const withProfile = changeRow(group, credit('musician'), profiles);
+  assert.match(withProfile.text, /City Radio \(npub1/);
+  assert.equal(withProfile.warning, 'The profile name is not "HeyCitizen". Check this key.');
+  const without = changeRow(group, credit('musician'), null);
+  assert.doesNotMatch(without.text, /City Radio/);
+  assert.equal(without.warning, null);
+  assert.equal(changeRow({ ...group, name: 'City Radio' }, credit('musician'), profiles).warning, null);
+});
+
+test('the guard row counts the uncovered changes', () => {
+  assert.equal(guardRow(0), null);
+  assert.equal(guardRow(1).title, '1 more change in the XML');
+  assert.match(guardRow(1).text, /does not show it/);
+  assert.equal(guardRow(3).title, '3 more changes in the XML');
+  assert.match(guardRow(3).text, /does not show them/);
+});
+
+test('the word table has a word for each key of the feed model', () => {
+  const source = readFileSync(new URL('../../core/src/feed.rs', import.meta.url), 'utf8');
+  const keys = new Set();
+  for (const block of source.matchAll(/pub struct (\w+)[^{]*\{([\s\S]*?)\n\}/g)) {
+    for (const m of block[2].matchAll(/^\s*pub (\w+):/gm)) keys.add(m[1]);
+  }
+  assert.ok(keys.size > 40);
+  const missing = [...keys].filter((k) => !(k in KEY_WORDS));
+  assert.deepEqual(missing, []);
+});
+
+test('a word in a summary line keeps sentence case', () => {
+  assert.equal(inSentence('Nostr key'), 'Nostr key');
+  assert.equal(inSentence('Picture'), 'picture');
+  assert.equal(inSentence('Information address'), 'information address');
+  const change = (entry) => ({ op: 'changed', path: 'img', entry, old: null, new: 'https://a.example/p.jpg' });
+  const [group] = fieldRows([{ kind: 'credits', name: 'Ann', changes: ['a', 'b', 'c'].map(change) }], null);
+  assert.equal(group.summary, '3 credits get the picture https://a.example/p.jpg');
+});

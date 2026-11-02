@@ -246,7 +246,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - Decision: [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md). The People test of 2026-11-02 found that the review did not show a change of one attribute in six credits.
 - The mockups are in `.studio-dev/mockup-diff/site/`.
-- [Task 077](../tasks/studio-v1-task-077-review-in-words.md) gives the work in three packets: the core and the API, the lines of the diff, then "What changes". It is not started.
+- [Task 077](../tasks/studio-v1-task-077-review-in-words.md) gives the work in three packets: the core and the API, the lines of the diff, then "What changes". It is complete, with its screenshot visual checks, and its human test is open.
 
 ### Phase 13: Desktop Shell
 

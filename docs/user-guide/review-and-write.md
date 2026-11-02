@@ -16,8 +16,24 @@ You can close Studio and come back. The draft stays.
 2. The sheet "Review changes" opens. Studio examines the draft each time that the sheet opens.
 3. Read the list of actions and the diff.
 
-The diff shows the lines of the feed file that change.
-Lines that start with `+` are new. Lines that start with `-` go out.
+The review has two views. Use the menu **View** to select one. Studio keeps your selection on this device.
+
+- **Simplified** is the default. It shows **What changes** first. This list gives each change in words, for example "Title: Old name → New name".
+  Then it shows **Changed lines**.
+- **Detailed** shows only the changed lines of the feed file.
+
+When many entries get the same new value, **What changes** gives one line, for example "6 credits get the Nostr key City Radio".
+It shows two of the changes. Select the line "4 more credits" to see the others.
+A Nostr key shows the profile name and the short key. If the profile name is not the name of the credit, Studio shows a warning. Check the key.
+
+A change can be in the file, but not in the list. Then the list ends with a row, for example "1 more change in the XML".
+Select **Detailed** to see each changed line.
+
+In **Changed lines**, a line that starts with `+` is new. A line that starts with `−` goes out.
+A line that starts with `±` has a part that is new or a part that goes out. Studio marks that part.
+
+Studio shows three lines around each change. Select "Show N more lines" to open a run of hidden lines.
+Select **Show the Whole File** to see each line. Then select **Show Only the Changes** to go back.
 When the draft has nothing to write, Studio says that it matches the hosted file.
 
 The sheet can also list these actions before the diff:

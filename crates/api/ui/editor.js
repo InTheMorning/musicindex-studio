@@ -4,10 +4,10 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, commonIndent, stripIndent, moreLabel } from './review.js';
+import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys } from './review.js';
 import { api, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
-import { PersonArt } from './peoplepages.js';
+import { PersonArt, useProfiles } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
@@ -1330,6 +1330,47 @@ function useReviewView() {
   return [view, choose];
 }
 
+// One row of the field view. The warning of a key shows in the error color.
+function FieldRow({ row }) {
+  return html`<div class="link-row static"><span class="text"><span class="label">${row.label}</span>
+    <span class="summary">${row.text}</span>
+    ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</span></div>`;
+}
+
+// "What changes": the field changes of the core in words (ADR 0114 items 1 to
+// 5). The core gives the changes and the count of the lines that it does not
+// explain.
+function FieldView({ diff }) {
+  const profiles = useProfiles(changeKeys(diff.fields));
+  const groups = fieldRows(diff.fields, profiles);
+  const guard = guardRow(diff.uncovered);
+  if (groups.length === 0 && !guard) return null;
+  // Adjacent groups with no label are rows of one channel field, and they
+  // share one group. The guard row joins the last such group (mockup screen 4).
+  const cards = [];
+  groups.forEach((g) => {
+    const last = cards[cards.length - 1];
+    if (!g.label && last && last.plain) last.parts.push(g);
+    else cards.push({ plain: !g.label, parts: [g] });
+  });
+  const guardView = guard && html`<div class="link-row static"><span class="text"><span class="label">${guard.title}</span>
+    <span class="summary">${guard.text}</span></span></div>`;
+  const lastPlain = cards.length > 0 && cards[cards.length - 1].plain;
+  const part = (g, i) => html`
+    ${g.label && html`<div class="link-row static" key=${`l${i}`}><span class="text"><span class="label">${g.label}</span>
+      ${g.summary && html`<span class="summary">${g.summary}</span>`}</span></div>`}
+    ${g.rows.map((row, j) => html`<${FieldRow} row=${row} key=${`${i}-${j}`} />`)}
+    ${g.more && html`<details class="disclosure" key=${`m${i}`}><summary class="link-row"><span class="summary">${g.more.summary}</span></summary>
+      <div class="form">${g.more.rows.map((row, j) => html`<${FieldRow} row=${row} key=${j} />`)}</div></details>`}`;
+  return html`<section class="page-section fieldview"><h2>What changes</h2>
+    ${cards.map((card, c) => html`<div class="group" key=${c}>
+      ${card.parts.map(part)}
+      ${lastPlain && c === cards.length - 1 && guardView}
+    </div>`)}
+    ${guard && !lastPlain && html`<div class="group">${guardView}</div>`}
+  </section>`;
+}
+
 // The lines of a review: the view menu, the lines with the changed parts
 // marked, and the links that open the hidden lines (ADR 0114 items 8 to 13).
 // `diff` is the answer of the diff route.
@@ -1366,12 +1407,14 @@ export function DiffView({ diff }) {
       </div>
       <button class="button" type="button" onClick=${() => setWhole(!whole)}>${whole ? 'Show Only the Changes' : 'Show the Whole File'}</button>
     </div>
+    ${view === 'simplified' && html`<${FieldView} diff=${diff} />`}
+    <section class="page-section">${view === 'simplified' && html`<h2>Changed lines</h2>`}
     <pre class="diff" tabindex="0" aria-label="Changes between the hosted file and the draft">${segments.map((s, index) => {
       if (!s.hidden) return line(s.row, `r${index}`);
       if (opened.has(s.id)) return s.rows.map((row, i) => line(row, `o${s.id}-${i}`));
       return html`<span key=${`h${s.id}`} class="line"><a class="more" href=${`#diff-run-${s.id}`}
         onClick=${(e) => { e.preventDefault(); open(s.id); }}><span aria-hidden="true">⋯ </span>${moreLabel(s.count)}</a>\n</span>`;
-    })}</pre>
+    })}</pre></section>
   </div>`;
 }
 

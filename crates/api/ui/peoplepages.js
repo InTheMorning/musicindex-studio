@@ -43,7 +43,7 @@ export function PersonArt({ person, large = false }) {
 // The profiles of Nostr keys, from `POST /nostr/resolve`. The value is null
 // while the request runs and when it fails, so that a row shows the short key
 // only (task 067d item 3).
-function useProfiles(npubs) {
+export function useProfiles(npubs) {
   const [profiles, setProfiles] = useState(null);
   const list = [...new Set(npubs.filter(Boolean))];
   const signature = list.join(',');

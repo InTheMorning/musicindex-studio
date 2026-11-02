@@ -8,6 +8,7 @@
 - Changed by: [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md). Item 12: a suggestion groups the items of one name. Item 14: the items of a suggestion can go to a person that exists, and two people can merge.
 - Uses: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change sets, [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules, [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy, and [ADR 0014](0014-collection-in-sqlite.md) for the collection.
 - Screens: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md).
+- Amended: 2026-11-02 by operator decision. Item 18: "Dismiss" hides the Lightning address of a profile for one person. The human test of `0.1.0-rc.10` found an address of the wrong account with no way to hide it.
 - Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Item 20: the operation "Correct". [ADR 0112](0112-a-credit-role-comes-from-a-list.md). Item 5: the usual role comes from the role list, with a usual group.
 
 ## Context
@@ -57,7 +58,7 @@
 ### The Lightning Address Of A Nostr Profile
 
 17. For each Nostr key of a person, the core reads the `lud16` of the newest kind 0. It uses the lookup relays of ADR 0074 item 12. It then makes the keysend lookup of ADR 0095 item 2.
-18. The address is a suggestion on the page of the person, with the result of the lookup. The user adds it to a wallet. The collection keeps no lookup of a suggestion that the user did not add, as ADR 0097 item 3 says for a guess.
+18. The address is a suggestion on the page of the person, with the result of the lookup. The user adds it to a wallet, or dismisses it with "Dismiss". The collection keeps each dismissed address for that person, and the address does not come back. A merge moves the dismissals to the person that it keeps. The collection keeps no lookup of a suggestion that the user did not add, as ADR 0097 item 3 says for a guess.
 19. Each request follows the network policy of the shell (ADR 0057). This changes the non-goal of ADR 0074 for `lud16`.
 
 ### Operations Of A Person

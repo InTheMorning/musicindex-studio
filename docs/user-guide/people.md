@@ -33,7 +33,8 @@ The page shows the details first. A field saves when you select a different fiel
 The page has no **Save** button.
 
 - **More from your feeds** lists items that can belong to this person. Select **Add** for an item.
-- **Payment** shows the wallets and the default address. Select **Add a Wallet** to add one.
+- **Payment** shows the wallets and the default address. Select **Add a Wallet** to add one. Select **Remove Wallet** below a wallet to remove it from the person.
+- A Lightning address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, remove the key in **Credits**.
 - **Credits** shows the credit names and the Nostr keys.
 - **Artist or label** shows the menu **Member of**.
 - **Merge with a Person** moves the items of a different person to this person.

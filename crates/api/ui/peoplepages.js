@@ -563,11 +563,16 @@ export function PersonPage({ id, feeds, go }) {
           member=${m.member} count=${usedText(m.count)} />`)}
         <div class="actions"><button class="button" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${suggestions.map((s) => html`<div class="group" key=${s.address}><${AddressRow} member=${{ address: s.address, recipient_type: 'lnaddress' }}
-        note=${profileAddressNote(s.npub, profiles)}
-        action=${html`<button class="button action" type="button" onClick=${() => act(async () => {
+        note=${profileAddressNote(s.npub, profiles)} />
+        <div class="actions"><button class="button action" type="button" onClick=${() => act(async () => {
           await api(`/people/${id}/profile-addresses`, { method: 'POST', body: { address: s.address } });
           await loadSuggestions();
-        })}>Add to Wallet</button>`} /></div>`)}
+        })}>Add to Wallet</button>
+        <button class="button" type="button" onClick=${() => act(async () => {
+          // "Dismiss" hides the address for this person for good (ADR 0098 item 18).
+          await api(`/people/${id}/profile-addresses/dismiss`, { method: 'POST', body: { address: s.address } });
+          await loadSuggestions();
+        })}>Dismiss</button></div></div>`)}
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => setLinking('wallets')} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
       <${PersonFields} person=${person} onSave=${saveFields} />

@@ -509,6 +509,17 @@ ALTER TABLE grant_writes ADD COLUMN cause TEXT;
     r"
 ALTER TABLE people ADD COLUMN usual_group TEXT NOT NULL DEFAULT '';
 ",
+    // ADR 0098 item 18: the user can dismiss the Lightning address of a
+    // profile for one person. The address then does not come back for that
+    // person.
+    r"
+CREATE TABLE person_address_dismissals (
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    address TEXT NOT NULL,
+    dismissed_at INTEGER NOT NULL,
+    PRIMARY KEY (person_id, address)
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside

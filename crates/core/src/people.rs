@@ -2398,12 +2398,67 @@ pub fn merge_people(
         "UPDATE change_sets SET person_id = ?1 WHERE person_id = ?2",
         params![keep.0, other.0],
     )?;
+    tx.execute(
+        "UPDATE OR IGNORE person_address_dismissals SET person_id = ?1 WHERE person_id = ?2",
+        params![keep.0, other.0],
+    )?;
     tx.execute("DELETE FROM people WHERE id = ?1", [other.0])?;
     tx.commit()?;
     Ok(())
 }
 
 // ---- The Lightning address of a profile (ADR 0098 items 17 to 19) ----
+
+/// Dismiss the Lightning address of a profile for `person` (the button
+/// "Dismiss", ADR 0098 item 18). [`profile_addresses`] then leaves it out.
+/// The address is kept in lowercase. A second dismissal changes nothing.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] for an empty address, a missing
+/// person error for an unknown person, and a [`CollectionError`] when
+/// SQLite fails.
+pub fn dismiss_profile_address(
+    collection: &Collection,
+    person: PersonId,
+    address: &str,
+) -> Result<(), CollectionError> {
+    let address = address.trim().to_lowercase();
+    if address.is_empty() {
+        return Err(CollectionError::invalid("the address is empty"));
+    }
+    let exists: bool = collection.db().query_row(
+        "SELECT EXISTS (SELECT 1 FROM people WHERE id = ?1)",
+        [person.0],
+        |r| r.get(0),
+    )?;
+    if !exists {
+        return Err(missing(person));
+    }
+    collection.db().execute(
+        "INSERT OR IGNORE INTO person_address_dismissals (person_id, address, dismissed_at)
+         VALUES (?1, ?2, ?3)",
+        params![person.0, address, now()],
+    )?;
+    Ok(())
+}
+
+/// The Lightning addresses that the user dismissed for `person`, in
+/// lowercase.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn dismissed_profile_addresses(
+    collection: &Collection,
+    person: PersonId,
+) -> Result<HashSet<String>, CollectionError> {
+    let mut statement = collection
+        .db()
+        .prepare("SELECT address FROM person_address_dismissals WHERE person_id = ?1")?;
+    let rows = statement.query_map([person.0], |r| r.get::<_, String>(0))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
 
 /// The Lightning address in the profile of a key of a person, with a
 /// keysend lookup that gives a wallet.
@@ -2423,13 +2478,16 @@ pub struct ProfileAddress {
 /// added to a wallet (ADR 0098 items 17 to 19).
 ///
 /// The function reads the `lud16` of the newest kind 0 of each key. It
-/// leaves out an address that is a member of a wallet of the person
-/// already. It requests the keysend data of each other address and gives
+/// leaves out an address in `dismissed` and an address that is a member of
+/// a wallet of the person already. It requests the keysend data of each other address and gives
 /// only an address with a `Found` result. It keeps no lookup, so the
 /// collection has no lookup of a suggestion that the user did not add
 /// (ADR 0097 item 3). Each request follows `policy` (ADR 0057).
+// The dismissed addresses come in as their own set, so that no keysend
+// request goes to an address that the user refused.
+#[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn profile_addresses<S: BuildHasher>(
+pub fn profile_addresses<S: BuildHasher, T: BuildHasher>(
     web: &Web,
     policy: &NetPolicy,
     relays: &[String],
@@ -2437,11 +2495,13 @@ pub fn profile_addresses<S: BuildHasher>(
     limit: Duration,
     person: &Person,
     lookups: &HashMap<String, Lookup, S>,
+    dismissed: &HashSet<String, T>,
 ) -> Vec<ProfileAddress> {
     let npubs: Vec<String> = person.keys.iter().map(|k| k.npub.clone()).collect();
     let wanted: Vec<(String, String)> =
         profiles::lightning_addresses_by_key(relays, policy, limit, &npubs)
             .into_iter()
+            .filter(|(_, address)| !dismissed.contains(&address.trim().to_lowercase()))
             .filter(|(_, address)| {
                 let key = RecipientKey {
                     address: address.clone(),
@@ -3583,6 +3643,7 @@ mod tests {
             profiles::SOURCE_LIMIT,
             &person,
             &HashMap::new(),
+            &HashSet::new(),
         );
         assert_eq!(list.len(), 1, "{list:?}");
         assert_eq!(list[0].address, ann_address);
@@ -3590,6 +3651,49 @@ mod tests {
         assert_eq!(list[0].wallet.address, "node-1");
         assert!(!list[0].in_person_wallet);
         assert_eq!(collection.keysend_lookups().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn a_dismissed_profile_address_is_not_a_suggestion() {
+        let collection = Collection::open_in_memory().unwrap();
+        let server = crate::testing::TestServer::start(vec![(
+            "/.well-known/keysend/ann",
+            200,
+            KEYSEND.as_bytes().to_vec(),
+        )]);
+        let ann_address = format!("ann@127.0.0.1:{}", server.port());
+        let (relay, npubs) = profile_relay(&[(7, &ann_address)]);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_key(&collection, ann, &npubs[0]).unwrap();
+        dismiss_profile_address(
+            &collection,
+            ann,
+            &format!("  {} ", ann_address.to_uppercase()),
+        )
+        .unwrap();
+        dismiss_profile_address(&collection, ann, &ann_address).unwrap();
+        let dismissed = dismissed_profile_addresses(&collection, ann).unwrap();
+        assert_eq!(
+            dismissed,
+            HashSet::from([ann_address.to_lowercase()]),
+            "ADR 0098 item 18: a dismissal keeps the address one time, in lowercase. Check dismiss_profile_address."
+        );
+        let list = profile_addresses(
+            &Web::new(),
+            &NetPolicy::Open,
+            &[relay.url()],
+            "http",
+            profiles::SOURCE_LIMIT,
+            &person(&collection, ann).unwrap(),
+            &HashMap::new(),
+            &dismissed,
+        );
+        assert!(
+            list.is_empty(),
+            "ADR 0098 item 18: \"Dismiss\" must hide the address for the person. Check the filter of profile_addresses. {list:?}"
+        );
+        assert!(dismiss_profile_address(&collection, PersonId(99), &ann_address).is_err());
+        assert!(dismiss_profile_address(&collection, ann, " ").is_err());
     }
 
     #[test]
@@ -3625,6 +3729,7 @@ mod tests {
                 profiles::SOURCE_LIMIT,
                 &person,
                 lookups,
+                &HashSet::new(),
             )
         };
         // With no stored lookup, only the address itself is a member.

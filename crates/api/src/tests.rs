@@ -10406,6 +10406,7 @@ async fn each_people_route_needs_the_token() {
         ("POST", "/api/v1/people/1/changes"),
         ("POST", "/api/v1/people/1/changes/preview"),
         ("GET", "/api/v1/people/1/check"),
+        ("POST", "/api/v1/people/1/profile-addresses/dismiss"),
         ("POST", "/api/v1/people/1/items"),
         ("GET", "/api/v1/people/1/more"),
         ("POST", "/api/v1/people/1/merge"),
@@ -10505,6 +10506,56 @@ async fn a_profile_address_is_a_suggestion_and_the_user_adds_it_with_the_evidenc
     // The address is a member of the wallet now, so it is no suggestion.
     let (_, body) = call(&app, "GET", &path, None).await;
     assert_eq!(body["suggestions"], json!([]));
+}
+
+#[tokio::test]
+async fn a_dismissed_profile_address_does_not_come_back_and_a_merge_keeps_the_dismissal() {
+    let (app, id, address, _servers) = person_with_profile_address().await;
+    let path = format!("/api/v1/people/{id}/profile-addresses");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{path}/dismiss"),
+        Some(json!({ "address": address })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (_, body) = call(&app, "GET", &path, None).await;
+    assert_eq!(
+        body["suggestions"],
+        json!([]),
+        "ADR 0098 item 18: a dismissed address must not come back. Check list_profile_addresses."
+    );
+    // A merge moves the dismissal to the person that it keeps.
+    let keep = new_person(&app, "Keep").await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{keep}/merge"),
+        Some(json!({ "other": id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let (_, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{keep}/profile-addresses"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        body["suggestions"],
+        json!([]),
+        "ADR 0098 item 18: a merge must keep the dismissal. Check merge_people."
+    );
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/people/999/profile-addresses/dismiss",
+        Some(json!({ "address": address })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

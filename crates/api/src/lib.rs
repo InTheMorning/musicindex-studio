@@ -194,6 +194,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/people/{id}/profile-addresses",
             get(people::list_profile_addresses).post(people::add_profile_address),
         )
+        .route(
+            "/people/{id}/profile-addresses/dismiss",
+            post(people::dismiss_profile_address),
+        )
         .route("/people/{id}/items", post(people::add_items))
         .route("/people/{id}/more", get(people::more_items))
         .route("/people/{id}/merge", post(people::merge_person))

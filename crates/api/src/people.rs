@@ -413,10 +413,11 @@ pub(crate) async fn list_profile_addresses(
             scheme,
             person,
             lookups(&w.collection)?,
+            people::dismissed_profile_addresses(&w.collection, PersonId(id))?,
         )))
     })
     .await?;
-    let Some((web, policy, relays, scheme, person, lookups)) = facts else {
+    let Some((web, policy, relays, scheme, person, lookups, dismissed)) = facts else {
         return Ok(Json(json!({ "suggestions": [] })));
     };
     blocking_unlocked(move || {
@@ -428,6 +429,7 @@ pub(crate) async fn list_profile_addresses(
             profiles::SOURCE_LIMIT,
             &person,
             &lookups,
+            &dismissed,
         );
         Ok(Json(json!({ "suggestions": list })))
     })
@@ -458,6 +460,21 @@ pub(crate) async fn add_profile_address(
             people::add_profile_address(&w.collection, &w.web, scheme, PersonId(id), &body.address)
                 .map_err(person_error)?;
         Ok(created(link))
+    })
+    .await
+}
+
+/// Dismiss the Lightning address of a profile for a person (ADR 0098 item
+/// 18). The address does not come back as a suggestion for that person.
+pub(crate) async fn dismiss_profile_address(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<ProfileAddressBody>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        people::dismiss_profile_address(&w.collection, PersonId(id), &body.address)
+            .map_err(person_error)?;
+        Ok(StatusCode::NO_CONTENT)
     })
     .await
 }

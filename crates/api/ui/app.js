@@ -2688,9 +2688,10 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
 // ---- Wallets and change sets (ADR 0091, ADR 0099) ----
 
 // A checkbox row of a feed, with its title and its places (ADR 0091 item 3).
-export function FeedCheckRow({ title, text, checked, onChange }) {
+export function FeedCheckRow({ title, text, lines, checked, onChange }) {
+  const shown = lines || (text ? [text] : []);
   return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onChange} />
-    <span class="text"><span class="label">${title}</span>${text && html`<span class="summary">${text}</span>`}</span></label>`;
+    <span class="text"><span class="label">${title}</span>${shown.map((line) => html`<span class="summary">${line}</span>`)}</span></label>`;
 }
 
 // Write one feed of a change set: the diff, the signer, then the write

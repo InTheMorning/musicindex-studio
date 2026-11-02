@@ -1168,6 +1168,10 @@ pub struct Suggestion {
     pub evidence: Vec<Evidence>,
     /// The key of each item, for [`dismiss`].
     pub item_keys: Vec<String>,
+    /// The person whose normal name, or one of whose credit names, has the
+    /// normal name of the suggestion (ADR 0111 item 6). With two matches,
+    /// the person with the lowest ID.
+    pub person_id: Option<PersonId>,
 }
 
 /// The items that the user selects to make a person (ADR 0098 item 14).
@@ -1837,6 +1841,23 @@ pub fn check<S: BuildHasher>(
     Ok(PersonCheck { feeds })
 }
 
+/// The normal name of each person and of each credit name, with the ID of
+/// its person (ADR 0111 item 6).
+fn person_names(collection: &Collection) -> Result<Vec<(String, PersonId)>, CollectionError> {
+    let mut names = Vec::new();
+    for person in people(collection)? {
+        names.push((normal_name(&person.name), person.id));
+        names.extend(
+            person
+                .credit_names
+                .iter()
+                .filter(|c| !c.name.trim().is_empty())
+                .map(|c| (normal_name(&c.name), person.id)),
+        );
+    }
+    Ok(names)
+}
+
 /// The suggestions of people from the credits and the recipients of the
 /// feeds (ADR 0098 items 12 to 16). This function makes no person and no
 /// link.
@@ -1866,6 +1887,7 @@ pub fn suggestions<S: BuildHasher>(
         .collect();
 
     let plans = plan_groups(&groups);
+    let names = person_names(collection)?;
     let mut list = Vec::new();
     for (group, (name, group_name, pays)) in groups.into_iter().zip(plans) {
         let identity_key = group.key.clone();
@@ -1925,6 +1947,12 @@ pub fn suggestions<S: BuildHasher>(
         if joined.iter().any(|r| r.joined_by == JoinedBy::Wallet) {
             evidence.push(Evidence::SameWallet);
         }
+        let wanted = normal_name(&name);
+        let person_id = names
+            .iter()
+            .filter(|(n, _)| *n == wanted)
+            .map(|(_, id)| *id)
+            .min_by_key(|id| id.0);
         list.push(Suggestion {
             identity: identity_key,
             name,
@@ -1934,6 +1962,7 @@ pub fn suggestions<S: BuildHasher>(
             payee_feeds: payee_feeds.len(),
             evidence,
             item_keys,
+            person_id,
         });
     }
     list.sort_by(|a, b| {
@@ -3397,6 +3426,24 @@ mod tests {
         let list = suggest(&collection);
         dismiss(&collection, &list[0].identity, &list[0].item_keys).unwrap();
         assert_eq!(counts(&collection), (0, 0));
+    }
+
+    #[test]
+    fn suggestion_gives_the_person_with_the_same_normal_name() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann  Lee", "artist", "", "npub1ann");
+        credit(&collection, 2, "Zed", "artist", "", "npub1zed");
+        credit(&collection, 3, "Quinn", "artist", "", "npub1quinn");
+        add_person(&collection, &fields("bob")).unwrap();
+        let second = add_person(&collection, &fields("ann lee")).unwrap();
+        let first = add_person(&collection, &fields("Other")).unwrap();
+        add_credit_name(&collection, first, " ANN LEE ", "", "").unwrap();
+        add_credit_name(&collection, second, "Zed", "", "").unwrap();
+        let list = suggest(&collection);
+        let by_name = |name: &str| list.iter().find(|s| s.name == name).unwrap().person_id;
+        // The lowest ID wins when two people match.
+        assert_eq!(by_name("Ann  Lee"), Some(PersonId(second.0.min(first.0))));
+        assert_eq!(by_name("Quinn"), None);
     }
 
     #[test]

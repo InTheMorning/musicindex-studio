@@ -5,6 +5,7 @@
 
 import { shortKey } from './nostrkey.js';
 import { feedKind, isPublisher } from './shell.js';
+import { placesText } from './recipients.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const feedCount = (n) => plural(n, 'feed', 'feeds');
@@ -103,7 +104,7 @@ export function personRow(person, feedTitles) {
   return { title: person.name, lines, count: feedCount(feedsOf(person)) };
 }
 
-// The start state of the sheet "Make a Person" (ADR 0099 item 3). An item
+// The start state of the sheet "Check: {name}" (ADR 0111 item 7). An item
 // with a different name starts not selected. The sheet has `memberOf` as text.
 // `profiles` is the result of `profileMap`, or null before it is known. A key
 // whose profile name differs from the name starts not selected (ADR 0103
@@ -369,13 +370,7 @@ export function profileAddressNote(npub, profiles) {
   return `From the Nostr profile ${name ? `${name} (${short})` : short} · keysend checked`;
 }
 
-// The title of the sheet "Make a Person".
-export const makeSheetTitle = (name) => `Make a Person: ${name}`;
-
-// The hint of the sheet "Make a Person" (ADR 0099 item 3).
-export const makeSheetHint = (name) => `Studio found these items with the name "${name}". Select the items that are this person. Studio changes no feed.`;
-
-// The row of a credit in the sheet "Make a Person".
+// The row of a credit in the sheet "Check: {name}".
 export function creditItemRow(item, titles) {
   const feeds = (item.feeds || []).map((id) => titleOf(titles, id));
   const lines = [];
@@ -384,7 +379,7 @@ export function creditItemRow(item, titles) {
   return { title: (item.roles || []).length > 0 ? item.roles.join(', ') : 'Credit', lines };
 }
 
-// The row of a payment address in the sheet "Make a Person".
+// The row of a payment address in the sheet "Check: {name}".
 export function payeeItemRow(item) {
   const count = (item.feeds || []).length;
   const lines = [feedCount(count)];
@@ -392,7 +387,7 @@ export function payeeItemRow(item) {
   return { title: addressText(item.key, item.recipient_type), lines };
 }
 
-// The row of a Nostr key in the sheet "Make a Person".
+// The row of a Nostr key in the sheet "Check: {name}".
 export const keyItemRow = (npub, profiles = null, name = '') => {
   const row = keyRow(npub, profiles, name);
   return { ...row, lines: [...row.lines, 'In a credit of the feeds'] };
@@ -769,8 +764,128 @@ export function changeLine(set, name) {
       const parts = [op.payee && 'a payee', op.credit && 'a credit'].filter(Boolean);
       return `Remove ${who} as ${joinList(parts)} from ${feedCount(n)}`;
     }
+    case 'correct': {
+      const parts = [op.npub && 'the Nostr key', op.payment && 'the payment address', (op.img || op.href) && 'the picture and the information address',
+        op.role && 'the role', op.other_payees && 'the payees with this name'].filter(Boolean);
+      return `Correct ${joinList(parts)} of ${who} in ${feedCount(n)}`;
+    }
     default: return '';
   }
+}
+
+// ---- The page "Check your feeds": the correction (ADR 0111 items 14 to 17, task 075c) ----
+
+// The number of feeds that "Correct N Feeds" names: each feed that is not
+// correct. The preview of the core leaves out a feed with no change.
+export const correctCount = (check) => ((check && check.feeds) || []).filter((f) => f.state !== 'correct').length;
+
+export const correctButtonLabel = (n) => `Correct ${plural(n, 'Feed', 'Feeds')}`;
+export const correctTitle = (name) => `Correct the Feeds: ${name}`;
+export const CORRECT_OMITTED = 'A feed with no change is not in the list.';
+export const CORRECT_EMPTY = 'No feed changes with these corrections.';
+
+// The IDs of the feeds that the preview covers: each feed that is not correct.
+export const correctFeedIds = (check) => ((check && check.feeds) || []).filter((f) => f.state !== 'correct').map((f) => f.feed_id);
+
+// The first Nostr key of a person, or an empty text.
+const firstNpub = (person) => ((person.keys || [])[0] || {}).npub || '';
+
+// The changes that a person can select. A change that needs a key or a
+// wallet shows only when the person has one.
+export function correctAvailable(person) {
+  const wallets = (person.wallets || []).length > 0;
+  return { key: (person.keys || []).length > 0, payment: wallets, details: true, role: true, other_payees: wallets };
+}
+
+// The start state of the sheet. Each change starts selected, except the
+// payees with this name, because that change moves a payment to a different
+// wallet.
+export function correctStart(person) {
+  const can = correctAvailable(person);
+  return {
+    key: can.key, npub: firstNpub(person), payment: can.payment, details: true, role: true, other_payees: false,
+  };
+}
+
+// The check boxes of the sheet: `id`, `label` and `line`.
+export function correctOptions(person, fields, profiles = null) {
+  const can = correctAvailable(person);
+  const who = profileName(fields.npub, profiles) || shortKey(fields.npub || '');
+  const role = trimmed(person.usual_role);
+  const all = [
+    ['key', 'Nostr key', `Each credit of ${person.name} gets ${who}`],
+    ['payment', 'Payment address', `Each payment of ${person.name} uses the default address`],
+    ['details', 'Picture and information address', 'Each credit gets the picture and the information address of this person'],
+    ['role', 'Role', role === '' ? 'Each credit with no role gets the usual role' : `Each credit with no role gets ${role}`],
+    ['other_payees', 'Payees with this name that pay a different wallet', 'Each such payee pays the default address. This changes who gets the payment'],
+  ];
+  return all.filter(([id]) => can[id]).map(([id, label, line]) => ({ id, label, line }));
+}
+
+// The choices of the menu "Key", or an empty list for a person with one key.
+export const correctKeyChoices = (person, profiles = null) => ((person.keys || []).length < 2 ? []
+  : person.keys.map((k) => [k.npub, profileName(k.npub, profiles) || shortKey(k.npub)]));
+
+// The `PersonOperation` of the correction. The core checks each value.
+export function correctBody(fields) {
+  return {
+    kind: 'correct',
+    key: fields.key && fields.npub ? fields.npub : null,
+    payment: !!fields.payment,
+    details: !!fields.details,
+    role: !!fields.role,
+    other_payees: !!fields.other_payees,
+  };
+}
+
+// True when the sheet selects one change at least.
+export const correctAnySelected = (fields) => !!(fields.key || fields.payment || fields.details || fields.role || fields.other_payees);
+
+// The feeds of the preview that the core changes, as the rows of the sheet.
+// A feed with the cause `no_credit`, `no_recipient` or `has_new_address` is
+// "Not changed", and the sheet leaves it out (ADR 0111 item 16). Any other
+// feed that the core does not change is also left out, and `omitted` counts
+// them. `placeRows` maps the ID of a feed to its row with `title` and
+// `lines`. `before` is the list of the rows now, so that a selection stays
+// after a new preview.
+// The change of the sheet "Correct the Feeds" that corrects each kind of
+// finding of the check (ADR 0111 items 9 and 15).
+const CORRECTED_BY = {
+  credit_key: 'key', credit_details: 'details', credit_role: 'role', not_default: 'payment', other_wallet: 'other_payees',
+};
+
+// The lines of the findings of one feed that the selected changes correct.
+// The findings come from the check of the core. This is a display aid.
+export function correctFindingLines(entry, fields, name, profiles = null) {
+  return ((entry && entry.findings) || [])
+    .filter((f) => fields[CORRECTED_BY[f.kind]])
+    .map((f) => findingLine(f, name, profiles, entry.state).text)
+    .filter(Boolean);
+}
+
+// The rows of the sheet "Correct the Feeds". `check`, `fields`, `name` and
+// `profiles` give the findings that the selected changes correct.
+export function correctRows(preview, titles, placeRows, before = [], check = null, fields = {}, name = '', profiles = null) {
+  const checks = new Map(((check && check.feeds) || []).map((f) => [f.feed_id, f]));
+  const kept = new Map(before.map((r) => [r.id, r.checked]));
+  const rows = [];
+  let omitted = 0;
+  for (const entry of (preview && preview.feeds) || []) {
+    const outcome = entry.outcome || {};
+    if (outcome.outcome !== 'changed') {
+      omitted += 1;
+      continue;
+    }
+    const place = placeRows.get(entry.feed_id);
+    rows.push({
+      id: entry.feed_id,
+      title: place ? place.title : titleOf(titles, entry.feed_id),
+      checked: kept.has(entry.feed_id) ? kept.get(entry.feed_id) : true,
+      lines: [[...(place ? place.lines.slice(0, 1) : []), placesText(outcome)].filter(Boolean).join(' · '),
+        ...correctFindingLines(checks.get(entry.feed_id), fields, name, profiles)].filter(Boolean),
+    });
+  }
+  return { rows, omitted };
 }
 
 // ---- The recipient picker (ADR 0099 item 19, task 066a) ----
@@ -898,9 +1013,11 @@ export function personChoices(people, exceptId = null) {
     .map((p) => [String(p.id), p.name]);
 }
 
+// The title of the sheet that adds a payee with no person to a person
+// (ADR 0111 item 8).
 export const addToTitle = (name) => `Add to a Person: ${name}`;
+// The hint under a person of the sheet "Check: {name}" (ADR 0103 item 9).
 export const ADD_TO_HINT = 'Studio adds the selected items to the person. Studio changes no feed.';
-export const NO_PERSON_TEXT = 'No person yet. Make a person first.';
 export const addItemsLabel = (n) => addPickLabel(n, 'Item', 'Items');
 
 const trimmed = (text) => String(text ?? '').trim();
@@ -931,7 +1048,8 @@ export function addToRows(state, person, titles = null, profiles = null) {
   const status = (group, r, i, row) => {
     const already = hasItem(person, group, r.item);
     const flag = already ? `Already in ${person.name}` : 'New';
-    return { group, index: i, already, checked: !already && r.checked, ...row, lines: [...row.lines, flag] };
+    // A new person has no flag: no item is in it yet.
+    return { group, index: i, already, checked: !already && r.checked, ...row, lines: person ? [...row.lines, flag] : row.lines };
   };
   return [
     ['credits', 'Credits', (item) => creditItemRow(item, titles)],
@@ -956,6 +1074,62 @@ export function addItemsBody(state, person) {
     keys: chosen('keys').map((r) => r.item),
   };
 }
+
+// ---- The sheet "Check: {name}" (ADR 0111 items 5 to 7, task 075c) ----
+
+// The value of the menu entry "A new person".
+export const NEW_PERSON = 'new';
+
+export const checkSheetTitle = (name) => `Check: ${name}`;
+
+// The hint of the menu "Person" when it shows the person with the name of
+// the suggestion (ADR 0111 item 6).
+export const MATCH_HINT = 'You have a person with this name. Studio adds the selected items to it.';
+
+// The hint under the menu "Member of" of a new person.
+export const NEW_MEMBER_HINT = 'The artist or label that this person is in. Studio changes no feed.';
+
+// The hint under the items of a new person.
+export const NEW_PERSON_HINT = 'Select the items that are this person. Studio changes no feed.';
+
+// The start state of the sheet. The menu starts on `person_id` of the
+// suggestion, else on "A new person". The core finds `person_id`.
+export function checkSheetStart(suggestion, profiles = null) {
+  const personId = suggestion.person_id === null || suggestion.person_id === undefined ? NEW_PERSON : String(suggestion.person_id);
+  return { ...makePersonStart(suggestion, profiles), personId };
+}
+
+// The choices of the menu "Person": "A new person", then each person A to Z.
+export const checkSheetChoices = (people) => [[NEW_PERSON, 'A new person'], ...personChoices(people)];
+
+// The hint of the menu: the text for the person that matches the suggestion.
+export const checkSheetHint = (suggestion, personId) => (
+  suggestion.person_id !== null && suggestion.person_id !== undefined && String(suggestion.person_id) === personId ? MATCH_HINT : undefined);
+
+// The person of the menu, or null for "A new person".
+export const checkSheetPerson = (state, people) => (state.personId === NEW_PERSON ? null
+  : (people || []).find((p) => String(p.id) === state.personId) || null);
+
+// The label of the primary button: "Add 1 Item" or "Add N Items" for a person,
+// else "Make the Person".
+export const checkSheetLabel = (state, person) => (person ? addItemsLabel(addSelectedCount(state, person)) : 'Make the Person');
+
+// True when the primary button works: a person with one new selected item,
+// or a new person with a name.
+export const checkSheetReady = (state, person) => (person ? addSelectedCount(state, person) > 0 : trimmed(state.name) !== '');
+
+// ---- The sheet "Add to a Person: {name}" of a payee (ADR 0111 item 8) ----
+
+export const WALLET_TO_PERSON_HINT = 'Studio keeps this wallet with the person. Studio changes no feed.';
+
+// The start state: "A new person" with the name of the payee.
+export const walletToPersonStart = (name) => ({ personId: NEW_PERSON, name: String(name ?? '') });
+
+// True when the primary button works.
+export const walletToPersonReady = (state) => state.personId !== NEW_PERSON || trimmed(state.name) !== '';
+
+// The label of the primary button.
+export const walletToPersonLabel = (state) => (state.personId === NEW_PERSON ? 'Make the Person' : 'Add the Wallet');
 
 export const MORE_HINT = 'Studio found these items with the name, a wallet or a Nostr key of this person. Add the items that are this person.';
 

@@ -8,19 +8,23 @@ import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
 import {
-  recipientKey, recipientRow, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES,
+  recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES,
   CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
   walletSheetReady, recipientTitle,
 } from './recipients.js';
 import {
-  peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, initials,
-  filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices, makeSheetTitle,
-  makeSheetHint, creditItemRow, payeeItemRow, keyItemRow, toggledItem, dismissBody, addPersonBody,
+  peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonBody, initials,
+  filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
+  toggledItem, dismissBody, addPersonBody,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, personFieldsBody, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
-  personChoices, addToTitle, ADD_TO_HINT, NO_PERSON_TEXT, addItemsLabel, addToRows, addSelectedCount, addItemsBody, MORE_HINT,
+  personChoices, addToTitle, ADD_TO_HINT, addToRows, addItemsBody, MORE_HINT,
+  NEW_MEMBER_HINT, NEW_PERSON_HINT, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson,
+  checkSheetLabel, checkSheetReady, NEW_PERSON, WALLET_TO_PERSON_HINT, walletToPersonStart, walletToPersonReady,
+  walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctOptions,
+  correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   memberChange, saveStatus, FIELDS_HINT, MEMBER_HINT, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
 } from './people.js';
@@ -72,11 +76,11 @@ function KeyRowView({ npub, profiles, name, action, note }) {
 // One row of a list: a button with the lines of its model. A line is text, or
 // `{ text, error }`. An error line shows in the error color, with the warning
 // icon.
-function ListRow({ title, lines, count, lead, onClick }) {
+function ListRow({ title, lines, count, lead, onClick, disabled = false }) {
   const line = (l, i) => (typeof l === 'string'
     ? html`<span class="summary" key=${i}>${l}</span>`
     : html`<span class=${l.error ? 'summary check-error' : 'summary'} key=${i}>${l.error && html`<${Icon} name="alert" />`}${l.text}</span>`);
-  return html`<button class="link-row" type="button" onClick=${onClick}>${lead}
+  return html`<button class="link-row" type="button" disabled=${disabled} onClick=${onClick}>${lead}
     <span class="text"><span class="label">${title}</span>${lines.map(line)}</span>
     ${count && html`<span class="count">${count}</span>`}<span class="go">›</span></button>`;
 }
@@ -153,106 +157,43 @@ export function PeoplePage({ feeds, go }) {
     ${data === null && !error && html`<p class="empty" role="status">Loading the people…</p>`}
     ${sections.map((id) => html`<${Fragment} key=${id}>${sectionViews[id]()}<//>`)}
   </section>
-  <${MakePersonSheet} suggestion=${making} feeds=${feeds} titles=${titles} go=${go}
+  <${CheckSuggestionSheet} suggestion=${making} people=${data ? data.people : []} feeds=${feeds} titles=${titles} go=${go}
     onClose=${() => setMaking(null)} onDismissed=${() => { setMaking(null); load(); }} />
   <${AddPersonSheet} open=${adding} go=${go} onClose=${() => setAdding(false)} /></div>`;
 }
 
 const Fragment = ({ children }) => children;
 
-// The sheet "Make a Person: {name}" (ADR 0099 item 3). The sheet changes no
-// feed. The core makes the person, and a 409 gives its message here.
-function MakePersonSheet({ suggestion, feeds, titles, go, onClose, onDismissed }) {
+// The sheet "Check: {name}" (ADR 0111 items 5 to 7). The menu "Person" picks
+// a new person or a person that exists. The sheet changes no feed. The core
+// makes the person or adds the items, and a 409 gives its message here.
+function CheckSuggestionSheet({ suggestion, people, feeds, titles, go, onClose, onDismissed }) {
   const ref = useSheet(suggestion !== null);
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="make-person-title" onClose=${onClose}>
-    ${suggestion && html`<${MakePersonForm} key=${suggestion.identity} suggestion=${suggestion} feeds=${feeds} titles=${titles}
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="check-suggestion-title" onClose=${onClose}>
+    ${suggestion && html`<${CheckSuggestionForm} key=${suggestion.identity} suggestion=${suggestion} people=${people} feeds=${feeds} titles=${titles}
       go=${go} onCancel=${() => ref.current.close()} onDismissed=${onDismissed} />`}
   </dialog>`;
 }
 
-function MakePersonForm({ suggestion, feeds, titles, go, onCancel, onDismissed }) {
-  const [state, setState] = useState(() => makePersonStart(suggestion));
+function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, onDismissed }) {
+  const [state, setState] = useState(() => checkSheetStart(suggestion));
   const profiles = useProfiles(state.keys.map((r) => r.item));
   useEffect(() => { if (profiles) setState((current) => withProfiles(current, profiles)); }, [profiles]);
-  const [adding, setAdding] = useState(false);
   const { busy, error, run } = useAction();
-  const make = () => run(async () => {
-    const made = await api('/people/suggestions/make', { method: 'POST', body: makePersonBody(state) });
-    go({ name: 'person', id: made.id });
+  const person = checkSheetPerson(state, people);
+  const groups = addToRows(state, person, titles, profiles);
+  const submit = () => run(async () => {
+    if (person) {
+      await api(`/people/${person.id}/items`, { method: 'POST', body: addItemsBody(state, person) });
+      go({ name: 'person', id: person.id });
+    } else {
+      const made = await api('/people/suggestions/make', { method: 'POST', body: makePersonBody(state) });
+      go({ name: 'person', id: made.id });
+    }
   });
   const dismiss = () => run(async () => {
     await api('/people/suggestions/dismiss', { method: 'POST', body: dismissBody(suggestion) });
     onDismissed();
-  });
-  const group = (title, name, rows, rowOf) => rows.length > 0 && html`<section class="page-section"><h2>${title}</h2>
-    <div class="group rows">${rows.map((r, i) => {
-      const row = rowOf(r.item);
-      return html`<${FeedCheckRow} key=${i} title=${row.title} text=${row.lines.join(' · ')} checked=${r.checked}
-        onChange=${() => setState(toggledItem(state, name, i))} />`;
-    })}</div></section>`;
-  const keyGroup = () => state.keys.length > 0 && html`<section class="page-section"><h2>Nostr key</h2>
-    <div class="group rows">${state.keys.map((r, i) => {
-      const row = keyItemRow(r.item, profiles, suggestion.name);
-      return html`<div class="key-row" key=${r.item}><label class="link-row use-row">
-          <input type="checkbox" checked=${r.checked} onChange=${() => setState(toggledItem(state, 'keys', i))} />
-          <${PersonArt} person=${{ img: row.picture, name: row.title }} /><${KeyText} row=${row} /></label>
-        <${CopyButton} text=${r.item} label="the Nostr key" /></div>`;
-    })}</div></section>`;
-  return html`<header>
-      <h2 id="make-person-title">${makeSheetTitle(suggestion.name)}</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
-    </header>
-    <div class="body">
-      <p class="hint">${makeSheetHint(suggestion.name)}</p>
-      ${group('Credits', 'credits', state.credits, (item) => creditItemRow(item, titles))}
-      ${group('Payment addresses', 'recipients', state.recipients, payeeItemRow)}
-      ${keyGroup()}
-      <section class="page-section"><h2>Artist or label</h2><div class="group rows">
-        <${ChoiceSelect} id="make-member" label="Member of" value=${state.memberOf} placeholder="None"
-          hint="The artist or label feed where this person is a member." options=${memberChoices(feeds)}
-          onChange=${(memberOf) => setState({ ...state, memberOf })} /></div></section>
-      <${ErrorNotice} error=${error} />
-    </div>
-    <footer>
-      <button class="button" type="button" disabled=${busy} onClick=${dismiss}>Not This Person</button>
-      <button class="button action" type="button" disabled=${busy} onClick=${() => setAdding(true)}>Add to a Person</button>
-      <button class="button primary" type="button" disabled=${busy} onClick=${make}>${busy ? 'Making the Person…' : 'Make the Person'}</button>
-    </footer>
-    <${AddToPersonSheet} open=${adding} suggestion=${suggestion} profiles=${profiles} titles=${titles} go=${go}
-      onClose=${() => setAdding(false)} />`;
-}
-
-// The sheet "Add to a Person: {name}" (ADR 0103 items 8 to 10). It opens over
-// the sheet "Make a Person". The core adds the items, and then the page of
-// the person opens.
-function AddToPersonSheet({ open, suggestion, profiles, titles, go, onClose }) {
-  const ref = useSheet(open);
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="add-to-title" onClose=${onClose}>
-    ${open && html`<${AddToPersonForm} suggestion=${suggestion} profiles=${profiles} titles=${titles} go=${go}
-      onCancel=${() => ref.current.close()} />`}
-  </dialog>`;
-}
-
-function AddToPersonForm({ suggestion, profiles, titles, go, onCancel }) {
-  const [people, setPeople] = useState(null);
-  const [personId, setPersonId] = useState('');
-  const [state, setState] = useState(() => makePersonStart(suggestion, profiles));
-  const { busy, error, run } = useAction();
-  useEffect(() => {
-    run(async () => {
-      const list = await api('/people');
-      setPeople(list);
-      const first = personChoices(list)[0];
-      if (first) setPersonId(first[0]);
-    });
-  }, []);
-  useEffect(() => { if (profiles) setState((current) => withProfiles(current, profiles)); }, [profiles]);
-  const person = (people || []).find((p) => String(p.id) === personId) || null;
-  const groups = person ? addToRows(state, person, titles, profiles) : [];
-  const count = person ? addSelectedCount(state, person) : 0;
-  const add = () => run(async () => {
-    await api(`/people/${person.id}/items`, { method: 'POST', body: addItemsBody(state, person) });
-    go({ name: 'person', id: person.id });
   });
   const rowView = (row) => {
     const text = html`<span class="text"><span class=${row.mono ? 'label mono key-text' : 'label'}>${row.title}</span>
@@ -266,21 +207,26 @@ function AddToPersonForm({ suggestion, profiles, titles, go, onCancel }) {
       <input type="checkbox" checked=${row.checked} onChange=${() => setState(toggledItem(state, row.group, row.index))} />${lead}${text}</label>${copy}</div>`;
   };
   return html`<header>
-      <h2 id="add-to-title">${addToTitle(suggestion.name)}</h2>
+      <h2 id="check-suggestion-title">${checkSheetTitle(suggestion.name)}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <div class="body">
-      ${people && people.length === 0 && html`<p class="empty">${NO_PERSON_TEXT}</p>`}
-      ${people && people.length > 0 && html`<div class="group rows"><${ChoiceSelect} id="add-to-person" label="Person" value=${personId}
-        hint="The person that gets the selected items." options=${personChoices(people)} onChange=${setPersonId} /></div>`}
+      <div class="group rows">
+        <${ChoiceSelect} id="check-person" label="Person" value=${state.personId} options=${checkSheetChoices(people)}
+          hint=${checkSheetHint(suggestion, state.personId)} onChange=${(personId) => setState({ ...state, personId })} />
+        ${!person && html`<${Field} id="check-name" label="Name" required value=${state.name}
+          onInput=${(e) => setState({ ...state, name: e.target.value })} />
+          <${ChoiceSelect} id="check-member" label="Member of" value=${state.memberOf} placeholder="None"
+            hint=${NEW_MEMBER_HINT} options=${memberChoices(feeds)} onChange=${(memberOf) => setState({ ...state, memberOf })} />`}
+      </div>
       ${groups.map((g) => html`<section class="page-section" key=${g.group}><h2>${g.title}</h2>
         <div class="group rows">${g.rows.map(rowView)}</div></section>`)}
-      ${person && html`<p class="hint">${ADD_TO_HINT}</p>`}
+      <p class="hint">${person ? ADD_TO_HINT : NEW_PERSON_HINT}</p>
       <${ErrorNotice} error=${error} />
     </div>
     <footer>
-      <button class="button" type="button" onClick=${onCancel}>Cancel</button>
-      <button class="button primary" type="button" disabled=${busy || count === 0} onClick=${add}>${busy ? 'Adding the Items…' : addItemsLabel(count)}</button>
+      <button class="button" type="button" disabled=${busy} onClick=${dismiss}>Not This Person</button>
+      <button class="button primary" type="button" disabled=${busy || !checkSheetReady(state, person)} onClick=${submit}>${busy ? (person ? 'Adding the Items…' : 'Making the Person…') : checkSheetLabel(state, person)}</button>
     </footer>`;
 }
 
@@ -368,7 +314,7 @@ function PersonFields({ person, onSave }) {
 // The sheet that adds a link to a person (ADR 0099 item 4).
 function LinkSheet({ kind, personId, onClose, onAdded }) {
   const ref = useSheet(kind !== null);
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="link-title" onClose=${onClose}>
+  return html`<dialog ref=${ref} class=${kind === 'wallets' ? 'sheet' : 'sheet small'} aria-labelledby="link-title" onClose=${onClose}>
     ${kind && html`<${LinkForm} key=${kind} kind=${kind} personId=${personId} onCancel=${() => ref.current.close()}
       onAdded=${() => { ref.current.close(); onAdded(); }} />`}
   </dialog>`;
@@ -377,7 +323,14 @@ function LinkSheet({ kind, personId, onClose, onAdded }) {
 function LinkForm({ kind, personId, onCancel, onAdded }) {
   const form = LINK_FORMS[kind];
   const [values, setValues] = useState(() => linkStart(kind));
+  // The sheet "Add a Wallet" lists the payees with no person first
+  // (ADR 0111 item 8). `null` while the list loads.
+  const [recipients, setRecipients] = useState(kind === 'wallets' ? null : []);
   const { busy, error, run } = useAction();
+  useEffect(() => {
+    if (kind !== 'wallets') return;
+    api('/recipients').then(setRecipients, () => setRecipients([]));
+  }, []);
   const set = (id, value) => setValues({ ...values, [id]: value });
   const add = (e) => {
     e.preventDefault();
@@ -387,16 +340,26 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
       onAdded();
     });
   };
+  const addPayee = (body) => run(async () => {
+    await api(`/people/${personId}/wallets`, { method: 'POST', body });
+    onAdded();
+  });
+  const sections = kind === 'wallets' ? addWalletSections(recipients || []) : [{ id: 'different', title: '', rows: [] }];
+  const fields = html`<div class="group rows">${linkFields(kind, values).map((f) => (f.select
+    ? html`<${ChoiceSelect} key=${f.id} id=${`link-${f.id}`} label=${f.label} value=${values[f.id]} options=${f.select}
+        onChange=${(v) => set(f.id, v)} />`
+    : html`<${Field} key=${f.id} id=${`link-${f.id}`} label=${f.label} hint=${f.hint} required=${!!f.required}
+        value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}</div>`;
   return html`<header>
       <h2 id="link-title">${form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <form class="body" id="link-form" onSubmit=${add}>
-      <div class="group rows">${linkFields(kind, values).map((f) => (f.select
-        ? html`<${ChoiceSelect} key=${f.id} id=${`link-${f.id}`} label=${f.label} value=${values[f.id]} options=${f.select}
-            onChange=${(v) => set(f.id, v)} />`
-        : html`<${Field} key=${f.id} id=${`link-${f.id}`} label=${f.label} hint=${f.hint} required=${!!f.required}
-            value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}</div>
+      ${sections.map((section) => (section.id === 'payees'
+    ? html`<section class="page-section" key=${section.id}><h2>${section.title}</h2><div class="group">${section.rows.map((row) =>
+      html`<${ListRow} key=${JSON.stringify(row.body)} title=${row.title} lines=${row.lines} count=${row.count}
+        onClick=${() => addPayee(row.body)} />`)}</div></section>`
+    : html`<section class="page-section" key=${section.id}>${section.title && html`<h2>${section.title}</h2>`}${fields}</section>`))}
       <${ErrorNotice} error=${error} />
     </form>
     <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${busy ? 'Adding…' : form.button}</button></footer>`;
@@ -418,11 +381,12 @@ function OperationSheet({ kind, person, groups, rows, feeds, go, onClose }) {
 
 // The feeds of a sheet with a check box for each. The sheets of a person and
 // of a wallet use it (ADR 0099 item 7).
-function FeedChecks({ rows, setRows, empty }) {
+// With `separate`, each line of a row shows on its own line.
+function FeedChecks({ rows, setRows, empty, separate = false }) {
   if (!rows) return null;
   if (rows.length === 0) return html`<p class="empty">${empty}</p>`;
   return html`<section class="page-section"><h2>${feedsHeading(rows)}</h2><div class="group rows">${rows.map((row) =>
-    html`<${FeedCheckRow} key=${row.id} title=${row.title} text=${row.lines.join(' · ')} checked=${row.checked}
+    html`<${FeedCheckRow} key=${row.id} title=${row.title} text=${separate ? undefined : row.lines.join(' · ')} lines=${separate ? row.lines : undefined} checked=${row.checked}
       onChange=${() => setRows(toggledRow(rows, row.id))} />`)}</div></section>`;
 }
 
@@ -698,10 +662,11 @@ function MergeForm({ person, onCancel, onMerged }) {
 
 // The page "Check your feeds" (ADR 0111 items 9 to 13). The core compares each
 // feed with the person. A row opens the feed in the editor. The button
-// "Correct N Feeds" comes with the sheet of the correction.
+// "Correct N Feeds" opens the sheet of the correction (ADR 0111 item 14).
 export function CheckPage({ id, feeds, go }) {
   const [person, setPerson] = useState(null);
   const [check, setCheck] = useState(null);
+  const [correcting, setCorrecting] = useState(false);
   const { error, run } = useAction();
   useEffect(() => {
     run(async () => {
@@ -719,6 +684,8 @@ export function CheckPage({ id, feeds, go }) {
     ${(person === null || check === null) && !error && html`<p class="empty" role="status">Checking the feeds…</p>`}
     ${person && check && html`<header class="recipient-head"><h1>Check your feeds</h1>
         <p class="hint">${checkIntro(person.name)}</p></header>
+      ${correctCount(check) > 0 && html`<div class="actions"><button class="button primary" type="button"
+        onClick=${() => setCorrecting(true)}>${correctButtonLabel(correctCount(check))}</button></div>`}
       ${groups.length === 0 && html`<p class="empty">No feed uses this person.</p>`}
       ${groups.map((g) => html`<section class="page-section" key=${g.state}><h2>${g.title}</h2>
         <div class="group">${g.feeds.map((entry) => {
@@ -727,7 +694,67 @@ export function CheckPage({ id, feeds, go }) {
           return html`<${ListRow} key=${entry.feed_id} title=${row ? row.title : titles.get(entry.feed_id) || `Feed ${entry.feed_id}`}
             lines=${checkFeedLines(entry, place, person.name, profiles)} onClick=${() => go({ name: 'feed', id: entry.feed_id })} />`;
         })}</div></section>`)}`}
-  </section></div>`;
+  </section>
+  <${CorrectSheet} open=${correcting} person=${person} check=${check} titles=${titles} placeRows=${rows} go=${go}
+    onClose=${() => setCorrecting(false)} /></div>`;
+}
+
+// The sheet "Correct the Feeds: {name}" (ADR 0111 items 14 to 17). The
+// preview of the core lists the feeds that the selected corrections change.
+// The primary button makes the change set, and the review follows.
+function CorrectSheet({ open, person, check, titles, placeRows, go, onClose }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="correct-title" onClose=${onClose}>
+    ${open && person && check && html`<${CorrectForm} person=${person} check=${check} titles=${titles} placeRows=${placeRows} go=${go}
+      onCancel=${() => ref.current.close()} />`}
+  </dialog>`;
+}
+
+function CorrectForm({ person, check, titles, placeRows, go, onCancel }) {
+  const [fields, setFields] = useState(() => correctStart(person));
+  const [list, setList] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
+  const { busy, error, run } = useAction();
+  const profiles = useProfiles([...person.keys.map((k) => k.npub), ...checkKeys(check)]);
+  const feedIds = correctFeedIds(check);
+  const set = (patch) => setFields({ ...fields, ...patch });
+  // After each change of a selection, the core gives the outcome of each feed.
+  useEffect(() => {
+    if (!correctAnySelected(fields) || feedIds.length === 0) { setList({ rows: [], omitted: 0 }); setPreviewError(null); return undefined; }
+    let live = true;
+    const timer = setTimeout(() => {
+      api(`/people/${person.id}/changes/preview`, { method: 'POST', body: { operation: correctBody(fields), feed_ids: feedIds } })
+        .then((result) => { if (live) { setList((before) => correctRows(result, titles, placeRows, before ? before.rows : [], check, fields, person.name, profiles)); setPreviewError(null); } },
+          (e) => { if (live) { setList({ rows: [], omitted: 0 }); setPreviewError(e); } });
+    }, 250);
+    return () => { live = false; clearTimeout(timer); };
+  }, [JSON.stringify(fields)]);
+  const rows = list ? list.rows : [];
+  const ids = checkedIds(rows);
+  const submit = () => run(async () => {
+    const made = await api(`/people/${person.id}/changes`, { method: 'POST', body: { operation: correctBody(fields), feed_ids: ids } });
+    go({ name: 'change-set', id: made.id });
+  });
+  const choices = correctKeyChoices(person, profiles);
+  return html`<header>
+      <h2 id="correct-title">${correctTitle(person.name)}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
+    </header>
+    <div class="body">
+      <section class="page-section"><h2>Changes</h2><div class="group rows">
+        ${choices.length > 0 && html`<${ChoiceSelect} id="correct-key" label="Key" value=${fields.npub} options=${choices}
+          onChange=${(npub) => set({ npub })} />`}
+        ${correctOptions(person, fields, profiles).map((o) => html`<${FeedCheckRow} key=${o.id} title=${o.label} text=${o.line}
+          checked=${fields[o.id]} onChange=${() => set({ [o.id]: !fields[o.id] })} />`)}</div></section>
+      ${list === null && !previewError && html`<p class="empty" role="status">Checking the feeds…</p>`}
+      ${list !== null && rows.length === 0 && !previewError && html`<p class="empty">${CORRECT_EMPTY}</p>`}
+      ${rows.length > 0 && html`<${FeedChecks} rows=${rows} setRows=${(next) => setList({ ...list, rows: next })} empty="" separate />`}
+      ${rows.length > 0 && list.omitted > 0 && html`<p class="hint">${CORRECT_OMITTED}</p>`}
+      <${ErrorNotice} error=${previewError || error} />
+    </div>
+    <footer>
+      <button class="button primary" type="button" disabled=${busy || ids.length === 0} onClick=${submit}>${busy ? BUSY_REVIEW : reviewLabel(ids.length)}</button>
+    </footer>`;
 }
 
 // ---- The page of a wallet with no person (ADR 0099 items 7 and 10, task 065d) ----
@@ -829,11 +856,13 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
     </footer>`;
 }
 
-// The page of a wallet with no person (ADR 0099 item 7). It has the five
-// operations and no list of feeds: each sheet lists the feeds.
+// The page of a wallet with no person (ADR 0099 item 7, ADR 0111 item 8). It
+// has the row "Add to a Person", the operations and no list of feeds: each
+// sheet lists the feeds.
 export function WalletPage({ recipient, feeds, go }) {
   const [uses, setUses] = useState(null);
   const [sheet, setSheet] = useState(null);
+  const [personSheet, setPersonSheet] = useState(false);
   const { error, run } = useAction();
   useEffect(() => {
     run(async () => {
@@ -847,11 +876,57 @@ export function WalletPage({ recipient, feeds, go }) {
     <${ErrorNotice} error=${error} />
     <header class="recipient-head"><h1>${breakParts(row.title).map((part, i) => html`${i > 0 && html`<wbr />`}${part}`)}</h1>
       ${addressLines(recipient).map((line) => html`<p class="hint" key=${line.address || line.label}>${line.label}${line.address && html` <span class="mono">${line.address}</span>`}${line.account && ` · account ${line.account}`}</p>`)}</header>
-    <div class="actions recipient-actions">${walletActions(recipient).map((action) => html`<button key=${action.kind}
-      class=${`button ${action.role}`} type="button" disabled=${action.kind !== 'add' && !used}
-      onClick=${() => setSheet(action.kind)}>${action.label}</button>`)}</div>
+    <section class="page-section"><h2>Person</h2><div class="group"><${ListRow} title=${PERSON_SECTION_TITLE} lines=${[PERSON_SECTION_LINE]}
+      onClick=${() => setPersonSheet(true)} /></div></section>
+    <section class="page-section"><h2>Change your feeds</h2><div class="group">${walletActions(recipient).map((action) => html`<${ListRow}
+      key=${action.kind} title=${action.label} lines=${[action.line]} disabled=${action.kind !== 'add' && !used}
+      onClick=${() => setSheet(action.kind)} />`)}</div></section>
     ${uses === null && !error && html`<p class="empty" role="status">Loading the feeds…</p>`}
     ${uses !== null && uses.length === 0 && html`<p class="empty">No feed uses this wallet. Add to All Releases puts it in feeds.</p>`}
     <${WalletSheet} kind=${sheet} recipient=${recipient} uses=${uses || []} feeds=${feeds} go=${go} onClose=${() => setSheet(null)} />
+    <${WalletPersonSheet} open=${personSheet} recipient=${recipient} go=${go} onClose=${() => setPersonSheet(false)} />
   </section></div>`;
+}
+
+// The sheet "Add to a Person: {name}" of a payee with no person (ADR 0111
+// item 8). The menu "Person" picks a new person or a person that exists. The
+// sheet changes no feed. A new person is made first, then the wallet is added.
+function WalletPersonSheet({ open, recipient, go, onClose }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="wallet-person-title" onClose=${onClose}>
+    ${open && html`<${WalletPersonForm} recipient=${recipient} go=${go} onCancel=${() => ref.current.close()} />`}
+  </dialog>`;
+}
+
+function WalletPersonForm({ recipient, go, onCancel }) {
+  const title = recipientTitle(recipient);
+  const [state, setState] = useState(() => walletToPersonStart(title));
+  const [people, setPeople] = useState(null);
+  const { busy, error, run } = useAction();
+  useEffect(() => { run(async () => { setPeople(await api('/people')); }); }, []);
+  const submit = () => run(async () => {
+    let id = Number(state.personId);
+    if (state.personId === NEW_PERSON) id = (await api('/people', { method: 'POST', body: addPersonBody(state.name) })).id;
+    await api(`/people/${id}/wallets`, { method: 'POST', body: walletBodyOf(recipient) });
+    go({ name: 'person', id });
+  });
+  const row = recipientRow(recipient);
+  return html`<header>
+      <h2 id="wallet-person-title">${addToTitle(title)}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
+    </header>
+    <div class="body">
+      <div class="group rows"><${ChoiceSelect} id="wallet-person" label="Person" value=${state.personId}
+          options=${checkSheetChoices(people || [])} onChange=${(personId) => setState({ ...state, personId })} />
+        ${state.personId === NEW_PERSON && html`<${Field} id="wallet-person-name" label="Name" required value=${state.name}
+          onInput=${(e) => setState({ ...state, name: e.target.value })} />`}</div>
+      <div class="group">${row.lines.map((line, i) => html`<div class="link-row static" key=${i}><span class="text">
+        <span class="label">${line}</span>${i === 0 && html`<span class="summary">${row.count}</span>`}</span></div>`)}</div>
+      <p class="hint">${WALLET_TO_PERSON_HINT}</p>
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${onCancel}>Cancel</button>
+      <button class="button primary" type="button" disabled=${busy || people === null || !walletToPersonReady(state)} onClick=${submit}>${busy ? 'Working…' : walletToPersonLabel(state)}</button>
+    </footer>`;
 }

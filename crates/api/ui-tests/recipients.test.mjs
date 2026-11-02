@@ -217,7 +217,7 @@ test('the page of a wallet has the five operations, the last one destructive (AD
     ['rename', 'Rename', 'action'],
     ['use_lnaddress', 'Use the Lightning Address', 'action'],
     ['add', 'Add to All Releases', 'action'],
-    ['remove', 'Remove', 'destructive']]);
+    ['remove', 'Remove from Feeds', 'destructive']]);
   assert.ok(!walletActions({ address: 'a@b.c', recipient_type: 'lnaddress' }).some((a) => a.kind === 'use_lnaddress'),
     'ADR 0095: a wallet with no node key has nothing to replace.');
 });

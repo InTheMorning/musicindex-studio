@@ -4,7 +4,7 @@
 // calculates each split and finds each place (ADR 0065).
 
 import { shortKey } from './nostrkey.js';
-import { memberLine, memberText, withFee, reviewLabel, checkedIds } from './people.js';
+import { memberLine, memberText, withFee, reviewLabel, checkedIds, payeesWithNoPerson } from './people.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -306,13 +306,23 @@ const WALLET_TITLES = {
   rename: 'Rename',
   use_lnaddress: 'Use the Lightning Address',
   add: 'Add to All Releases',
-  remove: 'Remove',
+  remove: 'Remove from Feeds',
+};
+
+// The line under the title of each operation on the page of a wallet
+// (ADR 0111 item 8).
+const WALLET_LINES = {
+  change_address: 'Pay a different address of this wallet in your feeds.',
+  rename: 'Change the name of this payee in your feeds.',
+  use_lnaddress: 'Pay the Lightning address of this wallet in your feeds.',
+  add: 'Add this payee to each release of an artist or label.',
+  remove: 'Remove this payee from the value blocks of your feeds.',
 };
 
 export function walletActions(entry) {
   return Object.entries(WALLET_TITLES)
     .filter(([kind]) => kind !== 'use_lnaddress' || hasNode(entry))
-    .map(([kind, label]) => ({ kind, label, role: kind === 'remove' ? 'destructive' : 'action' }));
+    .map(([kind, label]) => ({ kind, label, line: WALLET_LINES[kind], role: kind === 'remove' ? 'destructive' : 'action' }));
 }
 
 // The menu of the type of an address (ADR 0099 item 14).
@@ -400,3 +410,31 @@ export function walletSheetReady(kind, fields, ids) {
     && (kind !== 'add' || fields.percent !== '');
 }
 
+
+// ---- A payee with no person (ADR 0111 item 8, task 075c) ----
+
+export const PERSON_SECTION_TITLE = 'Add to a Person';
+export const PERSON_SECTION_LINE = 'Keep this wallet with a person, new or one that you have.';
+
+// The body of `POST /people/{id}/wallets` for a payee: its first member, the
+// Lightning address first. The core finds the wallet of the key.
+export function walletBodyOf(entry) {
+  const member = membersOf(entry)[0];
+  return {
+    address: member.address,
+    custom_key: member.custom_key ?? null,
+    custom_value: member.custom_value ?? null,
+    recipient_type: member.recipient_type || '',
+  };
+}
+
+// The sections of the sheet "Add a Wallet" of a person. The payees with no
+// person come first, each as a row that adds its wallet. The form for a
+// different address follows.
+export function addWalletSections(recipients) {
+  const payees = payeesWithNoPerson(recipients).map((entry) => ({ ...recipientRow(entry), recipient: entry, body: walletBodyOf(entry) }));
+  return [
+    ...(payees.length > 0 ? [{ id: 'payees', title: 'Payees with no person', rows: payees }] : []),
+    { id: 'different', title: 'A different address', rows: [] },
+  ];
+}

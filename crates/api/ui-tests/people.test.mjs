@@ -184,7 +184,7 @@ test('the result line leaves out a count of 0 and names one part', () => {
 
 import {
   initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeTitle, feedsToWrite,
-  changeRow, afterDiscard, afterMissing, memberChoices, makeSheetTitle, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
+  changeRow, afterDiscard, afterMissing, memberChoices, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
 } from '../ui/people.js';
 
 test('the search matches the name, an address and a key, with no regard to capitals', () => {
@@ -232,8 +232,7 @@ test('a person that is gone opens the person that kept its items, else People', 
   assert.deepEqual(afterMissing(5, merged), { name: 'people' });
 });
 
-test('the sheet Make a Person gives its texts, rows and menu', () => {
-  assert.equal(makeSheetTitle('Mary'), 'Make a Person: Mary');
+test('the sheet Check gives its rows and menu', () => {
   assert.deepEqual(memberChoices([
     { id: 2, medium: 'publisher', title: 'Zed' }, { id: 1, medium: 'music', title: 'Album' }, { id: 3, medium: 'publisher', title: 'Ann' },
   ]), [['3', 'Ann'], ['2', 'Zed']]);
@@ -740,4 +739,141 @@ test('the merge sheet gives the links of the other person and the result line', 
   assert.match(result.lines[1], /stay as in Sir HeyCitizen/);
   assert.deepEqual(mergeBody('9'), { other: 9 });
   assert.equal(mergeTitle('X'), 'Merge with X');
+});
+
+// ---- Task 075c: the sheets Check, Correct the Feeds and Add to a Person ----
+import {
+  NEW_PERSON, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson, checkSheetLabel, checkSheetReady,
+  walletToPersonStart, walletToPersonReady, walletToPersonLabel, correctCount, correctButtonLabel, correctFeedIds,
+  correctStart, correctOptions, correctKeyChoices, correctBody, correctAnySelected, correctRows, correctFindingLines,
+} from '../ui/people.js';
+import { addWalletSections, walletBodyOf } from '../ui/recipients.js';
+
+const CHECK_SUGGESTION = {
+  identity: 'i', name: 'Mary', person_id: null, item_keys: [],
+  credits: [{ name: 'Mary', href: '', npub: 'npub1m', roles: ['vocals'], feeds: [1], same_name: true }],
+  recipients: [{ key: KEYP('mary@x.example'), recipient_type: 'lnaddress', feeds: [1], same_name: true }],
+};
+const CHECK_PEOPLE = [{ id: 9, name: 'Mary', credit_names: [], keys: [], wallets: [] }, { id: 4, name: 'Anna', credit_names: [], keys: [], wallets: [] }];
+
+test('the sheet Check starts on the person with the name, else on a new person', () => {
+  assert.equal(checkSheetTitle('Mary'), 'Check: Mary');
+  assert.equal(checkSheetStart(CHECK_SUGGESTION).personId, NEW_PERSON);
+  const match = checkSheetStart({ ...CHECK_SUGGESTION, person_id: 9 });
+  assert.equal(match.personId, '9');
+  assert.deepEqual(checkSheetChoices(CHECK_PEOPLE), [[NEW_PERSON, 'A new person'], ['4', 'Anna'], ['9', 'Mary']]);
+  assert.equal(checkSheetHint({ ...CHECK_SUGGESTION, person_id: 9 }, '9'), 'You have a person with this name. Studio adds the selected items to it.');
+  assert.equal(checkSheetHint({ ...CHECK_SUGGESTION, person_id: 9 }, '4'), undefined);
+  assert.equal(checkSheetHint(CHECK_SUGGESTION, NEW_PERSON), undefined);
+});
+
+test('the primary button of the sheet Check follows the person', () => {
+  const fresh = checkSheetStart(CHECK_SUGGESTION);
+  assert.equal(checkSheetPerson(fresh, CHECK_PEOPLE), null);
+  assert.equal(checkSheetLabel(fresh, null), 'Make the Person');
+  assert.equal(checkSheetReady(fresh, null), true);
+  assert.equal(checkSheetReady({ ...fresh, name: '  ' }, null), false);
+  const match = checkSheetStart({ ...CHECK_SUGGESTION, person_id: 9 });
+  const person = checkSheetPerson(match, CHECK_PEOPLE);
+  assert.equal(person.name, 'Mary');
+  // The credit, the wallet and the key are new: three items.
+  assert.equal(checkSheetLabel(match, person), 'Add 3 Items');
+  assert.equal(checkSheetReady(match, person), true);
+  const one = { ...match, credits: [], keys: [], recipients: match.recipients };
+  assert.equal(checkSheetLabel(one, person), 'Add 1 Item');
+  assert.equal(checkSheetReady({ ...one, recipients: [] }, person), false);
+  // A new person shows no flag on its rows.
+  assert.ok(!addToRows(fresh, null).flatMap((g) => g.rows).some((r) => r.lines.includes('New')));
+});
+
+const CORRECT_PERSON = {
+  id: 7, name: 'HeyCitizen', usual_role: 'Audio Engineer', img: 'https://x.example/a.jpg', href: '',
+  keys: [{ npub: 'npub1a' }], wallets: [{ id: 1 }],
+};
+
+test('the sheet Correct the Feeds starts with the payees of the name not selected', () => {
+  const start = correctStart(CORRECT_PERSON);
+  assert.deepEqual(start, { key: true, npub: 'npub1a', payment: true, details: true, role: true, other_payees: false });
+  assert.deepEqual(correctOptions(CORRECT_PERSON, start).map((o) => o.label), [
+    'Nostr key', 'Payment address', 'Picture and information address', 'Role', 'Payees with this name that pay a different wallet']);
+  assert.deepEqual(correctBody(start), { kind: 'correct', key: 'npub1a', payment: true, details: true, role: true, other_payees: false });
+  assert.equal(correctBody({ ...start, key: false }).key, null);
+  assert.equal(correctAnySelected({ ...start, key: false, payment: false, details: false, role: false }), false);
+});
+
+test('the sheet Correct the Feeds leaves out a change that the person cannot give, and has a menu for two keys', () => {
+  const bare = { ...CORRECT_PERSON, keys: [], wallets: [] };
+  assert.deepEqual(correctOptions(bare, correctStart(bare)).map((o) => o.id), ['details', 'role']);
+  assert.equal(correctStart(bare).key, false);
+  assert.deepEqual(correctKeyChoices(CORRECT_PERSON), []);
+  assert.deepEqual(correctKeyChoices({ ...CORRECT_PERSON, keys: [{ npub: 'npub1a' }, { npub: 'npub1b' }] }, new Map([['npub1b', { name: 'City Radio' }]])).map((c) => c[1]),
+    ['npub1a', 'City Radio']);
+});
+
+test('the count and the feeds of the correction come from the check', () => {
+  const check = { feeds: [
+    { feed_id: 1, state: 'needs_correction' }, { feed_id: 2, state: 'not_default' }, { feed_id: 3, state: 'correct' },
+  ] };
+  assert.equal(correctCount(check), 2);
+  assert.deepEqual(correctFeedIds(check), [1, 2]);
+  assert.equal(correctButtonLabel(1), 'Correct 1 Feed');
+  assert.equal(correctButtonLabel(3), 'Correct 3 Feeds');
+});
+
+test('the rows of the correction leave out each feed that the core does not change', () => {
+  const changed = { outcome: 'changed', channel: false, items: 2, live_items: 0 };
+  const none = (cause) => ({ outcome: 'not_changed', cause: { cause } });
+  const preview = { feeds: [
+    { feed_id: 1, outcome: changed }, { feed_id: 2, outcome: none('no_credit') }, { feed_id: 3, outcome: none('no_recipient') },
+    { feed_id: 4, outcome: none('has_new_address') }, { feed_id: 5, outcome: changed },
+  ] };
+  const places = new Map([[1, { title: 'One', lines: ['Album', 'Credited as vocals'] }]]);
+  const { rows, omitted } = correctRows(preview, new Map([[5, 'Five']]), places);
+  assert.deepEqual(rows, [
+    { id: 1, title: 'One', checked: true, lines: ['Album · 2 tracks'] },
+    { id: 5, title: 'Five', checked: true, lines: ['2 tracks'] },
+  ]);
+  assert.equal(omitted, 3);
+  // A new preview keeps the selection of the user.
+  const again = correctRows(preview, new Map(), places, [{ id: 1, checked: false }]);
+  assert.equal(again.rows[0].checked, false);
+});
+
+test('the change line of a correction names the selected changes', () => {
+  const op = { kind: 'correct', npub: 'npub1a', payment: true, other_payees: false, img: 'x', href: null, role: null };
+  assert.equal(changeLine({ operation: op, feeds: [{}, {}] }, 'Hey'), 'Correct the Nostr key, the payment address and the picture and the information address of Hey in 2 feeds');
+});
+
+test('the sheet Add to a Person of a payee starts on a new person with the name of the payee', () => {
+  const start = walletToPersonStart('DuhLaurien');
+  assert.deepEqual(start, { personId: NEW_PERSON, name: 'DuhLaurien' });
+  assert.equal(walletToPersonLabel(start), 'Make the Person');
+  assert.equal(walletToPersonReady({ ...start, name: ' ' }), false);
+  assert.equal(walletToPersonLabel({ ...start, personId: '4' }), 'Add the Wallet');
+  assert.equal(walletToPersonReady({ ...start, personId: '4', name: '' }), true);
+});
+
+test('the sheet Add a Wallet lists the payees with no person first', () => {
+  const recipients = [
+    { address: 'saved@x.example', recipient_type: 'lnaddress', saved_id: 5, feeds: 1 },
+    { address: 'duh@x.example', name: 'DuhLaurien', recipient_type: 'lnaddress', saved_id: null, feeds: 1 },
+  ];
+  const sections = addWalletSections(recipients);
+  assert.deepEqual(sections.map((s) => s.id), ['payees', 'different']);
+  assert.deepEqual(sections[0].rows.map((r) => r.title), ['DuhLaurien']);
+  assert.deepEqual(sections[0].rows[0].body, { address: 'duh@x.example', custom_key: null, custom_value: null, recipient_type: 'lnaddress' });
+  assert.deepEqual(addWalletSections([]).map((s) => s.id), ['different']);
+  assert.equal(walletBodyOf({ address: 'a', addresses: [{ address: '02ab', recipient_type: 'node' }, { address: 'a@x.example', recipient_type: 'lnaddress' }] }).address, 'a@x.example');
+});
+
+test('a feed row of Correct the Feeds lists only the findings that the selected changes correct (ADR 0111 item 14)', () => {
+  const entry = { feed_id: 1, state: 'needs_correction', findings: [
+    { kind: 'credit_key', role: 'audio engineer', npub: '' },
+    { kind: 'credit_role' },
+    { kind: 'other_wallet', key: { address: 'a@b.example' } },
+  ] };
+  assert.deepEqual(correctFindingLines(entry, { key: true, role: false, other_payees: false }, 'Ann'), ['No Nostr key in the credit'],
+    'ADR 0111 item 14: a row lists the findings of the selected changes only. Check CORRECTED_BY in people.js.');
+  assert.equal(correctFindingLines(entry, { key: true, role: true, other_payees: true }, 'Ann').length, 3);
+  assert.deepEqual(correctFindingLines(undefined, { key: true }, 'Ann'), []);
 });

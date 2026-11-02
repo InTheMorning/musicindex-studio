@@ -26,7 +26,7 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  memberChange, saveStatus, FIELDS_HINT, MEMBER_HINT, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  memberChange, saveStatus, detailList, FIELDS_HINT, MEMBER_HINT, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
 } from './people.js';
 
 // The merges of this page load: the ID of each merged person, to the ID of
@@ -283,7 +283,7 @@ const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="b
 // `PATCH /people/{id}` when it loses the focus. The usual role is a menu and
 // sends them at once. `onSave` gives `{ ok, message }`. After a save, the field
 // shows its status (ADR 0111 item 2).
-function PersonFields({ person, onSave }) {
+function PersonFields({ person, onSave, detail, profiles, titles, feeds }) {
   const [values, setValues] = useState(() => personFieldsBody(person));
   const [save, setSave] = useState(null);
   useEffect(() => { setValues(personFieldsBody(person)); }, [person.name, person.usual_role, person.usual_group, person.img, person.href]);
@@ -298,6 +298,25 @@ function PersonFields({ person, onSave }) {
   const field = (id, label, key, hint) => html`<${Field} id=${id} label=${label} hint=${hint} value=${values[key]}
     onInput=${(e) => { setSave(null); setValues({ ...values, [key]: e.target.value }); }}
     onChange=${(e) => { if (e.target.value !== person[key]) commit(key, personFieldsBody(person, { [key]: e.target.value })); }}>${status(key)}<//>`;
+  // The suggestions of the core for one field. "Use" saves the value like a
+  // field save does. The UI changes no value.
+  const suggestions = (key) => {
+    const list = detailList(key, person[key], detail, profiles, titles, feeds);
+    if (list.state === 'none') return null;
+    const rows = list.rows.map((row) => html`<div class="link-row static" key=${row.value}>
+      ${key === 'img' && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
+      <span class="text"><span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
+      <button class="button action" type="button" aria-label=${`Use ${row.value}`}
+        onClick=${() => commit(key, personFieldsBody(person, { [key]: row.value }))}>Use</button></div>`);
+    // A collapsed list has no heading: its summary line names the values
+    // (ADR 0113 item 6).
+    if (list.state === 'collapsed') {
+      return html`<div class="group suggest-gap"><details class="disclosure">
+        <summary class="link-row"><span class="summary">${list.collapsedLine}</span></summary>
+        <div class="form">${rows}</div></details></div>`;
+    }
+    return html`<p class="hint suggest-heading">${list.heading}</p><div class="group">${rows}</div>`;
+  };
   return html`<div class="group rows">
     ${field('person-name', 'Name', 'name', FIELDS_HINT)}
     <${RoleMenu} id="person-role" label="Usual role" role=${values.usual_role} group=${values.usual_group} hint="The start value of a new credit."
@@ -307,8 +326,10 @@ function PersonFields({ person, onSave }) {
         setValues({ ...values, usual_role: role, usual_group: group });
         if (role !== person.usual_role || group !== (person.usual_group || '')) commit('usual_role', personFieldsBody(person, { usual_role: role, usual_group: group }));
       }} />
-    ${field('person-img', 'Picture address', 'img')}
-    ${field('person-href', 'Information address', 'href')}</div>`;
+    ${field('person-img', 'Picture address', 'img')}</div>
+    ${suggestions('img')}
+    <div class="group rows suggest-gap">${field('person-href', 'Information address', 'href')}</div>
+    ${suggestions('href')}`;
 }
 
 // The sheet that adds a link to a person (ADR 0099 item 4).
@@ -486,12 +507,22 @@ export function PersonPage({ id, feeds, go }) {
   useEffect(() => { loadMore(); }, [id]);
   const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => setSuggestions(r.suggestions || []), () => setSuggestions([]));
   useEffect(() => { loadSuggestions(); }, [id]);
+  // The suggestions of the picture and the information address (ADR 0113).
+  // They load after the person and again after each save.
+  const [detail, setDetail] = useState(null);
+  useEffect(() => {
+    if (!data) return undefined;
+    let live = true;
+    api(`/people/${id}/detail-suggestions`).then((r) => { if (live) setDetail(r); }, () => { if (live) setDetail(null); });
+    return () => { live = false; };
+  }, [data]);
   const known = data ? data.person : null;
   const profiles = useProfiles([
     ...(known ? known.keys.map((k) => k.npub) : []),
     ...(known ? known.credit_names.map((c) => c.npub) : []),
     ...suggestions.map((s) => s.npub),
     ...more.map((m) => m.npub),
+    ...((detail && [...detail.img, ...detail.href]) || []).flatMap((d) => d.sources.map((x) => x.npub)),
   ]);
   // Each change of a link reads the person again (task 065 item 5).
   const act = (work) => run(async () => { try { await work(); } finally { await reload(); } });
@@ -575,7 +606,7 @@ export function PersonPage({ id, feeds, go }) {
         })}>Dismiss</button></div></div>`)}
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => setLinking('wallets')} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
-      <${PersonFields} person=${person} onSave=${saveFields} />
+      <${PersonFields} person=${person} onSave=${saveFields} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} />
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<div class="group">
         ${person.credit_names.map((c) => html`<div class="link-row static" key=${`c${c.id}`}><span class="text"><span class="label">Credit name</span>
           ${c.name && html`<span class="summary">${c.name}</span>`}${c.href && html`<span class="summary">${c.href}</span>`}${c.npub && html`<span class="summary mono">${shortKey(c.npub)}</span>`}</span>

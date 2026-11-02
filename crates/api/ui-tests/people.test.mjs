@@ -877,3 +877,35 @@ test('a feed row of Correct the Feeds lists only the findings that the selected 
   assert.equal(correctFindingLines(entry, { key: true, role: true, other_payees: true }, 'Ann').length, 3);
   assert.deepEqual(correctFindingLines(undefined, { key: true }, 'Ann'), []);
 });
+
+test('ADR 0113: the list of suggestions is open, collapsed or none', async () => {
+  const { detailList } = await import('../ui/people.js');
+  const detail = { img: [{ value: 'https://a.example/1.jpg', sources: [{ kind: 'profile', npub: 'npub1abcdefghijklmnop' }] }, { value: 'https://a.example/2.jpg', sources: [] }], href: [] };
+  const open = detailList('img', '  ', detail, null, new Map(), []);
+  assert.equal(open.state, 'open');
+  assert.equal(open.heading, 'Suggestions for the picture');
+  assert.equal(open.rows.length, 2);
+  const collapsed = detailList('img', 'https://x.example/p.jpg', detail, null, new Map(), []);
+  assert.equal(collapsed.state, 'collapsed');
+  assert.equal(collapsed.collapsedLine, '2 other values in your feeds and profiles');
+  assert.equal(detailList('img', 'x', { img: [detail.img[0]] }, null, new Map(), []).collapsedLine, '1 other value in your feeds and profiles');
+  const none = detailList('href', '', detail, null, new Map(), []);
+  assert.equal(none.state, 'none');
+  assert.equal(none.heading, 'Suggestions for the information address');
+  assert.equal(detailList('href', '', null, null, new Map(), []).state, 'none');
+});
+
+test('ADR 0113: the source lines name each source and join with a dot', async () => {
+  const { detailSourceLine, profileMap } = await import('../ui/people.js');
+  const titles = new Map([[1, 'Night Signals'], [2, 'Low Tide'], [9, 'HeyCitizen']]);
+  const feeds = [{ id: 9, title: 'HeyCitizen', medium: 'publisher', publisher_roles: ['artist'] }];
+  const profiles = profileMap([{ npub: 'npub1named', name: 'Hey Citizen' }]);
+  assert.equal(detailSourceLine([{ kind: 'profile', npub: 'npub1named' }], 'img', profiles, titles, feeds), 'From the Nostr profile Hey Citizen');
+  assert.match(detailSourceLine([{ kind: 'profile', npub: 'npub1abcdefghijklmnopqrstuvwxyz' }], 'img', null, titles, feeds), /^From the Nostr profile npub1/);
+  assert.equal(detailSourceLine([{ kind: 'credit', feed_ids: [1, 2] }], 'img', null, titles, feeds), 'In the credits of 2 feeds: Night Signals, Low Tide');
+  assert.equal(detailSourceLine([{ kind: 'credit', feed_ids: [1] }], 'href', null, titles, feeds), 'In the credit of 1 feed: Night Signals');
+  assert.equal(detailSourceLine([{ kind: 'member', feed_id: 9 }], 'img', null, titles, feeds), 'The image of the artist feed HeyCitizen');
+  assert.equal(detailSourceLine([{ kind: 'member', feed_id: 9 }], 'href', null, titles, feeds), 'The link of the artist feed HeyCitizen');
+  assert.equal(detailSourceLine([{ kind: 'profile', npub: 'npub1named' }, { kind: 'member', feed_id: 9 }], 'href', profiles, titles, feeds),
+    'From the Nostr profile Hey Citizen · the link of the artist feed HeyCitizen');
+});

@@ -669,6 +669,59 @@ export function saveStatus(save, key) {
   return save.ok ? { text: 'Saved', error: false } : { text: save.message || 'Studio could not save this field', error: true };
 }
 
+// ---- The suggestions of the picture and the information address (ADR 0113) ----
+
+export const DETAIL_HEADINGS = {
+  img: 'Suggestions for the picture',
+  href: 'Suggestions for the information address',
+};
+
+// The collapsed line of a list of N values.
+export const detailCollapsedLine = (count) => (count === 1
+  ? '1 other value in your feeds and profiles'
+  : `${count} other values in your feeds and profiles`);
+
+// The line of one source of a suggestion. `field` is `img` or `href`.
+// `profiles` is the `profileMap` or null, `titles` maps a feed ID to its
+// title, and `feeds` is the feed list. The word of a feed is its first role in
+// lowercase, or "feed" with no role.
+export function detailSourceText(source, field, profiles, titles, feeds = []) {
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
+  if (source.kind === 'profile') {
+    return `From the Nostr profile ${profileName(source.npub, profiles) || shortKey(source.npub)}`;
+  }
+  if (source.kind === 'credit') {
+    const ids = source.feed_ids || [];
+    const names = ids.map((id) => titleOf(titles, id)).join(', ');
+    return ids.length === 1 ? `In the credit of 1 feed: ${names}` : `In the credits of ${ids.length} feeds: ${names}`;
+  }
+  const feed = byId.get(source.feed_id);
+  const role = feed && (feed.publisher_roles || []).length > 0 ? firstRole(feed).toLowerCase() : '';
+  const what = field === 'img' ? 'The image' : 'The link';
+  return `${what} of the ${role ? `${role} feed` : 'feed'} ${titleOf(titles, source.feed_id)}`;
+}
+
+// The source line of a suggestion. Two or more sources join with " · ". A
+// source after the first starts with a lowercase letter.
+export function detailSourceLine(sources, field, profiles, titles, feeds = []) {
+  return (sources || []).map((s, i) => {
+    const text = detailSourceText(s, field, profiles, titles, feeds);
+    return i === 0 ? text : text.charAt(0).toLowerCase() + text.slice(1);
+  }).join(' · ');
+}
+
+// The list of suggestions for one field, as `{ state, heading, collapsedLine,
+// rows: [{ value, line }] }`. `state` is `open` for an empty field with
+// suggestions, `collapsed` for a filled field with suggestions, and `none`
+// with no suggestion. `detail` is the answer of the core, or null.
+export function detailList(field, current, detail, profiles, titles, feeds = []) {
+  const list = (detail && detail[field]) || [];
+  const rows = list.map((s) => ({ value: s.value, line: detailSourceLine(s.sources, field, profiles, titles, feeds) }));
+  let state = 'none';
+  if (rows.length > 0) state = String(current ?? '').trim() === '' ? 'open' : 'collapsed';
+  return { state, heading: DETAIL_HEADINGS[field], collapsedLine: detailCollapsedLine(rows.length), rows };
+}
+
 // ---- The page "Check your feeds" (ADR 0111 items 9 to 13) ----
 
 export const CHECK_GROUPS = [

@@ -3,7 +3,10 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0113](../adr/0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md). It uses [ADR 0111](../adr/0111-the-page-of-a-person-checks-the-feeds.md) item 10 and [ADR 0098](../adr/0098-the-people-module.md) item 19.
 
-Status: Planned.
+Status: Complete, in two packets, with the screenshot visual check of 076b on 2026-11-02. The human test is open. Notes from the reviews:
+
+- 076a: one helper finds the credits of a person for the check of ADR 0111 and for the suggestions. The image of an artist or label feed is the cover of the feed list.
+- 076b: the visual check found the heading above a collapsed line. The line names the values already, so the planning model shows the heading only above an open list (ADR 0113 item 6).
 
 ## Goal
 

@@ -118,7 +118,7 @@ It has three sections.
 
 1. Select **Add a person**.
 2. Type the name in **Name**.
-3. Fill in the other fields if you want: **Role**, **Group**, **Picture address** and **Information address**. If you leave **Role** empty, it means host. If you leave **Group** empty, it means cast.
+3. Fill in the other fields if you want: **Role**, **Picture address** and **Information address**. Select the role from the menu. Studio writes the group of the role. If no role in the menu fits, select **Other role…**, write the role and select a group. If you leave **Role** empty, apps show the credit as host.
 
 When Studio can read the image at **Picture address**, the open entry of the person shows the picture.
 

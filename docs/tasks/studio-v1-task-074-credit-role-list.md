@@ -3,7 +3,10 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
 Decision: [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md). It uses [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0098](../adr/0098-the-people-module.md) items 5 and 20.
 
-Status: Planned.
+Status: Complete, in two packets, with the screenshot visual check of 074b on 2026-11-02. The human test is open. Notes from the reviews:
+
+- 074a: the list agrees with `taxonomy.json` at the named commit, in each group and in sequence. The planning model compared them with a script.
+- 074b: the visual check found that a free-text role kept the case of the menu group, for example `group="Music"`. ADR 0112 item 5 writes the role and the group in lowercase, so the planning model changed `apply_role_group` and 074a item 4. The text of "Other role" goes to the draft when the field loses the focus, as the other text fields do.
 
 ## Goal
 
@@ -43,7 +46,7 @@ These choices are fixed. Do not change them.
     - When the sent group is one of `groups_of(role)`, with no regard to case, the step keeps that group.
     - Else the group becomes the first group of `groups_of(role)`.
     - The role and the group become `wire` of their text.
-   A credit with a role that is not of the list keeps its sent role and group. A credit that does not change keeps its bytes (ADR 0012).
+   A changed credit with a role that is not of the list keeps its role and group text, as `wire` gives them (ADR 0112 item 5). A credit that does not change keeps its bytes (ADR 0012).
 5. A migration (the next number after `APP_KEYS_MIGRATION`) adds `usual_group TEXT NOT NULL DEFAULT ''` to `people`. `Person` gets `usual_group`. `PATCH /people/{id}` accepts it. The export gives it.
 6. "Pick from your people" and `AddToReleases` write the usual role and the usual group. When the usual role is of the list and the usual group is empty, the credit gets the first group of the role. `NewCredit` gets `group`.
 
@@ -54,7 +57,7 @@ Mechanical:
 - A core test: the list has each role of `taxonomy.json` at the named commit and the Music group. "Editor" is in two groups. The test fails with a message that names ADR 0112 and the fix.
 - A core test: a new credit with the role "Vocalist" saves as `role="vocalist" group="music"`. A changed credit with the role "Editor" and the group "Video Post-Production" keeps that group.
 - A core test: a credit that the user does not change keeps its bytes, also with the role "Vocalist" and no group.
-- A core test: a credit with the role "Field Recordist" keeps its sent role and group.
+- A core test: a changed credit with the role "Field Recordist" and the group "Sound" saves as `role="field recordist" group="sound"`.
 - A core test: the migration gives each person an empty `usual_group`. `AddToReleases` writes the usual group.
 - An API test: `GET /roles` gives the groups, the Music group first.
 - The corpus tests pass with no change.

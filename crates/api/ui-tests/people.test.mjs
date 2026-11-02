@@ -365,7 +365,7 @@ test('the forms of a link give the fields and the body', () => {
 });
 
 test('a change of one field sends the four fields of the person', () => {
-  assert.deepEqual(personFieldsBody(MK, { usual_role: 'Fiddle' }), { name: 'Mary Kate', usual_role: 'Fiddle', img: '', href: '' });
+  assert.deepEqual(personFieldsBody(MK, { usual_role: 'Fiddle' }), { name: 'Mary Kate', usual_role: 'Fiddle', usual_group: '', img: '', href: '' });
   assert.deepEqual(profileLine(MK, { 3: 'The Ultras' }), { role: 'Vocals', members: [{ id: 3, title: 'The Ultras' }] });
 });
 

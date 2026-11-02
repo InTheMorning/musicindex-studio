@@ -1194,7 +1194,8 @@ fn keep_key_form(current: &Feed, sent: &mut Feed) {
 /// For such a credit with a role of the list, a sent group that is a group
 /// of the role stays. Else the group is the first group of the role. The
 /// role and the group become lowercase text. A credit with a role that is
-/// not of the list stays as it was sent. A credit that does not change keeps
+/// not of the list keeps its role and its group, in lowercase text
+/// (ADR 0112 item 5). A credit that does not change keeps
 /// its bytes. The step applies to the channel, to each item and to each
 /// live item.
 fn apply_role_group(current: &Feed, sent: &mut Feed) {
@@ -1210,7 +1211,13 @@ fn apply_role_group(current: &Feed, sent: &mut Feed) {
                 continue;
             };
             let groups = roles::groups_of(role);
+            // A role that is not of the list keeps its text and its group,
+            // in the form of the wire (ADR 0112 item 5).
             let Some(first) = groups.first() else {
+                let role = roles::wire(role);
+                let group = entry.value.group.as_deref().map(roles::wire);
+                entry.value.role = Some(role);
+                entry.value.group = group;
                 continue;
             };
             let group = entry

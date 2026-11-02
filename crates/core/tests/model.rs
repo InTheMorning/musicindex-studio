@@ -649,7 +649,7 @@ fn a_role_that_is_not_of_the_list_keeps_its_sent_role_and_group() {
     pipeline::replace_model(&collection, id, &revision, model).unwrap();
     let text = draft_text(&collection, id);
     assert!(
-        text.contains("role=\"Field Recordist\"") && text.contains("group=\"Sound\""),
-        "ADR 0112 item 4: a role that is not of the list must keep its sent role and group. Check apply_role_group. {text}"
+        text.contains("role=\"field recordist\"") && text.contains("group=\"sound\""),
+        "ADR 0112 items 4 and 5: a changed role that is not of the list keeps its text and its group, in lowercase. Check apply_role_group. {text}"
     );
 }

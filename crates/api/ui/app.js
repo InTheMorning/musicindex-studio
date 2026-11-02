@@ -28,6 +28,7 @@ import { coverOf } from './cover.js';
 import { heldMap, mediaSource } from './media.js';
 import { SignerConnect } from './signer.js';
 import { useDraft } from './draft.js';
+import { roleChoice, fromChoice, roleOptions, ROLE_PLACEHOLDER, OTHER_ROLE, OTHER_HINT, NO_ROLE_HINT } from './roles.js';
 import { RETRY_DELAYS, findUpload, missingParts, partCount, partRange, receivedBytes } from './upload.js';
 import {
   exportView, EXPORT_DONE, RECOVERY_KEY_TEXT, importedNotice, showsImportNotice, sendingText, CHECKING_TEXT,
@@ -1287,6 +1288,60 @@ export function ChoiceSelect({ id, label, value, options, placeholder, hint, onC
       </select>
     </div>
   </div>`;
+}
+
+// The role list of the core. The UI reads it one time for each page load and
+// keeps it in memory (ADR 0112). A failed read gives an empty list, and the
+// menu then offers only "Other role…".
+let roleListRequest = null;
+export function useRoleList() {
+  const [list, setList] = useState(null);
+  useEffect(() => {
+    if (roleListRequest === null) {
+      roleListRequest = api('/roles').then((r) => r.groups, () => { roleListRequest = null; return []; });
+    }
+    let live = true;
+    roleListRequest.then((groups) => { if (live) setList(groups); });
+    return () => { live = false; };
+  }, []);
+  return list;
+}
+
+// The role of a credit, or the usual role of a person: a menu of the role
+// list, then "Other role…" with a text field and a group menu (ADR 0112).
+// `onChange(role, group)` gets the display names, or empty text. The text of
+// "Other role" goes to `onChange` when the field loses the focus, as the
+// other text fields do. `hint` replaces the hint of an empty role.
+export function RoleMenu({ id, label = 'Role', role, group, hint, onChange }) {
+  const list = useRoleList();
+  const [otherPicked, setOtherPicked] = useState(false);
+  const [otherText, setOtherText] = useState(role ?? '');
+  useEffect(() => { setOtherText(role ?? ''); }, [role]);
+  if (list === null) return html`<${ChoiceSelect} id=${id} label=${label} value="" placeholder="Loading the roles…" options=${[]} onChange=${() => {}} />`;
+  const choice = otherPicked ? 'other' : roleChoice(role, group, list);
+  const options = roleOptions(list);
+  const pick = (value) => {
+    setOtherPicked(value === 'other');
+    if (value === 'other') return onChange('', group ?? '');
+    const picked = fromChoice(value, list);
+    onChange(picked ? picked.role : '', picked ? picked.group : '');
+  };
+  return html`<div class="field">
+      <label for=${id}>${label}</label>
+      <div class="field-body">
+        ${choice === '' && (hint || NO_ROLE_HINT) && html`<span class="hint" id=${`${id}-hint`}>${hint || NO_ROLE_HINT}</span>`}
+        <select id=${id} value=${choice} aria-describedby=${choice === '' ? `${id}-hint` : undefined} onChange=${(e) => pick(e.target.value)}>
+          <option value="">${ROLE_PLACEHOLDER}</option>
+          ${options.groups.map((g) => html`<optgroup label=${g.label}>
+            ${g.options.map(([value, text]) => html`<option value=${value}>${text}</option>`)}</optgroup>`)}
+          <option value=${options.other[0]}>${OTHER_ROLE}</option>
+        </select>
+      </div>
+    </div>
+    ${choice === 'other' && html`<${Field} id=${`${id}-other`} label="Other role" hint=${OTHER_HINT} value=${otherText}
+      onInput=${(e) => setOtherText(e.target.value)} onChange=${(e) => onChange(e.target.value, group ?? '')} />
+      <${ChoiceSelect} id=${`${id}-group`} label="Group" value=${group ?? ''} placeholder="No group"
+        options=${list.map((g) => [g.name, g.name])} onChange=${(value) => onChange(role ?? '', value)} />`}`;
 }
 
 // The first choice is the type of the host. The form below it follows the

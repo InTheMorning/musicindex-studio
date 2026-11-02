@@ -613,9 +613,9 @@ export function linkBody(kind, values) {
 
 export const linkReady = (kind, values) => linkFields(kind, values).every((f) => !f.required || String(values[f.id] ?? '').trim() !== '');
 
-// The body of `PATCH /people/{id}`: the four fields, with one changed.
+// The body of `PATCH /people/{id}`: the fields, with some changed.
 export const personFieldsBody = (person, change = {}) => ({
-  name: person.name, usual_role: person.usual_role, img: person.img, href: person.href, ...change,
+  name: person.name, usual_role: person.usual_role, usual_group: person.usual_group ?? '', img: person.img, href: person.href, ...change,
 });
 
 // The line of the usual role of a person, and the publisher feeds of which
@@ -722,10 +722,10 @@ const lowerName = (name) => String(name ?? '').trim().toLowerCase();
 const firstKey = (person) => ((person.keys || []).find((k) => k.npub) || {}).npub || null;
 
 // The new credit from a person: a start value. An empty value gives no
-// attribute. The credit has no group (ADR 0098 item 3).
+// attribute. The group is the usual group of the person (ADR 0112).
 export function creditFromPerson(person) {
   const text = (value) => (value && String(value).trim() !== '' ? value : null);
-  return { name: person.name, role: text(person.usual_role), group: null, img: text(person.img), href: text(person.href), npub: firstKey(person) };
+  return { name: person.name, role: text(person.usual_role), group: text(person.usual_group), img: text(person.img), href: text(person.href), npub: firstKey(person) };
 }
 
 // The rows of the credits picker. A row is taken when the list has a credit

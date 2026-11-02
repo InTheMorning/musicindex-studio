@@ -4,11 +4,12 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { api, assetMode, askConfirm, CopyButton, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
+import { api, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows } from './people.js';
 import { withCids, STATUS } from './draft.js';
+import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
@@ -209,6 +210,7 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
   const blank = BLANK_PERSON;
   const { feedId } = useContext(PickerContext) || {};
   const [picking, setPicking] = useState(false);
+  const roles = useRoleList();
   const addPicked = (rows) => {
     setPicking(false);
     onChange(rows.reduce((list, row) => addOpen(list, row.credit), persons));
@@ -218,13 +220,11 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
       const id = `${prefix}-person-${p._cid}`;
       const summary = html`<span class="title">${p.name || 'New person'}</span>
-        <span class="sub">${p.role || 'host'} · ${p.group || 'cast'}</span>`;
+        <span class="sub">${roleSummary(p.role, p.group, roles || []) || 'host · cast'}</span>`;
       return html`<${EntryRow} key=${p._cid} group=${`${prefix}-persons`} cid=${p._cid} summary=${summary}>
         <${TextField} id=${`${id}-name`} label="Name" required value=${p.name} onChange=${change('name')} />
-        <div class="grid2">
-          <${TextField} id=${`${id}-role`} label="Role" hint="For example vocalist. Empty means host." value=${p.role} onChange=${change('role')} />
-          <${TextField} id=${`${id}-group`} label="Group" hint="For example music. Empty means cast." value=${p.group} onChange=${change('group')} />
-        </div>
+        <${RoleMenu} id=${`${id}-role`} role=${p.role} group=${p.group}
+          onChange=${(role, group) => onChange(setAt(persons, i, { ...p, role: role || null, group: group || null }))} />
         <${PersonPicture} url=${p.img} />
         <${TextField} id=${`${id}-img`} label="Picture address" type="url" address=${`${path}/${i}/img`} bad=${bad} value=${p.img} onChange=${change('img')} />
         <${TextField} id=${`${id}-href`} label="Information address" type="url" address=${`${path}/${i}/href`} bad=${bad} value=${p.href} onChange=${change('href')} />

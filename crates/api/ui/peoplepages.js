@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
-import { api, assetMode, askConfirm, Bar, ChoiceSelect, CopyButton, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { api, assetMode, askConfirm, Bar, ChoiceSelect, CopyButton, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
@@ -327,17 +327,22 @@ function AddressRow({ member, count, note, action }) {
 const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="button" onClick=${onClick}>
   <span class="num">＋</span><span class="title">${title}</span></button>`;
 
-// The four fields of a person. A change of one field sends the four
-// fields with `PATCH /people/{id}` when the field loses the focus.
+// The fields of a person. A text field sends the fields with
+// `PATCH /people/{id}` when it loses the focus. The usual role is a menu and
+// sends them at once.
 function PersonFields({ person, onSave }) {
   const [values, setValues] = useState(() => personFieldsBody(person));
-  useEffect(() => { setValues(personFieldsBody(person)); }, [person.name, person.usual_role, person.img, person.href]);
+  useEffect(() => { setValues(personFieldsBody(person)); }, [person.name, person.usual_role, person.usual_group, person.img, person.href]);
   const field = (id, label, key, hint) => html`<${Field} id=${id} label=${label} hint=${hint} value=${values[key]}
     onInput=${(e) => setValues({ ...values, [key]: e.target.value })}
     onChange=${(e) => { if (e.target.value !== person[key]) onSave(personFieldsBody(person, { [key]: e.target.value })); }} />`;
   return html`<div class="group rows">
     ${field('person-name', 'Name', 'name')}
-    ${field('person-role', 'Usual role', 'usual_role', 'The start value of a new credit.')}
+    <${RoleMenu} id="person-role" label="Usual role" role=${values.usual_role} group=${values.usual_group} hint="The start value of a new credit."
+      onChange=${(role, group) => {
+        setValues({ ...values, usual_role: role, usual_group: group });
+        if (role !== person.usual_role || group !== (person.usual_group || '')) onSave(personFieldsBody(person, { usual_role: role, usual_group: group }));
+      }} />
     ${field('person-img', 'Picture address', 'img')}
     ${field('person-href', 'Information address', 'href')}</div>`;
 }

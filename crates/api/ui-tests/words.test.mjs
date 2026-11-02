@@ -157,6 +157,9 @@ const HOST_ALLOWED = [
   // A CSS class.
   'class="panel host"',
   'class="host-head"',
+  // The role host of a credit (ADR 0112).
+  "|| 'host · cast'",
+  'as Host.',
 ];
 
 test('no UI text names a connector with the word host alone', () => {

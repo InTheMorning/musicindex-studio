@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys } from './review.js';
-import { api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext } from './app.js';
+import { api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
@@ -23,6 +23,7 @@ import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
+import { nextStep, firstStart, FIRST_STEPS } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyOrMove, missingCount, missingNotice, reviewNotice, dayText,
   SERVER_NOTICE, ADD_TRACKS_NOTICE, ENTRY_TEXT,
@@ -3124,13 +3125,15 @@ const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 // The publisher page: the fields, the role and the releases (ADR 0041 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
-function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged, onArtwork, onRemoved }) {
+function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged, onArtwork, onRemoved, connectors }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const roleAction = useAction();
   const linkAction = useAction();
   // The feeds whose draft the last link or role change altered.
   const [changed, setChanged] = useState([]);
   const [chosen, setChosen] = useState('');
+  // The row of the Add feeds page that is open, from the first steps (ADR 0119).
+  const [addOpen, setAddOpen] = useState(null);
   // The members of this feed, from `GET /feeds/{id}/members` (ADR 0118 item 9).
   const [members, setMembers] = useState([]);
   useEffect(() => {
@@ -3280,7 +3283,23 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       </div>
     </section>`,
   };
+  // The first steps of a new publisher feed with no release (ADR 0119 item 8).
+  // Each row opens a sheet of the Add feeds page.
+  const addedFeed = async (f) => { await onListChanged(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); };
+  const first = nextStep(feed);
   return html`<${ChangedNotices} changed=${changed} go=${go} />
+    ${first === 'album' && html`<div class="group first-step">
+      <div class="link-row static first-step-row">
+        <span class="step-icon" aria-hidden="true"><${Icon} name=${FIRST_STEPS.album.icon} /></span>
+        <span class="text"><span class="label">${FIRST_STEPS.album.title}</span><span class="summary">${FIRST_STEPS.album.line}</span></span>
+        <button class="button primary" type="button" onClick=${() => setAddOpen('album')}>${FIRST_STEPS.album.action}</button>
+      </div>
+    </div>`}
+    ${first === 'label' && html`<div class="group">${FIRST_STEPS.label.map((step) => html`<button class="link-row" type="button" key=${step.open}
+      onClick=${() => setAddOpen(step.open)}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
+      <span class="text"><span class="label">${step.title}</span><span class="summary">${step.line}</span></span><span class="go" aria-hidden="true">›</span></button>`)}</div>`}
+    ${addOpen && html`<${AddFeedRowSheet} open=${addOpen} connectors=${connectors} feeds=${feeds}
+      start=${firstStart(first, addOpen, model)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
     ${showSections(pageSequence('publisher'), shown)}`;
 }
 
@@ -3860,7 +3879,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist} op3Tracks=${draft.op3Tracks} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
-      draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} />`;
+      draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} connectors=${connectors} />`;
   } else if (playlist && page === 'tracks') {
     body = html`<${PlaylistTracksPage} feed=${feed} model=${model} update=${update} />`;
   } else if (playlist && page !== 'recipients' && page !== 'files') {

@@ -17,6 +17,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
+import { WELCOME, showWelcome, welcomeSteps, pathTexts, hostStep, HOST_ROWS, welcomeBody } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
@@ -613,40 +614,6 @@ function AddressDifferences({ feed }) {
     </ul>
     Studio uses the public address above. Studio does not change the feed file.
   </div>`;
-}
-
-// ---- Navigation with the browser history ----
-// Each screen keeps its view in history.state under its own scope, so that
-// the browser Back button goes to the previous step or view.
-
-function useNav(scope, initial) {
-  const [view, setView] = useState(() => {
-    const state = history.state;
-    return state && state.scope === scope ? state.view : initial;
-  });
-  useEffect(() => {
-    if (!history.state || history.state.scope !== scope) {
-      history.replaceState({ scope, view }, '');
-    }
-    const onPop = (event) => {
-      if (event.state && event.state.scope === scope) setView(event.state.view);
-    };
-    addEventListener('popstate', onPop);
-    return () => removeEventListener('popstate', onPop);
-  }, [scope]);
-  // push: a new history entry. replace: no way back to the current view.
-  const go = useCallback((next, { replace = false } = {}) => {
-    if (replace) history.replaceState({ scope, view: next }, '');
-    else history.pushState({ scope, view: next }, '');
-    setView(next);
-  }, [scope]);
-  return [view, go];
-}
-
-// A back selection changes no value, so it is a normal button (ADR 0037
-// item 1).
-function BackButton() {
-  return html`<button class="button" type="button" onClick=${() => history.back()}>← Back</button>`;
 }
 
 // ---- First-run wizard (ADR 0005) ----
@@ -1363,8 +1330,9 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, pendin
 
 // The first choice is the type of the host. The form below it follows the
 // type (ADR 0045 item 4). A server has no folder host (ADR 0055).
-function AddHostForm({ feeds, onAdded }) {
-  const [type, setType] = useState(serverMode ? 's3' : 'local');
+// `start` is the type that the form opens with (ADR 0119 item 6).
+function AddHostForm({ feeds, onAdded, start }) {
+  const [type, setType] = useState(start || (serverMode ? 's3' : 'local'));
   return html`<div class="form">
     <${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${[
       ...(serverMode ? [] : [['local', 'Folder on this computer']]),
@@ -1388,12 +1356,13 @@ function AddHostForm({ feeds, onAdded }) {
 // One form makes each new feed, as a draft with no file on the host yet
 // (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
-function MakeFeedForm({ connectors, feeds, startType, onAdded }) {
+// `start` gives optional start values: `author` and `role` (ADR 0119 item 8).
+function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded }) {
   const [type, setType] = useState(startType);
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
   const [title, setTitle] = useState('');
-  const [author, setAuthor] = useState('');
-  const [role, setRole] = useState(null);
+  const [author, setAuthor] = useState(start.author || '');
+  const [role, setRole] = useState(start.role || null);
   const [typedPath, setTypedPath] = useState(null);
   const [from, setFrom] = useState('');
   const [authorTyped, setAuthorTyped] = useState(false);
@@ -1705,55 +1674,6 @@ function MspImport({ onAdded }) {
   </div>`;
 }
 
-// ---- First-run wizard: one question (ADR 0020) ----
-
-function Wizard({ onFinish }) {
-  const [step, go] = useNav('wizard', 'question');
-  const [found, setFound] = useState(null);
-  const [added, setAdded] = useState(null);
-  let body;
-  if (step === 'question') {
-    body = html`<div class="form">
-      <div><h1>Do you already have a feed?</h1>
-        <p>Studio keeps your feeds in one collection, and edits them where you host them.</p></div>
-      <div class="actions">
-        <button class="button primary" type="button" onClick=${() => go('find')}>Yes, I Have Feeds</button>
-        <button class="button" type="button" onClick=${() => go('new')}>No, I Am New</button>
-      </div>
-      <button class="button link" type="button" onClick=${() => go('msp')}>Import from MSP 2.0</button>
-    </div>`;
-  } else if (step === 'msp') {
-    body = html`<div class="form"><div><h1>Import from MSP 2.0</h1></div>
-      <${MspImport} onAdded=${onFinish} />
-      <div class="actions"><${BackButton} /></div></div>`;
-  } else if (step === 'find') {
-    body = html`<div class="form"><div><h1>Find your feeds</h1></div>
-      <${FindFeeds} onFound=${(result) => { setFound(result); go('results'); }} />
-      <div class="actions"><${BackButton} /></div></div>`;
-  } else if (step === 'results' && found) {
-    body = html`<div class="form"><div><h1>Your feeds</h1></div>
-      <${FoundFeeds} found=${found} onNothingToAdd=${onFinish}
-        onAdded=${(result, groups) => { setAdded({ result, groups }); go('done', { replace: true }); }} />
-      <div class="actions"><${BackButton} /></div></div>`;
-  } else if (step === 'done' && added) {
-    const own = added.groups.filter((g) => !g.service).map((g) => g.host);
-    body = html`<div class="form"><div><h1>Studio is ready</h1>
-      <p>Studio added ${added.result.added.length} feed${added.result.added.length === 1 ? '' : 's'} to your collection.</p></div>
-      ${own.length > 0 && html`<p>To edit the feeds on ${own.join(', ')}, connect the folder that holds them in File hosts.</p>`}
-      <div class="actions"><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
-  } else if (step === 'new') {
-    body = html`<div class="form"><div><h1>Welcome</h1>
-      <p>To make a new release, connect the folder that your web server publishes in File hosts. Then select “Album” in Add a feed.</p></div>
-      <div class="actions"><${BackButton} /><button class="button primary" type="button" onClick=${onFinish}>Open Studio</button></div></div>`;
-  } else {
-    // A reload lost the wizard memory. Start again at the question.
-    body = html`<div class="form"><div><h1>Do you already have a feed?</h1></div>
-      <div class="actions"><button class="button primary" type="button" onClick=${() => go('find')}>Yes, I Have Feeds</button>
-        <button class="button" type="button" onClick=${() => go('new')}>No, I Am New</button></div></div>`;
-  }
-  return html`<main class="center"><div class="card"><${Brand} />${body}</div></main>`;
-}
-
 // ---- The library folder (ADR 0036 items 1 to 6) ----
 // Studio keeps one folder for each release: its feed file, its images and
 // its audio files. The app asks for this folder once, after the vault and
@@ -1871,7 +1791,13 @@ function Chevron({ direction }) {
 // icons/lucide/<name>.svg. The icon is decoration, and the label of the row
 // gives the accessible name.
 const ICONS = {
+  cloud: () => html`<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />`,
+  upload: () => html`<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" />`,
   library: () => html`<path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" />`,
+  music: () => html`<path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />`,
+  tag: () => html`<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />`,
+  search: () => html`<path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" />`,
+  disc: () => html`<circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="2" />`,
   users: () => html`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />`,
   wallet: () => html`<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />`,
   'hard-drive': () => html`<path d="M10 16h.01" /><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M21.946 12.013H2.054" /><path d="M6 16h.01" />`,
@@ -2662,12 +2588,12 @@ function SettingsPage() {
 
 // The sheet of one row of the Add feeds page (ADR 0073 item 3). `open` is the
 // ID of the row, or null. The forms of "Add a feed you have" do not change.
-function AddFeedSheet({ open, title, connectors, feeds, found, setFound, onAdded, onClose }) {
+function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, onAdded, onClose }) {
   const ref = useSheet(open !== null);
   const makeType = ['album', 'publisher', 'show', 'playlist'].includes(open) ? open : null;
   let body = null;
   if (makeType) {
-    body = html`<${MakeFeedForm} key=${open} connectors=${connectors} feeds=${feeds} startType=${makeType} onAdded=${onAdded} />`;
+    body = html`<${MakeFeedForm} key=${open} connectors=${connectors} feeds=${feeds} startType=${makeType} start=${start} onAdded=${onAdded} />`;
   } else if (open === 'find') {
     body = found
       ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
@@ -3058,14 +2984,10 @@ const SORT_LABELS = { order: 'Feed Order', newest: 'Newest', az: 'A to Z' };
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
-function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed }) {
+function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed }) {
   const [sortOpen, setSortOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
   const sortButton = useRef(null);
   const inGroup = group !== undefined;
-  // The desktop offers the import only while the collection has no feed
-  // (ADR 0107 item 9). The core refuses it otherwise.
-  const canImport = !assetMode().server && feeds.length === 0;
   const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, view: list.view, marked, group });
   const head = releases.head;
   const title = head ? head.title : 'Releases';
@@ -3092,6 +3014,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
   const viewButton = (name, label, icon) => html`<button class="button quiet icon-button view-button" type="button"
     aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
     onClick=${() => onQuery({ view: name })}>${icon}</button>`;
+  // A collection with no feed starts at the Welcome page (ADR 0119 item 1).
+  if (!inGroup && showWelcome(feeds)) return html`<${WelcomePage} connectors=${connectors} feeds=${feeds} onAdded=${onAddedFeed} />`;
   return html`<div>
     <${Bar}><span class="bar-title">${title}</span><//>
     <section class="releases">
@@ -3136,13 +3060,146 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">
             <p class="empty">No releases yet.</p>
-            <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button>
-              ${canImport && html`<button class="button action" type="button" onClick=${() => setImporting(true)}>Import an Account</button>`}</div>
-            ${canImport && html`<p class="hint">${DESKTOP_IMPORT_HINT}</p>`}
+            <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button></div>
           </div>`}
-      ${importing && html`<${ImportFlow} onBack=${() => setImporting(false)} />`}
     </section>
   </div>`;
+}
+
+// The Welcome page of a collection with no feed (ADR 0119 items 1 to 3). Each
+// row opens a sheet. The page writes nothing.
+function WelcomePage({ connectors, feeds, onAdded }) {
+  const [sheet, setSheet] = useState(null);
+  const [importing, setImporting] = useState(false);
+  // The import is offered where the shell permits it (ADR 0119 item 3).
+  const canImport = !assetMode().server;
+  return html`<div>
+    <${Bar}><span class="bar-title">Welcome</span><//>
+    <section class="section welcome">
+      <h1>${WELCOME.title}</h1>
+      <p class="welcome-intro">${WELCOME.intro}</p>
+      <div class="group welcome-group">
+        <${WelcomeRow} row=${WELCOME.rows.music} primary=${true} onClick=${() => setSheet('music')} />
+        <${WelcomeRow} row=${WELCOME.rows.label} onClick=${() => setSheet('label')} />
+      </div>
+      <div class="group">
+        <${WelcomeRow} row=${WELCOME.rows.online} onClick=${() => setSheet('find')} />
+      </div>
+      <p class="welcome-import">${WELCOME.mspBefore}
+        <button class="button link" type="button" onClick=${() => setSheet('msp')}>${WELCOME.mspButton}</button></p>
+      ${canImport && html`<p class="welcome-import">${WELCOME.importBefore}
+        <button class="button link" type="button" onClick=${() => setImporting(true)}>${WELCOME.importButton}</button></p>
+        <p class="hint">${DESKTOP_IMPORT_HINT}</p>`}
+    </section>
+    ${(sheet === 'music' || sheet === 'label') && html`<${StartSheet} key=${sheet} path=${sheet}
+      connectors=${connectors} feeds=${feeds} onAdded=${onAdded} onClose=${() => setSheet(null)} />`}
+    ${(sheet === 'find' || sheet === 'msp') && html`<${AddFeedRowSheet} open=${sheet} connectors=${connectors} feeds=${feeds}
+      onAdded=${onAdded} onClose=${() => setSheet(null)} />`}
+    ${importing && html`<${ImportFlow} onBack=${() => setImporting(false)} />`}
+  </div>`;
+}
+
+// One large row of the Welcome page: an icon, a title, one line and the arrow.
+function WelcomeRow({ row, primary = false, onClick }) {
+  return html`<button class="link-row welcome-row" type="button" onClick=${onClick}>
+    <span class=${primary ? 'welcome-icon primary' : 'welcome-icon'} aria-hidden="true"><${Icon} name=${row.icon} /></span>
+    <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
+    <span class="go" aria-hidden="true">›</span>
+  </button>`;
+}
+
+// The sheet of a musician or a label (ADR 0119 items 4 to 7). Step 1 asks the
+// name. Step 2 asks for the file host, unless one file host exists. Then the
+// draft of the publisher feed is made. Studio writes nothing (ADR 0007).
+// The sheet mounts for each open, so each open starts at step 1.
+function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
+  const ref = useSheet(true);
+  const text = pathTexts(path);
+  const names = welcomeSteps(path);
+  const mode = hostStep(connectors);
+  const [step, setStep] = useState('name');
+  const [name, setName] = useState('');
+  const [hostType, setHostType] = useState(null);
+  // The file host that this sheet connected. A new try after a failure uses
+  // it, and does not connect a second file host.
+  const [madeHost, setMadeHost] = useState(null);
+  const [connectorId, setConnectorId] = useState(connectors[0] ? String(connectors[0].id) : '');
+  const { busy, error, run } = useAction();
+  // With one file host, step 2 does not show (ADR 0119 item 6).
+  const steps = mode === 'skip' ? [names[0], names[2]] : names;
+  const now = step === 'name' ? 0 : 1;
+  const createFeed = (id) => run(async () => {
+    await onAdded(await api('/feeds/new', { method: 'POST', body: welcomeBody(path, name.trim(), id) }));
+  });
+  // With one file host, Continue of step 1 makes the feed.
+  const next = (event) => {
+    event.preventDefault();
+    if (mode === 'skip') createFeed(connectors[0].id);
+    else setStep('where');
+  };
+  const make = (event) => {
+    event.preventDefault();
+    createFeed(Number(connectorId));
+  };
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="start-title" onClose=${onClose}>
+    <header>
+      <h2 id="start-title">${text.sheet}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <ol class="steps-line">${steps.map((label, i) => {
+        const state = i < now ? 'done' : i === now ? 'now' : 'later';
+        return html`<li key=${label} class=${state}><span class="step-mark" aria-hidden="true">${state === 'done' ? '✓' : i + 1}</span>${label}</li>`;
+      })}</ol>
+      ${step === 'name'
+        ? html`<form class="form" onSubmit=${next}>
+            <${Field} id="start-name" label=${text.nameLabel} required value=${name} onInput=${(e) => setName(e.target.value)} />
+            ${text.hint && html`<p class="hint">${text.hint}</p>`}
+            <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+              <button class="button primary" type="submit" disabled=${busy || name.trim() === ''}>Continue</button></div>
+          </form>`
+        : mode === 'menu'
+          ? html`<form class="form" onSubmit=${make}>
+              <p>${text.where}</p>
+              <${ChoiceSelect} id="start-host" label="File host" value=${connectorId}
+                options=${connectors.map((c) => [String(c.id), c.name])} onChange=${setConnectorId} />
+              <div class="actions"><button class="button" type="button" onClick=${() => setStep('name')}>Back</button>
+                <button class="button primary" type="submit" disabled=${busy || connectorId === ''}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>
+            </form>`
+          : madeHost !== null
+            ? html`<div class="form">
+                <p>${`Studio connected the file host ${madeHost.name}.`}</p>
+                <div class="actions"><button class="button primary" type="button" disabled=${busy}
+                  onClick=${() => createFeed(madeHost.id)}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>
+              </div>`
+          : hostType === null
+            ? html`<div class="form">
+                <p>${text.where}</p>
+                <div class="group">${HOST_ROWS(serverMode).map((row) => html`<${WelcomeRow} key=${row.type} row=${row}
+                  primary=${row.primary === true} onClick=${() => setHostType(row.type)} />`)}</div>
+                <div class="actions"><button class="button" type="button" onClick=${() => setStep('name')}>Back</button></div>
+              </div>`
+            : html`<div class="form">
+                <p>${text.where}</p>
+                <${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} onAdded=${(connector) => { setMadeHost(connector); createFeed(connector.id); }} />
+                ${hostType === 'local' && html`<div class="actions"><button class="button link" type="button"
+                  onClick=${() => setHostType('sftp')}>Use an SFTP Server Instead</button></div>`}
+                <div class="actions"><button class="button" type="button" onClick=${() => setHostType(null)}>Back</button></div>
+              </div>`}
+      <${ErrorNotice} error=${error} />
+    </div>
+  </dialog>`;
+}
+
+// A row sheet of the Add feeds page, for the first steps (ADR 0119 items 6
+// and 8). The forms are the same as on the Add feeds page.
+export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onClose }) {
+  const [found, setFound] = useState(null);
+  const makeRow = MAKE_TYPES.some(([id]) => id === open);
+  const rows = addChoices({ hasHost: connectors.length > 0 }).flatMap((group) => group.rows);
+  const title = makeRow ? 'Make a new feed' : (rows.find((row) => row.id === open) || {}).title || '';
+  return html`<${AddFeedSheet} open=${open} title=${title} connectors=${connectors} feeds=${feeds}
+    found=${found} setFound=${setFound} start=${start} onAdded=${onAdded} onClose=${() => { setFound(null); onClose(); }} />`;
 }
 
 // The navigation state of the session (ADR 0039 item 8). A reload keeps it
@@ -3394,6 +3451,8 @@ function Shell({ vault, onLock }) {
     vaultLocked: serverMode && vault === 'locked', narrow,
   });
 
+  // A new feed opens its page. The list is loaded before the page opens.
+  const addedFeed = async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); };
   let main;
   // A screen with no bar of its own gets one.
   const withBar = (content) => html`<div><${Bar}><span class="bar-title">Studio</span><//>${content}</div>`;
@@ -3419,8 +3478,7 @@ function Shell({ vault, onLock }) {
   } else if (view.name === 'change-set') {
     main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} onChanged=${() => load()} />`;
   } else if (view.name === 'add-feed') {
-    main = html`<${AddFeeds} connectors=${connectors} feeds=${feeds} go=${go}
-      onAdded=${async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); }} />`;
+    main = html`<${AddFeeds} connectors=${connectors} feeds=${feeds} go=${go} onAdded=${addedFeed} />`;
   } else if (selected && view.name === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go}
       onAdding=${setAdding} onImporting=${setImporting} onChanged=${() => load()} connectors=${connectors} />`;
@@ -3440,7 +3498,7 @@ function Shell({ vault, onLock }) {
       group=${view.name === 'releases' ? view.group : undefined} groupSort=${view.sort}
       onGroupSort=${(sort) => go({ ...view, sort }, { replace: true })}
       changedFeeds=${changedFeeds} onQuery=${changeList}
-      onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${() => go({ name: 'add-feed' })} />`;
+      onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${() => go({ name: 'add-feed' })} onAddedFeed=${addedFeed} />`;
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard };
@@ -4358,7 +4416,6 @@ function ImportFlow({ signup, onDone, onBack }) {
 function Studio({ epoch }) {
   const [status, setStatus] = useState(null);
   const [library, setLibrary] = useState(null);
-  const [skipped, setSkipped] = useState(false);
   const [error, setError] = useState(null);
   const load = useCallback(async () => {
     try {
@@ -4388,11 +4445,8 @@ function Studio({ epoch }) {
   if (library.root === null) {
     return html`<${LibrarySheet} defaultRoot=${library.default_root} onDone=${load} />`;
   }
-  // The first run: an empty collection (ADR 0020). The vault comes when the
-  // user first adds a secret. On a server, the vault exists from the sign-up.
-  if (status.feeds === 0 && status.connectors === 0 && !skipped) {
-    return html`<${Wizard} onFinish=${() => { setSkipped(true); load(); }} />`;
-  }
+  // A new user with no feed sees the Welcome page in the Shell (ADR 0119
+  // item 11). The vault comes when the user first adds a secret (ADR 0020).
   return html`<${Shell} vault=${status.vault} onLock=${load} />`;
 }
 

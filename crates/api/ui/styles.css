@@ -1539,6 +1539,47 @@ button.outline-feed {
 .releases-tile .releases-text { width: 100%; }
 .empty-releases { display: grid; gap: 12px; justify-items: start; }
 
+/* The Welcome page and its first steps (ADR 0119). The large rows have an icon
+   box of 2.75rem, which is 44 px at the default size. The step line shows each step as done, now or later. */
+.welcome { max-width: 640px; }
+.welcome h1 { margin-top: 0; }
+.welcome-intro { color: var(--muted); }
+.welcome-group { margin-block: 16px 12px; }
+.welcome-row { gap: 16px; padding-block: 16px; }
+.welcome-row .summary { white-space: normal; }
+.welcome-import { margin-block: 20px 0; }
+.welcome-import + .welcome-import { margin-top: 6px; }
+.welcome-icon, .step-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 12px;
+  background: var(--fill-soft);
+  color: var(--text);
+}
+.welcome-icon.primary { background: var(--accent); color: #fff; }
+.welcome-icon .icon, .step-icon .icon { display: block; width: 22px; height: 22px; }
+.first-step { margin-bottom: 16px; }
+.first-step-row { cursor: default; gap: 16px; padding-block: 16px; }
+.first-step-row .text { flex: 1; min-width: 0; display: grid; }
+.first-step-row .summary { white-space: normal; }
+.steps-line { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 16px; padding: 0; }
+.steps-line li { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.steps-line li.now, .steps-line li.done { color: var(--text); }
+.steps-line .step-mark {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  font-size: var(--text-caption-2);
+  font-weight: 700;
+}
+.steps-line li.now .step-mark, .steps-line li.done .step-mark { background: var(--accent); color: #fff; box-shadow: none; }
+
 @media (max-width: 760px) {
   .page { padding: 8px 16px 24px; }
 }

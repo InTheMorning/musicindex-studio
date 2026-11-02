@@ -8,6 +8,7 @@ Music Index Studio edits hosted Podcasting 2.0 music feeds. An artist keeps each
 - [How Studio works](docs/user-guide/how-studio-works.md)
 - [Start Studio on your computer](docs/user-guide/start-on-desktop.md)
 - [Set up Studio for the first time](docs/user-guide/first-run.md)
+- [Start your artist page or label page](docs/user-guide/first-steps.md)
 - [Passphrase, unlock and lock](docs/user-guide/vault.md)
 - [Connect a file host](docs/user-guide/hosts.md)
 - [Add feeds that you already have](docs/user-guide/add-feeds.md)

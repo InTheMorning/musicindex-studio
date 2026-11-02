@@ -3,13 +3,15 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
 Decision: [ADR 0119](../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md).
 
-Status: Not started.
+Status: Complete. Packet 083a is committed. The screenshot visual check passed on 2026-11-02, with a local folder that has a public address. A local folder with no public address cannot make a page yet: the operator selected practice mode, and the next decision gives it. The human test is open.
 
 ## Goal
 
 A user with no feed sees "Welcome to Studio". The user starts as a musician or as a label, gives a name and picks a file host. Then Studio makes the draft of an artist page or a label page, with its next step. The first steps use no word "feed".
 
 ## Packets
+
+The visual check found that the first-run wizard of ADR 0020 asked its question before the Welcome page. ADR 0119 item 11 removes that question, and the planning model made the change in packet 083a.
 
 The task changes only the UI, in one packet. The core and the API already make a publisher feed with a role (`POST /feeds/new`).
 

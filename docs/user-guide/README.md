@@ -12,6 +12,7 @@ Most steps are the same in the two. A page tells you when a step is different.
 1. [How Studio works](how-studio-works.md). Read this page first. It explains the words that the guide uses.
 2. [Start Studio on your computer](start-on-desktop.md)
 3. [Set up Studio for the first time](first-run.md)
+4. [Start your artist page or label page](first-steps.md)
 
 ## Use Studio on a server
 

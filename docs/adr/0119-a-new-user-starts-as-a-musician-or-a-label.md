@@ -4,8 +4,8 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screens 2 to 6 of the mockups in `.studio-dev/mockup-start/site/`.
-- Amended: 2026-11-02 by the operator: "My own server" is the first row of item 6.
-- Changes: [ADR 0072](0072-add-a-feed-opens-from-releases.md), the empty Releases page. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) does not change for a user with feeds.
+- Amended: 2026-11-02 by the operator: "My own server" is the first row of item 6. Item 11 comes from the visual check of task 083.
+- Changes: [ADR 0072](0072-add-a-feed-opens-from-releases.md), the empty Releases page. [ADR 0020](0020-first-run-asks-one-question.md) items 1 and 2, the question of the first-run wizard (item 11). [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) does not change for a user with feeds.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the first write. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the file host forms. [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) and [ADR 0083](0083-hosting-is-a-first-class-role.md) for the roles. [ADR 0107](0107-a-user-can-export-and-import-an-account.md) for the import.
 
 ## Context
@@ -34,6 +34,7 @@
     - Label: the rows "Add an artist", "Add a release" and "Find an artist that is online".
 9. "Add an Album" opens "Add tracks" of ADR 0073 for a new album of this artist. The first write of the artist page and the album goes through Review (ADR 0007).
 10. The first steps use the words "artist page", "label page", "album", "release" and "file host". They do not use the word "feed". The Add feeds page, the settings and the details keep the word "feed".
+11. The Welcome page replaces the question of the first-run wizard, "Do you already have a feed?", and its page "Welcome" (ADR 0020 items 1 and 2). A new user goes from the library folder, or from the sign-up on a server, to the Welcome page. "My music is online already" uses the same search as the answer "Yes" of ADR 0020, and ADR 0020 items 3 to 15 do not change. Below the groups, the line "Moving from MSP 2.0? Import the Backups" opens the MSP 2.0 import.
 
 ## Alternatives Considered
 

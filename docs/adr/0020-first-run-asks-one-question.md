@@ -1,6 +1,7 @@
 # ADR 0020: The First Run Asks One Question
 
 - Status: Accepted
+- Changed by: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 11. The Welcome page replaces the question of items 1 and 2. Items 3 to 15 apply to the search of the Welcome page and of the Add feeds page.
 - Date: 2026-10-22
 - Owner: operator
 

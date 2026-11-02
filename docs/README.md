@@ -123,6 +123,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0118: "Member of" offers a credit on the artist feed](adr/0118-member-of-offers-a-credit-on-the-artist-feed.md)
 - [ADR 0119: A new user starts as a musician or a label](adr/0119-a-new-user-starts-as-a-musician-or-a-label.md)
 - [ADR 0120: The check of a person shows each difference](adr/0120-the-check-of-a-person-shows-each-difference.md)
+- [ADR 0121: A folder with no public address holds practice pages](adr/0121-a-folder-with-no-public-address-holds-practice-pages.md)
 
 ## Plans
 
@@ -342,6 +343,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 082: The credit name and the title of a member credit](tasks/studio-v1-task-082-credit-name-and-title.md)
 - [Studio v1 task 083: The Welcome page of a new user](tasks/studio-v1-task-083-welcome.md)
 - [Studio v1 task 084: The check of a person shows each difference](tasks/studio-v1-task-084-check-differences.md)
+- [Studio v1 task 085: Practice pages](tasks/studio-v1-task-085-practice-pages.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

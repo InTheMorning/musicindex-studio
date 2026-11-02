@@ -254,7 +254,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - Decision: [ADR 0119](../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md). On 2026-11-02 the operator asked for a clear first path for a musician and for a label, with no word "feed".
 - The mockups are in `.studio-dev/mockup-start/site/`.
-- [Task 083](../tasks/studio-v1-task-083-welcome.md) gives the work in one UI packet. It is complete, and its human test is open. A local folder with no public address waits for practice mode.
+- [Task 083](../tasks/studio-v1-task-083-welcome.md) gives the work in one UI packet. It is complete, and its human test is open. [ADR 0121](../adr/0121-a-folder-with-no-public-address-holds-practice-pages.md) makes a folder with no public address hold practice pages, and [task 085](../tasks/studio-v1-task-085-practice-pages.md) gives the work in two packets. It is not started.
 - [ADR 0120](../adr/0120-the-check-of-a-person-shows-each-difference.md) makes each row of the check of a person show its differences. [Task 084](../tasks/studio-v1-task-084-check-differences.md) gives the work in two packets. It is complete, and its human test is open. The two tasks share only the file `docs/README.md`.
 
 ### Phase 13: Desktop Shell

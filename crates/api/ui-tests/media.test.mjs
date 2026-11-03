@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HTTP_NOTICE, canPlay, heldMap, mediaSource, playerNotice, plainAddress } from '../ui/media.js';
+import { HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, mediaSource, playerError, playerNotice, plainAddress } from '../ui/media.js';
 
 // ADR 0109 item 5 and the acceptance criteria: the source of an image and of
 // the player. Fix a failure in crates/api/ui/media.js, not in the test.
@@ -47,4 +47,13 @@ test('ADR 0076: the OP3 prefix does not change the source of the player', () => 
 test('heldMap ignores a bad row', () => {
   assert.equal(heldMap(null).size, 0);
   assert.equal(heldMap({ files: [{ file: 'x', url: 'https://a.example/' }, { file: 1 }, null] }).size, 0);
+});
+
+test('a file from its host names the browser setting in the player error, and a held file does not', () => {
+  const held = new Map([['https://music.example/held.mp3', 7]]);
+  const direct = mediaSource('https://files.example/a.mp3', held);
+  assert.equal(playerError(direct), DIRECT_PLAYER_ERROR);
+  assert.equal(DIRECT_PLAYER_ERROR, 'Studio cannot play this file. Your browser can block audio from other sites.');
+  assert.equal(playerError(mediaSource('https://music.example/held.mp3', held)), PLAYER_ERROR);
+  assert.equal(PLAYER_ERROR, 'Studio cannot play this file.');
 });

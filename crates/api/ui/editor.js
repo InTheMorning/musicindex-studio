@@ -33,7 +33,7 @@ import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
-import { mediaSource, playerNotice, canPlay } from './media.js';
+import { mediaSource, playerNotice, canPlay, playerError } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
@@ -326,7 +326,6 @@ function Enclosure({ id, path, enclosure, onChange, bad, pick }) {
 // `needsMetadataRead` marks. The element then reads the duration, and
 // `pick.metadataDone` puts it in the track.
 const TICKET_RENEW_MS = 50 * 60 * 1000;
-const PLAYER_ERROR = 'Studio cannot play this file.';
 
 function AudioPlayer({ id, url, pick }) {
   const audio = useRef(null);
@@ -386,7 +385,7 @@ function AudioPlayer({ id, url, pick }) {
       }
       await element.play();
     } catch (e) {
-      setError(PLAYER_ERROR);
+      setError(playerError(source));
     }
   };
   const onLoadedMetadata = (e) => {
@@ -399,7 +398,7 @@ function AudioPlayer({ id, url, pick }) {
     // An element with no address gives no error of its own.
     if (!e.currentTarget.getAttribute('src')) return;
     setPlaying(false);
-    setError(PLAYER_ERROR);
+    setError(playerError(source));
     if (reading) pick.metadataDone(null);
   };
   const known = Number.isFinite(length) && length > 0;

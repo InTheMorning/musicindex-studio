@@ -58,6 +58,17 @@ export function playerNotice(source) {
   return source.kind === 'none' && source.reason === 'http' ? HTTP_NOTICE : null;
 }
 
+// The error of the player when the browser does not play the file. A file
+// from its host is a load from a different site, and a browser setting can
+// block it, so the text names that cause. A file that Studio holds loads
+// from Studio, so the setting has no effect on it.
+export const PLAYER_ERROR = 'Studio cannot play this file.';
+export const DIRECT_PLAYER_ERROR = 'Studio cannot play this file. Your browser can block audio from other sites.';
+
+export function playerError(source) {
+  return source && source.kind === 'direct' ? DIRECT_PLAYER_ERROR : PLAYER_ERROR;
+}
+
 // Can the player play this source?
 export function canPlay(source) {
   return source.kind === 'direct' || source.kind === 'held';

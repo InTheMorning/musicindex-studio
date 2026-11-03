@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c is complete. Its check on a manual run of the release workflow is open.
+Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c is complete. Its check passed on the release run of `v0.1.0-rc.16`.
 
 ## Goal
 
@@ -34,6 +34,8 @@ Visual check of 088d, by the planning model on Linux: the Quit step of the visua
 - "Quit After Write" hid the window and showed the wait menu. The app ended after the write.
 - "Open Studio" during the wait showed the window and the normal menu, and the app continued after the write.
 - "Quit Now" during the write ended the app and the API immediately. "Quit" with no work ended the app with no dialog.
+
+Check of 088c, by the planning model: the tag `v0.1.0-rc.16` took the place of the manual run. On 2026-11-03 run 41706767452 passed each of its six jobs. The Release holds the five archives, the nine installers and `SHA256SUMS.txt` with 14 lines. The downloaded Linux x86-64 DEB matches its line, and its control file gives the version `0.1.0-rc.16`.
 
 Human test, by the operator, after 088c and 088d: the human test of ADR 0124.
 

@@ -19,21 +19,12 @@ export const WELCOME = {
   importButton: 'Import an Account',
 };
 
-// The texts of the practice pages (ADR 0121 items 3, 7 and 8). The sheet
-// "Publish for Real" uses them, and so does the folder input of step 2.
-export const PRACTICE = {
-  badge: 'Practice',
-  button: 'Publish for Real',
-  sheet: 'Publish for Real',
-  sheetIntro: 'Studio moves each practice page of this folder to the file host that you select, and gives each page its real address. Then you review and write each page.',
-  folderHint: 'Leave it empty to practice. Nothing is public until you publish for real.',
-  requiredHint: 'Studio needs this address to make the pages public.',
-  targetLabel: 'File host',
-  move: 'Move the Pages',
-  newHost: 'Or add a file host with a public address.',
-  // The notice of a practice page (ADR 0121 items 3 and 7).
-  noticeStrong: 'This is a practice page.',
-  noticeText: 'Nothing is public. Select Publish for Real when you want apps to find it.',
+// The texts of the file host step (ADR 0122 items 3, 6 and 10). The text of
+// item 10 has no caller yet. Task 086c shows it on an expired feed.
+export const HOST_STEP = {
+  temporary: 'Kept for 7 days. Pick a real file host to keep your pages.',
+  placeholderGuid: 'Studio cannot make the GUID yet. A GUID comes from the public address of the feed, and this file host has none. Studio sets the GUID when the feed gets a public address.',
+  expired: 'The temporary area has expired. Move this feed to a real file host.',
 };
 
 // The texts and the step names of each path (ADR 0119 items 4 to 6).
@@ -78,58 +69,30 @@ export function showWelcome(feeds) {
   return (feeds || []).length === 0;
 }
 
-// What step 2 shows: `pick` with no file host, `skip` with one, and `menu`
-// with two or more (ADR 0119 item 6).
-export function hostStep(connectors) {
-  const count = (connectors || []).length;
-  if (count === 0) return 'pick';
-  return count === 1 ? 'skip' : 'menu';
+// The model of step 2 (ADR 0122 items 2 and 4). `menu` holds the connected file
+// hosts, with the first one selected, or null with no file host. `rows` are
+// the rows of the file host types. `selected` is the type of the first row
+// with no file host. With a file host, the menu is selected at the start, so
+// `selected` is null and the step has one primary button.
+export function hostStepModel(connectors, serverMode) {
+  const list = connectors || [];
+  const rows = HOST_ROWS(serverMode);
+  const menu = list.length > 0 ? { value: String(list[0].id), options: list.map((c) => [String(c.id), c.name]) } : null;
+  return { menu, rows, selected: menu ? null : rows[0].type };
 }
 
-// The rows of the file host types (ADR 0119 item 6). The first row is the
-// primary row. Each row gives the type of the file host form. The desktop
-// row opens a local folder form, which links to the SFTP form.
+// The rows of the file host step (ADR 0122 items 2 and 3). The first row is
+// the default row. It is selected at the start. Each row gives the type of
+// its form. A server has the temporary area as its default row.
 export function HOST_ROWS(serverMode) {
   return [
-    {
-      type: serverMode ? 'sftp' : 'local',
-      icon: 'hard-drive',
-      primary: true,
-      title: 'My own server',
-      line: serverMode ? 'Your own SFTP server.' : 'A folder on this computer, to try Studio first. Or your own SFTP server.',
-    },
+    serverMode
+      ? { type: 'temporary', icon: 'hard-drive', primary: true, title: 'Try it here (temporary)', line: HOST_STEP.temporary }
+      : { type: 'local', icon: 'hard-drive', primary: true, title: 'Folder on this computer', line: 'A folder on this computer. The public address is optional.' },
     { type: 'nsite', icon: 'upload', title: 'Nostr site (nsite)', line: 'A site on Nostr. Its pages and songs go to Blossom servers, signed with your Nostr key.' },
     { type: 's3', icon: 'cloud', title: 'S3 or Cloudflare R2', line: 'A storage bucket at Amazon S3, Cloudflare R2 or a similar provider.' },
+    { type: 'sftp', icon: 'hard-drive', title: 'SFTP server', line: 'Your own SFTP server.' },
   ];
-}
-
-// A file host gives a public address when its configuration has one. The
-// address is the field `base_url`, or the key and the identifier of an nsite
-// site. A Blossom host holds media only (ADR 0048 item 2), so it gives no
-// address for a page.
-function hasPublicAddress(connector) {
-  let config;
-  try {
-    config = JSON.parse(connector.config || '{}');
-  } catch {
-    return false;
-  }
-  switch (connector.kind) {
-    case 'local':
-    case 's3':
-    case 'sftp':
-      return typeof config.base_url === 'string' && config.base_url !== '';
-    case 'nsite':
-      return typeof config.public_key === 'string' && typeof config.d === 'string' && config.d !== '';
-    default:
-      return false;
-  }
-}
-
-// The file hosts that can receive the practice pages (ADR 0121 item 5). The
-// sheet "Publish for Real" offers only these hosts.
-export function publishTargets(connectors) {
-  return (connectors || []).filter(hasPublicAddress);
 }
 
 // The body of `POST /feeds/new` for the first publisher feed of a path (ADR

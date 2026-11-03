@@ -1548,6 +1548,7 @@ button.outline-feed {
 .welcome-group { margin-block: 16px 12px; }
 .welcome-row { gap: 16px; padding-block: 16px; }
 .welcome-row .summary { white-space: normal; }
+.welcome-row[aria-pressed="true"] { background: var(--fill); }
 .welcome-import { margin-block: 20px 0; }
 .welcome-import + .welcome-import { margin-top: 6px; }
 .welcome-icon, .step-icon {
@@ -1661,12 +1662,6 @@ button.outline-feed {
 .badge {
   flex: none; width: 56px; box-sizing: border-box; padding: 3px 0; border-radius: 6px; text-align: center;
   font-size: var(--text-footnote); font-weight: 600; letter-spacing: .04em; color: var(--text); background: var(--fill);
-}
-/* The practice badge (ADR 0121 item 7). It uses the text and the separator
-   tokens, and no new color. */
-.badge-practice {
-  display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--muted); border-radius: 6px;
-  font-size: var(--text-footnote); line-height: 1.6; color: var(--muted); white-space: nowrap; vertical-align: middle;
 }
 .import-file .name { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .import-file .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

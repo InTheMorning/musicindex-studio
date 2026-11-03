@@ -280,6 +280,16 @@ pub fn default_root() -> Option<PathBuf> {
     Some(home.home_dir().join("musicindex").join("studio"))
 }
 
+/// The default folder of the pages on a file host, `~/musicindex/pages`:
+/// the folder `pages` in the parent folder of [`default_root`] (ADR 0122
+/// item 2).
+///
+/// Gives `None` when the system has no home folder for this user.
+#[must_use]
+pub fn default_host_root() -> Option<PathBuf> {
+    Some(default_root()?.parent()?.join("pages"))
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;

@@ -1188,6 +1188,9 @@ pub(crate) async fn update_connector(
         }
         if let Some(base_url) = &body.base_url {
             set_connector_base_url(w, &row, base_url)?;
+            // A new public address gives each feed with a placeholder GUID
+            // its real GUID (ADR 0122 item 8).
+            assign_real_guids_of_all(w)?;
         }
         if let Some(config) = &new_config {
             w.collection.set_connector_config(id, config)?;
@@ -1211,6 +1214,16 @@ pub(crate) async fn update_connector(
         to_json(w.collection.connector(id)?)
     })
     .await
+}
+
+/// Give each feed with a placeholder GUID its real GUID, when its file host
+/// now gives a public address (ADR 0122 item 8). A feed with no such host
+/// keeps its placeholder.
+fn assign_real_guids_of_all(w: &Workspace) -> Result<(), ApiError> {
+    let hosts = w.hosts()?;
+    let ids: Vec<FeedId> = w.collection.feeds()?.iter().map(|row| row.id).collect();
+    pipeline::assign_real_guids(&w.collection, &hosts, &ids)?;
+    Ok(())
 }
 
 /// Accept a new host key for an SFTP host (ADR 0047 item 3). The server
@@ -1309,8 +1322,6 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
         }
         // The links of each feed give its destination (ADR 0085).
         let catalogs = publisher::catalogs(&feeds);
-        // A locked host gives no practice flag. The list reads no secret.
-        let hosts = w.hosts_without_secrets()?;
         let mut rows = Vec::new();
         for ((row, feed), catalog) in feeds.iter().zip(catalogs) {
             let state = draft_state(w, row)?;
@@ -1323,8 +1334,17 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             let mut value =
                 serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
-            // A practice page has no public address (ADR 0121 item 1).
-            value["practice"] = json!(pipeline::is_practice(&w.collection, &hosts, row));
+            // A feed with a placeholder GUID has no public address yet
+            // (ADR 0122 item 5). The GUID of a feed with a draft is in its
+            // draft: a new feed has no GUID in its row before its first
+            // write, and the links in the drafts name the GUID of the draft.
+            let guid = match w.collection.draft(row.id)? {
+                Some(_) => pipeline::draft_model(&w.collection, row.id)?.0.podcast_guid,
+                None => row.podcast_guid.clone(),
+            };
+            value["placeholder_guid"] =
+                json!(guid.as_deref().is_some_and(pipeline::has_placeholder_guid));
+            value["podcast_guid"] = json!(guid);
             value["image"] = json!(image);
             value["rss_image_url"] = json!(rss_image_url);
             // The release list marks a feed that apps do not list (ADR 0063).
@@ -1515,35 +1535,6 @@ pub(crate) async fn new_album_feed(
             w.collection.set_publisher_roles(id, &[role], true)?;
         }
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
-    })
-    .await
-}
-
-#[derive(Deserialize)]
-pub(crate) struct PracticePublish {
-    /// The file host of the practice pages.
-    from: i64,
-    /// The file host with a public address that receives the pages.
-    to: i64,
-}
-
-/// Publish each practice page of `from` on `to` for real (ADR 0121 item 5).
-/// The route writes no file. It gives the IDs of the pages.
-pub(crate) async fn publish_practice(
-    State(shared): State<Shared>,
-    Json(body): Json<PracticePublish>,
-) -> ApiResult {
-    blocking(shared, move |w| {
-        let hosts = w.hosts()?;
-        let feed_ids = pipeline::publish_practice(
-            &mut w.collection,
-            &hosts,
-            ConnectorId(body.from),
-            ConnectorId(body.to),
-        )?;
-        to_json(json!({
-            "feed_ids": feed_ids.iter().map(|id| id.0).collect::<Vec<_>>(),
-        }))
     })
     .await
 }
@@ -2040,6 +2031,9 @@ pub(crate) async fn match_connector(
         )?;
         // A new host gets its inventory immediately, so that the Files
         // page shows its copies (ADR 0036 item 6).
+        // A folder address can be new, so a feed with a placeholder GUID
+        // may get its real GUID (ADR 0122 item 8).
+        assign_real_guids_of_all(w)?;
         let hosts = w.hosts()?;
         let inventory = inventory::scan(&w.collection, &hosts, row.id)?;
         let linked = linked
@@ -2825,11 +2819,19 @@ pub(crate) async fn get_library(State(shared): State<Shared>) -> ApiResult {
             .library_root()?
             .map_or(Value::Null, |p| json!(p.to_string_lossy()));
         let default_root = library::default_root().and_then(|p| p.to_str().map(str::to_owned));
+        // The default folder of the pages on a file host is on the desktop
+        // only (ADR 0122 item 2). A server has no folder of the user.
+        let default_host_root = if w.rules.is_none() {
+            library::default_host_root().and_then(|p| p.to_str().map(str::to_owned))
+        } else {
+            None
+        };
         let max = download_limit(&w.collection, "download_max_file_bytes")?;
         let min = download_limit(&w.collection, "download_min_free_bytes")?;
         Ok(Json(json!({
             "root": root,
             "default_root": default_root,
+            "default_host_root": default_host_root,
             "download_max_file_bytes": max,
             "download_min_free_bytes": min,
         })))

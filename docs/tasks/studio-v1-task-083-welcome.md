@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
 Decision: [ADR 0119](../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md).
 
-Status: Complete. Packet 083a is committed. The screenshot visual check passed on 2026-11-02, with a local folder that has a public address. A local folder with no public address makes practice pages since task 085 (ADR 0121). The human test is open.
+Status: Complete. Packet 083a is committed. The screenshot visual check passed on 2026-11-02, with a local folder that has a public address. A local folder with no public address makes feeds with a placeholder GUID since task 086 (ADR 0122). The human test is open.
 
 ## Goal
 

@@ -1,9 +1,9 @@
 # Studio v1 Task 085: Practice Pages
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
-Decision: [ADR 0121](../adr/0121-a-folder-with-no-public-address-holds-practice-pages.md).
+Decision: [ADR 0121](../archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), superseded by ADR 0122.
 
-Status: Complete. Packets 085a and 085b are committed. The screenshot visual check passed on 2026-11-02. The human test is open.
+Status: Superseded. ADR 0122 superseded ADR 0121 on 2026-11-02, and [task 086](studio-v1-task-086-default-file-host.md) removes the practice parts. No human test.
 
 ## Goal
 
@@ -62,7 +62,7 @@ Implement only this task. Do not redesign the architecture.
 
 Read:
 - AGENTS.md
-- docs/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md
+- docs/archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md
 - docs/tasks/studio-v1-task-085-practice-pages.md (the Goal and packet 085a only)
 - ~/.agents/skills/asd-ste100/SKILL.md
 - The files that the Files section of packet 085a names.
@@ -138,7 +138,7 @@ Implement only this task. Do not redesign the architecture.
 
 Read:
 - AGENTS.md
-- docs/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md
+- docs/archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md
 - docs/tasks/studio-v1-task-085-practice-pages.md (the Goal and packet 085b only)
 - ~/.agents/skills/asd-ste100/SKILL.md
 - The files that the Files section of packet 085b names.

@@ -290,7 +290,6 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       image: feedCover(feed),
       glow: kindGlow(feedKind(feed)),
       typeLabel: feedKind(feed).label,
-      ...practiceFlag(feed),
       // The head opens the first page (ADR 0069).
       page: 'album',
       current: isCurrentPage(view, 'album'),
@@ -390,7 +389,6 @@ function feedLevel(owner, view, feeds) {
       art: publisherArt(owner, feeds),
       glow: kindGlow(feedKind(owner)),
       typeLabel: feedKind(owner).label,
-      ...practiceFlag(owner),
       from,
     },
     sections: headed(children, (feed) => ({
@@ -414,12 +412,6 @@ function feedLevel(owner, view, feeds) {
 // 3): each top feed, with no feed above it, under its role heading, then
 // "Not linked" when a release has no link. `count` is the number of
 // releases of the destination. The first row of a heading has `heading`.
-// The badge flag of a practice page (ADR 0121 item 7). The key is set only for
-// a practice page, so a row of each other feed keeps its shape.
-export function practiceFlag(feed) {
-  return feed.practice === true ? { practice: true } : {};
-}
-
 export function groupDestinations(feeds, view) {
   const list = Array.isArray(feeds) ? feeds : [];
   const shown = (group) => view.name === 'releases' && view.group === group;
@@ -561,7 +553,6 @@ export function releasesList({ feeds, connectors, sort, view, marked, group }) {
       id: owner.id,
       title: displayTitle(owner),
       typeLabel: feedKind(owner).label,
-      ...practiceFlag(owner),
       dot: feedKind(owner).dot,
     };
   } else if (group === 'none') {
@@ -596,7 +587,6 @@ export function releasesList({ feeds, connectors, sort, view, marked, group }) {
     id: feed.id,
     title: displayTitle(feed),
     typeLabel: feedKind(feed).label,
-    ...practiceFlag(feed),
     glow: kindGlow(feedKind(feed)),
     host: hostOf(feed, connectors),
     image: feedCover(feed),

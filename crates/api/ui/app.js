@@ -17,7 +17,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
-import { WELCOME, PRACTICE, showWelcome, welcomeSteps, pathTexts, hostStep, HOST_ROWS, welcomeBody, publishTargets } from './welcome.js';
+import { WELCOME, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
@@ -710,12 +710,17 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
   </div>`;
 }
 
-// `addressHint` replaces the hint of the public address (ADR 0121 item 8).
-// `requireAddress` makes the address required, for the sheet "Publish for Real".
-function LocalHostForm({ onAdded, addressHint = null, requireAddress = false }) {
+// `startRoot` is the folder that the form starts with (ADR 0122 item 3). The
+// submit button has the text `submitLabel`.
+function LocalHostForm({ onAdded, startRoot = '', submitLabel = 'Add the Folder' }) {
   const [name, setName] = useState('');
-  const [root, setRoot] = useState('');
+  const [root, setRoot] = useState(startRoot);
   const [baseUrl, setBaseUrl] = useState('');
+  // The start folder can arrive after the form opens. A folder that the user
+  // typed stays.
+  useEffect(() => {
+    if (startRoot) setRoot((current) => current || startRoot);
+  }, [startRoot]);
   const { busy, error, run } = useAction();
   const submit = (event) => {
     event.preventDefault();
@@ -735,12 +740,12 @@ function LocalHostForm({ onAdded, addressHint = null, requireAddress = false }) 
     <${Field} id="host-root" label="Folder" required placeholder="/home/me/feeds"
       hint="The full path of the folder that holds your feed files."
       error=${hostError.field} value=${root} onInput=${(e) => setRoot(e.target.value)} />
-    <${Field} id="host-url" label=${requireAddress ? 'Public address of the folder' : 'Public address of the folder (optional)'} type="url"
-      required=${requireAddress} placeholder="https://music.example.com/feeds"
-      hint=${requireAddress ? PRACTICE.requiredHint : (addressHint || 'When a web server publishes this folder, Studio uses this address for each feed.')}
+    <${Field} id="host-url" label="Public address of the folder (optional)" type="url"
+      placeholder="https://music.example.com/feeds"
+      hint="When a web server publishes this folder, Studio uses this address for each feed."
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
     <${ErrorNotice} error=${hostError.other} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root || (requireAddress && !baseUrl)}>${busy ? 'Adding…' : 'Add the Folder'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : submitLabel}</button></div>
   </form>`;
 }
 
@@ -1332,18 +1337,19 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, pendin
 
 // The first choice is the type of the host. The form below it follows the
 // type (ADR 0045 item 4). A server has no folder host (ADR 0055).
-// `start` is the type that the form opens with (ADR 0119 item 6).
-// `addressHint` and `requireAddress` go to the folder fields (ADR 0121 item 8).
-function AddHostForm({ feeds, onAdded, start, addressHint = null, requireAddress = false }) {
+// `start` is the type that the form opens with (ADR 0119 item 6). `showType`
+// hides the choice when the sheet shows the rows of step 2 (ADR 0122 item 2).
+// `startRoot` and `submitLabel` go to the folder form (ADR 0122 item 3).
+function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', submitLabel = 'Add the Folder' }) {
   const [type, setType] = useState(start || (serverMode ? 's3' : 'local'));
   return html`<div class="form">
-    <${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${[
+    ${showType && html`<${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${[
       ...(serverMode ? [] : [['local', 'Folder on this computer']]),
       ['s3', 'S3 or R2 bucket'],
       ['sftp', 'SFTP server'],
       ['nsite', 'nsite site'],
       ['blossom', 'Blossom server'],
-    ]} />
+    ]} />`}
     ${type === 's3'
       ? html`<${S3HostForm} onAdded=${onAdded} />`
       : type === 'sftp'
@@ -1352,7 +1358,7 @@ function AddHostForm({ feeds, onAdded, start, addressHint = null, requireAddress
           ? html`<${NsiteHostForm} feeds=${feeds} onAdded=${onAdded} />`
           : type === 'blossom'
             ? html`<${BlossomHostForm} onAdded=${onAdded} />`
-            : html`<${LocalHostForm} onAdded=${onAdded} addressHint=${addressHint} requireAddress=${requireAddress} />`}
+            : html`<${LocalHostForm} onAdded=${onAdded} startRoot=${startRoot} submitLabel=${submitLabel} />`}
   </div>`;
 }
 
@@ -1950,8 +1956,6 @@ function Crumb({ feed, view, draft }) {
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
-  // The sheet "Publish for Real" is open (ADR 0121 item 3).
-  const [publishing, setPublishing] = useState(false);
   const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const glow = kindGlow(kind);
@@ -1975,11 +1979,8 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
         onOpenHosts=${() => go({ name: 'hosts' })}
-        onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles}
-        practice=${feed.practice === true} onPublishForReal=${() => setPublishing(true)} />
+        onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} />
     <//>
-    ${publishing && html`<${PublishForRealSheet} feed=${feed} feeds=${feeds} connectors=${connectors} draft=${draft}
-      onPublished=${async () => { await draft.load(); await onChanged(); }} onClose=${() => setPublishing(false)} />`}
     <div class="feed-head">
       <header class="head">
         <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always
@@ -1989,15 +1990,13 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           <h1>${feed.title || 'Untitled feed'}</h1>
           ${feed.public_url
             ? html`<${FeedAddress} url=${feed.public_url} />`
-            : !feed.practice && html`<p class="sub mono">This feed has no public address yet.</p>`}
+            : html`<p class="sub mono">This feed has no public address yet.</p>`}
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
           ${busy ? 'Reading…' : 'Read Again'}</button>`}
       </header>
       <${ErrorNotice} error=${error} />
-      ${feed.practice
-        ? html`<div class="notice" role="status"><strong>${PRACTICE.noticeStrong}</strong> ${PRACTICE.noticeText}</div>`
-        : feed.last_version === null && html`<div class="notice" role="status">
+      ${feed.last_version === null && html`<div class="notice" role="status">
         <strong>The file host has no file for this ${feed.medium === 'publisher' ? 'feed' : 'release'} yet.</strong>
         Open Review and write the draft to make the file.
       </div>`}
@@ -2864,7 +2863,7 @@ function Level({ panel, go, back }) {
     <button class="outline-feed" type="button" aria-label=${`${head.title}, ${head.typeLabel}`}
       onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
       <${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" />
-      <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}${head.practice && html`<${PracticeBadge} />`}</span></div>
+      <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
     </button>
     ${panel.sections.map((section) => html`<div class="destination-group">
       <h2 class="panel-heading">${section.heading}</h2>
@@ -2907,7 +2906,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
       <${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always />
       <div class="text">
         <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"></span>`}</span>
-        <span class="sub">${feed.typeLabel}${feed.practice && html`<${PracticeBadge} />`}</span>
+        <span class="sub">${feed.typeLabel}</span>
       </div>
     </button>
     <ul class="tree">
@@ -3047,7 +3046,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the Feed</button>`}
         </div>`}
       </div>
-      ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}${head.practice && html`<${PracticeBadge} />`}</p>`}
+      ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
       ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
       ${releases.letters && html`<nav class="letters" aria-label="Letters">
         ${releases.letters.map((g) => html`<button class="button letter" type="button" onClick=${() => showLetter(g.firstId)}>${g.letter}</button>`)}
@@ -3059,7 +3058,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
                 <${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always />
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
-                  <span class="sub">${row.typeLabel}${row.practice && html`<${PracticeBadge} />`}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
+                  <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
                   ${row.note && html`<span class="sub">${row.note}</span>`}
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
@@ -3110,54 +3109,74 @@ function WelcomePage({ connectors, feeds, onAdded }) {
 }
 
 // One large row of the Welcome page: an icon, a title, one line and the arrow.
-function WelcomeRow({ row, primary = false, onClick }) {
-  return html`<button class="link-row welcome-row" type="button" onClick=${onClick}>
+// `selected` is set on a row of step 2, and it marks the selected row (ADR 0122 item 2).
+function WelcomeRow({ row, primary = false, selected = null, onClick }) {
+  return html`<button class="link-row welcome-row" type="button" aria-pressed=${selected === null ? null : String(selected)} onClick=${onClick}>
     <span class=${primary ? 'welcome-icon primary' : 'welcome-icon'} aria-hidden="true"><${Icon} name=${row.icon} /></span>
     <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
     <span class="go" aria-hidden="true">›</span>
   </button>`;
 }
 
-// The sheet of a musician or a label (ADR 0119 items 4 to 7). Step 1 asks the
-// name. Step 2 asks for the file host, unless one file host exists. Then the
-// draft of the publisher feed is made. Studio writes nothing (ADR 0007).
+// The sheet of a musician or a label (ADR 0119 items 4 to 7, ADR 0122 item 2).
+// Step 1 asks the name. Step 2 always shows. It has the select menu of the
+// connected file hosts, when one exists, and the rows of the file host types.
+// Then the draft of the publisher feed is made. Studio writes nothing (ADR 0007).
 // The sheet mounts for each open, so each open starts at step 1.
 function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
   const ref = useSheet(true);
   const text = pathTexts(path);
   const names = welcomeSteps(path);
-  const mode = hostStep(connectors);
+  const step2 = hostStepModel(connectors, serverMode);
   const [step, setStep] = useState('name');
   const [name, setName] = useState('');
-  const [hostType, setHostType] = useState(null);
+  // The row of step 2 that is selected, or null when the menu of the
+  // connected file hosts is selected. Only the selected choice shows its
+  // primary button.
+  const [hostType, setHostType] = useState(step2.selected);
   // The file host that this sheet connected. A new try after a failure uses
   // it, and does not connect a second file host.
   const [madeHost, setMadeHost] = useState(null);
-  const [connectorId, setConnectorId] = useState(connectors[0] ? String(connectors[0].id) : '');
+  // The connected file host of the select menu. The first one is selected at the start.
+  const [connectorId, setConnectorId] = useState(step2.menu ? step2.menu.value : '');
+  // The first folder of the desktop (ADR 0122 item 3).
+  const [defaultRoot, setDefaultRoot] = useState('');
   const { busy, error, run } = useAction();
-  // With one file host, step 2 does not show (ADR 0119 item 6).
-  const steps = mode === 'skip' ? [names[0], names[2]] : names;
+  useEffect(() => {
+    if (serverMode) return;
+    api('/library').then((library) => setDefaultRoot(library.default_host_root || ''), () => {});
+  }, []);
   const now = step === 'name' ? 0 : 1;
-  const createFeed = (id) => run(async () => {
-    await onAdded(await api('/feeds/new', { method: 'POST', body: welcomeBody(path, name.trim(), id) }));
+  const makePage = async (id) => onAdded(await api('/feeds/new', { method: 'POST', body: welcomeBody(path, name.trim(), id) }));
+  const createFeed = (id) => run(() => makePage(id));
+  // The row "Try it here (temporary)" sends the kind `temporary` with no other field (ADR 0122 item 4).
+  const addTemporary = () => run(async () => {
+    const connector = await api('/connectors', { method: 'POST', body: { kind: 'temporary' } });
+    setMadeHost(connector);
+    await makePage(connector.id);
   });
-  // With one file host, Continue of step 1 makes the feed.
+  // Continue of step 1 opens step 2, which always shows (ADR 0122 item 2).
   const next = (event) => {
     event.preventDefault();
-    if (mode === 'skip') createFeed(connectors[0].id);
-    else setStep('where');
+    setStep('where');
   };
   const make = (event) => {
     event.preventDefault();
     createFeed(Number(connectorId));
   };
+  // The form of the selected row. Its submit button adds the file host and makes the page.
+  const selectedForm = hostType === null ? null : hostType === 'temporary'
+    ? html`<div class="actions"><button class="button primary" type="button" disabled=${busy} onClick=${addTemporary}>${busy ? 'Making the Page…' : 'Continue'}</button></div>`
+    : html`<${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} showType=${false}
+        startRoot=${defaultRoot} submitLabel="Continue"
+        onAdded=${(connector) => { setMadeHost(connector); createFeed(connector.id); }} />`;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="start-title" onClose=${onClose}>
     <header>
       <h2 id="start-title">${text.sheet}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <ol class="steps-line">${steps.map((label, i) => {
+      <ol class="steps-line">${names.map((label, i) => {
         const state = i < now ? 'done' : i === now ? 'now' : 'later';
         return html`<li key=${label} class=${state}><span class="step-mark" aria-hidden="true">${state === 'done' ? '✓' : i + 1}</span>${label}</li>`;
       })}</ol>
@@ -3168,89 +3187,24 @@ function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
             <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
               <button class="button primary" type="submit" disabled=${busy || name.trim() === ''}>Continue</button></div>
           </form>`
-        : mode === 'menu'
-          ? html`<form class="form" onSubmit=${make}>
+        : madeHost !== null
+          ? html`<div class="form">
+              <p>${`Studio connected the file host ${madeHost.name}.`}</p>
+              <div class="actions"><button class="button primary" type="button" disabled=${busy}
+                onClick=${() => createFeed(madeHost.id)}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>
+            </div>`
+          : html`<div class="form">
               <p>${text.where}</p>
-              <${ChoiceSelect} id="start-host" label="File host" value=${connectorId}
-                options=${connectors.map((c) => [String(c.id), c.name])} onChange=${setConnectorId} />
-              <div class="actions"><button class="button" type="button" onClick=${() => setStep('name')}>Back</button>
-                <button class="button primary" type="submit" disabled=${busy || connectorId === ''}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>
-            </form>`
-          : madeHost !== null
-            ? html`<div class="form">
-                <p>${`Studio connected the file host ${madeHost.name}.`}</p>
-                <div class="actions"><button class="button primary" type="button" disabled=${busy}
-                  onClick=${() => createFeed(madeHost.id)}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>
-              </div>`
-          : hostType === null
-            ? html`<div class="form">
-                <p>${text.where}</p>
-                <div class="group">${HOST_ROWS(serverMode).map((row) => html`<${WelcomeRow} key=${row.type} row=${row}
-                  primary=${row.primary === true} onClick=${() => setHostType(row.type)} />`)}</div>
-                <div class="actions"><button class="button" type="button" onClick=${() => setStep('name')}>Back</button></div>
-              </div>`
-            : html`<div class="form">
-                <p>${text.where}</p>
-                <${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} addressHint=${PRACTICE.folderHint} onAdded=${(connector) => { setMadeHost(connector); createFeed(connector.id); }} />
-                ${hostType === 'local' && html`<div class="actions"><button class="button link" type="button"
-                  onClick=${() => setHostType('sftp')}>Use an SFTP Server Instead</button></div>`}
-                <div class="actions"><button class="button" type="button" onClick=${() => setHostType(null)}>Back</button></div>
-              </div>`}
-      <${ErrorNotice} error=${error} />
-    </div>
-  </dialog>`;
-}
-
-// The badge of a practice page (ADR 0121 item 7).
-function PracticeBadge() {
-  return html`<span class="badge-practice">${PRACTICE.badge}</span>`;
-}
-
-// The sheet "Publish for Real" (ADR 0121 items 3 and 5). It moves each
-// practice page of the folder to a file host with a public address.
-// The host is a connected one. It can also be a new one, from the rows of
-// step 2. Studio writes no page here. Each page is a draft. Its first write
-// goes through Review.
-function PublishForRealSheet({ feed, feeds, connectors, draft, onPublished, onClose }) {
-  const ref = useSheet(true);
-  const targets = publishTargets(connectors);
-  const [target, setTarget] = useState(targets[0] ? String(targets[0].id) : '');
-  // The type of a new file host, or null for the list of the rows.
-  const [hostType, setHostType] = useState(null);
-  const { busy, error, run } = useAction();
-  const publish = (to) => run(async () => {
-    if (!(await draft.flush())) return;
-    await api('/practice/publish', { method: 'POST', body: { from: feed.connector_id, to } });
-    await onPublished();
-    ref.current.close();
-  });
-  const submit = (event) => {
-    event.preventDefault();
-    publish(Number(target));
-  };
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="publish-title" onClose=${onClose}>
-    <header>
-      <h2 id="publish-title">${PRACTICE.sheet}</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
-    </header>
-    <div class="body">
-      <p>${PRACTICE.sheetIntro}</p>
-      ${targets.length > 0 && html`<form class="form" onSubmit=${submit}>
-        <${ChoiceSelect} id="publish-host" label=${PRACTICE.targetLabel} value=${target}
-          options=${targets.map((c) => [String(c.id), c.name])} onChange=${setTarget} />
-        <div class="actions"><button class="button primary" type="submit" disabled=${busy || target === ''}>${busy ? 'Moving the Pages…' : PRACTICE.move}</button></div>
-      </form>`}
-      ${hostType === null
-        ? html`<div class="form">
-            ${targets.length > 0 && html`<p>${PRACTICE.newHost}</p>`}
-            <div class="group">${HOST_ROWS(serverMode).map((row) => html`<${WelcomeRow} key=${row.type} row=${row}
-              onClick=${() => setHostType(row.type)} />`)}</div>
-          </div>`
-        : html`<div class="form">
-            <${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} requireAddress=${true}
-              onAdded=${(connector) => publish(connector.id)} />
-            <div class="actions"><button class="button" type="button" onClick=${() => setHostType(null)}>Back</button></div>
-          </div>`}
+              ${step2.menu && html`<form class="form" onSubmit=${make}>
+                <${ChoiceSelect} id="start-host" label="File host" value=${connectorId}
+                  options=${step2.menu.options} onChange=${(value) => { setConnectorId(value); setHostType(null); }} />
+                ${hostType === null && html`<div class="actions"><button class="button primary" type="submit" disabled=${busy || connectorId === ''}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>`}
+              </form>`}
+              <div class="group">${step2.rows.map((row) => html`<${WelcomeRow} key=${row.type} row=${row}
+                primary=${row.primary === true} selected=${row.type === hostType} onClick=${() => setHostType(row.type)} />`)}</div>
+              ${selectedForm}
+              <div class="actions"><button class="button" type="button" onClick=${() => setStep('name')}>Back</button></div>
+            </div>`}
       <${ErrorNotice} error=${error} />
     </div>
   </dialog>`;

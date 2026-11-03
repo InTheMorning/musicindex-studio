@@ -172,9 +172,9 @@ pub fn linked_releases(
 /// [`PublisherErrorKind::ReadOnly`] for a feed without a connector,
 /// [`PublisherErrorKind::NoGuid`] for a feed that cannot be named, and
 /// [`PublisherErrorKind::NoRole`] when the publisher feed has no role. Each
-/// draft is changed only after the checks. A practice page has no public
-/// address, so its link has its temporary GUID and no `feedUrl` (ADR 0121
-/// item 4).
+/// draft is changed only after the checks. A feed with a placeholder GUID has
+/// no public address, so its link has the placeholder GUID and no `feedUrl`
+/// (ADR 0122 item 5).
 pub fn link(
     collection: &Collection,
     publisher: FeedId,

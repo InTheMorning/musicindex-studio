@@ -651,7 +651,7 @@ async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written()
 }
 
 #[tokio::test]
-async fn a_new_release_on_a_folder_with_no_public_address_is_a_practice_page_409_for_a_file_and_422_for_an_empty_field()
+async fn a_new_release_on_a_folder_with_no_public_address_gets_a_placeholder_guid_409_for_a_file_and_422_for_an_empty_field()
  {
     let app = app();
     let root = app.feeds.path().to_str().unwrap();
@@ -669,9 +669,19 @@ async fn a_new_release_on_a_folder_with_no_public_address_is_a_practice_page_409
         Some(json!({ "connector_id": no_address["id"], "path": "a.xml", "title": "A", "author": "B" })),
     )
     .await;
-    // ADR 0121 item 2: the feed is made, and it has no public address.
+    // ADR 0122 item 5: the feed is made, with no public address and a
+    // placeholder GUID.
     assert_eq!(status, StatusCode::CREATED);
     assert!(body["public_url"].is_null());
+    let (_, draft) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{}/draft", body["id"]),
+        None,
+    )
+    .await;
+    let guid = draft["model"]["podcast_guid"].as_str().unwrap_or_default();
+    assert!(guid.starts_with("pending-"), "{draft}");
 
     let (_, connector) = call(
         &app,
@@ -703,23 +713,14 @@ async fn a_new_release_on_a_folder_with_no_public_address_is_a_practice_page_409
 }
 
 #[tokio::test]
-async fn a_practice_page_is_listed_refuses_its_write_and_is_published_for_real() {
+async fn a_placeholder_guid_feed_gets_its_real_guid_when_its_folder_gets_a_public_address() {
     let app = app();
     let root = app.feeds.path().to_str().unwrap().to_owned();
-    let private_root = app.feeds.path().join("private");
-    std::fs::create_dir_all(&private_root).unwrap();
-    let (_, private) = call(
+    let (_, folder) = call(
         &app,
         "POST",
         "/api/v1/connectors",
-        Some(json!({ "kind": "local", "name": "Private", "root": private_root.to_str().unwrap() })),
-    )
-    .await;
-    let (_, public) = call(
-        &app,
-        "POST",
-        "/api/v1/connectors",
-        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+        Some(json!({ "kind": "local", "name": "Folder", "root": root })),
     )
     .await;
     set_library_root(&app);
@@ -727,9 +728,7 @@ async fn a_practice_page_is_listed_refuses_its_write_and_is_published_for_real()
         &app,
         "POST",
         "/api/v1/feeds/new",
-        Some(
-            json!({ "connector_id": private["id"], "path": "a.xml", "title": "A", "author": "B" }),
-        ),
+        Some(json!({ "connector_id": folder["id"], "path": "a.xml", "title": "A", "author": "B" })),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -743,38 +742,51 @@ async fn a_practice_page_is_listed_refuses_its_write_and_is_published_for_real()
             .clone()
     };
 
-    let (status, rows) = call(&app, "GET", "/api/v1/feeds", None).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(listed(&rows)["practice"], true);
-
-    let (status, body) = call(
-        &app,
-        "POST",
-        &format!("/api/v1/feeds/{id}/write"),
-        Some(json!({ "diff_id": "unchecked" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body["error"]["code"], "practice_page");
-    assert!(!private_root.join("a.xml").exists());
-
-    let (status, body) = call(
-        &app,
-        "POST",
-        "/api/v1/practice/publish",
-        Some(json!({ "from": private["id"], "to": public["id"] })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["feed_ids"], json!([id]));
-
     let (_, rows) = call(&app, "GET", "/api/v1/feeds", None).await;
-    assert_eq!(listed(&rows)["practice"], false);
+    assert_eq!(listed(&rows)["placeholder_guid"], true);
+    // Feed facts shows the placeholder before the first write.
+    assert!(
+        listed(&rows)["podcast_guid"]
+            .as_str()
+            .is_some_and(|guid| guid.starts_with("pending-")),
+        "the feed row gives the placeholder GUID of the draft"
+    );
+
+    // ADR 0122 item 8: the folder gets a public address, and the feed gets
+    // its real GUID in its draft.
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/connectors/{}", folder["id"]),
+        Some(json!({ "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, rows) = call(&app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(listed(&rows)["placeholder_guid"], false);
     assert_eq!(listed(&rows)["public_url"], "https://music.example/a.xml");
+    let (_, draft) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(
+        draft["model"]["podcast_guid"],
+        studio_core::guid::podcast_guid_for_url("https://music.example/a.xml")
+    );
 }
 
 #[tokio::test]
-async fn a_bucket_with_no_public_address_gives_422_for_a_new_release() {
+async fn the_practice_publish_route_is_gone() {
+    let app = app();
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/practice/publish",
+        Some(json!({ "from": 1, "to": 2 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_bucket_with_no_public_address_gives_a_placeholder_guid_for_a_new_release() {
     let server = studio_core::testing::fake_s3::FakeS3::start("bk");
     let app = app();
     make_vault(&app).await;
@@ -789,9 +801,19 @@ async fn a_bucket_with_no_public_address_gives_422_for_a_new_release() {
         Some(json!({ "connector_id": connector["id"], "path": "a.xml", "title": "A", "author": "B" })),
     )
     .await;
-    // ADR 0121 item 1: only a local folder holds practice pages.
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "no_public_address");
+    // ADR 0122 item 5: any file host with no public address gives a
+    // placeholder GUID.
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert!(body["public_url"].is_null());
+    let (_, draft) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{}/draft", body["id"]),
+        None,
+    )
+    .await;
+    let guid = draft["model"]["podcast_guid"].as_str().unwrap_or_default();
+    assert!(guid.starts_with("pending-"), "{draft}");
 }
 
 /// An app with a connected folder at a public address, and a library
@@ -1202,11 +1224,6 @@ async fn each_publisher_route_needs_the_token() {
             "PUT",
             "/api/v1/feeds/1/role",
             Some(json!({ "roles": ["label"] })),
-        ),
-        (
-            "POST",
-            "/api/v1/practice/publish",
-            Some(json!({ "from": 1, "to": 2 })),
         ),
     ];
     for (method, path, body) in routes {

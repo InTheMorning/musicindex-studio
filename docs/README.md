@@ -123,7 +123,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0118: "Member of" offers a credit on the artist feed](adr/0118-member-of-offers-a-credit-on-the-artist-feed.md)
 - [ADR 0119: A new user starts as a musician or a label](adr/0119-a-new-user-starts-as-a-musician-or-a-label.md)
 - [ADR 0120: The check of a person shows each difference](adr/0120-the-check-of-a-person-shows-each-difference.md)
-- [ADR 0121: A folder with no public address holds practice pages](adr/0121-a-folder-with-no-public-address-holds-practice-pages.md)
+- [ADR 0122: A new user starts with a default file host](adr/0122-a-new-user-starts-with-a-default-file-host.md)
 
 ## Plans
 
@@ -344,6 +344,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 083: The Welcome page of a new user](tasks/studio-v1-task-083-welcome.md)
 - [Studio v1 task 084: The check of a person shows each difference](tasks/studio-v1-task-084-check-differences.md)
 - [Studio v1 task 085: Practice pages](tasks/studio-v1-task-085-practice-pages.md)
+- [Studio v1 task 086: The default file host and the placeholder GUID](tasks/studio-v1-task-086-default-file-host.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)
@@ -427,3 +428,4 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 Superseded decisions. Read them for research only. They bind no change.
 
 - [ADR 0101: A suggestion groups the items of one name](archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md), superseded by ADR 0103
+- [ADR 0121: A folder with no public address holds practice pages](archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), superseded by ADR 0122

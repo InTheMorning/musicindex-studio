@@ -1,12 +1,14 @@
+> Archived: superseded by [ADR 0122](../../adr/0122-a-new-user-starts-with-a-default-file-host.md) on 2026-11-02. ADR 0122 keeps the temporary GUID and the change of the links, and removes practice pages.
+
 # ADR 0121: A Folder With No Public Address Holds Practice Pages
 
-- Status: Accepted
+- Status: Superseded by ADR 0122
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from the choice "Practice mode" after the visual check of task 083.
 - Amended: 2026-11-02 by the planning model, from the review of packet 085a: item 1 applies to a local folder only.
-- Changes: [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md) items 6 to 9, for a file host with no public address. [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 6, the row "My own server".
-- Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) for feed identity. [ADR 0007](0007-draft-diff-write-and-announce.md) for the write. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) for a move after a write. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 6, 7 and 12 for the links.
+- Changes: [ADR 0032](../../adr/0032-new-releases-formats-paths-and-new-feeds.md) items 6 to 9, for a file host with no public address. [ADR 0119](../../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md) item 6, the row "My own server".
+- Uses: [ADR 0008](../../adr/0008-feed-types-and-feed-identity.md) for feed identity. [ADR 0007](../../adr/0007-draft-diff-write-and-announce.md) for the write. [ADR 0038](../../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) for a move after a write. [ADR 0041](../../adr/0041-publisher-feeds-and-two-way-links.md) items 6, 7 and 12 for the links.
 
 ## Context
 

@@ -23,7 +23,7 @@ import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
-import { nextStep, firstStart, FIRST_STEPS, PRACTICE } from './welcome.js';
+import { nextStep, firstStart, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyOrMove, missingCount, missingNotice, reviewNotice, dayText,
   SERVER_NOTICE, ADD_TRACKS_NOTICE, ENTRY_TEXT,
@@ -1859,7 +1859,7 @@ function toolbarStatus(draft) {
 
 // The toolbar of the editor: the draft status, and the buttons that open
 // the review sheet and the versions sheet (ADR 0029 items 1 to 3).
-export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpenHosts, onOpsChanged, onOpsCleared, practice = false, onPublishForReal }) {
+export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
   useEffect(() => {
@@ -1868,16 +1868,6 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
     return () => window.removeEventListener(OPEN_REVIEW, openReview);
   }, []);
   const status = toolbarStatus(draft);
-  // A practice page has no write (ADR 0121 item 3). Its toolbar offers
-  // "Publish for Real", and not "Review". It has no "Versions". The draft
-  // status shows only an error, because a practice page is never written.
-  if (practice) {
-    return html`<div class="draft-toolbar">
-      ${status.error && html`<span class="draft-status error" role="status">${status.text}</span>`}
-      <span class="badge-practice">${PRACTICE.badge}</span>
-      <button class="button primary" type="button" onClick=${onPublishForReal}>${PRACTICE.button}</button>
-    </div>`;
-  }
   return html`<div class="draft-toolbar">
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
@@ -1944,6 +1934,7 @@ function FeedFacts({ feed, onRemoved }) {
       <dl class="facts">
         <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
+        ${feed.placeholder_guid && html`<dd>${HOST_STEP.placeholderGuid}</dd>`}
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in File hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
         <dt>Announcement</dt><dd>${announcementText.split('\n').map((line, i) => html`${i > 0 && html`<br />`}${line}`)}</dd>

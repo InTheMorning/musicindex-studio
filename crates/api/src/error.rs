@@ -197,8 +197,6 @@ impl From<PipelineError> for ApiError {
                 (StatusCode::UNPROCESSABLE_ENTITY, "no_public_address")
             }
             PipelineErrorKind::FileExists => (StatusCode::CONFLICT, "file_exists"),
-            // ADR 0121 item 3: a practice page has no file to write.
-            PipelineErrorKind::PracticePage => (StatusCode::CONFLICT, "practice_page"),
             // A feed with no release folder cannot take an import, the
             // same as a workspace with no library folder (ADR 0036
             // item 1 and item 5).

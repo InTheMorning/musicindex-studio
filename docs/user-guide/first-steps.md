@@ -15,12 +15,14 @@ Select a row on the Welcome page.
 ## Start an artist page
 
 1. Type your name in **Artist name**. Select **Continue**.
-2. Select the file host that Studio uses for your files. The first row is **My own server**. Leave its public address empty to practice. If you use a different type of host, select its row.
-3. Fill in the fields of the file host. Studio adds the file host.
-4. Studio makes the draft of your artist page and opens it.
+2. Select the file host that Studio uses for your files. Step 2 always shows.
+   - On a computer, the first row is **Folder on this computer**. It is selected at the start. Studio starts with the folder `~/musicindex/pages`. Select **Continue**. The public address of the folder is optional.
+   - On a server, the first row is **Try it here (temporary)**. It is selected at the start. Studio keeps your files for 7 days. Select **Continue**.
+   - For a different type of file host, select its row. Fill in its fields. Studio adds the file host.
+3. Studio makes the draft of your artist page and opens it.
 
-If you connected one file host, Studio skips step 2 and uses that file host.
-If you connected two or more file hosts, select the file host in **File host**. Then select **Make the Page**.
+If you connected one or more file hosts, the menu **File host** shows above the rows.
+Select a file host in the menu. Then select **Make the Page**.
 
 ## Start a label page
 
@@ -44,24 +46,15 @@ To write your new pages to the file host, follow these steps.
 The first write of an artist page and of its album goes through **Review**.
 For more about this step, see [Review and write your changes](review-and-write.md).
 
-## Practice first
+## Placeholder GUID
 
-If you keep the public address of **My own server** empty, your pages are practice pages.
-A practice page shows the label **Practice** in the list of releases, in the left panel and in the toolbar.
-Studio edits a practice page, but it writes no file. Nothing is public.
+A feed gets its GUID from its public address.
+A folder with no public address has no public address. Studio cannot make the GUID at this time, so the feed gets a placeholder GUID.
+The feed facts show the placeholder and its cause.
 
-## Publish your practice pages for real
-
-Select **Publish for Real** in the toolbar of a practice page.
-Studio moves each practice page of the folder to the file host that you select.
-Each page gets its real address.
-
-1. Select a file host with a public address in **File host**. Select **Move the Pages**.
-2. Or select a row to add a new file host. A folder needs a public address.
-3. Select **Review** on each page, and write each page to the file host.
-
-A file host with no public address cannot receive a practice page.
-A file host that has a file at the same path stops the move. Studio changes no page.
+Studio also writes the feed to the file host.
+To set the GUID from a public address, give the folder a public address in **File hosts**. Or move the feed to a file host with a public address.
+Studio then sets the GUID, and it changes the links between your pages.
 
 ## Move from a different server
 

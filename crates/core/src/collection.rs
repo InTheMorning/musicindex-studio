@@ -858,22 +858,6 @@ pub struct DraftFeedMove {
     pub path: String,
 }
 
-/// One practice page that moves to a file host with a public address
-/// (ADR 0121 item 5).
-#[derive(Debug, Clone, Copy)]
-pub struct PracticeMove<'a> {
-    /// The feed.
-    pub id: FeedId,
-    /// The new host.
-    pub connector: ConnectorId,
-    /// The path on the new host. It is the path of the practice page.
-    pub path: &'a str,
-    /// The public address of the path on the new host.
-    pub address: &'a str,
-    /// The draft with the real GUID and the real links.
-    pub draft: &'a DraftRow,
-}
-
 /// A draft of a feed (ADR 0007).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftRow {
@@ -2226,31 +2210,15 @@ impl Collection {
         put_draft(&self.db, id, draft)
     }
 
-    /// Move each practice page to a file host with a public address, with
-    /// its new address and its new draft. All changes are one transaction
-    /// (ADR 0121 item 5).
+    /// Save the drafts of several feeds in one transaction (ADR 0122 item 8).
     ///
     /// # Errors
     ///
-    /// Gives a [`CollectionError`] when SQLite fails. No row changes then.
-    pub fn move_practice_pages(
-        &mut self,
-        moves: &[PracticeMove<'_>],
-    ) -> Result<(), CollectionError> {
-        let tx = self.db.transaction()?;
-        for practice in moves {
-            tx.execute(
-                "UPDATE feeds SET connector_id = ?2, path = ?3 WHERE id = ?1",
-                params![practice.id.0, practice.connector.0, practice.path],
-            )?;
-            put_address(
-                &tx,
-                practice.id,
-                AddressSource::Folder,
-                Some(practice.address),
-            )?;
-            choose_address(&tx, practice.id)?;
-            put_draft(&tx, practice.id, practice.draft)?;
+    /// Gives a [`CollectionError`] when SQLite fails. No draft changes then.
+    pub fn save_drafts(&self, drafts: &[(FeedId, DraftRow)]) -> Result<(), CollectionError> {
+        let tx = self.db.unchecked_transaction()?;
+        for (id, draft) in drafts {
+            put_draft(&tx, *id, draft)?;
         }
         tx.commit()?;
         Ok(())

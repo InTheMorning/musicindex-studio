@@ -414,7 +414,7 @@ fn open_bucket(server: &FakeS3) -> S3Bucket {
 }
 
 #[test]
-fn a_new_feed_in_a_folder_with_no_public_address_gives_an_error() {
+fn a_new_feed_on_a_bucket_with_no_public_address_gets_a_placeholder_guid() {
     let server = FakeS3::start("bk");
     let dir = tempfile::tempdir().unwrap();
     let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
@@ -422,7 +422,7 @@ fn a_new_feed_in_a_folder_with_no_public_address_gives_an_error() {
     let connector_id = collection
         .add_connector(S3Bucket::KIND, "Bucket", &config, None)
         .unwrap();
-    let error = pipeline::new_feed(
+    let id = pipeline::new_feed(
         &mut collection,
         &open_bucket(&server),
         connector_id,
@@ -431,8 +431,14 @@ fn a_new_feed_in_a_folder_with_no_public_address_gives_an_error() {
         "New Artist",
         "music",
     )
-    .unwrap_err();
-    assert_eq!(error.kind(), PipelineErrorKind::NoPublicAddress);
+    .unwrap();
+    assert_eq!(collection.feed(id).unwrap().public_url, None);
+    let (feed, _) = pipeline::draft_model(&collection, id).unwrap();
+    let guid = feed.podcast_guid.unwrap_or_default();
+    assert!(
+        pipeline::has_placeholder_guid(&guid),
+        "ADR 0122 item 5: the feed has a placeholder GUID, got {guid}"
+    );
 }
 
 #[test]

@@ -44,6 +44,25 @@ To write your new pages to the file host, follow these steps.
 The first write of an artist page and of its album goes through **Review**.
 For more about this step, see [Review and write your changes](review-and-write.md).
 
+## Practice first
+
+If you keep the public address of **My own server** empty, your pages are practice pages.
+A practice page shows the label **Practice** in the list of releases, in the left panel and in the toolbar.
+Studio edits a practice page, but it writes no file. Nothing is public.
+
+## Publish your practice pages for real
+
+Select **Publish for Real** in the toolbar of a practice page.
+Studio moves each practice page of the folder to the file host that you select.
+Each page gets its real address.
+
+1. Select a file host with a public address in **File host**. Select **Move the Pages**.
+2. Or select a row to add a new file host. A folder needs a public address.
+3. Select **Review** on each page, and write each page to the file host.
+
+A file host with no public address cannot receive a practice page.
+A file host that has a file at the same path stops the move. Studio changes no page.
+
 ## Move from a different server
 
 Select **Import an Account** below the rows of the Welcome page.

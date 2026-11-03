@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
 Decision: [ADR 0121](../adr/0121-a-folder-with-no-public-address-holds-practice-pages.md).
 
-Status: Not started.
+Status: Complete. Packets 085a and 085b are committed. The screenshot visual check passed on 2026-11-02. The human test is open.
 
 ## Goal
 

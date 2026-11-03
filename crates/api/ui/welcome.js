@@ -19,6 +19,23 @@ export const WELCOME = {
   importButton: 'Import an Account',
 };
 
+// The texts of the practice pages (ADR 0121 items 3, 7 and 8). The sheet
+// "Publish for Real" uses them, and so does the folder input of step 2.
+export const PRACTICE = {
+  badge: 'Practice',
+  button: 'Publish for Real',
+  sheet: 'Publish for Real',
+  sheetIntro: 'Studio moves each practice page of this folder to the file host that you select, and gives each page its real address. Then you review and write each page.',
+  folderHint: 'Leave it empty to practice. Nothing is public until you publish for real.',
+  requiredHint: 'Studio needs this address to make the pages public.',
+  targetLabel: 'File host',
+  move: 'Move the Pages',
+  newHost: 'Or add a file host with a public address.',
+  // The notice of a practice page (ADR 0121 items 3 and 7).
+  noticeStrong: 'This is a practice page.',
+  noticeText: 'Nothing is public. Select Publish for Real when you want apps to find it.',
+};
+
 // The texts and the step names of each path (ADR 0119 items 4 to 6).
 const PATHS = {
   music: {
@@ -84,6 +101,35 @@ export function HOST_ROWS(serverMode) {
     { type: 'nsite', icon: 'upload', title: 'Nostr site (nsite)', line: 'A site on Nostr. Its pages and songs go to Blossom servers, signed with your Nostr key.' },
     { type: 's3', icon: 'cloud', title: 'S3 or Cloudflare R2', line: 'A storage bucket at Amazon S3, Cloudflare R2 or a similar provider.' },
   ];
+}
+
+// A file host gives a public address when its configuration has one. The
+// address is the field `base_url`, or the key and the identifier of an nsite
+// site. A Blossom host holds media only (ADR 0048 item 2), so it gives no
+// address for a page.
+function hasPublicAddress(connector) {
+  let config;
+  try {
+    config = JSON.parse(connector.config || '{}');
+  } catch {
+    return false;
+  }
+  switch (connector.kind) {
+    case 'local':
+    case 's3':
+    case 'sftp':
+      return typeof config.base_url === 'string' && config.base_url !== '';
+    case 'nsite':
+      return typeof config.public_key === 'string' && typeof config.d === 'string' && config.d !== '';
+    default:
+      return false;
+  }
+}
+
+// The file hosts that can receive the practice pages (ADR 0121 item 5). The
+// sheet "Publish for Real" offers only these hosts.
+export function publishTargets(connectors) {
+  return (connectors || []).filter(hasPublicAddress);
 }
 
 // The body of `POST /feeds/new` for the first publisher feed of a path (ADR

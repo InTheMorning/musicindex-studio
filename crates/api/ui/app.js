@@ -17,7 +17,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
-import { WELCOME, showWelcome, welcomeSteps, pathTexts, hostStep, HOST_ROWS, welcomeBody } from './welcome.js';
+import { WELCOME, PRACTICE, showWelcome, welcomeSteps, pathTexts, hostStep, HOST_ROWS, welcomeBody, publishTargets } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
@@ -710,7 +710,9 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
   </div>`;
 }
 
-function LocalHostForm({ onAdded }) {
+// `addressHint` replaces the hint of the public address (ADR 0121 item 8).
+// `requireAddress` makes the address required, for the sheet "Publish for Real".
+function LocalHostForm({ onAdded, addressHint = null, requireAddress = false }) {
   const [name, setName] = useState('');
   const [root, setRoot] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -733,12 +735,12 @@ function LocalHostForm({ onAdded }) {
     <${Field} id="host-root" label="Folder" required placeholder="/home/me/feeds"
       hint="The full path of the folder that holds your feed files."
       error=${hostError.field} value=${root} onInput=${(e) => setRoot(e.target.value)} />
-    <${Field} id="host-url" label="Public address of the folder (optional)" type="url"
-      placeholder="https://music.example.com/feeds"
-      hint="When a web server publishes this folder, Studio uses this address for each feed."
+    <${Field} id="host-url" label=${requireAddress ? 'Public address of the folder' : 'Public address of the folder (optional)'} type="url"
+      required=${requireAddress} placeholder="https://music.example.com/feeds"
+      hint=${requireAddress ? PRACTICE.requiredHint : (addressHint || 'When a web server publishes this folder, Studio uses this address for each feed.')}
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
     <${ErrorNotice} error=${hostError.other} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : 'Add the Folder'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root || (requireAddress && !baseUrl)}>${busy ? 'Adding…' : 'Add the Folder'}</button></div>
   </form>`;
 }
 
@@ -1331,7 +1333,8 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, pendin
 // The first choice is the type of the host. The form below it follows the
 // type (ADR 0045 item 4). A server has no folder host (ADR 0055).
 // `start` is the type that the form opens with (ADR 0119 item 6).
-function AddHostForm({ feeds, onAdded, start }) {
+// `addressHint` and `requireAddress` go to the folder fields (ADR 0121 item 8).
+function AddHostForm({ feeds, onAdded, start, addressHint = null, requireAddress = false }) {
   const [type, setType] = useState(start || (serverMode ? 's3' : 'local'));
   return html`<div class="form">
     <${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${[
@@ -1349,7 +1352,7 @@ function AddHostForm({ feeds, onAdded, start }) {
           ? html`<${NsiteHostForm} feeds=${feeds} onAdded=${onAdded} />`
           : type === 'blossom'
             ? html`<${BlossomHostForm} onAdded=${onAdded} />`
-            : html`<${LocalHostForm} onAdded=${onAdded} />`}
+            : html`<${LocalHostForm} onAdded=${onAdded} addressHint=${addressHint} requireAddress=${requireAddress} />`}
   </div>`;
 }
 
@@ -1947,6 +1950,8 @@ function Crumb({ feed, view, draft }) {
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
+  // The sheet "Publish for Real" is open (ADR 0121 item 3).
+  const [publishing, setPublishing] = useState(false);
   const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const glow = kindGlow(kind);
@@ -1970,8 +1975,11 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
         onOpenHosts=${() => go({ name: 'hosts' })}
-        onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} />
+        onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles}
+        practice=${feed.practice === true} onPublishForReal=${() => setPublishing(true)} />
     <//>
+    ${publishing && html`<${PublishForRealSheet} feed=${feed} feeds=${feeds} connectors=${connectors} draft=${draft}
+      onPublished=${async () => { await draft.load(); await onChanged(); }} onClose=${() => setPublishing(false)} />`}
     <div class="feed-head">
       <header class="head">
         <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always
@@ -1981,13 +1989,15 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           <h1>${feed.title || 'Untitled feed'}</h1>
           ${feed.public_url
             ? html`<${FeedAddress} url=${feed.public_url} />`
-            : html`<p class="sub mono">This feed has no public address yet.</p>`}
+            : !feed.practice && html`<p class="sub mono">This feed has no public address yet.</p>`}
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
           ${busy ? 'Reading…' : 'Read Again'}</button>`}
       </header>
       <${ErrorNotice} error=${error} />
-      ${feed.last_version === null && html`<div class="notice" role="status">
+      ${feed.practice
+        ? html`<div class="notice" role="status"><strong>${PRACTICE.noticeStrong}</strong> ${PRACTICE.noticeText}</div>`
+        : feed.last_version === null && html`<div class="notice" role="status">
         <strong>The file host has no file for this ${feed.medium === 'publisher' ? 'feed' : 'release'} yet.</strong>
         Open Review and write the draft to make the file.
       </div>`}
@@ -2854,7 +2864,7 @@ function Level({ panel, go, back }) {
     <button class="outline-feed" type="button" aria-label=${`${head.title}, ${head.typeLabel}`}
       onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
       <${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" />
-      <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
+      <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}${head.practice && html`<${PracticeBadge} />`}</span></div>
     </button>
     ${panel.sections.map((section) => html`<div class="destination-group">
       <h2 class="panel-heading">${section.heading}</h2>
@@ -2897,7 +2907,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
       <${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always />
       <div class="text">
         <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"></span>`}</span>
-        <span class="sub">${feed.typeLabel}</span>
+        <span class="sub">${feed.typeLabel}${feed.practice && html`<${PracticeBadge} />`}</span>
       </div>
     </button>
     <ul class="tree">
@@ -3037,7 +3047,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the Feed</button>`}
         </div>`}
       </div>
-      ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
+      ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}${head.practice && html`<${PracticeBadge} />`}</p>`}
       ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
       ${releases.letters && html`<nav class="letters" aria-label="Letters">
         ${releases.letters.map((g) => html`<button class="button letter" type="button" onClick=${() => showLetter(g.firstId)}>${g.letter}</button>`)}
@@ -3049,7 +3059,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
                 <${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always />
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
-                  <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
+                  <span class="sub">${row.typeLabel}${row.practice && html`<${PracticeBadge} />`}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
                   ${row.note && html`<span class="sub">${row.note}</span>`}
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
@@ -3181,11 +3191,66 @@ function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
               </div>`
             : html`<div class="form">
                 <p>${text.where}</p>
-                <${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} onAdded=${(connector) => { setMadeHost(connector); createFeed(connector.id); }} />
+                <${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} addressHint=${PRACTICE.folderHint} onAdded=${(connector) => { setMadeHost(connector); createFeed(connector.id); }} />
                 ${hostType === 'local' && html`<div class="actions"><button class="button link" type="button"
                   onClick=${() => setHostType('sftp')}>Use an SFTP Server Instead</button></div>`}
                 <div class="actions"><button class="button" type="button" onClick=${() => setHostType(null)}>Back</button></div>
               </div>`}
+      <${ErrorNotice} error=${error} />
+    </div>
+  </dialog>`;
+}
+
+// The badge of a practice page (ADR 0121 item 7).
+function PracticeBadge() {
+  return html`<span class="badge-practice">${PRACTICE.badge}</span>`;
+}
+
+// The sheet "Publish for Real" (ADR 0121 items 3 and 5). It moves each
+// practice page of the folder to a file host with a public address.
+// The host is a connected one. It can also be a new one, from the rows of
+// step 2. Studio writes no page here. Each page is a draft. Its first write
+// goes through Review.
+function PublishForRealSheet({ feed, feeds, connectors, draft, onPublished, onClose }) {
+  const ref = useSheet(true);
+  const targets = publishTargets(connectors);
+  const [target, setTarget] = useState(targets[0] ? String(targets[0].id) : '');
+  // The type of a new file host, or null for the list of the rows.
+  const [hostType, setHostType] = useState(null);
+  const { busy, error, run } = useAction();
+  const publish = (to) => run(async () => {
+    if (!(await draft.flush())) return;
+    await api('/practice/publish', { method: 'POST', body: { from: feed.connector_id, to } });
+    await onPublished();
+    ref.current.close();
+  });
+  const submit = (event) => {
+    event.preventDefault();
+    publish(Number(target));
+  };
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="publish-title" onClose=${onClose}>
+    <header>
+      <h2 id="publish-title">${PRACTICE.sheet}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <p>${PRACTICE.sheetIntro}</p>
+      ${targets.length > 0 && html`<form class="form" onSubmit=${submit}>
+        <${ChoiceSelect} id="publish-host" label=${PRACTICE.targetLabel} value=${target}
+          options=${targets.map((c) => [String(c.id), c.name])} onChange=${setTarget} />
+        <div class="actions"><button class="button primary" type="submit" disabled=${busy || target === ''}>${busy ? 'Moving the Pages…' : PRACTICE.move}</button></div>
+      </form>`}
+      ${hostType === null
+        ? html`<div class="form">
+            ${targets.length > 0 && html`<p>${PRACTICE.newHost}</p>`}
+            <div class="group">${HOST_ROWS(serverMode).map((row) => html`<${WelcomeRow} key=${row.type} row=${row}
+              onClick=${() => setHostType(row.type)} />`)}</div>
+          </div>`
+        : html`<div class="form">
+            <${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} requireAddress=${true}
+              onAdded=${(connector) => publish(connector.id)} />
+            <div class="actions"><button class="button" type="button" onClick=${() => setHostType(null)}>Back</button></div>
+          </div>`}
       <${ErrorNotice} error=${error} />
     </div>
   </dialog>`;

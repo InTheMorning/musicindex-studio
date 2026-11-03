@@ -3,8 +3,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   firstStart,
-  WELCOME, showWelcome, welcomeSteps, pathTexts, hostStep, HOST_ROWS, welcomeBody, nextStep, FIRST_STEPS,
+  WELCOME, PRACTICE, showWelcome, welcomeSteps, pathTexts, hostStep, HOST_ROWS, welcomeBody, nextStep, FIRST_STEPS,
+  publishTargets,
 } from '../ui/welcome.js';
+import { isTitleCase } from '../ui/casing.js';
 
 const FEED_WORD = /\bfeeds?\b/i;
 
@@ -77,7 +79,7 @@ test('the texts of ADR 0119 items 2, 5, 6 and 8 are as decided', () => {
 test('the texts of the Welcome page, the host rows and the steps do not use the word feed', () => {
   const texts = [
     WELCOME, HOST_ROWS(false), HOST_ROWS(true), welcomeSteps('music'), welcomeSteps('label'),
-    pathTexts('music'), pathTexts('label'), FIRST_STEPS,
+    pathTexts('music'), pathTexts('label'), FIRST_STEPS, PRACTICE,
   ];
   for (const text of texts) {
     assert.doesNotMatch(JSON.stringify(text), FEED_WORD);
@@ -88,4 +90,32 @@ test('a first-step row gives the start values of its form (ADR 0119 item 8)', ()
   assert.deepEqual(firstStart('album', 'album', { title: 'HeyCitizen' }), { author: 'HeyCitizen' });
   assert.deepEqual(firstStart('label', 'publisher', { title: 'Night Signals Records' }), { role: 'artist' });
   assert.deepEqual(firstStart('label', 'album', { title: 'Night Signals Records' }), {});
+});
+
+test('the texts of the practice pages are as decided (ADR 0121 items 3, 7 and 8)', () => {
+  assert.equal(PRACTICE.badge, 'Practice');
+  assert.equal(PRACTICE.button, 'Publish for Real');
+  assert.equal(PRACTICE.move, 'Move the Pages');
+  assert.equal(PRACTICE.folderHint, 'Leave it empty to practice. Nothing is public until you publish for real.');
+  assert.equal(PRACTICE.sheetIntro, 'Studio moves each practice page of this folder to the file host that you select, and gives each page its real address. Then you review and write each page.');
+});
+
+test('the button labels of the practice pages are in title case', () => {
+  assert.equal(isTitleCase(PRACTICE.button), true);
+  assert.equal(isTitleCase(PRACTICE.move), true);
+});
+
+test('publishTargets keeps only the file hosts with a public address (ADR 0121 item 3)', () => {
+  const connectors = [
+    { id: 1, kind: 'local', name: 'Folder', config: '{"root":"/a","base_url":null}' },
+    { id: 2, kind: 'local', name: 'Web', config: '{"root":"/b","base_url":"https://music.example.com/feeds"}' },
+    { id: 3, kind: 's3', name: 'Bucket', config: '{"bucket":"b","base_url":"https://cdn.example.com/"}' },
+    { id: 4, kind: 's3', name: 'Bucket with no address', config: '{"bucket":"c","base_url":null}' },
+    { id: 5, kind: 'sftp', name: 'SFTP', config: '{"host":"h","base_url":""}' },
+    { id: 6, kind: 'nsite', name: 'Site', config: '{"public_key":"abc","d":"site"}' },
+    { id: 7, kind: 'blossom', name: 'Blossom', config: '{"url":"https://b.example"}' },
+    { id: 8, kind: 'local', name: 'Broken', config: 'not json' },
+  ];
+  assert.deepEqual(publishTargets(connectors).map((c) => c.id), [2, 3, 6]);
+  assert.deepEqual(publishTargets(undefined), []);
 });

@@ -7,6 +7,7 @@
 - Changed: on 2026-11-03 the operator changed the default port from 39017 to 42069. The Ponder dev server also has the default port 42069. When it runs, item 7 gives Studio a free port for that start.
 - Changed: on 2026-11-03 the operator added items 16 to 21, through the questionnaire. "Quit" waits for a write that runs, or asks the user. The operator selected the dialog with three buttons and a wait with no limit. The operator also selected writes and uploads as the work, and the wait in the tray menu.
 - Changed: on 2026-11-03 the operator added the lock of item 10, through the questionnaire. The visual check of packet 088b found that the single instance plugin needs D-Bus on Linux. With no D-Bus, a second start opened a second API on the same data folder.
+- Changed: on 2026-11-03 the planning model added the ad-hoc signature of item 14, from the Tauri page on macOS signing. It needs no Apple account and no secret. The user must open the app with "Open Anyway" one time.
 - Changes: [ADR 0002](0002-rust-core-json-api-browser-ui.md) item 4, the form of the Tauri shell. The [distribution plan](../plans/distribution-phase-plan.md), milestone 2.
 - Uses: [ADR 0016](0016-ui-without-a-build-step.md), [ADR 0017](0017-local-api-access.md), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) for the granted writes, and the [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
@@ -46,7 +47,7 @@
 ### The Release
 
 13. The release keeps the five archives of `studio-desktop`, and adds the Tauri installers: AppImage, DEB and RPM on Linux, DMG on macOS, MSI on Windows. A Flatpak waits (distribution plan).
-14. The first installers are not signed. The release notes tell the user how to open an unsigned app on macOS and on Windows.
+14. The first installers are not signed. The macOS app has an ad-hoc signature with no identity, because Apple Silicon needs a signature on an app from the internet. The release notes tell the user how to open an unsigned app on macOS and on Windows.
 15. The first installers have no updater. The user installs a new version over the old one. The updater needs a decision with its key and its recovery test.
 
 ### Quit While Work Runs

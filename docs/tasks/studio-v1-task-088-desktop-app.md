@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c can start.
+Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c is ready for an agent.
 
 ## Goal
 
@@ -227,9 +227,135 @@ At the end, report:
 
 ## Packet 088c: The Installers
 
-This packet waits for 088b. The planning model writes its Architecture section after the commit of 088b, from the facts of the release workflow and of `tauri-action` at that time. The research note marks two items as not verified: the attach of `tauri-action` to the draft Release, and the bundle names.
+On 2026-11-03 the planning model wrote this packet from four sources. These are the release workflow at commit `53c2fe0`, the source of `tauri-bundler` 2.10.4, the page of `tauri-action` and a local Linux build.
 
-Its fixed choices: the release keeps the five archives and their smoke tests. The workflow adds the AppImage, the DEB and the RPM on Linux, the DMG on macOS, and the MSI on Windows, built on the native runners. No installer is signed. `SHA256SUMS.txt` lists each file. The release notes and the install runbook tell the user how to open an unsigned app on macOS and on Windows.
+### Facts
+
+- `tauri-action` finds or makes a Release in each job of the matrix. The draft job of the workflow already makes the draft, its notes (ADR 0100) and `SHA256SUMS.txt`. So the packet does not use `tauri-action`. Each build job runs `cargo tauri build`, and the draft job attaches the installers with the archives.
+- The bundler names each file from the product name, the version and the architecture, for example `Music Index Studio_0.1.0-rc.15_amd64.deb`. The architecture word is different in each format.
+- The RPM target refuses a `-` in the version, so `0.1.0-rc.15` fails. The RPM has no setting for its own version. `cargo tauri bundle` makes a bundle from the binary of `cargo tauri build` with no new compile, and its `--config` can give a different `version` and `bundle > linux > rpm > release`. The local build made `Music Index Studio-0.1.0-0.rc.15.x86_64.rpm` in this method. The release `0.rc.15` sorts before the release `1` of `0.1.0`.
+- The DEB accepts `0.1.0-rc.15`. The local DEB holds `usr/bin/studio-desktop-app`, the icons and `Music Index Studio.desktop`. Its description is "Tauri desktop app of musicindex-studio", from `Cargo.toml`, and its long description is "(none)".
+- The MSI target refuses a pre-release identifier that is not a number, so `0.1.0-rc.15` fails. The setting `bundle > windows > wix > version` replaces the version of the MSI. `allowDowngrades` is `true` by default, so each MSI installs over each other version.
+- The AppImage step gets `linuxdeploy` at a fixed commit, and it sets `APPIMAGE_EXTRACT_AND_RUN=1`, so it needs no FUSE. Its GTK plugin reads `/etc/os-release`. The sandbox of the planning model hides that file, so the AppImage fails there. The CI run checks the AppImage. It also tries to get `linuxdeploy-plugin-appimage` from the `continuous` release. When that download fails, it uses its own copy.
+- The bundler writes the bundle type into the binary for the updater. After the first bundle, it shows a warning for each other bundle. Studio has no updater (ADR 0124 item 15), so this warning has no effect.
+- With `CI` set, the DMG step skips the Finder layout of the window.
+- Apple Silicon needs a code signature on each app from the internet. The Tauri page on macOS signing gives the ad-hoc signature `"signingIdentity": "-"` for an app with no Apple identity. The user must still allow the app in Privacy & Security.
+
+### Files
+
+Inspect: `.github/workflows/desktop-release.yml`, `.github/workflows/ci.yml` (the apt packages), `tools/release_desktop.py`, `crates/desktop-app/tauri.conf.json`, `docs/runbooks/desktop-release.md`, `docs/runbooks/install-desktop.md`, `docs/user-guide/start-on-desktop.md`.
+
+Change: `.github/workflows/desktop-release.yml`, `tools/release_desktop.py`, `crates/desktop-app/tauri.conf.json`, `docs/runbooks/desktop-release.md`, `docs/runbooks/install-desktop.md`, `docs/user-guide/start-on-desktop.md`.
+
+Do not change: the Rust code, `Cargo.toml`, `Cargo.lock`, `.github/workflows/ci.yml`, the ADRs.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. The five archives, their package step and their smoke test do not change.
+2. Each build job installs the Tauri CLI with `cargo install tauri-cli --version 2.12.4 --locked`, after the Rust toolchain. This is the version of `.studio-dev/tools/tauri-cli`.
+3. Both Linux jobs install `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`, the packages of `ci.yml`. The job `linux-x86_64` also installs `openssh-server`, as before.
+4. A new step in `crates/desktop-app`, after the archive step, makes the installers in `target/release/bundle/`:
+    - Linux: `cargo tauri build --ci --bundles appimage,deb`, then `cargo tauri bundle --ci --bundles rpm --config "$(python tools/release_desktop.py bundle-config rpm)"`.
+    - macOS: `cargo tauri build --ci --bundles dmg`.
+    - Windows: `cargo tauri build --ci --bundles msi --config "$(python tools/release_desktop.py bundle-config msi)"`.
+5. A new command `python tools/release_desktop.py bundle-config FORMAT` prints the JSON for `--config`, from the version of the workspace:
+    - `msi` for `0.1.0-rc.15`: `{"bundle":{"windows":{"wix":{"version":"0.1.0.15"}}}}`. For `0.1.0`: the version `0.1.0`.
+    - `rpm` for `0.1.0-rc.15`: `{"version":"0.1.0","bundle":{"linux":{"rpm":{"release":"0.rc.15"}}}}`. For `0.1.0`: the version `0.1.0` and the release `1`.
+    - The command refuses a pre-release that is not `rc.N`, and an `N` above 65535.
+6. In `bundle`, `tauri.conf.json` gets these values:
+    - `"macOS": {"signingIdentity": "-"}`, the ad-hoc signature with no identity of ADR 0124 item 14.
+    - `"category": "Music"`.
+    - `"shortDescription": "Edit your hosted Podcasting 2.0 music feeds"`.
+    - `"longDescription": "Music Index Studio edits the Podcasting 2.0 music feeds on your file hosts. It keeps your collection and your secret vault on this computer."`
+7. A new command `python tools/release_desktop.py installers --target T --bundle-dir target/release/bundle --output .studio-dev/release` copies each installer of the target to a fixed name: `musicindex-studio-v{version}-{slug}{suffix}`. The suffixes are `.AppImage`, `.deb` and `.rpm` on Linux, `.dmg` on macOS and `.msi` on Windows. The command refuses a missing installer and a bundle folder with more than one file of a suffix. A `--skip SUFFIX` option is only for the local check of the planning model.
+8. The same command examines the start bytes of each file, with no external tool. The bytes are `!<arch>\n` for DEB, `\xed\xab\xee\xdb` for RPM, ELF with `AI\x02` at byte 8 for AppImage, `\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1` for MSI, and `koly` at 512 bytes before the end for DMG. A wrong file stops the job.
+9. `checksums` expects the five archives and the nine installers, and refuses an incomplete set. Its last line says "SHA256SUMS.txt covers all 14 desktop files".
+10. The draft notes keep the notes file of the version first (ADR 0100 item 5). The fixed text after it is:
+
+    ```text
+    Desktop archives and installers. These files are unsigned. The server image is ghcr.io/inthemorning/studio-server:VERSION.
+
+    On macOS, open the DMG and move Music Index Studio to Applications. At the first start, macOS stops the app. Open System Settings, then Privacy & Security, then select Open Anyway.
+
+    On Windows, open the MSI. If SmartScreen shows "Windows protected your PC", select More info, then Run anyway. Smart App Control can block an unsigned app. Then use the archive.
+    ```
+
+11. A manual run builds the same files as workflow artifacts and makes no Release.
+12. `install-desktop.md` stays the `START-HERE.md` of the archives. It gets a short section that names the installers and gives the steps of item 10. `start-on-desktop.md` names the installers in "Start the app window". `desktop-release.md` says that the draft holds 14 files, and that the installers have a file check but no start test.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- `bundle-config msi` and `bundle-config rpm` print the JSON of item 5 for the version of the workspace.
+- On this Linux computer, `cargo tauri build --ci --bundles deb`, then the RPM command of item 4, give the DEB and the RPM. The control file of the DEB has the description of item 6.
+- `installers` examines the DEB and the RPM with their fixed names, and the file check passes. The sandbox cannot make the AppImage, so a local check of `installers` gives `--skip appimage`. The workflow never gives `--skip`.
+- `installers` refuses a file with wrong start bytes, and a missing installer. The final summary gives the commands that showed this.
+- The four commit checks pass.
+
+Visual, by the planning model: the operator pushes `main` and starts a manual run. Each job of the run passes. Its artifact holds the archive and the installers of its system.
+
+Human test, by the operator: the human test of ADR 0124, with the installers of the draft.
+
+### Escalation Triggers
+
+- The DMG step or the MSI step needs a tool that the runner does not have.
+- `cargo tauri build` changes `Cargo.lock`.
+- The installer of a system needs a change of the Rust code.
+
+### Prompt for lower-context coding model
+
+You are implementing one bounded task from a larger plan.
+
+Implement only this task. Do not redesign the architecture.
+
+Read:
+- AGENTS.md
+- docs/adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md (items 12 to 15)
+- docs/adr/0100-each-release-candidate-has-a-notes-file.md (item 5)
+- docs/tasks/studio-v1-task-088-desktop-app.md (the Goal and packet 088c only)
+- ~/.agents/skills/asd-ste100/SKILL.md
+- The files that the Files section of packet 088c names.
+
+Goal:
+- The draft GitHub Release of a version tag holds the five archives and nine installers. These are the AppImage, DEB and RPM of each Linux system, the DMG of each macOS system and the MSI of Windows. `SHA256SUMS.txt` lists all 14 files.
+
+Constraints:
+- Follow the Architecture section of packet 088c fully, items 1 to 12.
+- Do not use `tauri-action`. Pin each new action by its commit SHA, as the workflow does now. Add no new action if a `run` step can do the work.
+- The Tauri CLI is at `.studio-dev/tools/tauri-cli/bin/cargo-tauri`. Put it on `PATH` for the local build.
+- Keep the Python code in the style of `tools/release_desktop.py`: the standard library only.
+- Each comment and the documents are in ASD-STE100 Simplified Technical English. Check each changed document with `python3 ~/.agents/skills/asd-ste100/scripts/ste_lint.py --check --no-heuristics FILE`.
+- Do not start a GUI app. Do not use the display `:0`.
+- Keep test data in `.studio-dev/`, not in `/tmp`.
+- Other sessions can write in the tree. Change only the files that the packet names.
+
+Do not touch:
+- The Rust code, `Cargo.toml`, `Cargo.lock`, `.github/workflows/ci.yml`, the ADRs.
+- Do not commit. Do not stage files. Do not push. Do not start a workflow.
+
+Acceptance criteria:
+- The mechanical criteria of packet 088c.
+
+Test commands:
+- cargo fmt --all --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test --workspace
+- tools/node --test crates/api/ui-tests/*.test.mjs
+- python3 tools/release_desktop.py bundle-config msi
+- python3 tools/release_desktop.py bundle-config rpm
+- (cd crates/desktop-app && PATH="$PWD/../../.studio-dev/tools/tauri-cli/bin:$PATH" cargo tauri build --ci --bundles deb)
+- (cd crates/desktop-app && PATH="$PWD/../../.studio-dev/tools/tauri-cli/bin:$PATH" cargo tauri bundle --ci --bundles rpm --config "$(python3 ../../tools/release_desktop.py bundle-config rpm)")
+- python3 tools/release_desktop.py installers --target x86_64-unknown-linux-gnu --bundle-dir target/release/bundle --output .studio-dev/check-088c/release --skip .AppImage
+
+At the end, report:
+1. files changed
+2. tests run
+3. behavior changed
+4. deviations from task
+5. unresolved concerns
 
 ## Packet 088d: Quit While Work Runs
 

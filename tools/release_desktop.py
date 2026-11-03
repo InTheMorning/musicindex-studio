@@ -9,6 +9,7 @@ import platform
 import queue
 import re
 import secrets
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -27,6 +28,15 @@ TARGETS = {
     "x86_64-unknown-linux-gnu": ("Linux", "x86_64", "linux-x86_64", ".tar.gz"),
     "aarch64-unknown-linux-gnu": ("Linux", "aarch64", "linux-arm64", ".tar.gz"),
 }
+
+# Installer suffixes of each system, and the folder of the bundler for each suffix.
+INSTALLERS = {
+    "Windows": [".msi"],
+    "Darwin": [".dmg"],
+    "Linux": [".AppImage", ".deb", ".rpm"],
+}
+BUNDLE_FOLDERS = {".AppImage": "appimage", ".deb": "deb", ".rpm": "rpm",
+                  ".dmg": "dmg", ".msi": "msi"}
 
 
 def version():
@@ -182,19 +192,93 @@ def smoke(target, archive):
     print(f"Smoke test passed: {expected}")
 
 
+def release_parts():
+    """Give the core version and the number N of an rc.N pre-release, or None."""
+    match = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-rc\.(\d+))?", version())
+    if match is None:
+        raise ValueError(f"the version {version()} is not X.Y.Z or X.Y.Z-rc.N")
+    core, number = match.groups()
+    if number is not None and (int(number) > 65535 or number != str(int(number))):
+        raise ValueError(f"the pre-release number {number} must be 65535 or less")
+    return core, number
+
+
+def bundle_config(form):
+    """Print the JSON for --config of the Tauri bundler (MSI and RPM refuse rc.N)."""
+    core, number = release_parts()
+    if form == "msi":
+        wix = core if number is None else f"{core}.{number}"
+        return {"bundle": {"windows": {"wix": {"version": wix}}}}
+    release = "1" if number is None else f"0.rc.{number}"
+    return {"version": core, "bundle": {"linux": {"rpm": {"release": release}}}}
+
+
+def installer_names():
+    """Give the fixed installer names of every target."""
+    names = set()
+    for system, _, slug, _ in TARGETS.values():
+        for suffix in INSTALLERS[system]:
+            names.add(f"musicindex-studio-v{version()}-{slug}{suffix}")
+    return names
+
+
+def check_start_bytes(path, suffix):
+    size = path.stat().st_size
+    with path.open("rb") as source:
+        head = source.read(16)
+        if suffix == ".deb":
+            good = head.startswith(b"!<arch>\n")
+        elif suffix == ".rpm":
+            good = head.startswith(b"\xed\xab\xee\xdb")
+        elif suffix == ".AppImage":
+            good = head.startswith(b"\x7fELF") and head[8:11] == b"AI\x02"
+        elif suffix == ".msi":
+            good = head.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
+        else:
+            good = False
+            if size >= 512:
+                source.seek(size - 512)
+                good = source.read(4) == b"koly"
+    if not good:
+        raise ValueError(f"{path.name} does not have the start bytes of a {suffix} file")
+
+
+def installers(target, bundle_dir, output, skip):
+    """Copy each installer of the target to its fixed name, after a start-byte check."""
+    slug, _ = target_details(target)
+    system = TARGETS[target][0]
+    bundle_dir = Path(bundle_dir)
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    for suffix in INSTALLERS[system]:
+        if suffix in skip:
+            continue
+        found = [path for path in (bundle_dir / BUNDLE_FOLDERS[suffix]).glob(f"*{suffix}")
+                 if path.is_file()]
+        if not found:
+            raise ValueError(f"the installer {suffix} is missing in {bundle_dir}")
+        if len(found) > 1:
+            raise ValueError(f"the bundle folder has more than one {suffix} file")
+        check_start_bytes(found[0], suffix)
+        destination = output / f"musicindex-studio-v{version()}-{slug}{suffix}"
+        shutil.copyfile(found[0], destination)
+        print(destination)
+
+
 def checksums(output):
     output = Path(output)
     expected = {f"musicindex-studio-desktop-v{version()}-{slug}{suffix}"
                 for _, _, slug, suffix in TARGETS.values()}
+    expected |= installer_names()
     found = {path.name for path in output.iterdir() if path.is_file()}
     if found != expected:
-        raise ValueError(f"archive set is incomplete: {sorted(expected - found)}")
+        raise ValueError(f"file set is incomplete: {sorted(expected - found)}")
     lines = []
     for name in sorted(expected):
         digest = hashlib.sha256((output / name).read_bytes()).hexdigest()
         lines.append(f"{digest}  {name}\n")
     (output / "SHA256SUMS.txt").write_text("".join(lines), encoding="ascii")
-    print("SHA256SUMS.txt covers all five desktop archives")
+    print(f"SHA256SUMS.txt covers all {len(expected)} desktop files")
 
 
 def main():
@@ -209,6 +293,14 @@ def main():
     test = commands.add_parser("smoke")
     test.add_argument("--target", required=True)
     test.add_argument("--archive", required=True)
+    config = commands.add_parser("bundle-config")
+    config.add_argument("format", choices=["msi", "rpm"])
+    inst = commands.add_parser("installers")
+    inst.add_argument("--target", required=True)
+    inst.add_argument("--bundle-dir", required=True)
+    inst.add_argument("--output", required=True)
+    # Only for a local check on a computer that cannot make every installer.
+    inst.add_argument("--skip", action="append", default=[])
     sums = commands.add_parser("checksums")
     sums.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -220,6 +312,10 @@ def main():
         package(args.target, args.binary, args.output)
     elif args.command == "smoke":
         smoke(args.target, args.archive)
+    elif args.command == "bundle-config":
+        print(json.dumps(bundle_config(args.format), separators=(",", ":")))
+    elif args.command == "installers":
+        installers(args.target, args.bundle_dir, args.output, args.skip)
     else:
         checksums(args.output)
 

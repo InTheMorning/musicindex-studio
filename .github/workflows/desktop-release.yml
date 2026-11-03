@@ -50,6 +50,9 @@ jobs:
         with:
           toolchain: 1.99.1
           components: rustfmt, clippy
+      - name: Install Tauri CLI
+        shell: bash
+        run: cargo install tauri-cli --version 2.12.4 --locked
       - name: Check version
         shell: bash
         run: |
@@ -68,9 +71,12 @@ jobs:
             echo "ADR 0100 item 4: the tag $GITHUB_REF_NAME needs the notes file docs/releases/$version.md. Commit it on main, then make a new candidate." >&2
             exit 1
           fi
+      - name: Install Linux packages
+        if: startsWith(matrix.slug, 'linux-')
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
       - name: Install Linux test server
         if: matrix.slug == 'linux-x86_64'
-        run: sudo apt-get update && sudo apt-get install -y openssh-server
+        run: sudo apt-get install -y openssh-server
       - name: Run repository checks
         if: matrix.slug == 'linux-x86_64'
         shell: bash
@@ -96,6 +102,30 @@ jobs:
             --output .studio-dev/release)
           python tools/release_desktop.py smoke \
             --target '${{ matrix.target }}' --archive "$archive"
+      - name: Build Linux installers
+        if: startsWith(matrix.slug, 'linux-')
+        shell: bash
+        working-directory: crates/desktop-app
+        run: |
+          cargo tauri build --ci --bundles appimage,deb -- --locked
+          cargo tauri bundle --ci --bundles rpm --config "$(python ../../tools/release_desktop.py bundle-config rpm)"
+      - name: Build macOS installer
+        if: startsWith(matrix.slug, 'macos-')
+        shell: bash
+        working-directory: crates/desktop-app
+        run: cargo tauri build --ci --bundles dmg -- --locked
+      - name: Build Windows installer
+        if: matrix.slug == 'windows-x86_64'
+        shell: bash
+        working-directory: crates/desktop-app
+        run: cargo tauri build --ci --bundles msi --config "$(python ../../tools/release_desktop.py bundle-config msi)" -- --locked
+      - name: Check and name installers
+        shell: bash
+        run: |
+          python tools/release_desktop.py installers \
+            --target '${{ matrix.target }}' \
+            --bundle-dir target/release/bundle \
+            --output .studio-dev/release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-${{ matrix.slug }}
@@ -122,7 +152,7 @@ jobs:
           pattern: desktop-*
           path: .studio-dev/release
           merge-multiple: true
-      - name: Check all archives and write checksums
+      - name: Check all files and write checksums
         run: python tools/release_desktop.py checksums --output .studio-dev/release
       - name: Create or refresh draft
         env:
@@ -137,7 +167,11 @@ jobs:
               cat "docs/releases/$version.md"
               echo
             fi
-            echo "Desktop archives only. These archives are unsigned. The server image is ghcr.io/inthemorning/studio-server:$version."
+            echo "Desktop archives and installers. These files are unsigned. The server image is ghcr.io/inthemorning/studio-server:$version."
+            echo
+            echo "On macOS, open the DMG and move Music Index Studio to Applications. At the first start, macOS stops the app. Open System Settings, then Privacy & Security, then select Open Anyway."
+            echo
+            echo 'On Windows, open the MSI. If SmartScreen shows "Windows protected your PC", select More info, then Run anyway. Smart App Control can block an unsigned app. You cannot allow only this app in Smart App Control.'
           } > .studio-dev/notes.md
           if gh release view "$tag" --json isDraft --jq .isDraft > .studio-dev/draft-state; then
             if [[ "$(cat .studio-dev/draft-state)" != true ]]; then

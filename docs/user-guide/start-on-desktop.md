@@ -8,7 +8,7 @@ See [Sign in to a Studio server](sign-in.md).
 
 ## Start the app
 
-The desktop app has no installer at this time.
+The archive starts Studio in your web browser. For the app window, see "Start the app window" below.
 A GitHub Release can give an archive for Windows, macOS or Linux.
 The archive has the file `START-HERE.md`. It gives the steps to start Studio from the archive.
 See [Start Music Index Studio](../runbooks/install-desktop.md).
@@ -37,7 +37,13 @@ Studio shows the Studio page. Keep the terminal open while you use Studio.
 ## Start the app window
 
 The desktop app opens Studio in its own window. It does not use your web browser.
-The app has no installer at this time. You can start it from the source code:
+The GitHub Release has an installer for each system. These installers have no code signature. See [Start Music Index Studio](../runbooks/install-desktop.md) for the steps on macOS and Windows.
+
+- Linux: install the DEB or the RPM, or run the AppImage.
+- macOS: open the DMG and move Music Index Studio to Applications.
+- Windows: open the MSI.
+
+You can also start the app from the source code:
 
 ```sh
 cargo run -p studio-desktop-app

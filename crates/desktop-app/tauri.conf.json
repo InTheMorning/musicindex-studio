@@ -11,6 +11,12 @@
   "bundle": {
     "active": true,
     "publisher": "Music Index",
+    "category": "Music",
+    "shortDescription": "Edit your hosted Podcasting 2.0 music feeds",
+    "longDescription": "Music Index Studio edits the Podcasting 2.0 music feeds on your file hosts. It keeps your collection and your secret vault on this computer.",
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

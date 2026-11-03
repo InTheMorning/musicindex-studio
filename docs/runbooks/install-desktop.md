@@ -1,13 +1,19 @@
 # Start Music Index Studio
 
 This archive contains the desktop shell. It starts Studio on your computer and prints a browser address.
-It does not open a desktop window. A native window and installers are planned for a later release.
+It does not open a desktop window. The GitHub Release also has installers for the app window.
 
 1. Extract the full archive into a folder that you can keep.
 2. On Windows, open `studio-desktop.exe` in the extracted folder.
 3. On macOS or Linux, open a terminal in that folder and run `./studio-desktop`.
 4. Open the printed address in a browser on the same computer. Studio uses port 42069, else a free port.
 5. Keep Studio running while you use the browser.
+
+The GitHub Release has an installer for each system. These are an AppImage, a DEB and an RPM on Linux, a DMG on macOS and an MSI on Windows. These installers have no code signature.
+
+On macOS, open the DMG and move Music Index Studio to Applications. At the first start, macOS stops the app. Open System Settings, then Privacy & Security, then select Open Anyway.
+
+On Windows, open the MSI. If SmartScreen shows "Windows protected your PC", select More info, then Run anyway. Smart App Control can block an unsigned app. You cannot allow only this app in Smart App Control.
 
 The address contains a private access token. Do not share it or put it in a public log.
 Studio keeps the collection and vault in the local application data folder of your operating system.

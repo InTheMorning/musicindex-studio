@@ -2,8 +2,9 @@
 
 ## Purpose
 
-The desktop workflow builds five archives from a version tag.
+The desktop workflow builds five archives and nine installers from a version tag.
 It tests each archive on a native GitHub runner and creates a draft GitHub Release.
+The installers are the AppImage, DEB and RPM of each Linux system, the DMG of each macOS system and the MSI of Windows ([ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md)).
 The release has no server binary. The server shell is not ready for public use.
 
 ## Before a release
@@ -13,14 +14,14 @@ The release has no server binary. The server shell is not ready for public use.
 3. Write the notes of the version in `docs/releases/VERSION.md` and commit them ([ADR 0100](../adr/0100-each-release-candidate-has-a-notes-file.md)). Use the open human tests of the Studio phase plan for "What to test".
 4. Run the `Desktop release` workflow by hand to check all five runners.
 
-A manual run uploads archives as workflow artifacts. It does not create a GitHub Release.
+A manual run uploads archives and installers as workflow artifacts. It does not create a GitHub Release.
 The workflow needs no repository secret for these unsigned archives.
 
 ## Make a draft
 
 1. Push a tag that matches the workspace version, such as `v0.1.0`.
 2. Wait for all five build and smoke jobs to pass.
-3. Open the draft GitHub Release and check its notes, five archives, and `SHA256SUMS.txt`. The notes are the notes file of the version, then one sentence about the archives and the server image.
+3. Open the draft GitHub Release and check its notes, its 14 files, and `SHA256SUMS.txt`. The 14 files are five archives and nine installers. The notes are the notes file of the version, then the text about the files, the server image and unsigned apps.
 4. Test each archive on a normal desktop system before you publish the draft.
 5. Publish the draft only after the remaining release checks pass.
 
@@ -33,7 +34,9 @@ A run refuses to change a published Release.
 
 The smoke test extracts the archive, runs the binary, and checks the local UI.
 It also checks the API token, the loopback Host rule, and vault data after a restart.
-This test does not verify an installer, because this milestone has archives only.
+The installers have a file check, but no start test. The workflow examines the start bytes of each installer and gives it a fixed name. Test each installer on a normal desktop system.
+
+The bundler refuses a pre-release version in the RPM and the MSI. The command `python tools/release_desktop.py bundle-config FORMAT` gives the replacement version for the build.
 
 ## Data and updates
 

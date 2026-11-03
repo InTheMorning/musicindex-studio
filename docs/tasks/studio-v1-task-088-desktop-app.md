@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c is ready for an agent.
+Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c is complete. Its check on a manual run of the release workflow is open.
 
 ## Goal
 
@@ -279,7 +279,7 @@ These choices are fixed. Do not change them.
 
     On macOS, open the DMG and move Music Index Studio to Applications. At the first start, macOS stops the app. Open System Settings, then Privacy & Security, then select Open Anyway.
 
-    On Windows, open the MSI. If SmartScreen shows "Windows protected your PC", select More info, then Run anyway. Smart App Control can block an unsigned app. Then use the archive.
+    On Windows, open the MSI. If SmartScreen shows "Windows protected your PC", select More info, then Run anyway. Smart App Control can block an unsigned app. You cannot allow only this app in Smart App Control.
     ```
 
 11. A manual run builds the same files as workflow artifacts and makes no Release.

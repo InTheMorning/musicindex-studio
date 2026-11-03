@@ -9,7 +9,8 @@ use studio_core::announce::{self, AnnounceSkip, AnnouncementState};
 use studio_core::collection::{Collection, ConnectorId, DraftOperationKind, FeedId, LibraryFileId};
 use studio_core::connector::{
     self, Connector, ConnectorError, ConnectorErrorKind, Expected, FileList, FileRead, HostChanges,
-    KeptBlob, ListedFile, LocalFolder, NsiteHost, PlannedEvent, Stamp, Version,
+    KeptBlob, ListedFile, LocalFolder, NsiteHost, PlannedEvent, S3Bucket, S3Config, S3Credentials,
+    S3UrlStyle, Stamp, Version,
 };
 use studio_core::feed::{ContentLink, Enclosure, Entry, Feed, Item, RssImage};
 use studio_core::grant::{self, GrantChange};
@@ -21,6 +22,7 @@ use studio_core::pipeline::{
     self, AddressCheck, DiffFile, DiffId, OperationKind, PipelineErrorKind,
 };
 use studio_core::testing::blossom::TestBlossom;
+use studio_core::testing::fake_s3::FakeS3;
 use studio_core::testing::relay::TestRelay;
 use studio_core::xml::Document;
 
@@ -389,17 +391,40 @@ fn a_new_feed_makes_a_draft_with_no_hosted_file() {
     );
 }
 
+/// The configuration of a bucket with no base address. The bucket is on the
+/// fake server, so no test sends a request to the network.
+fn bucket_config(server: &FakeS3) -> S3Config {
+    S3Config {
+        endpoint: server.url(),
+        region: "us-east-1".to_owned(),
+        bucket: "bk".to_owned(),
+        url_style: S3UrlStyle::Path,
+        prefix: String::new(),
+        base_url: None,
+    }
+}
+
+/// Open the bucket of `bucket_config`.
+fn open_bucket(server: &FakeS3) -> S3Bucket {
+    S3Bucket::new(
+        bucket_config(server),
+        S3Credentials::new("AKIDEXAMPLE", "secret"),
+    )
+    .unwrap()
+}
+
 #[test]
 fn a_new_feed_in_a_folder_with_no_public_address_gives_an_error() {
+    let server = FakeS3::start("bk");
     let dir = tempfile::tempdir().unwrap();
-    let folder = LocalFolder::new(dir.path(), None);
     let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let config = serde_json::to_string(&bucket_config(&server)).unwrap();
     let connector_id = collection
-        .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
+        .add_connector(S3Bucket::KIND, "Bucket", &config, None)
         .unwrap();
     let error = pipeline::new_feed(
         &mut collection,
-        &folder,
+        &open_bucket(&server),
         connector_id,
         "my-album.xml",
         "New Album",
@@ -2826,23 +2851,19 @@ fn with_podping_off_the_queued_announcement_has_no_podping() {
 
 #[test]
 fn a_feed_and_a_host_with_no_public_address_give_no_address_and_the_write_succeeds() {
+    let server = FakeS3::start("bk");
     let dir = tempfile::tempdir().unwrap();
-    let folder = LocalFolder::new(dir.path(), None);
-    folder
+    open_bucket(&server)
         .write("album.xml", FEED.as_bytes(), &Expected::Absent)
         .unwrap();
+    let config = serde_json::to_string(&bucket_config(&server)).unwrap();
     let mut collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
     let connector_id = collection
-        .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
+        .add_connector(S3Bucket::KIND, "Bucket", &config, None)
         .unwrap();
-    let connector = connector::from_row(
-        &collection.connector(connector_id).unwrap(),
-        None,
-        &studio_core::net::NetPolicy::Open,
-    )
-    .unwrap();
+    let connector: Box<dyn Connector> = Box::new(open_bucket(&server));
     let mut hosts = Hosts::new();
-    hosts.insert(connector_id, Box::new(folder));
+    hosts.insert(connector_id, Box::new(open_bucket(&server)));
     let library = Library::open(dir.path().join("library")).unwrap();
     let feed = collection
         .add_feed(None, Some((connector_id, "album.xml")))

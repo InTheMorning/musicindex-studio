@@ -38,8 +38,6 @@ pub enum PublisherErrorKind {
     NoRole,
     /// A draft has no `podcast:guid`.
     NoGuid,
-    /// A feed has no public address.
-    NoAddress,
     /// A draft or the collection failed. See [`PublisherError::pipeline`].
     Pipeline,
 }
@@ -172,9 +170,11 @@ pub fn linked_releases(
 /// Gives [`PublisherErrorKind::NotPublisher`] or
 /// [`PublisherErrorKind::NotRelease`] for a feed of the wrong medium,
 /// [`PublisherErrorKind::ReadOnly`] for a feed without a connector,
-/// [`PublisherErrorKind::NoGuid`] or [`PublisherErrorKind::NoAddress`] for
-/// a feed that cannot be named, and [`PublisherErrorKind::NoRole`] when the
-/// publisher feed has no role. Each draft is changed only after the checks.
+/// [`PublisherErrorKind::NoGuid`] for a feed that cannot be named, and
+/// [`PublisherErrorKind::NoRole`] when the publisher feed has no role. Each
+/// draft is changed only after the checks. A practice page has no public
+/// address, so its link has its temporary GUID and no `feedUrl` (ADR 0121
+/// item 4).
 pub fn link(
     collection: &Collection,
     publisher: FeedId,
@@ -553,12 +553,6 @@ fn check_named(feed: &Party, name: &str) -> Result<(), PublisherError> {
         return Err(PublisherError::new(
             PublisherErrorKind::NoGuid,
             format!("the draft of the {name} has no podcast:guid"),
-        ));
-    }
-    if feed.url.is_none() {
-        return Err(PublisherError::new(
-            PublisherErrorKind::NoAddress,
-            format!("the {name} has no public address"),
         ));
     }
     Ok(())

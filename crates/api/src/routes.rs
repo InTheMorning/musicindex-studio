@@ -1309,6 +1309,8 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
         }
         // The links of each feed give its destination (ADR 0085).
         let catalogs = publisher::catalogs(&feeds);
+        // A locked host gives no practice flag. The list reads no secret.
+        let hosts = w.hosts_without_secrets()?;
         let mut rows = Vec::new();
         for ((row, feed), catalog) in feeds.iter().zip(catalogs) {
             let state = draft_state(w, row)?;
@@ -1321,6 +1323,8 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             let mut value =
                 serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
+            // A practice page has no public address (ADR 0121 item 1).
+            value["practice"] = json!(pipeline::is_practice(&w.collection, &hosts, row));
             value["image"] = json!(image);
             value["rss_image_url"] = json!(rss_image_url);
             // The release list marks a feed that apps do not list (ADR 0063).
@@ -1511,6 +1515,35 @@ pub(crate) async fn new_album_feed(
             w.collection.set_publisher_roles(id, &[role], true)?;
         }
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PracticePublish {
+    /// The file host of the practice pages.
+    from: i64,
+    /// The file host with a public address that receives the pages.
+    to: i64,
+}
+
+/// Publish each practice page of `from` on `to` for real (ADR 0121 item 5).
+/// The route writes no file. It gives the IDs of the pages.
+pub(crate) async fn publish_practice(
+    State(shared): State<Shared>,
+    Json(body): Json<PracticePublish>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let hosts = w.hosts()?;
+        let feed_ids = pipeline::publish_practice(
+            &mut w.collection,
+            &hosts,
+            ConnectorId(body.from),
+            ConnectorId(body.to),
+        )?;
+        to_json(json!({
+            "feed_ids": feed_ids.iter().map(|id| id.0).collect::<Vec<_>>(),
+        }))
     })
     .await
 }

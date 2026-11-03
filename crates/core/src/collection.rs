@@ -858,6 +858,22 @@ pub struct DraftFeedMove {
     pub path: String,
 }
 
+/// One practice page that moves to a file host with a public address
+/// (ADR 0121 item 5).
+#[derive(Debug, Clone, Copy)]
+pub struct PracticeMove<'a> {
+    /// The feed.
+    pub id: FeedId,
+    /// The new host.
+    pub connector: ConnectorId,
+    /// The path on the new host. It is the path of the practice page.
+    pub path: &'a str,
+    /// The public address of the path on the new host.
+    pub address: &'a str,
+    /// The draft with the real GUID and the real links.
+    pub draft: &'a DraftRow,
+}
+
 /// A draft of a feed (ADR 0007).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftRow {
@@ -2207,17 +2223,36 @@ impl Collection {
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn save_draft(&self, id: FeedId, draft: &DraftRow) -> Result<(), CollectionError> {
-        self.db.execute(
-            "INSERT INTO drafts (feed_id, base_version, base_xml, draft_xml, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT (feed_id) DO UPDATE SET base_version = ?2, base_xml = ?3, draft_xml = ?4, updated_at = ?5",
-            params![
-                id.0,
-                draft.base_version.as_ref().map(Version::as_str),
-                draft.base_xml,
-                draft.draft_xml,
-                now()
-            ],
-        )?;
+        put_draft(&self.db, id, draft)
+    }
+
+    /// Move each practice page to a file host with a public address, with
+    /// its new address and its new draft. All changes are one transaction
+    /// (ADR 0121 item 5).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails. No row changes then.
+    pub fn move_practice_pages(
+        &mut self,
+        moves: &[PracticeMove<'_>],
+    ) -> Result<(), CollectionError> {
+        let tx = self.db.transaction()?;
+        for practice in moves {
+            tx.execute(
+                "UPDATE feeds SET connector_id = ?2, path = ?3 WHERE id = ?1",
+                params![practice.id.0, practice.connector.0, practice.path],
+            )?;
+            put_address(
+                &tx,
+                practice.id,
+                AddressSource::Folder,
+                Some(practice.address),
+            )?;
+            choose_address(&tx, practice.id)?;
+            put_draft(&tx, practice.id, practice.draft)?;
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -3684,6 +3719,22 @@ impl RecipientAgg {
             saved_id: self.saved_id,
         }
     }
+}
+
+/// Add or replace the draft of a feed on a connection or a transaction.
+fn put_draft(db: &Connection, id: FeedId, draft: &DraftRow) -> Result<(), CollectionError> {
+    db.execute(
+        "INSERT INTO drafts (feed_id, base_version, base_xml, draft_xml, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT (feed_id) DO UPDATE SET base_version = ?2, base_xml = ?3, draft_xml = ?4, updated_at = ?5",
+        params![
+            id.0,
+            draft.base_version.as_ref().map(Version::as_str),
+            draft.base_xml,
+            draft.draft_xml,
+            now()
+        ],
+    )?;
+    Ok(())
 }
 
 /// Turn the empty text that the database uses for a missing custom key or

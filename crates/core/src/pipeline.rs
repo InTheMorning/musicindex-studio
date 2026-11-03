@@ -14,14 +14,14 @@ use crate::address::AddressSource;
 use crate::announce::{self, AnnounceSettings, AnnounceSkip, PlannedAnnouncement, Timing};
 use crate::collection::{
     Collection, CollectionError, ConnectorId, DraftFeedMove, DraftOperationKind, DraftRow, FeedId,
-    FeedRow, LibraryFile, LibraryFileId, SnapshotId,
+    FeedRow, LibraryFile, LibraryFileId, PracticeMove, SnapshotId,
 };
 use crate::connector::{
-    Connector, ConnectorError, ConnectorErrorKind, Expected, HostChanges, PlannedDelete,
-    PlannedWrite, Version,
+    Connector, ConnectorError, ConnectorErrorKind, Expected, HostChanges, LocalFolder,
+    PlannedDelete, PlannedWrite, Version,
 };
 use crate::digest::sha256_hex;
-use crate::feed::{Entry, Feed, FeedError, Person};
+use crate::feed::{AtomLink, Entry, Feed, FeedError, Person};
 use crate::grant::{self, GrantChange};
 use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
@@ -73,8 +73,11 @@ pub enum PipelineErrorKind {
     /// The collection database failed.
     Collection,
     /// The connector gives no public address for the path of a new feed
-    /// (ADR 0032 item 8).
+    /// (ADR 0032 item 8), or for the path of a page that moves (ADR 0121).
     NoPublicAddress,
+    /// The feed is a practice page. Studio writes no practice page
+    /// (ADR 0121 item 3).
+    PracticePage,
     /// A file already exists at the path of a new feed (ADR 0032 item 8),
     /// at the path of a pending file (ADR 0026 item 7), or at the name of
     /// a file of the release folder, with different bytes (ADR 0036
@@ -706,11 +709,49 @@ const NEW_FEED_TEMPLATE: &str = concat!(
     "</rss>\n",
 );
 
+/// The error of a new feed with no public address (ADR 0032 item 8).
+fn no_public_address(path: &str) -> PipelineError {
+    PipelineError::new(
+        PipelineErrorKind::NoPublicAddress,
+        format!("{path} has no public address; give the file host a public address first"),
+    )
+}
+
+/// The temporary GUID of a practice page (ADR 0121 item 2).
+fn practice_guid(connector_id: ConnectorId, path: &str) -> String {
+    podcast_guid_for_url(&format!("studio-practice://{}/{path}", connector_id.0))
+}
+
+/// True when the connector is a local folder. Only a local folder holds
+/// practice pages (ADR 0121 item 1, ADR 0048 item 2).
+fn is_local_folder(
+    collection: &Collection,
+    connector_id: ConnectorId,
+) -> Result<bool, PipelineError> {
+    Ok(collection.connector(connector_id)?.kind == LocalFolder::KIND)
+}
+
+/// True when the feed is a practice page: its connector is a local folder,
+/// and the connector gives no public address for its path (ADR 0121 item 1).
+/// A feed of an unknown or locked host is not a practice page.
+#[must_use]
+pub fn is_practice(collection: &Collection, hosts: &Hosts, row: &FeedRow) -> bool {
+    let (Some(connector_id), Some(path)) = (row.connector_id, row.path.as_deref()) else {
+        return false;
+    };
+    is_local_folder(collection, connector_id).unwrap_or(false)
+        && hosts
+            .get(connector_id)
+            .is_ok_and(|host| host.public_url(path).is_none())
+}
+
 /// Make a new feed in a connected folder, as a draft with no hosted
 /// file (ADR 0032 items 6 to 9).
 ///
 /// The feed GUID is the `UUIDv5` of the public address of `path`
-/// ([`podcast_guid_for_url`]). The draft sets `podcast:medium` to `medium`
+/// ([`podcast_guid_for_url`]). With no public address, the feed is a
+/// practice page: its GUID is temporary, and its draft has no `self` link
+/// (ADR 0121 item 2). The draft sets `podcast:medium` to `medium`
 /// and `language` to `en`. The caller gives `music` for an album feed
 /// and `publisher` for a publisher feed (ADR 0041 item 2). The user sets each other field in the editor,
 /// examines the diff, and writes it. The write puts the file only when no
@@ -718,9 +759,9 @@ const NEW_FEED_TEMPLATE: &str = concat!(
 ///
 /// # Errors
 ///
-/// Gives [`PipelineErrorKind::NoPublicAddress`] when the connector gives no
-/// public address for `path`, and [`PipelineErrorKind::FileExists`] when a
-/// file exists there already.
+/// Gives [`PipelineErrorKind::NoPublicAddress`] when the connector is not a
+/// local folder and gives no public address for `path`. Gives
+/// [`PipelineErrorKind::FileExists`] when a file exists there already.
 pub fn new_feed(
     collection: &mut Collection,
     connector: &dyn Connector,
@@ -730,12 +771,10 @@ pub fn new_feed(
     author: &str,
     medium: &str,
 ) -> Result<FeedId, PipelineError> {
-    let address = connector.public_url(path).ok_or_else(|| {
-        PipelineError::new(
-            PipelineErrorKind::NoPublicAddress,
-            format!("{path} has no public address; give the file host a public address first"),
-        )
-    })?;
+    let address = connector.public_url(path);
+    if address.is_none() && !is_local_folder(collection, connector_id)? {
+        return Err(no_public_address(path));
+    }
     if connector.read(path)?.is_some() {
         return Err(PipelineError::new(
             PipelineErrorKind::FileExists,
@@ -743,17 +782,21 @@ pub fn new_feed(
         ));
     }
     let mut doc = Document::parse(NEW_FEED_TEMPLATE)?;
+    let guid = match &address {
+        Some(address) => podcast_guid_for_url(address),
+        None => practice_guid(connector_id, path),
+    };
     let feed = Feed {
         title: Some(title.to_owned()),
         author: Some(author.to_owned()),
-        podcast_guid: Some(podcast_guid_for_url(&address)),
+        podcast_guid: Some(guid),
         medium: Some(medium.to_owned()),
         language: Some("en".to_owned()),
         ..Feed::default()
     };
     feed.write(&mut doc)?;
     let id = collection.add_feed(None, Some((connector_id, path)))?;
-    collection.set_address(id, AddressSource::Folder, Some(&address))?;
+    collection.set_address(id, AddressSource::Folder, address.as_deref())?;
     collection.set_new_feed(id, title, medium)?;
     collection.save_draft(
         id,
@@ -791,12 +834,10 @@ pub fn copy_feed(
     author: &str,
     source: FeedId,
 ) -> Result<FeedId, PipelineError> {
-    let address = connector.public_url(path).ok_or_else(|| {
-        PipelineError::new(
-            PipelineErrorKind::NoPublicAddress,
-            format!("{path} has no public address; give the file host a public address first"),
-        )
-    })?;
+    let address = connector.public_url(path);
+    if address.is_none() && !is_local_folder(collection, connector_id)? {
+        return Err(no_public_address(path));
+    }
     if connector.read(path)?.is_some() {
         return Err(PipelineError::new(
             PipelineErrorKind::FileExists,
@@ -806,46 +847,38 @@ pub fn copy_feed(
     let draft = current_draft(collection, source)?;
     let mut doc = Document::parse_bytes(&draft.draft_xml)?;
     let mut feed = Feed::read(&doc)?;
-    let new_guid = podcast_guid_for_url(&address);
-    let old_prefix = feed
-        .podcast_guid
-        .as_deref()
-        .map(|guid| format!("https://op3.dev/e,pg={guid}/"));
-    let new_prefix = format!("https://op3.dev/e,pg={new_guid}/");
-    let swap_prefix = |url: &mut Option<String>| {
-        if let (Some(old), Some(text)) = (old_prefix.as_deref(), url.as_deref())
-            && let Some(rest) = text.strip_prefix(old)
-        {
-            *url = Some(format!("{new_prefix}{rest}"));
-        }
+    let new_guid = match &address {
+        Some(address) => podcast_guid_for_url(address),
+        None => practice_guid(connector_id, path),
     };
+    let old_guid = feed.podcast_guid.clone();
     feed.title = Some(title.to_owned());
     feed.author = Some(author.to_owned());
-    feed.podcast_guid = Some(new_guid);
+    feed.podcast_guid = Some(new_guid.clone());
     feed.new_feed_url = None;
     feed.publisher = None;
     feed.live_items.clear();
     feed.txts.retain(|t| t.purpose.as_deref() == Some("npub"));
-    for link in &mut feed.atom_links {
-        if link.value.rel.as_deref() == Some("self") {
-            link.value.href = Some(address.clone());
-        }
-    }
-    for entry in &mut feed.items {
-        let item = &mut entry.value;
-        item.guid = Some(uuid::Uuid::new_v4().to_string());
-        if let Some(enclosure) = item.enclosure.as_mut() {
-            swap_prefix(&mut enclosure.url);
-        }
-        for alternate in &mut item.alternate_enclosures {
-            for source in &mut alternate.value.sources {
-                swap_prefix(&mut source.value.uri);
+    match &address {
+        Some(address) => {
+            for link in &mut feed.atom_links {
+                if link.value.rel.as_deref() == Some("self") {
+                    link.value.href = Some(address.clone());
+                }
             }
         }
+        // A practice page has no `self` link (ADR 0121 item 2).
+        None => feed
+            .atom_links
+            .retain(|link| link.value.rel.as_deref() != Some("self")),
     }
+    for entry in &mut feed.items {
+        entry.value.guid = Some(uuid::Uuid::new_v4().to_string());
+    }
+    swap_op3_prefixes(&mut feed, old_guid.as_deref(), &new_guid);
     feed.write(&mut doc)?;
     let id = collection.add_feed(None, Some((connector_id, path)))?;
-    collection.set_address(id, AddressSource::Folder, Some(&address))?;
+    collection.set_address(id, AddressSource::Folder, address.as_deref())?;
     collection.set_new_feed(id, title, "music")?;
     collection.save_draft(
         id,
@@ -856,6 +889,184 @@ pub fn copy_feed(
         },
     )?;
     Ok(id)
+}
+
+/// One practice page of a publish, with its real GUID and its address
+/// (ADR 0121 item 5).
+struct PracticePlan {
+    id: FeedId,
+    path: String,
+    /// The temporary GUID. The remote items of other drafts name it.
+    old_guid: Option<String>,
+    new_guid: String,
+    address: String,
+}
+
+/// Publish each practice page of the file host `from` on the file host `to`,
+/// in one transaction (ADR 0121 item 5). Studio writes no file. Each page
+/// becomes a draft of `to`, with its real GUID, its `self` link and the
+/// corrected links of the other pages. The first write then goes through
+/// Review (ADR 0121 item 6).
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NotFound`] when `from` has no practice page,
+/// [`PipelineErrorKind::NoPublicAddress`] when `to` gives no public address
+/// for a path, and [`PipelineErrorKind::FileExists`] when `to` has a file at
+/// a path. No row and no draft changes then.
+pub fn publish_practice(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    from: ConnectorId,
+    to: ConnectorId,
+) -> Result<Vec<FeedId>, PipelineError> {
+    let target = hosts.get(to)?;
+    let feeds = collection.feeds()?;
+    let rows: Vec<FeedRow> = feeds
+        .into_iter()
+        .filter(|row| row.connector_id == Some(from) && is_practice(collection, hosts, row))
+        .collect();
+    if rows.is_empty() {
+        return Err(PipelineError::new(
+            PipelineErrorKind::NotFound,
+            format!("file host {} has no practice pages", from.0),
+        ));
+    }
+    let plans = plan_practice(collection, target, &rows)?;
+    let mut drafts = Vec::with_capacity(plans.len());
+    for plan in &plans {
+        drafts.push(practice_draft(collection, plan, &plans)?);
+    }
+    let moves: Vec<PracticeMove<'_>> = plans
+        .iter()
+        .zip(&drafts)
+        .map(|(plan, draft)| PracticeMove {
+            id: plan.id,
+            connector: to,
+            path: &plan.path,
+            address: &plan.address,
+            draft,
+        })
+        .collect();
+    collection.move_practice_pages(&moves)?;
+    Ok(plans.iter().map(|plan| plan.id).collect())
+}
+
+/// Check each practice page against the file host `target`, and give its
+/// real GUID and address. Each check runs before any change.
+///
+/// # Errors
+///
+/// Gives the errors of [`publish_practice`] for a path.
+fn plan_practice(
+    collection: &Collection,
+    target: &dyn Connector,
+    rows: &[FeedRow],
+) -> Result<Vec<PracticePlan>, PipelineError> {
+    let mut plans = Vec::with_capacity(rows.len());
+    for row in rows {
+        let (_, path) = writable(row)?;
+        let path = path.to_owned();
+        let address = target.public_url(&path).ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::NoPublicAddress,
+                format!(
+                    "{path} has no public address on the file host that you select. Give that file host a public address first."
+                ),
+            )
+        })?;
+        if target.read(&path)?.is_some() {
+            return Err(PipelineError::new(
+                PipelineErrorKind::FileExists,
+                format!("a file exists at {path} on the file host that you select"),
+            ));
+        }
+        let (feed, _) = draft_model(collection, row.id)?;
+        plans.push(PracticePlan {
+            id: row.id,
+            path,
+            old_guid: feed.podcast_guid,
+            new_guid: podcast_guid_for_url(&address),
+            address,
+        });
+    }
+    Ok(plans)
+}
+
+/// The draft of one practice page with its real GUID and its `self` link.
+/// Each remote item that names a page of `plans` gets its new GUID and its
+/// new address.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the draft is not a feed.
+fn practice_draft(
+    collection: &Collection,
+    plan: &PracticePlan,
+    plans: &[PracticePlan],
+) -> Result<DraftRow, PipelineError> {
+    let mut draft = changed_draft(current_draft(collection, plan.id)?, |feed| {
+        feed.podcast_guid = Some(plan.new_guid.clone());
+        swap_op3_prefixes(feed, plan.old_guid.as_deref(), &plan.new_guid);
+        set_self_link(feed, &plan.address);
+    })?;
+    for other in plans {
+        draft = changed_draft(draft, |feed| relink(feed, other))?;
+    }
+    Ok(draft)
+}
+
+/// Give the feed a `self` link to `address`. The feed gets a new link when
+/// it has none.
+fn set_self_link(feed: &mut Feed, address: &str) {
+    if !feed.set_self_url(address) {
+        feed.atom_links.push(Entry::new(AtomLink {
+            href: Some(address.to_owned()),
+            rel: Some("self".to_owned()),
+            ..AtomLink::default()
+        }));
+    }
+}
+
+/// Change each remote item that names the temporary GUID of `plan`. The
+/// item gets the real GUID and the real address of the page.
+fn relink(feed: &mut Feed, plan: &PracticePlan) {
+    let items = feed.remote_items.iter_mut().chain(
+        feed.publisher
+            .iter_mut()
+            .flat_map(|links| links.remote_items.iter_mut()),
+    );
+    for entry in items {
+        if plan.old_guid.is_some() && entry.value.feed_guid == plan.old_guid {
+            entry.value.feed_guid = Some(plan.new_guid.clone());
+            entry.value.feed_url = Some(plan.address.clone());
+        }
+    }
+}
+
+/// Change the OP3 prefix of each enclosure from the old GUID to the new
+/// GUID (ADR 0076). A URL with another prefix keeps its text.
+fn swap_op3_prefixes(feed: &mut Feed, old_guid: Option<&str>, new_guid: &str) {
+    let old_prefix = old_guid.map(|guid| format!("https://op3.dev/e,pg={guid}/"));
+    let new_prefix = format!("https://op3.dev/e,pg={new_guid}/");
+    let swap = |url: &mut Option<String>| {
+        if let (Some(old), Some(text)) = (old_prefix.as_deref(), url.as_deref())
+            && let Some(rest) = text.strip_prefix(old)
+        {
+            *url = Some(format!("{new_prefix}{rest}"));
+        }
+    };
+    for entry in &mut feed.items {
+        let item = &mut entry.value;
+        if let Some(enclosure) = item.enclosure.as_mut() {
+            swap(&mut enclosure.url);
+        }
+        for alternate in &mut item.alternate_enclosures {
+            for source in &mut alternate.value.sources {
+                swap(&mut source.value.uri);
+            }
+        }
+    }
 }
 
 /// Parse the hosted file that the draft started from, for `write_hosted`
@@ -881,14 +1092,26 @@ pub fn edit_draft(
     id: FeedId,
     change: impl FnOnce(&mut Feed),
 ) -> Result<DraftRow, PipelineError> {
-    let mut draft = current_draft(collection, id)?;
+    let draft = changed_draft(current_draft(collection, id)?, change)?;
+    collection.save_draft(id, &draft)?;
+    Ok(draft)
+}
+
+/// The draft with the change applied, in memory. The draft is not saved.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the draft is not a feed.
+fn changed_draft(
+    mut draft: DraftRow,
+    change: impl FnOnce(&mut Feed),
+) -> Result<DraftRow, PipelineError> {
     let mut doc = Document::parse_bytes(&draft.draft_xml)?;
     let mut feed = Feed::read(&doc)?;
     change(&mut feed);
     let hosted = hosted_document(&draft);
     feed.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
-    collection.save_draft(id, &draft)?;
     Ok(draft)
 }
 
@@ -2630,6 +2853,9 @@ pub fn library_file_in_use(
 ///
 /// # Errors
 ///
+/// Gives [`PipelineErrorKind::PracticePage`] for a practice page, before
+/// any other step (ADR 0121 item 3).
+///
 /// Gives [`PipelineErrorKind::DiffNotApproved`],
 /// [`PipelineErrorKind::WaitingForDownload`],
 /// [`PipelineErrorKind::BadAddress`], [`PipelineErrorKind::BadKey`] or
@@ -2834,6 +3060,16 @@ pub fn write_draft_signed(
     public: Option<&crate::web::Web>,
 ) -> Result<Version, PipelineError> {
     let row = collection.feed(id)?;
+    // ADR 0121 item 3: a practice page is refused before any other step.
+    if is_practice(collection, hosts, &row) {
+        return Err(PipelineError::new(
+            PipelineErrorKind::PracticePage,
+            format!(
+                "feed {} is a practice page. Studio writes no practice page. Publish the pages for real first.",
+                id.0
+            ),
+        ));
+    }
     // A feed with no connector writes to the host of its draft feed move.
     let from_host = if row.connector_id.is_some() {
         let (connector_id, path) = writable(&row)?;

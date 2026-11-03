@@ -197,6 +197,8 @@ impl From<PipelineError> for ApiError {
                 (StatusCode::UNPROCESSABLE_ENTITY, "no_public_address")
             }
             PipelineErrorKind::FileExists => (StatusCode::CONFLICT, "file_exists"),
+            // ADR 0121 item 3: a practice page has no file to write.
+            PipelineErrorKind::PracticePage => (StatusCode::CONFLICT, "practice_page"),
             // A feed with no release folder cannot take an import, the
             // same as a workspace with no library folder (ADR 0036
             // item 1 and item 5).
@@ -243,9 +245,6 @@ impl From<PublisherError> for ApiError {
             PublisherErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
             PublisherErrorKind::NoRole => (StatusCode::CONFLICT, "role_required"),
             PublisherErrorKind::NoGuid => (StatusCode::UNPROCESSABLE_ENTITY, "no_guid"),
-            PublisherErrorKind::NoAddress => {
-                (StatusCode::UNPROCESSABLE_ENTITY, "no_public_address")
-            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "publisher"),
         };
         Self::new(status, code, error.to_string())

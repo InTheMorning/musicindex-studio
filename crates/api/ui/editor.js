@@ -1936,6 +1936,8 @@ function FeedFacts({ feed, onRemoved }) {
       onRemoved();
     });
   };
+  // "Remove from Collection" is a row of its own below the facts, so that it
+  // shows with the facts closed.
   return html`<details class="disclosure">
     <summary class="link-row"><span class="label">Feed facts</span><span class="summary">GUID, file, version and announcement</span></summary>
     <div class="form">
@@ -1946,10 +1948,10 @@ function FeedFacts({ feed, onRemoved }) {
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
         <dt>Announcement</dt><dd>${announcementText.split('\n').map((line, i) => html`${i > 0 && html`<br />`}${line}`)}</dd>
       </dl>
-      <${ErrorNotice} error=${error} />
-      <div class="actions"><button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button></div>
     </div>
-  </details>`;
+  </details>
+  <div class="actions"><button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button></div>
+  <${ErrorNotice} error=${error} />`;
 }
 
 // The section "Artists and labels" of an album or a playlist: its publisher

@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
 Decision: [ADR 0122](../adr/0122-a-new-user-starts-with-a-default-file-host.md). It supersedes ADR 0121, and replaces task 085.
 
-Status: 086a and 086b are complete, with the desktop part of the visual check. 086c is next.
+Status: Complete, with the screenshot visual check of the desktop and of the server. The human test is open.
 
 ## Goal
 
@@ -185,4 +185,96 @@ The planning model made these changes before the commit:
 
 ## Packet 086c: The Temporary Area Of A Server
 
-The planning model writes this packet after the commit of 086a and 086b. It uses `sweep_pending` of `crates/api/src/uploads.rs` for the hourly deletion, and the user folder of ADR 0055.
+### Files
+
+Inspect: `crates/core/src/connector.rs` (`HostEnv`, `from_row_in`, `LocalFolder`), `crates/api/src/workspace.rs` (`data_dir`, `rules`, `connector_of`, `hosts_for`, `private_dir`), `crates/api/src/routes.rs` (`NewConnector`, `add_connector`, `not_on_server`, `list_feeds`, `write_feed`, `ensure_draft`, the update of a connector), `crates/api/src/uploads.rs` (`sweep_pending`, `spawn_cleaner`), `crates/core/src/pipeline.rs` (`start_draft`, `set_feed_host`), `crates/core/src/account_archive.rs` (the import of the connectors), `crates/api/src/tests.rs`, `crates/api/ui/editor.js` (the notice "The file host has no file for this feed yet"), `crates/api/ui/app.js` (the File hosts page and its rows), `crates/api/ui/welcome.js` (`HOST_STEP.expired`), `crates/api/ui-tests/`, `docs/user-guide/first-steps.md`.
+
+Change: those files, and a new module `crates/api/src/temporary.rs`.
+
+Do not change: the collection schema, the ADRs, `crates/server` other than a test.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. The core gets `connector::TEMPORARY_KIND = "temporary"` and the field `HostEnv::temporary_root: Option<PathBuf>`. `from_row_in` makes a `LocalFolder` at `temporary_root` with no public address for this kind. With no `temporary_root`, it gives a connector error. The connector config holds no path: it is `{}` or `{"expired_at": SECONDS}`. Thus an account archive cannot point the area at a different folder.
+2. The workspace sets `temporary_root` to `data_dir/temporary` on a server (`rules` is set), and to `None` on the desktop. It makes the folder with `private_dir` (mode 0700) before the first use.
+3. `NewConnector` gets the variant `Temporary {}`. On the desktop, the route gives 403 `not_on_desktop` (ADR 0122 non-goal). When the account has a temporary area, the route gives 409 `temporary_exists`. The name of the connector is "Temporary area".
+4. `temporary::sweep(w, now)` runs in the hourly loop of `spawn_cleaner`, after `sweep_pending`, with its own error handling. For each temporary area with no `expired_at`: the last write is the newest modification time of a file in the folder. When the folder has a file and the last write is 7 days or more before `now`:
+    - First, each written feed of the area with no draft gets a draft from its live file, through `pipeline::start_draft`. Thus the feed keeps its content.
+    - Then the function removes each file and each subfolder in the folder. The folder stays.
+    - Then it sets `expired_at` in the connector config.
+    - It does not read or touch the vault (ADR 0055 item 16).
+5. `GET /feeds` gives `temporary_expired: true` for a feed whose connector, or whose draft feed move source, is an expired temporary area.
+6. `write_feed` gives 409 `temporary_expired` for a feed whose target file host is an expired temporary area. A move to a different file host, and its write, work. The removal of an expired area works. A user can then add a new area.
+7. The update route of a connector refuses a temporary area, as it refuses each kind with no form.
+8. The UI: the File hosts page shows a temporary area with its name and the text `HOST_STEP.temporary`, and with no edit form. The page of a feed with `temporary_expired` shows the notice `HOST_STEP.expired` in the place of the notice "The file host has no file for this feed yet". `docs/user-guide/first-steps.md` tells the temporary area of a server.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- An API test with server rules: `POST /connectors {kind: "temporary"}` makes the connector, its folder is `data_dir/temporary` with mode 0700, and its config holds no path. A second one gives 409 `temporary_exists`.
+- An API test on the desktop: the same request gives 403 `not_on_desktop`.
+- A test: a new album on the area gets a placeholder GUID, and its write puts the file in the folder.
+- A test of `temporary::sweep`: with a file 6 days old, nothing changes. With the newest file 7 days old, the written feed gets a draft, the folder is empty, `expired_at` is set, and `GET /feeds` gives `temporary_expired`. A write then gives 409 `temporary_expired`. Use `File::set_modified` for the times.
+- A test: a feed of an expired area moves to a local folder with a public address, and its write works. It gets its real GUID.
+- A core test: `from_row_in` for the kind `temporary` with no `temporary_root` gives an error, and a config with a path does not change the folder.
+- A Node test: the File hosts row of a temporary area and the expired notice use the texts of ADR 0122 items 3 and 10.
+- The four commit checks pass.
+
+Visual, by the planning model: the server part of the visual check of ADR 0122.
+
+### Prompt for lower-context coding model
+
+You are implementing one bounded task from a larger plan.
+
+Implement only this task. Do not redesign the architecture.
+
+Read:
+- AGENTS.md
+- docs/adr/0122-a-new-user-starts-with-a-default-file-host.md
+- docs/tasks/studio-v1-task-086-default-file-host.md (the Goal, the review of 086a and 086b, and packet 086c)
+- ~/.agents/skills/asd-ste100/SKILL.md
+- The files that the Files section of packet 086c names.
+
+Goal:
+- A server user can try Studio in a temporary area in the user folder. The server removes its files 7 days after the last write, and each feed keeps its draft and can move to a real file host.
+
+Constraints:
+- Follow the Architecture section of packet 086c fully.
+- A write to a host occurs only through `pipeline::write_draft`.
+- No feed rule in the UI (ADR 0065). Each button label is in title case. Each `setState` that combines the old value uses a functional update.
+- Each comment, each test message and the user guide page are in ASD-STE100 Simplified Technical English.
+- Follow the Pragmatic Rust Guidelines of the `rust-dev` skill.
+- Clippy runs with `-D warnings`, which includes `too_many_lines` for a test.
+- The UI has no build step. To check syntax, copy a changed UI file to a `.mjs` file in `.studio-dev/` and run `tools/node --check` on the copy.
+
+Do not touch:
+- The collection schema, the ADRs, `crates/server` other than a test.
+- Do not commit. Do not do the visual check.
+
+Acceptance criteria:
+- The mechanical criteria of packet 086c.
+
+Test commands:
+- cargo fmt --all --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test --workspace
+- tools/node --test crates/api/ui-tests/*.test.mjs
+
+At the end, report:
+1. files changed
+2. tests run
+3. behavior changed
+4. deviations from task
+5. unresolved concerns
+
+### Review Of 086c
+
+The planning model found these items in the operator's test and in the visual check:
+
+- The route that adds a folder did not make the default folder, so a new computer gave "Studio did not find this folder on this computer." `add_connector` now makes the folder when its path is the `default_host_root`. It makes no other folder. The visual check ran the route with a home folder in `.studio-dev`.
+- In Feed facts, the explanation of the placeholder had no term, so it went into the first column of the grid. At 390 px this pushed the values off the screen. The explanation now stays in the value column, and a long value wraps.
+- A feed of an expired area that moves needs a write with no old file. The core skips the conflict check, the snapshot and the pointer only when the old file host is an expired area and the file is gone.
+- Open: a write under a show grant does not check the expiry of a temporary area. Only `write_feed` refuses it.

@@ -433,6 +433,9 @@ pub(crate) fn spawn_cleaner(shared: &Arc<Mutex<Workspace>>) {
                     let _ = sweep_hosted(&w);
                 }
                 let _ = sweep_pending(&w, i64::try_from(now).unwrap_or(i64::MAX));
+                // The temporary area of a server ends 7 days after its last
+                // write (ADR 0122 item 10).
+                let _ = crate::temporary::sweep(&w, now);
             }
             drop(shared);
             first = false;

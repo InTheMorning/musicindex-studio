@@ -12538,3 +12538,278 @@ async fn the_queues_of_an_archive_do_not_come_in_on_the_desktop() {
         "ADR 0107 item 13: an import must not bring a waiting announcement or a queued download. Call clear_queues in the check."
     );
 }
+
+#[test]
+fn the_default_host_folder_is_made_and_no_other_missing_folder_is_made() {
+    let home = tempfile::tempdir().unwrap();
+    let default = home.path().join("musicindex").join("pages");
+    let other = home.path().join("typing-error");
+    crate::routes::make_default_host_folder(other.to_str().unwrap(), Some(&default)).unwrap();
+    assert!(!other.exists(), "a typing error must not make a folder");
+    assert!(!default.exists(), "only the default folder is made");
+    crate::routes::make_default_host_folder(default.to_str().unwrap(), Some(&default)).unwrap();
+    assert!(default.is_dir());
+    // A folder that is not the default gives no change, when no default exists.
+    crate::routes::make_default_host_folder(other.to_str().unwrap(), None).unwrap();
+    assert!(!other.exists());
+}
+
+#[tokio::test]
+async fn a_missing_folder_that_is_not_the_default_gives_422_and_is_not_made() {
+    let app = app();
+    let missing = app.data.path().join("no-such-folder");
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "x", "root": missing.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "folder_not_found");
+    assert!(!missing.exists());
+}
+
+const DAY_SECS: u64 = 24 * 60 * 60;
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+/// A server app with a handle to its workspace, for a test of the sweep of
+/// the temporary area.
+fn server_app_with_handle() -> (App, crate::WorkspaceHandle) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(None)
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_server_rules(crate::ServerRules {
+            storage_limit: 1 << 30,
+            folder: data.path().to_path_buf(),
+            library_root: data.path().join("library"),
+            hold_assets: true,
+        })
+        .unwrap();
+    let (router, handle) = crate::workspace_router(workspace);
+    (
+        App {
+            router,
+            data,
+            feeds,
+        },
+        handle,
+    )
+}
+
+/// Make the temporary area of a server. Gives its connector ID.
+async fn make_temporary_area(app: &App) -> i64 {
+    set_library_root(app);
+    let (status, connector) = call(
+        app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "temporary" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{connector}");
+    connector["id"].as_i64().unwrap()
+}
+
+/// Write the draft of a feed with its own diff. Gives the response.
+async fn write_with_own_diff(app: &App, id: i64) -> (StatusCode, Value) {
+    let (_, diff) = call(app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn a_server_makes_one_temporary_area_in_the_user_folder() {
+    let app = app_with_rules(1 << 30);
+    let id = make_temporary_area(&app).await;
+    let folder = app.data.path().join("temporary");
+    assert!(folder.is_dir());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&folder).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
+    }
+    let (_, rows) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == id)
+        .unwrap();
+    assert_eq!(row["kind"], "temporary");
+    let config: Value = serde_json::from_str(row["config"].as_str().unwrap()).unwrap();
+    assert!(config.get("root").is_none(), "{config}");
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "temporary" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "temporary_exists");
+}
+
+#[tokio::test]
+async fn the_temporary_area_is_refused_on_the_desktop() {
+    let app = app();
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "temporary" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"]["code"], "not_on_desktop");
+}
+
+#[tokio::test]
+async fn a_new_album_on_the_temporary_area_has_a_placeholder_and_writes_its_file() {
+    let app = app_with_rules(1 << 30);
+    let connector = make_temporary_area(&app).await;
+    let feed = make_feed(
+        &app,
+        new_feed_body(connector, "album.xml", "Album", None, None),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    let guid = draft_model(&app, id).await["podcast_guid"].clone();
+    assert!(guid.as_str().unwrap().starts_with("pending-"), "{guid}");
+    let (status, body) = write_with_own_diff(&app, id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(app.data.path().join("temporary/album.xml").is_file());
+}
+
+#[tokio::test]
+async fn the_sweep_keeps_the_drafts_and_expires_the_area_after_7_days() {
+    let (app, handle) = server_app_with_handle();
+    let connector = make_temporary_area(&app).await;
+    let feed = make_feed(
+        &app,
+        new_feed_body(connector, "album.xml", "Album", None, None),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    let (status, body) = write_with_own_diff(&app, id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let file = app.data.path().join("temporary/album.xml");
+    let now = now_secs();
+    let set_age = |days: u64| {
+        let time = std::time::UNIX_EPOCH + std::time::Duration::from_secs(now - days * DAY_SECS);
+        std::fs::File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_modified(time)
+            .unwrap();
+    };
+
+    // Six days after the last write, nothing changes.
+    set_age(6);
+    handle
+        .with_workspace(move |w| crate::temporary::sweep(w, now))
+        .await
+        .unwrap();
+    assert!(file.is_file());
+
+    // Seven days after the last write, the files go and the drafts stay.
+    set_age(7);
+    handle
+        .with_workspace(move |w| crate::temporary::sweep(w, now))
+        .await
+        .unwrap();
+    assert!(!file.exists());
+    assert!(app.data.path().join("temporary").is_dir());
+    let has_draft = handle
+        .with_workspace(move |w| {
+            w.collection
+                .draft(studio_core::collection::FeedId(id))
+                .unwrap()
+                .is_some()
+        })
+        .await;
+    assert!(has_draft);
+    assert_eq!(listed(&app, id).await["temporary_expired"], true);
+
+    // A write to the expired area gives 409.
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "temporary_expired");
+}
+
+#[tokio::test]
+async fn a_feed_of_an_expired_area_moves_to_a_public_host_and_gets_its_real_guid() {
+    let (app, handle) = server_app_with_handle();
+    let area = make_temporary_area(&app).await;
+    let feed = make_feed(&app, new_feed_body(area, "album.xml", "Album", None, None)).await;
+    let id = feed["id"].as_i64().unwrap();
+    let (status, body) = write_with_own_diff(&app, id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let now = now_secs();
+    let file = app.data.path().join("temporary/album.xml");
+    let time = std::time::UNIX_EPOCH + std::time::Duration::from_secs(now - 8 * DAY_SECS);
+    std::fs::File::options()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(time)
+        .unwrap();
+    handle
+        .with_workspace(move |w| crate::temporary::sweep(w, now))
+        .await
+        .unwrap();
+
+    // A server has no local folder host (ADR 0055 item 24), so the file
+    // host with the public address is a bucket.
+    let bucket = studio_core::testing::fake_s3::FakeS3::start("bk");
+    make_vault(&app).await;
+    let (status, host) = call(&app, "POST", "/api/v1/connectors", Some(s3_body(&bucket))).await;
+    assert_eq!(status, StatusCode::CREATED, "{host}");
+    let (status, moved) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": host["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": moved["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, draft) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(
+        draft["model"]["podcast_guid"],
+        studio_core::guid::podcast_guid_for_url("https://cdn.example.com/feeds/album.xml")
+    );
+}

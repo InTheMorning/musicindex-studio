@@ -987,6 +987,7 @@ mod tests {
                 blobs: Vec::new(),
                 signing: Signing::default(),
                 policy: NetPolicy::Open,
+                temporary_root: None,
             },
         )
         .expect("a connector");

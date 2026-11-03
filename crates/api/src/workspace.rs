@@ -687,6 +687,9 @@ pub struct Workspace {
     pub(crate) signer_generation: u64,
 }
 
+/// The folder of the temporary area in the user folder (ADR 0122 item 9).
+pub(crate) const TEMPORARY_FOLDER: &str = "temporary";
+
 /// The time of the computer, in seconds since the Unix epoch.
 fn clock_now() -> i64 {
     i64::try_from(crate::announcer::now()).unwrap_or(i64::MAX)
@@ -828,8 +831,20 @@ impl Workspace {
         });
         let now = i64::try_from(crate::announcer::now()).unwrap_or(i64::MAX);
         self.collection.set_asset_rules(asset_rules, now)?;
+        // The temporary area is a folder in the user folder (ADR 0122 item
+        // 9). It is made here, so that an imported area has its folder too.
+        private_dir(&self.data_dir.join(TEMPORARY_FOLDER))
+            .map_err(|e| ApiError::internal(format!("{TEMPORARY_FOLDER}: {e}")))?;
         self.rules = Some(rules);
         Ok(self)
+    }
+
+    /// The folder of the temporary area: `temporary/` in the user folder
+    /// of a server (ADR 0122 item 9). The desktop has none.
+    pub(crate) fn temporary_root(&self) -> Option<PathBuf> {
+        self.rules
+            .as_ref()
+            .map(|_| self.data_dir.join(TEMPORARY_FOLDER))
     }
 
     /// Give the workspace the sign-in identity of its account, for the
@@ -1281,6 +1296,7 @@ impl Workspace {
             &HostEnv {
                 vault: self.vault.as_ref(),
                 policy: self.net_policy.clone(),
+                temporary_root: self.temporary_root(),
                 ..HostEnv::default()
             },
         )
@@ -1323,6 +1339,7 @@ impl Workspace {
                 blobs: self.collection.kept_blobs(row.id)?,
                 signing: signing.clone(),
                 policy: self.net_policy.clone(),
+                temporary_root: self.temporary_root(),
             };
             let made = connector::from_row_in(&row, &env)?;
             hosts.insert(row.id, made);
@@ -1357,6 +1374,7 @@ impl Workspace {
                 blobs: self.collection.kept_blobs(row.id)?,
                 signing: signing.clone(),
                 policy: self.net_policy.clone(),
+                temporary_root: self.temporary_root(),
             };
             hosts.insert(row.id, connector::from_row_in(&row, &env)?);
         }

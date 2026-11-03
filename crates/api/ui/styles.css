@@ -795,6 +795,10 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
 .section h2 { font-size: var(--text-title-3); font-weight: 700; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 20px; }
 .facts dt { color: var(--muted); }
+/* A long value with no spaces, such as a GUID or a version, wraps in its
+   column. A note under a value has no term, so it stays in the value column. */
+.facts dd { min-width: 0; overflow-wrap: anywhere; }
+.facts .facts-note { grid-column: 2; }
 .passkey-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .passkey-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .panel {

@@ -126,3 +126,13 @@ test('no UI file names the practice pages or the button Publish for Real (ADR 01
     assert.doesNotMatch(text, /practice|publish for real/i, name);
   }
 });
+
+test('the File hosts row of a temporary area and the expired notice use the texts of ADR 0122 items 3 and 10', () => {
+  const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  // The row of the temporary area shows its text and has no Edit button (item 9).
+  assert.match(app, /isTemporary && html`<p class="hint">\$\{HOST_STEP\.temporary\}<\/p>`/);
+  assert.match(app, /!isTemporary && html`<button class="button" type="button" disabled=\$\{removeBusy\} onClick=\$\{startEdit\}>Edit<\/button>`/);
+  // A feed of an expired area shows the notice of item 10 in the place of the no-file notice.
+  assert.match(app, /feed\.temporary_expired\s*\? html`<div class="notice" role="status">\$\{HOST_STEP\.expired\}<\/div>`/);
+  assert.equal(HOST_STEP.expired, 'The temporary area has expired. Move this feed to a real file host.');
+});

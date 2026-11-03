@@ -331,6 +331,7 @@ pub(crate) enum NewConnector {
     Sftp(NewSftp),
     Nsite(NewNsite),
     Blossom(NewBlossom),
+    Temporary {},
 }
 
 /// Who signs the events of a new nsite or Blossom host (ADR 0044 item 1).
@@ -1108,6 +1109,7 @@ pub(crate) async fn add_connector(
             NewConnector::Sftp(body) => return add_sftp_connector(w, &body),
             NewConnector::Nsite(body) => return add_nsite_connector(w, &body),
             NewConnector::Blossom(body) => return add_blossom_connector(w, &body),
+            NewConnector::Temporary {} => return add_temporary_connector(w),
         };
         let root = expand_home(root.trim());
         if !std::path::Path::new(&root).is_absolute() {
@@ -1117,6 +1119,7 @@ pub(crate) async fn add_connector(
                 "the folder must be an absolute path",
             ));
         }
+        make_default_host_folder(&root, library::default_host_root().as_deref())?;
         if !std::path::Path::new(&root).is_dir() {
             return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -1132,6 +1135,50 @@ pub(crate) async fn add_connector(
         Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
     })
     .await
+}
+
+/// Make the default folder of the pages when the user chooses it (ADR 0122
+/// item 2). Each other missing folder stays missing, so that a typing error
+/// makes no folder. `default` is the default folder of `GET /library`.
+pub(crate) fn make_default_host_folder(
+    root: &str,
+    default: Option<&std::path::Path>,
+) -> Result<(), ApiError> {
+    let Some(default) = default else {
+        return Ok(());
+    };
+    if std::path::Path::new(root) != default {
+        return Ok(());
+    }
+    std::fs::create_dir_all(default)
+        .map_err(|e| ApiError::internal(format!("{}: {e}", default.display())))
+}
+
+/// Add the temporary area of a server (ADR 0122 items 3 and 9). The
+/// account has one area only. The folder is made with the workspace.
+fn add_temporary_connector(w: &Workspace) -> Result<(StatusCode, Json<Value>), ApiError> {
+    if w.rules.is_none() {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "not_on_desktop",
+            "the temporary area is only on a server",
+        ));
+    }
+    if w.collection
+        .connectors()?
+        .iter()
+        .any(|row| row.kind == connector::TEMPORARY_KIND)
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "temporary_exists",
+            "the account has a temporary area already",
+        ));
+    }
+    let id = w
+        .collection
+        .add_connector(connector::TEMPORARY_KIND, "Temporary area", "{}", None)?;
+    Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
 }
 
 /// The refusal of a function of the desktop only (ADR 0055 items 24 and 25).
@@ -1173,6 +1220,14 @@ pub(crate) async fn update_connector(
     blocking(shared, move |w| {
         let id = ConnectorId(id);
         let row = w.collection.connector(id)?;
+        // The temporary area has no settings (ADR 0122 item 9).
+        if row.kind == connector::TEMPORARY_KIND {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_config",
+                "the temporary area has no settings to change",
+            ));
+        }
         // The new host key is checked first, so that a refusal changes nothing.
         if let Some(host_key) = &body.host_key {
             accept_host_key(w, &row, host_key)?;
@@ -1313,6 +1368,7 @@ fn set_connector_base_url(
 /// image (ADR 0039 item 2, task 026a).
 pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
+        let expired = crate::temporary::expired_areas(w)?;
         // The cover image comes from the same source as the file list. A
         // feed with no readable source has no image and no link.
         let mut feeds = Vec::new();
@@ -1344,6 +1400,11 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             };
             value["placeholder_guid"] =
                 json!(guid.as_deref().is_some_and(pipeline::has_placeholder_guid));
+            // The files of an expired temporary area are gone (ADR 0122 item 10).
+            value["temporary_expired"] = json!(
+                row.connector_id
+                    .is_some_and(|connector_id| expired.contains(&connector_id))
+            );
             value["podcast_guid"] = json!(guid);
             value["image"] = json!(image);
             value["rss_image_url"] = json!(rss_image_url);
@@ -2692,6 +2753,7 @@ pub(crate) async fn write_feed(
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
+        crate::temporary::check_write_target(w, id)?;
         let plan_time = pipeline::plan_time_for_write(&w.collection, id, &approved, now)?;
         let hosts = w.hosts_with(Signing {
             plan_time,

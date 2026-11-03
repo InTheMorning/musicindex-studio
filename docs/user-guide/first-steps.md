@@ -56,6 +56,23 @@ Studio also writes the feed to the file host.
 To set the GUID from a public address, give the folder a public address in **File hosts**. Or move the feed to a file host with a public address.
 Studio then sets the GUID, and it changes the links between your pages.
 
+## The temporary area on a server
+
+The temporary area is a folder in your user folder on the server.
+It has no public address, so each feed in it gets a placeholder GUID.
+
+Studio deletes the files of the temporary area 7 days after the last write.
+Your feeds and their drafts stay in your collection.
+After the deletion, each feed in the area shows this text: "The temporary area has expired. Move this feed to a real file host."
+
+To keep your pages, follow these steps.
+
+1. Add a file host with a public address in **File hosts**.
+2. Open each feed of the expired area.
+3. Move the feed to the new file host. Then write it through **Review**.
+
+An account has one temporary area. To make a new area, remove the expired area in **File hosts** first.
+
 ## Move from a different server
 
 Select **Import an Account** below the rows of the Welcome page.

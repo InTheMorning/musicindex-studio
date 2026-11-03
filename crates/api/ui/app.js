@@ -17,7 +17,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
 import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
-import { WELCOME, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody } from './welcome.js';
+import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
@@ -1996,7 +1996,9 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           ${busy ? 'Reading…' : 'Read Again'}</button>`}
       </header>
       <${ErrorNotice} error=${error} />
-      ${feed.last_version === null && html`<div class="notice" role="status">
+      ${feed.temporary_expired
+        ? html`<div class="notice" role="status">${HOST_STEP.expired}</div>`
+        : feed.last_version === null && html`<div class="notice" role="status">
         <strong>The file host has no file for this ${feed.medium === 'publisher' ? 'feed' : 'release'} yet.</strong>
         Open Review and write the draft to make the file.
       </div>`}
@@ -2356,6 +2358,8 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   const isNsite = connector.kind === 'nsite';
   const isBlossom = connector.kind === 'blossom';
   const isNostr = isNsite || isBlossom;
+  // The temporary area of a server has no settings, so it has no form (ADR 0122 item 9).
+  const isTemporary = connector.kind === 'temporary';
   // The fields of an nsite or Blossom host that "Edit" changes (ADR 0050).
   const [relays, setRelays] = useState(linesText(config.relays));
   const [servers, setServers] = useState(linesText(config.servers));
@@ -2420,9 +2424,9 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   const mismatch = accept.error && accept.error.code === 'host_key_mismatch';
   return html`<article class="panel host">
     <header class="host-head">
-      <span class="eyebrow">${isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : isNsite ? 'nsite site' : isBlossom ? 'Blossom server' : 'Folder on this computer'}</span>
+      <span class="eyebrow">${isTemporary ? 'Temporary area' : isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : isNsite ? 'nsite site' : isBlossom ? 'Blossom server' : 'Folder on this computer'}</span>
       ${!editing && html`<div class="actions">
-        <button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>
+        ${!isTemporary && html`<button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>`}
         <button class="button destructive" type="button" disabled=${removeBusy}
           aria-label=${`Remove the file host ${connector.name}`} onClick=${onRemove}>Remove</button>
       </div>`}
@@ -2448,6 +2452,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
           </div>
         </form>`
       : html`<h2>${connector.name}</h2>
+          ${isTemporary && html`<p class="hint">${HOST_STEP.temporary}</p>`}
           <dl class="facts">
             ${isS3
               ? html`<dt>Endpoint</dt><dd class="mono">${config.endpoint}</dd>
@@ -2465,8 +2470,8 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
                       <dt>Relays</dt><dd><ul class="address-list">${(config.relays || []).map((r) => html`<li class="mono">${r}</li>`)}</ul></dd>`}
                     <dt>Blossom servers</dt><dd><ul class="address-list">${(config.servers || []).map((r) => html`<li class="mono">${r}</li>`)}</ul></dd>
                     <dt>Signing</dt><dd>${signingText}</dd>`
-                  : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
-            ${!isNostr && html`<dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
+                  : isTemporary ? null : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
+            ${!isNostr && !isTemporary && html`<dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>`}
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<details class="disclosure host-feeds">
               <summary>${written.length} ${written.length === 1 ? 'feed' : 'feeds'}</summary>

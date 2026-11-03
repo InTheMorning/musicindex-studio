@@ -655,6 +655,7 @@ mod tests {
                 blobs: vec![blob.clone()],
                 signing: Signing::default(),
                 policy: NetPolicy::Open,
+                temporary_root: None,
             },
         )
         .expect("a connector");

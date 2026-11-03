@@ -254,7 +254,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - Decision: [ADR 0119](../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md). On 2026-11-02 the operator asked for a clear first path for a musician and for a label, with no word "feed".
 - The mockups are in `.studio-dev/mockup-start/site/`.
-- [Task 083](../tasks/studio-v1-task-083-welcome.md) gives the work in one UI packet. It is complete, and its human test is open. [ADR 0122](../adr/0122-a-new-user-starts-with-a-default-file-host.md) makes step 2 required, with a default file host, and gives a placeholder GUID to a feed with no public address. It supersedes ADR 0121 (practice pages, task 085). [Task 086](../tasks/studio-v1-task-086-default-file-host.md) gives the work in three packets. It is in progress.
+- [Task 083](../tasks/studio-v1-task-083-welcome.md) gives the work in one UI packet. It is complete, and its human test is open. [ADR 0122](../adr/0122-a-new-user-starts-with-a-default-file-host.md) makes step 2 required, with a default file host, and gives a placeholder GUID to a feed with no public address. It supersedes ADR 0121 (practice pages, task 085). [Task 086](../tasks/studio-v1-task-086-default-file-host.md) gives the work in three packets. It is complete, with its screenshot visual check, and its human test is open.
 - [ADR 0120](../adr/0120-the-check-of-a-person-shows-each-difference.md) makes each row of the check of a person show its differences. [Task 084](../tasks/studio-v1-task-084-check-differences.md) gives the work in two packets. It is complete, and its human test is open. The two tasks share only the file `docs/README.md`.
 
 ### Phase 13: Desktop Shell

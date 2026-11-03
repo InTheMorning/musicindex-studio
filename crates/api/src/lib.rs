@@ -13,6 +13,7 @@ mod import;
 mod media;
 mod people;
 mod routes;
+mod temporary;
 mod ui;
 mod uploads;
 mod workspace;

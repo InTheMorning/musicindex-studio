@@ -1934,7 +1934,7 @@ function FeedFacts({ feed, onRemoved }) {
       <dl class="facts">
         <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
-        ${feed.placeholder_guid && html`<dd>${HOST_STEP.placeholderGuid}</dd>`}
+        ${feed.placeholder_guid && html`<dd class="facts-note">${HOST_STEP.placeholderGuid}</dd>`}
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in File hosts.'}</dd>
         <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
         <dt>Announcement</dt><dd>${announcementText.split('\n').map((line, i) => html`${i > 0 && html`<br />`}${line}`)}</dd>

@@ -3185,10 +3185,19 @@ pub fn write_draft_signed(
             format!("a live item is not correct: {}", texts.join(" ")),
         ));
     }
+    // ADR 0122 item 10: the file of an expired temporary area is gone, so
+    // the draft of its feed has no file to compare with.
+    let source_gone = match &from_host {
+        Some((source, _)) => {
+            crate::connector::is_expired_temporary(&collection.connector(*source)?)
+        }
+        None => false,
+    };
     let live = if from_host.is_some() {
         let live = connector.read(&path)?;
         let live_version = live.as_ref().map(|f| &f.version);
-        if live_version != draft.base_version.as_ref() {
+        let gone = source_gone && live.is_none();
+        if !gone && live_version != draft.base_version.as_ref() {
             return Err(PipelineError::new(
                 PipelineErrorKind::Conflict,
                 format!("{path} changed on the file host after the draft started"),
@@ -3237,12 +3246,16 @@ pub fn write_draft_signed(
     let version = if from_host.is_none() {
         put_public_feed_file(collection, id, connector, &path, &draft)?
     } else if let Some(moved) = &feed_move {
-        let old = FeedHost {
-            connector,
-            connector_id,
-            path: &path,
-        };
-        put_moved_feed_file(collection, hosts, id, &old, &draft, live.as_ref(), moved)?
+        if source_gone {
+            put_feed_from_expired(hosts, &draft, moved)?
+        } else {
+            let old = FeedHost {
+                connector,
+                connector_id,
+                path: &path,
+            };
+            put_moved_feed_file(collection, hosts, id, &old, &draft, live.as_ref(), moved)?
+        }
     } else {
         let expected = match &live {
             Some(file) => {
@@ -3848,6 +3861,71 @@ struct FeedHost<'a> {
     path: &'a str,
 }
 
+/// The public address of a moved feed on its new host.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NoPublicAddress`] when the new host gives none.
+fn new_address(moved: &FeedMove) -> Result<&str, PipelineError> {
+    moved.url.as_deref().ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NoPublicAddress,
+            format!("{} has no public address on the new file host", moved.path),
+        )
+    })
+}
+
+/// Write the feed XML of a draft to the new host of a feed move. A file
+/// with the same bytes from an earlier, stopped write is a finished step.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::FileExists`] when another file exists at the
+/// path.
+fn write_to_new_host(
+    hosts: &Hosts,
+    moved: &FeedMove,
+    draft: &DraftRow,
+) -> Result<Version, PipelineError> {
+    let new_host = hosts.get(moved.connector_id)?;
+    match new_host.write(&moved.path, &draft.draft_xml, &Expected::Absent) {
+        Ok(version) => Ok(version),
+        Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
+            // A write that stopped after this step left the draft XML on
+            // the new host. The same bytes let the write continue, so the
+            // user can finish the move. Other bytes are a different file.
+            match new_host.read(&moved.path)? {
+                Some(found) if found.bytes == draft.draft_xml => Ok(found.version),
+                _ => Err(PipelineError::new(
+                    PipelineErrorKind::FileExists,
+                    format!(
+                        "a file exists at {} on the new file host already",
+                        moved.path
+                    ),
+                )),
+            }
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Put the feed XML of a feed that moves off an expired temporary area on
+/// its new host (ADR 0122 item 10). The old file is gone, so the write makes
+/// no snapshot of it and no pointer or redirect on the old host.
+///
+/// # Errors
+///
+/// Gives the errors of [`write_to_new_host`], and
+/// [`PipelineErrorKind::NoPublicAddress`] when the new host gives no address.
+fn put_feed_from_expired(
+    hosts: &Hosts,
+    draft: &DraftRow,
+    moved: &FeedMove,
+) -> Result<Version, PipelineError> {
+    new_address(moved)?;
+    write_to_new_host(hosts, moved, draft)
+}
+
 /// Put the feed XML on the new host of a feed move, then make the host from
 /// before point to it: the second step of [`write_draft`] with a feed move
 /// (ADR 0038 items 19 and 20). Gives the version of the file on the new
@@ -3875,34 +3953,8 @@ fn put_moved_feed_file(
             format!("{} does not exist on the file host", old.path),
         )
     })?;
-    let new_url = moved.url.as_deref().ok_or_else(|| {
-        PipelineError::new(
-            PipelineErrorKind::NoPublicAddress,
-            format!("{} has no public address on the new file host", moved.path),
-        )
-    })?;
-    let new_host = hosts.get(moved.connector_id)?;
-    let version = match new_host.write(&moved.path, &draft.draft_xml, &Expected::Absent) {
-        Ok(version) => version,
-        Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
-            // A write that stopped after this step left the draft XML on
-            // the new host. The same bytes let the write continue, so the
-            // user can finish the move. Other bytes are a different file.
-            match new_host.read(&moved.path)? {
-                Some(found) if found.bytes == draft.draft_xml => found.version,
-                _ => {
-                    return Err(PipelineError::new(
-                        PipelineErrorKind::FileExists,
-                        format!(
-                            "a file exists at {} on the new file host already",
-                            moved.path
-                        ),
-                    ));
-                }
-            }
-        }
-        Err(error) => return Err(error.into()),
-    };
+    let new_url = new_address(moved)?;
+    let version = write_to_new_host(hosts, moved, draft)?;
     collection.add_snapshot(id, &live_file.version, &live_file.bytes)?;
     match moved.method {
         FeedMoveMethod::Redirect => old.connector.set_redirect(old.path, new_url)?,

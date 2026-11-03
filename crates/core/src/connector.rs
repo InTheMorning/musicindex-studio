@@ -228,6 +228,20 @@ pub struct KeptBlob {
     pub size: u64,
 }
 
+/// The connector kind of the temporary area of a server (ADR 0122 items 9
+/// and 10). The area is a folder in the user folder, with no public address.
+pub const TEMPORARY_KIND: &str = "temporary";
+
+/// True when a row is a temporary area whose files the server removed
+/// (ADR 0122 item 10). The config holds the time of the expiry as
+/// `expired_at`.
+#[must_use]
+pub fn is_expired_temporary(row: &ConnectorRow) -> bool {
+    row.kind == TEMPORARY_KIND
+        && serde_json::from_str::<serde_json::Value>(&row.config)
+            .is_ok_and(|config| config.get("expired_at").is_some())
+}
+
 /// What a connector gets from Studio when it is made.
 #[derive(Debug, Default)]
 pub struct HostEnv<'a> {
@@ -240,6 +254,9 @@ pub struct HostEnv<'a> {
     /// The rule for the addresses that the connector connects to
     /// (ADR 0057).
     pub policy: NetPolicy,
+    /// The folder of the temporary area. `None` on the desktop, where the
+    /// kind `temporary` is not available (ADR 0122 item 1).
+    pub temporary_root: Option<PathBuf>,
 }
 
 /// Read and write the files of one host.
@@ -510,6 +527,7 @@ pub fn from_row(
             blobs: Vec::new(),
             signing: nostr_events::Signing::default(),
             policy: policy.clone(),
+            temporary_root: None,
         },
     )
 }
@@ -559,6 +577,17 @@ pub fn from_row_in(
             )?
             .with_policy(&env.policy),
         )),
+        TEMPORARY_KIND => {
+            // The config holds no path, so the area stays in its folder
+            // (ADR 0122 item 1).
+            let root = env.temporary_root.clone().ok_or_else(|| {
+                ConnectorError::new(
+                    ConnectorErrorKind::InvalidConfig,
+                    "the temporary area is only on a server",
+                )
+            })?;
+            Ok(Box::new(LocalFolder::new(root, None)))
+        }
         other => Err(ConnectorError::new(
             ConnectorErrorKind::InvalidConfig,
             format!("the connector kind {other:?} is not known"),
@@ -690,6 +719,45 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(error.kind(), ConnectorErrorKind::Unauthorized);
+    }
+
+    fn temporary_row(config: &str) -> ConnectorRow {
+        ConnectorRow {
+            id: crate::collection::ConnectorId(3),
+            kind: TEMPORARY_KIND.to_owned(),
+            name: "Temporary area".to_owned(),
+            config: config.to_owned(),
+            secret_ref: None,
+        }
+    }
+
+    #[test]
+    fn a_temporary_area_needs_a_folder_from_the_server() {
+        let error = from_row_in(&temporary_row("{}"), &HostEnv::default())
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), ConnectorErrorKind::InvalidConfig);
+        assert_eq!(error.to_string(), "the temporary area is only on a server");
+    }
+
+    #[test]
+    fn a_temporary_area_ignores_a_path_in_its_config() {
+        let folder = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let env = HostEnv {
+            temporary_root: Some(folder.path().to_path_buf()),
+            ..HostEnv::default()
+        };
+        let config = serde_json::json!({
+            "root": other.path().to_str().unwrap(),
+            "expired_at": 5,
+        })
+        .to_string();
+        let host = from_row_in(&temporary_row(&config), &env).unwrap();
+        host.write("a.xml", b"<rss/>", &Expected::Absent).unwrap();
+        assert!(folder.path().join("a.xml").exists());
+        assert!(!other.path().join("a.xml").exists());
+        assert_eq!(host.public_url("a.xml"), None);
     }
 
     #[test]

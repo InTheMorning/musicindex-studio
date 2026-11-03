@@ -34,3 +34,12 @@ Each step is done on 2026-10-27:
 | 8. "Add to Home Screen" on the two phone types. Studio opens with no browser bar. | | | Open |
 | 9. Do not use the phone for 15 minutes. The vault locks, the session stays, and the next write asks for an unlock. | | | Open |
 | 10. A connected app does "Go live" and "End the show" with no browser session open. It waits for v4vmm or the live publisher. | | | Open |
+
+## The Tests That Wait
+
+On 2026-11-03 the operator put the open tests off until a subsequent date. The operator asked to prepare Phase 13. The operator can test with an iPhone and with a computer with a NIP-07 extension. Thus:
+
+- The operator can do tests 6, 7, 8 and 9 on an iPhone, and test 5 if a signer for the iPhone works. Test 6 uses the computer.
+- Tests 3 and 4, and the Android part of test 8, need an Android phone. The operator has none, so these tests are blocked.
+- The sign-in on a second Apple device in test 2 needs a second Apple device. It is blocked.
+- Test 10 waits for the client of the live publisher.

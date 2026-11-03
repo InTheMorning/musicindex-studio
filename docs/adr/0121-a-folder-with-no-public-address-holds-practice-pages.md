@@ -4,6 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from the choice "Practice mode" after the visual check of task 083.
+- Amended: 2026-11-02 by the planning model, from the review of packet 085a: item 1 applies to a local folder only.
 - Changes: [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md) items 6 to 9, for a file host with no public address. [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 6, the row "My own server".
 - Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) for feed identity. [ADR 0007](0007-draft-diff-write-and-announce.md) for the write. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) for a move after a write. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 6, 7 and 12 for the links.
 
@@ -18,7 +19,7 @@
 
 ## Decision
 
-1. A feed is a practice page when its file host gives no public address for its path. Studio does not keep a flag: the core finds the state from the file host.
+1. A feed is a practice page when its file host is a local folder (the kind `local`) and gives no public address for its path. Studio does not keep a flag: the core finds the state from the file host. A feed on a different kind of file host with no public address gets the error `no_public_address`, as before: S3, SFTP and nsite are servers that must have an address, and a Blossom host holds media only (ADR 0048 item 2).
 2. The core makes a practice page as a draft, as it makes each new feed. Its GUID is temporary: the UUIDv5 of `studio-practice://{connector ID}/{path}`. Its draft has no `self` link.
 3. Studio writes no practice page. The core refuses `write_draft` for a practice page with the error `practice_page`, before it changes a file. Studio announces nothing for a practice page.
 4. A link to a practice page has the temporary GUID in `feedGuid`, and no `feedUrl`.

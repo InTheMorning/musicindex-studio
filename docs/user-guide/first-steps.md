@@ -15,7 +15,7 @@ Select a row on the Welcome page.
 ## Start an artist page
 
 1. Type your name in **Artist name**. Select **Continue**.
-2. Select the file host that Studio uses for your files. The first row is **Nostr (Blossom)**. If you use a different type of host, select its row.
+2. Select the file host that Studio uses for your files. The first row is **My own server**. Leave its public address empty to practice. If you use a different type of host, select its row.
 3. Fill in the fields of the file host. Studio adds the file host.
 4. Studio makes the draft of your artist page and opens it.
 

@@ -81,7 +81,7 @@ export function HOST_ROWS(serverMode) {
       title: 'My own server',
       line: serverMode ? 'Your own SFTP server.' : 'A folder on this computer, to try Studio first. Or your own SFTP server.',
     },
-    { type: 'blossom', icon: 'upload', title: 'Nostr (Blossom)', line: 'Blossom servers keep the files. You sign each upload with your Nostr key.' },
+    { type: 'nsite', icon: 'upload', title: 'Nostr site (nsite)', line: 'A site on Nostr. Its pages and songs go to Blossom servers, signed with your Nostr key.' },
     { type: 's3', icon: 'cloud', title: 'S3 or Cloudflare R2', line: 'A storage bucket at Amazon S3, Cloudflare R2 or a similar provider.' },
   ];
 }

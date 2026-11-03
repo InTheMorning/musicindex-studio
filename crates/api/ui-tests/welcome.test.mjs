@@ -27,12 +27,12 @@ test('hostStep gives pick, skip and menu for zero, one and two file hosts', () =
 
 test('HOST_ROWS gives the rows in the sequence of the operator, with the type of each form', () => {
   const desktop = HOST_ROWS(false);
-  assert.deepEqual(desktop.map((r) => r.title), ['My own server', 'Nostr (Blossom)', 'S3 or Cloudflare R2']);
-  assert.deepEqual(desktop.map((r) => r.type), ['local', 'blossom', 's3']);
+  assert.deepEqual(desktop.map((r) => r.title), ['My own server', 'Nostr site (nsite)', 'S3 or Cloudflare R2']);
+  assert.deepEqual(desktop.map((r) => r.type), ['local', 'nsite', 's3']);
   assert.equal(desktop[0].primary, true);
   assert.equal(desktop[1].primary, undefined);
-  assert.deepEqual(HOST_ROWS(true).map((r) => r.type), ['sftp', 'blossom', 's3']);
-  assert.equal(desktop[1].line, 'Blossom servers keep the files. You sign each upload with your Nostr key.');
+  assert.deepEqual(HOST_ROWS(true).map((r) => r.type), ['sftp', 'nsite', 's3']);
+  assert.equal(desktop[1].line, 'A site on Nostr. Its pages and songs go to Blossom servers, signed with your Nostr key.');
   assert.equal(desktop[2].line, 'A storage bucket at Amazon S3, Cloudflare R2 or a similar provider.');
 });
 

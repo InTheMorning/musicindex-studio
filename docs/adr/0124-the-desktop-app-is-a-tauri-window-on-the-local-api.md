@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-03 by the operator, through the questionnaire. The operator selected the window on the local API, the current data folder and unsigned first installers. The operator also selected installers adjacent to the archives, the ID `org.musicindex.studio`, the tray, no updater at first, and the fixed port 42069.
 - Changed: on 2026-11-03 the operator changed the default port from 39017 to 42069. The Ponder dev server also has the default port 42069. When it runs, item 7 gives Studio a free port for that start.
+- Changed: on 2026-11-03 the operator added items 16 to 21, through the questionnaire. "Quit" waits for a write that runs, or asks the user. The operator selected the dialog with three buttons and a wait with no limit. The operator also selected writes and uploads as the work, and the wait in the tray menu.
 - Changes: [ADR 0002](0002-rust-core-json-api-browser-ui.md) item 4, the form of the Tauri shell. The [distribution plan](../plans/distribution-phase-plan.md), milestone 2.
 - Uses: [ADR 0016](0016-ui-without-a-build-step.md), [ADR 0017](0017-local-api-access.md), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) for the granted writes, and the [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
@@ -47,6 +48,17 @@
 14. The first installers are not signed. The release notes tell the user how to open an unsigned app on macOS and on Windows.
 15. The first installers have no updater. The user installs a new version over the old one. The updater needs a decision with its key and its recovery test.
 
+### Quit While Work Runs
+
+16. When no work runs, "Quit" ends the app immediately and shows no dialog. The Apple guidance shows an alert only when a step can cause a loss that the person cannot repair (`presentations/alerts.md` of the `apple-hig` skill).
+17. Work is a request that writes to a file host, and an upload in parts. A write is each request that calls the write pipeline, also the writes of a change set and the granted writes. An upload is work from its first part to its last part. An upload with no new part for 2 minutes is not work. A download into the library and the announcement queue are not work, because they continue at the next start (ADR 0038 item 9, ADR 0052 item 18).
+18. When work runs, "Quit" shows a dialog of the operating system. It is not a sheet of the page, because the window can be hidden. The title names the work, for example "Studio Is Writing 1 Feed". The message is "If you quit now, the write stops. You then must do the write again." The buttons are "Cancel", "Quit Now" and "Quit After Write". "Quit After Write" is the default button. When the dialog of the system can mark a destructive button, "Quit Now" has that mark.
+19. "Cancel" closes the dialog, and the app continues. "Quit Now" ends the app immediately, and the write stops.
+20. "Quit After Write" hides the window. The API continues, and the app waits with no time limit until no work runs. Then it stops the API, waits for each request that started, and ends.
+
+    While it waits, the tray menu starts with the item "Quits after the write…", which the user cannot select. Then it has "Open Studio" and "Quit Now". "Open Studio" shows the window and cancels the quit. "Quit Now" ends the app immediately.
+21. These items apply to the app only. In `studio-desktop`, Ctrl+C stops the shell immediately.
+
 ## Alternatives Considered
 
 - The localhost plugin. Not chosen: it adds a second server for the same UI, and its page warns of security risks.
@@ -54,10 +66,15 @@
 - The data folder of the Tauri identifier. Not chosen: it needs a move of the collection and the vault on each system.
 - The app quits when the window closes. Not chosen: a granted write needs the API.
 - Keep the settings of the UI in the collection. Not chosen: the fixed port keeps them with less work.
+- "Quit" stops the app immediately, also during a write. Not chosen: a write can stop at the middle with no warning.
+- "Quit" waits a maximum of 30 seconds. Not chosen: the operator selected a wait with no limit, and "Quit Now" gives the user the immediate stop.
+- A dialog with two buttons, "Cancel" and "Quit After Write". Not chosen: the user cannot then stop a long upload.
+- A dialog also for a download and for the announcement queue. Not chosen: they continue at the next start.
 
 ## Consequences
 
 - `crates/desktop` gets a library with the start of the shell, and `studio-desktop` and the app use it.
+- `studio-api` counts the work of item 17, and it serves with a graceful shutdown. The library of `crates/desktop` gives the count to the app.
 - CI installs the Linux libraries of Tauri, and the four checks build the app crate.
 - The release workflow builds the installers on the native runners, adjacent to the archives.
 - The human tests of the app need a person with each system. The operator has a Linux computer and an iPhone.
@@ -81,8 +98,10 @@ Mechanical:
 - A test: the shell start gives port 42069 when it is free, and a different port when a listener has it.
 - A test: the link rule of item 5 opens an address of a different origin outside the window, and keeps an address of the origin in it.
 - A test: the app opens the data folder of `studio-desktop`.
+- A test: the work count of item 17 increases during a write and during an upload in parts, and decreases after it. An upload with no new part for 2 minutes is not in the count.
+- A test: the decision of items 16 to 20 is a function of the work count and the button. It gives "end now", "show the dialog", "wait" or "continue".
 - The four commit checks pass, with the app crate in the workspace.
 
-Visual, by the planning model on Linux: the app starts and shows the UI in its window. It keeps the theme after a restart, hides on close, and shows again from the tray. A file drop and a download work.
+Visual, by the planning model on Linux: the app starts and shows the UI in its window. It keeps the theme after a restart, hides on close, and shows again from the tray. A file drop and a download work. "Quit" during a slow write shows the dialog, and each of its three buttons does the action of items 19 and 20.
 
 Human, by the operator: install the app on each system that the operator has, and do the visual steps. Install a new version over the old one, and keep the collection and the vault.

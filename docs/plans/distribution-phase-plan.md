@@ -67,7 +67,7 @@ The release contains desktop artifacts only. It does not contain `studio-server`
 
 ## Milestone 2: Native desktop installers
 
-Start this milestone after Phase 12 and its human tests are complete.
+On 2026-11-03 the operator started this milestone before the end of Phase 12 and its human tests.
 [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) gives the form of the app, and [task 088](../tasks/studio-v1-task-088-desktop-app.md) gives the work.
 
 Build the Tauri shell required by ADR 0002. Keep the same core, API, and UI.

@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packet 088a is complete, with its visual check. Packets 088b and 088c wait for the gate of the distribution plan. The gate is the end of Phase 12 and its human tests, or a statement of the operator that removes it.
+Status: Open. Packet 088a is complete, with its visual check. On 2026-11-03 the operator removed the gate of the distribution plan, so packet 088b can start.
 
 ## Goal
 
@@ -15,12 +15,15 @@ An artist installs Music Index Studio, and it opens in its own window. Closing t
 - 088a: the start of the shell in a library of `crates/desktop`, and the fixed port 42069. It changes `studio-desktop` only, and it corrects the loss of the UI settings at each start.
 - 088b: the Tauri app `crates/desktop-app`: the window, the link rule, the download, the drop, the tray and the single instance. After the commit of 088a.
 - 088c: the installers in the release workflow, adjacent to the archives, with the notes for an unsigned app. After the commit of 088b.
+- 088d: "Quit" while work runs (ADR 0124 items 16 to 21): the work count in `studio-api`, the graceful shutdown, the dialog and the wait in the tray. After the commit of 088b. Packets 088c and 088d do not depend on each other.
 
 Visual check of 088a, by the planning model: start `studio-desktop` two times with the same data folder. Change the theme between the two starts. The theme stays. Start a second `studio-desktop` while the first runs: it gets a different port and starts.
 
 Visual check of 088b, by the planning model on Linux: the visual check of ADR 0124.
 
-Human test, by the operator, after 088c: the human test of ADR 0124.
+Visual check of 088d, by the planning model on Linux: the Quit step of the visual check of ADR 0124.
+
+Human test, by the operator, after 088c and 088d: the human test of ADR 0124.
 
 ## Packet 088a: The Shell Start And The Fixed Port
 
@@ -103,9 +106,9 @@ At the end, report:
 
 ## Packet 088b: The Tauri App
 
-This packet waits for the gate. The planning model checks the packet against the code of 088a before it starts.
+The planning model checks the packet against the code of 088a before it starts.
 
-The review of 088a found one item for this packet. `studio_api::serve` has no graceful shutdown, so the shutdown signal of `start` drops the serve future. The server then accepts no new connection, but a request that started can continue until the process ends. Before 088b starts, the planning model decides if "Quit" must wait for each request that started.
+In this packet, "Quit" stops the API immediately, as item 6 says. Packet 088d adds the dialog and the wait of ADR 0124 items 16 to 21.
 
 ### Files
 
@@ -146,3 +149,48 @@ Visual: the visual check of 088b.
 This packet waits for 088b. The planning model writes its Architecture section after the commit of 088b, from the facts of the release workflow and of `tauri-action` at that time. The research note marks two items as not verified: the attach of `tauri-action` to the draft Release, and the bundle names.
 
 Its fixed choices: the release keeps the five archives and their smoke tests. The workflow adds the AppImage, the DEB and the RPM on Linux, the DMG on macOS, and the MSI on Windows, built on the native runners. No installer is signed. `SHA256SUMS.txt` lists each file. The release notes and the install runbook tell the user how to open an unsigned app on macOS and on Windows.
+
+## Packet 088d: Quit While Work Runs
+
+The planning model checks this packet against the code of 088b before it starts.
+
+### Files
+
+Inspect: ADR 0124 items 16 to 21, `crates/api/src/lib.rs` (`serve`, `local_router`), `crates/api/src/routes.rs` (`write_feed` and each other caller of the write pipeline), the routes of `/app/v1/` and of the change sets, `crates/api/src/uploads.rs`, `crates/desktop/src/lib.rs`, `crates/desktop-app/src/` (from 088b), `crates/server/src/` (the callers of `studio_api::serve`).
+
+Change: `crates/api/src/lib.rs`, a new module of `crates/api` for the work count, the files of `crates/api` that call the write pipeline, `crates/api/src/uploads.rs`, `crates/server/src/` only for a changed signature of `serve`, `crates/desktop/src/lib.rs`, `crates/desktop-app/` (its `src/`, `Cargo.toml` and `capabilities/` for the dialog plugin), `Cargo.lock`.
+
+Do not change: `crates/core`, the UI, the ADRs, `crates/desktop/src/main.rs` other than a changed signature.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. `studio-api` gives a cloneable work count, `Work`. It has `writes()` and `uploads()`. A write holds a guard from its start to its end. The guard decreases the count when it drops, also on an error and on a panic.
+2. Each request that calls the write pipeline holds a write guard. This includes the writes of a change set and the granted writes of `/app/v1/`.
+3. An upload in parts is in `uploads()` from its first part to its last part or its delete. An upload with no new part for 2 minutes is not in the count. The count reads the time of the last part. It does not need a timer.
+4. `studio_api::serve` takes a shutdown future, and it uses the graceful shutdown of axum. After the signal, it accepts no connection and waits for each request that started.
+5. `start` of `crates/desktop` gives the `Work` of the workspace in `Started`.
+6. The rule of ADR 0124 items 16 to 20 is a function with no Tauri and no I/O. It takes the work count, the state of the app and an event: "Quit", "Cancel", "Quit Now", "Quit After Write", "Open Studio" or "no work". It gives the next state and an action: "end now", "show the dialog", "wait", "continue", or "stop the API and end".
+7. The dialog uses `tauri-plugin-dialog` with the texts of ADR 0124 item 18. The title counts the work: "Studio Is Writing 1 Feed", "Studio Is Writing 2 Feeds", "Studio Is Receiving 1 Music File", or "Studio Is Writing 1 Feed And Receiving 1 Music File".
+8. While the app waits, it reads the count each second. When the count is 0, it sends the shutdown signal, waits for the end of `serve`, and ends.
+9. The tray menu of the wait is the menu of ADR 0124 item 20. The app puts back the menu of 088b when the user selects "Open Studio".
+10. In `studio-desktop`, Ctrl+C stops the shell immediately (ADR 0124 item 21). The serve of `start` stops on the signal with no wait for the work.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- A test: a write guard increases `writes()`, and its drop decreases it, also after an error of the write.
+- A test: an upload in parts is in `uploads()` after its first part, not after its last part, and not 2 minutes after its last part. The test gives the time, so it does not wait.
+- A test of the function of item 6, with each event in each state.
+- A test: the title of item 7 for 1 write, 2 writes, 1 upload, and 1 write with 1 upload.
+- The four commit checks pass.
+
+Visual: the visual check of 088d.
+
+### Escalation Triggers
+
+- A write to a file host that does not go through a request of `studio-api`.
+- `tauri-plugin-dialog` cannot show three buttons with their own texts on a system. Do not change the dialog. Report the facts.
+- The graceful shutdown of axum waits for a connection that stays open with no request.

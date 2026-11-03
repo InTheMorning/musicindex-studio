@@ -2,10 +2,15 @@
 //! the real GUID when the host gets a public address (ADR 0122).
 
 use std::fs;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use studio_core::announce;
 use studio_core::collection::{Collection, ConnectorId, FeedId, PublisherRole};
-use studio_core::connector::LocalFolder;
+use studio_core::connector::{
+    Connector, ConnectorError, Expected, FileList, FileRead, ListedFile, LocalFolder, Stamp,
+    Version,
+};
 use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::Hosts;
@@ -169,7 +174,7 @@ fn a_move_to_a_file_host_with_a_public_address_gives_the_real_guids_and_links() 
     let album_guid = podcast_guid_for_url(album_url);
     let artist_guid = podcast_guid_for_url(artist_url);
 
-    pipeline::set_feed_host(&s.collection, &s.hosts, album, s.public).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, Some(&s.library), album, s.public).unwrap();
     let album_model: Feed = pipeline::draft_model(&s.collection, album).unwrap().0;
     assert_eq!(
         album_model.podcast_guid.as_deref(),
@@ -185,7 +190,7 @@ fn a_move_to_a_file_host_with_a_public_address_gives_the_real_guids_and_links() 
     assert_eq!(channel_link.feed_guid.as_deref(), Some(album_guid.as_str()));
     assert_eq!(channel_link.feed_url.as_deref(), Some(album_url));
 
-    pipeline::set_feed_host(&s.collection, &s.hosts, artist, s.public).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, Some(&s.library), artist, s.public).unwrap();
     let artist_model = pipeline::draft_model(&s.collection, artist).unwrap().0;
     assert_eq!(
         artist_model.podcast_guid.as_deref(),
@@ -216,7 +221,8 @@ fn a_new_public_address_gives_the_real_guid_to_each_feed_with_a_placeholder() {
             Some("https://private.example".into()),
         )),
     );
-    let changed = pipeline::assign_real_guids(&s.collection, &hosts, &[album]).unwrap();
+    let changed =
+        pipeline::assign_real_guids(&s.collection, &hosts, Some(&s.library), &[album]).unwrap();
     assert_eq!(changed, [album]);
     let expected = podcast_guid_for_url("https://private.example/album.xml");
     assert_eq!(draft_guid(&s, album).as_deref(), Some(expected.as_str()));
@@ -237,7 +243,7 @@ fn a_written_feed_with_no_draft_gets_its_real_guid_and_its_links() {
 
     // A move of the album changes the link in the written artist page.
     start(&s, album);
-    pipeline::set_feed_host(&s.collection, &s.hosts, album, s.public).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, Some(&s.library), album, s.public).unwrap();
     let album_url = "https://music.example/album.xml";
     let album_guid = podcast_guid_for_url(album_url);
     let artist_model = pipeline::draft_model(&s.collection, artist)
@@ -266,7 +272,8 @@ fn a_new_public_address_gives_the_real_guid_to_a_written_feed_with_no_draft() {
             Some("https://private.example".into()),
         )),
     );
-    let changed = pipeline::assign_real_guids(&s.collection, &hosts, &[album]).unwrap();
+    let changed =
+        pipeline::assign_real_guids(&s.collection, &hosts, Some(&s.library), &[album]).unwrap();
     assert_eq!(changed, [album], "only the named feed changes");
     let expected = podcast_guid_for_url("https://private.example/album.xml");
     assert_eq!(draft_guid(&s, album).as_deref(), Some(expected.as_str()));
@@ -357,7 +364,7 @@ fn a_move_to_a_public_host_changes_each_placeholder_address_to_its_public_addres
 
     // The OP3 flag is read from the draft: it is on only when each enclosure
     // has the prefix. A placeholder track therefore has no OP3 setting here.
-    pipeline::set_feed_host(&s.collection, &s.hosts, album, s.public).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, Some(&s.library), album, s.public).unwrap();
     let plain = "https://music.example/album/01%20Song.mp3";
     let (feed, _) = pipeline::draft_model(&s.collection, album).unwrap();
     let url = feed.items[0]
@@ -406,7 +413,7 @@ fn a_track_imported_after_a_move_between_public_folders_is_uploaded_to_its_addre
     write_new(&mut s, album);
     let public = s.hosts.get(s.public).unwrap();
     pipeline::start_draft(&s.collection, public, album).unwrap();
-    pipeline::set_feed_host(&s.collection, &s.hosts, album, second).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, Some(&s.library), album, second).unwrap();
 
     // The track is imported after the move, so its address is on the first host.
     let url = add_track(&mut s, album, "album");
@@ -424,4 +431,138 @@ fn a_track_imported_after_a_move_between_public_folders_is_uploaded_to_its_addre
     .unwrap();
     assert!(s.dir.path().join("public/album/01 Song.mp3").exists());
     assert!(s.dir.path().join("second/album.xml").exists());
+}
+
+/// Start a draft of a written feed, when it has none. A draft that exists
+/// keeps the changes that the core made to it.
+fn ensure_draft(s: &Setup, id: FeedId) {
+    if s.collection.draft(id).unwrap().is_none() {
+        start(s, id);
+    }
+}
+
+/// Move a written feed to the public folder, and write it (ADR 0122 item 8).
+fn move_to_public_and_write(s: &mut Setup, id: FeedId) {
+    ensure_draft(s, id);
+    pipeline::set_feed_host(&s.collection, &s.hosts, Some(&s.library), id, s.public).unwrap();
+    write_new(s, id);
+}
+
+/// An artist page and an album on the private folder, both written, with
+/// the album linked to the artist page. Each has a release folder.
+fn linked_written_pages(s: &mut Setup) -> (FeedId, FeedId) {
+    let artist = new_artist(s, "artist.xml");
+    let album = new_album(s, "album.xml");
+    publisher::link(&s.collection, artist, album).unwrap();
+    s.collection.set_feed_folder(artist, "artist").unwrap();
+    s.collection.set_feed_folder(album, "album").unwrap();
+    write_new(s, artist);
+    write_new(s, album);
+    (artist, album)
+}
+
+/// The album is moved and written before the artist page moves. The album
+/// then has its real GUID and no draft, and the artist page keeps its
+/// placeholder GUID in the link of the album (ADR 0122 item 8).
+#[test]
+fn a_written_album_gets_the_real_guid_of_an_artist_page_that_moves_later() {
+    let mut s = setup();
+    let (artist, album) = linked_written_pages(&mut s);
+
+    move_to_public_and_write(&mut s, album);
+    assert!(s.collection.draft(album).unwrap().is_none());
+
+    // The artist page moves after the write of the album.
+    ensure_draft(&s, artist);
+    pipeline::set_feed_host(&s.collection, &s.hosts, Some(&s.library), artist, s.public).unwrap();
+
+    let artist_url = "https://music.example/artist.xml";
+    let artist_guid = podcast_guid_for_url(artist_url);
+    let album_model = pipeline::draft_model(&s.collection, album)
+        .expect("the written album gets a draft with the real link")
+        .0;
+    let link = &album_model.publisher.as_ref().unwrap().remote_items[0].value;
+    assert_eq!(link.feed_guid.as_deref(), Some(artist_guid.as_str()));
+    assert_eq!(link.feed_url.as_deref(), Some(artist_url));
+}
+
+/// A host that counts each read of a file. It gives the files of `inner`.
+struct ReadCounter {
+    inner: LocalFolder,
+    reads: Arc<AtomicUsize>,
+}
+
+impl Connector for ReadCounter {
+    fn read(&self, path: &str) -> Result<Option<FileRead>, ConnectorError> {
+        self.reads.fetch_add(1, Ordering::SeqCst);
+        self.inner.read(path)
+    }
+
+    fn write(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        self.inner.write(path, bytes, expected)
+    }
+
+    fn public_url(&self, path: &str) -> Option<String> {
+        self.inner.public_url(path)
+    }
+
+    fn list(&self) -> Result<FileList, ConnectorError> {
+        self.inner.list()
+    }
+
+    fn stat(&self, path: &str) -> Result<Option<ListedFile>, ConnectorError> {
+        self.inner.stat(path)
+    }
+
+    fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
+        self.inner.delete(path, expected)
+    }
+}
+
+/// A written feed with a real GUID whose hosted copy names no placeholder
+/// gets no draft, and the core reads no host file for it (ADR 0122 item 8).
+#[test]
+fn a_written_feed_with_a_real_guid_and_no_placeholder_link_reads_no_host_file() {
+    let mut s = setup();
+    let album = pipeline::new_feed(
+        &mut s.collection,
+        s.hosts.get(s.public).unwrap(),
+        s.public,
+        "album.xml",
+        "Album",
+        "Artist",
+        "music",
+    )
+    .unwrap();
+    s.collection.set_feed_folder(album, "album").unwrap();
+    write_new(&mut s, album);
+
+    let reads = Arc::new(AtomicUsize::new(0));
+    let mut hosts = Hosts::new();
+    hosts.insert(
+        s.public,
+        Box::new(ReadCounter {
+            inner: LocalFolder::new(
+                s.dir.path().join("public"),
+                Some("https://music.example".into()),
+            ),
+            reads: Arc::clone(&reads),
+        }),
+    );
+    for library in [None, Some(&s.library)] {
+        let changed =
+            pipeline::assign_real_guids(&s.collection, &hosts, library, &[album]).unwrap();
+        assert!(changed.is_empty(), "no feed changes");
+    }
+    assert_eq!(
+        reads.load(Ordering::SeqCst),
+        0,
+        "a feed with a real GUID and no placeholder link is not read on its host"
+    );
+    assert!(s.collection.draft(album).unwrap().is_none());
 }

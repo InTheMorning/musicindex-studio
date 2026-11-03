@@ -898,9 +898,10 @@ struct FeedChange {
 pub fn assign_real_guids(
     collection: &Collection,
     hosts: &Hosts,
+    library: Option<&Library>,
     ids: &[FeedId],
 ) -> Result<Vec<FeedId>, PipelineError> {
-    let drafts = placeholder_candidates(collection, hosts)?;
+    let drafts = placeholder_candidates(collection, hosts, library)?;
     let mut changes = Vec::new();
     for &id in ids {
         let Some((_, draft)) = drafts.iter().find(|(candidate, _)| *candidate == id) else {
@@ -931,9 +932,10 @@ pub fn assign_real_guids(
 }
 
 /// The drafts that [`assign_real_guids`] can change: each draft of the
-/// collection, and a draft from the live file of each written feed with a
-/// placeholder GUID and no draft. The collection keeps the GUID of the last
-/// write, so the function reads only the files of such feeds.
+/// collection, and a draft from the live file of each written feed with no
+/// draft that has a placeholder GUID or whose hosted copy names a placeholder
+/// GUID in a `remoteItem` (ADR 0122 item 8). The collection keeps the GUID of
+/// the last write, so the function reads only the files of such feeds.
 ///
 /// # Errors
 ///
@@ -941,6 +943,7 @@ pub fn assign_real_guids(
 fn placeholder_candidates(
     collection: &Collection,
     hosts: &Hosts,
+    library: Option<&Library>,
 ) -> Result<Vec<(FeedId, DraftRow)>, PipelineError> {
     let mut drafts = Vec::new();
     for row in collection.feeds()? {
@@ -948,11 +951,13 @@ fn placeholder_candidates(
             drafts.push((row.id, draft));
             continue;
         }
-        if !row
+        let placeholder_guid = row
             .podcast_guid
             .as_deref()
-            .is_some_and(has_placeholder_guid)
-        {
+            .is_some_and(has_placeholder_guid);
+        let links_placeholder =
+            library.is_some_and(|library| hosted_copy_names_placeholder(library, &row));
+        if !placeholder_guid && !links_placeholder {
             continue;
         }
         let (Some(connector_id), Some(path)) = (row.connector_id, row.path.as_deref()) else {
@@ -2224,6 +2229,10 @@ fn grant_bytes(grants: &[(String, Option<i64>)]) -> Vec<u8> {
 /// folder, `/`, and the file name of its public address (ADR 0067
 /// item 7).
 ///
+/// The feed then gets its real GUID through [`assign_real_guids`].
+/// `library` gives the hosted copies that name the feeds with a link to a
+/// placeholder. With `None`, a written feed with a real GUID keeps its link.
+///
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::FileExists`] when the inventory of the new
@@ -2235,6 +2244,7 @@ fn grant_bytes(grants: &[(String, Option<i64>)]) -> Vec<u8> {
 pub fn set_feed_host(
     collection: &Collection,
     hosts: &Hosts,
+    library: Option<&Library>,
     id: FeedId,
     target: ConnectorId,
 ) -> Result<(), PipelineError> {
@@ -2285,7 +2295,7 @@ pub fn set_feed_host(
     })?;
     // The new file host has a public address, so the feed gets its real
     // GUID (ADR 0122 item 8).
-    assign_real_guids(collection, hosts, &[id])?;
+    assign_real_guids(collection, hosts, library, &[id])?;
     Ok(())
 }
 
@@ -2378,20 +2388,42 @@ fn feed_title(row: &FeedRow) -> String {
 /// Studio has not yet put a hosted file there: it is not a feed that this
 /// Studio has confirmed, so it does not block a deletion.
 fn feed_refers_in_library(library: &Library, row: &FeedRow, url: &str) -> bool {
-    let (Some(folder), Some(path)) = (row.folder.as_deref(), row.path.as_deref()) else {
-        return false;
-    };
+    hosted_copy(library, row)
+        .is_some_and(|feed| feed_addresses(&feed).iter().any(|address| address == url))
+}
+
+/// The hosted copy of `row` in its release folder, as the feed that Studio
+/// last put there. Gives `None` when the row has no release folder, or the
+/// copy is absent or is not a feed.
+fn hosted_copy(library: &Library, row: &FeedRow) -> Option<Feed> {
+    let (folder, path) = (row.folder.as_deref()?, row.path.as_deref()?);
     let file_name = path.rsplit_once('/').map_or(path, |(_, file)| file);
-    let Ok(bytes) = std::fs::read(library.path(folder, file_name)) else {
+    let bytes = std::fs::read(library.path(folder, file_name)).ok()?;
+    let doc = Document::parse_bytes(&bytes).ok()?;
+    Feed::read(&doc).ok()
+}
+
+/// True when the hosted copy of `row` names a placeholder GUID in a
+/// `remoteItem` of the feed or of its publisher (ADR 0122 item 8). A feed
+/// with no hosted copy gives `false`.
+fn hosted_copy_names_placeholder(library: &Library, row: &FeedRow) -> bool {
+    let Some(feed) = hosted_copy(library, row) else {
         return false;
     };
-    let Ok(doc) = Document::parse_bytes(&bytes) else {
-        return false;
-    };
-    let Ok(feed) = Feed::read(&doc) else {
-        return false;
-    };
-    feed_addresses(&feed).iter().any(|address| address == url)
+    let publisher_items = feed
+        .publisher
+        .iter()
+        .flat_map(|links| links.remote_items.iter());
+    feed.remote_items
+        .iter()
+        .chain(publisher_items)
+        .any(|entry| {
+            entry
+                .value
+                .feed_guid
+                .as_deref()
+                .is_some_and(has_placeholder_guid)
+        })
 }
 
 /// True when the draft of `row` gives `url` as an address. A copy of an

@@ -1273,11 +1273,13 @@ pub(crate) async fn update_connector(
 
 /// Give each feed with a placeholder GUID its real GUID, when its file host
 /// now gives a public address (ADR 0122 item 8). A feed with no such host
-/// keeps its placeholder.
+/// keeps its placeholder. The hosted copies in the library name the feeds
+/// that have a link to a placeholder (ADR 0122 item 8).
 fn assign_real_guids_of_all(w: &Workspace) -> Result<(), ApiError> {
     let hosts = w.hosts()?;
+    let library = w.library().ok();
     let ids: Vec<FeedId> = w.collection.feeds()?.iter().map(|row| row.id).collect();
-    pipeline::assign_real_guids(&w.collection, &hosts, &ids)?;
+    pipeline::assign_real_guids(&w.collection, &hosts, library.as_ref(), &ids)?;
     Ok(())
 }
 
@@ -3538,7 +3540,14 @@ pub(crate) async fn set_feed_host(
                     ensure_draft(w, id)?;
                 }
                 let hosts = w.hosts()?;
-                pipeline::set_feed_host(&w.collection, &hosts, id, ConnectorId(target))?;
+                let library = w.library().ok();
+                pipeline::set_feed_host(
+                    &w.collection,
+                    &hosts,
+                    library.as_ref(),
+                    id,
+                    ConnectorId(target),
+                )?;
             }
             None if has_connector => {
                 return Err(ApiError::new(

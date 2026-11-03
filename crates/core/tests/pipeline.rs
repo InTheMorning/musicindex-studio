@@ -1797,7 +1797,7 @@ fn move_setup(redirecting: bool) -> MoveSetup {
 #[test]
 fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host() {
     let mut s = move_setup(false);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let moved = diff.feed_move.clone().unwrap();
     assert_eq!(moved.method, pipeline::FeedMoveMethod::Pointer);
@@ -1856,7 +1856,7 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
 #[test]
 fn a_host_that_can_redirect_gets_a_redirect_and_keeps_its_file_with_no_pointer() {
     let mut s = move_setup(true);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(
         diff.feed_move.as_ref().unwrap().method,
@@ -1890,7 +1890,7 @@ fn a_move_to_a_host_with_a_file_at_the_path_gives_file_exists() {
     let s = move_setup(false);
     fs::write(s.dir_b.path().join("album.xml"), b"other").unwrap();
     inventory::scan(&s.collection, &s.hosts, s.b).unwrap();
-    let error = pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap_err();
+    let error = pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::FileExists);
     assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
 }
@@ -1898,7 +1898,7 @@ fn a_move_to_a_host_with_a_file_at_the_path_gives_file_exists() {
 #[test]
 fn a_file_put_on_the_new_host_after_the_diff_stops_the_write_with_file_exists() {
     let mut s = move_setup(false);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     fs::write(s.dir_b.path().join("album.xml"), b"other").unwrap();
     let error = pipeline::write_draft(
@@ -1919,7 +1919,7 @@ fn a_file_put_on_the_new_host_after_the_diff_stops_the_write_with_file_exists() 
 #[test]
 fn a_write_that_stopped_after_the_new_host_got_the_feed_can_finish_the_move() {
     let mut s = move_setup(false);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     // A write that stopped after its second step left the draft XML on
     // host B, and host A has no pointer yet.
@@ -1962,10 +1962,10 @@ fn a_deletion_of_the_feed_xml_of_a_feed_is_blocked() {
 #[test]
 fn the_host_of_the_feed_removes_the_move_and_puts_the_self_link_back() {
     let s = move_setup(false);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let (feed, _) = pipeline::draft_model(&s.collection, s.feed).unwrap();
     assert_eq!(feed.self_url(), Some("https://b.example/album.xml"));
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.a).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.a).unwrap();
     assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
     let draft = s.collection.draft(s.feed).unwrap().unwrap();
     assert_eq!(draft.draft_xml, draft.base_xml);
@@ -1974,7 +1974,7 @@ fn the_host_of_the_feed_removes_the_move_and_puts_the_self_link_back() {
 #[test]
 fn a_discard_of_the_draft_removes_the_feed_move() {
     let s = move_setup(false);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     assert!(pipeline::draft_changed(&s.collection, s.feed).unwrap());
     pipeline::discard_draft(&s.collection, s.feed).unwrap();
     assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
@@ -1983,7 +1983,7 @@ fn a_discard_of_the_draft_removes_the_feed_move() {
 #[test]
 fn a_deletion_of_a_pointer_file_is_blocked() {
     let mut s = move_setup(false);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     pipeline::write_draft(
         &mut s.collection,
@@ -2887,7 +2887,7 @@ fn a_feed_and_a_host_with_no_public_address_give_no_address_and_the_write_succee
 #[test]
 fn a_feed_move_queues_the_new_address_and_the_address_from_before() {
     let mut s = move_setup(false);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.b).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(
         announced(&diff),
@@ -4002,7 +4002,7 @@ fn the_write_of_a_public_draft_with_no_host_choice_refuses_with_read_only() {
 fn a_host_choice_of_a_public_draft_gives_the_path_the_self_link_and_a_move_with_no_method() {
     let s = public_setup();
     pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
     let chosen = s.collection.draft_feed_move(s.feed).unwrap().unwrap();
     assert_eq!(chosen.connector_id, s.target);
     assert_eq!(chosen.path, "album/album.xml");
@@ -4031,7 +4031,8 @@ fn a_host_choice_on_a_target_with_a_file_at_the_path_gives_file_exists() {
     s.collection
         .put_host_file(s.target, "album/album.xml", 1, &Stamp::new("1"))
         .unwrap();
-    let error = pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap_err();
+    let error =
+        pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::FileExists);
 }
 
@@ -4039,7 +4040,7 @@ fn a_host_choice_on_a_target_with_a_file_at_the_path_gives_file_exists() {
 fn clear_feed_host_removes_the_move_and_gives_the_self_link_of_the_base() {
     let s = public_setup();
     pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
     pipeline::clear_feed_host(&s.collection, s.feed).unwrap();
     assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
     let draft = s.collection.draft(s.feed).unwrap().unwrap();
@@ -4051,7 +4052,7 @@ fn the_write_of_a_moved_public_draft_puts_the_feed_on_the_target_and_nothing_at_
     let mut s = public_setup();
     pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
     public_edit(&s);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(
         announced(&diff)
@@ -4101,7 +4102,7 @@ fn a_public_file_that_changed_after_the_draft_started_gives_conflict_and_writes_
     let mut s = public_setup();
     pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
     public_edit(&s);
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     *s.server.body.lock().unwrap() = s.xml.replace("Album", "Changed").into_bytes();
     let error = public_write(&mut s, &diff.id).unwrap_err();
@@ -4114,7 +4115,7 @@ fn a_public_file_that_changed_after_the_draft_started_gives_conflict_and_writes_
 fn a_write_of_a_public_draft_needs_the_web_of_the_caller() {
     let mut s = public_setup();
     pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let error = pipeline::write_draft(
         &mut s.collection,
@@ -4155,7 +4156,7 @@ fn an_upload_of_a_public_draft_goes_to_the_target_after_the_host_choice() {
     let error = public_write(&mut s, &diff.id).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
 
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.blocked.len(), 0);
     assert_eq!(diff.operations.len(), 1);
@@ -4168,7 +4169,7 @@ fn an_upload_of_a_public_draft_goes_to_the_target_after_the_host_choice() {
 fn a_linked_draft_with_the_same_bytes_on_the_host_takes_the_version_of_the_host() {
     let s = public_setup();
     let draft = pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
-    pipeline::set_feed_host(&s.collection, &s.hosts, s.feed, s.target).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let host = LocalFolder::new(dir.path(), Some("https://c.example".into()));
     let written = host

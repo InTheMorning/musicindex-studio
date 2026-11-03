@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
 Decision: [ADR 0122](../adr/0122-a-new-user-starts-with-a-default-file-host.md). It supersedes ADR 0121, and replaces task 085.
 
-Status: Complete, with the screenshot visual checks of the desktop and of the server. The human test of 2026-11-03 found that a track could not go on a folder with no public address. Packet 086d gives ADR 0122 items 12 to 15, with its screenshot visual check. The human test is open.
+Status: Complete, with the screenshot visual checks of the desktop and of the server. The human test of 2026-11-03 found that a track could not go on a folder with no public address. Packet 086d gives ADR 0122 items 12 to 15, with its screenshot visual check. The desktop part of the human test passed on 2026-11-03. Packet 086e corrects the sequence fault that the test found. The server part is open, after a deploy.
 
 ## Goal
 
@@ -375,3 +375,92 @@ The planning model found these items in the review and in the visual check:
 - Studio reads the OP3 switch from the enclosures, so a feed with placeholder addresses always reads it as off. ADR 0122 items 13 and 15 now say that the switch stays off until the feed has a public address, and the core adds no prefix at the change.
 - Visual check: on the default folder, a track got `pending:check-album/01 Song 1.mp3` with the text of item 14, and the player played it from the library. The write put the MP3 in the folder. After the move to a folder with a public address, Review showed the real GUID and the new address, and the write put the MP3 on the new file host. The check used 1100 px, and 390 px with touch, in the two themes. `$edges()`, `$overflow()` and `$fieldText()` gave no result.
 - Open: an address that the user types with the start `pending:` passes the address check. Two file hosts with no public address can give the same placeholder text, so the player can select the wrong held file. The two cases are not probable.
+
+## Human Test Of 2026-11-03, Desktop
+
+The operator started as a new user on the desktop, with the default folder `~/musicindex/pages`. Studio made the folder. The operator made an artist page and an album with tracks, and wrote them. Then the operator moved the two pages to the real file host `files.heycitizen.xyz`. After the writes, the two feeds loaded from the host with their real GUIDs and no `pending` text, and a song played.
+
+The test found two faults:
+
+- A track could not go on a folder with no public address. Packet 086d corrects it.
+- The links between the pages depend on the sequence of the writes. When the user writes the album before the artist page moves, the album has its real GUID and no draft. Studio then does not read the album file again, and the album keeps the placeholder GUID of the artist page in its link. The operator moved the artist page before the write of the album, and the links were correct. Packet 086e corrects it.
+
+## Packet 086e: The Links Do Not Depend On The Sequence Of The Writes
+
+Decision: ADR 0122 item 8, third point. The human test of 2026-11-03 found the fault.
+
+No UI change, so no visual check. The human test of ADR 0122 covers it on the server.
+
+### Files
+
+Inspect: `crates/core/src/pipeline.rs` (`assign_real_guids`, `placeholder_candidates`, `feed_change`, `relink`, `set_feed_host`, `feed_refers_in_library`), `crates/core/src/library.rs` (`Library::path`), `crates/api/src/routes.rs` (the callers of `set_feed_host` and of `assign_real_guids`, `files_feed`), `crates/core/tests/placeholder_guid.rs`, `crates/api/src/tests.rs`.
+
+Change: those files only.
+
+Do not change: the UI, the documents, the collection schema, `crates/server`.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. `assign_real_guids` and `set_feed_host` get a parameter `library: Option<&Library>`. Each caller gives the library when the workspace has one.
+2. `placeholder_candidates` also gives a draft from the live file of a written feed with no draft and a real GUID, when the hosted copy of that feed in its release folder names a placeholder GUID in a `remoteItem`. The release folder copy is the file that `feed_refers_in_library` reads. The core reads the host file only for such a feed, as it does now for a feed with a placeholder GUID.
+3. With no library, or with no hosted copy in the release folder, the core reads no file for a feed with a real GUID.
+4. The function saves a draft only when the feed changes, as now.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- A core test: an artist page and an album on a folder with no public address link to each other. The album moves to a folder with a public address and is written. Then the artist page moves. The album gets a draft, and its link names the real GUID and the address of the artist page.
+- A core test: a written feed with a real GUID whose copy names no placeholder gets no draft, and the core reads no host file for it.
+- The four commit checks pass.
+
+### Prompt for lower-context coding model
+
+You are implementing one bounded task from a larger plan.
+
+Implement only this task. Do not redesign the architecture.
+
+Read:
+- AGENTS.md
+- docs/adr/0122-a-new-user-starts-with-a-default-file-host.md (item 8)
+- docs/tasks/studio-v1-task-086-default-file-host.md (the Goal, the section "Human Test Of 2026-11-03, Desktop" and packet 086e)
+- ~/.agents/skills/asd-ste100/SKILL.md
+- The files that the Files section of packet 086e names.
+
+Goal:
+- The links between the pages get the real GUID in each sequence of the moves and the writes.
+
+Constraints:
+- Follow the Architecture section of packet 086e fully.
+- A write to a host occurs only through `pipeline::write_draft`. The function writes no file.
+- Each comment and each test message is in ASD-STE100 Simplified Technical English.
+- Follow the Pragmatic Rust Guidelines of the `rust-dev` skill.
+- Clippy runs with `-D warnings`, which includes `too_many_lines` for a test. Put a long setup in a helper function.
+- Keep test data in `.studio-dev/`, not in `/tmp`.
+
+Do not touch:
+- The UI, the documents, the collection schema, `crates/server`.
+- Do not commit.
+
+Acceptance criteria:
+- The mechanical criteria of packet 086e.
+
+Test commands:
+- cargo fmt --all --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test --workspace
+- tools/node --test crates/api/ui-tests/*.test.mjs
+
+At the end, report:
+1. files changed
+2. tests run
+3. behavior changed
+4. deviations from task
+5. unresolved concerns
+
+### Review Of 086e
+
+- The core reads the hosted copy of each written feed in its release folder. It reads the host file only of a feed whose copy names a placeholder GUID. A core test with a host that counts its reads examines this.
+- When the workspace has no library, the core does not change the links of a written feed with a real GUID. The API gives the library in each shell.

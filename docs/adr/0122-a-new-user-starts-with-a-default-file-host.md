@@ -3,7 +3,8 @@
 - Status: Accepted
 - Date: 2026-11-02
 - Owner: operator
-- Accepted: 2026-11-02 by the operator: "we should simply force user to configure a host at the start, with a default setting to an intuitive writable local folder or temporary memory", and "use a placeholder bogus guid with an explanation why it can not be generated at this time". The operator selected the temporary area as the default on a server. On 2026-11-03, the human test found that a track cannot go on a folder with no public address. The operator selected the placeholder address of items 12 to 15.
+- Accepted: 2026-11-02 by the operator: "we should simply force user to configure a host at the start, with a default setting to an intuitive writable local folder or temporary memory", and "use a placeholder bogus guid with an explanation why it can not be generated at this time". The operator selected the temporary area as the default on a server.
+- Changed: on 2026-11-03, the human test found that a track cannot go on a folder with no public address. The operator selected the placeholder address of items 12 to 15. The same test found that the links depended on the sequence of the writes.
 - Supersedes: [ADR 0121](../archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), practice pages.
 - Changes: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 6, step 2. [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md) items 6 to 9, for a file host with no public address.
 - Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) for feed identity. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) for a feed move. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 6, 7 and 12 for the links. [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) for the user folder.
@@ -33,7 +34,7 @@
 8. The feed gets its real GUID, the UUIDv5 of its public address, when it first has a public address:
     - When the user moves it to a file host with a public address (ADR 0038). The core sets the GUID with the move of the draft.
     - When the user gives its file host a public address. The core sets the GUID of each feed of that file host with a placeholder.
-    - In the same step, the core changes each `feedGuid` and `feedUrl` that named the placeholder, in the drafts of the collection. The user writes the changed drafts through Review (ADR 0007).
+    - In the same step, the core changes each `feedGuid` and `feedUrl` that named the placeholder, in the drafts of the collection. A written feed with no draft that names the placeholder gets a draft from its file. This also applies to a feed with a GUID from a public address. The user writes the changed drafts through Review (ADR 0007).
 
 ### The Temporary Area Of A Server
 

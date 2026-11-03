@@ -22,11 +22,13 @@ const PAGES = {
     { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
   ],
   publisher: () => [
+    // The role says what the page is, so it is first (ADR 0075 item 1, as
+    // amended on 2026-11-02).
+    { id: 'role', tier: 'identity' },
     { id: 'channel', tier: 'identity', fields: [...FEED_FIELDS] },
     { id: 'releases', tier: 'content' },
     { id: 'members', tier: 'details' },
     { id: 'details', tier: 'details', rows: ['recipients', 'credits'] },
-    { id: 'role', tier: 'setup' },
     { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
   ],
   playlist: () => [

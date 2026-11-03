@@ -18,7 +18,7 @@ The operator selected this decision from a questionnaire on 2026-10-28.
 
 ## Decision
 
-1. The publisher page gets the section `details`, with the tier `details`, and the rows "Value routes" and "Credits and links". It is after the section `releases` and before the section `role` ([ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md)).
+1. The publisher page gets the section `details`, with the tier `details`, and the rows "Value routes" and "Credits and links". It is after the section `releases` ([ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md)). On 2026-11-02 the operator moved the section `role` to the top of the page, with the tier `identity`, because the role tells what the page is.
 2. The rows open the pages of the album: `RecipientsPage` and `CreditsPage`. The pages do not change.
 3. The recipient picker of the album offers the same recipients on a publisher feed ([ADR 0027](0027-the-recipient-picker.md)).
 4. Studio does not copy the publisher recipients into its releases, and does not copy the release recipients into the publisher feed.

@@ -26,10 +26,10 @@ test('ChannelFields in editor.js has no field Language', () => {
 test('the page publisher gives the sections in the sequence of ADR 0075', () => {
   assert.deepEqual(
     pageSequence('publisher').map((s) => s.id),
-    ['channel', 'releases', 'members', 'details', 'role', 'feed'],
-    'ADR 0118 item 8: the publisher page must give channel, releases, members, details, role and feed. Fix the page publisher in crates/api/ui/pages.js.',
+    ['role', 'channel', 'releases', 'members', 'details', 'feed'],
+    'ADR 0075 item 1 and ADR 0118 item 8: the publisher page must give role, channel, releases, members, details and feed. Fix the page publisher in crates/api/ui/pages.js.',
   );
-  assert.deepEqual(pageSequence('publisher')[3].rows, ['recipients', 'credits']);
+  assert.deepEqual(pageSequence('publisher')[4].rows, ['recipients', 'credits']);
 });
 
 test('the page settings gives op3 after locked for an album only', () => {
@@ -104,7 +104,7 @@ test('hosts starts with cards', () => {
 
 test('nostr follows author on the three feed pages', () => {
   for (const name of ['album', 'publisher', 'playlist']) {
-    const fields = pageSequence(name)[0].fields;
+    const fields = pageSequence(name).find((s) => s.fields).fields;
     assert.equal(fields.indexOf('nostr'), fields.indexOf('author') + 1,
       'ADR 0074 item 19: the row nostr must follow author. Fix FEED_FIELDS in crates/api/ui/pages.js.');
   }

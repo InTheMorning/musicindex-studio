@@ -1563,8 +1563,9 @@ button.outline-feed {
 .welcome-icon.primary { background: var(--accent); color: #fff; }
 .welcome-icon .icon, .step-icon .icon { display: block; width: 22px; height: 22px; }
 .first-step { margin-bottom: 16px; }
-.first-step-row { cursor: default; gap: 16px; padding-block: 16px; }
-.first-step-row .text { flex: 1; min-width: 0; display: grid; }
+/* The button goes to its own line when the text has less than 14rem. */
+.first-step-row { cursor: default; gap: 12px 16px; padding-block: 16px; flex-wrap: wrap; }
+.first-step-row .text { flex: 1; min-width: 14rem; display: grid; }
 .first-step-row .summary { white-space: normal; }
 .steps-line { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 16px; padding: 0; }
 .steps-line li { display: flex; align-items: center; gap: 6px; color: var(--muted); }

@@ -3,7 +3,8 @@
 - Status: Accepted
 - Date: 2026-11-03
 - Owner: operator
-- Accepted: 2026-11-03 by the operator, through the questionnaire. The operator selected the window on the local API, the current data folder and unsigned first installers. The operator also selected installers adjacent to the archives, the ID `org.musicindex.studio`, the tray, no updater at first, and the fixed port 39017.
+- Accepted: 2026-11-03 by the operator, through the questionnaire. The operator selected the window on the local API, the current data folder and unsigned first installers. The operator also selected installers adjacent to the archives, the ID `org.musicindex.studio`, the tray, no updater at first, and the fixed port 42069.
+- Changed: on 2026-11-03 the operator changed the default port from 39017 to 42069. The Ponder dev server also has the default port 42069. When it runs, item 7 gives Studio a free port for that start.
 - Changes: [ADR 0002](0002-rust-core-json-api-browser-ui.md) item 4, the form of the Tauri shell. The [distribution plan](../plans/distribution-phase-plan.md), milestone 2.
 - Uses: [ADR 0016](0016-ui-without-a-build-step.md), [ADR 0017](0017-local-api-access.md), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) for the granted writes, and the [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
@@ -27,7 +28,7 @@
 
 ### The Port
 
-7. The default port of the two desktop shells, the app and `studio-desktop`, is 39017. When a different program has that port, the shell uses a free port for that start. The UI then has its default settings for that start. `--port` still sets a port, and `--port 0` gives a free port.
+7. The default port of the two desktop shells, the app and `studio-desktop`, is 42069. When a different program has that port, the shell uses a free port for that start. The UI then has its default settings for that start. `--port` still sets a port, and `--port 0` gives a free port.
 
 ### The App And Its Tray
 
@@ -77,7 +78,7 @@
 
 Mechanical:
 
-- A test: the shell start gives port 39017 when it is free, and a different port when a listener has it.
+- A test: the shell start gives port 42069 when it is free, and a different port when a listener has it.
 - A test: the link rule of item 5 opens an address of a different origin outside the window, and keeps an address of the origin in it.
 - A test: the app opens the data folder of `studio-desktop`.
 - The four commit checks pass, with the app crate in the workspace.

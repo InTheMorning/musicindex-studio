@@ -12,7 +12,7 @@ An artist installs Music Index Studio, and it opens in its own window. Closing t
 
 ## Packets
 
-- 088a: the start of the shell in a library of `crates/desktop`, and the fixed port 39017. It changes `studio-desktop` only, and it corrects the loss of the UI settings at each start.
+- 088a: the start of the shell in a library of `crates/desktop`, and the fixed port 42069. It changes `studio-desktop` only, and it corrects the loss of the UI settings at each start.
 - 088b: the Tauri app `crates/desktop-app`: the window, the link rule, the download, the drop, the tray and the single instance. After the commit of 088a.
 - 088c: the installers in the release workflow, adjacent to the archives, with the notes for an unsigned app. After the commit of 088b.
 
@@ -38,20 +38,20 @@ These choices are fixed. Do not change them.
 
 1. `crates/desktop` gets a library target with the start of the shell. `main.rs` reads the arguments and calls the library. The binary name `studio-desktop` and its arguments do not change.
 2. The library gives:
-    - `pub const DEFAULT_PORT: u16 = 39017;`
+    - `pub const DEFAULT_PORT: u16 = 42069;`
     - `pub fn default_data_dir() -> Option<PathBuf>`, the function of `main.rs` from before, with the macOS rule from before.
-    - `pub async fn bind(port: Option<u16>) -> std::io::Result<TcpListener>`. With `None`, it binds `127.0.0.1:39017`, and when that port is in use, `127.0.0.1:0`. With `Some(n)`, it binds `127.0.0.1:n` only, and `Some(0)` gives a free port.
+    - `pub async fn bind(port: Option<u16>) -> std::io::Result<TcpListener>`. With `None`, it binds `127.0.0.1:42069`, and when that port is in use, `127.0.0.1:0`. With `Some(n)`, it binds `127.0.0.1:n` only, and `Some(0)` gives a free port.
     - A function that opens the workspace and makes the token and the router. It gives the UI address with `#token=`, and a future that serves until a shutdown signal. The Tauri app of 088b calls it, so it takes the shutdown signal as a parameter.
-3. The default of `--port` is `None`, which item 2 gives. The usage text says that the default is 39017, else a free port.
-4. When the shell uses a free port in the place of 39017, it prints one line. The line says this, and that the UI has its default settings for this start.
+3. The default of `--port` is `None`, which item 2 gives. The usage text says that the default is 42069, else a free port.
+4. When the shell uses a free port in the place of 42069, it prints one line. The line says this, and that the UI has its default settings for this start.
 5. The user guide and the install runbook give the default port.
 
 ### Acceptance Criteria
 
 Mechanical:
 
-- A test: `bind(None)` gives port 39017 when it is free. With a listener on 39017, `bind(None)` gives a different port. `bind(Some(n))` with a listener on `n` gives an error.
-- The test must not fail when a different program has 39017 on the computer of the test. It then checks only the second case.
+- A test: `bind(None)` gives port 42069 when it is free. With a listener on 42069, `bind(None)` gives a different port. `bind(Some(n))` with a listener on `n` gives an error.
+- The test must not fail when a different program has 42069 on the computer of the test. It then checks only the second case.
 - The smoke test of `tools/release_desktop.py` still passes.
 - The four commit checks pass.
 
@@ -72,7 +72,7 @@ Read:
 
 Goal:
 - The start of the desktop shell is a library function that the Tauri app can call.
-- The default port is 39017, else a free port, so the UI keeps its settings between starts.
+- The default port is 42069, else a free port, so the UI keeps its settings between starts.
 
 Constraints:
 - Follow the Architecture section of packet 088a fully.

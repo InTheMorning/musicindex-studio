@@ -22,7 +22,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use studio_desktop::{DEFAULT_PORT, StartOptions, bind, default_data_dir, start};
+use studio_desktop::{DEFAULT_PORT, StartOptions, bind, default_data_dir, harden_process, start};
 
 struct Options {
     data_dir: PathBuf,
@@ -80,17 +80,6 @@ async fn main() -> ExitCode {
     }
 }
 
-/// Mark the process as not dumpable, so that no core dump holds a vault
-/// key (ADR 0104 item 1). A failure gives a warning only.
-fn harden_process() {
-    #[cfg(target_os = "linux")]
-    if let Err(error) =
-        rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
-    {
-        eprintln!("studio-desktop: warning: the process cannot become not dumpable: {error}");
-    }
-}
-
 async fn run() -> Result<(), String> {
     harden_process();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -129,17 +118,4 @@ async fn run() -> Result<(), String> {
     println!("{}", started.ui_url);
     std::io::stdout().flush().map_err(|e| e.to_string())?;
     started.serve.await.map_err(|e| e.to_string())
-}
-
-#[cfg(all(test, target_os = "linux"))]
-mod hardening_tests {
-    #[test]
-    fn the_start_step_marks_the_process_not_dumpable() {
-        super::harden_process();
-        assert_eq!(
-            rustix::process::dumpable_behavior().unwrap(),
-            rustix::process::DumpableBehavior::NotDumpable,
-            "ADR 0104 item 1: the desktop must be not dumpable. Call harden_process() at the start of run()."
-        );
-    }
 }

@@ -6,6 +6,7 @@
 - Accepted: 2026-11-03 by the operator, through the questionnaire. The operator selected the window on the local API, the current data folder and unsigned first installers. The operator also selected installers adjacent to the archives, the ID `org.musicindex.studio`, the tray, no updater at first, and the fixed port 42069.
 - Changed: on 2026-11-03 the operator changed the default port from 39017 to 42069. The Ponder dev server also has the default port 42069. When it runs, item 7 gives Studio a free port for that start.
 - Changed: on 2026-11-03 the operator added items 16 to 21, through the questionnaire. "Quit" waits for a write that runs, or asks the user. The operator selected the dialog with three buttons and a wait with no limit. The operator also selected writes and uploads as the work, and the wait in the tray menu.
+- Changed: on 2026-11-03 the operator added the lock of item 10, through the questionnaire. The visual check of packet 088b found that the single instance plugin needs D-Bus on Linux. With no D-Bus, a second start opened a second API on the same data folder.
 - Changes: [ADR 0002](0002-rust-core-json-api-browser-ui.md) item 4, the form of the Tauri shell. The [distribution plan](../plans/distribution-phase-plan.md), milestone 2.
 - Uses: [ADR 0016](0016-ui-without-a-build-step.md), [ADR 0017](0017-local-api-access.md), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) for the granted writes, and the [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
@@ -35,7 +36,7 @@
 
 8. The app has a tray icon, with the menu items "Open Studio" and "Quit". Linux gives no click event of the tray icon, so the menu is the control on each system.
 9. When the user closes the window, the window hides, and the app and its API keep running. A connected app can thus write under a show grant. "Open Studio" shows the window again. "Quit" stops the API and ends the app.
-10. A second start of the app shows the window of the first one, through the single instance plugin. No second API starts.
+10. A second start of the app shows the window of the first one, through the single instance plugin. No second API starts. Each desktop shell also locks a file in its data folder at its start. When a different shell holds that lock, the start stops with the message "Studio is already running." The lock works with no D-Bus, and it also applies to `studio-desktop`.
 
 ### The Data And The Name
 
@@ -98,6 +99,7 @@ Mechanical:
 - A test: the shell start gives port 42069 when it is free, and a different port when a listener has it.
 - A test: the link rule of item 5 opens an address of a different origin outside the window, and keeps an address of the origin in it.
 - A test: the app opens the data folder of `studio-desktop`.
+- A test: a second lock of one data folder fails, and the lock is free after the first shell ends.
 - A test: the work count of item 17 increases during a write and during an upload in parts, and decreases after it. An upload with no new part for 2 minutes is not in the count.
 - A test: the decision of items 16 to 20 is a function of the work count and the button. It gives "end now", "show the dialog", "wait" or "continue".
 - The four commit checks pass, with the app crate in the workspace.

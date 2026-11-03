@@ -34,6 +34,26 @@ http://127.0.0.1:PORT/#token=...
 
 Studio shows the Studio page. Keep the terminal open while you use Studio.
 
+## Start the app window
+
+The desktop app opens Studio in its own window. It does not use your web browser.
+The app has no installer at this time. You can start it from the source code:
+
+```sh
+cargo run -p studio-desktop-app
+```
+
+The app uses the same data folder as `studio-desktop`, and it needs no token from you.
+Links to other web sites open in your web browser.
+A download goes to your Downloads folder, and the app shows the name of the file.
+
+When you close the window, the app stays in the tray, and Studio continues to run.
+Select **Open Studio** in the tray menu to show the window again.
+Select **Quit** in the tray menu to stop Studio.
+When you start the app a second time, it shows the first window.
+If a different Studio uses the same data folder, the app shows "Studio is already running." and stops.
+This also applies to `studio-desktop`. Only one Studio can use a data folder at a time.
+
 ## Why the address has a token
 
 The token is a long secret code.

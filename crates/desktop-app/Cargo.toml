@@ -1,0 +1,32 @@
+[package]
+name = "studio-desktop-app"
+description = "Tauri desktop app of musicindex-studio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "studio-desktop-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+directories.workspace = true
+studio-desktop = { path = "../desktop" }
+tauri = { version = "2", features = ["tray-icon"] }
+# The single instance plugin must be the first plugin (ADR 0124 item 10).
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["sync"] }
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

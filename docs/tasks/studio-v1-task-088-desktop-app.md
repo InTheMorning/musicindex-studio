@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packet 088a is complete, with its visual check. On 2026-11-03 the operator removed the gate of the distribution plan, so packet 088b can start.
+Status: Open. Packets 088a and 088b are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packets 088c and 088d can start.
 
 ## Goal
 
@@ -19,7 +19,13 @@ An artist installs Music Index Studio, and it opens in its own window. Closing t
 
 Visual check of 088a, by the planning model: start `studio-desktop` two times with the same data folder. Change the theme between the two starts. The theme stays. Start a second `studio-desktop` while the first runs: it gets a different port and starts.
 
-Visual check of 088b, by the planning model on Linux: the visual check of ADR 0124.
+Visual check of 088b, by the planning model on Linux: the visual check of ADR 0124. It passed on 2026-11-03 on an Xvfb display with i3 and a D-Bus session, with these results:
+
+- The window opens the UI with the token. The theme stays after a restart. A close hides the window, and the API continues.
+- The tray menu has "Open Studio" and "Quit". "Open Studio" shows the window and gives it the focus. "Quit" stops the API and ends the app.
+- With D-Bus, a second start shows the first window. With no D-Bus, a second start shows "Studio is already running." and ends with no second API.
+- Two downloads of "Export People" give `studio-people.json` and `studio-people (1).json`, and each dialog names its file. On Linux, WebKitGTK gives the handler a free name with ` (1)`, so the ` 2` of item 5 does not occur there.
+- A drop reaches the page, because the Tauri drop handler is off. The drag source of the check gave only `text/uri-list`, so the page got text and no file. A plain WebKitGTK window gave the same result. The human test does the drop from a file manager.
 
 Visual check of 088d, by the planning model on Linux: the Quit step of the visual check of ADR 0124.
 
@@ -141,6 +147,7 @@ These choices are fixed. Do not change them.
 13. `tauri.conf.json` has no window and no `frontendDist`. The app makes the window in code with `WebviewUrl::External` and the UI address. `app.security.csp` is `null`.
 14. The crate uses the workspace lints. The binary has `windows_subsystem = "windows"` in a build with no debug assertions.
 15. The tray icon uses the default icon of the app.
+16. `lock_data_dir` of `crates/desktop` locks `studio.lock` in the data folder, and `start` calls it before `Workspace::open`. The serve future holds the lock. A held lock gives a `StartError` with `already_running()`, and the app shows "Studio is already running." The visual check of 088b added this item (ADR 0124 item 10).
 
 ### Acceptance Criteria
 
@@ -150,6 +157,7 @@ Mechanical:
 - A test of the name of a download of item 5, with a name that is in use.
 - A test: the app gives the data folder of `studio-desktop`.
 - The Linux test of `harden_process()` passes from the library of `crates/desktop`.
+- A test: a second lock of one data folder fails, and the lock is free after the first shell ends.
 - The four commit checks pass, with the new crate.
 
 Visual: the visual check of 088b.

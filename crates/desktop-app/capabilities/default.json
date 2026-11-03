@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The window opens the local API of Studio. It has no Tauri command and no remote access (ADR 0124 item 2).",
+  "windows": ["main"],
+  "permissions": []
+}

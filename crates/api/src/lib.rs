@@ -16,6 +16,7 @@ mod routes;
 mod temporary;
 mod ui;
 mod uploads;
+mod work;
 mod workspace;
 
 use std::sync::{Arc, Mutex};
@@ -30,18 +31,29 @@ pub use error::ApiError;
 pub use import::{
     Credential, ImportOpen, ImportStore, PART_SIZE as IMPORT_PART_SIZE, Staged, verify_credential,
 };
+pub use work::{Work, WriteGuard};
 pub use workspace::{
     AccountIdentity, AppChange, AppHook, ClientAddress, Clock, ServerRules, VaultState, WallClock,
     Workspace, WorkspaceHandle, private_dir,
 };
 
-/// Serve a router until the process stops.
+/// Serve a router until `shutdown` completes. After the signal, the server
+/// accepts no connection and waits for each request that started.
 ///
 /// # Errors
 ///
 /// Gives the I/O error of the listener.
-pub async fn serve(listener: tokio::net::TcpListener, router: Router) -> std::io::Result<()> {
-    axum::serve(listener, router).await
+pub async fn serve<S>(
+    listener: tokio::net::TcpListener,
+    router: Router,
+    shutdown: S,
+) -> std::io::Result<()>
+where
+    S: std::future::Future<Output = ()> + Send + 'static,
+{
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown)
+        .await
 }
 
 /// A QR code of the text, as SVG text (ADR 0056 item 13). Both shells use

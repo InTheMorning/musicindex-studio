@@ -101,11 +101,10 @@ async fn run() -> Result<(), String> {
     let mut start_options = StartOptions::new(&options.data_dir);
     start_options.musicindex = options.musicindex;
     start_options.hub = options.hub;
-    let shutdown = async {
-        // Ctrl+C stops the shell. A failed signal handler also stops it.
-        let _ = tokio::signal::ctrl_c().await;
-    };
-    let started = start(&start_options, listener, shutdown).map_err(|e| e.to_string())?;
+    // The shell ends at Ctrl+C with no wait (ADR 0124 item 21), so the
+    // shutdown future of the serve does not end.
+    let started =
+        start(&start_options, listener, std::future::pending()).map_err(|e| e.to_string())?;
     println!("Music Index Studio {}", env!("CARGO_PKG_VERSION"));
     println!("Data: {}", options.data_dir.display());
     if options.port.is_none() && started.port != DEFAULT_PORT {
@@ -117,5 +116,9 @@ async fn run() -> Result<(), String> {
     println!("Open this address in your browser:");
     println!("{}", started.ui_url);
     std::io::stdout().flush().map_err(|e| e.to_string())?;
-    started.serve.await.map_err(|e| e.to_string())
+    tokio::select! {
+        result = started.serve => result.map_err(|e| e.to_string()),
+        // A failed signal handler also stops the shell.
+        _ = tokio::signal::ctrl_c() => Ok(()),
+    }
 }

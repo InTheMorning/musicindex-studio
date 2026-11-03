@@ -685,6 +685,8 @@ pub struct Workspace {
     /// Counts the connections, so that a late answer of an old connection
     /// changes nothing.
     pub(crate) signer_generation: u64,
+    /// The count of the writes and the uploads that run (ADR 0124 item 17).
+    work: crate::work::Work,
 }
 
 /// The folder of the temporary area in the user folder (ADR 0122 item 9).
@@ -815,7 +817,15 @@ impl Workspace {
             signer: SignerSlot::None,
             nip46_relays: vec![DEFAULT_NIP46_RELAY.to_owned()],
             signer_generation: 0,
+            work: crate::work::Work::new(),
         })
+    }
+
+    /// The count of the work that runs. The clone shares the count, and
+    /// reading it needs no lock of the workspace.
+    #[must_use]
+    pub fn work(&self) -> crate::work::Work {
+        self.work.clone()
     }
 
     /// Use the rules of the server: no local folder host, one library

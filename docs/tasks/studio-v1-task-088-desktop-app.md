@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packets 088a and 088b are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packets 088c and 088d can start.
+Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c can start.
 
 ## Goal
 
@@ -27,7 +27,13 @@ Visual check of 088b, by the planning model on Linux: the visual check of ADR 01
 - Two downloads of "Export People" give `studio-people.json` and `studio-people (1).json`, and each dialog names its file. On Linux, WebKitGTK gives the handler a free name with ` (1)`, so the ` 2` of item 5 does not occur there.
 - A drop reaches the page, because the Tauri drop handler is off. The drag source of the check gave only `text/uri-list`, so the page got text and no file. A plain WebKitGTK window gave the same result. The human test does the drop from a file manager.
 
-Visual check of 088d, by the planning model on Linux: the Quit step of the visual check of ADR 0124.
+Visual check of 088d, by the planning model on Linux: the Quit step of the visual check of ADR 0124. It passed on 2026-11-03 on Xvfb. A local folder host had a public address on a local test server that waits 40 seconds, so each write waited about 20 seconds at its confirmation. The results:
+
+- "Quit" during the write showed "Studio Is Writing 1 Feed", the message and the three buttons.
+- "Cancel" kept the app. Return selected "Quit After Write", so it is the default button on Linux.
+- "Quit After Write" hid the window and showed the wait menu. The app ended after the write.
+- "Open Studio" during the wait showed the window and the normal menu, and the app continued after the write.
+- "Quit Now" during the write ended the app and the API immediately. "Quit" with no work ended the app with no dialog.
 
 Human test, by the operator, after 088c and 088d: the human test of ADR 0124.
 

@@ -2737,6 +2737,8 @@ pub(crate) async fn write_feed(
     Json(body): Json<Write>,
 ) -> ApiResult {
     blocking(shared, move |w| {
+        // The write counts as work until it ends (ADR 0124 item 17).
+        let _work = w.work().write();
         let id = FeedId(id);
         let signed = body
             .signed_events
@@ -6342,6 +6344,8 @@ fn granted_write(
     key: &str,
     change: &grant::GrantChange,
 ) -> ApiResult {
+    // The write counts as work until it ends (ADR 0124 item 17).
+    let _work = w.work().write();
     let show = grant_of_app(w, grant_id, app)?;
     let now = w.now_secs();
     // The diff of the granted write makes its signing plan at `now`.

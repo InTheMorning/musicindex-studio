@@ -224,17 +224,20 @@ pub(crate) async fn put_part(
     Path((upload, n)): Path<(String, u32)>,
     body: Bytes,
 ) -> ApiResult {
-    let (row, incoming, rules) = blocking(Arc::clone(&shared), {
+    let (row, incoming, rules, work) = blocking(Arc::clone(&shared), {
         let upload = upload.clone();
         move |w| {
             Ok((
                 w.collection.upload(&upload)?,
                 w.incoming_dir.clone(),
                 w.rules.clone(),
+                w.work(),
             ))
         }
     })
     .await?;
+    // The upload counts as work from its first part (ADR 0124 item 17).
+    work.touch_upload(&row.id);
     if u64::from(n) >= part_count(row.size) {
         return Err(bad_part(format!(
             "part {n} is outside the file, which has {} parts",
@@ -263,6 +266,8 @@ pub(crate) async fn put_part(
     file.write_all(&body).await.map_err(|e| io_error(&e))?;
     file.flush().await.map_err(|e| io_error(&e))?;
     drop(file);
+    // A slow part stays in the count after its bytes are on the disk.
+    work.touch_upload(&row.id);
     blocking(shared, move |w| {
         w.collection
             .record_upload_part(&upload, n, crate::announcer::now())?;
@@ -316,6 +321,7 @@ pub(crate) async fn finish_upload(
                 "the upload is not there",
             ));
         }
+        w.work().end_upload(&row.id);
         Ok((row, w.incoming_dir.clone()))
     })
     .await?;
@@ -354,6 +360,7 @@ pub(crate) async fn delete_upload(
     let incoming = blocking(shared, move |w| {
         let row = w.collection.upload(&upload)?;
         w.collection.remove_upload(&row.id)?;
+        w.work().end_upload(&row.id);
         Ok(part_path(&w.incoming_dir, &row.id))
     })
     .await?;

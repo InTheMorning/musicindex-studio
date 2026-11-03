@@ -9,6 +9,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
+pub use studio_api::Work;
 use studio_api::{Access, Workspace, local_router};
 use tokio::net::TcpListener;
 
@@ -102,8 +103,12 @@ pub struct Started {
     pub ui_url: String,
     /// The bound port.
     pub port: u16,
-    /// Serves the API. It ends after the shutdown signal.
+    /// Serves the API. After the shutdown signal, it accepts no connection,
+    /// waits for each request that started, and then ends.
     pub serve: Serve,
+    /// The count of the writes and the uploads that run (ADR 0124 items 16
+    /// and 17).
+    pub work: studio_api::Work,
 }
 
 impl std::fmt::Debug for Started {
@@ -196,7 +201,8 @@ pub fn lock_data_dir(data_dir: &Path) -> Result<std::fs::File, StartError> {
 /// Open the workspace, make the token and the router, and prepare the serve.
 ///
 /// The caller binds `listener` with [`bind`]. The returned future serves
-/// until `shutdown` completes. It holds the lock of [`lock_data_dir`] until
+/// until `shutdown` completes, and then waits for each request that
+/// started. It holds the lock of [`lock_data_dir`] until
 /// it ends.
 ///
 /// # Errors
@@ -234,21 +240,20 @@ where
         .port();
     let access = Access::new(port).map_err(|e| StartError::new(format!("{e:?}")))?;
     let ui_url = access.ui_url();
+    let work = workspace.work();
     let router = local_router(workspace, access);
     let serve = async move {
         // The lock stays until the serve ends.
         let _lock = lock;
-        tokio::select! {
-            result = studio_api::serve(listener, router) => {
-                result.map_err(|e| StartError::new(e.to_string()))
-            }
-            () = shutdown => Ok(()),
-        }
+        studio_api::serve(listener, router, shutdown)
+            .await
+            .map_err(|e| StartError::new(e.to_string()))
     };
     Ok(Started {
         ui_url,
         port,
         serve: Box::pin(serve),
+        work,
     })
 }
 
@@ -332,6 +337,32 @@ mod tests {
             rustix::process::dumpable_behavior().unwrap(),
             rustix::process::DumpableBehavior::NotDumpable,
             "ADR 0104 item 1: the desktop must be not dumpable. Call harden_process() at the start of run()."
+        );
+    }
+
+    #[tokio::test]
+    async fn the_serve_ends_after_the_shutdown_with_an_idle_connection() {
+        let dir = tempfile::tempdir().unwrap();
+        let listener = bind(Some(0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        let started = start(
+            &StartOptions::new(&dir.path().join("data")),
+            listener,
+            async {
+                let _ = stopped.await;
+            },
+        )
+        .expect("the start must work");
+        assert_eq!(started.work.writes(), 0);
+        // A connection that sent no request must not hold the shutdown.
+        let _idle = tokio::net::TcpStream::connect(address).await.unwrap();
+        let serve = tokio::spawn(started.serve);
+        let _ = stop.send(());
+        let done = tokio::time::timeout(std::time::Duration::from_secs(5), serve).await;
+        assert!(
+            done.is_ok(),
+            "ADR 0124 item 20: the serve must end after the shutdown signal."
         );
     }
 }

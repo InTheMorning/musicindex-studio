@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
 Decision: [ADR 0122](../adr/0122-a-new-user-starts-with-a-default-file-host.md). It supersedes ADR 0121, and replaces task 085.
 
-Status: Complete, with the screenshot visual check of the desktop and of the server. The human test is open.
+Status: Complete, with the screenshot visual checks of the desktop and of the server. The human test of 2026-11-03 found that a track could not go on a folder with no public address. Packet 086d gives ADR 0122 items 12 to 15, with its screenshot visual check. The human test is open.
 
 ## Goal
 
@@ -278,3 +278,100 @@ The planning model found these items in the operator's test and in the visual ch
 - In Feed facts, the explanation of the placeholder had no term, so it went into the first column of the grid. At 390 px this pushed the values off the screen. The explanation now stays in the value column, and a long value wraps.
 - A feed of an expired area that moves needs a write with no old file. The core skips the conflict check, the snapshot and the pointer only when the old file host is an expired area and the file is gone.
 - Open: a write under a show grant does not check the expiry of a temporary area. Only `write_feed` refuses it.
+
+## Packet 086d: The Placeholder Address Of A File
+
+Decision: ADR 0122 items 12 to 15. The human test of 2026-11-03 found the gap: "Add tracks" on the default folder gave "This file host has no public address. Give it one in File hosts." for each file.
+
+Visual check, by the planning model, before the commit: on the default folder, the user adds three MP3 files to an album, sees the placeholder address and its text on a track page, and plays the track. The user writes the album, and the files are in the folder. Then the user moves the album to a file host with a public address, and Review shows the new addresses. The check uses 1100 px, and 390 px with touch, in the two themes.
+
+### Files
+
+Inspect: `crates/core/src/inventory.rs` (`planned_path`, `PlannedPath`, `copies`), `crates/core/src/connector.rs` (`planned_url`), `crates/core/src/pipeline.rs` (`assign_real_guids`, `placeholder_candidates`, `guid_change`, `apply_guid_change`, `swap_op3_prefixes`, `apply_op3`, `release_path`, `feed_addresses`, `host_operations`, `public_target`, `set_feed_host`), `crates/core/src/media.rs` (`op3_prefix`, `plain_address`), `crates/core/tests/placeholder_guid.rs`, `crates/api/src/routes.rs` (`import_upload`, `reference_url`, the replacement of an audio file near line 4430, `held_files`), `crates/api/src/tests.rs`, `crates/api/ui/media.js` (`mediaSource`, `heldMap`), `crates/api/ui/editor.js` (`AudioPlayer`, the audio file field of the track page), `crates/api/ui/welcome.js` (`HOST_STEP`), `crates/api/ui-tests/media.test.mjs`, `crates/api/ui-tests/welcome.test.mjs`, `docs/user-guide/first-steps.md`.
+
+Change: those files only.
+
+Do not change: the collection schema, the ADRs, `crates/server`, the connectors.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. `inventory::placeholder_address(path: &str) -> String` gives `pending:` and the path. `inventory::is_placeholder_address(url: &str) -> bool` is true for a text that starts with `pending:`.
+2. `planned_path` gives `url: Some(placeholder_address(&path))` when the connector gives no planned address. Each other field does not change. Examine each caller of `PlannedPath::url` and of `planned_path`. A caller that used `url == None` as "no public address" now sees the placeholder. Keep the behavior of each caller that must not write a placeholder to a host with a public address.
+3. `import_upload` no longer refuses a feed whose folder has no public address. The lossless pair of a placeholder MP3 address uses the placeholder FLAC address.
+4. `apply_op3` and `swap_op3_prefixes` give no OP3 prefix to a placeholder address.
+5. `assign_real_guids` also changes the placeholder addresses. For each feed of `ids` whose target file host (the feed move, else its host) gives a public address, the core changes each address of `feed_addresses` that is a placeholder: in each enclosure, each alternative enclosure source and each image. The new address is the `planned_path` URL of the library file of that path, with the planning row of the target file host, as `host_operations` makes it. A placeholder address with no library file stays. This change occurs also when the GUID of the feed is real already. It is in the same transaction as the GUID change.
+6. `held_files` lists a local library file with a placeholder address also when it is on the host, because the player has no other source.
+7. `mediaSource` gives `{ kind: 'held', file }` for an address that the held map has, before the `https` check. A placeholder address that the held map does not have gives `{ kind: 'none', reason: 'pending' }`. This is a display aid, not a feed rule.
+8. `HOST_STEP.placeholderAddress` holds the text of ADR 0122 item 14. The audio file field of the track page shows it below the field when the address is a placeholder. Use the class `facts-note` or the field hint class. Each other text does not change.
+9. `docs/user-guide/first-steps.md` tells that the songs of a folder with no public address get their addresses when the feed moves.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- A core test: an import of a track into a feed on a local folder with no public address gives a `pending:` address. The write puts the file in the folder, and the feed XML has the `pending:` enclosure.
+- A core test: `set_feed_host` to a local folder with a public address changes each `pending:` enclosure, alternative enclosure source and image of the draft to the `https` planned address. The write then puts the files on the new file host.
+- An API test: `POST` of a track to a feed on a folder with no public address gives 201 and a `pending:` address. `GET /media/held` lists the file before and after the write.
+- A Node test: `mediaSource` of a held placeholder address and of a placeholder address that is not held, and the text of `HOST_STEP.placeholderAddress`.
+- The four commit checks pass.
+
+Visual: the visual check of this packet.
+
+### Prompt for lower-context coding model
+
+You are implementing one bounded task from a larger plan.
+
+Implement only this task. Do not redesign the architecture.
+
+Read:
+- AGENTS.md
+- docs/adr/0122-a-new-user-starts-with-a-default-file-host.md (items 8 and 12 to 15)
+- docs/tasks/studio-v1-task-086-default-file-host.md (the Goal and packet 086d only)
+- ~/.agents/skills/asd-ste100/SKILL.md
+- The files that the Files section of packet 086d names.
+
+Goal:
+- A track can go on a file host with no public address. Its file gets a `pending:` address, and the write puts the file there.
+- When the feed gets a public address, the core changes each `pending:` address to the real planned address.
+
+Constraints:
+- Follow the Architecture section of packet 086d fully.
+- No feed rule in the UI (ADR 0065). The core makes each address.
+- A write to a host occurs only through `pipeline::write_draft`.
+- A read and a write with no edit give the same bytes. The corpus tests enforce this.
+- Each comment, each test message and the user guide text are in ASD-STE100 Simplified Technical English.
+- Follow the Pragmatic Rust Guidelines of the `rust-dev` skill.
+- Clippy runs with `-D warnings`, which includes `too_many_lines` for a test. Put a long setup in a helper function.
+- The UI has no build step. To check syntax, copy a changed UI file to a `.mjs` file in `.studio-dev/` and run `tools/node --check` on the copy.
+- Keep test data in `.studio-dev/`, not in `/tmp`.
+
+Do not touch:
+- The collection schema, the ADRs, `crates/server`, the connectors.
+- Do not commit. Do not do the visual check.
+
+Acceptance criteria:
+- The mechanical criteria of packet 086d.
+
+Test commands:
+- cargo fmt --all --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test --workspace
+- tools/node --test crates/api/ui-tests/*.test.mjs
+
+At the end, report:
+1. files changed
+2. tests run
+3. behavior changed
+4. deviations from task
+5. unresolved concerns
+
+### Review Of 086d
+
+The planning model found these items in the review and in the visual check:
+
+- The first version planned each upload of a moved feed only on the new file host. A track that the user adds after a move has an address on the old file host, so the write did not upload it. The plan now uses the two file hosts, and the address in the draft selects the file host. A core test examines this.
+- Studio reads the OP3 switch from the enclosures, so a feed with placeholder addresses always reads it as off. ADR 0122 items 13 and 15 now say that the switch stays off until the feed has a public address, and the core adds no prefix at the change.
+- Visual check: on the default folder, a track got `pending:check-album/01 Song 1.mp3` with the text of item 14, and the player played it from the library. The write put the MP3 in the folder. After the move to a folder with a public address, Review showed the real GUID and the new address, and the write put the MP3 on the new file host. The check used 1100 px, and 390 px with touch, in the two themes. `$edges()`, `$overflow()` and `$fieldText()` gave no result.
+- Open: an address that the user types with the start `pending:` passes the address check. Two file hosts with no public address can give the same placeholder text, so the player can select the wrong held file. The two cases are not probable.

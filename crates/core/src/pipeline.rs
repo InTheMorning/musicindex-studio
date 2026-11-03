@@ -21,7 +21,7 @@ use crate::connector::{
     PlannedWrite, Version,
 };
 use crate::digest::sha256_hex;
-use crate::feed::{AtomLink, Entry, Feed, FeedError, Person};
+use crate::feed::{AtomLink, Entry, Feed, FeedError, Item, Person};
 use crate::grant::{self, GrantChange};
 use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
@@ -858,23 +858,26 @@ pub fn copy_feed(
     Ok(id)
 }
 
-/// A feed that gets its real GUID in place of a placeholder (ADR 0122
-/// item 8).
-struct GuidChange {
+/// The change of one feed under [`assign_real_guids`] (ADR 0122 items 8
+/// and 15).
+struct FeedChange {
     /// The feed.
     id: FeedId,
-    /// The placeholder GUID. The remote items of other drafts name it.
-    old_guid: String,
-    /// The `UUIDv5` of the public address.
-    new_guid: String,
-    /// The public address. It is the `self` link of the feed.
+    /// The placeholder GUID and the real GUID. `None` when the feed keeps
+    /// its GUID.
+    guid: Option<(String, String)>,
+    /// The public address. It is the `self` link of the feed when the GUID
+    /// changes.
     address: String,
+    /// Each placeholder address of the draft, with its public address.
+    addresses: Vec<(String, String)>,
 }
 
-/// Give each feed of `ids` with a placeholder GUID its real GUID, when its
-/// file host now gives a public address (ADR 0122 item 8). The file host of
-/// a feed is the target of its draft feed move, or else its connector. The
-/// real GUID is the `UUIDv5` of that address, and the feed gets it with its
+/// Give each feed of `ids` a real GUID in place of its placeholder, and
+/// each placeholder address its public address, when its file host now
+/// gives a public address (ADR 0122 items 8 and 15). The file host of a
+/// feed is the target of its draft feed move, else its connector. The real
+/// GUID is the `UUIDv5` of that address, and the feed gets it with its
 /// `self` link and its OP3 prefixes (ADR 0076).
 ///
 /// Each `feedGuid` that names an old placeholder changes in each draft of
@@ -886,7 +889,7 @@ struct GuidChange {
 /// through Review (ADR 0007).
 ///
 /// A feed with no file host, or with a host that is locked, unknown or
-/// that does not give its file, keeps its placeholder.
+/// that does not give its file, keeps its placeholders.
 ///
 /// # Errors
 ///
@@ -903,7 +906,7 @@ pub fn assign_real_guids(
         let Some((_, draft)) = drafts.iter().find(|(candidate, _)| *candidate == id) else {
             continue;
         };
-        if let Some(change) = guid_change(collection, hosts, id, draft)? {
+        if let Some(change) = feed_change(collection, hosts, id, draft)? {
             changes.push(change);
         }
     }
@@ -914,7 +917,7 @@ pub fn assign_real_guids(
     for (id, draft) in drafts {
         let mut next = draft.clone();
         if let Some(own) = changes.iter().find(|change| change.id == id) {
-            next = changed_draft(next, |feed| apply_guid_change(feed, own))?;
+            next = changed_draft(next, |feed| apply_feed_change(feed, own))?;
         }
         for change in &changes {
             next = changed_draft(next, |feed| relink(feed, change))?;
@@ -975,27 +978,29 @@ fn placeholder_candidates(
     Ok(drafts)
 }
 
-/// The change of the GUID of one feed, when its draft has a placeholder GUID
-/// and its file host gives a public address. Gives none otherwise.
+/// The change of one feed, when its file host gives a public address and
+/// the draft has a placeholder GUID or a placeholder address. Gives none
+/// otherwise.
 ///
 /// # Errors
 ///
 /// Gives a [`PipelineError`] when the draft is not a feed, or when SQLite
 /// fails.
-fn guid_change(
+fn feed_change(
     collection: &Collection,
     hosts: &Hosts,
     id: FeedId,
     draft: &DraftRow,
-) -> Result<Option<GuidChange>, PipelineError> {
+) -> Result<Option<FeedChange>, PipelineError> {
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let Some(old_guid) = feed.podcast_guid.filter(|guid| has_placeholder_guid(guid)) else {
-        return Ok(None);
-    };
+    let old_guid = feed
+        .podcast_guid
+        .clone()
+        .filter(|guid| has_placeholder_guid(guid));
     let row = collection.feed(id)?;
     let target = match collection.draft_feed_move(id)? {
         Some(moved) => Some((moved.connector_id, moved.path)),
-        None => row.connector_id.zip(row.path),
+        None => row.connector_id.zip(row.path.clone()),
     };
     let Some((connector_id, path)) = target else {
         return Ok(None);
@@ -1007,19 +1012,79 @@ fn guid_change(
     let Some(address) = host.public_url(&path) else {
         return Ok(None);
     };
-    Ok(Some(GuidChange {
+    // The library files are planned for the target file host, as
+    // `host_operations` plans them (ADR 0122 item 15).
+    let planning = FeedRow {
+        files_connector_id: Some(connector_id),
+        path: Some(path),
+        ..row
+    };
+    let addresses = placeholder_addresses(collection, hosts, &planning, &feed)?;
+    if old_guid.is_none() && addresses.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(FeedChange {
         id,
-        old_guid,
-        new_guid: podcast_guid_for_url(&address),
+        guid: old_guid.map(|old| (old, podcast_guid_for_url(&address))),
         address,
+        addresses,
     }))
 }
 
-/// Give the feed its real GUID, its `self` link and its OP3 prefixes.
-fn apply_guid_change(feed: &mut Feed, change: &GuidChange) {
-    feed.podcast_guid = Some(change.new_guid.clone());
-    swap_op3_prefixes(feed, Some(&change.old_guid), &change.new_guid);
-    set_self_link(feed, &change.address);
+/// Each placeholder address of `feed` with the public address of its library
+/// file (ADR 0122 item 15). The public address is the planned address of
+/// the file with the planning row. A placeholder with no library file
+/// stays, and so does one whose file has no public address.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when SQLite fails.
+fn placeholder_addresses(
+    collection: &Collection,
+    hosts: &Hosts,
+    planning: &FeedRow,
+    feed: &Feed,
+) -> Result<Vec<(String, String)>, PipelineError> {
+    let placeholders: Vec<String> = feed_addresses(feed)
+        .into_iter()
+        .filter(|url| inventory::is_placeholder_address(url))
+        .map(Cow::into_owned)
+        .collect();
+    if placeholders.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut public: BTreeMap<String, String> = BTreeMap::new();
+    for file in collection.library_files(planning.id)? {
+        // A file that the hosts cannot plan keeps its placeholder.
+        let Ok(planned) = inventory::planned_path(collection, hosts, planning, &file) else {
+            continue;
+        };
+        if let Some(url) = planned
+            .url
+            .filter(|url| !inventory::is_placeholder_address(url))
+        {
+            public.insert(planned.path, url);
+        }
+    }
+    Ok(placeholders
+        .into_iter()
+        .filter_map(|placeholder| {
+            let path = placeholder.strip_prefix(inventory::PLACEHOLDER_ADDRESS_PREFIX)?;
+            let url = public.get(path)?.clone();
+            Some((placeholder, url))
+        })
+        .collect())
+}
+
+/// Give the feed its real GUID, its `self` link, its OP3 prefixes and its
+/// public addresses (ADR 0122 items 8 and 15).
+fn apply_feed_change(feed: &mut Feed, change: &FeedChange) {
+    if let Some((old, new)) = &change.guid {
+        feed.podcast_guid = Some(new.clone());
+        swap_op3_prefixes(feed, Some(old), new);
+        set_self_link(feed, &change.address);
+    }
+    replace_placeholder_addresses(feed, &change.addresses);
 }
 
 /// Give the feed a `self` link to `address`. The feed gets a new link when
@@ -1034,17 +1099,84 @@ fn set_self_link(feed: &mut Feed, address: &str) {
     }
 }
 
+/// Replace each placeholder address of `feed` with its public address (ADR
+/// 0122 item 15). The OP3 switch is off for a feed with placeholder tracks,
+/// because `Feed::read` reads it from the enclosures, so no prefix is added here.
+fn replace_placeholder_addresses(feed: &mut Feed, changes: &[(String, String)]) {
+    if changes.is_empty() {
+        return;
+    }
+    if let Some(url) = feed.image.as_mut()
+        && let Some(new) = public_of(url, changes)
+    {
+        *url = new;
+    }
+    if let Some(url) = feed.rss_image.as_mut().and_then(|image| image.url.as_mut())
+        && let Some(new) = public_of(url, changes)
+    {
+        *url = new;
+    }
+    for entry in &mut feed.items {
+        let item = &mut entry.value;
+        if let Some(url) = item.enclosure.as_mut().and_then(|e| e.url.as_mut())
+            && let Some(new) = public_of(url, changes)
+        {
+            *url = new;
+        }
+        replace_item_addresses(item, changes);
+    }
+    for entry in &mut feed.live_items {
+        let item = &mut entry.value.item;
+        if let Some(url) = item.enclosure.as_mut().and_then(|e| e.url.as_mut())
+            && let Some(new) = public_of(url, changes)
+        {
+            *url = new;
+        }
+        replace_item_addresses(item, changes);
+    }
+}
+
+/// Replace each placeholder address of one item that is not an enclosure:
+/// the image, and the `podcast:source` of each alternate enclosure.
+fn replace_item_addresses(item: &mut Item, changes: &[(String, String)]) {
+    if let Some(url) = item.image.as_mut()
+        && let Some(new) = public_of(url, changes)
+    {
+        *url = new;
+    }
+    for alternate in &mut item.alternate_enclosures {
+        for source in &mut alternate.value.sources {
+            if let Some(url) = source.value.uri.as_mut()
+                && let Some(new) = public_of(url, changes)
+            {
+                *url = new;
+            }
+        }
+    }
+}
+
+/// The public address of the placeholder `url`, when `changes` has one.
+fn public_of(url: &str, changes: &[(String, String)]) -> Option<String> {
+    changes
+        .iter()
+        .find(|(placeholder, _)| placeholder == url)
+        .map(|(_, public)| public.clone())
+}
+
 /// Change each remote item that names the placeholder GUID of `change`. The
 /// item gets the real GUID and the real address of the feed.
-fn relink(feed: &mut Feed, change: &GuidChange) {
+fn relink(feed: &mut Feed, change: &FeedChange) {
+    let Some((old, new)) = &change.guid else {
+        return;
+    };
     let items = feed.remote_items.iter_mut().chain(
         feed.publisher
             .iter_mut()
             .flat_map(|links| links.remote_items.iter_mut()),
     );
     for entry in items {
-        if entry.value.feed_guid.as_deref() == Some(change.old_guid.as_str()) {
-            entry.value.feed_guid = Some(change.new_guid.clone());
+        if entry.value.feed_guid.as_deref() == Some(old.as_str()) {
+            entry.value.feed_guid = Some(new.clone());
             entry.value.feed_url = Some(change.address.clone());
         }
     }
@@ -1209,7 +1341,8 @@ pub fn replace_model(
 /// no prefix. This includes a new track. A sent `false` over a draft
 /// `true` removes the prefix from each enclosure. A sent `false` over a
 /// draft `false` changes no address. The step does not change an alternate
-/// enclosure, an image or a live item.
+/// enclosure, an image or a live item. A placeholder address gets no
+/// prefix (ADR 0122 item 13).
 fn apply_op3(current: &Feed, sent: &mut Feed) {
     let guid = current.podcast_guid.as_deref().unwrap_or_default();
     for entry in &mut sent.items {
@@ -1217,7 +1350,7 @@ fn apply_op3(current: &Feed, sent: &mut Feed) {
             continue;
         };
         if sent.op3 {
-            if !url.is_empty() {
+            if !url.is_empty() && !inventory::is_placeholder_address(url) {
                 *url = op3_prefix(url, guid);
             }
         } else if current.op3 {
@@ -2410,53 +2543,67 @@ fn host_operations(
     let mut operations = Vec::new();
     let mut blocked = Vec::new();
 
-    // A feed with no host plans its files for the host of its feed move
-    // (ADR 0067 item 6).
+    // A feed plans its files for the host of its draft feed move (ADR 0067
+    // item 6, ADR 0122 item 15). A feed with a connector also keeps the
+    // planned addresses of its own host, because a track imported before the
+    // move has them. A file that the draft refers to at a planned address is
+    // uploaded to the host of that address.
     let moved_row;
-    let planning_row = match public_target(collection, feed_row)? {
-        Some((target, path)) => {
+    let mut planning_rows: Vec<&FeedRow> = Vec::new();
+    match collection.draft_feed_move(feed_row.id)? {
+        Some(DraftFeedMove { connector_id, path }) => {
             moved_row = FeedRow {
-                files_connector_id: Some(target),
+                files_connector_id: Some(connector_id),
                 path: Some(path),
                 ..feed_row.clone()
             };
-            &moved_row
+            planning_rows.push(&moved_row);
+            if feed_row.connector_id.is_some() {
+                planning_rows.push(feed_row);
+            }
         }
-        None => feed_row,
-    };
+        None => planning_rows.push(feed_row),
+    }
 
     // Each library file whose planned address is in the draft, with no
     // copy of the same bytes at its planned path yet, is an upload
     // (ADR 0036 item 10). A draft that refers to a copy on a different
     // host uses that copy, so it needs no upload.
     for file in collection.library_files(feed_row.id)? {
-        let planned = match inventory::planned_path(collection, hosts, planning_row, &file) {
-            Ok(planned) => planned,
-            Err(error)
-                if error.kind() == InventoryErrorKind::NoHost
-                    && feed_row.connector_id.is_none() =>
-            {
-                continue;
-            }
-            Err(error) => return Err(error.into()),
-        };
-        let planned_in_use = planned
-            .url
-            .as_deref()
-            .is_some_and(|url| urls.iter().any(|address| address == url));
-        // A remote file has no bytes in the library, so it is never an
-        // upload (ADR 0038 item 1).
-        if planned_in_use && !planned.on_host && file.sha256.is_some() {
-            operations.push(HostOperation {
-                kind: OperationKind::Upload,
-                connector_id: planned.connector_id,
-                path: planned.path,
-                size: file.size,
-                library_file_id: Some(file.id.0),
-                url: planned.url,
-                operation_id: None,
-                waiting: false,
+        for planning_row in &planning_rows {
+            let planned = match inventory::planned_path(collection, hosts, planning_row, &file) {
+                Ok(planned) => planned,
+                Err(error)
+                    if error.kind() == InventoryErrorKind::NoHost
+                        && feed_row.connector_id.is_none() =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            };
+            let planned_in_use = planned
+                .url
+                .as_deref()
+                .is_some_and(|url| urls.iter().any(|address| address == url));
+            let already = operations.iter().any(|op: &HostOperation| {
+                op.kind == OperationKind::Upload
+                    && op.connector_id == planned.connector_id
+                    && op.path == planned.path
             });
+            // A remote file has no bytes in the library, so it is never an
+            // upload (ADR 0038 item 1).
+            if planned_in_use && !planned.on_host && file.sha256.is_some() && !already {
+                operations.push(HostOperation {
+                    kind: OperationKind::Upload,
+                    connector_id: planned.connector_id,
+                    path: planned.path,
+                    size: file.size,
+                    library_file_id: Some(file.id.0),
+                    url: planned.url,
+                    operation_id: None,
+                    waiting: false,
+                });
+            }
         }
     }
 
@@ -4273,7 +4420,10 @@ fn confirm_new_addresses(
             }
             Some(_) => {}
         }
+        // A placeholder address has no public address to check (ADR 0122
+        // item 12).
         if let Some(url) = operation.url.as_deref()
+            && !inventory::is_placeholder_address(url)
             && let Err(reason) = addresses.check(url)
         {
             failed.push(format!("{url} does not pass: {reason}"));

@@ -3513,8 +3513,9 @@ async fn a_text_file_gives_415_and_a_repeated_name_reuses_the_same_library_file(
 }
 
 #[tokio::test]
-async fn an_upload_to_a_folder_with_no_public_address_gives_422() {
+async fn an_upload_to_a_folder_with_no_public_address_gives_a_placeholder_address() {
     let app = app();
+    set_library_root(&app);
     let root = app.feeds.path().to_str().unwrap();
     let (_, connector) = call(
         &app,
@@ -3533,10 +3534,105 @@ async fn an_upload_to_a_folder_with_no_public_address_gives_422() {
     let id = feed["id"].as_i64().unwrap();
     let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
 
+    // ADR 0122 item 12: the file gets a placeholder address, and the file
+    // is not on the host yet.
     let (status, body) = upload(&app, id, "tagged.mp3", bytes).await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(body["error"]["code"], "no_public_address");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["on_host"], false);
+    let url = body["url"].as_str().unwrap();
+    assert!(url.starts_with("pending:"), "{url}");
+    assert_eq!(url, format!("pending:{}", body["path"].as_str().unwrap()));
     assert!(incoming_is_empty(&app));
+}
+
+#[tokio::test]
+async fn the_held_list_gives_a_placeholder_file_before_and_after_the_write() {
+    let app = app();
+    set_library_root(&app);
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "No address", "root": root })),
+    )
+    .await;
+    let (status, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(json!({
+            "connector_id": connector["id"],
+            "path": "my-album.xml",
+            "title": "New Album",
+            "author": "New Artist",
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    let id = feed["id"].as_i64().unwrap();
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    assert_eq!(status, StatusCode::CREATED, "{file}");
+    let file_id = file["library_file_id"].as_i64().unwrap();
+    let url = file["url"].as_str().unwrap().to_owned();
+    assert!(url.starts_with("pending:"), "{url}");
+
+    // ADR 0109 item 5 and ADR 0122 item 14: the held list gives the
+    // placeholder before the write, so the player can play the file.
+    let (_, held) = call(&app, "GET", "/api/v1/media/held", None).await;
+    assert_eq!(held["files"][0]["file"], file_id, "{held}");
+    assert_eq!(held["files"][0]["url"], url.as_str());
+
+    // The draft uses the placeholder, and the write puts the file on the folder.
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    let item = studio_core::feed::Item {
+        title: Some("Song".to_owned()),
+        enclosure: Some(studio_core::feed::Enclosure {
+            url: Some(url.clone()),
+            length: Some(file["size"].to_string()),
+            media_type: Some("audio/mpeg".to_owned()),
+        }),
+        ..studio_core::feed::Item::default()
+    };
+    model["items"] = json!([serde_json::to_value(item).unwrap()]);
+    let (status, draft) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{written}");
+    assert!(
+        app.feeds
+            .path()
+            .join(file["path"].as_str().unwrap())
+            .exists()
+    );
+
+    // After the write the file is on the folder, and the placeholder is still held.
+    let (_, held) = call(&app, "GET", "/api/v1/media/held", None).await;
+    assert_eq!(held["files"][0]["file"], file_id, "{held}");
+    assert_eq!(held["files"][0]["url"], url.as_str());
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    let row = files["files"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["id"] == file_id))
+        .unwrap_or_else(|| panic!("{files}"));
+    // The row keeps the placeholder address after the write.
+    assert_eq!(row["url"], url.as_str(), "{row}");
 }
 
 #[tokio::test]

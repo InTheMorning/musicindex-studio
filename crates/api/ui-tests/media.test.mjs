@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, mediaSource, playerError, playerNotice, plainAddress } from '../ui/media.js';
+import { HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress } from '../ui/media.js';
 
 // ADR 0109 item 5 and the acceptance criteria: the source of an image and of
 // the player. Fix a failure in crates/api/ui/media.js, not in the test.
@@ -56,4 +56,14 @@ test('a file from its host names the browser setting in the player error, and a 
   assert.equal(DIRECT_PLAYER_ERROR, 'Studio cannot play this file. Your browser can block audio from other sites.');
   assert.equal(playerError(mediaSource('https://music.example/held.mp3', held)), PLAYER_ERROR);
   assert.equal(PLAYER_ERROR, 'Studio cannot play this file.');
+});
+
+test('ADR 0122 item 14: a placeholder address plays only from the file that Studio holds', () => {
+  const placeholder = 'pending:my-album/01 Song.mp3';
+  const holding = heldMap({ files: [{ file: 9, url: placeholder }] });
+  assert.equal(isPlaceholderAddress(placeholder), true);
+  assert.equal(isPlaceholderAddress('https://music.example/a.mp3'), false);
+  assert.deepEqual(mediaSource(placeholder, holding), { kind: 'held', file: 9 });
+  assert.deepEqual(mediaSource(placeholder, null), { kind: 'none', reason: 'loading' });
+  assert.deepEqual(mediaSource('pending:other.mp3', holding), { kind: 'none', reason: 'other' });
 });

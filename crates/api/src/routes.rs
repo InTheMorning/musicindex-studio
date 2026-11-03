@@ -3645,8 +3645,11 @@ fn reference_url(
     if let Some(url) = existing {
         return Ok(url);
     }
+    // The reference replaces each address of the file in the draft, so a
+    // placeholder would replace a public address. The route refuses it.
     planned_path_on(collection, hosts, feed_row, file, connector_id)?
         .url
+        .filter(|url| !inventory::is_placeholder_address(url))
         .ok_or_else(|| {
             ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -4431,13 +4434,21 @@ fn use_new_file(
         None
     } else {
         writer(w, id)?;
-        Some(planned.url.clone().ok_or_else(|| {
-            ApiError::new(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "no_public_address",
-                "the file host gives no public address for this file",
-            )
-        })?)
+        // The copies in use have public addresses, which a placeholder would
+        // replace. The route refuses that (ADR 0122 item 12).
+        Some(
+            planned
+                .url
+                .clone()
+                .filter(|url| !inventory::is_placeholder_address(url))
+                .ok_or_else(|| {
+                    ApiError::new(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "no_public_address",
+                        "the file host gives no public address for this file",
+                    )
+                })?,
+        )
     };
 
     let folder = feed_row.folder.as_deref().unwrap_or_default();
@@ -4603,15 +4614,11 @@ fn check_restore(
     Ok(pipeline::check_restore(&w.collection, id, path, &files)?)
 }
 
-/// The blocking steps of an upload, with the workspace locked: the public
-/// address check, and the import of the MP3 file and of the FLAC file
-/// into the library (ADR 0026, ADR 0032 items 1 to 5 and 10, ADR 0033
-/// items 1 to 7, ADR 0034, ADR 0036 items 5, 9 and 10). With `replace`,
-/// a different file at the same name gets the hash name (ADR 0040 item 3).
-#[expect(
-    clippy::too_many_lines,
-    reason = "the import of the main file and the lossless file is one sequence"
-)]
+/// The blocking steps of an upload, with the workspace locked: the import
+/// of the MP3 file and of the FLAC file into the library (ADR 0026, ADR
+/// 0032 items 1 to 5 and 10, ADR 0033 items 1 to 7, ADR 0034, ADR 0036
+/// items 5, 9 and 10, ADR 0122 items 3 and 12). With `replace`, a different
+/// file at the same name gets the hash name (ADR 0040 item 3).
 fn import_upload(
     w: &mut Workspace,
     id: FeedId,
@@ -4624,19 +4631,14 @@ fn import_upload(
     } else {
         pipeline::import_into_library
     };
-    let made = writer(w, id)?;
+    // A folder with no public address gets a placeholder address for each
+    // file (ADR 0122 item 12), so the import needs no public address.
+    writer(w, id)?;
     let row = w.collection.feed(id)?;
     let feed_path = row
         .path
         .as_deref()
         .ok_or_else(|| ApiError::internal(format!("feed {} has a connector and no path", id.0)))?;
-    if made.public_url(feed_path).is_none() {
-        return Err(ApiError::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "no_public_address",
-            "the folder of this feed has no public address; give the folder one first",
-        ));
-    }
 
     let hosts = w.hosts()?;
     let library = w.library()?;
@@ -4909,7 +4911,12 @@ pub(crate) async fn held_files(State(shared): State<Shared>) -> ApiResult {
                     else {
                         continue;
                     };
-                    if let (false, Some(url)) = (planned.on_host, planned.url) {
+                    // The player has no other source for a file with a placeholder
+                    // address (ADR 0109 item 5, ADR 0122 item 14).
+                    let Some(url) = planned.url else {
+                        continue;
+                    };
+                    if !planned.on_host || inventory::is_placeholder_address(&url) {
                         held.push(json!({
                             "file": file.id.0,
                             "url": url,

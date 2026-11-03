@@ -33,7 +33,7 @@ import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
-import { mediaSource, playerNotice, canPlay, playerError } from './media.js';
+import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
@@ -306,8 +306,10 @@ function Enclosure({ id, path, enclosure, onChange, bad, pick }) {
   const mustOpen = propertiesOpen(enclosure, errors);
   const [opened, setOpened] = useState(mustOpen);
   useEffect(() => { if (mustOpen) setOpened(true); }, [mustOpen]);
+  // A placeholder address has the text of ADR 0122 item 14 (task 086d).
+  const placeholder = isPlaceholderAddress(value.url) ? HOST_STEP.placeholderAddress : null;
   return html`<${TextField} id=${`${id}-url`} label="Audio file address" type="url" address=${`${path}enclosure/url`} bad=${bad} value=${value.url} onChange=${change('url')}
-      rootProps=${pick.rootProps}><${ChooseFile} pick=${pick} /><//>
+      hint=${placeholder} rootProps=${pick.rootProps}><${ChooseFile} pick=${pick} /><//>
     <${AudioPlayer} id=${id} url=${value.url} pick=${pick} />
     <details class="disclosure" open=${opened} onToggle=${(e) => setOpened(e.currentTarget.open)}>
       <summary class="link-row"><span class="label">Properties</span>

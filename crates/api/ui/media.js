@@ -8,6 +8,12 @@ export const HTTP_NOTICE = 'This file uses http. Studio cannot play it here.';
 
 const OP3_PREFIX = 'https://op3.dev/e';
 
+// True for a placeholder address of a file on a file host with no public
+// address (ADR 0122 item 12). The core gives the same text in the draft.
+export function isPlaceholderAddress(url) {
+  return typeof url === 'string' && url.startsWith('pending:');
+}
+
 // The address with no OP3 prefix, as `plain_address` of the core gives it
 // (ADR 0076 item 1). It is an aid for the source only: the player must not
 // make a download for OP3, and a held file has a plain planned address.
@@ -44,6 +50,13 @@ export function heldMap(answer) {
 //   { kind: 'none', reason }         nothing to load: `empty`, `http`, `other` or `loading`
 export function mediaSource(url, held) {
   if (typeof url !== 'string' || url.trim() === '') return { kind: 'none', reason: 'empty' };
+  // A placeholder has no public address, so only Studio can load it (ADR
+  // 0122 item 14).
+  if (isPlaceholderAddress(url.trim())) {
+    if (held === null || held === undefined) return { kind: 'none', reason: 'loading' };
+    if (held.has(url.trim())) return { kind: 'held', file: held.get(url.trim()) };
+    return { kind: 'none', reason: 'other' };
+  }
   const plain = plainAddress(url.trim());
   if (/^http:\/\/\S+$/i.test(plain)) return { kind: 'none', reason: 'http' };
   if (!/^https:\/\/\S+$/i.test(plain)) return { kind: 'none', reason: 'other' };

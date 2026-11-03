@@ -39,9 +39,11 @@ struct Checker {
 
 impl Checker {
     fn field(&mut self, path: &str, value: Option<&String>) {
-        // An empty field is no address (ADR 0023 item 2).
+        // An empty field is no address (ADR 0023 item 2). A placeholder
+        // address is replaced at the public address (ADR 0122 item 15).
         if let Some(value) = value.filter(|v| !v.is_empty())
             && !is_web_address(value)
+            && !crate::inventory::is_placeholder_address(value)
         {
             self.found.push(BadAddress {
                 field: path.to_owned(),

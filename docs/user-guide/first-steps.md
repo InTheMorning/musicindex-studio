@@ -56,6 +56,16 @@ Studio also writes the feed to the file host.
 To set the GUID from a public address, give the folder a public address in **File hosts**. Or move the feed to a file host with a public address.
 Studio then sets the GUID, and it changes the links between your pages.
 
+## Placeholder address
+
+A file in a folder with no public address has no public address.
+Studio gives the file a placeholder address. It starts with `pending:`.
+The track page then shows the text "Studio cannot make the address of this file yet."
+The player plays the file from Studio.
+
+When the feed gets a public address, Studio sets the address of each file in the feed.
+It does this in the same step as the GUID. You then write the changed draft in **Review**.
+
 ## The temporary area on a server
 
 The temporary area is a folder in your user folder on the server.

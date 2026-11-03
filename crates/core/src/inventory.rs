@@ -325,6 +325,25 @@ pub fn host_of(feed: &FeedRow, file: &LibraryFile) -> Option<ConnectorId> {
         .or(feed.connector_id)
 }
 
+/// The start of the placeholder address of a library file on a file host
+/// with no public address (ADR 0122 item 12).
+pub const PLACEHOLDER_ADDRESS_PREFIX: &str = "pending:";
+
+/// The placeholder address of a file at `path` on its file host (ADR 0122
+/// item 12). The text is the prefix `pending:` and the path.
+#[must_use]
+pub fn placeholder_address(path: &str) -> String {
+    format!("{PLACEHOLDER_ADDRESS_PREFIX}{path}")
+}
+
+/// True when `url` is a placeholder address (ADR 0122 item 12). A
+/// placeholder is no web address, and no OP3 prefix goes on it (ADR 0122
+/// item 13).
+#[must_use]
+pub fn is_placeholder_address(url: &str) -> bool {
+    url.starts_with(PLACEHOLDER_ADDRESS_PREFIX)
+}
+
 /// The path, the address and the host where Studio plans to put a
 /// library file (ADR 0036 item 9, ADR 0035 items 13 and 16).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -333,7 +352,8 @@ pub struct PlannedPath {
     pub connector_id: ConnectorId,
     /// The planned path on the host.
     pub path: String,
-    /// The public address of the planned path.
+    /// The public address of the planned path. A host with no public
+    /// address gives the placeholder address of the path (ADR 0122 item 12).
     pub url: Option<String>,
     /// True when a file with the same SHA-256 as `file` is already at the
     /// path.
@@ -388,6 +408,9 @@ pub(crate) fn hash_name(path: &str, sha256: &str) -> String {
 /// SHA-256 as `file`. When the host has a different file at the clean
 /// path, the function gives the hash name next to it instead.
 ///
+/// A host with no public address gives the placeholder address of the path
+/// as the planned address (ADR 0122 item 12).
+///
 /// # Errors
 ///
 /// Gives [`InventoryErrorKind::NoHost`] when `file` and `feed` give no
@@ -412,11 +435,11 @@ pub fn planned_path(
     // A remote file has no SHA-256. Studio reads no host file for it, and
     // it plans the clean path (ADR 0038 item 1).
     let Some(sha256) = file.sha256.as_deref() else {
-        let url = hosts.get(connector_id)?.planned_url(&clean_path, None);
+        let url = planned_address(hosts.get(connector_id)?, &clean_path, None);
         return Ok(PlannedPath {
             connector_id,
             path: clean_path,
-            url,
+            url: Some(url),
             on_host: false,
         });
     };
@@ -448,14 +471,21 @@ pub fn planned_path(
         (clean_path, false)
     };
 
-    let connector = hosts.get(connector_id)?;
-    let url = connector.planned_url(&path, Some(sha256));
+    let url = planned_address(hosts.get(connector_id)?, &path, Some(sha256));
     Ok(PlannedPath {
         connector_id,
         path,
-        url,
+        url: Some(url),
         on_host,
     })
+}
+
+/// The planned address of `path` on `connector`. A host with no public
+/// address gives the placeholder of the path (ADR 0122 item 12).
+fn planned_address(connector: &dyn Connector, path: &str, sha256: Option<&str>) -> String {
+    connector
+        .planned_url(path, sha256)
+        .unwrap_or_else(|| placeholder_address(path))
 }
 
 #[cfg(test)]

@@ -136,3 +136,9 @@ test('the File hosts row of a temporary area and the expired notice use the text
   assert.match(app, /feed\.temporary_expired\s*\? html`<div class="notice" role="status">\$\{HOST_STEP\.expired\}<\/div>`/);
   assert.equal(HOST_STEP.expired, 'The temporary area has expired. Move this feed to a real file host.');
 });
+
+test('the track page shows the text of ADR 0122 item 14 under a placeholder address', () => {
+  const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.equal(HOST_STEP.placeholderAddress, 'Studio cannot make the address of this file yet. The address comes from the public address of the feed, and this file host has none. Studio sets the address when the feed gets a public address.');
+  assert.match(editor, /isPlaceholderAddress\(value\.url\) \? HOST_STEP\.placeholderAddress : null/);
+});

@@ -25,6 +25,7 @@ export const HOST_STEP = {
   temporary: 'Kept for 7 days. Pick a real file host to keep your pages.',
   placeholderGuid: 'Studio cannot make the GUID yet. A GUID comes from the public address of the feed, and this file host has none. Studio sets the GUID when the feed gets a public address.',
   expired: 'The temporary area has expired. Move this feed to a real file host.',
+  placeholderAddress: 'Studio cannot make the address of this file yet. The address comes from the public address of the feed, and this file host has none. Studio sets the address when the feed gets a public address.',
 };
 
 // The texts and the step names of each path (ADR 0119 items 4 to 6).

@@ -6,7 +6,7 @@ use std::fs;
 use studio_core::announce;
 use studio_core::collection::{Collection, ConnectorId, FeedId, PublisherRole};
 use studio_core::connector::LocalFolder;
-use studio_core::feed::Feed;
+use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
@@ -296,4 +296,132 @@ fn copy_feed_with_no_public_address_gets_a_placeholder_guid() {
     assert!(pipeline::has_placeholder_guid(&guid));
     let (feed, _) = pipeline::draft_model(&s.collection, copy).unwrap();
     assert_eq!(feed.atom_links.len(), 0, "a copy has no self link");
+}
+
+/// Import one track into the release folder `folder` of `id`, and add it to
+/// the draft. Gives the address of the track in the draft.
+fn add_track(s: &mut Setup, id: FeedId, folder: &str) -> String {
+    s.collection.set_feed_folder(id, folder).unwrap();
+    let source = s.dir.path().join("01 Song.mp3");
+    fs::write(&source, b"music!!").unwrap();
+    let imported = pipeline::import_into_library(
+        &s.collection,
+        &s.library,
+        &s.hosts,
+        id,
+        &source,
+        "01 Song.mp3",
+        "audio/mpeg",
+    )
+    .unwrap();
+    let url = imported.planned.url.clone().unwrap();
+    let item = Item {
+        title: Some("Song".to_owned()),
+        enclosure: Some(Enclosure {
+            url: Some(url.clone()),
+            length: Some("7".to_owned()),
+            media_type: Some("audio/mpeg".to_owned()),
+        }),
+        ..Item::default()
+    };
+    pipeline::edit_draft(&s.collection, id, move |feed| {
+        feed.items.push(Entry::new(item));
+    })
+    .unwrap();
+    url
+}
+
+#[test]
+fn a_track_on_a_folder_with_no_public_address_gets_a_placeholder_address() {
+    let mut s = setup();
+    let album = new_album(&mut s, "my-album.xml");
+    let url = add_track(&mut s, album, "my-album");
+    assert_eq!(url, "pending:my-album/01 Song.mp3");
+    let (feed, _) = pipeline::draft_model(&s.collection, album).unwrap();
+    assert!(
+        feed.bad_addresses().is_empty(),
+        "a placeholder is no bad address"
+    );
+
+    write_new(&mut s, album);
+    assert!(s.dir.path().join("private/my-album/01 Song.mp3").exists());
+}
+
+#[test]
+fn a_move_to_a_public_host_changes_each_placeholder_address_to_its_public_address() {
+    let mut s = setup();
+    let album = new_album(&mut s, "album.xml");
+    add_track(&mut s, album, "album");
+    write_new(&mut s, album);
+    start(&s, album);
+
+    // The OP3 flag is read from the draft: it is on only when each enclosure
+    // has the prefix. A placeholder track therefore has no OP3 setting here.
+    pipeline::set_feed_host(&s.collection, &s.hosts, album, s.public).unwrap();
+    let plain = "https://music.example/album/01%20Song.mp3";
+    let (feed, _) = pipeline::draft_model(&s.collection, album).unwrap();
+    let url = feed.items[0]
+        .value
+        .enclosure
+        .as_ref()
+        .and_then(|enclosure| enclosure.url.clone())
+        .unwrap();
+    assert_eq!(url, plain);
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, album).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        album,
+        &diff.id,
+    )
+    .unwrap();
+    assert!(s.dir.path().join("public/album/01 Song.mp3").exists());
+}
+
+#[test]
+fn a_track_imported_after_a_move_between_public_folders_is_uploaded_to_its_address() {
+    let mut s = setup();
+    let second_root = s.dir.path().join("second");
+    fs::create_dir_all(&second_root).unwrap();
+    let second_folder = LocalFolder::new(second_root, Some("https://second.example".into()));
+    let second = s
+        .collection
+        .add_connector(LocalFolder::KIND, "Second", &second_folder.config(), None)
+        .unwrap();
+    s.hosts.insert(second, Box::new(second_folder));
+
+    let album = pipeline::new_feed(
+        &mut s.collection,
+        s.hosts.get(s.public).unwrap(),
+        s.public,
+        "album.xml",
+        "Album",
+        "Artist",
+        "music",
+    )
+    .unwrap();
+    write_new(&mut s, album);
+    let public = s.hosts.get(s.public).unwrap();
+    pipeline::start_draft(&s.collection, public, album).unwrap();
+    pipeline::set_feed_host(&s.collection, &s.hosts, album, second).unwrap();
+
+    // The track is imported after the move, so its address is on the first host.
+    let url = add_track(&mut s, album, "album");
+    assert_eq!(url, "https://music.example/album/01%20Song.mp3");
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, album).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        album,
+        &diff.id,
+    )
+    .unwrap();
+    assert!(s.dir.path().join("public/album/01 Song.mp3").exists());
+    assert!(s.dir.path().join("second/album.xml").exists());
 }

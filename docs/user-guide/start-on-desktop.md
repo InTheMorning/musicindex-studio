@@ -41,6 +41,10 @@ Studio accepts only the full address with the token.
 If you open the address without the token, Studio shows "Open Studio from its address".
 Copy the full address from the terminal again.
 
+Studio tries port 42069 at each start. The same port lets the browser keep the settings of Studio, such as the theme.
+If a different program uses port 42069, Studio prints a line and uses a free port for that start.
+The settings of Studio are then the default settings for that start.
+
 Studio makes a new token each time that it starts.
 After you stop and start Studio, copy the new address.
 
@@ -62,7 +66,7 @@ You can also use these options.
 
 | Option | What it does |
 | --- | --- |
-| `--port N` | Sets the port. The default lets the system choose a free port. |
+| `--port N` | Sets the port. The default is 42069. When a different program uses it, Studio uses a free port. |
 | `--musicindex URL` | Uses a different musicindex address. The default is `https://api.musicindex.org`. |
 | `--podcastindex-hub URL` | Sets the hub that gets the announcements after a write. |
 | `--version` | Prints the version of Studio and stops. |

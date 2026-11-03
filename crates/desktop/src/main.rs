@@ -2,14 +2,15 @@
 //!
 //! The artist runs this binary on their own machine (ADR 0001). It runs the
 //! local API on a loopback address and prints the UI address with the access
-//! token (ADR 0017). The Tauri window comes in the Desktop Shell
-//! phase.
+//! token (ADR 0017). The start is in the library of this crate, which the
+//! Tauri app also calls (ADR 0124).
 //!
 //! Options:
 //!
 //! - `--data-dir PATH`: the folder of the vault and the collection. The
 //!   default is the local application data folder of the operating system.
-//! - `--port N`: the port. The default 0 lets the system select a free port.
+//! - `--port N`: the port. The default is 42069, else a free port. `0` gives
+//!   a free port.
 //! - `--musicindex URL`: the musicindex API. The default is
 //!   `https://api.musicindex.org`.
 //! - `--podcastindex-hub URL`: the hub that gets the announcements after a
@@ -18,41 +19,21 @@
 //! - `--help`: print the options and stop.
 
 use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use studio_api::{Access, Workspace, local_router};
+use studio_desktop::{DEFAULT_PORT, StartOptions, bind, default_data_dir, start};
 
 struct Options {
     data_dir: PathBuf,
-    port: u16,
+    port: Option<u16>,
     musicindex: Option<String>,
     hub: Option<String>,
 }
 
-fn default_data_dir() -> Option<PathBuf> {
-    let path = directories::ProjectDirs::from("", "", "musicindex-studio")?
-        .data_local_dir()
-        .to_path_buf();
-    #[cfg(target_os = "macos")]
-    {
-        let old_path = directories::BaseDirs::new()?
-            .home_dir()
-            .join(".local/share/musicindex-studio");
-        let has_data = |folder: &std::path::Path| {
-            folder.join("collection.sqlite").exists() || folder.join("vault.json").exists()
-        };
-        if has_data(&old_path) && !has_data(&path) {
-            return Some(old_path);
-        }
-    }
-    Some(path)
-}
-
 fn options() -> Result<Options, String> {
     let mut data_dir = None;
-    let mut port = 0;
+    let mut port = None;
     let mut musicindex = None;
     let mut hub = None;
     let mut args = std::env::args().skip(1);
@@ -62,10 +43,11 @@ fn options() -> Result<Options, String> {
                 data_dir = Some(PathBuf::from(args.next().ok_or("--data-dir needs a path")?));
             }
             "--port" => {
-                port = args
-                    .next()
-                    .and_then(|p| p.parse().ok())
-                    .ok_or("--port needs a number from 0 to 65535")?;
+                port = Some(
+                    args.next()
+                        .and_then(|p| p.parse().ok())
+                        .ok_or("--port needs a number from 0 to 65535")?,
+                );
             }
             "--musicindex" => {
                 musicindex = Some(args.next().ok_or("--musicindex needs an address")?);
@@ -121,45 +103,32 @@ async fn run() -> Result<(), String> {
             "Usage: studio-desktop [--data-dir PATH] [--port N] [--musicindex URL] [--podcastindex-hub URL]"
         );
         println!("       studio-desktop --version | --help");
+        println!("The default port is {DEFAULT_PORT}, else a free port.");
         return Ok(());
     }
     let options = options()?;
-    let mut workspace = Workspace::open(&options.data_dir).map_err(|e| format!("{e:?}"))?;
-    if let Some(base) = &options.musicindex {
-        workspace = workspace.with_musicindex(base);
-    }
-    if let Some(url) = &options.hub {
-        workspace = workspace.with_hub(url);
-    }
-    // Keep the remote file records of each feed current (ADR 0038 item 3).
-    // The function does nothing when Studio has no library folder yet.
-    workspace.record_all_remote_files();
-    // Continue each download that was not complete (ADR 0038 item 9).
-    workspace.resume_downloads();
-    // Prepare the announcement queue (ADR 0052 item 18).
-    workspace.resume_announcements();
     // ADR 0017: listen on a loopback address only.
-    let listener =
-        tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, options.port)))
-            .await
-            .map_err(|e| e.to_string())?;
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let access = Access::new(port).map_err(|e| format!("{e:?}"))?;
+    let listener = bind(options.port).await.map_err(|e| e.to_string())?;
+    let mut start_options = StartOptions::new(&options.data_dir);
+    start_options.musicindex = options.musicindex;
+    start_options.hub = options.hub;
+    let shutdown = async {
+        // Ctrl+C stops the shell. A failed signal handler also stops it.
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    let started = start(&start_options, listener, shutdown).map_err(|e| e.to_string())?;
     println!("Music Index Studio {}", env!("CARGO_PKG_VERSION"));
     println!("Data: {}", options.data_dir.display());
+    if options.port.is_none() && started.port != DEFAULT_PORT {
+        println!(
+            "Port {DEFAULT_PORT} is in use. Studio uses port {} for this start. The UI has its default settings for this start.",
+            started.port
+        );
+    }
     println!("Open this address in your browser:");
-    println!("{}", access.ui_url());
+    println!("{}", started.ui_url);
     std::io::stdout().flush().map_err(|e| e.to_string())?;
-    axum_serve(listener, local_router(workspace, access)).await
-}
-
-async fn axum_serve(
-    listener: tokio::net::TcpListener,
-    router: studio_api::Router,
-) -> Result<(), String> {
-    studio_api::serve(listener, router)
-        .await
-        .map_err(|e| e.to_string())
+    started.serve.await.map_err(|e| e.to_string())
 }
 
 #[cfg(all(test, target_os = "linux"))]

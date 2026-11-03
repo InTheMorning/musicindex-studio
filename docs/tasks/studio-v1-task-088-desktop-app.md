@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packet 088a can start. Packets 088b and 088c wait for the gate of the distribution plan. The gate is the end of Phase 12 and its human tests, or a statement of the operator that removes it.
+Status: Open. Packet 088a is complete, with its visual check. Packets 088b and 088c wait for the gate of the distribution plan. The gate is the end of Phase 12 and its human tests, or a statement of the operator that removes it.
 
 ## Goal
 
@@ -104,6 +104,8 @@ At the end, report:
 ## Packet 088b: The Tauri App
 
 This packet waits for the gate. The planning model checks the packet against the code of 088a before it starts.
+
+The review of 088a found one item for this packet. `studio_api::serve` has no graceful shutdown, so the shutdown signal of `start` drops the serve future. The server then accepts no new connection, but a request that started can continue until the process ends. Before 088b starts, the planning model decides if "Quit" must wait for each request that started.
 
 ### Files
 

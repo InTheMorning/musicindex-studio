@@ -261,7 +261,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - Package the Tauri app for Linux, macOS and Windows.
 - Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md). The app is a Tauri window on the local API, with a tray, the data folder of `studio-desktop` and the fixed port 42069. The [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md) gives the facts.
-- [Task 088](../tasks/studio-v1-task-088-desktop-app.md) gives the work in three packets. Packet 088a (the shell start and the fixed port) can start. Packets 088b (the Tauri app) and 088c (the installers) wait for the end of Phase 12 and its human tests, or a statement of the operator that removes the gate.
+- [Task 088](../tasks/studio-v1-task-088-desktop-app.md) gives the work in three packets. Packet 088a (the shell start and the fixed port) is complete, with its visual check. Packets 088b (the Tauri app) and 088c (the installers) wait for the end of Phase 12 and its human tests, or a statement of the operator that removes the gate.
 - Visual check: the operator installs and uses the app on each platform.
 
 ### Phase 14: File Moves And The Self-Hosted File Host

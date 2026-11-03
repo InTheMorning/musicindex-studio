@@ -6,7 +6,7 @@ It does not open a desktop window. A native window and installers are planned fo
 1. Extract the full archive into a folder that you can keep.
 2. On Windows, open `studio-desktop.exe` in the extracted folder.
 3. On macOS or Linux, open a terminal in that folder and run `./studio-desktop`.
-4. Open the printed address in a browser on the same computer.
+4. Open the printed address in a browser on the same computer. Studio uses port 42069, else a free port.
 5. Keep Studio running while you use the browser.
 
 The address contains a private access token. Do not share it or put it in a public log.

@@ -422,6 +422,7 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [Keysend and Lightning address recipients, 2026-10-31](research/2026-10-31-keysend-and-lightning-address-recipients.md)
 - [Host secrets under a show grant, 2026-11-01](research/2026-11-01-connected-app-host-secrets.md)
 - [People module design note, 2026-11-01](research/2026-11-01-people-module-design-note.md)
+- [Tauri desktop shell research, 2026-11-03](research/2026-11-03-tauri-desktop-shell-research.md)
 
 ## Notes
 

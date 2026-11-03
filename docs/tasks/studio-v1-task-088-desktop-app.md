@@ -227,30 +227,32 @@ Its fixed choices: the release keeps the five archives and their smoke tests. Th
 
 ## Packet 088d: Quit While Work Runs
 
-The planning model checks this packet against the code of 088b before it starts.
+On 2026-11-03 the planning model checked the packet against the code of 088b. The check made items 1, 3, 4, 5, 7 and 10 exact, and added items 11 and 12.
 
 ### Files
 
-Inspect: ADR 0124 items 16 to 21, `crates/api/src/lib.rs` (`serve`, `local_router`), `crates/api/src/routes.rs` (`write_feed` and each other caller of the write pipeline), the routes of `/app/v1/` and of the change sets, `crates/api/src/uploads.rs`, `crates/desktop/src/lib.rs`, `crates/desktop-app/src/` (from 088b), `crates/server/src/` (the callers of `studio_api::serve`).
+Inspect: ADR 0124 items 16 to 21, `crates/api/src/lib.rs` (`serve`, `local_router`), `crates/api/src/workspace.rs` (`Workspace`, `Workspace::open`), `crates/api/src/routes.rs` (`write_feed` near line 2734, and the granted write near line 6375 that calls `pipeline::write_granted`), `crates/api/src/uploads.rs` (`put_part`, `finish_upload`, `delete_upload`), `crates/desktop/src/lib.rs`, `crates/desktop/src/main.rs`, `crates/desktop-app/src/main.rs`, `crates/server/src/` (the callers of `studio_api::serve`), the source of `tauri-plugin-dialog` 2.8.4 (`MessageDialogButtons::YesNoCancelCustom`, `MessageDialogResult`).
 
-Change: `crates/api/src/lib.rs`, a new module of `crates/api` for the work count, the files of `crates/api` that call the write pipeline, `crates/api/src/uploads.rs`, `crates/server/src/` only for a changed signature of `serve`, `crates/desktop/src/lib.rs`, `crates/desktop-app/` (its `src/`, `Cargo.toml` and `capabilities/` for the dialog plugin), `Cargo.lock`.
+Change: `crates/api/src/lib.rs`, a new module `crates/api/src/work.rs`, `crates/api/src/workspace.rs` (the field and its getter), `crates/api/src/routes.rs` (the two write routes only), `crates/api/src/uploads.rs`, `crates/server/src/` only for the changed signature of `serve`, `crates/desktop/src/lib.rs`, `crates/desktop/src/main.rs`, `crates/desktop-app/src/` (new modules are allowed), `Cargo.lock` only if a dependency changes.
 
-Do not change: `crates/core`, the UI, the ADRs, `crates/desktop/src/main.rs` other than a changed signature.
+Do not change: `crates/core`, the UI, the ADRs, the other routes of `crates/api`.
 
 ### Architecture
 
 These choices are fixed. Do not change them.
 
-1. `studio-api` gives a cloneable work count, `Work`. It has `writes()` and `uploads()`. A write holds a guard from its start to its end. The guard decreases the count when it drops, also on an error and on a panic.
-2. Each request that calls the write pipeline holds a write guard. This includes the writes of a change set and the granted writes of `/app/v1/`.
-3. An upload in parts is in `uploads()` from its first part to its last part or its delete. An upload with no new part for 2 minutes is not in the count. The count reads the time of the last part. It does not need a timer.
-4. `studio_api::serve` takes a shutdown future, and it uses the graceful shutdown of axum. After the signal, it accepts no connection and waits for each request that started.
-5. `start` of `crates/desktop` gives the `Work` of the workspace in `Started`.
+1. `studio-api` gives a cloneable work count, `Work`, in `work.rs`, with an `Arc` and no lock of the workspace. It has `write() -> WriteGuard`, `writes()`, `uploads()` and `uploads_at(now)`. A write holds a `WriteGuard` from its start to its end. The guard decreases the count when it drops, also on an error and on a panic. `Workspace` holds one `Work`, and `Workspace::work()` gives a clone.
+2. Each request that calls the write pipeline holds a write guard. These are `write_feed` and the granted write of `/app/v1/`. A change set writes each feed through `write_feed`.
+3. An upload in parts is in `uploads()` from its first part to its finish or its delete. An upload with no new part for 2 minutes is not in the count. `Work` keeps the ID of each upload and the time of its last part in memory. `put_part` sets the time, and `finish_upload` and `delete_upload` remove the ID. The count compares the times with `now`, so it needs no timer.
+4. `studio_api::serve(listener, router, shutdown)` takes a shutdown future, and it uses `with_graceful_shutdown` of axum. After the signal, it accepts no connection and waits for each request that started. The server shell gives a future that does not end, so its behavior does not change.
+5. `start` of `crates/desktop` takes `Workspace::work()` before `local_router`, and gives it in the field `work` of `Started`. The serve future of `start` uses the graceful shutdown of item 4.
 6. The rule of ADR 0124 items 16 to 20 is a function with no Tauri and no I/O. It takes the work count, the state of the app and an event: "Quit", "Cancel", "Quit Now", "Quit After Write", "Open Studio" or "no work". It gives the next state and an action: "end now", "show the dialog", "wait", "continue", or "stop the API and end".
-7. The dialog uses `tauri-plugin-dialog` with the texts of ADR 0124 item 18. The title counts the work: "Studio Is Writing 1 Feed", "Studio Is Writing 2 Feeds", "Studio Is Receiving 1 Music File", or "Studio Is Writing 1 Feed And Receiving 1 Music File".
+7. The dialog uses `tauri-plugin-dialog` with `MessageDialogButtons::YesNoCancelCustom("Quit After Write", "Quit Now", "Cancel")` and the texts of ADR 0124 item 18. The plugin cannot set the default button or a destructive mark. The final summary tells which button is the default on Linux. The title counts the work: "Studio Is Writing 1 Feed", "Studio Is Writing 2 Feeds", "Studio Is Receiving 1 Music File", or "Studio Is Writing 1 Feed And Receiving 1 Music File".
 8. While the app waits, it reads the count each second. When the count is 0, it sends the shutdown signal, waits for the end of `serve`, and ends.
 9. The tray menu of the wait is the menu of ADR 0124 item 20. The app puts back the menu of 088b when the user selects "Open Studio".
-10. In `studio-desktop`, Ctrl+C stops the shell immediately (ADR 0124 item 21). The serve of `start` stops on the signal with no wait for the work.
+10. In `studio-desktop`, Ctrl+C stops the shell immediately (ADR 0124 item 21). `main.rs` gives `start` a shutdown future that does not end, and selects between the serve future and Ctrl+C.
+11. The tray icon has the ID `main`, so that the app can change its menu with `tray_by_id`. A "Quit" while the dialog shows does nothing.
+12. On "Quit Now", and on "Quit" with no work, the app ends as in 088b: it sends the shutdown signal and calls `exit(0)` with no wait.
 
 ### Acceptance Criteria
 
@@ -269,3 +271,50 @@ Visual: the visual check of 088d.
 - A write to a file host that does not go through a request of `studio-api`.
 - `tauri-plugin-dialog` cannot show three buttons with their own texts on a system. Do not change the dialog. Report the facts.
 - The graceful shutdown of axum waits for a connection that stays open with no request.
+
+### Prompt for lower-context coding model
+
+You are implementing one bounded task from a larger plan.
+
+Implement only this task. Do not redesign the architecture.
+
+Read:
+- AGENTS.md
+- docs/adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md (items 9 and 16 to 21)
+- docs/tasks/studio-v1-task-088-desktop-app.md (the Goal and packet 088d only)
+- ~/.agents/skills/asd-ste100/SKILL.md
+- The files that the Files section of packet 088d names.
+
+Goal:
+- "Quit" in the tray of the app waits for a write or an upload that runs, or asks the user, as ADR 0124 items 16 to 21 say.
+
+Constraints:
+- Follow the Architecture section of packet 088d fully, items 1 to 12.
+- The rule of item 6 is a pure function with no Tauri and no I/O, in its own module of `crates/desktop-app`.
+- The write pipeline, the feed rules and the responses of the routes do not change.
+- No log, no error text and no test output holds the UI address with its token.
+- Each comment, each test message and the documents are in ASD-STE100 Simplified Technical English.
+- Follow the Pragmatic Rust Guidelines of the `rust-dev` skill.
+- Keep test data in `.studio-dev/`, not in `/tmp`.
+- Other sessions can write in the tree. Change only the files that the packet names.
+
+Do not touch:
+- `crates/core`, the UI, the ADRs, the routes of `crates/api` other than the two write routes and the upload routes.
+- Do not commit. Do not stage files.
+
+Acceptance criteria:
+- The mechanical criteria of packet 088d.
+- The existing tests of `crates/api` and `crates/server` pass with no change of their assertions.
+
+Test commands:
+- cargo fmt --all --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test --workspace
+- tools/node --test crates/api/ui-tests/*.test.mjs
+
+At the end, report:
+1. files changed
+2. tests run
+3. behavior changed
+4. deviations from task
+5. unresolved concerns

@@ -553,15 +553,22 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
 // The row of a Nostr key. It opens the sheet. `person` gives the name and the
 // picture of a person entry, or it is missing for the key of a feed. `bad` is
 // true when the core found the key not correct.
-function NostrRow({ label, summary, value, feedId, bad, person, onSet }) {
+export function NostrRow({ label, summary, value, feedId, bad, person, onSet }) {
   const [open, setOpen] = useState(false);
-  const row = html`<button class="link-row" type="button" onClick=${() => setOpen(true)}>
+  return html`<${NostrKeyRow} label=${label} summary=${summary} value=${value} bad=${bad} onOpen=${() => setOpen(true)} />
+    <${NostrSheet} open=${open} value=${value} feedId=${feedId} person=${person} onSet=${onSet} onClose=${() => setOpen(false)} />`;
+}
+
+// The row of a Nostr key, with no sheet. A form puts the row in its group
+// and `NostrSheet` after its end, because the sheet has its own form
+// (ADR 0123).
+export function NostrKeyRow({ label, summary, value, bad, onOpen }) {
+  const row = html`<button class="link-row" type="button" onClick=${onOpen}>
       <span class="label">${label}</span>
       <span class=${bad ? 'summary field-error' : 'summary'}>${bad ? 'Not a Nostr key' : summary}</span>
       <span class="go" aria-hidden="true">›</span>
     </button>`;
-  return html`${value ? html`<div class="key-row">${row}<${CopyButton} text=${value} label="the Nostr key" /></div>` : row}
-    <${NostrSheet} open=${open} value=${value} feedId=${feedId} person=${person} onSet=${onSet} onClose=${() => setOpen(false)} />`;
+  return value ? html`<div class="key-row">${row}<${CopyButton} text=${value} label="the Nostr key" /></div>` : row;
 }
 
 const FAILED_TEXT = {
@@ -590,7 +597,7 @@ function ProfileBody({ profile }) {
 // with its name and picture. A selection calls `onSet(npub, picked)`. The key
 // `null` removes the key. `picked` has the profile name and picture that the
 // user chose to use.
-function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
+export function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
   const ref = useSheet(open);
   const session = useContext(SessionContext);
   const mine = session && session.session && session.session.pubkey ? npubOf(session.session.pubkey) : null;

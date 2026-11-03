@@ -2,11 +2,11 @@
 // the pages and call the API. The functions of `people.js` give each text
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
-import { useSheet } from './editor.js';
+import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
 import { api, assetMode, askConfirm, Bar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
-import { shortKey } from './nostrkey.js';
+import { shortKey, keySummary } from './nostrkey.js';
 import {
   recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES,
   CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
@@ -340,7 +340,10 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
     if (kind !== 'wallets') return;
     api('/recipients').then(setRecipients, () => setRecipients([]));
   }, []);
-  const set = (id, value) => setValues({ ...values, [id]: value });
+  // A functional update keeps the value of each field that changed last.
+  const set = (id, value) => setValues((current) => ({ ...current, [id]: value }));
+  // The sheet "Find a Nostr profile" of a form with a Nostr key (ADR 0123).
+  const [keyOpen, setKeyOpen] = useState(false);
   const add = (e) => {
     e.preventDefault();
     if (!linkReady(kind, values)) return;
@@ -358,7 +361,9 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
     ? html`<${ChoiceSelect} key=${f.id} id=${`link-${f.id}`} label=${f.label} value=${values[f.id]} options=${f.select}
         onChange=${(v) => set(f.id, v)} />`
     : html`<${Field} key=${f.id} id=${`link-${f.id}`} label=${f.label} hint=${f.hint} required=${!!f.required}
-        value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}</div>`;
+        value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}
+    ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" summary=${keySummary(values.name, values.npub)} value=${values.npub}
+      onOpen=${() => setKeyOpen(true)} />`}</div>`;
   return html`<header>
       <h2 id="link-title">${form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
@@ -371,6 +376,8 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
     : html`<section class="page-section" key=${section.id}>${section.title && html`<h2>${section.title}</h2>`}${fields}</section>`))}
       <${ErrorNotice} error=${error} />
     </form>
+    ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} onSet=${(npub) => set('npub', npub)}
+      onClose=${() => setKeyOpen(false)} />`}
     <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${busy ? 'Adding…' : form.button}</button></footer>`;
 }
 
@@ -608,6 +615,12 @@ export function PersonPage({ id, feeds, go }) {
   // The first offer has its sheet open.
   const [offers, setOffers] = useState([]);
   const loadMore = () => api(`/people/${id}/more`).then((r) => setMore(r.items || []), () => setMore([]));
+  // "Add a Nostr Key" adds the key that the sheet "Find a Nostr profile" picks (ADR 0123).
+  const addKey = (npub) => act(async () => {
+    await api(`/people/${id}/keys`, { method: 'POST', body: { npub } });
+    loadSuggestions();
+    loadMore();
+  });
   useEffect(() => { loadMore(); }, [id]);
   const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => setSuggestions(r.suggestions || []), () => setSuggestions([]));
   useEffect(() => { loadSuggestions(); }, [id]);
@@ -801,8 +814,10 @@ export function PersonPage({ id, feeds, go }) {
   </section>
   <${OperationSheet} kind=${sheet} person=${person} groups=${groups} rows=${feedRows(person.places, feeds)} feeds=${feeds}
     go=${go} onClose=${() => setSheet(null)} />
-  <${LinkSheet} kind=${linking} personId=${person.id} onClose=${() => setLinking(null)}
+  <${LinkSheet} kind=${linking === 'keys' ? null : linking} personId=${person.id} onClose=${() => setLinking(null)}
     onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />
+  <${NostrSheet} open=${linking === 'keys'} value=${null} onSet=${(npub) => { if (npub) addKey(npub); }}
+    onClose=${() => setLinking(null)} />
   <${MergeSheet} open=${merging} person=${person} onClose=${() => setMerging(false)}
     onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} />
   <${FindSheet} open=${finding !== null && picked === null} personId=${person.id} name=${person.name} query=${finding || ''}

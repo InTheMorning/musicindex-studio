@@ -124,6 +124,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0119: A new user starts as a musician or a label](adr/0119-a-new-user-starts-as-a-musician-or-a-label.md)
 - [ADR 0120: The check of a person shows each difference](adr/0120-the-check-of-a-person-shows-each-difference.md)
 - [ADR 0122: A new user starts with a default file host](adr/0122-a-new-user-starts-with-a-default-file-host.md)
+- [ADR 0123: One type of value has one picker](adr/0123-one-type-of-value-has-one-picker.md)
 
 ## Plans
 
@@ -345,6 +346,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 084: The check of a person shows each difference](tasks/studio-v1-task-084-check-differences.md)
 - [Studio v1 task 085: Practice pages](tasks/studio-v1-task-085-practice-pages.md)
 - [Studio v1 task 086: The default file host and the placeholder GUID](tasks/studio-v1-task-086-default-file-host.md)
+- [Studio v1 task 087: One Nostr key picker](tasks/studio-v1-task-087-one-nostr-key-picker.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

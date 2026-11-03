@@ -41,6 +41,8 @@ A control with a change has a mark at its start edge.
 - **Payment** shows the wallets and the default address. Select **Add a Wallet** to add one. Select **Remove Wallet** below a wallet to remove it from the person.
 - A Lightning address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, remove the key in **Credits**.
 - **Credits** shows the credit names and the Nostr keys.
+- **Add a Nostr Key** opens the sheet **Find a Nostr profile**. Type a name, an `npub` key or a NIP-05 address in the field. Then select **Search**, and select a result to add the key.
+- The row **Nostr key** of **Add a Credit Name** opens the same sheet.
 - **Artist or label** shows the menu **Member of**. After you select **Save** with a changed **Member of**, Studio can offer a credit on that artist or label feed.
   - The sheet asks to add this person to the credits of the feed. Select **Review in 1 Feed** to make a change set. Studio writes the feed only after you review it.
   - Select **Not Now** to keep the membership in Studio only. No feed changes.

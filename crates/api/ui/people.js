@@ -589,13 +589,9 @@ export const LINK_FORMS = {
     fields: [
       { id: 'name', label: 'Name', required: true },
       { id: 'href', label: 'Information address' },
-      { id: 'npub', label: 'Nostr key' },
     ],
-  },
-  keys: {
-    title: 'Add a Nostr Key',
-    button: 'Add the Key',
-    fields: [{ id: 'npub', label: 'Nostr key', required: true }],
+    // The Nostr key is a NostrRow of editor.js, not a field (ADR 0123 item 5).
+    nostrKey: true,
   },
   'support-links': {
     title: 'Add a Support Link',
@@ -611,15 +607,20 @@ export const LINK_FORMS = {
 export const linkFields = (kind, values) => LINK_FORMS[kind].fields
   .filter((f) => !f.node || values.recipient_type === 'node');
 
-export const linkStart = (kind) => Object.fromEntries(LINK_FORMS[kind].fields.map((f) => [f.id, f.start ?? '']));
+export const linkStart = (kind) => ({
+  ...Object.fromEntries(LINK_FORMS[kind].fields.map((f) => [f.id, f.start ?? ''])),
+  ...(LINK_FORMS[kind].nostrKey ? { npub: null } : {}),
+});
 
 // The body of the POST of a link. An empty custom key or account is none.
+// A form with `nostrKey` sends its key, or `null` with no key (ADR 0123).
 export function linkBody(kind, values) {
   const body = {};
   for (const f of linkFields(kind, values)) {
     const text = String(values[f.id] ?? '').trim();
     body[f.id] = f.node && text === '' ? null : text;
   }
+  if (LINK_FORMS[kind].nostrKey) body.npub = String(values.npub ?? '').trim() || null;
   return body;
 }
 

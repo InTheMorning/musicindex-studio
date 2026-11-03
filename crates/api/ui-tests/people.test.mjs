@@ -423,16 +423,33 @@ test('the primary button needs a feed and a part', () => {
 });
 
 test('the forms of a link give the fields and the body', () => {
-  assert.deepEqual(Object.keys(LINK_FORMS), ['wallets', 'credit-names', 'keys', 'support-links']);
+  assert.deepEqual(Object.keys(LINK_FORMS), ['wallets', 'credit-names', 'support-links']);
   const start = linkStart('wallets');
   assert.equal(start.recipient_type, 'lnaddress');
   assert.deepEqual(linkFields('wallets', start).map((f) => f.id), ['recipient_type', 'address']);
   assert.deepEqual(linkFields('wallets', { recipient_type: 'node' }).map((f) => f.id), ['recipient_type', 'address', 'custom_key', 'custom_value']);
   assert.deepEqual(linkBody('wallets', { recipient_type: 'node', address: ' 02ab ', custom_key: '', custom_value: 'a' }),
     { recipient_type: 'node', address: '02ab', custom_key: null, custom_value: 'a' });
-  assert.ok(!linkReady('keys', { npub: ' ' }));
   assert.ok(linkReady('support-links', { label: '', url: 'https://x.example' }));
   assert.deepEqual(linkBody('support-links', { label: ' L ', url: 'u' }), { label: 'L', url: 'u' });
+});
+
+test('a credit name sends its Nostr key from the picker (ADR 0123)', () => {
+  assert.equal(linkStart('credit-names').npub, null);
+  assert.deepEqual(linkFields('credit-names', linkStart('credit-names')).map((f) => f.id), ['name', 'href']);
+  assert.deepEqual(linkBody('credit-names', { name: ' Ann ', href: '', npub: 'npub1a' }), { name: 'Ann', href: '', npub: 'npub1a' });
+  assert.deepEqual(linkBody('credit-names', { name: 'Ann', href: 'https://x.example', npub: null }), { name: 'Ann', href: 'https://x.example', npub: null });
+  assert.ok(linkReady('credit-names', { name: 'Ann', href: '', npub: null }));
+  assert.ok(!linkReady('credit-names', { name: ' ', href: '', npub: 'npub1a' }));
+});
+
+test('no link form has a plain field for a Nostr key (ADR 0123)', () => {
+  for (const [kind, form] of Object.entries(LINK_FORMS)) {
+    for (const f of form.fields) {
+      assert.notEqual(f.id, 'npub',
+        `ADR 0123 ${kind}: a link form has no plain field for a Nostr key. Use NostrRow or NostrSheet of editor.js with nostrKey: true on the form.`);
+    }
+  }
 });
 
 test('the usual role line and the membership of a person', () => {

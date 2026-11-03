@@ -1,0 +1,146 @@
+# Studio v1 Task 088: The Desktop App
+
+Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Desktop Shell". [Distribution plan](../plans/distribution-phase-plan.md), milestone 2.
+Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
+Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
+
+Status: Open. Packet 088a can start. Packets 088b and 088c wait for the gate of the distribution plan. The gate is the end of Phase 12 and its human tests, or a statement of the operator that removes it.
+
+## Goal
+
+An artist installs Music Index Studio, and it opens in its own window. Closing the window keeps Studio in the tray, so a connected app can write under a show grant. The theme and the settings of the UI stay between starts. The collection and the vault of the archive stay.
+
+## Packets
+
+- 088a: the start of the shell in a library of `crates/desktop`, and the fixed port 39017. It changes `studio-desktop` only, and it corrects the loss of the UI settings at each start.
+- 088b: the Tauri app `crates/desktop-app`: the window, the link rule, the download, the drop, the tray and the single instance. After the commit of 088a.
+- 088c: the installers in the release workflow, adjacent to the archives, with the notes for an unsigned app. After the commit of 088b.
+
+Visual check of 088a, by the planning model: start `studio-desktop` two times with the same data folder. Change the theme between the two starts. The theme stays. Start a second `studio-desktop` while the first runs: it gets a different port and starts.
+
+Visual check of 088b, by the planning model on Linux: the visual check of ADR 0124.
+
+Human test, by the operator, after 088c: the human test of ADR 0124.
+
+## Packet 088a: The Shell Start And The Fixed Port
+
+### Files
+
+Inspect: `crates/desktop/src/main.rs`, `crates/desktop/Cargo.toml`, `crates/api/src/lib.rs` (`local_router`, `Access`), `crates/api/src/workspace.rs`, `tools/release_desktop.py` (the smoke test and its port), `.github/workflows/desktop-release.yml`, `docs/user-guide/start-on-desktop.md`, `docs/runbooks/install-desktop.md`.
+
+Change: `crates/desktop/src/main.rs`, a new `crates/desktop/src/lib.rs`, `crates/desktop/Cargo.toml`, `tools/release_desktop.py` only when its smoke test needs a port change, `docs/user-guide/start-on-desktop.md`, `docs/runbooks/install-desktop.md`.
+
+Do not change: `crates/core`, `crates/api`, `crates/server`, the UI, the ADRs.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. `crates/desktop` gets a library target with the start of the shell. `main.rs` reads the arguments and calls the library. The binary name `studio-desktop` and its arguments do not change.
+2. The library gives:
+    - `pub const DEFAULT_PORT: u16 = 39017;`
+    - `pub fn default_data_dir() -> Option<PathBuf>`, the function of `main.rs` from before, with the macOS rule from before.
+    - `pub async fn bind(port: Option<u16>) -> std::io::Result<TcpListener>`. With `None`, it binds `127.0.0.1:39017`, and when that port is in use, `127.0.0.1:0`. With `Some(n)`, it binds `127.0.0.1:n` only, and `Some(0)` gives a free port.
+    - A function that opens the workspace and makes the token and the router. It gives the UI address with `#token=`, and a future that serves until a shutdown signal. The Tauri app of 088b calls it, so it takes the shutdown signal as a parameter.
+3. The default of `--port` is `None`, which item 2 gives. The usage text says that the default is 39017, else a free port.
+4. When the shell uses a free port in the place of 39017, it prints one line. The line says this, and that the UI has its default settings for this start.
+5. The user guide and the install runbook give the default port.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- A test: `bind(None)` gives port 39017 when it is free. With a listener on 39017, `bind(None)` gives a different port. `bind(Some(n))` with a listener on `n` gives an error.
+- The test must not fail when a different program has 39017 on the computer of the test. It then checks only the second case.
+- The smoke test of `tools/release_desktop.py` still passes.
+- The four commit checks pass.
+
+Visual: the visual check of 088a.
+
+### Prompt for lower-context coding model
+
+You are implementing one bounded task from a larger plan.
+
+Implement only this task. Do not redesign the architecture.
+
+Read:
+- AGENTS.md
+- docs/adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md (items 7 and 11)
+- docs/tasks/studio-v1-task-088-desktop-app.md (the Goal and packet 088a only)
+- ~/.agents/skills/asd-ste100/SKILL.md
+- The files that the Files section of packet 088a names.
+
+Goal:
+- The start of the desktop shell is a library function that the Tauri app can call.
+- The default port is 39017, else a free port, so the UI keeps its settings between starts.
+
+Constraints:
+- Follow the Architecture section of packet 088a fully.
+- The API binds only a loopback address, and each `/api/` request needs the token (ADR 0017).
+- Each comment, each test message and the documents are in ASD-STE100 Simplified Technical English.
+- Follow the Pragmatic Rust Guidelines of the `rust-dev` skill.
+- Keep test data in `.studio-dev/`, not in `/tmp`.
+
+Do not touch:
+- `crates/core`, `crates/api`, `crates/server`, the UI, the ADRs.
+- Do not commit.
+
+Acceptance criteria:
+- The mechanical criteria of packet 088a.
+
+Test commands:
+- cargo fmt --all --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test --workspace
+- tools/node --test crates/api/ui-tests/*.test.mjs
+
+At the end, report:
+1. files changed
+2. tests run
+3. behavior changed
+4. deviations from task
+5. unresolved concerns
+
+## Packet 088b: The Tauri App
+
+This packet waits for the gate. The planning model checks the packet against the code of 088a before it starts.
+
+### Files
+
+Inspect: `crates/desktop/src/lib.rs` (from 088a), `Cargo.toml`, `rust-toolchain.toml`, `.github/workflows/ci.yml`, `crates/api/src/lib.rs` (the CSP), `crates/api/ui/` (the downloads: "Export People", "Export Studio" and "Download to This Device"; the links with `target="_blank"`), `crates/api/ui/assets/icon-512.png`, `../musicindex-assets/brand/musicindex-mark.svg`, the research note.
+
+Change: a new crate `crates/desktop-app` (its `Cargo.toml`, `build.rs`, `tauri.conf.json`, `capabilities/`, `icons/` and `src/`), the root `Cargo.toml` (the member), `Cargo.lock`, `.github/workflows/ci.yml` (the Linux packages), `docs/user-guide/start-on-desktop.md`.
+
+Do not change: `crates/core`, `crates/api`, `crates/server`, the UI, the ADRs, `crates/desktop` other than a bug of 088a that the planning model accepts.
+
+### Architecture
+
+These choices are fixed. Do not change them.
+
+1. The crate `crates/desktop-app` has the package name `studio-desktop-app`, and the product name "Music Index Studio". `tauri.conf.json` has the identifier `org.musicindex.studio` and the publisher "Music Index". It uses Tauri 2 with the feature `tray-icon`, and the plugins `tauri-plugin-single-instance` and `tauri-plugin-opener`. The single instance plugin is the first plugin.
+2. The app calls the library of `crates/desktop` with the data folder of `default_data_dir()`, `bind(None)` and its own shutdown signal. It opens one window, with the label `main` and the title "Music Index Studio", at the UI address. It sets no Tauri CSP and has no `remote` capability. The window has no Tauri command.
+3. The window turns off the drop handler of Tauri (`disable_drag_drop_handler`).
+4. The opener plugin opens an address in the system browser in two cases: a navigation of the window to a different origin, and a new window for any address. The window stays on its page. The rule is a function with a test: it takes the origin of the window and an address, and gives "keep" or "open outside".
+5. `on_download` puts each download in the downloads folder of the user. On a name that is in use, it adds ` 2`, ` 3` and so on before the extension. After the download, the app shows a system notice or a dialog with the name of the file. If the webview gives no path at the end (macOS), the notice gives the planned name.
+6. The tray menu has "Open Studio" and "Quit". "Open Studio" shows the window and gives it the focus. "Quit" stops the API through the shutdown signal, then ends the app.
+7. A close of the window hides it. The app keeps running. An exit request of the user that is not "Quit" does not end the app (`RunEvent::ExitRequested` with `prevent_exit`).
+8. A second start shows the window of the first start, and gives it the focus.
+9. The icons come from `musicindex-mark.svg`, in the sizes that the Tauri bundler needs. The crate keeps the generated files, and the task gives the command that made them.
+10. CI installs the Linux packages of the Tauri prerequisites page (`libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`), so that the four checks build the crate.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- A test of the link rule of item 4.
+- A test of the name of a download of item 5, with a name that is in use.
+- A test: the app gives the data folder of `studio-desktop`.
+- The four commit checks pass, with the new crate.
+
+Visual: the visual check of 088b.
+
+## Packet 088c: The Installers
+
+This packet waits for 088b. The planning model writes its Architecture section after the commit of 088b, from the facts of the release workflow and of `tauri-action` at that time. The research note marks two items as not verified: the attach of `tauri-action` to the draft Release, and the bundle names.
+
+Its fixed choices: the release keeps the five archives and their smoke tests. The workflow adds the AppImage, the DEB and the RPM on Linux, the DMG on macOS, and the MSI on Windows, built on the native runners. No installer is signed. `SHA256SUMS.txt` lists each file. The release notes and the install runbook tell the user how to open an unsigned app on macOS and on Windows.

@@ -17,7 +17,7 @@ It has no native window or installer. [ADR 0002](../adr/0002-rust-core-json-api-
 [Phase 13](studio-v1-phase-plan.md) assigns desktop packaging to the Desktop Shell phase.
 The UI is in the binary, so an archive needs no separate UI files ([ADR 0016](../adr/0016-ui-without-a-build-step.md)).
 
-The desktop data path uses `HOME` or `XDG_DATA_HOME`. Windows has no default path through this code.
+The desktop data path uses `HOME` or `XDG_DATA_HOME`. On Windows, `directories` gives `%LOCALAPPDATA%\musicindex-studio\data` (the Tauri research of 2026-11-03).
 The library default and `~` expansion also use `HOME`. Some tests require Unix permissions, symbolic links, or `sshd`.
 
 The workspace has Linux CI, but it has no release workflow, checksums, signing, or artifact smoke test.
@@ -68,6 +68,7 @@ The release contains desktop artifacts only. It does not contain `studio-server`
 ## Milestone 2: Native desktop installers
 
 Start this milestone after Phase 12 and its human tests are complete.
+[ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) gives the form of the app, and [task 088](../tasks/studio-v1-task-088-desktop-app.md) gives the work.
 Build the Tauri shell required by ADR 0002. Keep the same core, API, and UI.
 Use Tauri's [distribution tools](https://v2.tauri.app/distribute/) for the native application and installers.
 Test the installed app, its update path, and its removal on each target operating system.

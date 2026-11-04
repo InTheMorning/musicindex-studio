@@ -7,15 +7,17 @@ use std::fs;
 use std::path::Path;
 
 use studio_core::collection::{Collection, ConnectorId, FeedId};
-use studio_core::connector::{self, Connector, Expected, LocalFolder};
-use studio_core::discover::FailKind;
+use studio_core::connector::{Connector, Expected, LocalFolder};
+use studio_core::discover::{FailKind, ReadFailure};
+use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::move_link::{
-    self, Condition, DraftLinks, FeedReader, Hop, HopResult, LinkNotice, ScriptedReader,
+    self, Condition, DraftLinks, FeedBody, FeedReader, Hop, HopResult, LinkNotice, ScriptedReader,
     WebFeedReader,
 };
 use studio_core::pipeline::{self, AddressCheck, PipelineError, PipelineErrorKind};
+use studio_core::xml::Document;
 
 const GUID: &str = "917393e3-1b1e-5cef-ace4-edaa54e1f810";
 const URL: &str = "https://a.example/album.xml";
@@ -62,6 +64,12 @@ struct Env {
 /// A feed on host A, with a draft. The self link of the file is
 /// `self_url`, and the feed has the public address `URL`.
 fn env(self_url: &str) -> Env {
+    env_on(self_url, LocalFolder::KIND)
+}
+
+/// [`env`] with a host A of the connector kind `kind`. Host A is a local
+/// folder in each case.
+fn env_on(self_url: &str, kind: &str) -> Env {
     let dir_a = tempfile::tempdir().unwrap();
     let dir_b = tempfile::tempdir().unwrap();
     let folder_a = LocalFolder::new(dir_a.path(), Some("https://a.example".into()));
@@ -72,30 +80,24 @@ fn env(self_url: &str) -> Env {
         .unwrap();
     let mut collection = Collection::open(&dir_a.path().join("collection.sqlite")).unwrap();
     let a = collection
-        .add_connector(LocalFolder::KIND, "A", &folder_a.config(), None)
+        .add_connector(kind, "A", &folder_a.config(), None)
         .unwrap();
     let b = collection
         .add_connector(LocalFolder::KIND, "B", &folder_b.config(), None)
         .unwrap();
-    let reader = connector::from_row(
-        &collection.connector(a).unwrap(),
-        None,
-        &studio_core::net::NetPolicy::Open,
-    )
-    .unwrap();
-    let mut hosts = Hosts::new();
-    hosts.insert(a, Box::new(folder_a));
-    hosts.insert(b, Box::new(folder_b));
     let library = Library::open(dir_a.path().join("library")).unwrap();
     let feed = collection
         .add_feed(Some(URL), Some((a, "album.xml")))
         .unwrap();
-    pipeline::refresh(&mut collection, reader.as_ref(), feed).unwrap();
+    pipeline::refresh(&mut collection, &folder_a, feed).unwrap();
     collection.set_feed_folder(feed, "album").unwrap();
     library
         .write_feed_xml("album", "album.xml", original.as_bytes())
         .unwrap();
-    pipeline::start_draft(&collection, reader.as_ref(), feed).unwrap();
+    pipeline::start_draft(&collection, &folder_a, feed).unwrap();
+    let mut hosts = Hosts::new();
+    hosts.insert(a, Box::new(folder_a));
+    hosts.insert(b, Box::new(folder_b));
     Env {
         dir_a,
         dir_b,
@@ -179,6 +181,30 @@ fn hop(url: &str, result: HopResult) -> Hop {
 
 fn set_tag(env: &Env, tag: &str) {
     env.edit(|f| f.new_feed_url = Some(tag.to_owned()));
+}
+
+fn failure(kind: FailKind) -> ReadFailure {
+    ReadFailure {
+        kind,
+        message: "scripted failure".to_owned(),
+    }
+}
+
+/// The body that a destination serves when it has the draft.
+fn draft_body(env: &Env, url: &str) -> FeedBody {
+    let draft = env.collection.draft(env.feed).unwrap().unwrap();
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml).unwrap()).unwrap();
+    FeedBody::of(&feed, url.to_owned())
+}
+
+/// A reader for a move. The read of stage 1 gets the first result, and the
+/// reads of stage 2 get the others.
+fn destination(results: Vec<Result<FeedBody, ReadFailure>>) -> ScriptedReader {
+    ScriptedReader::empty().with_results(DEST, results)
+}
+
+fn gone() -> Result<FeedBody, ReadFailure> {
+    Err(failure(FailKind::Gone))
 }
 
 const B: &str = "https://b.example/f.xml";
@@ -401,13 +427,18 @@ fn a_destination_that_is_not_public_is_refused_and_no_file_changes() {
 }
 
 #[test]
-fn a_move_sends_one_read_to_the_destination_and_acts_only_on_not_public() {
+fn a_move_sends_one_read_to_the_destination_in_stage_1_and_acts_only_on_not_public() {
     let mut e = env(URL);
     pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
-    // The destination has no feed yet, so the read fails. The write goes on.
-    let reader = ScriptedReader::empty().with_failure(DEST, FailKind::Gone);
+    // The destination has no feed yet, so the read of stage 1 fails. The
+    // write goes on. Stage 2 reads the destination again after the write.
+    let reader = ScriptedReader::empty().with_results(
+        DEST,
+        vec![Err(failure(FailKind::Gone)), Ok(draft_body(&e, DEST))],
+    );
     e.write(&reader).unwrap();
-    assert_eq!(reader.reads(), [DEST]);
+    assert_eq!(reader.reads(), [DEST, DEST]);
+    assert_eq!(reader.waits(), 0);
     assert!(files(e.dir_b.path()).contains_key("album.xml"));
 }
 
@@ -501,4 +532,336 @@ fn the_real_reader_gives_not_public_for_a_loopback_address() {
         .read("http://127.0.0.1:9/feed.xml")
         .unwrap_err();
     assert_eq!(failure.kind, FailKind::NotPublic);
+}
+
+// ---- Stage 2: the read of the destination (ADR 0126 items 14 to 19) ----
+
+/// A moved feed whose destination fails stage 2 three times. Gives the
+/// environment and the refusal, after the checks that every refusal shares.
+fn refused_move() -> (Env, ScriptedReader, Vec<u8>) {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let draft = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let reader = destination(vec![gone()]);
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadMoveLink, "{error}");
+    let refusal = error.bad_move_link().unwrap();
+    assert_eq!(refusal.condition, Condition::ReadFails);
+    assert_eq!(refusal.hops, [hop(DEST, HopResult::Gone)]);
+    // One read of stage 1 and 3 reads of stage 2, with 2 waits.
+    assert_eq!(reader.reads(), [DEST; 4]);
+    assert_eq!(reader.waits(), 2);
+    (e, reader, draft)
+}
+
+/// The state that every stage 2 refusal leaves (ADR 0126 item 18).
+fn assert_kept_after_refusal(e: &Env, placed: &[u8]) {
+    assert_eq!(
+        fs::read_to_string(e.dir_a.path().join("album.xml")).unwrap(),
+        e.original,
+        "the old host keeps its file, and it has no pointer"
+    );
+    assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), placed);
+    let row = e.collection.feed(e.feed).unwrap();
+    assert_ne!(row.connector_id, Some(e.b), "the feed keeps its location");
+    assert_eq!(row.public_url.as_deref(), Some(URL));
+    assert!(e.collection.draft(e.feed).unwrap().is_some());
+    assert_eq!(
+        e.collection
+            .draft_feed_move(e.feed)
+            .unwrap()
+            .unwrap()
+            .connector_id,
+        e.b,
+        "the draft keeps its move"
+    );
+    assert_eq!(e.collection.snapshots(e.feed).unwrap().len(), 0);
+    let a = row.connector_id.unwrap();
+    assert!(!e.collection.is_feed_pointer(a, "album.xml").unwrap());
+    assert!(
+        e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap(),
+        "the refusal records the placed file"
+    );
+    assert!(!e.collection.is_feed_pointer(e.b, "album.xml").unwrap());
+}
+
+#[test]
+fn a_destination_that_fails_stage_2_gets_no_pointer_and_keeps_the_draft_move() {
+    let (e, _, placed) = refused_move();
+    assert_kept_after_refusal(&e, &placed);
+}
+
+#[test]
+fn a_destination_with_a_different_guid_is_condition_3_and_gets_no_pointer() {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let placed = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let mut other = draft_body(&e, DEST);
+    other.podcast_guid = Some("other-guid".to_owned());
+    let reader = destination(vec![Ok(other)]);
+    let error = e.write(&reader).unwrap_err();
+    let refusal = error.bad_move_link().unwrap();
+    assert_eq!(refusal.condition, Condition::GuidMismatch);
+    assert_eq!(refusal.hops, [hop(DEST, HopResult::GuidMismatch)]);
+    assert_kept_after_refusal(&e, &placed);
+}
+
+#[test]
+fn a_destination_with_other_names_than_the_draft_is_condition_2() {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let placed = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let mut stale = draft_body(&e, DEST);
+    stale.names.self_link = Some(URL.to_owned());
+    let reader = destination(vec![Ok(stale.clone())]);
+    let error = e.write(&reader).unwrap_err();
+    let refusal = error.bad_move_link().unwrap();
+    assert_eq!(refusal.condition, Condition::ReadFails);
+    assert_eq!(refusal.hops, [hop(DEST, HopResult::NamesDiffer)]);
+    assert_kept_after_refusal(&e, &placed);
+
+    // A tag that the draft does not have is also another name.
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let mut tagged = draft_body(&e, DEST);
+    tagged.names.tag = Some(C.to_owned());
+    let error = e.write(&destination(vec![Ok(tagged)])).unwrap_err();
+    assert_eq!(
+        error.bad_move_link().unwrap().condition,
+        Condition::ReadFails
+    );
+}
+
+#[test]
+fn the_pointer_is_written_only_after_stage_2_passes() {
+    // A reader that records what the old host holds at each read.
+    struct Watching {
+        old: std::path::PathBuf,
+        body: FeedBody,
+        seen: std::sync::Mutex<Vec<String>>,
+    }
+    impl FeedReader for Watching {
+        fn read(&self, _url: &str) -> Result<FeedBody, ReadFailure> {
+            let on_old = fs::read_to_string(self.old.join("album.xml")).unwrap();
+            self.seen.lock().unwrap().push(on_old);
+            Ok(self.body.clone())
+        }
+        fn wait_between_reads(&self) {}
+    }
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let reader = Watching {
+        old: e.dir_a.path().to_path_buf(),
+        body: draft_body(&e, DEST),
+        seen: std::sync::Mutex::default(),
+    };
+    e.write(&reader).unwrap();
+    let seen = reader.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2, "one read of stage 1 and one of stage 2");
+    assert!(
+        seen.iter().all(|text| *text == e.original),
+        "the old host holds its feed at each read"
+    );
+    let on_old = fs::read_to_string(e.dir_a.path().join("album.xml")).unwrap();
+    assert!(on_old.contains(&format!("new-feed-url>{DEST}</")));
+    assert!(
+        e.collection
+            .is_feed_pointer(ConnectorId(1), "album.xml")
+            .unwrap()
+    );
+    assert!(
+        !e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap()
+    );
+}
+
+#[test]
+fn after_a_refusal_a_repair_lets_the_next_write_complete_the_move() {
+    let (mut e, _, _) = refused_move();
+    e.edit(|f| f.title = Some("Album (Repaired)".into()));
+    let repaired = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let reader = destination(vec![gone(), Ok(draft_body(&e, DEST))]);
+    e.write(&reader).unwrap();
+
+    assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), &repaired);
+    assert!(
+        !e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap(),
+        "a successful move removes the row"
+    );
+    let on_old = fs::read_to_string(e.dir_a.path().join("album.xml")).unwrap();
+    assert!(on_old.contains(&format!("new-feed-url>{DEST}</")));
+    assert!(
+        e.collection
+            .is_feed_pointer(ConnectorId(1), "album.xml")
+            .unwrap()
+    );
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
+    assert!(e.collection.draft(e.feed).unwrap().is_none());
+}
+
+#[test]
+fn a_placed_file_with_a_different_guid_gives_file_exists_and_does_not_change() {
+    let (mut e, _, _) = refused_move();
+    // The file on the host changed to a feed of another podcast.
+    let other = e
+        .original
+        .replace(GUID, "00000000-0000-0000-0000-000000000000");
+    fs::write(e.dir_b.path().join("album.xml"), &other).unwrap();
+    e.edit(|f| f.title = Some("Album (Repaired)".into()));
+    let reader = destination(vec![Ok(draft_body(&e, DEST))]);
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    assert_eq!(
+        fs::read_to_string(e.dir_b.path().join("album.xml")).unwrap(),
+        other
+    );
+    let on_old = fs::read_to_string(e.dir_a.path().join("album.xml")).unwrap();
+    assert_eq!(on_old, e.original);
+}
+
+#[test]
+fn a_file_without_a_row_is_not_a_placed_file() {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    // The same GUID, but Studio did not place the file.
+    fs::write(e.dir_b.path().join("album.xml"), e.original.as_bytes()).unwrap();
+    let reader = destination(vec![Ok(draft_body(&e, DEST))]);
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    assert_eq!(
+        fs::read_to_string(e.dir_b.path().join("album.xml")).unwrap(),
+        e.original
+    );
+}
+
+#[test]
+fn set_feed_host_accepts_a_placed_file_of_this_feed_and_not_one_of_another_feed() {
+    let (mut e, _, _) = refused_move();
+    // The refusal scanned the new host, so the placed file is in the inventory.
+    assert!(e.collection.host_file(e.b, "album.xml").unwrap().is_some());
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+
+    let other = e.collection.add_feed(None, None).unwrap();
+    e.collection
+        .add_placed_feed_file(e.b, "album.xml", other)
+        .unwrap();
+    let error = pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+}
+
+#[test]
+fn a_delete_of_a_placed_file_by_the_user_removes_the_row_and_the_file() {
+    let (mut e, _, _) = refused_move();
+    // The user chooses the host of the feed again, and deletes the file.
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, ConnectorId(1)).unwrap();
+    e.collection
+        .add_draft_operation(
+            e.feed,
+            studio_core::collection::DraftOperationKind::Delete,
+            None,
+            e.b,
+            "album.xml",
+        )
+        .unwrap();
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    assert_eq!(diff.blocked.len(), 0, "a placed file is not a pointer file");
+    e.edit(|f| f.title = Some("Album (Repaired)".into()));
+    let reader = ScriptedReader::empty();
+    e.write(&reader).unwrap();
+    assert!(!files(e.dir_b.path()).contains_key("album.xml"));
+    assert!(
+        !e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap()
+    );
+}
+
+#[test]
+fn a_slow_destination_passes_on_the_second_or_the_third_read() {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let good = draft_body(&e, DEST);
+    // Stage 1, then stage 2 read 1 (stale), then read 2 (correct).
+    let reader = destination(vec![gone(), gone(), Ok(good.clone())]);
+    e.write(&reader).unwrap();
+    assert_eq!(reader.reads().len(), 3);
+    assert_eq!(reader.waits(), 1);
+
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let good = draft_body(&e, DEST);
+    let reader = destination(vec![gone(), gone(), gone(), Ok(good)]);
+    e.write(&reader).unwrap();
+    assert_eq!(reader.reads().len(), 4);
+    assert_eq!(reader.waits(), 2);
+}
+
+#[test]
+fn a_destination_that_is_not_public_gets_no_second_read_in_stage_2() {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let reader = destination(vec![gone(), Err(failure(FailKind::NotPublic))]);
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(
+        error.bad_move_link().unwrap().condition,
+        Condition::NotPublic
+    );
+    assert_eq!(reader.waits(), 0);
+}
+
+#[test]
+fn a_move_with_no_tag_keeps_the_names_exact_by_text() {
+    // The check compares the names by exact text (ADR 0126 item 2).
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let mut body = draft_body(&e, DEST);
+    body.names.self_link = body.names.self_link.map(|text| format!("{text}/"));
+    let error = e.write(&destination(vec![Ok(body)])).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadMoveLink);
+}
+
+#[test]
+fn a_move_from_an_expired_temporary_area_runs_stage_2_and_writes_no_pointer() {
+    let mut e = env_on(URL, studio_core::connector::TEMPORARY_KIND);
+    let a = e.collection.feed(e.feed).unwrap().connector_id.unwrap();
+    // The server removed the files of the area (ADR 0122 item 10).
+    fs::remove_file(e.dir_a.path().join("album.xml")).unwrap();
+    e.collection
+        .set_connector_config(a, "{\"expired_at\": 1}")
+        .unwrap();
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let placed = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+
+    // Stage 2 refuses: the new file stays as a placed file, and the feed
+    // keeps its location.
+    let reader = destination(vec![gone()]);
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadMoveLink, "{error}");
+    assert_eq!(reader.reads().len(), 4);
+    assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), &placed);
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(a));
+    assert!(e.collection.draft_feed_move(e.feed).unwrap().is_some());
+    assert!(
+        e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap()
+    );
+    assert!(!files(e.dir_a.path()).contains_key("album.xml"));
+
+    // After a pass, the move completes with no pointer on the old host.
+    let reader = destination(vec![gone(), Ok(draft_body(&e, DEST))]);
+    e.write(&reader).unwrap();
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
+    assert!(!files(e.dir_a.path()).contains_key("album.xml"));
+    assert!(!e.collection.is_feed_pointer(a, "album.xml").unwrap());
+    assert!(
+        !e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap()
+    );
 }

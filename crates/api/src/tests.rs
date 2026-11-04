@@ -57,15 +57,28 @@ fn app_with_index(index: &str) -> App {
 
 /// An app with a scheme for the keysend lookups. `None` sends no lookup.
 fn app_with_keysend(index: &str, keysend: Option<&'static str>) -> App {
+    app_with_reader(index, keysend, None)
+}
+
+/// [`app_with_keysend`] with a reader of public feeds. The reader serves the
+/// destination of a move in stage 2 of ADR 0126.
+fn app_with_reader(
+    index: &str,
+    keysend: Option<&'static str>,
+    reader: Option<studio_core::move_link::ScriptedReader>,
+) -> App {
     let data = tempfile::tempdir().unwrap();
     let feeds = tempfile::tempdir().unwrap();
     std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
-    let workspace = Workspace::open(data.path())
+    let mut workspace = Workspace::open(data.path())
         .unwrap()
         .with_musicindex(index)
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(keysend)
         .with_address_check(std::sync::Arc::new(PassAll));
+    if let Some(reader) = reader {
+        workspace = workspace.with_feed_reader(std::sync::Arc::new(reader));
+    }
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
         data,
@@ -8498,7 +8511,17 @@ async fn the_draft_of_a_read_only_feed_has_no_host_and_a_saved_edit_gives_a_diff
 #[tokio::test]
 async fn a_host_choice_of_a_read_only_draft_gives_a_feed_move_and_a_write_moves_the_feed() {
     let server = web_feeds();
-    let app = app_with_index(&server.url(""));
+    // The new host serves the draft at its new address (ADR 0126 item 15).
+    // The feed has no self link, so the draft names nothing.
+    let new_url = "https://new.example/album/a.xml";
+    let reader = studio_core::move_link::ScriptedReader::empty().with_feed(
+        new_url,
+        new_url,
+        Some("g-1"),
+        None,
+        None,
+    );
+    let app = app_with_reader(&server.url(""), None, Some(reader));
     set_library_root(&app);
     let id = read_only_with_folder(&app, &server.url("/a.xml"));
     let draft_path = format!("/api/v1/feeds/{id}/draft");
@@ -12862,6 +12885,20 @@ async fn the_sweep_keeps_the_drafts_and_expires_the_area_after_7_days() {
 #[tokio::test]
 async fn a_feed_of_an_expired_area_moves_to_a_public_host_and_gets_its_real_guid() {
     let (app, handle) = server_app_with_handle();
+    // The bucket serves the draft at its new address (ADR 0126 item 15).
+    let new_url = "https://cdn.example.com/feeds/album.xml";
+    let reader = studio_core::move_link::ScriptedReader::empty().with_feed(
+        new_url,
+        new_url,
+        Some(&studio_core::guid::podcast_guid_for_url(new_url)),
+        None,
+        Some(new_url),
+    );
+    handle
+        .with_workspace(move |w| {
+            w.link_reader = crate::workspace::LinkReader(std::sync::Arc::new(reader));
+        })
+        .await;
     let area = make_temporary_area(&app).await;
     let feed = make_feed(&app, new_feed_body(area, "album.xml", "Album", None, None)).await;
     let id = feed["id"].as_i64().unwrap();

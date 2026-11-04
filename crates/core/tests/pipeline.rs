@@ -1831,6 +1831,23 @@ fn move_setup(redirecting: bool) -> MoveSetup {
     }
 }
 
+/// The body that the new host serves at `url` after the write of the draft
+/// of `feed`: stage 2 of ADR 0126 passes when the destination serves it.
+fn destination_body(
+    collection: &Collection,
+    feed: FeedId,
+    url: &str,
+) -> studio_core::move_link::FeedBody {
+    let draft = collection.draft(feed).unwrap().unwrap();
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml).unwrap()).unwrap();
+    studio_core::move_link::FeedBody::of(&feed, url.to_owned())
+}
+
+/// A reader that serves the draft of `feed` at `url`.
+fn destination_reader(collection: &Collection, feed: FeedId, url: &str) -> ScriptedReader {
+    ScriptedReader::empty().with_body(url, destination_body(collection, feed, url))
+}
+
 #[test]
 fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host() {
     let mut s = move_setup(false);
@@ -1852,12 +1869,13 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
         ]
     );
 
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         s.feed,
         &diff.id,
     )
@@ -1900,12 +1918,13 @@ fn a_host_that_can_redirect_gets_a_redirect_and_keeps_its_file_with_no_pointer()
         diff.feed_move.as_ref().unwrap().method,
         pipeline::FeedMoveMethod::Redirect
     );
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         s.feed,
         &diff.id,
     )
@@ -1966,12 +1985,13 @@ fn a_write_that_stopped_after_the_new_host_got_the_feed_can_finish_the_move() {
     let draft = s.collection.draft(s.feed).unwrap().unwrap();
     fs::write(s.dir_b.path().join("album.xml"), &draft.draft_xml).unwrap();
 
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         s.feed,
         &diff.id,
     )
@@ -2026,12 +2046,13 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
     let mut s = move_setup(false);
     pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         s.feed,
         &diff.id,
     )
@@ -2957,12 +2978,13 @@ fn a_feed_move_queues_the_new_address_and_the_address_from_before() {
             ("https://a.example/album.xml".to_owned(), true),
         ]
     );
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         s.feed,
         &diff.id,
     )
@@ -4033,12 +4055,27 @@ fn public_edit(s: &PublicSetup) {
 }
 
 fn public_write(s: &mut PublicSetup, id: &DiffId) -> Result<Version, pipeline::PipelineError> {
+    // A move serves the draft at the new address (ADR 0126 item 15).
+    let reader = match s.collection.draft_feed_move(s.feed).unwrap() {
+        Some(moved) => {
+            let url = s
+                .hosts
+                .get(moved.connector_id)
+                .unwrap()
+                .public_url(&moved.path);
+            match url {
+                Some(url) => destination_reader(&s.collection, s.feed, &url),
+                None => ScriptedReader::empty(),
+            }
+        }
+        None => ScriptedReader::empty(),
+    };
     pipeline::write_public_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         &s.web,
         s.feed,
         id,
@@ -4203,6 +4240,66 @@ fn the_write_of_a_moved_public_draft_puts_the_feed_on_the_target_and_nothing_at_
     let in_library = fs::read(s.library.path("album", "album.xml")).unwrap();
     assert_eq!(in_library, on_target.as_bytes());
     assert_eq!(queued(&s.collection, s.feed), 2);
+}
+
+#[test]
+fn a_moved_public_draft_that_fails_stage_2_keeps_a_placed_file_and_the_next_write_replaces_it() {
+    let mut s = public_setup();
+    pipeline::start_public_draft(&s.collection, &s.library, s.feed).unwrap();
+    public_edit(&s);
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.target).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    // ADR 0126 item 14: the destination serves nothing, so stage 2 refuses.
+    let reader = ScriptedReader::empty();
+    let error = pipeline::write_public_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &reader,
+        &s.web,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadMoveLink, "{error}");
+    assert_eq!(reader.waits(), 2);
+    let target_file = s.dir.path().join("target/album/album.xml");
+    assert!(
+        fs::read_to_string(&target_file)
+            .unwrap()
+            .contains("Album (Deluxe)")
+    );
+    assert!(s.collection.feed(s.feed).unwrap().connector_id.is_none());
+    assert!(s.collection.draft_feed_move(s.feed).unwrap().is_some());
+    assert_eq!(s.collection.snapshots(s.feed).unwrap().len(), 0);
+    assert!(
+        s.collection
+            .is_placed_feed_file(s.target, "album/album.xml", s.feed)
+            .unwrap()
+    );
+
+    // A repair changes the bytes. The next write replaces the placed file.
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        f.title = Some("Album (Repaired)".into());
+    })
+    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    public_write(&mut s, &diff.id).unwrap();
+    assert!(
+        fs::read_to_string(&target_file)
+            .unwrap()
+            .contains("Album (Repaired)")
+    );
+    assert_eq!(
+        s.collection.feed(s.feed).unwrap().connector_id,
+        Some(s.target)
+    );
+    assert!(
+        !s.collection
+            .is_placed_feed_file(s.target, "album/album.xml", s.feed)
+            .unwrap()
+    );
 }
 
 #[test]

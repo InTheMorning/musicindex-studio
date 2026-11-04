@@ -16,6 +16,14 @@ use crate::web::Web;
 /// The maximum number of reads in one chain (ADR 0126 item 9, condition 1).
 pub const MAX_HOPS: usize = 10;
 
+/// The maximum number of reads of the destination in stage 2 (ADR 0126
+/// item 15).
+pub const STAGE_TWO_READS: usize = 3;
+
+/// The seconds between two reads of the destination in stage 2 (ADR 0126
+/// item 15).
+pub const STAGE_TWO_WAIT_SECONDS: u64 = 10;
+
 /// The URLs that a body names (ADR 0126 item 1).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BodyNames {
@@ -70,6 +78,10 @@ pub trait FeedReader: Send + Sync {
     /// RSS feed. The kind [`FailKind::NotPublic`] means that the address is
     /// not a global address.
     fn read(&self, url: &str) -> Result<FeedBody, ReadFailure>;
+
+    /// Wait before the next read of the destination in stage 2. The real
+    /// reader waits [`STAGE_TWO_WAIT_SECONDS`]. A test reader does not wait.
+    fn wait_between_reads(&self);
 }
 
 /// The real [`FeedReader`]. It reads through `discover::read_feed`.
@@ -100,6 +112,10 @@ impl FeedReader for WebFeedReader {
     fn read(&self, url: &str) -> Result<FeedBody, ReadFailure> {
         let public = discover::read_feed(&self.web, url)?;
         Ok(FeedBody::of(&public.feed, public.url))
+    }
+
+    fn wait_between_reads(&self) {
+        std::thread::sleep(std::time::Duration::from_secs(STAGE_TWO_WAIT_SECONDS));
     }
 }
 
@@ -183,6 +199,8 @@ pub enum HopResult {
     NotPublic,
     /// The feed has a different `podcast:guid`, or none.
     GuidMismatch,
+    /// The feed at the destination has other names than the draft (stage 2).
+    NamesDiffer,
     /// The feed names two different new addresses.
     ConflictingNames,
     /// The address is the self link, and it differs from the address of
@@ -361,6 +379,66 @@ pub fn check(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkReport {
     report
 }
 
+/// Run stage 2 on the destination of a move (ADR 0126 items 14 and 15).
+///
+/// The function reads `destination` up to [`STAGE_TWO_READS`] times and
+/// waits between two reads through [`FeedReader::wait_between_reads`]. It
+/// passes when a body is an RSS feed with the `podcast:guid` of `draft` and
+/// the same names as `draft`, by exact text. A host or a CDN can serve an
+/// earlier result, so a body that fails gets the next read.
+///
+/// # Errors
+///
+/// Gives the refusal of the last read. A read that fails, or a body with
+/// other names than the draft, is condition 2. A body with a different
+/// `podcast:guid` is condition 3. An address that is not public is
+/// condition 7, and it gets no second read.
+pub fn check_destination(
+    reader: &dyn FeedReader,
+    draft: &Feed,
+    destination: &str,
+) -> Result<(), BadMoveLink> {
+    let names = BodyNames::of(draft);
+    let mut last = None;
+    for attempt in 0..STAGE_TWO_READS {
+        if attempt > 0 {
+            reader.wait_between_reads();
+        }
+        let mut hop = Hop::new(destination, HopResult::Feed);
+        let condition = match reader.read(destination) {
+            Err(failure) => {
+                let (condition, result) = failure_result(failure.kind);
+                hop.result = result;
+                condition
+            }
+            Ok(body) => {
+                if body.url != destination {
+                    hop.final_url = Some(body.url.clone());
+                }
+                if draft
+                    .podcast_guid
+                    .as_deref()
+                    .is_some_and(|guid| body.podcast_guid.as_deref() != Some(guid))
+                {
+                    hop.result = HopResult::GuidMismatch;
+                    Condition::GuidMismatch
+                } else if body.names != names {
+                    hop.result = HopResult::NamesDiffer;
+                    Condition::ReadFails
+                } else {
+                    return Ok(());
+                }
+            }
+        };
+        let refusal = BadMoveLink::new(condition, vec![hop]);
+        if condition == Condition::NotPublic {
+            return Err(refusal);
+        }
+        last = Some(refusal);
+    }
+    last.map_or(Ok(()), Err)
+}
+
 /// Walk a chain from `start` until a body that ends it, or a condition
 /// holds (ADR 0126 item 4 and item 9). `visited` holds the URLs that the
 /// chain visited, and the walk adds each one. `hops` gets each hop.
@@ -455,6 +533,7 @@ pub struct ScriptedReader {
         >,
     >,
     reads: std::sync::Mutex<Vec<String>>,
+    waits: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -534,6 +613,12 @@ impl ScriptedReader {
             .expect("the read lock is not poisoned")
             .clone()
     }
+
+    /// The number of waits between reads so far.
+    #[must_use]
+    pub fn waits(&self) -> usize {
+        self.waits.load(std::sync::atomic::Ordering::SeqCst)
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -557,5 +642,9 @@ impl FeedReader for ScriptedReader {
         } else {
             results.front().expect("the list has a result").clone()
         }
+    }
+
+    fn wait_between_reads(&self) {
+        self.waits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 }

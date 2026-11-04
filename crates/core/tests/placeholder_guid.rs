@@ -103,15 +103,37 @@ fn new_artist(s: &mut Setup, path: &str) -> FeedId {
     id
 }
 
+/// A reader for the write of `id`. A pending move gets the draft at its new
+/// address, as the new host serves it (ADR 0126 item 15).
+fn serving(s: &Setup, id: FeedId) -> ScriptedReader {
+    let Some(moved) = s.collection.draft_feed_move(id).unwrap() else {
+        return ScriptedReader::empty();
+    };
+    let Some(url) = s
+        .hosts
+        .get(moved.connector_id)
+        .unwrap()
+        .public_url(&moved.path)
+    else {
+        return ScriptedReader::empty();
+    };
+    let (feed, _) = pipeline::draft_model(&s.collection, id).unwrap();
+    ScriptedReader::empty().with_body(
+        &url,
+        studio_core::move_link::FeedBody::of(&feed, url.clone()),
+    )
+}
+
 /// Write a new feed on the private folder, with its approved diff.
 fn write_new(s: &mut Setup, id: FeedId) {
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, id).unwrap();
+    let reader = serving(s, id);
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         id,
         &diff.id,
     )
@@ -378,12 +400,13 @@ fn a_move_to_a_public_host_changes_each_placeholder_address_to_its_public_addres
     assert_eq!(url, plain);
 
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, album).unwrap();
+    let reader = serving(&s, album);
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         album,
         &diff.id,
     )
@@ -423,12 +446,13 @@ fn a_track_imported_after_a_move_between_public_folders_is_uploaded_to_its_addre
     assert_eq!(url, "https://music.example/album/01%20Song.mp3");
 
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, album).unwrap();
+    let reader = serving(&s, album);
     pipeline::write_draft(
         &mut s.collection,
         &s.hosts,
         &s.library,
         &PassAll,
-        &ScriptedReader::empty(),
+        &reader,
         album,
         &diff.id,
     )

@@ -526,6 +526,17 @@ CREATE TABLE person_address_dismissals (
     r"
 ALTER TABLE feed_credits ADD COLUMN places TEXT NOT NULL DEFAULT '[]';
 ",
+    // ADR 0126 item 19: the feed XML that stage 2 refused stays on the new
+    // host as a placed file of the feed. The next write replaces it.
+    r"
+CREATE TABLE placed_feed_files (
+    connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (connector_id, path)
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -2160,6 +2171,66 @@ impl Collection {
             .query_row(
                 "SELECT 1 FROM feed_pointers WHERE connector_id = ?1 AND path = ?2",
                 params![connector.0, path],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Record a placed file: the feed XML of `feed` that stage 2 of ADR 0126
+    /// refused. It is not a pointer file (ADR 0126 item 19).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_placed_feed_file(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+        feed: FeedId,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO placed_feed_files (connector_id, path, feed_id, added_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (connector_id, path) DO UPDATE SET feed_id = ?3",
+            params![connector.0, path, feed.0, now()],
+        )?;
+        Ok(())
+    }
+
+    /// Remove the record of a placed file. The function does nothing when
+    /// the file has no record.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_placed_feed_file(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM placed_feed_files WHERE connector_id = ?1 AND path = ?2",
+            params![connector.0, path],
+        )?;
+        Ok(())
+    }
+
+    /// True when the file at `path` on a host is a placed file of `feed`.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn is_placed_feed_file(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+        feed: FeedId,
+    ) -> Result<bool, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT 1 FROM placed_feed_files WHERE connector_id = ?1 AND path = ?2 AND feed_id = ?3",
+                params![connector.0, path, feed.0],
                 |_| Ok(()),
             )
             .optional()?
@@ -4563,7 +4634,6 @@ mod tests {
             MIGRATIONS[CREDIT_PLACES_MIGRATION].contains("places"),
             "ADR 0120 item 1: CREDIT_PLACES_MIGRATION must be the index of its entry in MIGRATIONS"
         );
-        assert_eq!(CREDIT_PLACES_MIGRATION + 1, MIGRATIONS.len());
     }
 
     /// Make a database at the version before the migration of the places.

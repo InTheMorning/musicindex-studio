@@ -2298,7 +2298,10 @@ pub fn set_feed_host(
             format!("{path} is not on its file host yet, so there is no feed XML to move"),
         ));
     }
-    if collection.host_file(target, path)?.is_some() {
+    // ADR 0126 item 19: a placed file of this feed is not a different file.
+    if collection.host_file(target, path)?.is_some()
+        && !collection.is_placed_feed_file(target, path, id)?
+    {
         return Err(PipelineError::new(
             PipelineErrorKind::FileExists,
             format!("a file exists at {path} on the new file host already"),
@@ -3519,7 +3522,10 @@ pub fn write_draft_signed(
         if let Some(web) = public {
             check_public_base(&row, web, &draft)?;
         }
-        if connector.read(&path)?.is_some() {
+        // A placed file of this feed is replaced (ADR 0126 item 19).
+        if connector.read(&path)?.is_some()
+            && !collection.is_placed_feed_file(connector_id, &path, id)?
+        {
             return Err(PipelineError::new(
                 PipelineErrorKind::FileExists,
                 format!("a file exists at {path} on the new file host already"),
@@ -3552,18 +3558,44 @@ pub fn write_draft_signed(
     // and then the host from before points to it (ADR 0038 item 19). The
     // release folder then keeps the same bytes as the hosted file
     // (ADR 0036 item 3).
+    // Each move runs stage 2 of ADR 0126 on the new file, before the
+    // pointer, the snapshot and the new location of the feed (items 14
+    // and 16).
+    let stage_two = StageTwo { links, feed: &feed };
     let version = if from_host.is_none() {
-        put_public_feed_file(collection, id, connector, &path, &draft)?
+        let target = PublicTarget {
+            connector,
+            connector_id,
+            path: &path,
+        };
+        put_public_feed_file(
+            collection,
+            hosts,
+            id,
+            &target,
+            &draft,
+            feed_move.as_ref(),
+            &stage_two,
+        )
     } else if let Some(moved) = &feed_move {
         if source_gone {
-            put_feed_from_expired(hosts, &draft, moved)?
+            put_feed_from_expired(collection, hosts, id, &draft, moved, &stage_two)
         } else {
             let old = FeedHost {
                 connector,
                 connector_id,
                 path: &path,
             };
-            put_moved_feed_file(collection, hosts, id, &old, &draft, live.as_ref(), moved)?
+            put_moved_feed_file(
+                collection,
+                hosts,
+                id,
+                &old,
+                &draft,
+                live.as_ref(),
+                moved,
+                &stage_two,
+            )
         }
     } else {
         let expected = match &live {
@@ -3573,8 +3605,28 @@ pub fn write_draft_signed(
             }
             None => Expected::Absent,
         };
-        connector.write(&path, &draft.draft_xml, &expected)?
+        connector
+            .write(&path, &draft.draft_xml, &expected)
+            .map_err(PipelineError::from)
     };
+    let version = match version {
+        Ok(version) => version,
+        Err(error) => {
+            // ADR 0126 item 18: the destination failed stage 2. The feed
+            // keeps its location and its draft move, and the host from
+            // before keeps its file.
+            if error.kind() == PipelineErrorKind::BadMoveLink
+                && let Some(moved) = &feed_move
+            {
+                keep_refused_destination(collection, hosts, id, moved, &operations, &mut touched)?;
+            }
+            return Err(error);
+        }
+    };
+    if let Some(moved) = &feed_move {
+        // The destination passed stage 2, so its file is the feed now.
+        collection.remove_placed_feed_file(moved.connector_id, &moved.path)?;
+    }
     touched.insert(feed_move.as_ref().map_or(connector_id, |m| m.connector_id));
 
     // Publish the changes of steps 1 and 2 on each host. A failure here
@@ -4185,55 +4237,146 @@ fn new_address(moved: &FeedMove) -> Result<&str, PipelineError> {
     })
 }
 
-/// Write the feed XML of a draft to the new host of a feed move. A file
-/// with the same bytes from an earlier, stopped write is a finished step.
+/// Stage 2 of ADR 0126 for one write: the facts that it needs.
+struct StageTwo<'a> {
+    links: LinkCheck<'a>,
+    /// The draft as a typed feed.
+    feed: &'a Feed,
+}
+
+impl StageTwo<'_> {
+    /// Read the destination of `moved` after the feed XML is on the new
+    /// host (ADR 0126 items 14 and 15). A granted write never moves a feed
+    /// and makes no read. A destination with no address has no read.
+    ///
+    /// The function publishes the changes of the new host first, so that a
+    /// connector that publishes at the end of a step serves the new file.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`PipelineErrorKind::BadMoveLink`] when the destination does
+    /// not pass.
+    fn run(&self, hosts: &Hosts, moved: &FeedMove) -> Result<(), PipelineError> {
+        let LinkCheck::Check(reader) = self.links else {
+            return Ok(());
+        };
+        let Some(url) = moved.url.as_deref() else {
+            return Ok(());
+        };
+        hosts.get(moved.connector_id)?.finish()?;
+        move_link::check_destination(reader, self.feed, url).map_err(PipelineError::refused)
+    }
+}
+
+/// True when `found` is a feed with the `podcast:guid` of `draft`. A draft
+/// with no `podcast:guid` has no such file (ADR 0126 item 19).
+fn has_guid_of(found: &[u8], draft: &DraftRow) -> bool {
+    let guid_of = |bytes: &[u8]| {
+        Document::parse_bytes(bytes)
+            .ok()
+            .and_then(|doc| Feed::read(&doc).ok())
+            .and_then(|feed| feed.podcast_guid)
+    };
+    guid_of(&draft.draft_xml).is_some_and(|guid| guid_of(found).as_deref() == Some(guid.as_str()))
+}
+
+/// Put `draft` on a new host at `path`. A file with the same bytes from an
+/// earlier, stopped write is a finished step. A placed file of this feed
+/// with the `podcast:guid` of the draft is replaced (ADR 0126 item 19).
 ///
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::FileExists`] when another file exists at the
-/// path.
-fn write_to_new_host(
-    hosts: &Hosts,
-    moved: &FeedMove,
+/// path. The file does not change then.
+fn place_feed_file(
+    collection: &Collection,
+    id: FeedId,
+    (host, connector_id): (&dyn Connector, ConnectorId),
+    path: &str,
     draft: &DraftRow,
 ) -> Result<Version, PipelineError> {
-    let new_host = hosts.get(moved.connector_id)?;
-    match new_host.write(&moved.path, &draft.draft_xml, &Expected::Absent) {
+    let exists = || {
+        PipelineError::new(
+            PipelineErrorKind::FileExists,
+            format!("a file exists at {path} on the new file host already"),
+        )
+    };
+    match host.write(path, &draft.draft_xml, &Expected::Absent) {
         Ok(version) => Ok(version),
         Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
             // A write that stopped after this step left the draft XML on
             // the new host. The same bytes let the write continue, so the
-            // user can finish the move. Other bytes are a different file.
-            match new_host.read(&moved.path)? {
-                Some(found) if found.bytes == draft.draft_xml => Ok(found.version),
-                _ => Err(PipelineError::new(
-                    PipelineErrorKind::FileExists,
-                    format!(
-                        "a file exists at {} on the new file host already",
-                        moved.path
-                    ),
-                )),
+            // user can finish the move. Other bytes are a different file,
+            // unless they are a placed file of this feed.
+            let Some(found) = host.read(path)? else {
+                return Err(exists());
+            };
+            if found.bytes == draft.draft_xml {
+                return Ok(found.version);
             }
+            if collection.is_placed_feed_file(connector_id, path, id)?
+                && has_guid_of(&found.bytes, draft)
+            {
+                return host
+                    .write(path, &draft.draft_xml, &Expected::Version(found.version))
+                    .map_err(|error| {
+                        if error.kind() == ConnectorErrorKind::Conflict {
+                            exists()
+                        } else {
+                            error.into()
+                        }
+                    });
+            }
+            Err(exists())
         }
         Err(error) => Err(error.into()),
     }
 }
 
+/// Write the feed XML of a draft to the new host of a feed move.
+///
+/// # Errors
+///
+/// Gives the errors of [`place_feed_file`].
+fn write_to_new_host(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+    moved: &FeedMove,
+    draft: &DraftRow,
+) -> Result<Version, PipelineError> {
+    let new_host = hosts.get(moved.connector_id)?;
+    place_feed_file(
+        collection,
+        id,
+        (new_host, moved.connector_id),
+        &moved.path,
+        draft,
+    )
+}
+
 /// Put the feed XML of a feed that moves off an expired temporary area on
 /// its new host (ADR 0122 item 10). The old file is gone, so the write makes
-/// no snapshot of it and no pointer or redirect on the old host.
+/// no snapshot of it and no pointer or redirect on the old host. Stage 2
+/// runs on the new file (ADR 0126 item 14).
 ///
 /// # Errors
 ///
 /// Gives the errors of [`write_to_new_host`], and
 /// [`PipelineErrorKind::NoPublicAddress`] when the new host gives no address.
+/// Gives [`PipelineErrorKind::BadMoveLink`] when stage 2 refuses.
 fn put_feed_from_expired(
+    collection: &Collection,
     hosts: &Hosts,
+    id: FeedId,
     draft: &DraftRow,
     moved: &FeedMove,
+    stage_two: &StageTwo<'_>,
 ) -> Result<Version, PipelineError> {
     new_address(moved)?;
-    write_to_new_host(hosts, moved, draft)
+    let version = write_to_new_host(collection, hosts, id, moved, draft)?;
+    stage_two.run(hosts, moved)?;
+    Ok(version)
 }
 
 /// Put the feed XML on the new host of a feed move, then make the host from
@@ -4243,11 +4386,17 @@ fn put_feed_from_expired(
 ///
 /// The new host gets the file only when it has no file at the path. The
 /// host from before gets a redirect, or a pointer file that Studio keeps.
+/// Stage 2 runs before the snapshot and the pointer (ADR 0126 item 16).
 ///
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::FileExists`] when a file exists on the new
-/// host at the path, before any file changes.
+/// host at the path, before any file changes. Gives
+/// [`PipelineErrorKind::BadMoveLink`] when stage 2 refuses.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the move needs the old host, the new host and stage 2"
+)]
 fn put_moved_feed_file(
     collection: &Collection,
     hosts: &Hosts,
@@ -4256,6 +4405,7 @@ fn put_moved_feed_file(
     draft: &DraftRow,
     live: Option<&crate::connector::FileRead>,
     moved: &FeedMove,
+    stage_two: &StageTwo<'_>,
 ) -> Result<Version, PipelineError> {
     let live_file = live.ok_or_else(|| {
         PipelineError::new(
@@ -4264,7 +4414,8 @@ fn put_moved_feed_file(
         )
     })?;
     let new_url = new_address(moved)?;
-    let version = write_to_new_host(hosts, moved, draft)?;
+    let version = write_to_new_host(collection, hosts, id, moved, draft)?;
+    stage_two.run(hosts, moved)?;
     collection.add_snapshot(id, &live_file.version, &live_file.bytes)?;
     match moved.method {
         FeedMoveMethod::Redirect => old.connector.set_redirect(old.path, new_url)?,
@@ -4281,6 +4432,35 @@ fn put_moved_feed_file(
         FeedMoveMethod::None => {}
     }
     Ok(version)
+}
+
+/// Keep the state after stage 2 refused the destination (ADR 0126 item 18).
+///
+/// The feed XML on the new host becomes a placed file of the feed. The
+/// feed keeps its location and its draft move, and the draft does not
+/// change. The uploads and the copies get a confirmation, as in
+/// [`keep_draft_after_failed_confirmation`]. Then the function publishes
+/// and scans each host in `touched`.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or a host fails.
+fn keep_refused_destination(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    id: FeedId,
+    moved: &FeedMove,
+    operations: &[HostOperation],
+    touched: &mut HashSet<ConnectorId>,
+) -> Result<(), PipelineError> {
+    collection.add_placed_feed_file(moved.connector_id, &moved.path, id)?;
+    touched.insert(moved.connector_id);
+    finish_hosts(collection, hosts, touched)?;
+    confirm_files_on_next_write(collection, id, operations)?;
+    for &connector_id in touched.iter() {
+        inventory::scan(collection, hosts, connector_id)?;
+    }
+    Ok(())
 }
 
 /// Check that the public address of a feed with no connector still gives
@@ -4313,31 +4493,74 @@ fn check_public_base(
     Ok(())
 }
 
+/// The new host of a feed with no connector, and the path on it.
+struct PublicTarget<'a> {
+    connector: &'a dyn Connector,
+    connector_id: ConnectorId,
+    path: &'a str,
+}
+
 /// Put the feed XML of a feed with no connector on its new host. Studio
 /// keeps the base of the draft as a snapshot. It writes nothing at the
-/// address before the move (ADR 0067 item 8). Gives the version of the new
-/// file.
+/// address before the move (ADR 0067 item 8). Stage 2 runs before the
+/// snapshot (ADR 0126 item 14). Gives the version of the new file.
 ///
 /// # Errors
 ///
-/// Gives [`PipelineErrorKind::FileExists`] when a file is at the path.
+/// Gives [`PipelineErrorKind::FileExists`] when a file is at the path, and
+/// [`PipelineErrorKind::BadMoveLink`] when stage 2 refuses.
 fn put_public_feed_file(
     collection: &Collection,
+    hosts: &Hosts,
     id: FeedId,
-    target: &dyn Connector,
-    path: &str,
+    target: &PublicTarget<'_>,
     draft: &DraftRow,
+    moved: Option<&FeedMove>,
+    stage_two: &StageTwo<'_>,
 ) -> Result<Version, PipelineError> {
-    let version = match target.write(path, &draft.draft_xml, &Expected::Absent) {
+    let version = match target
+        .connector
+        .write(target.path, &draft.draft_xml, &Expected::Absent)
+    {
         Ok(version) => version,
         Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
-            return Err(PipelineError::new(
-                PipelineErrorKind::FileExists,
-                format!("a file exists at {path} on the new file host already"),
-            ));
+            // Only a placed file of this feed is replaced, and the same
+            // bytes are not a finished step here.
+            let found = target.connector.read(target.path)?;
+            let replaced = match found {
+                Some(found)
+                    if collection.is_placed_feed_file(target.connector_id, target.path, id)?
+                        && has_guid_of(&found.bytes, draft) =>
+                {
+                    Some(target.connector.write(
+                        target.path,
+                        &draft.draft_xml,
+                        &Expected::Version(found.version),
+                    ))
+                }
+                _ => None,
+            };
+            match replaced {
+                Some(Ok(version)) => version,
+                Some(Err(error)) if error.kind() != ConnectorErrorKind::Conflict => {
+                    return Err(error.into());
+                }
+                _ => {
+                    return Err(PipelineError::new(
+                        PipelineErrorKind::FileExists,
+                        format!(
+                            "a file exists at {} on the new file host already",
+                            target.path
+                        ),
+                    ));
+                }
+            }
         }
         Err(error) => return Err(error.into()),
     };
+    if let Some(moved) = moved {
+        stage_two.run(hosts, moved)?;
+    }
     if let Some(base) = &draft.base_version {
         collection.add_snapshot(id, base, &draft.base_xml)?;
     }
@@ -4639,6 +4862,26 @@ fn keep_draft_after_failed_confirmation(
             draft_xml: draft.draft_xml.clone(),
         },
     )?;
+    confirm_files_on_next_write(collection, id, operations)?;
+    collection.remove_draft_feed_move(id)?;
+    for &connector_id in touched {
+        inventory::scan(collection, hosts, connector_id)?;
+    }
+    Ok(())
+}
+
+/// Give the draft a confirmation for each upload, copy and confirmation of
+/// `operations`, so that the next write requests the files again. The
+/// draft loses its copies, and keeps its deletions.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn confirm_files_on_next_write(
+    collection: &Collection,
+    id: FeedId,
+    operations: &[HostOperation],
+) -> Result<(), PipelineError> {
     for operation in collection.draft_operations(id)? {
         if matches!(
             operation.kind,
@@ -4647,7 +4890,6 @@ fn keep_draft_after_failed_confirmation(
             collection.remove_draft_operation(id, operation.id)?;
         }
     }
-    collection.remove_draft_feed_move(id)?;
     for operation in operations {
         if matches!(
             operation.kind,
@@ -4661,9 +4903,6 @@ fn keep_draft_after_failed_confirmation(
                 &operation.path,
             )?;
         }
-    }
-    for &connector_id in touched {
-        inventory::scan(collection, hosts, connector_id)?;
     }
     Ok(())
 }
@@ -4697,6 +4936,7 @@ fn delete_each_operation(
         match target.delete(&operation.path, &host_file.stamp) {
             Ok(()) => {
                 collection.remove_host_file(operation.connector_id, &operation.path)?;
+                collection.remove_placed_feed_file(operation.connector_id, &operation.path)?;
                 touched.insert(operation.connector_id);
                 deleted_on.insert(operation.connector_id);
             }

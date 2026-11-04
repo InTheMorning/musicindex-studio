@@ -132,6 +132,19 @@ export function kindOfFile(file) {
   return null;
 }
 
+// "Add tracks" takes music and image files (ADR 0125 item 4). The kind
+// `lyrics` belongs to a lyrics field.
+export function addsAsTrackFile(file) {
+  const kind = kindOfFile(file);
+  return kind === 'audio' || kind === 'image';
+}
+
+// The text for the files of a drop that "Add tracks" cannot use (ADR 0125
+// item 4).
+export function refusedText(names) {
+  return `Studio cannot use ${names.join(', ')}. Drop music and image files.`;
+}
+
 // Does the field accept the file that Studio received? `facts.kind` is the
 // kind that the upload route found.
 export function acceptsFile(field, facts) {

@@ -66,9 +66,9 @@
 
 WebKitGTK gives a page no file from a drop, and the page cannot read the file address of the drag. It also does not connect Ctrl+Z to the undo command. A plain window of the same engine shows both results.
 
-22. The local router has the route `GET /api/v1/dropped-files/{id}`, with the access rule of ADR 0017. It gives the bytes of the file of the last drop, one time. The ID is random, and the app sets it for each drop. The page cannot name a path. The router of the server does not have this route.
-23. On Linux, the window keeps the drop handler of Tauri, so the engine does not put the file address in a text box. The app gives the page the names of the dropped files, the position and the ID of one regular file. A file path does not go to the page.
-24. On Linux, the app adds a script to the window. For a drag of `text/uri-list`, the script sends each `dragover` to the page as a file drag, so a field shows its drop state with no change to the UI. At a drop, it sends a `drop` with the files to the element at the position. When that element does not accept a file drag, the script gets no bytes.
+22. The local router has the route `GET /api/v1/dropped-files/{id}`, with the access rule of ADR 0017. It gives the bytes of each file of the last drop, one time. The ID is random, and the app sets it for each drop. The page cannot name a path. The router of the server does not have this route.
+23. On Linux, the window keeps the drop handler of Tauri, so the engine does not put the file address in a text box. The app gives the page the names of the dropped files, the position and the ID of each regular file. A file path does not go to the page.
+24. On Linux, the app adds a script to the window. For a drag of `text/uri-list`, the script sends each `dragover` to the page as a file drag, so a field shows its drop state with no change to the UI. At a drop, it sends a `drop` with the files to the element at the position. When that element does not accept a file drag, or it takes one file and the drop has many, the script gets no bytes.
 25. On Linux, the same script connects Ctrl+Z to the undo command, and Ctrl+Shift+Z and Ctrl+Y to the redo command, in a text field.
 
 ## Alternatives Considered

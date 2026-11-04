@@ -126,6 +126,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0122: A new user starts with a default file host](adr/0122-a-new-user-starts-with-a-default-file-host.md)
 - [ADR 0123: One type of value has one picker](adr/0123-one-type-of-value-has-one-picker.md)
 - [ADR 0124: The desktop app is a Tauri window on the local API](adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md)
+- [ADR 0125: Each file target shows that it takes a drop](adr/0125-each-file-target-shows-that-it-takes-a-drop.md)
 
 ## Plans
 
@@ -349,6 +350,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 086: The default file host and the placeholder GUID](tasks/studio-v1-task-086-default-file-host.md)
 - [Studio v1 task 087: One Nostr key picker](tasks/studio-v1-task-087-one-nostr-key-picker.md)
 - [Studio v1 task 088: The desktop app](tasks/studio-v1-task-088-desktop-app.md)
+- [Studio v1 task 089: Drop targets](tasks/studio-v1-task-089-drop-targets.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

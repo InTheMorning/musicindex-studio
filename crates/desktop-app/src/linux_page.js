@@ -13,11 +13,12 @@
     });
     return event;
   };
-  // The field accepts a drag when it cancels the `dragover` event.
+  // A target cancels the `dragover` event. The page refuses each other file
+  // drag with the effect `none`.
   const accepts = (target) => {
     const event = fileEvent('dragover', []);
     target.dispatchEvent(event);
-    return event.defaultPrevented;
+    return event.defaultPrevented && event.dataTransfer.dropEffect !== 'none';
   };
   for (const type of ['dragenter', 'dragover']) {
     window.addEventListener(type, (event) => {
@@ -29,18 +30,24 @@
     }, true);
   }
   // The app calls this function with the drop that it got.
-  window.__studioDrop = async ({ x, y, names, id, token }) => {
+  window.__studioDrop = async ({ x, y, files, token }) => {
     const target = document.elementFromPoint(x, y);
     if (!target || !accepts(target)) return;
-    let files = names.map((name) => new File([], name));
-    if (id) {
-      const answer = await fetch(`/api/v1/dropped-files/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!answer.ok) return;
-      files = [new File([await answer.blob()], names[0])];
+    // A target for one file refuses many files, so it needs no bytes.
+    const bytes = files.length === 1 || target.closest('[data-drop-many]');
+    const given = [];
+    for (const { name, id } of files) {
+      let parts = [];
+      if (bytes && id) {
+        const answer = await fetch(`/api/v1/dropped-files/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!answer.ok) return;
+        parts = [await answer.blob()];
+      }
+      given.push(new File(parts, name));
     }
-    target.dispatchEvent(fileEvent('drop', files));
+    target.dispatchEvent(fileEvent('drop', given));
   };
   window.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || !event.ctrlKey || event.altKey || event.metaKey) return;

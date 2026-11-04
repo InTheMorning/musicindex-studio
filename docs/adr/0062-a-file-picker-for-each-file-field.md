@@ -68,7 +68,7 @@ Each connector can list the files of its host, to a folder depth of 4 and a maxi
 ### Drop A File On A Field
 
 20. Each field of item 1 also accepts one file that the user drops on it. A drop is an upload of item 11. A drop of more than one file, or of a file of a different kind, shows an error and changes nothing.
-21. The drop area of a field shows when the pointer brings a file over it. A screen with no pointer uses the button.
+21. The drop area of a field shows when the pointer brings a file over it ([ADR 0125](0125-each-file-target-shows-that-it-takes-a-drop.md) adds a hint with no drag, and an outline on each target during a drag). A screen with no pointer uses the button.
 
 ### The Cover Of A Channel
 

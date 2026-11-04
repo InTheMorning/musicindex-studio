@@ -28,6 +28,7 @@ import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from '
 import { coverOf } from './cover.js';
 import { heldMap, mediaSource } from './media.js';
 import { SignerConnect } from './signer.js';
+import { dropHandlers, watchFileDrags, accountDropResult } from './filedrop.js';
 import { useDraft } from './draft.js';
 import { roleChoice, fromChoice, roleOptions, ROLE_PLACEHOLDER, OTHER_ROLE, OTHER_HINT, NO_ROLE_HINT } from './roles.js';
 import { RETRY_DELAYS, findUpload, missingParts, partCount, partRange, receivedBytes } from './upload.js';
@@ -397,6 +398,18 @@ function ThemeToggle() {
 function Brand() {
   return html`<span class="brand"><img src="/ui/assets/musicindex-lockup-horizontal.svg" alt="Music Index" />
     <span class="product">Studio</span></span>`;
+}
+
+// One drop target for files (ADR 0125). `handlers` go on its element.
+export function useFileDrop({ busy, onFiles, stop = false }) {
+  const [over, setOver] = useState(false);
+  const handlers = dropHandlers({ isBusy: () => busy, setOver, onFiles, stop });
+  return { over, handlers };
+}
+
+// The class of a drop area of a sheet (ADR 0125 item 2).
+export function dropAreaClass(over, busy) {
+  return `import-pick drop-area${busy ? '' : ' drop-target'}${over ? ' drop-over' : ''}`;
 }
 
 export function ErrorNotice({ error }) {
@@ -1630,10 +1643,9 @@ function MspImport({ onAdded }) {
   const { busy, error, run } = useAction();
 
   const [names, setNames] = useState([]);
-  const read = async (event) => {
+  const read = async (files) => {
     setFileError(null);
     const parsed = [];
-    const files = Array.from(event.target.files);
     setNames(files.map((file) => file.name));
     for (const file of files) {
       try {
@@ -1644,6 +1656,7 @@ function MspImport({ onAdded }) {
     }
     setBackups(parsed);
   };
+  const backupDrop = useFileDrop({ busy: false, onFiles: read, stop: true });
   const send = () => run(async () => {
     try {
       const done = await api('/import/msp', { method: 'POST', body: { backups } });
@@ -1669,10 +1682,11 @@ function MspImport({ onAdded }) {
     </div>`;
   }
   return html`<div class="form">
-    <div class="field import-pick">
+    <div class=${`field ${dropAreaClass(backupDrop.over, false)}`} data-drop-many="" ...${backupDrop.handlers}>
+      <p class="hint drop-text">Drop the backup files here.</p>
       <span class="hint" id="msp-files-hint">The .json files that MSP 2.0 saved for your hosted feeds. You can select more than one.</span>
       <input id="msp-files" class="visually-hidden" type="file" accept=".json,application/json" multiple aria-describedby="msp-files-hint"
-        aria-invalid=${fileError ? 'true' : undefined} onChange=${read} />
+        aria-invalid=${fileError ? 'true' : undefined} onChange=${(e) => read(Array.from(e.target.files))} />
       <label for="msp-files" class="button action">Choose Backup Files</label>
       ${names.length > 0 && html`<p class="hint mono">${names.join(', ')}</p>`}
       ${fileError && html`<span class="field-error">${fileError}</span>`}
@@ -4328,10 +4342,21 @@ function ImportFlow({ signup, onDone, onBack }) {
   const pick = useAction();
   const open = useAction();
 
+  const [dropError, setDropError] = useState(null);
   const choose = (event) => {
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
-    if (!file) return;
+    if (file) sendFile(file);
+  };
+  const dropFile = (files) => {
+    const result = accountDropResult(files);
+    setDropError(result.error || null);
+    if (result.file) sendFile(result.file);
+  };
+  const accountBusy = pick.busy || (needInvite && invite.trim() === '');
+  const accountDrop = useFileDrop({ busy: accountBusy, onFiles: dropFile, stop: true });
+  const sendFile = (file) => {
+    setDropError(null);
     pick.run(async () => {
       setSending({ name: file.name, size: file.size, sent: 0, checking: false });
       try {
@@ -4401,8 +4426,12 @@ function ImportFlow({ signup, onDone, onBack }) {
         ${needInvite && html`<${Field} id="import-invite" label="Invite code" autocomplete="off" required
           value=${invite} onInput=${(e) => setInvite(e.target.value)} />`}
         <input ref=${picker} type="file" accept=".tar,application/x-tar" hidden onChange=${choose} />
-        <div class="actions"><button class="button action" type="button" disabled=${pick.busy || (needInvite && invite.trim() === '')}
-          onClick=${() => picker.current.click()}>Select the File</button></div>
+        <div class=${dropAreaClass(accountDrop.over, accountBusy)} ...${accountDrop.handlers}>
+          <p class="hint drop-text">Drop the account file here.</p>
+          <button class="button action" type="button" disabled=${accountBusy}
+            onClick=${() => picker.current.click()}>Select the File</button>
+          ${dropError && html`<p class="field-error" role="alert">${dropError}</p>`}
+        </div>
         ${row && html`<div class="group rows"><div class="link-row static">
           <span class="text"><span class="label">${row.label}</span><span class="summary">${row.summary}</span></span></div></div>`}
         <${AuthNotice} error=${pick.error} importing=${true} />
@@ -4589,4 +4618,5 @@ function App() {
   return html`${body}<${ConfirmHost} />${unlockAsk && (view === 'shell' || view === 'local') && html`<${UnlockSheet} session=${session} reason=${unlockAsk.reason} onDone=${closeUnlock} />`}`;
 }
 
+watchFileDrags(window, document.documentElement);
 render(html`<${App} />`, document.getElementById('app'));

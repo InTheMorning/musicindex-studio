@@ -262,6 +262,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Package the Tauri app for Linux, macOS and Windows.
 - Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md). The app is a Tauri window on the local API, with a tray, the data folder of `studio-desktop` and the fixed port 42069. The [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md) gives the facts.
 - [Task 088](../tasks/studio-v1-task-088-desktop-app.md) gives the work in five packets. Packets 088a (the shell start and the fixed port), 088b (the Tauri app) and 088d ("Quit" while work runs) are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the end of Phase 12. Packet 088c (the installers) is complete, and its check passed on the release run of `v0.1.0-rc.16`. The human test of that candidate found that on Linux a drop gives no file and Ctrl+Z does nothing. Packet 088e corrects both (ADR 0124 items 22 to 25), and the next candidate has the correction. The human test of ADR 0124 is open.
+- [Task 089](../tasks/studio-v1-task-089-drop-targets.md) gives the drop targets of [ADR 0125](../adr/0125-each-file-target-shows-that-it-takes-a-drop.md). It is complete, with its visual check, and its human test is open.
 - Visual check: the operator installs and uses the app on each platform.
 
 ### Phase 14: File Moves And The Self-Hosted File Host

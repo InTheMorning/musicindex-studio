@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys } from './review.js';
-import { api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
+import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
@@ -36,7 +36,7 @@ import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
-import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
+import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -728,10 +728,6 @@ const FIELD_NOUN = {
 };
 
 // Does the drag carry a file?
-function hasFiles(event) {
-  return Array.from((event.dataTransfer && event.dataTransfer.types) || []).includes('Files');
-}
-
 // The state and the actions of one file field. `subject` is the channel
 // model of a cover field, else the item. It gives the addresses from before.
 // `apply(address, facts, source)` puts the new file in the model. A selection
@@ -745,7 +741,6 @@ function useFilePick(field, subject, apply, onDuration) {
   const kind = fieldKind(field);
   const { busy, error, run } = useAction();
   const [open, setOpen] = useState(false);
-  const [over, setOver] = useState(false);
   const [dropError, setDropError] = useState(null);
   const [sent, setSent] = useState(0);
   const [size, setSize] = useState(0);
@@ -800,21 +795,16 @@ function useFilePick(field, subject, apply, onDuration) {
     else if (result.action === 'error') setDropError(result.text);
   };
   // The properties of the `.field` element of the address: the drop state
-  // and the drop (ADR 0062 items 20 and 21).
+  // and the drop (ADR 0062 items 20 and 21, ADR 0125 item 3).
+  const { over, handlers } = useFileDrop({ busy, onFiles: drop });
+  const areaDrop = useFileDrop({ busy, onFiles: drop, stop: true });
   const rootProps = {
-    class: over ? 'field drop-over' : 'field',
-    onDragOver: (e) => { if (hasFiles(e) && !busy) { e.preventDefault(); if (!over) setOver(true); } },
-    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); },
-    onDrop: (e) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      setOver(false);
-      if (!busy) drop(Array.from(e.dataTransfer.files));
-    },
+    class: `field${busy ? '' : ' drop-target'}${over ? ' drop-over' : ''}`,
+    ...handlers,
   };
   const errorText = dropError || (error ? importErrorText(error) : null);
   return {
-    field, kind, noun: FIELD_NOUN[field], open, busy, over, sent, size, errorText, rootProps, choose, upload,
+    field, kind, noun: FIELD_NOUN[field], open, busy, over, sent, size, errorText, rootProps, areaDrop, choose, upload,
     metadataFor, metadataFailed, metadataDone,
     openSheet: () => { setDropError(null); setOpen(true); },
     closeSheet: () => setOpen(false),
@@ -887,8 +877,13 @@ function FilePicker({ pick }) {
   let path = null;
   if (pick.open && source === 'release') path = `/feeds/${feedId}/picker/release?kind=${pick.kind}`;
   if (pick.open && source === 'hosts' && host) path = `/connectors/${host.connectorId}/picker?kind=${pick.kind}`;
-  // A drop on the sheet must not reach the field below it.
-  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  // A drop on the sheet must not reach the field below it. The drop area of
+  // "This computer" takes a file before this handler.
+  const stop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+  };
   return html`<dialog ref=${ref} class="sheet" aria-labelledby=${`${inputId}-title`} onClose=${pick.closeSheet}
       onDragOver=${stop} onDrop=${stop}>
     <header>
@@ -910,7 +905,8 @@ function FilePicker({ pick }) {
         </div>
         <${PickerList} key=${host.connectorId} path=${path} kind=${pick.kind} onSelect=${(file) => pick.choose(file, 'hosts')} />`}
       ${source === 'computer' && html`<div class="group">
-          <div class="import-pick">
+          <div class=${dropAreaClass(pick.areaDrop.over, pick.busy)} ...${pick.areaDrop.handlers}>
+            <p class="hint drop-text">Drop a file here.</p>
             <input id=${inputId} class="visually-hidden" type="file" disabled=${pick.busy} accept=${list[2].accept}
               onChange=${(e) => { const [file] = e.target.files; e.target.value = ''; if (file) pick.upload(file); }} />
             <label for=${inputId} class="button action">${pick.busy ? `Sending… ${progressPercent(pick.sent, pick.size)}%` : 'Select a File'}</label>
@@ -932,6 +928,7 @@ function ChooseFile({ pick, children }) {
       ${children}
       <button class="button action" type="button" id=${`choose-${pick.field}`} disabled=${pick.busy} aria-label=${`Choose… ${pick.noun}`}
         onClick=${pick.openSheet}>${pick.busy ? 'Sending…' : 'Choose…'}</button>
+      ${!pick.busy && !pick.over && html`<span class="hint drop-text">or drop a file here</span>`}
     </div>
     ${pick.over && html`<span class="hint" role="status">Drop the file here to send it.</span>`}
     ${!pick.open && pick.errorText && html`<span class="field-error" role="alert">${pick.errorText}</span>`}
@@ -1165,6 +1162,13 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
     }
   };
 
+  const [refused, setRefused] = useState([]);
+  const dropFiles = (files) => {
+    const useful = files.filter(addsAsTrackFile);
+    setRefused(files.filter((file) => !addsAsTrackFile(file)).map((file) => file.name));
+    if (useful.length > 0) addFiles(useful);
+  };
+  const tracksDrop = useFileDrop({ busy: false, onFiles: dropFiles, stop: true });
   const addFiles = (fileList) => {
     const added = Array.from(fileList).map((file) => ({
       id: nextImportId++,
@@ -1278,7 +1282,8 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <div class="import-pick">
+      <div class=${dropAreaClass(tracksDrop.over, false)} data-drop-many="" ...${tracksDrop.handlers}>
+        <p class="hint drop-text">Drop music and image files here.</p>
         <p class="hint" id="import-input-hint">
           Studio reads the facts of each file, and makes one track for each audio file.
         </p>
@@ -1287,6 +1292,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
           accept="audio/*,image/*,.wav,.flac,.m4a,.ogg,.opus"
           onChange=${(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         <label for="import-input" class="button action">＋ Choose Music and Image Files</label>
+        ${refused.length > 0 && html`<p class="field-error" role="alert">${refusedText(refused)}</p>`}
       </div>
       ${!assetMode().holdAssets && html`<div class="notice" role="status">${ADD_TRACKS_NOTICE}</div>`}
       ${rows.length === 0 && html`<button class="button link" type="button" onClick=${onAddress}>The Audio Is Already Online</button>`}

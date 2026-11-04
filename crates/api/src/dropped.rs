@@ -1,4 +1,4 @@
-//! The file of the last drop on the window of the desktop app (ADR 0124
+//! The files of the last drop on the window of the desktop app (ADR 0124
 //! items 22 to 24).
 //!
 //! On Linux, `WebKitGTK` gives the page no file from a drop. The app gets the
@@ -22,26 +22,29 @@ use crate::access::random_hex;
 /// The size of one read of the file.
 const CHUNK_BYTES: usize = 1024 * 1024;
 
-/// A cloneable holder of the file of the last drop.
+/// A cloneable holder of the files of the last drop.
 #[derive(Debug, Clone, Default)]
 pub struct DroppedFiles {
     files: Arc<Mutex<HashMap<String, PathBuf>>>,
 }
 
 impl DroppedFiles {
-    /// Keep `path` in the place of the file of the earlier drop, and give the
-    /// ID of its route.
+    /// Keep `paths` in the place of the files of the earlier drop, and give
+    /// the ID of the route of each path.
     ///
     /// # Errors
     ///
     /// Returns an error when the system gives no random bytes.
-    pub fn replace(&self, path: PathBuf) -> Result<String, ApiError> {
-        let id = random_hex::<16>()?;
+    pub fn replace(&self, paths: Vec<PathBuf>) -> Result<Vec<String>, ApiError> {
+        let named = paths
+            .into_iter()
+            .map(|path| Ok((random_hex::<16>()?, path)))
+            .collect::<Result<Vec<_>, ApiError>>()?;
+        let ids = named.iter().map(|(id, _)| id.clone()).collect();
         if let Ok(mut files) = self.files.lock() {
-            files.clear();
-            files.insert(id.clone(), path);
+            *files = named.into_iter().collect();
         }
-        Ok(id)
+        Ok(ids)
     }
 
     fn take(&self, id: &str) -> Option<PathBuf> {
@@ -110,7 +113,10 @@ mod tests {
         let file = data.path().join("song.flac");
         std::fs::write(&file, b"the bytes").unwrap();
         let dropped = DroppedFiles::default();
-        let id = dropped.replace(file).unwrap();
+        let other = data.path().join("other.flac");
+        std::fs::write(&other, b"other bytes").unwrap();
+        let ids = dropped.replace(vec![file, other]).unwrap();
+        let (id, other_id) = (ids[0].clone(), ids[1].clone());
         let router = router(&data, dropped);
 
         let refused = router.clone().oneshot(request(&id, None)).await.unwrap();
@@ -129,6 +135,18 @@ mod tests {
         let body = first.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(&body[..], b"the bytes");
 
+        let other = router
+            .clone()
+            .oneshot(request(&other_id, Some(TOKEN)))
+            .await
+            .unwrap();
+        let body = other.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            &body[..],
+            b"other bytes",
+            "ADR 0125 item 4: the route must give each file of a drop."
+        );
+
         let second = router.oneshot(request(&id, Some(TOKEN))).await.unwrap();
         assert_eq!(
             second.status(),
@@ -143,8 +161,8 @@ mod tests {
         let file = data.path().join("song.flac");
         std::fs::write(&file, b"the bytes").unwrap();
         let dropped = DroppedFiles::default();
-        let old = dropped.replace(file.clone()).unwrap();
-        let new = dropped.replace(file).unwrap();
+        let old = dropped.replace(vec![file.clone()]).unwrap().remove(0);
+        let new = dropped.replace(vec![file]).unwrap().remove(0);
         let router = router(&data, dropped);
         let answer = router
             .clone()

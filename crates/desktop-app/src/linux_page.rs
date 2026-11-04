@@ -23,9 +23,8 @@ fn file_name(path: &std::path::Path) -> String {
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
 }
 
-/// Give a drop to the page. The page gets the names, and an address for one
-/// regular file only. A drop of many files or of a folder needs no bytes,
-/// because the field refuses it.
+/// Give a drop to the page. The page gets the name of each path, and the ID
+/// of each regular file. A file path does not go to the page.
 pub fn give_drop(
     window: &WebviewWindow,
     dropped: &studio_desktop::DroppedFiles,
@@ -33,16 +32,19 @@ pub fn give_drop(
     paths: &[PathBuf],
     position: PhysicalPosition<f64>,
 ) {
-    let names: Vec<String> = paths.iter().map(|p| file_name(p)).collect();
-    let id = match paths {
-        [one] if one.is_file() => dropped.replace(one.clone()).ok(),
-        _ => None,
-    };
+    let regular: Vec<PathBuf> = paths.iter().filter(|p| p.is_file()).cloned().collect();
+    let mut ids = dropped.replace(regular).unwrap_or_default().into_iter();
+    let files: Vec<_> = paths
+        .iter()
+        .map(|path| {
+            let id = if path.is_file() { ids.next() } else { None };
+            json!({ "name": file_name(path), "id": id })
+        })
+        .collect();
     let call = json!({
         "x": position.x,
         "y": position.y,
-        "names": names,
-        "id": id,
+        "files": files,
         "token": token,
     });
     let _ = window.eval(format!("window.__studioDrop({call});"));

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult,
+  fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText,
   replacedAddresses, selectedFacts, kindOfFile, NO_ADDRESS_TEXT,
 } from '../ui/picker.js';
 
@@ -76,6 +76,17 @@ test('dropResult uploads one file of the right kind', () => {
   const song = { name: 'a.flac', type: '' };
   assert.equal(dropResult('track-audio', [song]).action, 'upload');
   assert.equal(dropResult('track-audio', [{ name: 'a.wav', type: 'audio/wav' }]).action, 'upload');
+});
+
+test('Add tracks takes music and image files, and no lyrics file', () => {
+  assert.equal(addsAsTrackFile({ name: 'a.flac' }), true);
+  assert.equal(addsAsTrackFile({ name: 'a.png' }), true);
+  assert.equal(addsAsTrackFile({ name: 'a.txt' }), false, 'ADR 0125 item 4: a text file is not a track.');
+  assert.equal(addsAsTrackFile({ name: 'a.zip' }), false);
+});
+
+test('refusedText names each file that a drop on Add tracks cannot use', () => {
+  assert.equal(refusedText(['a.txt', 'b.pdf']), 'Studio cannot use a.txt, b.pdf. Drop music and image files.');
 });
 
 test('dropResult refuses two files and a file of the wrong kind', () => {

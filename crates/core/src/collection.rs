@@ -2177,6 +2177,48 @@ impl Collection {
             .is_some())
     }
 
+    /// True when the file at `path` on a host is a pointer file of `feed`
+    /// (ADR 0126 item 21). A pointer file of a different feed gives false.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn is_pointer_of_feed(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+        feed: FeedId,
+    ) -> Result<bool, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT 1 FROM feed_pointers WHERE connector_id = ?1 AND path = ?2 AND feed_id = ?3",
+                params![connector.0, path, feed.0],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Remove the record of a pointer file, because the feed XML replaced
+    /// it (ADR 0126 item 22). The function does nothing when the file has
+    /// no record.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_feed_pointer(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM feed_pointers WHERE connector_id = ?1 AND path = ?2",
+            params![connector.0, path],
+        )?;
+        Ok(())
+    }
+
     /// Record a placed file: the feed XML of `feed` that stage 2 of ADR 0126
     /// refused. It is not a pointer file (ADR 0126 item 19).
     ///

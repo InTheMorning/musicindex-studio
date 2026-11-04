@@ -391,6 +391,9 @@ pub struct FeedMove {
     pub from_url: Option<String>,
     /// How the host from before points to the new address.
     pub method: FeedMoveMethod,
+    /// The file at the path on the new host is a pointer file of this feed,
+    /// and the feed XML replaces it (ADR 0126 item 21).
+    pub replaces_pointer: bool,
 }
 
 /// The kind of a [`HostOperation`] (ADR 0036 items 10 and 12).
@@ -2040,6 +2043,7 @@ fn feed_move(
             path,
             from_url: row.public_url.clone(),
             method: FeedMoveMethod::None,
+            replaces_pointer: false,
         }));
     }
     let (from_id, from_path) = writable(row)?;
@@ -2052,6 +2056,7 @@ fn feed_move(
     } else {
         FeedMoveMethod::Pointer
     };
+    let replaces_pointer = collection.is_pointer_of_feed(connector_id, &path, row.id)?;
     Ok(Some(FeedMove {
         connector_id,
         url: hosts.get(connector_id)?.public_url(&path),
@@ -2060,6 +2065,7 @@ fn feed_move(
             .public_url(from_path)
             .or_else(|| row.public_url.clone()),
         method,
+        replaces_pointer,
     }))
 }
 
@@ -2078,6 +2084,12 @@ fn feed_move_bytes(feed_move: Option<&FeedMove>) -> Vec<u8> {
     bytes.extend_from_slice(feed_move.path.as_bytes());
     bytes.push(0);
     bytes.extend_from_slice(feed_move.method.as_str().as_bytes());
+    // Only a move that replaces a pointer file adds this value, so the
+    // diff ID of any other move does not change (ADR 0126 item 21).
+    if feed_move.replaces_pointer {
+        bytes.push(0);
+        bytes.extend_from_slice(b"replaces-pointer");
+    }
     bytes
 }
 
@@ -2298,9 +2310,11 @@ pub fn set_feed_host(
             format!("{path} is not on its file host yet, so there is no feed XML to move"),
         ));
     }
-    // ADR 0126 item 19: a placed file of this feed is not a different file.
+    // ADR 0126 items 19 and 21: a placed file or a pointer file of this
+    // feed is not a different file.
     if collection.host_file(target, path)?.is_some()
         && !collection.is_placed_feed_file(target, path, id)?
+        && !collection.is_pointer_of_feed(target, path, id)?
     {
         return Err(PipelineError::new(
             PipelineErrorKind::FileExists,
@@ -3626,6 +3640,10 @@ pub fn write_draft_signed(
     if let Some(moved) = &feed_move {
         // The destination passed stage 2, so its file is the feed now.
         collection.remove_placed_feed_file(moved.connector_id, &moved.path)?;
+        // The path is no longer a pointer file (ADR 0126 item 22). The
+        // record stays until here, so a stopped write that continues has
+        // the same diff.
+        collection.remove_feed_pointer(moved.connector_id, &moved.path)?;
     }
     touched.insert(feed_move.as_ref().map_or(connector_id, |m| m.connector_id));
 
@@ -4282,7 +4300,8 @@ fn has_guid_of(found: &[u8], draft: &DraftRow) -> bool {
 
 /// Put `draft` on a new host at `path`. A file with the same bytes from an
 /// earlier, stopped write is a finished step. A placed file of this feed
-/// with the `podcast:guid` of the draft is replaced (ADR 0126 item 19).
+/// or pointer file of this feed with the `podcast:guid` of the draft is
+/// replaced (ADR 0126 items 19 and 21).
 ///
 /// # Errors
 ///
@@ -4314,7 +4333,8 @@ fn place_feed_file(
             if found.bytes == draft.draft_xml {
                 return Ok(found.version);
             }
-            if collection.is_placed_feed_file(connector_id, path, id)?
+            if (collection.is_placed_feed_file(connector_id, path, id)?
+                || collection.is_pointer_of_feed(connector_id, path, id)?)
                 && has_guid_of(&found.bytes, draft)
             {
                 return host
@@ -4454,6 +4474,9 @@ fn keep_refused_destination(
     touched: &mut HashSet<ConnectorId>,
 ) -> Result<(), PipelineError> {
     collection.add_placed_feed_file(moved.connector_id, &moved.path, id)?;
+    // A pointer file that the feed XML replaced is a placed file now, and
+    // no code treats it as a pointer (ADR 0126 items 19 and 22).
+    collection.remove_feed_pointer(moved.connector_id, &moved.path)?;
     touched.insert(moved.connector_id);
     finish_hosts(collection, hosts, touched)?;
     confirm_files_on_next_write(collection, id, operations)?;

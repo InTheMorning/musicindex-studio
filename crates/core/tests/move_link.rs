@@ -865,3 +865,214 @@ fn a_move_from_an_expired_temporary_area_runs_stage_2_and_writes_no_pointer() {
             .unwrap()
     );
 }
+
+// ---- A return to an earlier host (ADR 0126 items 21 to 23) ----
+
+const A_ID: ConnectorId = ConnectorId(1);
+
+/// Move the feed to `target`, which serves the draft at `url`. The first
+/// move uses the draft of the environment. Each later move starts a draft
+/// on the host of the feed.
+fn move_to(e: &mut Env, target: ConnectorId, url: &str) {
+    if e.collection.draft(e.feed).unwrap().is_none() {
+        let host = e.collection.feed(e.feed).unwrap().connector_id.unwrap();
+        pipeline::start_draft(&e.collection, e.hosts.get(host).unwrap(), e.feed).unwrap();
+    }
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, target).unwrap();
+    let reader = ScriptedReader::empty().with_body(url, draft_body(e, url));
+    e.write(&reader).unwrap();
+}
+
+fn move_to_b(e: &mut Env) {
+    let b = e.b;
+    move_to(e, b, DEST);
+}
+
+fn on_host(e: &Env, id: ConnectorId) -> String {
+    let dir = if id == A_ID { &e.dir_a } else { &e.dir_b };
+    fs::read_to_string(dir.path().join("album.xml")).unwrap()
+}
+
+fn is_pointer_to(text: &str, url: &str) -> bool {
+    text.contains(&format!("new-feed-url>{url}</")) && text.contains(GUID)
+}
+
+fn is_feed_with_self(text: &str, url: &str) -> bool {
+    !text.contains("new-feed-url") && text.contains(&format!("href=\"{url}\""))
+}
+
+#[test]
+fn a_move_from_a_to_b_and_back_to_a_completes() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    assert!(is_pointer_to(&on_host(&e, A_ID), DEST));
+    assert!(e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
+
+    // The diff of the return says that the pointer file becomes the feed.
+    pipeline::start_draft(&e.collection, e.hosts.get(e.b).unwrap(), e.feed).unwrap();
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap();
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    assert!(diff.feed_move.as_ref().unwrap().replaces_pointer);
+    move_to(&mut e, A_ID, URL);
+
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(A_ID));
+    assert!(is_feed_with_self(&on_host(&e, A_ID), URL));
+    assert!(is_pointer_to(&on_host(&e, e.b), URL));
+    assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
+    assert!(e.collection.is_feed_pointer(e.b, "album.xml").unwrap());
+    assert!(
+        !e.collection
+            .is_placed_feed_file(A_ID, "album.xml", e.feed)
+            .unwrap()
+    );
+}
+
+#[test]
+fn two_returns_in_sequence_keep_the_bytes_and_the_pointer_rows_right() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    let rows = |e: &Env| {
+        (
+            e.collection.is_feed_pointer(A_ID, "album.xml").unwrap(),
+            e.collection.is_feed_pointer(e.b, "album.xml").unwrap(),
+        )
+    };
+    assert_eq!(rows(&e), (true, false));
+    move_to(&mut e, A_ID, URL);
+    assert!(is_feed_with_self(&on_host(&e, A_ID), URL));
+    assert!(is_pointer_to(&on_host(&e, e.b), URL));
+    assert_eq!(rows(&e), (false, true));
+    move_to_b(&mut e);
+    assert!(is_feed_with_self(&on_host(&e, e.b), DEST));
+    assert!(is_pointer_to(&on_host(&e, A_ID), DEST));
+    assert_eq!(rows(&e), (true, false));
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
+}
+
+#[test]
+fn a_file_at_a_pointer_path_with_a_different_guid_gives_file_exists() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    pipeline::start_draft(&e.collection, e.hosts.get(e.b).unwrap(), e.feed).unwrap();
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap();
+    // Somebody replaced the pointer file with a feed of another podcast.
+    let other = e
+        .original
+        .replace(GUID, "00000000-0000-0000-0000-000000000000");
+    fs::write(e.dir_a.path().join("album.xml"), &other).unwrap();
+    let reader = ScriptedReader::empty().with_body(URL, draft_body(&e, URL));
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    assert_eq!(on_host(&e, A_ID), other);
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
+    assert!(e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
+}
+
+#[test]
+fn set_feed_host_refuses_the_pointer_path_of_a_different_feed() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    pipeline::start_draft(&e.collection, e.hosts.get(e.b).unwrap(), e.feed).unwrap();
+    let other = e.collection.add_feed(None, None).unwrap();
+    e.collection
+        .add_feed_pointer(A_ID, "album.xml", other)
+        .unwrap();
+    let error = pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    assert!(
+        !e.collection
+            .is_pointer_of_feed(A_ID, "album.xml", e.feed)
+            .unwrap()
+    );
+}
+
+#[test]
+fn the_diff_of_a_return_has_the_new_value_and_a_normal_move_does_not() {
+    let e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let normal = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    assert!(!normal.feed_move.as_ref().unwrap().replaces_pointer);
+    let json = serde_json::to_value(normal.feed_move.as_ref().unwrap()).unwrap();
+    assert_eq!(json["replaces_pointer"], false);
+    let normal_id = normal.id.clone();
+
+    // The same move with the row of a pointer has a different diff ID.
+    e.collection
+        .add_feed_pointer(e.b, "album.xml", e.feed)
+        .unwrap();
+    fs::write(e.dir_b.path().join("album.xml"), e.original.as_bytes()).unwrap();
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let ret = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    assert!(ret.feed_move.as_ref().unwrap().replaces_pointer);
+    assert_ne!(ret.id, normal_id);
+    let json = serde_json::to_value(ret.feed_move.as_ref().unwrap()).unwrap();
+    assert_eq!(json["replaces_pointer"], true);
+}
+
+#[test]
+fn a_stage_2_refusal_on_a_return_keeps_the_state_and_a_repair_completes() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    pipeline::start_draft(&e.collection, e.hosts.get(e.b).unwrap(), e.feed).unwrap();
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap();
+    let placed = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let b_before = on_host(&e, e.b);
+
+    // A CDN still serves the pointer: the body has the tag of the pointer.
+    let mut stale = draft_body(&e, URL);
+    stale.names.tag = Some(DEST.to_owned());
+    let reader = ScriptedReader::empty().with_body(URL, stale);
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadMoveLink, "{error}");
+    // The destination holds the feed, as a placed file and not a pointer.
+    assert_eq!(files(e.dir_a.path()).get("album.xml").unwrap(), &placed);
+    assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
+    assert!(
+        e.collection
+            .is_placed_feed_file(A_ID, "album.xml", e.feed)
+            .unwrap()
+    );
+    // The feed keeps its location, and the old host gets no pointer.
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
+    assert_eq!(on_host(&e, e.b), b_before);
+    assert!(!e.collection.is_feed_pointer(e.b, "album.xml").unwrap());
+    assert!(e.collection.draft_feed_move(e.feed).unwrap().is_some());
+
+    // A repair, and the next write replaces the placed file and completes.
+    e.edit(|f| f.title = Some("Album (Repaired)".into()));
+    let reader = ScriptedReader::empty().with_body(URL, draft_body(&e, URL));
+    e.write(&reader).unwrap();
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(A_ID));
+    assert!(on_host(&e, A_ID).contains("Album (Repaired)"));
+    assert!(is_pointer_to(&on_host(&e, e.b), URL));
+    assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
+    assert!(
+        !e.collection
+            .is_placed_feed_file(A_ID, "album.xml", e.feed)
+            .unwrap()
+    );
+}
+
+#[test]
+fn a_stopped_write_of_a_return_continues() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    pipeline::start_draft(&e.collection, e.hosts.get(e.b).unwrap(), e.feed).unwrap();
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap();
+    let draft = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let id_before = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed)
+        .unwrap()
+        .id;
+    // The earlier write stopped after the feed XML replaced the pointer
+    // file: the file has the draft bytes, and the row is still there.
+    fs::write(e.dir_a.path().join("album.xml"), &draft).unwrap();
+    let id_after = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed)
+        .unwrap()
+        .id;
+    assert_eq!(id_before, id_after);
+    let reader = ScriptedReader::empty().with_body(URL, draft_body(&e, URL));
+    e.write(&reader).unwrap();
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(A_ID));
+    assert!(is_pointer_to(&on_host(&e, e.b), URL));
+    assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
+}

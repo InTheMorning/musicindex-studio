@@ -184,7 +184,7 @@ The engines are WebKitGTK on Linux, WKWebView on macOS and WebView2 on Windows. 
 - Studio drops files onto a file field (R14). The drop code is in `picker.js` and `editor.js`.
 - Tauri enables its own drag handler by default. The setting is `dragDropEnabled` in the window configuration, and its default is `true` [S7].
 - The configuration page says that disabling it "is required to use HTML5 drag and drop on the frontend on Windows" [S7]. The builder page says the same for Windows, because Tauri replaces the WebView2 handler [S8].
-- The effect on macOS and Linux is Not verified.
+- The effect on macOS is Not verified. On Linux, the page gets no file with the handler off (ADR 0124, packet 088e of task 088).
 - The `disable_drag_drop_handler` method is the builder form of the setting [S8].
 
 ### File downloads

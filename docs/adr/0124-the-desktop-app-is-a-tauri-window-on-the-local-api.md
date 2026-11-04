@@ -8,6 +8,7 @@
 - Changed: on 2026-11-03 the operator added items 16 to 21, through the questionnaire. "Quit" waits for a write that runs, or asks the user. The operator selected the dialog with three buttons and a wait with no limit. The operator also selected writes and uploads as the work, and the wait in the tray menu.
 - Changed: on 2026-11-03 the operator added the lock of item 10, through the questionnaire. The visual check of packet 088b found that the single instance plugin needs D-Bus on Linux. With no D-Bus, a second start opened a second API on the same data folder.
 - Changed: on 2026-11-03 the planning model added the ad-hoc signature of item 14, from the Tauri page on macOS signing. It needs no Apple account and no secret. The user must open the app with "Open Anyway" one time.
+- Changed: on 2026-11-04 the operator added items 22 to 25 and changed items 3 and 4, through the questionnaire, after the human test of `0.1.0-rc.16`. On Linux a drop did not reach the field, and Ctrl+Z did nothing. [WebKit bug 323277](https://bugs.webkit.org/show_bug.cgi?id=323277) gives the cause of the drop.
 - Changes: [ADR 0002](0002-rust-core-json-api-browser-ui.md) item 4, the form of the Tauri shell. The [distribution plan](../plans/distribution-phase-plan.md), milestone 2.
 - Uses: [ADR 0016](0016-ui-without-a-build-step.md), [ADR 0017](0017-local-api-access.md), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) for the granted writes, and the [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
@@ -24,8 +25,8 @@
 
 1. A new crate `crates/desktop-app` is the Tauri app. Tauri 2 is the version, with the Rust pin of `rust-toolchain.toml`.
 2. The app runs the `studio-api` router in its own process on the loopback address, with the access token of ADR 0017. It opens one window at `http://127.0.0.1:PORT/#token=…`. The window exposes no Tauri command to the page, so the app has no `remote` capability.
-3. The UI, the API and their access rules do not change for the app. The UI has no code for Tauri.
-4. The window turns off the drop handler of Tauri, so that the drop of a file goes to the page (ADR 0062).
+3. The UI and the access rules of the API do not change for the app. The UI has no code for Tauri. The API has one more route for the app, in item 22.
+4. On macOS and on Windows, the window turns off the drop handler of Tauri, so that the drop of a file goes to the page (ADR 0062). Items 22 to 24 give the drop on Linux.
 5. A link that leaves the origin of the window, or a link with `target="_blank"`, opens in the system browser. The window does not go to it.
 6. A download of the page goes to the downloads folder of the user, and the app tells the user the name of the file.
 
@@ -61,8 +62,19 @@
     While it waits, the tray menu starts with the item "Quits after the write…", which the user cannot select. Then it has "Open Studio" and "Quit Now". "Open Studio" shows the window and cancels the quit. "Quit Now" ends the app immediately.
 21. These items apply to the app only. In `studio-desktop`, Ctrl+C stops the shell immediately.
 
+### The Page On Linux
+
+WebKitGTK gives a page no file from a drop, and the page cannot read the file address of the drag. It also does not connect Ctrl+Z to the undo command. A plain window of the same engine shows both results.
+
+22. The local router has the route `GET /api/v1/dropped-files/{id}`, with the access rule of ADR 0017. It gives the bytes of the file of the last drop, one time. The ID is random, and the app sets it for each drop. The page cannot name a path. The router of the server does not have this route.
+23. On Linux, the window keeps the drop handler of Tauri, so the engine does not put the file address in a text box. The app gives the page the names of the dropped files, the position and the ID of one regular file. A file path does not go to the page.
+24. On Linux, the app adds a script to the window. For a drag of `text/uri-list`, the script sends each `dragover` to the page as a file drag, so a field shows its drop state with no change to the UI. At a drop, it sends a `drop` with the files to the element at the position. When that element does not accept a file drag, the script gets no bytes.
+25. On Linux, the same script connects Ctrl+Z to the undo command, and Ctrl+Shift+Z and Ctrl+Y to the redo command, in a text field.
+
 ## Alternatives Considered
 
+- A file address that the page reads from the drag on Linux. Not possible: WebKitGTK gives the page an empty value.
+- No drop on Linux, with only the file button. Not chosen: the operator selected a drop that works.
 - The localhost plugin. Not chosen: it adds a second server for the same UI, and its page warns of security risks.
 - The UI in the Tauri protocol. Not chosen: the API is on a different origin, and ADR 0017 refuses CORS.
 - The data folder of the Tauri identifier. Not chosen: it needs a move of the collection and the vault on each system.
@@ -86,6 +98,7 @@
 - The API binds only a loopback address, and each `/api/` request needs the token (ADR 0017).
 - The UI loads no script, style, font or frame from other servers (ADR 0016).
 - No signing key or credential is in the repository, an artifact or a log.
+- The page cannot name a file path for the route of item 22.
 
 ## Non-goals
 
@@ -100,6 +113,7 @@ Mechanical:
 - A test: the shell start gives port 42069 when it is free, and a different port when a listener has it.
 - A test: the link rule of item 5 opens an address of a different origin outside the window, and keeps an address of the origin in it.
 - A test: the app opens the data folder of `studio-desktop`.
+- A test: the route of item 22 needs the token and gives the file one time. A new drop replaces the earlier file. The routes of the server do not have this route.
 - A test: a second lock of one data folder fails, and the lock is free after the first shell ends.
 - A test: the work count of item 17 increases during a write and during an upload in parts, and decreases after it. An upload with no new part for 2 minutes is not in the count.
 - A test: the decision of items 16 to 20 is a function of the work count and the button. It gives "end now", "show the dialog", "wait" or "continue".

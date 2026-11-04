@@ -8,6 +8,8 @@
 
 mod downloads;
 mod links;
+#[cfg(target_os = "linux")]
+mod linux_page;
 mod quit;
 
 use std::collections::HashMap;
@@ -243,18 +245,32 @@ fn open_outside(app: &AppHandle, address: &Url) {
     let _ = app.opener().open_url(address.as_str(), None::<&str>);
 }
 
-fn build_window(app: &AppHandle, ui_url: &str) -> Result<WebviewWindow, String> {
+fn build_window(
+    app: &AppHandle,
+    ui_url: &str,
+    dropped: studio_desktop::DroppedFiles,
+) -> Result<WebviewWindow, String> {
     let address = Url::parse(ui_url).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    let token = linux_page::token_of(&address);
+    #[cfg(not(target_os = "linux"))]
+    let _ = dropped;
     let origin = address.origin();
     let navigation_origin = origin.clone();
     let navigation_app = app.clone();
     let window_app = app.clone();
     let download_app = app.clone();
     let planned: Mutex<HashMap<String, PathBuf>> = Mutex::new(HashMap::new());
-    let window = WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(address))
+    let builder = WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(address))
         .title(TITLE)
-        .inner_size(1280.0, 860.0)
-        .disable_drag_drop_handler()
+        .inner_size(1280.0, 860.0);
+    // `WebKitGTK` gives the page no file from a drop, so on Linux the app gets
+    // the drop. Each other system gives it to the page (ADR 0124 items 4 and 23).
+    #[cfg(target_os = "linux")]
+    let builder = builder.initialization_script(linux_page::SCRIPT);
+    #[cfg(not(target_os = "linux"))]
+    let builder = builder.disable_drag_drop_handler();
+    let window = builder
         .on_navigation(
             move |target| match link_action(&navigation_origin, target, false) {
                 LinkAction::Keep => true,
@@ -314,6 +330,10 @@ fn build_window(app: &AppHandle, ui_url: &str) -> Result<WebviewWindow, String> 
         if let WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
             let _ = hidden.hide();
+        }
+        #[cfg(target_os = "linux")]
+        if let WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, position }) = event {
+            linux_page::give_drop(&hidden, &dropped, &token, paths, *position);
         }
     });
     Ok(window)
@@ -377,7 +397,7 @@ fn setup(app: &AppHandle) -> Result<(), String> {
         }
         let _ = ended_sender.send(());
     });
-    build_window(app, &started.ui_url)?;
+    build_window(app, &started.ui_url, started.dropped)?;
     build_tray(app).map_err(|e| e.to_string())?;
     Ok(())
 }

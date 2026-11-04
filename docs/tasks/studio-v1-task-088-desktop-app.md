@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Phase 13: Deskt
 Decision: [ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 Research: [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
 
-Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c is complete. Its check passed on the release run of `v0.1.0-rc.16`.
+Status: Open. Packets 088a, 088b and 088d are complete, with their visual checks. On 2026-11-03 the operator removed the gate of the distribution plan. Packet 088c is complete. Its check passed on the release run of `v0.1.0-rc.16`. The human test of that candidate found the defects of packet 088e.
 
 ## Goal
 
@@ -16,6 +16,7 @@ An artist installs Music Index Studio, and it opens in its own window. Closing t
 - 088b: the Tauri app `crates/desktop-app`: the window, the link rule, the download, the drop, the tray and the single instance. After the commit of 088a.
 - 088c: the installers in the release workflow, adjacent to the archives, with the notes for an unsigned app. After the commit of 088b.
 - 088d: "Quit" while work runs (ADR 0124 items 16 to 21): the work count in `studio-api`, the graceful shutdown, the dialog and the wait in the tray. After the commit of 088b. Packets 088c and 088d do not depend on each other.
+- 088e: the drop and Ctrl+Z on Linux (ADR 0124 items 22 to 25), from the human test of `0.1.0-rc.16`.
 
 Visual check of 088a, by the planning model: start `studio-desktop` two times with the same data folder. Change the theme between the two starts. The theme stays. Start a second `studio-desktop` while the first runs: it gets a different port and starts.
 
@@ -25,7 +26,7 @@ Visual check of 088b, by the planning model on Linux: the visual check of ADR 01
 - The tray menu has "Open Studio" and "Quit". "Open Studio" shows the window and gives it the focus. "Quit" stops the API and ends the app.
 - With D-Bus, a second start shows the first window. With no D-Bus, a second start shows "Studio is already running." and ends with no second API.
 - Two downloads of "Export People" give `studio-people.json` and `studio-people (1).json`, and each dialog names its file. On Linux, WebKitGTK gives the handler a free name with ` (1)`, so the ` 2` of item 5 does not occur there.
-- A drop reaches the page, because the Tauri drop handler is off. The drag source of the check gave only `text/uri-list`, so the page got text and no file. A plain WebKitGTK window gave the same result. The human test does the drop from a file manager.
+- A drop reaches the page, because the Tauri drop handler is off. The drag source of the check gave only `text/uri-list`, so the page got text and no file. A plain WebKitGTK window gave the same result. This check did not find the defect: the same result occurs with a file manager. Packet 088e corrects it.
 
 Visual check of 088d, by the planning model on Linux: the Quit step of the visual check of ADR 0124. It passed on 2026-11-03 on Xvfb. A local folder host had a public address on a local test server that waits 40 seconds, so each write waited about 20 seconds at its confirmation. The results:
 
@@ -452,3 +453,39 @@ At the end, report:
 3. behavior changed
 4. deviations from task
 5. unresolved concerns
+
+## Packet 088e: The Drop And Ctrl+Z On Linux
+
+On 2026-11-04 the planning model made this packet directly, after the human test of `0.1.0-rc.16` on the AppImage. The operator selected option A in the questionnaire: the app handles the drop.
+
+### Facts
+
+The planning model got these facts from a drag from Thunar to a plain WebKitGTK 2.54.2 window, with no Studio code:
+
+- The page gets the types `text/uri-list` and `text/html`, no type `Files`, and `files=0`. [WebKit bug 323277](https://bugs.webkit.org/show_bug.cgi?id=323277) reports this as a regression from a security fix. Its status was NEW on 2026-11-04.
+- The page does not accept the drag, so the engine puts the `file:///` address in a text box.
+- When the page accepts the drag, `getData('text/uri-list')` is empty at the drop. So the page cannot read the path.
+- Ctrl+Z reaches the page with no cancel and has no effect. `document.execCommand('undo')` undoes the text.
+
+### Files
+
+`crates/api/src/dropped.rs` is new. `crates/desktop-app/src/linux_page.rs` and `linux_page.js` are new. The packet changes `crates/api/src/lib.rs`, `crates/desktop/src/lib.rs`, `crates/desktop-app/src/main.rs` and `crates/desktop-app/Cargo.toml`.
+
+### Acceptance Criteria
+
+Mechanical:
+
+- The route needs the token and gives the file one time.
+- A new drop replaces the file of the earlier drop.
+- The routes of the server do not have the route.
+- The four commit checks pass.
+
+Visual, by the planning model on Xvfb with the Linux debug build and a drag from Thunar:
+
+- During a drag over "Audio file address", the field shows its drop state and "Drop the file here to send it." The result was a pass.
+- A drop of a WAV file sends it, and the address changes to the new file. The duration and the MP3 and lossless rows show. No `file:///` text shows. A file of 100 MB also gave the duration and both rows. The result was a pass.
+- A drop of a text file shows "Select an audio file". A drop of two files shows "Drop one file only". The result was a pass.
+- A drop on Title changes no text and sends no file. The result was a pass.
+- Ctrl+Z and Ctrl+Shift+Z undo and redo the text of the album title, and the feed file name below it changes too. The result was a pass.
+
+Human, by the operator: the drop and Ctrl+Z in the AppImage of the next candidate, from the file manager of the operator. The macOS and Windows windows do not use this packet, and a tester of those systems checks their drop.

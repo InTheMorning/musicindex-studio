@@ -8,6 +8,7 @@ mod access;
 mod account;
 mod announcer;
 mod downloads;
+mod dropped;
 mod error;
 mod import;
 mod media;
@@ -27,6 +28,7 @@ use axum::routing::{delete, get, post, put};
 
 pub use access::Access;
 pub use axum::Router;
+pub use dropped::DroppedFiles;
 pub use error::ApiError;
 pub use import::{
     Credential, ImportOpen, ImportStore, PART_SIZE as IMPORT_PART_SIZE, Staged, verify_credential,
@@ -96,6 +98,16 @@ async fn local_session() -> axum::Json<serde_json::Value> {
 /// session route and the routes of one workspace, all under the access
 /// layer (ADR 0017).
 pub fn local_router(workspace: Workspace, access: Access) -> Router {
+    local_router_with_drops(workspace, access, DroppedFiles::default())
+}
+
+/// The local router with the route of the file of a drop on the window of
+/// the desktop app (ADR 0124 item 22).
+pub fn local_router_with_drops(
+    workspace: Workspace,
+    access: Access,
+    dropped: DroppedFiles,
+) -> Router {
     // The desktop public origin is its loopback address (ADR 0110 item 12).
     let workspace = if workspace.public_origin.is_none() {
         workspace.with_public_origin(&format!("http://127.0.0.1:{}", access.port))
@@ -105,6 +117,10 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
     let (workspace_routes, _handle) = workspace_router(workspace);
     ui_router()
         .route("/auth/v1/session", get(local_session))
+        .route(
+            "/api/v1/dropped-files/{id}",
+            get(dropped::serve).with_state(dropped),
+        )
         .merge(workspace_routes)
         .layer(middleware::from_fn_with_state(access, access::check))
 }

@@ -9,8 +9,8 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
-pub use studio_api::Work;
-use studio_api::{Access, Workspace, local_router};
+use studio_api::{Access, Workspace, local_router_with_drops};
+pub use studio_api::{DroppedFiles, Work};
 use tokio::net::TcpListener;
 
 /// The port that the desktop shells try first (ADR 0124 item 7). A fixed
@@ -109,6 +109,8 @@ pub struct Started {
     /// The count of the writes and the uploads that run (ADR 0124 items 16
     /// and 17).
     pub work: studio_api::Work,
+    /// The file of the last drop on the window of the app (ADR 0124 item 22).
+    pub dropped: studio_api::DroppedFiles,
 }
 
 impl std::fmt::Debug for Started {
@@ -241,7 +243,8 @@ where
     let access = Access::new(port).map_err(|e| StartError::new(format!("{e:?}")))?;
     let ui_url = access.ui_url();
     let work = workspace.work();
-    let router = local_router(workspace, access);
+    let dropped = studio_api::DroppedFiles::default();
+    let router = local_router_with_drops(workspace, access, dropped.clone());
     let serve = async move {
         // The lock stays until the serve ends.
         let _lock = lock;
@@ -254,6 +257,7 @@ where
         port,
         serve: Box::pin(serve),
         work,
+        dropped,
     })
 }
 

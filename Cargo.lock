@@ -4729,6 +4729,7 @@ name = "studio-desktop-app"
 version = "0.1.0-rc.16"
 dependencies = [
  "directories",
+ "serde_json",
  "studio-desktop",
  "tauri",
  "tauri-build",

@@ -28,6 +28,7 @@ use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::{Library, file_stamp};
 use crate::live::{self, LiveStatus};
 use crate::media::{op3_prefix, plain_address};
+use crate::move_link::{self, BadMoveLink, DraftLinks, FeedReader, LinkReport};
 use crate::nostr_events::npub_text;
 use crate::roles;
 use crate::xml::{Document, ParseError};
@@ -124,6 +125,10 @@ pub enum PipelineErrorKind {
     /// A show grant of the draft names an app that is not active now, so
     /// the write would drop the grant with no message (ADR 0110 item 19).
     AppNotActive,
+    /// A link of the draft is not correct, so stage 1 refuses the write.
+    /// [`PipelineError::bad_move_link`] gives the condition and each hop
+    /// (ADR 0126 items 9 and 10).
+    BadMoveLink,
 }
 
 /// An error from the write pipeline.
@@ -131,6 +136,7 @@ pub enum PipelineErrorKind {
 pub struct PipelineError {
     kind: PipelineErrorKind,
     message: String,
+    bad_move_link: Option<Box<BadMoveLink>>,
 }
 
 impl PipelineError {
@@ -138,6 +144,16 @@ impl PipelineError {
         Self {
             kind,
             message: message.into(),
+            bad_move_link: None,
+        }
+    }
+
+    /// The error of a refusal in stage 1 (ADR 0126 item 10).
+    pub(crate) fn refused(refusal: BadMoveLink) -> Self {
+        Self {
+            kind: PipelineErrorKind::BadMoveLink,
+            message: refusal.to_string(),
+            bad_move_link: Some(Box::new(refusal)),
         }
     }
 
@@ -145,6 +161,13 @@ impl PipelineError {
     #[must_use]
     pub fn kind(&self) -> PipelineErrorKind {
         self.kind
+    }
+
+    /// The condition and each hop of a [`PipelineErrorKind::BadMoveLink`]
+    /// error.
+    #[must_use]
+    pub fn bad_move_link(&self) -> Option<&BadMoveLink> {
+        self.bad_move_link.as_deref()
     }
 }
 
@@ -3042,6 +3065,7 @@ pub fn library_file_in_use(
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::DiffNotApproved`],
+/// [`PipelineErrorKind::BadMoveLink`],
 /// [`PipelineErrorKind::WaitingForDownload`],
 /// [`PipelineErrorKind::BadAddress`], [`PipelineErrorKind::BadKey`] or
 /// [`PipelineErrorKind::Conflict`] before any file changes on a host.
@@ -3062,6 +3086,7 @@ pub fn write_draft(
     hosts: &Hosts,
     library: &Library,
     addresses: &dyn AddressCheck,
+    reader: &dyn FeedReader,
     id: FeedId,
     approved: &DiffId,
 ) -> Result<Version, PipelineError> {
@@ -3070,6 +3095,7 @@ pub fn write_draft(
         hosts,
         library,
         addresses,
+        LinkCheck::Check(reader),
         id,
         approved,
         &[],
@@ -3085,11 +3111,16 @@ pub fn write_draft(
 /// # Errors
 ///
 /// Gives the errors of [`write_draft_signed`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "write_draft gives its arguments and the client of the public address"
+)]
 pub fn write_public_draft(
     collection: &mut Collection,
     hosts: &Hosts,
     library: &Library,
     addresses: &dyn AddressCheck,
+    reader: &dyn FeedReader,
     web: &crate::web::Web,
     id: FeedId,
     approved: &DiffId,
@@ -3099,12 +3130,101 @@ pub fn write_public_draft(
         hosts,
         library,
         addresses,
+        LinkCheck::Check(reader),
         id,
         approved,
         &[],
         unix_now(),
         Some(web),
     )
+}
+
+/// How a write treats the links of its draft (ADR 0126 stage 1).
+#[derive(Clone, Copy)]
+pub enum LinkCheck<'a> {
+    /// Run stage 1. The reader reads each followed URL.
+    Check(&'a dyn FeedReader),
+    /// A granted write: it changes no link, makes no read and gets no
+    /// refusal from stage 1 (ADR 0126 item 26). Only `write_granted` passes
+    /// this value.
+    GrantedWrite,
+}
+
+/// The URL of a draft (ADR 0126 item 4): the destination of the move, else
+/// the public address of the feed (ADR 0021). Gives `None` for a feed on a
+/// file host with no public address.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the host set fails.
+fn draft_url(
+    hosts: &Hosts,
+    row: &FeedRow,
+    feed_move: Option<&FeedMove>,
+) -> Result<Option<String>, PipelineError> {
+    if let Some(moved) = feed_move {
+        return Ok(moved.url.clone());
+    }
+    if let Some(url) = &row.public_url {
+        return Ok(Some(url.clone()));
+    }
+    Ok(match writable(row) {
+        Ok((connector_id, path)) => hosts.get(connector_id)?.public_url(path),
+        Err(_) => None,
+    })
+}
+
+/// Run stage 1 of ADR 0126 on a draft. The self link counts as changed
+/// when it differs from the self link of the base.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the host set fails.
+fn link_report(
+    hosts: &Hosts,
+    reader: &dyn FeedReader,
+    row: &FeedRow,
+    draft: &DraftRow,
+    feed: &Feed,
+    feed_move: Option<&FeedMove>,
+) -> Result<LinkReport, PipelineError> {
+    let url = draft_url(hosts, row, feed_move)?;
+    let base_self = Document::parse_bytes(&draft.base_xml)
+        .ok()
+        .and_then(|doc| Feed::read(&doc).ok())
+        .and_then(|base| base.self_url().map(str::to_owned));
+    let self_changed = feed.self_url() != base_self.as_deref();
+    let destination = feed_move.and_then(|moved| moved.url.as_deref());
+    Ok(move_link::check(
+        reader,
+        &DraftLinks {
+            feed,
+            url: url.as_deref(),
+            self_changed,
+            destination,
+        },
+    ))
+}
+
+/// The refusals and the notices of stage 1 for the draft of a feed, for
+/// Review (ADR 0126 items 6 and 13). The function changes nothing. It
+/// makes the same reads as the start of a write.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft, or the collection
+/// or the host set fails.
+pub fn check_links(
+    collection: &Collection,
+    hosts: &Hosts,
+    reader: &dyn FeedReader,
+    id: FeedId,
+) -> Result<LinkReport, PipelineError> {
+    let row = collection.feed(id)?;
+    let draft = current_draft(collection, id)?;
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    let moved = feed_move(collection, hosts, &row)?;
+    link_report(hosts, reader, &row, &draft, &feed, moved.as_ref())
 }
 
 /// The plan time for a write: the plan time of the feed when the plan has
@@ -3238,6 +3358,7 @@ pub fn write_draft_signed(
     hosts: &Hosts,
     library: &Library,
     addresses: &dyn AddressCheck,
+    links: LinkCheck<'_>,
     id: FeedId,
     approved: &DiffId,
     signed: &[nostr::prelude::Event],
@@ -3295,6 +3416,15 @@ pub fn write_draft_signed(
             PipelineErrorKind::DiffNotApproved,
             "the draft changed after the diff was approved; approve the new diff",
         ));
+    }
+    // ADR 0126 stage 1: a bad link stops the write before any file
+    // changes. A granted write changes no link and makes no read
+    // (ADR 0126 item 26).
+    if let LinkCheck::Check(reader) = links {
+        let report = link_report(hosts, reader, &row, &draft, &feed, feed_move.as_ref())?;
+        if let Some(refusal) = report.refusal {
+            return Err(PipelineError::refused(refusal));
+        }
     }
     // ADR 0105 item 10: a pending file that Studio removed stops the write.
     let missing = removed_pending_files(collection, &operations)?;
@@ -3856,6 +3986,7 @@ fn write_granted_with(
             hosts,
             library,
             addresses,
+            LinkCheck::GrantedWrite,
             feed_id,
             &diff.id,
             &[],

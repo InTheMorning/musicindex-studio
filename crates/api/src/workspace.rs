@@ -15,6 +15,7 @@ use studio_core::discover::Found;
 use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
+use studio_core::move_link::FeedReader;
 use studio_core::musicindex::{DEFAULT_API, MusicIndex};
 use studio_core::net::NetPolicy;
 use studio_core::nip46::RemoteSigner;
@@ -495,6 +496,31 @@ impl std::fmt::Debug for AddressChecker {
     }
 }
 
+/// The reader of the public feeds that stage 1 of a write follows (ADR 0126
+/// item 7). The real reader uses the policy `Public` in both shells. Only a
+/// test replaces it, so that no test sends a request to the network.
+#[derive(Clone)]
+pub(crate) struct LinkReader(pub(crate) Arc<dyn FeedReader>);
+
+impl std::fmt::Debug for LinkReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LinkReader")
+    }
+}
+
+/// The reader of a new workspace. A test build reads nothing, so that no
+/// test sends a request to the network (ADR 0045).
+fn default_link_reader() -> LinkReader {
+    #[cfg(test)]
+    {
+        LinkReader(Arc::new(studio_core::move_link::ScriptedReader::empty()))
+    }
+    #[cfg(not(test))]
+    {
+        LinkReader(Arc::new(studio_core::move_link::WebFeedReader::public()))
+    }
+}
+
 /// A change of the list of connected apps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppChange {
@@ -624,6 +650,8 @@ pub struct Workspace {
     /// The address check of the write. `None` means that the write uses
     /// `web`.
     pub(crate) address_check: Option<AddressChecker>,
+    /// The reader of the public feeds of stage 1 (ADR 0126 item 7).
+    pub(crate) link_reader: LinkReader,
     pub(crate) index: MusicIndex,
     /// The relays that give the relay list and the server list of a key
     /// (ADR 0048 item 3). A test sets the address of a test relay.
@@ -795,6 +823,7 @@ impl Workspace {
             hub_web: Web::with_policy(&NetPolicy::Open),
             net_policy: NetPolicy::Open,
             address_check: None,
+            link_reader: default_link_reader(),
             index: MusicIndex::new(Web::with_policy(&NetPolicy::Open), DEFAULT_API),
             lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
             nip05_scheme: "https",
@@ -1051,6 +1080,15 @@ impl Workspace {
     #[must_use]
     pub fn with_address_check(mut self, check: Arc<dyn AddressCheck + Send + Sync>) -> Self {
         self.address_check = Some(AddressChecker(check));
+        self
+    }
+
+    /// Use a different reader for the links of a write, such as a test
+    /// double (ADR 0126 item 7).
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn with_feed_reader(mut self, reader: Arc<dyn FeedReader>) -> Self {
+        self.link_reader = LinkReader(reader);
         self
     }
 

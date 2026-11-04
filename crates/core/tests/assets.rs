@@ -11,6 +11,7 @@ use studio_core::connector::{self, Connector, Expected, LocalFolder};
 use studio_core::feed::{Enclosure, Entry, Item};
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
+use studio_core::move_link::ScriptedReader;
 use studio_core::pipeline::{self, AddressCheck, PipelineErrorKind};
 
 struct PassAll;
@@ -145,6 +146,7 @@ fn write(s: &mut Setup) -> Result<(), pipeline::PipelineError> {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )

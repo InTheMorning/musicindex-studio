@@ -12909,3 +12909,152 @@ async fn a_feed_of_an_expired_area_moves_to_a_public_host_and_gets_its_real_guid
         studio_core::guid::podcast_guid_for_url("https://cdn.example.com/feeds/album.xml")
     );
 }
+
+// ---- Stage 1 of ADR 0126: a bad move link ----
+
+/// An app whose reader of public feeds serves `reader`, with a connector
+/// for the feeds folder. Gives the app and the connector ID. No request
+/// leaves the computer (ADR 0045).
+async fn app_with_link_reader(reader: studio_core::move_link::ScriptedReader) -> (App, i64) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(None)
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_feed_reader(std::sync::Arc::new(reader));
+    let app = App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    };
+    let root = app.feeds.path().to_str().unwrap().to_owned();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    set_library_root(&app);
+    let id = connector["id"].as_i64().unwrap();
+    (app, id)
+}
+
+const TAG_GONE: &str = "<itunes:new-feed-url xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">https://other.example/f.xml</itunes:new-feed-url>";
+
+/// Write the draft of a feed through the routes. Gives the status and the
+/// body of the write.
+async fn write_through_routes(app: &App, id: i64) -> (StatusCode, Value) {
+    let (status, diff) = call(app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn a_refused_write_gives_422_bad_move_link_with_each_hop_and_changes_no_file() {
+    // The feed names https://other.example/f.xml. That feed names the
+    // address of this feed again: a loop of two URLs (scenario S3).
+    let reader = studio_core::move_link::ScriptedReader::empty().with_feed(
+        "https://other.example/f.xml",
+        "https://other.example/f.xml",
+        Some("ga"),
+        Some("https://music.example/a.xml"),
+        Some("https://other.example/f.xml"),
+    );
+    let (app, connector) = app_with_link_reader(reader).await;
+    let xml = paid_feed("A", "ga", &[ANN, BOB], &[], TAG_GONE);
+    let id = add_paid_feed(&app, connector, "a.xml", &xml).await;
+    let (status, _) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = write_through_routes(&app, id).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "bad_move_link");
+    let details = &body["error"]["details"];
+    assert_eq!(details["condition"], "loop");
+    assert_eq!(details["number"], 1);
+    assert_eq!(
+        details["hops"],
+        json!([
+            { "url": "https://other.example/f.xml", "result": "feed" },
+            { "url": "https://music.example/a.xml", "result": "revisited" },
+        ])
+    );
+    // No file changed on the host, and the draft stays.
+    assert_eq!(
+        std::fs::read_to_string(app.feeds.path().join("a.xml")).unwrap(),
+        xml
+    );
+    assert!(
+        collection_of(&app)
+            .draft(studio_core::collection::FeedId(id))
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn a_change_set_writes_the_other_feeds_when_one_feed_is_refused() {
+    let (app, connector) =
+        app_with_link_reader(studio_core::move_link::ScriptedReader::empty()).await;
+    // Feed A names a URL that nothing serves. Feed B has no tag.
+    let a_xml = paid_feed("A", "ga", &[ANN, BOB], &[], TAG_GONE);
+    let a = add_paid_feed(&app, connector, "a.xml", &a_xml).await;
+    let b_xml = paid_feed("B", "gb", &[ANN, BOB], &[], "");
+    let b = add_paid_feed(&app, connector, "b.xml", &b_xml).await;
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [a, b],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    let id = set["id"].as_i64().unwrap();
+
+    let (status, body) = write_through_routes(&app, a).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "bad_move_link");
+    assert_eq!(body["error"]["details"]["condition"], "read_fails");
+    assert_eq!(
+        body["error"]["details"]["hops"],
+        json!([{ "url": "https://other.example/f.xml", "result": "unreachable" }])
+    );
+    assert_eq!(
+        std::fs::read_to_string(app.feeds.path().join("a.xml")).unwrap(),
+        a_xml
+    );
+
+    // The refusal of feed A does not stop feed B.
+    let (status, body) = write_through_routes(&app, b).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        std::fs::read_to_string(app.feeds.path().join("b.xml"))
+            .unwrap()
+            .contains("Anna")
+    );
+    let (_, set) = call(&app, "GET", &format!("/api/v1/change-sets/{id}"), None).await;
+    assert_eq!(change_row(&set, a)["written_at"], Value::Null, "{set}");
+    assert!(change_row(&set, b)["written_at"].is_i64(), "{set}");
+    // Feed A keeps its draft.
+    assert!(
+        collection_of(&app)
+            .draft(studio_core::collection::FeedId(a))
+            .unwrap()
+            .is_some()
+    );
+}

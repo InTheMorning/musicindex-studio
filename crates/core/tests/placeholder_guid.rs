@@ -15,6 +15,7 @@ use studio_core::feed::{Enclosure, Entry, Feed, Item};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
+use studio_core::move_link::ScriptedReader;
 use studio_core::pipeline::{self, AddressCheck};
 use studio_core::publisher;
 
@@ -110,6 +111,7 @@ fn write_new(s: &mut Setup, id: FeedId) {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         id,
         &diff.id,
     )
@@ -381,6 +383,7 @@ fn a_move_to_a_public_host_changes_each_placeholder_address_to_its_public_addres
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         album,
         &diff.id,
     )
@@ -425,6 +428,7 @@ fn a_track_imported_after_a_move_between_public_folders_is_uploaded_to_its_addre
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         album,
         &diff.id,
     )

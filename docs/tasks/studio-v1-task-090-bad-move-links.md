@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0126](../adr/0126-studio-refuses-a-bad-move-link.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F0.
 
-Status: Open. No packet is complete.
+Status: Open. Packet 090a is complete.
 
 ## Goal
 

@@ -2780,6 +2780,7 @@ pub(crate) async fn write_feed(
             &hosts,
             &library,
             addresses,
+            pipeline::LinkCheck::Check(w.link_reader.0.as_ref()),
             id,
             &approved,
             &signed,

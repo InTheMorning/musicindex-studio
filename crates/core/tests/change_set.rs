@@ -12,6 +12,7 @@ use studio_core::connector::{self, Connector, Expected, LocalFolder};
 use studio_core::feed::Recipient;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
+use studio_core::move_link::ScriptedReader;
 use studio_core::people::{self, Person, PersonFields};
 use studio_core::pipeline::{self, AddressCheck};
 use studio_core::publisher::Catalog;
@@ -272,6 +273,7 @@ fn discard_does_not_change_a_feed_that_was_written() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         one,
         &diff.id,
     )
@@ -558,6 +560,7 @@ fn the_write_of_the_last_changed_feed_deletes_the_change_set() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         one,
         &diff.id,
     )
@@ -680,6 +683,7 @@ fn use_lnaddress_writes_the_attributes_and_the_method() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         one,
         &diff.id,
     )
@@ -1488,6 +1492,7 @@ fn credit_feed_links_the_credit_name_and_a_remove_after_its_write_removes_the_cr
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feeds[0],
         &diff.id,
     )

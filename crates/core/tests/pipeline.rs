@@ -17,6 +17,7 @@ use studio_core::grant::{self, GrantChange};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
+use studio_core::move_link::ScriptedReader;
 use studio_core::nostr_events::Signing;
 use studio_core::pipeline::{
     self, AddressCheck, DiffFile, DiffId, OperationKind, PipelineErrorKind,
@@ -122,6 +123,7 @@ fn an_approved_draft_writes_the_file_and_keeps_a_snapshot() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -172,6 +174,7 @@ fn a_write_gives_the_rss_image_the_address_of_itunes_image() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -201,6 +204,7 @@ fn a_draft_that_changed_after_the_approval_does_not_write() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &approved,
     )
@@ -211,6 +215,7 @@ fn a_draft_that_changed_after_the_approval_does_not_write() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &DiffId::new("x"),
     )
@@ -233,6 +238,7 @@ fn a_file_that_changed_on_the_host_after_the_draft_started_does_not_write() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -254,6 +260,7 @@ fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -273,6 +280,7 @@ fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -478,8 +486,16 @@ fn the_diff_of_a_new_feed_adds_the_full_file_and_the_write_puts_it() {
     assert!(diff.unified.contains("+<rss"));
     assert!(!diff.unified.contains("\n-<"));
 
-    let version =
-        pipeline::write_draft(&mut collection, &hosts, &library, &PassAll, id, &diff.id).unwrap();
+    let version = pipeline::write_draft(
+        &mut collection,
+        &hosts,
+        &library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        id,
+        &diff.id,
+    )
+    .unwrap();
     let bytes = fs::read(dir.path().join("my-album.xml")).unwrap();
     let read_feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
     assert_eq!(read_feed.title.as_deref(), Some("New Album"));
@@ -509,8 +525,16 @@ fn a_file_put_by_another_tool_before_the_write_of_a_new_feed_gives_a_conflict() 
         b"<rss><channel><title>Other</title></channel></rss>",
     )
     .unwrap();
-    let error = pipeline::write_draft(&mut collection, &hosts, &library, &PassAll, id, &diff.id)
-        .unwrap_err();
+    let error = pipeline::write_draft(
+        &mut collection,
+        &hosts,
+        &library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        id,
+        &diff.id,
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
     assert!(collection.draft(id).unwrap().is_some());
 }
@@ -910,6 +934,7 @@ fn a_copy_of_a_remote_file_waits_for_its_download_and_the_write_refuses_it() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -945,6 +970,7 @@ fn a_copy_of_a_remote_file_waits_for_its_download_and_the_write_refuses_it() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1088,6 +1114,7 @@ fn a_release_with_files_on_two_hosts_writes_both_with_the_correct_address() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1131,6 +1158,7 @@ fn a_changed_library_file_gets_a_hash_name_and_the_write_deletes_the_old_file_af
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1201,6 +1229,7 @@ fn a_changed_library_file_gets_a_hash_name_and_the_write_deletes_the_old_file_af
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1252,6 +1281,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         second,
         &diff_second.id,
     )
@@ -1278,6 +1308,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_does_not_delete_it() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1329,6 +1360,7 @@ fn a_host_file_that_changed_after_the_scan_stops_the_deletion_with_conflict() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1462,6 +1494,7 @@ fn write_that_does_not_pass(s: &mut Setup, draft: &UploadAndDelete, addresses: &
         &s.hosts,
         &s.library,
         addresses,
+        &ScriptedReader::empty(),
         s.feed,
         &draft.diff_id,
     )
@@ -1572,6 +1605,7 @@ fn a_second_write_after_a_write_that_does_not_pass_confirms_again_and_deletes() 
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &draft.diff_id,
     )
@@ -1585,6 +1619,7 @@ fn a_second_write_after_a_write_that_does_not_pass_confirms_again_and_deletes() 
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &next.id,
     )
@@ -1626,6 +1661,7 @@ fn a_confirmation_compares_the_host_file_with_the_library_file() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &next.id,
     )
@@ -1652,6 +1688,7 @@ fn the_confirmation_does_not_read_the_uploaded_file() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &draft.diff_id,
     )
@@ -1820,6 +1857,7 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1867,6 +1905,7 @@ fn a_host_that_can_redirect_gets_a_redirect_and_keeps_its_file_with_no_pointer()
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1906,6 +1945,7 @@ fn a_file_put_on_the_new_host_after_the_diff_stops_the_write_with_file_exists() 
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1931,6 +1971,7 @@ fn a_write_that_stopped_after_the_new_host_got_the_feed_can_finish_the_move() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -1990,6 +2031,7 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -2014,6 +2056,7 @@ fn a_deletion_of_a_pointer_file_is_blocked() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -2130,6 +2173,7 @@ fn draft_with_upload_and_deletion(s: &mut Setup) -> (DiffId, String, String) {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -2195,6 +2239,7 @@ fn a_write_calls_finish_after_the_feed_xml_and_again_after_the_deletions() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff_id,
     )
@@ -2223,6 +2268,7 @@ fn a_host_with_no_deletion_gets_one_finish_only() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -2246,6 +2292,7 @@ fn a_failed_finish_gives_an_error_and_keeps_the_draft_and_the_feed_state() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -2278,6 +2325,7 @@ fn a_host_that_gives_kept_blobs_has_them_in_the_collection_after_the_write() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -2399,6 +2447,7 @@ fn a_feed_on_an_nsite_host_writes_an_upload_and_a_deletion_with_two_manifests() 
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff_id,
     )
@@ -2476,6 +2525,7 @@ impl SigningSite {
             &hosts,
             &self.library,
             &PassAll,
+            pipeline::LinkCheck::Check(&ScriptedReader::empty()),
             self.feed,
             diff_id,
             signed,
@@ -2765,6 +2815,7 @@ fn a_write_to_a_local_folder_host_needs_no_plan() {
         &s.hosts,
         &s.library,
         &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
         s.feed,
         &diff.id,
         &[],
@@ -2797,6 +2848,7 @@ fn write_s(s: &mut Setup, id: &DiffId) -> Result<(), pipeline::PipelineError> {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         id,
     )
@@ -2880,7 +2932,16 @@ fn a_feed_and_a_host_with_no_public_address_give_no_address_and_the_write_succee
     let diff = pipeline::diff(&collection, &hosts, &library, feed).unwrap();
     assert_eq!(diff.announce_skip, Some(AnnounceSkip::NoAddress));
     assert_eq!(announced(&diff), []);
-    pipeline::write_draft(&mut collection, &hosts, &library, &PassAll, feed, &diff.id).unwrap();
+    pipeline::write_draft(
+        &mut collection,
+        &hosts,
+        &library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        feed,
+        &diff.id,
+    )
+    .unwrap();
     assert_eq!(queued(&collection, feed), 0);
 }
 
@@ -2901,6 +2962,7 @@ fn a_feed_move_queues_the_new_address_and_the_address_from_before() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -2967,6 +3029,7 @@ fn a_live_item_with_no_content_link_does_not_write() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -3039,6 +3102,7 @@ fn write_granted_show(s: &mut Setup) -> String {
         &s.hosts,
         &s.library,
         &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
         s.feed,
         &diff.id,
         &[],
@@ -3070,6 +3134,41 @@ fn granted(
         "Show tool",
         now,
     )
+}
+
+#[test]
+fn a_granted_write_makes_no_read_and_gets_no_refusal_of_stage_1() {
+    // ADR 0126 item 26. The hosted feed has a tag that names a URL that
+    // nothing serves. A write of the user refuses it. A granted write
+    // changes no link, makes no read and passes.
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let with_tag = live(&s).replace(
+        "<podcast:medium>",
+        "<itunes:new-feed-url xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\">https://gone.example/f.xml</itunes:new-feed-url><podcast:medium>",
+    );
+    fs::write(s.dir.path().join("album.xml"), with_tag).unwrap();
+    granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap();
+    assert!(live(&s).contains("status=\"live\""));
+    assert!(live(&s).contains("https://gone.example/f.xml"));
+
+    edit_title(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let before = live(&s);
+    let reader = ScriptedReader::empty();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &reader,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadMoveLink);
+    assert_eq!(reader.reads(), ["https://gone.example/f.xml"]);
+    assert_eq!(live(&s), before);
 }
 
 #[test]
@@ -3123,6 +3222,7 @@ fn a_change_of_the_draft_grant_after_the_diff_gives_diff_not_approved() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -3138,6 +3238,7 @@ fn a_change_of_the_draft_grant_after_the_diff_gives_diff_not_approved() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &with_grant.id,
     )
@@ -3224,6 +3325,7 @@ fn a_written_grant_names_its_app_and_keeps_the_origin_of_that_app() {
         &s.hosts,
         &s.library,
         &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
         s.feed,
         &second.id,
         &[],
@@ -3421,6 +3523,7 @@ fn a_draft_with_only_a_grant_or_a_host_operation_is_a_change_and_an_empty_draft_
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -3503,6 +3606,7 @@ fn a_user_write_that_ends_the_show_or_removes_it_ends_the_grant() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -3804,6 +3908,7 @@ fn the_write_refuses_a_new_bad_key_but_not_a_bad_key_of_the_hosted_feed() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -3816,6 +3921,7 @@ fn the_write_refuses_a_new_bad_key_but_not_a_bad_key_of_the_hosted_feed() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -3932,6 +4038,7 @@ fn public_write(s: &mut PublicSetup, id: &DiffId) -> Result<Version, pipeline::P
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         &s.web,
         s.feed,
         id,
@@ -3991,6 +4098,7 @@ fn the_write_of_a_public_draft_with_no_host_choice_refuses_with_read_only() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -4122,6 +4230,7 @@ fn a_write_of_a_public_draft_needs_the_web_of_the_caller() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -4220,6 +4329,7 @@ fn a_linked_draft_with_different_bytes_on_the_host_gives_a_conflict_at_the_write
         &hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         s.feed,
         &diff.id,
     )
@@ -4382,6 +4492,7 @@ fn a_delete_for_a_file_that_a_different_feed_refers_to_with_a_prefix_does_not_de
         &s.hosts,
         &s.library,
         &PassAll,
+        &ScriptedReader::empty(),
         second,
         &diff_second.id,
     )

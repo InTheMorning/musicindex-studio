@@ -220,6 +220,13 @@ fn open_user(
     if pass_all {
         workspace = workspace.with_address_check(Arc::new(PassAll));
     }
+    // No test sends a request to the network (ADR 0045), also not the reads
+    // of stage 1 of a write (ADR 0126).
+    #[cfg(test)]
+    {
+        workspace =
+            workspace.with_feed_reader(Arc::new(studio_core::move_link::ScriptedReader::empty()));
+    }
     #[cfg(test)]
     if let Some(clock) = clock {
         workspace = workspace.with_clock(clock);

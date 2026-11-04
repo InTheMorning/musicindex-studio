@@ -24,6 +24,8 @@ pub struct ApiError {
     status: StatusCode,
     code: &'static str,
     message: String,
+    /// Typed data for the client, such as the hops of a refused move link.
+    details: Option<serde_json::Value>,
 }
 
 impl ApiError {
@@ -39,7 +41,15 @@ impl ApiError {
             status,
             code,
             message: message.into(),
+            details: None,
         }
+    }
+
+    /// Add typed data to the error body, under `error.details`.
+    #[must_use]
+    pub(crate) fn with_details(mut self, details: serde_json::Value) -> Self {
+        self.details = Some(details);
+        self
     }
 
     /// The error as the `/app/v1/` routes give it. A live value that the
@@ -93,7 +103,10 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let body = json!({ "error": { "code": self.code, "message": self.message } });
+        let mut body = json!({ "error": { "code": self.code, "message": self.message } });
+        if let Some(details) = self.details {
+            body["error"]["details"] = details;
+        }
         (self.status, Json(body)).into_response()
     }
 }
@@ -177,6 +190,16 @@ impl From<MigrateError> for ApiError {
 
 impl From<PipelineError> for ApiError {
     fn from(error: PipelineError) -> Self {
+        // ADR 0126 item 10: the refusal gives the condition and each hop.
+        if let Some(refusal) = error.bad_move_link() {
+            let details = serde_json::to_value(refusal).unwrap_or_default();
+            return Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "bad_move_link",
+                error.to_string(),
+            )
+            .with_details(details);
+        }
         let (status, code) = match error.kind() {
             PipelineErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
             PipelineErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),

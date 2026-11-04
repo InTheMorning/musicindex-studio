@@ -257,6 +257,13 @@ A phase gets task files in `docs/tasks/` before work starts.
 - [Task 083](../tasks/studio-v1-task-083-welcome.md) gives the work in one UI packet. It is complete, and its human test is open. [ADR 0122](../adr/0122-a-new-user-starts-with-a-default-file-host.md) makes step 2 required, with a default file host, and gives a placeholder GUID to a feed with no public address. It supersedes ADR 0121 (practice pages, task 085). [Task 086](../tasks/studio-v1-task-086-default-file-host.md) gives the work in three packets. It is complete, with its screenshot visual check, and its human test is open.
 - [ADR 0120](../adr/0120-the-check-of-a-person-shows-each-difference.md) makes each row of the check of a person show its differences. [Task 084](../tasks/studio-v1-task-084-check-differences.md) gives the work in two packets. It is complete, and its human test is open. The two tasks share only the file `docs/README.md`.
 
+### Feed Moves
+
+- The [research request on a feed check](research-feed-check-request.md) gives items F0 to F6. Only F0 has a decision.
+- Decision: [ADR 0126](../adr/0126-studio-refuses-a-bad-move-link.md). Studio refuses a bad move link, and a return to an earlier host works.
+- [Task 090](../tasks/studio-v1-task-090-bad-move-links.md) gives the work in four packets. It is open.
+- Visual check: Review shows a refusal and a notice. The operator moves a feed between two real file hosts, and back.
+
 ### Phase 13: Desktop Shell
 
 - Package the Tauri app for Linux, macOS and Windows.

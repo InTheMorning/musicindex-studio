@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-26
 - Owner: operator
+- Changed by: [ADR 0126](0126-studio-refuses-a-bad-move-link.md) item 7. The read of a named feed URL uses `Public` on the desktop too.
 
 ## Context
 

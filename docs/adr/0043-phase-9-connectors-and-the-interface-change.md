@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-25
 - Owner: operator, with the technical choices of the planning model
+- Changed by: [ADR 0126](0126-studio-refuses-a-bad-move-link.md) item 18. A draft keeps its feed move after a refusal of the move.
 
 ## Context
 

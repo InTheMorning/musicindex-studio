@@ -127,6 +127,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0123: One type of value has one picker](adr/0123-one-type-of-value-has-one-picker.md)
 - [ADR 0124: The desktop app is a Tauri window on the local API](adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md)
 - [ADR 0125: Each file target shows that it takes a drop](adr/0125-each-file-target-shows-that-it-takes-a-drop.md)
+- [ADR 0126: Studio refuses a bad move link](adr/0126-studio-refuses-a-bad-move-link.md)
 
 ## Plans
 
@@ -135,6 +136,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Research request on search, shared code and PodSovereign](plans/research-search-request.md)
 - [Research request on the shell](plans/research-ui-shell-request.md)
 - [Research request on the Phase 9 connectors](plans/research-phase-9-connectors-request.md)
+- [Research request on a feed check with repairs](plans/research-feed-check-request.md)
 
 ## Tasks
 
@@ -351,6 +353,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 087: One Nostr key picker](tasks/studio-v1-task-087-one-nostr-key-picker.md)
 - [Studio v1 task 088: The desktop app](tasks/studio-v1-task-088-desktop-app.md)
 - [Studio v1 task 089: Drop targets](tasks/studio-v1-task-089-drop-targets.md)
+- [Studio v1 task 090: Bad move links](tasks/studio-v1-task-090-bad-move-links.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

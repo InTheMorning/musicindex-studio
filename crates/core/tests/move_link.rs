@@ -13,8 +13,8 @@ use studio_core::feed::Feed;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::move_link::{
-    self, Condition, DraftLinks, FeedBody, FeedReader, Hop, HopResult, LinkNotice, ScriptedReader,
-    WebFeedReader,
+    self, Condition, DraftLinks, FeedBody, FeedReader, Hop, HopResult, LinkNotice, Repair,
+    ScriptedReader, WebFeedReader,
 };
 use studio_core::pipeline::{self, AddressCheck, PipelineError, PipelineErrorKind};
 use studio_core::xml::Document;
@@ -1075,4 +1075,197 @@ fn a_stopped_write_of_a_return_continues() {
     assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(A_ID));
     assert!(is_pointer_to(&on_host(&e, e.b), URL));
     assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
+}
+
+// ---- The repairs of ADR 0126 item 20 ----
+
+fn repairs_of(e: &Env, reader: &dyn FeedReader) -> (Vec<Repair>, Vec<Repair>) {
+    let report = pipeline::check_links(&e.collection, &e.hosts, reader, e.feed).unwrap();
+    let refusal = report.refusal.map(|r| r.repairs).unwrap_or_default();
+    (refusal, report.repairs)
+}
+
+#[test]
+fn the_report_gives_the_repairs_that_fit_each_condition() {
+    // Condition 1, 2, 3 and 4 from the tag of the draft: remove the tag.
+    let e = env(URL);
+    set_tag(&e, B);
+    let loop_reader = ScriptedReader::empty().with_feed(B, B, Some(GUID), Some(URL), Some(B));
+    let remove = vec![Repair::RemoveTag];
+    assert_eq!(
+        repairs_of(&e, &loop_reader),
+        (remove.clone(), remove.clone())
+    );
+    let gone = ScriptedReader::empty().with_failure(B, FailKind::Gone);
+    assert_eq!(repairs_of(&e, &gone).0, remove);
+    let guid = ScriptedReader::empty().with_feed(B, B, Some("other"), None, None);
+    assert_eq!(repairs_of(&e, &guid).0, remove);
+    let names = ScriptedReader::empty().with_feed(B, B, Some(GUID), Some(C), Some(D));
+    assert_eq!(repairs_of(&e, &names).0, remove);
+    let hidden = ScriptedReader::empty().with_failure(B, FailKind::NotPublic);
+    assert_eq!(repairs_of(&e, &hidden).0, remove);
+
+    // Condition 6: use the public address.
+    let e = env(URL);
+    e.edit(|f| {
+        f.set_self_url("https://other.example/album.xml");
+    });
+    let none = ScriptedReader::empty();
+    let use_address = vec![Repair::UsePublicAddress];
+    assert_eq!(repairs_of(&e, &none), (use_address.clone(), use_address));
+
+    // Condition 7 for the destination of a move: no repair.
+    let e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let hidden = ScriptedReader::empty().with_failure(DEST, FailKind::NotPublic);
+    assert_eq!(repairs_of(&e, &hidden), (vec![], vec![]));
+
+    // The notice: use the public address, and no refusal.
+    let e = env("https://old.example/album.xml");
+    assert_eq!(
+        repairs_of(&e, &none),
+        (vec![], vec![Repair::UsePublicAddress])
+    );
+
+    // Nothing to report: no repair.
+    let e = env(URL);
+    assert_eq!(repairs_of(&e, &none), (vec![], vec![]));
+
+    // A draft with no URL has no `use_public_address`.
+    let report = check_no_url(
+        &feed_xml(URL),
+        &ScriptedReader::empty().with_failure(URL, FailKind::Gone),
+    );
+    assert_eq!(report.refusal.unwrap().repairs, Vec::<Repair>::new());
+}
+
+#[test]
+fn a_stage_2_refusal_has_the_stage_and_the_repairs_that_apply() {
+    let (e, _, _) = refused_move();
+    // The tag and the self link of the placed draft fit the destination, so
+    // no repair applies.
+    let mut e = e;
+    let reader = destination(vec![gone()]);
+    let error = e.write(&reader).unwrap_err();
+    let refusal = error.bad_move_link().unwrap();
+    assert_eq!(refusal.stage, 2);
+    assert_eq!(refusal.repairs, Vec::<Repair>::new());
+
+    // A draft with a tag gets the repair "Remove the Tag" in stage 2.
+    let mut e = env(URL);
+    set_tag(&e, DEST);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let reader = ScriptedReader::empty().with_results(
+        DEST,
+        vec![Err(failure(FailKind::Gone)), Err(failure(FailKind::Gone))],
+    );
+    let error = e.write(&reader).unwrap_err();
+    let refusal = error.bad_move_link().unwrap();
+    assert_eq!(refusal.stage, 2, "{error}");
+    assert_eq!(refusal.repairs, [Repair::RemoveTag]);
+}
+
+/// The draft text and the ID of its diff.
+fn draft_text(e: &Env) -> (String, String) {
+    let draft = e.collection.draft(e.feed).unwrap().unwrap();
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    (
+        String::from_utf8(draft.draft_xml).unwrap(),
+        diff.id.as_str().to_owned(),
+    )
+}
+
+fn revision_of(e: &Env) -> String {
+    pipeline::revision(&e.collection.draft(e.feed).unwrap().unwrap())
+}
+
+#[test]
+fn use_the_public_address_changes_only_the_self_link_in_the_draft_and_the_diff() {
+    let old = "https://old.example/album.xml";
+    let e = env(old);
+    e.edit(|f| f.title = Some("Album (Deluxe)".into()));
+    let (before, id_before) = draft_text(&e);
+    pipeline::apply_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        Repair::UsePublicAddress,
+        &revision_of(&e),
+    )
+    .unwrap();
+    let (after, id_after) = draft_text(&e);
+    assert_eq!(after, before.replace(old, URL));
+    assert_ne!(id_before, id_after);
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    let changed: Vec<&str> = diff
+        .unified
+        .lines()
+        .filter(|l| {
+            (l.starts_with('+') || l.starts_with('-'))
+                && !l.starts_with("+++")
+                && !l.starts_with("---")
+        })
+        .collect();
+    assert!(changed.iter().any(|l| l.contains(old)), "{changed:?}");
+    assert!(changed.iter().any(|l| l.contains(URL)), "{changed:?}");
+    assert!(changed.iter().any(|l| l.contains("Deluxe")), "{changed:?}");
+    // The repair applies once.
+    let error = pipeline::apply_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        Repair::UsePublicAddress,
+        &revision_of(&e),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::InvalidOperation);
+}
+
+#[test]
+fn remove_the_tag_removes_only_the_tag_and_a_repair_that_does_not_apply_gives_an_error() {
+    let e = env(URL);
+    set_tag(&e, B);
+    let (before, _) = draft_text(&e);
+    // It does not apply: the draft has a tag, but no different self link.
+    let error = pipeline::apply_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        Repair::UsePublicAddress,
+        &revision_of(&e),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::InvalidOperation);
+    // A stale revision changes nothing.
+    let error = pipeline::apply_repair(&e.collection, &e.hosts, e.feed, Repair::RemoveTag, "stale")
+        .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::StaleRevision);
+    assert_eq!(draft_text(&e).0, before);
+
+    pipeline::apply_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        Repair::RemoveTag,
+        &revision_of(&e),
+    )
+    .unwrap();
+    let (after, _) = draft_text(&e);
+    assert!(before.contains(B) && !after.contains(B), "{after}");
+    // Only the tag element goes. The namespace declaration stays.
+    let start = before.find("<itunes:new-feed-url").unwrap();
+    let end = before.find("</itunes:new-feed-url>").unwrap() + "</itunes:new-feed-url>".len();
+    let mut expected = before.clone();
+    expected.replace_range(start..end, "");
+    let normalized = |text: &str| text.split_whitespace().collect::<String>();
+    assert_eq!(normalized(&after), normalized(&expected));
+    let error = pipeline::apply_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        Repair::RemoveTag,
+        &revision_of(&e),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::InvalidOperation);
 }

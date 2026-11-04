@@ -83,6 +83,45 @@ Pending file operations and grants can show the button when the feed XML has no 
 
 If an action waits for a download, the button is disabled. Studio shows "Wait for each download, then write."
 
+## When Studio refuses a write
+
+A feed can name a new address in the tag `itunes:new-feed-url`. Studio follows that address before it writes.
+Studio reads each address that the new feed names. It does this when you open the sheet, and again when you write.
+Studio refuses the write in these cases:
+
+- The addresses come back to an address that they visited.
+- An address does not give an RSS feed, or Studio cannot read it.
+- A feed at an address has a different `podcast:guid`.
+- A feed at an address names two different new addresses.
+- You change the self link to an address other than the address of the feed.
+- An address is not a public address.
+
+The sheet shows "Studio refuses this write." It lists each address, with the cause below it.
+Studio tells you what changed on the file hosts. You cannot write over a refusal.
+The button **Write to the File Host** is disabled while the refusal shows.
+
+If a button shows, select it:
+
+- **Remove the Tag** removes `itunes:new-feed-url` from the draft.
+- **Use the Public Address** sets the self link to the address of the feed.
+
+The button changes the draft. Studio then examines the changes again. The diff shows only that one change.
+
+A refusal can come after the new feed file is on the new file host. This happens when the new file host does not give the feed that Studio put there.
+Studio then writes no pointer file, and the feed stays at its address. The file stays on the new file host.
+The next write replaces it. Correct the cause, then select **Write to the File Host** again.
+
+Studio can also show "The self link names a different address." This is a notice, not a refusal.
+Studio can write the feed. Select **Use the Public Address** to make the self link the same as the address of the feed.
+
+## Move a feed back to an earlier file host
+
+You can move a feed back to a file host that it used before.
+That file host has a pointer file at the earlier path. The move row says "The pointer file at the new address becomes the feed."
+Studio replaces the pointer file with the feed only when the file has the same `podcast:guid` as the feed.
+If the file has a different `podcast:guid`, Studio writes nothing and shows an error.
+The file host that the feed leaves gets a pointer file with the new address.
+
 ## When the hosted file changed
 
 If someone else or a different tool changed the hosted file after you started the draft, Studio shows "The hosted file changed after the draft started."

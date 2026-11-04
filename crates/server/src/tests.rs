@@ -452,6 +452,26 @@ async fn the_api_layer_needs_a_session_and_the_csrf_header() {
 }
 
 #[tokio::test]
+async fn the_link_check_and_repair_routes_need_a_session_and_the_csrf_header() {
+    let app = app(Signup::Invite);
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    for (method, path) in [
+        ("GET", "/api/v1/feeds/1/link-check"),
+        ("POST", "/api/v1/feeds/1/draft/use-public-address"),
+        ("POST", "/api/v1/feeds/1/draft/remove-tag"),
+    ] {
+        let none = send(&app, call(method, path, None)).await;
+        assert_eq!(none.status, StatusCode::UNAUTHORIZED, "{path}");
+        assert_eq!(none.code(), "session_required", "{path}");
+        let mut no_header = call(method, path, None);
+        no_header.token = Some(&who.0);
+        let reply = send(&app, no_header).await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN, "{path}");
+        assert_eq!(reply.code(), "csrf_required", "{path}");
+    }
+}
+
+#[tokio::test]
 async fn sign_up_needs_an_unused_invite_in_the_mode_invite() {
     let app = app(Signup::Invite);
     let none = sign_up(&app, "a@example.org", PASS_ONE, None).await;

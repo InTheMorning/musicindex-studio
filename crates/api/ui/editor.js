@@ -14,6 +14,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
+import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
@@ -1493,10 +1494,36 @@ function FeedMoveRow({ move, connectors, onUndo, busy }) {
       ${move.from_url && html`<span class="sub">From <span class="mono">${move.from_url}</span></span>`}
       <span class="sub">To <span class="mono">${move.url}</span></span>
       <span class="sub">${moveNote(move.method)}</span>
+      ${move.replaces_pointer && html`<span class="sub">${REPLACES_POINTER_NOTE}</span>`}
       <span class="sub">${connectorName(connectors, move.connector_id)}</span>
     </span>
     <button class="button" type="button" disabled=${busy} onClick=${onUndo}>Undo</button>
   </div>`;
+}
+
+// The refusal of a write by the core, with each hop and the repair buttons
+// (ADR 0126 items 10 and 20). The core gives the condition, the hops and the
+// repairs. This function only shows them.
+function LinkRefusal({ refusal, busy, onRepair }) {
+  const view = refusalView(refusal);
+  if (!view) return null;
+  return html`<div class="notice error" role="alert"><strong>${view.title}</strong>${view.text} ${view.state}
+    ${view.hops.length > 0 && html`<ol class="hops">${view.hops.map((hop, i) => html`<li key=${i}>
+      <span class="mono">${hop.url}</span>
+      ${hop.finalUrl && html`<span class="why">Redirects to <span class="mono">${hop.finalUrl}</span></span>`}
+      <span class="why">${hop.why}</span></li>`)}</ol>`}
+    ${view.repairs.length > 0 && html`<div class="actions">${view.repairs.map((r) => html`<button class="button" type="button"
+      disabled=${busy} onClick=${() => onRepair(r.id)}>${r.label}</button>`)}</div>`}
+  </div>`;
+}
+
+// The notice of a self link that differs from the address of the feed
+// (ADR 0126 item 6). The write stays possible.
+function LinkNotices({ report, busy, onRepair }) {
+  return noticeViews(report).map((view) => html`<div class="notice" role="status"><strong>${view.title}</strong>The feed names${' '}<span class="mono">${view.selfUrl}</span>. Its address is <span class="mono">${view.draftUrl}</span>. ${view.end}
+    ${view.repairs.length > 0 && html`<div class="actions">${view.repairs.map((r) => html`<button class="button" type="button"
+      disabled=${busy} onClick=${() => onRepair(r.id)}>${r.label}</button>`)}</div>`}
+  </div>`);
 }
 
 // A deletion that Studio refuses because a feed of the library refers to
@@ -1640,10 +1667,17 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   // The progress of the signer while a write signs the planned events.
   const [progress, setProgress] = useState(null);
   // A diff is for one draft. After a user edit, the diff is not current.
-  useEffect(() => { setDiff(null); }, [draft.edits]);
+  useEffect(() => { setDiff(null); setLinks(null); }, [draft.edits]);
+  // The check of the links of the draft (ADR 0126 item 13). A request that
+  // fails gives no block: the write runs the same check again in the core.
+  const [links, setLinks] = useState(null);
+  const checkLinks = async () => {
+    try { setLinks(await api(`/feeds/${feedId}/link-check`)); } catch (_) { setLinks(null); }
+  };
   const examine = () => run(async () => {
     if (!(await draft.flush())) return;
     setDiff(await api(`/feeds/${feedId}/diff`));
+    await checkLinks();
   });
   // The sheet examines the draft each time that it opens.
   useEffect(() => { if (open) examine(); }, [open]);
@@ -1659,6 +1693,16 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
   const setHost = (connectorId) => run(async () => {
     setDiff(await api(`/feeds/${feedId}/feed-host`, { method: 'PUT', body: { connector_id: connectorId } }));
     onOpsChanged();
+    await checkLinks();
+  });
+  // A repair of ADR 0126 item 20 changes the draft in the core. The sheet
+  // loads the draft again and examines the diff again.
+  const repair = (id) => run(async () => {
+    await draft.flush();
+    const current = await api(`/feeds/${feedId}/draft`);
+    draft.show(await api(`/feeds/${feedId}/draft/${repairRoute(id)}`, { method: 'POST', body: { revision: current.revision } }));
+    setDiff(await api(`/feeds/${feedId}/diff`));
+    await checkLinks();
   });
   const undoMove = () => setHost(readOnly ? null : feedConnectorId);
   // The hosts that can take the file of a read-only feed. The core refuses
@@ -1696,6 +1740,12 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       if (e.code === 'conflict') setDiff(null);
       // After an expired plan, the new diff has a new plan.
       if (e.code === 'plan_expired') setDiff(await api(`/feeds/${feedId}/diff`));
+      // After a refusal of stage 2, the diff is not the same: the move
+      // has a placed file (ADR 0126 item 19). Examine again.
+      if (e.code === 'bad_move_link') {
+        try { setDiff(await api(`/feeds/${feedId}/diff`)); } catch (_) { /* The user can examine again. */ }
+        await checkLinks();
+      }
       // A signer that fails may be gone. Ask for its state again.
       if (!hasNip07 && e.code === 'signer_refused') loadRemote();
       throw e;
@@ -1741,6 +1791,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     return () => clearInterval(timer);
   }, [open, waiting, feedId]);
   const conflict = error && error.code === 'conflict';
+  // The refusal of the check, else the refusal of the last write.
+  const refusal = (links && links.refusal) || refusalOfError(error);
   // Studio cannot write while an address of the draft is not correct. A
   // host operation of `diff` does not block the write on its own: Studio
   // skips a deletion that `diff.blocked` names, and the user sees it here.
@@ -1768,6 +1820,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
             <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startAgain}>Start Again from the Hosted File</button></div></div>`
         : stale
           ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
+          : refusalOfError(error)
+          ? null
           : signErrorText(error && error.code)
             ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
             : html`<${ErrorNotice} error=${error} />`}
@@ -1776,7 +1830,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
         Correct the fields with red text. Each address starts with https:// or http://.
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
+      ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
+      ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${sentCount > 0 && html`<div class="notice" role="status">${reviewNotice(sentCount)}</div>`}
       ${choosing && html`<div class="group rows">
         <p class="hint">Studio cannot write to the file host of this feed. Connect that file host, or move the feed to a file host that you connected.</p>
@@ -1817,7 +1873,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the Draft</button>
-      ${diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner} onClick=${write}>
+      ${diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
     </footer>
   </dialog>`;

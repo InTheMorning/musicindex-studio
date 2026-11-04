@@ -230,6 +230,18 @@ impl Hop {
     }
 }
 
+/// A repair that the core offers for one user action (ADR 0126 item 20).
+/// Each repair changes the draft, so the diff shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Repair {
+    /// Set the self link to the URL of the draft.
+    UsePublicAddress,
+    /// Remove `itunes:new-feed-url`.
+    RemoveTag,
+}
+
 /// The refusal of a write: the condition and each hop (ADR 0126 item 10).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct BadMoveLink {
@@ -237,8 +249,14 @@ pub struct BadMoveLink {
     pub condition: Condition,
     /// The number of the condition.
     pub number: u8,
+    /// The stage that refused: 1 before any file changes, 2 after the new
+    /// feed file is on the destination (ADR 0126 item 13 and item 14).
+    pub stage: u8,
     /// Each hop, in the sequence of the reads.
     pub hops: Vec<Hop>,
+    /// The repairs that apply to the draft. The list is empty when no
+    /// repair applies.
+    pub repairs: Vec<Repair>,
 }
 
 impl BadMoveLink {
@@ -246,8 +264,15 @@ impl BadMoveLink {
         Self {
             condition,
             number: condition.number(),
+            stage: 1,
             hops,
+            repairs: Vec::new(),
         }
+    }
+
+    fn with_repairs(mut self, repairs: Vec<Repair>) -> Self {
+        self.repairs = repairs;
+        self
     }
 }
 
@@ -300,6 +325,67 @@ pub struct LinkReport {
     pub refusal: Option<BadMoveLink>,
     /// The notices for Review.
     pub notices: Vec<LinkNotice>,
+    /// The repairs that apply: the repairs of the refusal, and
+    /// `use_public_address` for a notice (ADR 0126 item 20).
+    pub repairs: Vec<Repair>,
+}
+
+/// The facts of a draft that stage 1 examines, as owned values. The caller
+/// makes them under the lock of the workspace. Then it releases the lock
+/// and runs [`OwnedDraftLinks::report`], which reads the network.
+#[derive(Debug, Clone)]
+pub struct OwnedDraftLinks {
+    /// The draft as a typed feed.
+    pub feed: Feed,
+    /// See [`DraftLinks::url`].
+    pub url: Option<String>,
+    /// See [`DraftLinks::self_changed`].
+    pub self_changed: bool,
+    /// See [`DraftLinks::destination`].
+    pub destination: Option<String>,
+}
+
+impl OwnedDraftLinks {
+    /// Run stage 1 on these facts. The call reads through `reader`.
+    #[must_use]
+    pub fn report(&self, reader: &dyn FeedReader) -> LinkReport {
+        check(
+            reader,
+            &DraftLinks {
+                feed: &self.feed,
+                url: self.url.as_deref(),
+                self_changed: self.self_changed,
+                destination: self.destination.as_deref(),
+            },
+        )
+    }
+}
+
+/// The repairs that apply to a draft with the URL `url` (ADR 0126 item 20).
+/// `remove_tag` applies when the draft has the tag. `use_public_address`
+/// applies when the draft has a URL and a self link that differs from it.
+#[must_use]
+pub fn applicable_repairs(feed: &Feed, url: Option<&str>) -> Vec<Repair> {
+    let mut repairs = Vec::new();
+    if repair_applies(Repair::UsePublicAddress, feed, url) {
+        repairs.push(Repair::UsePublicAddress);
+    }
+    if repair_applies(Repair::RemoveTag, feed, url) {
+        repairs.push(Repair::RemoveTag);
+    }
+    repairs
+}
+
+/// True when `repair` applies to the draft `feed` with the URL `url`.
+#[must_use]
+pub fn repair_applies(repair: Repair, feed: &Feed, url: Option<&str>) -> bool {
+    match repair {
+        Repair::UsePublicAddress => matches!(
+            (feed.self_url(), url),
+            (Some(self_url), Some(url)) if self_url != url
+        ),
+        Repair::RemoveTag => feed.new_feed_url.is_some(),
+    }
 }
 
 /// Run stage 1 on a draft (ADR 0126 items 5 to 8 and 13).
@@ -309,6 +395,17 @@ pub struct LinkReport {
 /// and the function acts only on the kind `NotPublic` of it.
 #[must_use]
 pub fn check(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkReport {
+    let mut report = check_conditions(reader, links);
+    if let Some(refusal) = &report.refusal {
+        report.repairs.clone_from(&refusal.repairs);
+    }
+    if !report.notices.is_empty() && !report.repairs.contains(&Repair::UsePublicAddress) {
+        report.repairs.push(Repair::UsePublicAddress);
+    }
+    report
+}
+
+fn check_conditions(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkReport {
     let names = BodyNames::of(links.feed);
     let mut report = LinkReport::default();
 
@@ -319,10 +416,13 @@ pub fn check(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkReport {
         if links.self_changed {
             // Condition 6. The self link is not read, because it differs
             // from the URL of the draft already.
-            report.refusal = Some(BadMoveLink::new(
-                Condition::SelfLinkDiffers,
-                vec![Hop::new(self_url, HopResult::DiffersFromDraft)],
-            ));
+            report.refusal = Some(
+                BadMoveLink::new(
+                    Condition::SelfLinkDiffers,
+                    vec![Hop::new(self_url, HopResult::DiffersFromDraft)],
+                )
+                .with_repairs(vec![Repair::UsePublicAddress]),
+            );
             return report;
         }
         report.notices.push(LinkNotice::SelfLinkDiffers {
@@ -353,13 +453,16 @@ pub fn check(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkReport {
     let start = match (tag, self_link) {
         // Condition 4 for the body of the draft.
         (Some(tag), Some(self_link)) if tag != self_link => {
-            report.refusal = Some(BadMoveLink::new(
-                Condition::ConflictingNames,
-                vec![
-                    Hop::new(tag, HopResult::ConflictingNames),
-                    Hop::new(self_link, HopResult::ConflictingNames),
-                ],
-            ));
+            report.refusal = Some(
+                BadMoveLink::new(
+                    Condition::ConflictingNames,
+                    vec![
+                        Hop::new(tag, HopResult::ConflictingNames),
+                        Hop::new(self_link, HopResult::ConflictingNames),
+                    ],
+                )
+                .with_repairs(vec![Repair::RemoveTag]),
+            );
             return report;
         }
         (Some(start), _) | (None, Some(start)) => start,
@@ -374,7 +477,13 @@ pub fn check(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkReport {
         &mut visited,
         &mut hops,
     ) {
-        report.refusal = Some(BadMoveLink::new(condition, hops));
+        // The repair removes the tag only when the chain started from it.
+        let repairs = if tag.is_some() {
+            vec![Repair::RemoveTag]
+        } else {
+            Vec::new()
+        };
+        report.refusal = Some(BadMoveLink::new(condition, hops).with_repairs(repairs));
     }
     report
 }
@@ -430,10 +539,12 @@ pub fn check_destination(
                 }
             }
         };
-        let refusal = BadMoveLink::new(condition, vec![hop]);
+        let mut refusal = BadMoveLink::new(condition, vec![hop]);
+        refusal.stage = 2;
         if condition == Condition::NotPublic {
             return Err(refusal);
         }
+        refusal.repairs = applicable_repairs(draft, Some(destination));
         last = Some(refusal);
     }
     last.map_or(Ok(()), Err)

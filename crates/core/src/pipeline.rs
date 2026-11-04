@@ -28,7 +28,7 @@ use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::{Library, file_stamp};
 use crate::live::{self, LiveStatus};
 use crate::media::{op3_prefix, plain_address};
-use crate::move_link::{self, BadMoveLink, DraftLinks, FeedReader, LinkReport};
+use crate::move_link::{self, BadMoveLink, FeedReader, LinkReport, OwnedDraftLinks, Repair};
 use crate::nostr_events::npub_text;
 use crate::roles;
 use crate::xml::{Document, ParseError};
@@ -3191,8 +3191,35 @@ fn draft_url(
     })
 }
 
-/// Run stage 1 of ADR 0126 on a draft. The self link counts as changed
-/// when it differs from the self link of the base.
+/// The owned facts of a draft that stage 1 of ADR 0126 examines. The self
+/// link counts as changed when it differs from the self link of the base.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the host set fails.
+fn link_inputs(
+    hosts: &Hosts,
+    row: &FeedRow,
+    draft: &DraftRow,
+    feed: &Feed,
+    feed_move: Option<&FeedMove>,
+) -> Result<OwnedDraftLinks, PipelineError> {
+    let url = draft_url(hosts, row, feed_move)?;
+    let base_self = Document::parse_bytes(&draft.base_xml)
+        .ok()
+        .and_then(|doc| Feed::read(&doc).ok())
+        .and_then(|base| base.self_url().map(str::to_owned));
+    let self_changed = feed.self_url() != base_self.as_deref();
+    let destination = feed_move.and_then(|moved| moved.url.clone());
+    Ok(OwnedDraftLinks {
+        feed: feed.clone(),
+        url,
+        self_changed,
+        destination,
+    })
+}
+
+/// Run stage 1 of ADR 0126 on a draft.
 ///
 /// # Errors
 ///
@@ -3205,22 +3232,28 @@ fn link_report(
     feed: &Feed,
     feed_move: Option<&FeedMove>,
 ) -> Result<LinkReport, PipelineError> {
-    let url = draft_url(hosts, row, feed_move)?;
-    let base_self = Document::parse_bytes(&draft.base_xml)
-        .ok()
-        .and_then(|doc| Feed::read(&doc).ok())
-        .and_then(|base| base.self_url().map(str::to_owned));
-    let self_changed = feed.self_url() != base_self.as_deref();
-    let destination = feed_move.and_then(|moved| moved.url.as_deref());
-    Ok(move_link::check(
-        reader,
-        &DraftLinks {
-            feed,
-            url: url.as_deref(),
-            self_changed,
-            destination,
-        },
-    ))
+    Ok(link_inputs(hosts, row, draft, feed, feed_move)?.report(reader))
+}
+
+/// The facts of the draft of a feed for the check of stage 1. The function
+/// makes no network read, so a caller can hold a lock while it runs, and
+/// then release the lock before [`OwnedDraftLinks::report`] reads the
+/// network.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft, or the collection
+/// or the host set fails.
+pub fn link_inputs_for(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+) -> Result<OwnedDraftLinks, PipelineError> {
+    let row = collection.feed(id)?;
+    let draft = current_draft(collection, id)?;
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    let moved = feed_move(collection, hosts, &row)?;
+    link_inputs(hosts, &row, &draft, &feed, moved.as_ref())
 }
 
 /// The refusals and the notices of stage 1 for the draft of a feed, for
@@ -3237,11 +3270,54 @@ pub fn check_links(
     reader: &dyn FeedReader,
     id: FeedId,
 ) -> Result<LinkReport, PipelineError> {
+    Ok(link_inputs_for(collection, hosts, id)?.report(reader))
+}
+
+/// Apply a repair of ADR 0126 item 20 to the draft of a feed. "Use the
+/// Public Address" sets the self link to the URL of the draft. "Remove the
+/// Tag" removes `itunes:new-feed-url`. The draft changes through the model,
+/// so the diff shows only this change. The function writes no file.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::StaleRevision`] when `sent_revision` is not
+/// the revision of the draft, and [`PipelineErrorKind::InvalidOperation`]
+/// when the repair does not apply to the draft. The draft then does not
+/// change. It also gives an error when the feed has no draft.
+pub fn apply_repair(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+    repair: Repair,
+    sent_revision: &str,
+) -> Result<DraftRow, PipelineError> {
     let row = collection.feed(id)?;
     let draft = current_draft(collection, id)?;
+    if revision(&draft) != sent_revision {
+        return Err(PipelineError::new(
+            PipelineErrorKind::StaleRevision,
+            "the draft changed after this model was read; read the draft again",
+        ));
+    }
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let moved = feed_move(collection, hosts, &row)?;
-    link_report(hosts, reader, &row, &draft, &feed, moved.as_ref())
+    let url = draft_url(hosts, &row, moved.as_ref())?;
+    if !move_link::repair_applies(repair, &feed, url.as_deref()) {
+        return Err(PipelineError::new(
+            PipelineErrorKind::InvalidOperation,
+            "this repair does not apply to the draft",
+        ));
+    }
+    let changed = changed_draft(draft, |feed| match repair {
+        Repair::UsePublicAddress => {
+            if let Some(url) = &url {
+                set_self_link(feed, url);
+            }
+        }
+        Repair::RemoveTag => feed.new_feed_url = None,
+    })?;
+    collection.save_draft(id, &changed)?;
+    Ok(changed)
 }
 
 /// The plan time for a write: the plan time of the feed when the plan has

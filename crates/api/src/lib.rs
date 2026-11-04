@@ -332,6 +332,12 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
                 .put(routes::put_draft)
                 .delete(routes::delete_draft),
         )
+        .route("/feeds/{id}/link-check", get(routes::link_check))
+        .route(
+            "/feeds/{id}/draft/use-public-address",
+            post(routes::use_public_address),
+        )
+        .route("/feeds/{id}/draft/remove-tag", post(routes::remove_tag))
         .route("/feeds/{id}/live-items", post(routes::add_live_item))
         .route(
             "/feeds/{id}/live-items/{guid}/status",

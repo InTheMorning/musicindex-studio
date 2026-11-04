@@ -33,6 +33,7 @@ use studio_core::library::{self, Library};
 use studio_core::live::{self, LiveStatus};
 use studio_core::media;
 use studio_core::migrate;
+use studio_core::move_link;
 use studio_core::nostr_events::Signing;
 use studio_core::people;
 use studio_core::pipeline;
@@ -2480,6 +2481,64 @@ pub(crate) async fn put_draft(
         let id = FeedId(id);
         ensure_draft(w, id)?;
         pipeline::replace_model(&w.collection, id, &body.revision, body.model)?;
+        draft_json(w, id)
+    })
+    .await
+}
+
+/// The check of stage 1 of ADR 0126 for the draft of a feed, for Review.
+/// The route takes the facts of the draft under the lock of the workspace
+/// and releases the lock. The reads then run with no lock, so that a slow
+/// host does not stop another request. The route changes nothing.
+pub(crate) async fn link_check(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    let (links, reader) = blocking(shared, move |w| {
+        let id = FeedId(id);
+        ensure_draft(w, id)?;
+        let hosts = w.hosts()?;
+        let links = pipeline::link_inputs_for(&w.collection, &hosts, id)?;
+        Ok((links, w.link_reader.clone()))
+    })
+    .await?;
+    let report = blocking_unlocked(move || Ok(links.report(reader.0.as_ref()))).await?;
+    to_json(report)
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SentRepair {
+    revision: String,
+}
+
+/// Apply the repair "Use the Public Address" to the draft (ADR 0126 item
+/// 20). The route changes the draft only. It never writes to a host.
+pub(crate) async fn use_public_address(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SentRepair>,
+) -> ApiResult {
+    repair_draft(shared, id, body, move_link::Repair::UsePublicAddress).await
+}
+
+/// Apply the repair "Remove the Tag" to the draft (ADR 0126 item 20). The
+/// route changes the draft only. It never writes to a host.
+pub(crate) async fn remove_tag(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SentRepair>,
+) -> ApiResult {
+    repair_draft(shared, id, body, move_link::Repair::RemoveTag).await
+}
+
+async fn repair_draft(
+    shared: Shared,
+    id: i64,
+    body: SentRepair,
+    repair: move_link::Repair,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        ensure_draft(w, id)?;
+        let hosts = w.hosts()?;
+        pipeline::apply_repair(&w.collection, &hosts, id, repair, &body.revision)?;
         draft_json(w, id)
     })
     .await

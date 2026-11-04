@@ -66,10 +66,13 @@ function takeToken() {
 const token = takeToken();
 
 class ApiError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, details) {
     super(message);
     this.status = status;
     this.code = code;
+    // The data that the core gives with the error, such as the hops of
+    // `bad_move_link` (ADR 0126 item 10).
+    this.details = details;
   }
 }
 
@@ -152,7 +155,7 @@ async function exchange(url, headers, { method = 'GET', body, raw = false }) {
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     const error = data && data.error ? data.error : { code: 'unknown', message: response.statusText };
-    throw new ApiError(response.status, error.code, error.message);
+    throw new ApiError(response.status, error.code, error.message, error.details);
   }
   return data;
 }

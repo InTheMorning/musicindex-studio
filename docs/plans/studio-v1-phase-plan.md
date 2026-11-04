@@ -261,7 +261,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - The [research request on a feed check](research-feed-check-request.md) gives items F0 to F6. Only F0 has a decision.
 - Decision: [ADR 0126](../adr/0126-studio-refuses-a-bad-move-link.md). Studio refuses a bad move link, and a return to an earlier host works.
-- [Task 090](../tasks/studio-v1-task-090-bad-move-links.md) gives the work in four packets. It is open.
+- [Task 090](../tasks/studio-v1-task-090-bad-move-links.md) is complete in four packets, with its screenshot visual check. Its human test is open.
 - Visual check: Review shows a refusal and a notice. The operator moves a feed between two real file hosts, and back.
 
 ### Phase 13: Desktop Shell

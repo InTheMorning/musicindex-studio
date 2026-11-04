@@ -13020,6 +13020,8 @@ async fn a_refused_write_gives_422_bad_move_link_with_each_hop_and_changes_no_fi
     let details = &body["error"]["details"];
     assert_eq!(details["condition"], "loop");
     assert_eq!(details["number"], 1);
+    assert_eq!(details["stage"], 1);
+    assert_eq!(details["repairs"], json!(["remove_tag"]));
     assert_eq!(
         details["hops"],
         json!([
@@ -13038,6 +13040,279 @@ async fn a_refused_write_gives_422_bad_move_link_with_each_hop_and_changes_no_fi
             .unwrap()
             .is_some()
     );
+}
+
+/// A reader that records whether the lock of the workspace was free during
+/// a read, and then serves the scripted bodies.
+struct LockProbe {
+    shared: std::sync::Arc<std::sync::Mutex<Workspace>>,
+    free: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    inner: studio_core::move_link::ScriptedReader,
+}
+
+impl studio_core::move_link::FeedReader for LockProbe {
+    fn read(
+        &self,
+        url: &str,
+    ) -> Result<studio_core::move_link::FeedBody, studio_core::discover::ReadFailure> {
+        // Try the lock for up to two seconds. A held lock fails the test.
+        let limit = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let free = loop {
+            if self.shared.try_lock().is_ok() {
+                break true;
+            }
+            if std::time::Instant::now() > limit {
+                break false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        self.free.store(free, std::sync::atomic::Ordering::SeqCst);
+        self.inner.read(url)
+    }
+
+    fn wait_between_reads(&self) {
+        self.inner.wait_between_reads();
+    }
+}
+
+/// An app with a connector for the feeds folder, whose reader of public
+/// feeds is a [`LockProbe`] over `reader`. Gives the app, the connector ID
+/// and the flag of the probe.
+async fn app_with_lock_probe(
+    reader: studio_core::move_link::ScriptedReader,
+) -> (App, i64, std::sync::Arc<std::sync::atomic::AtomicBool>) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(None)
+        .with_address_check(std::sync::Arc::new(PassAll));
+    let (router, handle) = crate::workspace_router(workspace);
+    let free = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let probe = LockProbe {
+        shared: handle.shared_for_test(),
+        free: std::sync::Arc::clone(&free),
+        inner: reader,
+    };
+    handle
+        .with_workspace(move |w| {
+            w.link_reader = crate::workspace::LinkReader(std::sync::Arc::new(probe));
+        })
+        .await;
+    let app = App {
+        router,
+        data,
+        feeds,
+    };
+    let root = app.feeds.path().to_str().unwrap().to_owned();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    set_library_root(&app);
+    let id = connector["id"].as_i64().unwrap();
+    (app, id, free)
+}
+
+const OLD_SELF: &str = "<atom:link xmlns:atom=\"http://www.w3.org/2005/Atom\" rel=\"self\" href=\"https://old.example/b.xml\"/>";
+
+/// Give a feed a public address that differs from its self link, as a feed
+/// behind a redirect has (ADR 0021 item 1).
+fn set_public_url(app: &App, id: i64, url: &str) {
+    rusqlite::Connection::open(app.data.path().join("collection.sqlite"))
+        .unwrap()
+        .execute("UPDATE feeds SET public_url = ?2 WHERE id = ?1", (id, url))
+        .unwrap();
+}
+
+fn draft_bytes(app: &App, id: i64) -> String {
+    let draft = collection_of(app)
+        .draft(studio_core::collection::FeedId(id))
+        .unwrap()
+        .unwrap();
+    String::from_utf8(draft.draft_xml).unwrap()
+}
+
+#[tokio::test]
+async fn the_link_check_route_gives_the_refusal_the_notice_and_the_repairs_with_no_lock() {
+    let reader = studio_core::move_link::ScriptedReader::empty().with_feed(
+        "https://other.example/f.xml",
+        "https://other.example/f.xml",
+        Some("ga"),
+        Some("https://music.example/a.xml"),
+        Some("https://other.example/f.xml"),
+    );
+    let (app, connector, free) = app_with_lock_probe(reader).await;
+    let a_xml = paid_feed("A", "ga", &[ANN, BOB], &[], TAG_GONE);
+    let a = add_paid_feed(&app, connector, "a.xml", &a_xml).await;
+    let b_xml = paid_feed("B", "gb", &[ANN, BOB], &[], OLD_SELF);
+    let b = add_paid_feed(&app, connector, "b.xml", &b_xml).await;
+    set_public_url(&app, b, "https://music.example/b.xml");
+    call(&app, "GET", &format!("/api/v1/feeds/{a}/draft"), None).await;
+    call(&app, "GET", &format!("/api/v1/feeds/{b}/draft"), None).await;
+
+    // A refusal, with its repair. The reader found the lock free.
+    let (status, report) = call(&app, "GET", &format!("/api/v1/feeds/{a}/link-check"), None).await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["refusal"]["condition"], "loop");
+    assert_eq!(report["refusal"]["stage"], 1);
+    assert_eq!(report["refusal"]["repairs"], json!(["remove_tag"]));
+    assert_eq!(report["notices"], json!([]));
+    assert_eq!(report["repairs"], json!(["remove_tag"]));
+    assert!(
+        free.load(std::sync::atomic::Ordering::SeqCst),
+        "the read ran while the workspace was locked"
+    );
+
+    // A notice, with its repair, and no read.
+    let (status, report) = call(&app, "GET", &format!("/api/v1/feeds/{b}/link-check"), None).await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["refusal"], Value::Null);
+    assert_eq!(
+        report["notices"],
+        json!([{
+            "notice": "self_link_differs",
+            "self_url": "https://old.example/b.xml",
+            "draft_url": "https://music.example/b.xml",
+        }])
+    );
+    assert_eq!(report["repairs"], json!(["use_public_address"]));
+}
+
+#[tokio::test]
+async fn each_repair_route_changes_only_its_one_value_and_refuses_when_it_does_not_apply() {
+    let reader = studio_core::move_link::ScriptedReader::empty();
+    let (app, connector) = app_with_link_reader(reader).await;
+    let a_xml = paid_feed("A", "ga", &[ANN, BOB], &[], TAG_GONE);
+    let a = add_paid_feed(&app, connector, "a.xml", &a_xml).await;
+    let b_xml = paid_feed("B", "gb", &[ANN, BOB], &[], OLD_SELF);
+    let b = add_paid_feed(&app, connector, "b.xml", &b_xml).await;
+    set_public_url(&app, b, "https://music.example/b.xml");
+    let (_, draft_a) = call(&app, "GET", &format!("/api/v1/feeds/{a}/draft"), None).await;
+    let (_, draft_b) = call(&app, "GET", &format!("/api/v1/feeds/{b}/draft"), None).await;
+
+    // A repair that does not apply gives 422 and changes nothing.
+    let before_a = draft_bytes(&app, a);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{a}/draft/use-public-address"),
+        Some(json!({ "revision": draft_a["revision"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    // The core kind InvalidOperation has the code of the change sets.
+    assert_eq!(body["error"]["code"], "invalid_change_set");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{b}/draft/remove-tag"),
+        Some(json!({ "revision": draft_b["revision"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(draft_bytes(&app, a), before_a);
+
+    // A stale revision gives 409.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{a}/draft/remove-tag"),
+        Some(json!({ "revision": "stale" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "stale_revision");
+    assert_eq!(draft_bytes(&app, a), before_a);
+
+    // "Remove the Tag" removes the tag and no other byte.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{a}/draft/remove-tag"),
+        Some(json!({ "revision": draft_a["revision"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["model"]["new_feed_url"], Value::Null);
+    assert_eq!(draft_bytes(&app, a), before_a.replace(TAG_GONE, ""));
+
+    // "Use the Public Address" changes the self link and no other byte.
+    let before_b = draft_bytes(&app, b);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{b}/draft/use-public-address"),
+        Some(json!({ "revision": draft_b["revision"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        draft_bytes(&app, b),
+        before_b.replace("https://old.example/b.xml", "https://music.example/b.xml")
+    );
+    // The repair applied once, so it does not apply again.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{b}/draft/use-public-address"),
+        Some(json!({ "revision": body["revision"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+}
+
+#[tokio::test]
+async fn a_stage_two_refusal_gives_the_stage_and_keeps_the_feed_at_its_address() {
+    let server = web_feeds();
+    let new_url = "https://new.example/album/a.xml";
+    // The destination serves a feed with a different podcast:guid.
+    let reader = studio_core::move_link::ScriptedReader::empty().with_feed(
+        new_url,
+        new_url,
+        Some("other-guid"),
+        None,
+        None,
+    );
+    let app = app_with_reader(&server.url(""), None, Some(reader));
+    set_library_root(&app);
+    let id = read_only_with_folder(&app, &server.url("/a.xml"));
+    let new_dir = tempfile::tempdir().unwrap();
+    let new_id = add_host(&app, "New", new_dir.path(), "https://new.example").await;
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    let (_, diff) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": new_id })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "bad_move_link");
+    let details = &body["error"]["details"];
+    assert_eq!(details["stage"], 2);
+    assert_eq!(details["condition"], "guid_mismatch");
+    assert_eq!(details["hops"][0]["url"], new_url);
+    assert_eq!(details["hops"][0]["result"], "guid_mismatch");
+    assert_eq!(details["repairs"], json!([]));
+    // The feed keeps its host, and the draft keeps its move.
+    let (_, feed) = call(&app, "GET", &format!("/api/v1/feeds/{id}"), None).await;
+    assert_eq!(feed["connector_id"], Value::Null);
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(diff["feed_move"]["connector_id"], new_id);
 }
 
 #[tokio::test]

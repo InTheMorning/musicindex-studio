@@ -70,6 +70,12 @@ impl WorkspaceHandle {
         .map_err(|e| ApiError::internal(e.to_string()))?
     }
 
+    /// The shared workspace, so that a test can try its lock.
+    #[cfg(test)]
+    pub(crate) fn shared_for_test(&self) -> Arc<Mutex<Workspace>> {
+        Arc::clone(&self.shared)
+    }
+
     /// Run a function on the workspace. Only a test uses it.
     #[cfg(test)]
     pub(crate) async fn with_workspace<T, F>(&self, work: F) -> T

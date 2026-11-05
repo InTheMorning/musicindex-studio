@@ -1,7 +1,10 @@
-// The script of the window on Linux (ADR 0124 items 23 to 25). WebKitGTK gives a page no
-// file from a drop, and it does not connect Ctrl+Z to the undo command. The
-// UI stays the same as in a browser: it sees a usual file drag.
+// The script of the window on Linux (ADR 0124 items 23 to 25 and 27). WebKitGTK gives a page no
+// file from a drop, it does not connect Ctrl+Z to the undo command, and it does
+// not always draw a backdrop blur. The UI stays the same as in a browser: it
+// sees a usual file drag.
 (() => {
+  // With no blur, the page text shows through a translucent toolbar.
+  document.documentElement.style.setProperty('--bar-bg', 'var(--sidebar)');
   const FILE_DRAG = (event) => {
     const types = Array.from((event.dataTransfer && event.dataTransfer.types) || []);
     return event.isTrusted && types.includes('text/uri-list') && !types.includes('Files');

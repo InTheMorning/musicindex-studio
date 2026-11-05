@@ -8,11 +8,30 @@
 // `crates/core/src/move_link.rs`.
 export const CONDITION_TEXT = {
   loop: 'The new addresses come back to an address that they visited, or go through more than 10 addresses.',
-  read_fails: 'An address does not give an RSS feed, or Studio cannot read it.',
-  guid_mismatch: 'A feed at an address has a different podcast:guid.',
-  conflicting_names: 'A feed at an address names two different new addresses.',
-  self_link_differs: 'The draft changes the self link to an address other than the address of the feed.',
-  not_public: 'An address is not a public address.',
+  read_fails: 'That address does not give a correct feed, or Studio cannot read it.',
+  guid_mismatch: 'The feed at that address has a different podcast:guid, so it is a different feed.',
+  conflicting_names: 'The feed names two different new addresses.',
+  self_link_differs: 'That address is not the address of this feed.',
+  not_public: 'That address is not a public address, so apps cannot read it.',
+};
+
+// Where the first address came from, and what can occur. The keys are the
+// variants of `LinkSource` (ADR 0126 item 28).
+export const SOURCE_TEXT = {
+  tag: 'This feed says that it moved to a new address, in the tag itunes:new-feed-url.',
+  self_link: 'The draft changes the address that this feed gives for itself, in its self link.',
+  move: 'You selected a move of this feed to a new address.',
+};
+export const DANGER_TEXT = {
+  tag: 'An app or an index that follows the tag would lose your feed.',
+  self_link: 'An app or an index that follows the self link would lose your feed.',
+  move: 'After a move, apps and indexes go to that address, so they would lose your feed.',
+};
+// What the user can do. The repair buttons give the first choice.
+export const NEXT_TEXT = {
+  tag: 'To continue, remove the tag, or put a feed at that address.',
+  self_link: 'To continue, use the public address of this feed.',
+  move: 'To continue, correct the public address of the file host, or undo the move.',
 };
 
 // The reason of each hop. The keys are the variants of `HopResult`.
@@ -48,14 +67,15 @@ export const REPAIRS = {
 
 export const REFUSAL_TITLE = 'Studio refuses this write.';
 export const NOTICE_TITLE = 'The self link names a different address.';
-export const NOTICE_END = 'Studio can still write it.';
+export const NOTICE_WHY = 'The self link is where this feed says that it lives. The draft did not change it. An app that follows it can read the file at that address, not this feed.';
+export const NOTICE_END = 'Studio can still write the feed. To correct the self link, use the public address.';
 export const REPLACES_POINTER_NOTE = 'The pointer file at the new address becomes the feed.';
 
 // The warning of a return to an earlier address (ADR 0128 items 7 and 8). It
 // gives no time: Stophammer ADR 0083 owns the times, and Studio cannot read
 // the count of the index.
 export const RETURN_TITLE = 'This is a return to an earlier address.';
-export const RETURN_TEXT = 'The index can wait before it follows a return, and the wait grows with each return.';
+export const RETURN_TEXT = 'This feed was at this address before. The index can wait before it follows a return, and the wait grows with each return. Your write is safe, and you do not need to do more.';
 
 // The warning for a feed move of the core, or `null` when it is not a return.
 export function returnWarning(move) {
@@ -82,7 +102,10 @@ export function refusalView(refusal) {
   if (!refusal) return null;
   return {
     title: REFUSAL_TITLE,
+    source: Object.hasOwn(SOURCE_TEXT, refusal.source) ? SOURCE_TEXT[refusal.source] : '',
     text: Object.hasOwn(CONDITION_TEXT, refusal.condition) ? CONDITION_TEXT[refusal.condition] : UNKNOWN_CONDITION,
+    danger: Object.hasOwn(DANGER_TEXT, refusal.source) ? DANGER_TEXT[refusal.source] : '',
+    next: Object.hasOwn(NEXT_TEXT, refusal.source) ? NEXT_TEXT[refusal.source] : '',
     state: Object.hasOwn(STAGE_TEXT, refusal.stage) ? STAGE_TEXT[refusal.stage] : '',
     hops: (refusal.hops || []).map((hop) => ({
       url: hop.url,
@@ -108,6 +131,7 @@ export function noticeViews(report) {
       title: NOTICE_TITLE,
       selfUrl: notice.self_url,
       draftUrl: notice.draft_url,
+      why: NOTICE_WHY,
       end: NOTICE_END,
       repairs: repairButtons((report.repairs || []).filter((id) => id === 'use_public_address')),
     }));

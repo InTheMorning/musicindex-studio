@@ -482,7 +482,7 @@ fn model_json(feed: &Feed) -> Option<Value> {
 }
 
 /// Remove the `key` of each entry. No field of the model has this name.
-fn strip_keys(value: &mut Value) {
+pub(crate) fn strip_keys(value: &mut Value) {
     match value {
         Value::Object(map) => {
             map.remove("key");

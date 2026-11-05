@@ -122,6 +122,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/peoplepages.js"),
     ),
     (
+        "feedfacts.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/feedfacts.js"),
+    ),
+    (
         "review.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/review.js"),

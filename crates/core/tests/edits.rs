@@ -186,17 +186,14 @@ fn a_host_move_changes_only_the_self_link_and_adds_the_new_feed_url() {
         Some("https://new.example/feed.xml")
     );
     assert_eq!(feed.items[0].guid.as_deref(), Some("g1"));
-    assert!(after.contains(
-        "<itunes:new-feed-url>https://new.example/feed.xml</itunes:new-feed-url>\n  <item>"
-    ));
     let expected = source
         .replace(
             "https://old.example/feed.xml\" rel=\"self\" type=\"application/rss+xml\"/>",
             "https://new.example/feed.xml\" rel=\"self\" type=\"application/rss+xml\"/>",
         )
         .replace(
-            "  <item>",
-            "  <itunes:new-feed-url>https://new.example/feed.xml</itunes:new-feed-url>\n  <item>",
+            "  <title>",
+            "  <itunes:new-feed-url>https://new.example/feed.xml</itunes:new-feed-url>\n  <title>",
         );
     assert_eq!(after, expected);
 }

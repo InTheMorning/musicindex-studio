@@ -2487,6 +2487,48 @@ pub(crate) async fn put_draft(
     .await
 }
 
+/// What a merge of the hosted file into the draft does (ADR 0129 item 2).
+pub(crate) async fn get_draft_merge(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let made = writer(w, id)?;
+        let (plan, version) = pipeline::merge_plan(&w.collection, made.as_ref(), id)?;
+        Ok(Json(json!({ "plan": plan, "version": version })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SentMerge {
+    version: String,
+    #[serde(default)]
+    choices: std::collections::BTreeMap<String, studio_core::merge::Side>,
+}
+
+/// Merge the hosted file into the draft (ADR 0129 items 3 to 6).
+pub(crate) async fn post_draft_merge(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SentMerge>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let made = writer(w, id)?;
+        pipeline::merge_draft(
+            &w.collection,
+            made.as_ref(),
+            id,
+            &body.version,
+            &body.choices,
+        )?;
+        draft_json(w, id)
+    })
+    .await
+}
+
 /// The check of stage 1 of ADR 0126 for the draft of a feed, for Review.
 /// The route takes the facts of the draft under the lock of the workspace
 /// and releases the lock. The reads then run with no lock, so that a slow

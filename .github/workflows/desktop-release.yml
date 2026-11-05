@@ -73,7 +73,11 @@ jobs:
           fi
       - name: Install Linux packages
         if: startsWith(matrix.slug, 'linux-')
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+          # The AppImage holds each GStreamer plugin of the runner, and the bundler needs patchelf for them (ADR 0124 item 26).
+          sudo apt-get install -y patchelf gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-alsa gstreamer1.0-pulseaudio
       - name: Install Linux test server
         if: matrix.slug == 'linux-x86_64'
         run: sudo apt-get install -y openssh-server

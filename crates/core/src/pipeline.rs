@@ -536,7 +536,43 @@ pub fn refresh(
         AddressSource::Folder,
         connector.public_url(path).as_deref(),
     )?;
+    move_unedited_draft(collection, id, &file.bytes, &file.version)?;
     Ok(feed)
+}
+
+/// Move a draft with no edits to the file that Studio read (ADR 0007 item 6).
+/// A draft with an edit, a host operation, a feed move, a draft file or a
+/// show grant keeps its base, and the conflict check stops its write. A
+/// signing plan is not an edit: each diff makes one, and the next diff makes
+/// it again.
+fn move_unedited_draft(
+    collection: &Collection,
+    id: FeedId,
+    bytes: &[u8],
+    version: &Version,
+) -> Result<(), PipelineError> {
+    let Some(draft) = collection.draft(id)? else {
+        return Ok(());
+    };
+    if draft.base_version.is_none()
+        || draft.draft_xml != draft.base_xml
+        || collection.draft_feed_move(id)?.is_some()
+        || !collection.draft_operations(id)?.is_empty()
+        || !collection.draft_files(id)?.is_empty()
+        || !collection.draft_grants(id)?.is_empty()
+    {
+        return Ok(());
+    }
+    collection.remove_signing_plan(id)?;
+    collection.save_draft(
+        id,
+        &DraftRow {
+            base_version: Some(version.clone()),
+            base_xml: bytes.to_vec(),
+            draft_xml: bytes.to_vec(),
+        },
+    )?;
+    Ok(())
 }
 
 /// Read a feed that has no connector from its public address, and keep its
@@ -562,7 +598,115 @@ pub fn refresh_public(
         .map_err(|message| PipelineError::new(PipelineErrorKind::Network, message))?;
     collection.record_state(id, &read.feed, &read.version)?;
     collection.set_address(id, AddressSource::Read, Some(&read.url))?;
+    move_unedited_draft(collection, id, &read.bytes, &read.version)?;
     Ok(read.feed)
+}
+
+/// The bytes, the version and the draft of a merge (ADR 0129).
+fn merge_inputs(
+    collection: &Collection,
+    connector: &dyn Connector,
+    id: FeedId,
+) -> Result<(DraftRow, crate::connector::FileRead), PipelineError> {
+    let row = collection.feed(id)?;
+    let (_, path) = writable(&row)?;
+    let draft = current_draft(collection, id)?;
+    let file = connector.read(path)?.ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::NotFound,
+            format!("{path} does not exist on the file host"),
+        )
+    })?;
+    Ok((draft, file))
+}
+
+fn merged(
+    draft: &DraftRow,
+    hosted: &[u8],
+    choices: &std::collections::BTreeMap<String, crate::merge::Side>,
+) -> Result<crate::merge::Merged, PipelineError> {
+    let read = |bytes: &[u8]| -> Result<Feed, PipelineError> {
+        Ok(Feed::read(&Document::parse_bytes(bytes)?)?)
+    };
+    crate::merge::merge(
+        &read(&draft.base_xml)?,
+        &read(&draft.draft_xml)?,
+        &read(hosted)?,
+        choices,
+    )
+    .map_err(|message| PipelineError::new(PipelineErrorKind::InvalidModel, message))
+}
+
+/// What a merge of the hosted file into the draft does (ADR 0129 item 2). It
+/// changes nothing. Gives the version of the hosted file that the plan used.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed is read-only, the file does not
+/// exist, or a file is not a feed.
+pub fn merge_plan(
+    collection: &Collection,
+    connector: &dyn Connector,
+    id: FeedId,
+) -> Result<(crate::merge::MergePlan, Version), PipelineError> {
+    let (draft, file) = merge_inputs(collection, connector, id)?;
+    let plan = merged(&draft, &file.bytes, &std::collections::BTreeMap::new())?.plan;
+    Ok((plan, file.version))
+}
+
+/// Merge the hosted file into the draft (ADR 0129 items 3 to 6). The hosted
+/// file becomes the base of the draft. No write occurs, and the user reviews
+/// the new draft.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::Conflict`] when the hosted file is not the
+/// version of the plan, and [`PipelineErrorKind::InvalidModel`] when a field
+/// that both sides changed has no choice. The draft then does not change.
+pub fn merge_draft(
+    collection: &Collection,
+    connector: &dyn Connector,
+    id: FeedId,
+    version: &str,
+    choices: &std::collections::BTreeMap<String, crate::merge::Side>,
+) -> Result<DraftRow, PipelineError> {
+    let (draft, file) = merge_inputs(collection, connector, id)?;
+    if file.version.as_str() != version {
+        return Err(PipelineError::new(
+            PipelineErrorKind::Conflict,
+            "the hosted file changed again; examine the changes again",
+        ));
+    }
+    let result = merged(&draft, &file.bytes, choices)?;
+    if let Some(open) = result
+        .plan
+        .conflicts
+        .iter()
+        .find(|field| !choices.contains_key(&field.id))
+    {
+        return Err(PipelineError::new(
+            PipelineErrorKind::InvalidModel,
+            format!("select a value for {}", open.id),
+        ));
+    }
+    let invalid = |message: String| PipelineError::new(PipelineErrorKind::InvalidModel, message);
+    let mut sent: Feed =
+        serde_json::from_value(result.model).map_err(|e| invalid(e.to_string()))?;
+    let mut doc = Document::parse_bytes(&file.bytes)?;
+    let current = Feed::read(&doc)?;
+    sent.last_build_date.clone_from(&current.last_build_date);
+    sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
+    number_tracks(&current, &mut sent);
+    apply_op3(&current, &mut sent);
+    let hosted = Document::parse_bytes(&file.bytes)?;
+    sent.write_hosted(&mut doc, Some(&hosted))?;
+    let row = DraftRow {
+        base_version: Some(file.version),
+        draft_xml: doc.write().into_bytes(),
+        base_xml: file.bytes,
+    };
+    collection.save_draft(id, &row)?;
+    Ok(row)
 }
 
 /// Start a draft from the live file. It replaces an older draft.

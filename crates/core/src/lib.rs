@@ -30,6 +30,7 @@ pub mod library;
 pub mod live;
 pub mod lookup;
 pub mod media;
+pub mod merge;
 pub mod migrate;
 pub mod move_link;
 pub mod msp;

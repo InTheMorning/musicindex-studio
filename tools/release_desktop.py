@@ -35,6 +35,7 @@ INSTALLERS = {
     "Darwin": [".dmg"],
     "Linux": [".AppImage", ".deb", ".rpm"],
 }
+APPIMAGE_AUDIO_PLUGINS = ("autodetect", "playback", "audioconvert", "mpg123", "flac", "libav", "debugutilsbad")
 BUNDLE_FOLDERS = {".AppImage": "appimage", ".deb": "deb", ".rpm": "rpm",
                   ".dmg": "dmg", ".msi": "msi"}
 
@@ -243,6 +244,20 @@ def check_start_bytes(path, suffix):
         raise ValueError(f"{path.name} does not have the start bytes of a {suffix} file")
 
 
+def check_appimage_audio(path):
+    """Refuse an AppImage with no audio plugins, because Play then fails (ADR 0124 item 26)."""
+    with tempfile.TemporaryDirectory() as folder:
+        for plugin in APPIMAGE_AUDIO_PLUGINS:
+            member = f"usr/lib/gstreamer-1.0/libgst{plugin}.so"
+            subprocess.run([path.resolve(), "--appimage-extract", member], cwd=folder,
+                           capture_output=True, check=False)
+            if not (Path(folder) / "squashfs-root" / member).is_file():
+                raise ValueError(
+                    f"ADR 0124 item 26: {path.name} has no {member}, so Play can fail or hang the app. "
+                    "Set bundleMediaFramework in tauri.conf.json, and install the "
+                    "GStreamer plugin packages and patchelf in the release workflow.")
+
+
 def installers(target, bundle_dir, output, skip):
     """Copy each installer of the target to its fixed name, after a start-byte check."""
     slug, _ = target_details(target)
@@ -260,6 +275,8 @@ def installers(target, bundle_dir, output, skip):
         if len(found) > 1:
             raise ValueError(f"the bundle folder has more than one {suffix} file")
         check_start_bytes(found[0], suffix)
+        if suffix == ".AppImage":
+            check_appimage_audio(found[0])
         destination = output / f"musicindex-studio-v{version()}-{slug}{suffix}"
         shutil.copyfile(found[0], destination)
         print(destination)

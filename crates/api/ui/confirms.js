@@ -24,10 +24,6 @@ export const CONFIRMS = {
     'Discard the draft?',
     'Studio deletes each change that you did not write. The feed file on its file host does not change.',
     'Discard the Draft'),
-  startAgain: () => destructive(
-    'Start again from the hosted file?',
-    'Studio deletes each change in the draft. Then it starts a new draft from the feed file on its file host.',
-    'Start Again'),
   replaceDraft: () => destructive(
     'Replace the draft with this version?',
     'Studio deletes each change in the draft. Then it starts a new draft from this earlier version.',

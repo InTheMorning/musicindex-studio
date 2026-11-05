@@ -4,7 +4,7 @@
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
-import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys } from './review.js';
+import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady } from './review.js';
 import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
@@ -15,6 +15,7 @@ import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, tog
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
+import { versionLabel, LOCK_HELP } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -1401,15 +1402,18 @@ export function DiffView({ diff }) {
     viewCounter += 1;
     idRef.current = `review-view-${viewCounter}`;
   }
-  const rows = shownLines(diff.lines || [], view);
+  const rows = shownLines(diff.lines || []);
   const segments = runs(rows, whole);
   const open = (id) => setOpened((prev) => new Set(prev).add(id));
   const shown = segments.flatMap((s) => (s.hidden ? (opened.has(s.id) ? s.rows : []) : [s.row]));
   const indent = narrow ? commonIndent(shown) : 0;
-  const line = (row, key) => html`<span key=${key} class=${`line ${row.kind === 'same' ? '' : row.kind}`}>${row.sign} ${
-    (indent ? stripIndent(row.parts, indent) : row.parts).map((part, i) => (part.changed
-      ? html`<mark key=${i} class=${row.kind === 'remove' ? 'del' : 'ins'}>${part.text}</mark>`
-      : part.text))}\n</span>`;
+  const line = (row, key) => {
+    const note = localTimeNote(row);
+    return html`<span key=${key} class=${`line ${row.kind === 'same' ? '' : row.kind}`}>${row.sign} ${
+      (indent ? stripIndent(row.parts, indent) : row.parts).map((part, i) => (part.changed
+        ? html`<mark key=${i} class=${row.kind === 'remove' ? 'del' : 'ins'}>${part.text}</mark>`
+        : part.text))}\n</span>${note && html`<span class="line time-note">  ${note}\n</span>`}`;
+  };
   return html`<div class="review-lines">
     <div class="viewbar">
       <div class="field">
@@ -1422,16 +1426,41 @@ export function DiffView({ diff }) {
           </select>
         </div>
       </div>
-      <button class="button" type="button" onClick=${() => setWhole(!whole)}>${whole ? 'Show Only the Changes' : 'Show the Whole File'}</button>
+      ${view === 'detailed' && html`<button class="button" type="button" onClick=${() => setWhole(!whole)}>${whole ? 'Show Only the Changes' : 'Show the Whole File'}</button>`}
     </div>
     ${view === 'simplified' && html`<${FieldView} diff=${diff} />`}
-    <section class="page-section">${view === 'simplified' && html`<h2>Changed lines</h2>`}
+    ${view === 'detailed' && html`<section class="page-section">
     <pre class="diff" tabindex="0" aria-label="Changes between the hosted file and the draft">${segments.map((s, index) => {
       if (!s.hidden) return line(s.row, `r${index}`);
       if (opened.has(s.id)) return s.rows.map((row, i) => line(row, `o${s.id}-${i}`));
       return html`<span key=${`h${s.id}`} class="line"><a class="more" href=${`#diff-run-${s.id}`}
         onClick=${(e) => { e.preventDefault(); open(s.id); }}><span aria-hidden="true">⋯ </span>${moreLabel(s.count)}</a>\n</span>`;
-    })}</pre></section>
+    })}</pre></section>`}
+  </div>`;
+}
+
+// The merge of the hosted file into the draft (ADR 0129). The core gives the
+// plan. A field that both sides changed has a select menu with no start value.
+function MergePanel({ merge, busy, onChoose, onApply }) {
+  const rows = mergeRows(merge.plan);
+  const list = (title, items, text) => items.length > 0 && html`<section class="page-section"><h2>${title}</h2>
+    <div class="group">${items.map((row) => html`<div class="link-row static" key=${row.id}><span class="text">
+      <span class="label">${row.label}</span><span class="summary">${text(row)}</span></span></div>`)}</div></section>`;
+  return html`<div class="merge-panel">
+    <div class="notice" role="status"><strong>${MERGE_TITLE}</strong>${MERGE_INTRO}</div>
+    ${list(MERGE_HEADINGS.kept, rows.kept, (row) => row.mine)}
+    ${list(MERGE_HEADINGS.incoming, rows.incoming, (row) => row.hosted)}
+    ${rows.conflicts.length > 0 && html`<section class="page-section"><h2>${MERGE_HEADINGS.conflicts}</h2>
+      <div class="group">${rows.conflicts.map((row) => html`<div class="field" key=${row.id}>
+        <label for=${`merge-${row.id}`}>${row.label}</label>
+        <div class="field-body"><select id=${`merge-${row.id}`} value=${merge.choices[row.id] || ''}
+          onChange=${(e) => onChoose(row.id, e.target.value)}>
+          <option value="">Select one</option>
+          <option value="mine">Your edit: ${row.mine}</option>
+          <option value="hosted">Hosted file: ${row.hosted}</option>
+        </select></div></div>`)}</div></section>`}
+    <div class="actions"><button class="button primary" type="button"
+      disabled=${busy || !mergeReady(merge.plan, merge.choices)} onClick=${onApply}>Apply to the Draft</button></div>
   </div>`;
 }
 
@@ -1508,11 +1537,14 @@ function FeedMoveRow({ move, connectors, onUndo, busy }) {
 function LinkRefusal({ refusal, busy, onRepair }) {
   const view = refusalView(refusal);
   if (!view) return null;
-  return html`<div class="notice error" role="alert"><strong>${view.title}</strong>${view.text} ${view.state}
+  return html`<div class="notice error" role="alert"><strong>${view.title}</strong>
+    <p>${view.source} ${view.text} ${view.danger}</p>
     ${view.hops.length > 0 && html`<ol class="hops">${view.hops.map((hop, i) => html`<li key=${i}>
       <span class="mono">${hop.url}</span>
       ${hop.finalUrl && html`<span class="why">Redirects to <span class="mono">${hop.finalUrl}</span></span>`}
       <span class="why">${hop.why}</span></li>`)}</ol>`}
+    <p>${view.state}</p>
+    <p>${view.next}</p>
     ${view.repairs.length > 0 && html`<div class="actions">${view.repairs.map((r) => html`<button class="button" type="button"
       disabled=${busy} onClick=${() => onRepair(r.id)}>${r.label}</button>`)}</div>`}
   </div>`;
@@ -1521,7 +1553,7 @@ function LinkRefusal({ refusal, busy, onRepair }) {
 // The notice of a self link that differs from the address of the feed
 // (ADR 0126 item 6). The write stays possible.
 function LinkNotices({ report, busy, onRepair }) {
-  return noticeViews(report).map((view) => html`<div class="notice" role="status"><strong>${view.title}</strong>The feed names${' '}<span class="mono">${view.selfUrl}</span>. Its address is <span class="mono">${view.draftUrl}</span>. ${view.end}
+  return noticeViews(report).map((view) => html`<div class="notice" role="status"><strong>${view.title}</strong>The feed names${' '}<span class="mono">${view.selfUrl}</span>. Its address is <span class="mono">${view.draftUrl}</span>. ${view.why} ${view.end}
     ${view.repairs.length > 0 && html`<div class="actions">${view.repairs.map((r) => html`<button class="button" type="button"
       disabled=${busy} onClick=${() => onRepair(r.id)}>${r.label}</button>`)}</div>`}
   </div>`);
@@ -1783,15 +1815,26 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       await draft.load();
     });
   };
-  const startAgain = async () => {
-    if (!await askConfirm(CONFIRMS.startAgain())) return;
-    run(async () => {
-      await api(`/feeds/${feedId}/draft`, { method: 'DELETE' });
-      setDiff(null);
-      onOpsCleared();
-      await draft.load();
-    });
-  };
+  // A merge keeps each edit of the draft (ADR 0129). The Review sheet then
+  // examines the new draft.
+  const [merge, setMerge] = useState(null);
+  const startMerge = () => run(async () => {
+    await draft.flush();
+    const found = await api(`/feeds/${feedId}/draft/merge`);
+    setMerge({ ...found, choices: {} });
+  });
+  const applyMerge = () => run(async () => {
+    try {
+      draft.show(await api(`/feeds/${feedId}/draft/merge`, { method: 'POST', body: { version: merge.version, choices: merge.choices } }));
+    } catch (e) {
+      // The hosted file changed again, so this plan is old.
+      if (e.code === 'conflict') setMerge(null);
+      throw e;
+    }
+    setMerge(null);
+    setDiff(await api(`/feeds/${feedId}/diff`));
+    await checkLinks();
+  });
   // An operation waits for a download of its file (ADR 0038 item 12). The
   // write refuses the draft until each download is complete.
   const waiting = !!diff && diff.operations.some((op) => op.waiting);
@@ -1828,10 +1871,17 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
             Load the draft again to continue. The changes in this window since the last save go out.
             <div class="actions"><button class="button" type="button" onClick=${draft.load}>Load the Draft Again</button></div></div>`
         : html`<${ErrorNotice} error=${draft.error} />`}
-      ${conflict
+      ${merge
+        ? html`<${MergePanel} merge=${merge} busy=${busy} onApply=${applyMerge}
+            onChoose=${(id, side) => setMerge((m) => {
+              const choices = { ...m.choices };
+              if (side) choices[id] = side; else delete choices[id];
+              return { ...m, choices };
+            })} />`
+        : conflict
         ? html`<div class="notice error" role="alert"><strong>The hosted file changed after the draft started.</strong>
             Studio did not write. A different tool or a different person changed the file.
-            <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startAgain}>Start Again from the Hosted File</button></div></div>`
+            <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startMerge}>Apply My Edits to the New File</button></div></div>`
         : stale
           ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
           : refusalOfError(error)
@@ -1883,9 +1933,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
           ${choice.kind === 'differs' ? 'Connect a Different Signer' : 'Connect a Signer'}</button>
       </div>`}
       ${diff && connecting && html`<${SignerConnect} onConnected=${connected} onCancel=${() => setConnecting(false)} />`}
-      <div class="actions">
+      ${!merge && html`<div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
-      </div>
+      </div>`}
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the Draft</button>
@@ -1926,7 +1976,7 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
       ${list && list.length === 0 && html`<p class="hint">No earlier versions yet.</p>`}
       ${list && list.length > 0 && html`<div class="group"><ul class="snapshots">${list.map((s) => html`<li key=${s.id}>
         <span><span class="when">${new Date(s.taken_at * 1000).toLocaleString()}</span>
-          <span class="mono sub">${s.version.slice(0, 19)}</span></span>
+          <span class="mono sub">${versionLabel(s.version)}</span></span>
         <button class="button" type="button" disabled=${busy} onClick=${() => restore(s)}>Put in the Draft</button>
       </li>`)}</ul></div>`}
     </div>
@@ -2022,7 +2072,7 @@ function FeedFacts({ feed, onRemoved }) {
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
         ${feed.placeholder_guid && html`<dd class="facts-note">${HOST_STEP.placeholderGuid}</dd>`}
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in File hosts.'}</dd>
-        <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
+        <dt>Version</dt><dd class="mono">${feed.last_version ? versionLabel(feed.last_version) : 'Not read yet'}</dd>
         <dt>Announcement</dt><dd>${announcementText.split('\n').map((line, i) => html`${i > 0 && html`<br />`}${line}`)}</dd>
       </dl>
     </div>
@@ -2263,6 +2313,7 @@ function SettingsPage({ model, update, album, op3Tracks }) {
           <div class="field-body">
             <label class="check"><input id="set-locked" type="checkbox" checked=${isLocked(locked)}
               onChange=${(e) => setLocked(e.target.checked)} /></label>
+            <span class="hint">${LOCK_HELP}</span>
           </div>
         </div>
         ${locked && html`<${TextField} id="set-lock-owner" label="Lock owner email" value=${locked.owner} onChange=${setLockOwner} />`}

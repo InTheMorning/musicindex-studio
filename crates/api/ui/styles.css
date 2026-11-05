@@ -943,6 +943,7 @@ textarea:focus { background: var(--fill); }
   line-height: 1.5;
 }
 .diff .line { display: block; padding: 0 14px; border-left: 3px solid transparent; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff .time-note { color: var(--muted); }
 .diff .add { border-left-color: var(--diff-add); background: var(--diff-add-bg); }
 .diff .remove { border-left-color: var(--diff-remove); background: var(--diff-remove-bg); }
 .diff .ins, .diff .del { border-radius: 3px; padding: 0 1px; color: inherit; }
@@ -1129,6 +1130,9 @@ select option { background: var(--level-3); color: var(--text); }
 .page { padding: 8px 32px 32px; max-width: 880px; display: grid; gap: 28px; }
 .page-section { display: grid; gap: 8px; }
 .page-section > h2 { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
+.notice.error > p { margin: 8px 0 0; }
+.merge-panel { display: grid; gap: 20px; }
+.merge-panel > .actions { margin: 0; }
 .page-section > .note { padding: 0 4px; color: var(--muted); font-size: var(--text-callout); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 4px; }
 .section-head > h2 { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -1685,7 +1689,7 @@ button.outline-feed {
    its size (task 021g, ADR 0036 item 14). A blocked deletion uses the
    error color on its own row only, not an entity color (ADR 0018). */
 .host-op-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 16px; flex-wrap: wrap; }
-.host-op-row .kind { flex: none; width: 4.5rem; font-weight: 600; }
+.host-op-row .kind { flex: none; width: 5.5rem; font-weight: 600; }
 .host-op-row .text { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .host-op-row .title { font-weight: 600; }
 .host-op-row .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }

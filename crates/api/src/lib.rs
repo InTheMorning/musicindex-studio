@@ -332,6 +332,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
                 .put(routes::put_draft)
                 .delete(routes::delete_draft),
         )
+        .route(
+            "/feeds/{id}/draft/merge",
+            get(routes::get_draft_merge).post(routes::post_draft_merge),
+        )
         .route("/feeds/{id}/link-check", get(routes::link_check))
         .route(
             "/feeds/{id}/draft/use-public-address",

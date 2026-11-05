@@ -25,7 +25,7 @@ An artist can have feeds, audio and art on more than one host.
 
 - A connector writes media files and feed files.
 - A move of a media file changes its URL. Studio updates each feed that refers to that file, through the write pipeline ([ADR 0007](0007-draft-diff-write-and-announce.md)).
-- A move of a feed file writes `podcast:previousUrl` and `itunes:new-feed-url` ([ADR 0008](0008-feed-types-and-feed-identity.md)). Studio gives a redirect from the previous URL when the previous host can do it.
+- A move of a feed file writes `itunes:new-feed-url` ([ADR 0008](0008-feed-types-and-feed-identity.md)). Studio gives a redirect from the previous URL when the previous host can do it.
 - The self-hosted file host obeys the same connector interface as each other host.
 
 ## Invariants

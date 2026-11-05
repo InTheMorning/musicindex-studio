@@ -242,11 +242,26 @@ pub enum Repair {
     RemoveTag,
 }
 
+/// Where the first address of a refusal came from (ADR 0126 item 28).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum LinkSource {
+    /// `itunes:new-feed-url` of the draft.
+    Tag,
+    /// The self link of the draft.
+    SelfLink,
+    /// The destination of the move that the user selected.
+    Move,
+}
+
 /// The refusal of a write: the condition and each hop (ADR 0126 item 10).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct BadMoveLink {
     /// The condition.
     pub condition: Condition,
+    /// Where the first address came from.
+    pub source: LinkSource,
     /// The number of the condition.
     pub number: u8,
     /// The stage that refused: 1 before any file changes, 2 after the new
@@ -260,9 +275,10 @@ pub struct BadMoveLink {
 }
 
 impl BadMoveLink {
-    fn new(condition: Condition, hops: Vec<Hop>) -> Self {
+    fn new(condition: Condition, source: LinkSource, hops: Vec<Hop>) -> Self {
         Self {
             condition,
+            source,
             number: condition.number(),
             stage: 1,
             hops,
@@ -424,6 +440,7 @@ fn check_conditions(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkRepo
             report.refusal = Some(
                 BadMoveLink::new(
                     Condition::SelfLinkDiffers,
+                    LinkSource::SelfLink,
                     vec![Hop::new(self_url, HopResult::DiffersFromDraft)],
                 )
                 .with_repairs(vec![Repair::UsePublicAddress]),
@@ -443,6 +460,7 @@ fn check_conditions(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkRepo
     {
         report.refusal = Some(BadMoveLink::new(
             Condition::NotPublic,
+            LinkSource::Move,
             vec![Hop::new(destination, HopResult::NotPublic)],
         ));
         return report;
@@ -461,6 +479,7 @@ fn check_conditions(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkRepo
             report.refusal = Some(
                 BadMoveLink::new(
                     Condition::ConflictingNames,
+                    LinkSource::Tag,
                     vec![
                         Hop::new(tag, HopResult::ConflictingNames),
                         Hop::new(self_link, HopResult::ConflictingNames),
@@ -483,12 +502,12 @@ fn check_conditions(reader: &dyn FeedReader, links: &DraftLinks<'_>) -> LinkRepo
         &mut hops,
     ) {
         // The repair removes the tag only when the chain started from it.
-        let repairs = if tag.is_some() {
-            vec![Repair::RemoveTag]
+        let (source, repairs) = if tag.is_some() {
+            (LinkSource::Tag, vec![Repair::RemoveTag])
         } else {
-            Vec::new()
+            (LinkSource::SelfLink, Vec::new())
         };
-        report.refusal = Some(BadMoveLink::new(condition, hops).with_repairs(repairs));
+        report.refusal = Some(BadMoveLink::new(condition, source, hops).with_repairs(repairs));
     }
     report
 }
@@ -544,7 +563,7 @@ pub fn check_destination(
                 }
             }
         };
-        let mut refusal = BadMoveLink::new(condition, vec![hop]);
+        let mut refusal = BadMoveLink::new(condition, LinkSource::Move, vec![hop]);
         refusal.stage = 2;
         if condition == Condition::NotPublic {
             return Err(refusal);

@@ -95,7 +95,7 @@ When Phase 7 implements this ADR, these rules change:
 
 - The library needs disk space for each audio file that the user downloads.
 - A move of a file to a different host becomes a change of its placement. The file moves of [ADR 0009](0009-studio-connects-to-hosts-and-moves-files.md) item 4 use this method.
-- A feed on a host that Studio cannot write, such as Wavlake, can go to a different host. That is a move of the feed file, with `podcast:previousUrl` ([ADR 0008](0008-feed-types-and-feed-identity.md)).
+- A feed on a host that Studio cannot write, such as Wavlake, can go to a different host. That is a move of the feed file, with `itunes:new-feed-url` ([ADR 0008](0008-feed-types-and-feed-identity.md)).
 
 ## Invariants
 

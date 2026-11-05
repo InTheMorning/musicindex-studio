@@ -18,9 +18,8 @@ You can close Studio and come back. The draft stays.
 
 The review has two views. Use the menu **View** to select one. Studio keeps your selection on this device.
 
-- **Simplified** is the default. It shows **What changes** first. This list gives each change in words, for example "Title: Old name → New name".
-  Then it shows **Changed lines**.
-- **Detailed** shows only the changed lines of the feed file.
+- **Simplified** is the default. It shows **What changes**. This list gives each change in words, for example "Title: Old name → New name". Each time shows in your local time.
+- **Detailed** shows the changed lines of the feed file. Below a changed line with a time, a second line gives your local time.
 
 When many entries get the same new value, **What changes** gives one line, for example "6 credits get the Nostr key City Radio".
 It shows two of the changes. Select the line "4 more credits" to see the others.
@@ -29,11 +28,10 @@ A Nostr key shows the profile name and the short key. If the profile name is not
 A change can be in the file, but not in the list. Then the list ends with a row, for example "1 more change in the XML".
 Select **Detailed** to see each changed line.
 
-In **Changed lines**, a line that starts with `+` is new. A line that starts with `−` goes out.
-A line that starts with `±` has a part that is new or a part that goes out. Studio marks that part.
+In **Detailed**, a line that starts with `+` is new. A line that starts with `−` goes out. Studio marks the changed part of each line.
 
 Studio shows three lines around each change. Select "Show N more lines" to open a run of hidden lines.
-Select **Show the Whole File** to see each line. Then select **Show Only the Changes** to go back.
+In **Detailed**, select **Show the Whole File** to see each line. Then select **Show Only the Changes** to go back.
 When the draft has nothing to write, Studio says that it matches the hosted file.
 
 The sheet can also list these actions before the diff:
@@ -146,7 +144,13 @@ Studio can show these notices. None of them stops the write:
 
 If someone else or a different tool changed the hosted file after you started the draft, Studio shows "The hosted file changed after the draft started."
 Studio writes nothing.
-Select **Start Again from the Hosted File**. Studio asks you to confirm. Each change in the draft then goes out.
+Select **Apply My Edits to the New File**. Studio shows what stays and what comes from the hosted file:
+
+- **Your edits stay** lists your edits. Studio applies them to the new file.
+- **New from the hosted file** lists the changes that your draft gets.
+- **Both changed. Select one** lists each field that both sides changed. For each field, select your edit or the value of the hosted file.
+
+Select **Apply to the Draft**. Nothing changes on a file host. Examine the changes, then write them. To remove your edits, select **Discard the Draft**.
 
 ## Discard the draft
 

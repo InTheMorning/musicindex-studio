@@ -4,6 +4,7 @@
 - Date: 2026-11-04
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-04 by the operator. The operator selected the tag at each move, and a warning at each return.
+- Changed: on 2026-11-05 the operator added item 12, so that a person who reads the file finds the tag first. This changes [ADR 0012](0012-lossless-tree-with-a-typed-model.md) item 3 for this tag.
 - Source: the handoff note of the Stophammer session of 2026-11-04, `.idea/studio/stophammer-feed-contract-handoff.md` in `../stophammer`. Stophammer ADR 0083 owns the rule of the index.
 - Changes: [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 19, for the feed on the new host. [ADR 0126](0126-studio-refuses-a-bad-move-link.md) "Alternatives Considered", which left the tag in the new feed open.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) and [ADR 0065](0065-the-core-applies-each-feed-rule.md).
@@ -46,6 +47,10 @@ A move, a first return and a later write reach the index. A second return waits 
 10. Stophammer owns how the index reads a feed. Studio cites ADR 0083 and does not restate its rule as a rule of Studio.
 11. If the rule of ADR 0083 changes, this record changes in the same commit as the code.
 
+### The Position Of The Tag
+
+12. When Studio adds the tag, the tag goes directly after `<channel>`. A tag that the feed already has stays in its position, and a tag of the hosted file gets its hosted position ([ADR 0031](0031-a-new-element-takes-its-hosted-position.md)).
+
 ## Alternatives Considered
 
 - A tag in each new feed. Not chosen by the operator: the index needs nothing for a feed that never moved. A feed with no address has no value for the tag. Each copy by hand also carries a tag that names the earlier address.
@@ -59,7 +64,6 @@ A move, a first return and a later write reach the index. A second return waits 
 - The diff of each move has one more line.
 - A wait ends only at a later crawl of the destination. A Studio write announces each address one time, so a return in a wait can need a later crawl or a new write. The research did not examine how often the crawler reads such a feed.
 - A tag stays in a feed after its move. A copy of that file by hand then names the earlier address. Stophammer ADR 0083 section 2 item 3 examines this case.
-- ADR 0008 item 6 says that a move also writes `podcast:previousUrl`, and the pipeline has no code for it. This record does not decide that difference.
 
 ## Invariants
 
@@ -83,6 +87,7 @@ Mechanical:
 - A core test: the same for a feed with no self link, and for a draft with a different tag before the move.
 - A core test: Undo of a move gives the tag of the base, and it gives no tag when the base has none.
 - A core test: the diff of a move shows the tag.
+- A core test: a new tag is the first child of the channel, and a tag of the base stays in its position.
 - A Node test: the model module gives the warning only when `replaces_pointer` is true.
 
 Visual, by the planning model:

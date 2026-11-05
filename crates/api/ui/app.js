@@ -1974,7 +1974,13 @@ function Crumb({ feed, view, draft }) {
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
   const kind = feedKind(feed);
-  const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
+  // The core moves a draft with no edits to the file that it reads, so the
+  // edits of the user go first, and the draft loads again (ADR 0007 item 6).
+  const refresh = () => run(async () => {
+    if (!await draft.flush()) return;
+    onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' }));
+    await draft.load();
+  });
   const glow = kindGlow(kind);
   // A host operation can change the draft XML, and `draft.changed` from
   // the server counts each pending operation (ADR 0036 item 14). After

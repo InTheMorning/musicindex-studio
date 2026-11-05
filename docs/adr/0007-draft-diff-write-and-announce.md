@@ -18,6 +18,7 @@ Stophammer reads podpings. It has no route that sends a podping for an editor.
 3. Studio writes only if the live file has not changed since it was read ([ADR 0006](0006-connectors-and-the-v1-set.md)). If it changed, Studio shows the conflict and does not write.
 4. Before each write, Studio keeps a snapshot of the live file. The user can roll back to a snapshot.
 5. After a write, Studio sends a podping and a Podcast Index pubnotify. A setting turns each one off.
+6. When Studio reads a feed from its host, a draft with no edits moves to the file that Studio read. A draft has no edits when its bytes are the bytes of its base, and it has no host operation, feed move, draft file or show grant. Each other draft keeps its base, and item 3 stops its write. The [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md) gave this item: Read Again left a stale draft, and Review examined the earlier bytes.
 
 ## Alternatives Considered
 

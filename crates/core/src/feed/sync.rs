@@ -523,6 +523,33 @@ impl<'p, 'n> Children<'p, 'n> {
         );
     }
 
+    /// Write an optional text child, and put a new one first in the parent.
+    /// A child of a kind that the hosted parent has takes its hosted position
+    /// (ADR 0128 item 12).
+    pub(crate) fn text_first(&mut self, ns: Ns, local: &str, value: Option<&String>) {
+        let first = self
+            .parent
+            .children()
+            .iter()
+            .position(|node| matches!(node, Node::Element(_)));
+        let in_parent = !positions(self.parent, |e| e.is(ns, local)).is_empty();
+        let hosted = self
+            .hosted
+            .as_deref()
+            .is_some_and(|types| types.iter().any(|t| t.is(ns, local)));
+        let (Some(first), Some(text), false, false) = (first, value, in_parent, hosted) else {
+            self.text(ns, local, value);
+            return;
+        };
+        let mut element = self.names.element(ns, local);
+        set_model_text(&mut element, text);
+        let children = self.parent.children_mut();
+        let indent = xml::indent_before(children, first);
+        let start = if indent.is_some() { first - 1 } else { first };
+        let after = insert(children, start, indent.as_ref(), element);
+        xml::format_new(self.parent, after - 1);
+    }
+
     /// Write the `href` attribute of an optional child, such as `itunes:image`.
     pub(crate) fn href(&mut self, ns: Ns, local: &str, value: Option<&String>) {
         let make =

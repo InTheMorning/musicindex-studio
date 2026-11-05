@@ -7,10 +7,12 @@
 import { shortKey } from './nostrkey.js';
 import { profileName, keyWarning } from './people.js';
 
+const rowText = (row) => row.parts.map((part) => part.text).join('');
+
 export const VIEWS = ['simplified', 'detailed'];
 export const VIEW_LABELS = { simplified: 'Simplified', detailed: 'Detailed' };
 export const VIEW_HINTS = {
-  simplified: 'What changes in words, then the changed lines.',
+  simplified: 'What changes in words, with each time in your local time.',
   detailed: 'The changed lines of the XML, as the file host gets them.',
 };
 export const CONTEXT_LINES = 3;
@@ -22,33 +24,42 @@ export function normalizeView(value) {
 
 const hasChange = (line) => line.parts.some((part) => part.changed);
 
-// The rows of a view. `kind` is "same", "add" or "remove". `sign` is the
-// sign of the row. In "simplified", a pair with one side that has no changed
-// part is one row with the sign "±".
-export function shownLines(lines, view) {
-  const simple = normalizeView(view) === 'simplified';
-  const skipped = new Set();
-  const rows = [];
-  lines.forEach((line, index) => {
-    if (skipped.has(index)) return;
-    if (line.kind === 'same') {
-      rows.push({ kind: 'same', sign: ' ', parts: line.parts });
-    } else if (line.kind === 'added') {
-      rows.push({ kind: 'add', sign: '+', parts: line.parts });
-    } else {
-      const other = simple && line.pair != null ? lines[line.pair] : null;
-      if (other && !hasChange(line)) {
-        skipped.add(line.pair);
-        rows.push({ kind: 'add', sign: '±', parts: other.parts });
-      } else if (other && !hasChange(other)) {
-        skipped.add(line.pair);
-        rows.push({ kind: 'remove', sign: '±', parts: line.parts });
-      } else {
-        rows.push({ kind: 'remove', sign: '−', parts: line.parts });
-      }
-    }
+// The rows of the lines. `kind` is "same", "add" or "remove". `sign` is the
+// sign of the row.
+export function shownLines(lines) {
+  return lines.map((line) => {
+    if (line.kind === 'same') return { kind: 'same', sign: ' ', parts: line.parts };
+    return line.kind === 'added'
+      ? { kind: 'add', sign: '+', parts: line.parts }
+      : { kind: 'remove', sign: '−', parts: line.parts };
   });
-  return rows;
+}
+
+// ---- Local time (ADR 0114 items 14 and 15). A display aid: the file keeps
+// its text (ADR 0065). ----
+
+const TIME_KEYS = new Set(['pub_date', 'pub_date_time', 'last_build_date', 'start', 'end']);
+const TIME_LINE = /<(?:pubDate|lastBuildDate)>([^<]+)<|\b(?:start|end)=\x22([^\x22]+)\x22/g;
+const LIVE_LINE = /<podcast:liveItem\b/;
+
+// A time of a feed in the local time of the browser, or null when the text is
+// not a time. `zone` is for the tests.
+export function localTime(text, zone) {
+  const time = Date.parse(text);
+  if (Number.isNaN(time)) return null;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium', timeZone: zone }).format(time);
+}
+
+// The text below a changed line with a time, or null. A `start` or an `end`
+// is a time only in a live item.
+export function localTimeNote(row, zone) {
+  if (row.kind === 'same') return null;
+  const text = rowText(row);
+  const times = [...text.matchAll(TIME_LINE)]
+    .filter((match) => match[1] || LIVE_LINE.test(text))
+    .map((match) => localTime(match[1] || match[2], zone))
+    .filter(Boolean);
+  return times.length > 0 ? `Local time: ${times.join(' to ')}` : null;
 }
 
 // The rows with the context around each changed row. With `whole`, each row
@@ -84,7 +95,6 @@ export function runs(rows, whole) {
   return segments;
 }
 
-export const rowText = (row) => row.parts.map((part) => part.text).join('');
 
 // The number of leading spaces that each row has. A tab counts as one space.
 // An empty row does not count.
@@ -192,6 +202,7 @@ export function valueText(value, path, profiles, short = false) {
     return name ? `${name} (${shortKey(value)})` : shortKey(value);
   }
   if (typeof value === 'object') return brief(value) || JSON.stringify(value);
+  if (TIME_KEYS.has(lastKey(path))) return localTime(String(value)) ?? String(value);
   return String(value);
 }
 
@@ -201,9 +212,11 @@ export function changeRow(group, change, profiles) {
   const word = pathWord(change.path);
   const label = field ? keyWord(group.name) : (change.entry || word || keyWord(group.name) || 'Entry');
   const lead = field ? word : (change.entry ? word : '');
+  // A scalar field of the channel has an empty path, and the group names it.
+  const valuePath = field && !change.path ? group.name : change.path;
   let text;
   if (change.op === 'changed') {
-    text = `${valueText(change.old, change.path, profiles)} → ${valueText(change.new, change.path, profiles)}`;
+    text = `${valueText(change.old, valuePath, profiles)} → ${valueText(change.new, valuePath, profiles)}`;
   } else {
     const verb = change.op === 'added' ? 'Added' : 'Removed';
     const value = change.op === 'added' ? change.new : change.old;
@@ -285,3 +298,47 @@ export function guardRow(uncovered) {
     ? { title: '1 more change in the XML', text: 'This list does not show it. Select the detailed view to see each changed line.' }
     : { title: `${uncovered} more changes in the XML`, text: 'This list does not show them. Select the detailed view to see each changed line.' };
 }
+
+// ---- A merge of the hosted file into the draft (ADR 0129). The core gives
+// each field and its side, and applies the choices. This model only gives
+// the words. ----
+
+export const MERGE_TITLE = 'The hosted file changed outside Studio.';
+export const MERGE_INTRO = 'Studio can apply your edits to the new file. Nothing changes on a file host until you write.';
+export const MERGE_HEADINGS = {
+  kept: 'Your edits stay',
+  incoming: 'New from the hosted file',
+  conflicts: 'Both changed. Select one',
+};
+
+const mergeLabel = (field) => {
+  const word = field.key ? keyWord(field.key) : 'Whole track';
+  return field.track ? `${field.track} · ${word}` : word;
+};
+
+// A whole track shows its title, or that it is gone.
+const mergeValue = (field, value) => {
+  if (!field.key) return value ? (value.title || 'Track') : 'No track';
+  return valueText(value, field.key, {});
+};
+
+// The rows of a plan of the core, with the words of each value.
+export function mergeRows(plan) {
+  const row = (field) => ({
+    id: field.id,
+    label: mergeLabel(field),
+    mine: mergeValue(field, field.mine),
+    hosted: mergeValue(field, field.hosted),
+  });
+  return {
+    kept: (plan.kept || []).map(row),
+    incoming: (plan.incoming || []).map(row),
+    conflicts: (plan.conflicts || []).map(row),
+  };
+}
+
+// True when each field that both sides changed has a choice.
+export function mergeReady(plan, choices) {
+  return (plan.conflicts || []).every((field) => Boolean(choices[field.id]));
+}
+

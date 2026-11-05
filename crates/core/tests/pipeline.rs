@@ -250,6 +250,170 @@ fn a_file_that_changed_on_the_host_after_the_draft_started_does_not_write() {
 }
 
 #[test]
+fn read_again_moves_a_draft_with_no_edits_and_keeps_each_other_draft() {
+    let mut s = setup();
+    let path = s.dir.path().join("album.xml");
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+
+    // A draft with no edits gets the new file (ADR 0007 item 6).
+    let outside = FEED.replace("<title>", "<title>Outside ");
+    fs::write(&path, &outside).unwrap();
+    pipeline::refresh(&mut s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(
+        draft.draft_xml,
+        outside.as_bytes(),
+        "ADR 0007 item 6: Read Again moves a draft with no edits to the new file. Fix: call move_unedited_draft in pipeline::refresh."
+    );
+    assert_eq!(draft.base_xml, outside.as_bytes());
+    assert_eq!(
+        draft.base_version,
+        s.collection.feed(s.feed).unwrap().last_version
+    );
+
+    // Review makes a signing plan and no edit, so the draft still moves.
+    pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let after_review = FEED.replace("<title>", "<title>Review ");
+    fs::write(&path, &after_review).unwrap();
+    pipeline::refresh(&mut s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(
+        draft.draft_xml,
+        after_review.as_bytes(),
+        "ADR 0007 item 6: a Review is not an edit. Fix: do not count a signing plan in move_unedited_draft."
+    );
+
+    // A draft with a move keeps its base.
+    s.collection
+        .set_draft_feed_move(s.feed, ConnectorId(1), "album.xml")
+        .unwrap();
+    let moved = FEED.replace("<title>", "<title>Moved ");
+    fs::write(&path, &moved).unwrap();
+    pipeline::refresh(&mut s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let kept = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(kept.base_xml, after_review.as_bytes());
+    s.collection.remove_draft_feed_move(s.feed).unwrap();
+
+    // A draft with an edit keeps its edit and its base.
+    let mut edited = kept;
+    edited.draft_xml = FEED.replace("<title>", "<title>Edit ").into_bytes();
+    s.collection.save_draft(s.feed, &edited).unwrap();
+    fs::write(&path, FEED.replace("<title>", "<title>Later ")).unwrap();
+    pipeline::refresh(&mut s.collection, s.connector.as_ref(), s.feed).unwrap();
+    assert_eq!(s.collection.draft(s.feed).unwrap().unwrap(), edited);
+}
+
+#[test]
+fn a_merge_keeps_the_edit_takes_the_outside_change_and_the_write_passes() {
+    let mut s = setup();
+    let path = s.dir.path().join("album.xml");
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Mine".into())).unwrap();
+    let outside = FEED.replace("Track One", "Track One (outside)");
+    fs::write(&path, &outside).unwrap();
+
+    let (plan, version) =
+        pipeline::merge_plan(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    assert_eq!(plan.conflicts.len(), 0);
+    let none = std::collections::BTreeMap::new();
+    let error = pipeline::merge_draft(&s.collection, s.connector.as_ref(), s.feed, "old", &none)
+        .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        PipelineErrorKind::Conflict,
+        "ADR 0129 item 6: a plan of an earlier file does not apply."
+    );
+
+    pipeline::merge_draft(
+        &s.collection,
+        s.connector.as_ref(),
+        s.feed,
+        version.as_str(),
+        &none,
+    )
+    .unwrap();
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    assert_eq!(
+        draft.base_xml,
+        outside.as_bytes(),
+        "ADR 0129 item 3: the hosted file becomes the base."
+    );
+    let text = String::from_utf8(draft.draft_xml).unwrap();
+    assert!(
+        text.contains("<title>Mine</title>"),
+        "ADR 0129 item 1: an edit stays.\n{text}"
+    );
+    assert!(
+        text.contains("Track One (outside)"),
+        "ADR 0129 item 1: the outside change comes in.\n{text}"
+    );
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    assert!(live(&s).contains("<title>Mine</title>"));
+    assert!(live(&s).contains("Track One (outside)"));
+}
+
+#[test]
+fn a_merge_with_a_field_that_both_sides_changed_needs_a_choice() {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Mine".into())).unwrap();
+    let before = s.collection.draft(s.feed).unwrap().unwrap();
+    let title = Feed::read(&Document::parse(FEED).unwrap())
+        .unwrap()
+        .title
+        .unwrap();
+    fs::write(
+        s.dir.path().join("album.xml"),
+        FEED.replace(&format!("<title>{title}</title>"), "<title>Theirs</title>"),
+    )
+    .unwrap();
+    let (plan, version) =
+        pipeline::merge_plan(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    assert_eq!(plan.conflicts.len(), 1);
+    assert_eq!(plan.conflicts[0].id, "title");
+    let error = pipeline::merge_draft(
+        &s.collection,
+        s.connector.as_ref(),
+        s.feed,
+        version.as_str(),
+        &std::collections::BTreeMap::new(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::InvalidModel);
+    assert_eq!(
+        s.collection.draft(s.feed).unwrap().unwrap(),
+        before,
+        "ADR 0129 item 5: a refused merge changes nothing."
+    );
+    let choices =
+        std::collections::BTreeMap::from([("title".to_owned(), studio_core::merge::Side::Hosted)]);
+    let row = pipeline::merge_draft(
+        &s.collection,
+        s.connector.as_ref(),
+        s.feed,
+        version.as_str(),
+        &choices,
+    )
+    .unwrap();
+    assert!(
+        String::from_utf8(row.draft_xml)
+            .unwrap()
+            .contains("<title>Theirs</title>")
+    );
+}
+
+#[test]
 fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();

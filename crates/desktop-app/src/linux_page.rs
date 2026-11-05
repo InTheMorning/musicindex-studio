@@ -1,5 +1,5 @@
 //! The parts of the page that `WebKitGTK` does not give on Linux (ADR 0124
-//! items 22 to 25): the file of a drop, and Ctrl+Z.
+//! items 22 to 25 and 27): the file of a drop, Ctrl+Z, and an opaque toolbar.
 
 use std::path::PathBuf;
 

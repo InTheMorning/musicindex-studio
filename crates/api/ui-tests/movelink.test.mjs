@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { isTitleCase } from '../ui/casing.js';
 import {
-  CONDITION_TEXT, HOP_TEXT, STAGE_TEXT, REPAIRS, refusalView, refusalOfError, noticeViews, blocksWrite,
+  CONDITION_TEXT, HOP_TEXT, STAGE_TEXT, SOURCE_TEXT, DANGER_TEXT, NEXT_TEXT, REPAIRS, refusalView, refusalOfError, noticeViews, blocksWrite,
   repairButtons, repairRoute, REPLACES_POINTER_NOTE, returnWarning,
 } from '../ui/movelink.js';
 
@@ -28,6 +28,18 @@ test('each condition of the core has a text', () => {
   assert.ok(names.length >= 6);
   for (const name of names) assert.ok(CONDITION_TEXT[name], `Condition ${name} has no text. ${owner}`);
   assert.deepEqual(Object.keys(CONDITION_TEXT).sort(), [...names].sort(), 'movelink.js has a text for a condition that the core does not give.');
+});
+
+test('each source of the core has its three texts', () => {
+  const names = variants('LinkSource');
+  assert.ok(names.length >= 3);
+  for (const name of names) {
+    assert.ok(SOURCE_TEXT[name] && DANGER_TEXT[name] && NEXT_TEXT[name], `LinkSource ${name} needs its texts. ADR 0126 item 28. Add them to crates/api/ui/movelink.js.`);
+  }
+  const view = refusalView({ condition: 'read_fails', source: 'tag', stage: 1, hops: [], repairs: ['remove_tag'] });
+  assert.equal(view.source, SOURCE_TEXT.tag);
+  assert.equal(view.danger, DANGER_TEXT.tag);
+  assert.equal(view.next, NEXT_TEXT.tag);
 });
 
 test('each hop result of the core has a text', () => {
@@ -96,7 +108,8 @@ test('the self link notice gives both addresses and the repair', () => {
   assert.equal(view.title, 'The self link names a different address.');
   assert.equal(view.selfUrl, 'https://old.example/a.xml');
   assert.equal(view.draftUrl, 'https://b.example/a.xml');
-  assert.equal(view.end, 'Studio can still write it.');
+  assert.ok(view.why.length > 0, 'ADR 0126 item 28: the notice says why the self link matters.');
+  assert.match(view.end, /^Studio can still write/);
   assert.deepEqual(view.repairs, [{ id: 'use_public_address', label: 'Use the Public Address' }]);
   assert.deepEqual(noticeViews(null), []);
   assert.deepEqual(noticeViews({ notices: [{ notice: 'other' }] }), []);

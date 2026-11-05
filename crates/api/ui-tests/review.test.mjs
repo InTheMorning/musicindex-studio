@@ -1,40 +1,33 @@
 // The lines of a review (ADR 0114 items 8 to 12).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shownLines, runs, commonIndent, moreLabel, stripIndent, normalizeView } from '../ui/review.js';
+import { shownLines, localTime, localTimeNote, runs, commonIndent, moreLabel, stripIndent, normalizeView } from '../ui/review.js';
 
 const part = (text, changed = false) => ({ text, changed });
 const same = (text) => ({ kind: 'same', parts: [part(text)], pair: null });
 const removed = (parts, pair = null) => ({ kind: 'removed', parts, pair });
 const added = (parts) => ({ kind: 'added', parts });
 
-test('a pair with only added parts is one row with the sign ±', () => {
+test('each changed line is one row with its sign', () => {
   const lines = [
-    removed([part('<a')], 1),
-    added([part('<a'), part(' x="1"', true)]),
-  ];
-  const rows = shownLines(lines, 'simplified');
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].sign, '±');
-  assert.equal(rows[0].kind, 'add');
-  assert.equal(shownLines(lines, 'detailed').length, 2);
-});
-
-test('a pair with a removed and an added part is two rows', () => {
-  const lines = [
-    removed([part('<t>'), part('Old', true)], 1),
+    same('<a>'),
+    removed([part('<t>'), part('Old', true)], 2),
     added([part('<t>'), part('New', true)]),
   ];
-  const rows = shownLines(lines, 'simplified');
-  assert.deepEqual(rows.map((r) => r.sign), ['−', '+']);
+  assert.deepEqual(shownLines(lines).map((r) => r.sign), [' ', '−', '+']);
 });
 
-test('a pair with only removed parts is one row from the removed line', () => {
-  const lines = [removed([part('<a'), part(' x="1"', true)], 1), added([part('<a')])];
-  const rows = shownLines(lines, 'simplified');
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].kind, 'remove');
-  assert.equal(rows[0].sign, '±');
+test('a changed line with a time has the local time, and each other line has none', () => {
+  const row = (text, kind = 'add') => ({ kind, parts: [part(text)] });
+  assert.equal(
+    localTimeNote(row('<lastBuildDate>Thu, 05 Nov 2026 14:20:10 +0000</lastBuildDate>'), 'America/Chicago'),
+    `Local time: ${localTime('Thu, 05 Nov 2026 14:20:10 +0000', 'America/Chicago')}`,
+    'ADR 0114 item 15: a changed date line has a second line with the local time.',
+  );
+  assert.equal(localTimeNote(row('<pubDate>Thu, 05 Nov 2026 14:20:10 +0000</pubDate>', 'same')), null);
+  assert.equal(localTimeNote(row('<title>start="now"</title>')), null);
+  assert.equal(localTimeNote(row('<lastBuildDate>not a time</lastBuildDate>')), null);
+  assert.match(localTimeNote(row('<podcast:liveItem start="2026-11-05T14:00:00Z" end="2026-11-05T15:00:00Z">')), /^Local time: .* to /);
 });
 
 test('runs keeps three rows of context and counts each hidden run', () => {
@@ -63,7 +56,7 @@ test('moreLabel and normalizeView', () => {
 
 // ---- What changes (task 077c) ----
 import { readFileSync } from 'node:fs';
-import { fieldRows, guardRow, changeRow, KEY_WORDS, pathWord, inSentence } from '../ui/review.js';
+import { fieldRows, guardRow, changeRow, KEY_WORDS, pathWord, inSentence, mergeRows, mergeReady } from '../ui/review.js';
 
 const KEY = 'npub1' + 'q'.repeat(58);
 const credit = (role) => ({ op: 'changed', path: 'npub', entry: role, old: null, new: KEY });
@@ -139,3 +132,27 @@ test('a word in a summary line keeps sentence case', () => {
   const [group] = fieldRows([{ kind: 'credits', name: 'Ann', changes: ['a', 'b', 'c'].map(change) }], null);
   assert.equal(group.summary, '3 credits get the picture https://a.example/p.jpg');
 });
+
+test('a build date in words shows the local time', () => {
+  const old = 'Thu, 05 Nov 2026 14:20:10 +0000';
+  const row = changeRow({ kind: 'field', name: 'last_build_date' }, { op: 'changed', path: '', old, new: 'Thu, 05 Nov 2026 14:43:54 +0000' }, {});
+  assert.ok(row.text.startsWith(`${localTime(old)} → `), 'ADR 0114 item 14: the Simplified view shows each time in local time.');
+  assert.ok(!row.text.includes('+0000'));
+  const text = changeRow({ kind: 'field', name: 'title' }, { op: 'changed', path: '', old: 'May 5', new: 'June 6' }, {}).text;
+  assert.equal(text, 'May 5 → June 6', 'A title that looks like a date stays as text.');
+});
+
+test('a merge plan gives the words of each row and waits for each choice', () => {
+  const plan = {
+    kept: [{ id: 'description', track: null, key: 'description', mine: 'Mine', hosted: 'Old' }],
+    incoming: [{ id: 'items/a/title', track: 'One', key: 'title', mine: 'One', hosted: 'New' }],
+    conflicts: [{ id: 'title', track: null, key: 'title', mine: 'A', hosted: 'B' }, { id: 'items/b', track: 'Two', key: '', mine: null, hosted: { title: 'Two' } }],
+  };
+  const rows = mergeRows(plan);
+  assert.equal(rows.kept[0].label, 'Description');
+  assert.equal(rows.incoming[0].label, 'One · Title');
+  assert.deepEqual([rows.conflicts[1].mine, rows.conflicts[1].hosted], ['No track', 'Two']);
+  assert.equal(mergeReady(plan, { title: 'mine' }), false, 'ADR 0129 item 5: each conflict needs a choice.');
+  assert.equal(mergeReady(plan, { title: 'mine', 'items/b': 'hosted' }), true);
+});
+

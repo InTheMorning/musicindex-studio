@@ -1339,6 +1339,41 @@ fn a_move_gives_the_feed_the_tag_of_its_own_url_and_the_pointer_names_the_destin
 }
 
 #[test]
+fn a_new_tag_goes_first_in_the_channel_and_a_tag_of_the_base_stays_in_its_position() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    let on_b = on_host(&e, e.b);
+    let channel = on_b.find("<channel>").unwrap() + "<channel>".len();
+    assert!(
+        on_b[channel..]
+            .trim_start()
+            .starts_with("<itunes:new-feed-url>"),
+        "ADR 0128 item 12: a new itunes:new-feed-url goes directly after <channel>. Fix: write it with text_first in Feed::write_hosted.\n{on_b}"
+    );
+
+    let with_tag = feed_xml(URL)
+        .replace(
+            "<rss version=\"2.0\"",
+            "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" version=\"2.0\"",
+        )
+        .replace(
+            "</channel>",
+            "<itunes:new-feed-url>https://old.example/a.xml</itunes:new-feed-url></channel>",
+        );
+    let e = env_with_xml(with_tag, LocalFolder::KIND);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let draft = String::from_utf8(draft_bytes(&e)).unwrap();
+    assert_names_own_url(&draft, DEST);
+    let channel = draft.find("<channel>").unwrap() + "<channel>".len();
+    assert!(
+        !draft[channel..]
+            .trim_start()
+            .starts_with("<itunes:new-feed-url>"),
+        "ADR 0128 item 12: a tag that the feed already has stays in its position.\n{draft}"
+    );
+}
+
+#[test]
 fn a_feed_with_no_self_link_gets_the_tag_at_a_move() {
     let mut e = env_with_xml(feed_with(false, None), LocalFolder::KIND);
     move_to_b(&mut e);

@@ -229,7 +229,7 @@ impl Feed {
         c.one(self.owner.as_ref());
         c.text(Ns::Itunes, "keywords", self.keywords.as_ref());
         c.href(Ns::Itunes, "image", self.image.as_ref());
-        c.text(Ns::Itunes, "new-feed-url", self.new_feed_url.as_ref());
+        c.text_first(Ns::Itunes, "new-feed-url", self.new_feed_url.as_ref());
         c.text(Ns::Itunes, "block", self.itunes_block.as_ref());
         c.list(&self.blocks);
         c.list(&self.atom_links);

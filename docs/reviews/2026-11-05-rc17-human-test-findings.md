@@ -110,10 +110,28 @@ The notes of `0.1.0-rc.17` say one year ahead. That is a bad test, because a lar
 - The first download of the AppImage had an arm64 header and a different hash. The release file has the hash `df38e561…` and it runs. How the wrong local copy occurred is not known.
 - **Lock against import** has no help text, and the user guide does not explain it.
 - A version with an R2 ETag shows a stray quote mark in the list of **Versions**.
-- ADR 0008 item 6 says that a move writes `podcast:previousUrl`, and the pipeline has no code for it. This needs a decision.
+- ADR 0008 item 6 said that a move writes `podcast:previousUrl`, and the pipeline has no code for it. On 2026-11-05 the operator removed the tag from that item.
 - A wait in the index ends only at a later crawl of the destination (ADR 0128 "Consequences"). The Stophammer session can say how often this occurs.
 - The "Desktop macos-arm64" job failed one time with `hdiutil: create failed - Resource busy`, and a re-run passed. A retry in the workflow is a correction if it occurs again.
 - The Stophammer session asked for a report. Its note is `.idea/studio/stophammer-feed-contract-handoff.md` in `../stophammer`.
+
+## Corrections Of 2026-11-05
+
+No release candidate holds these corrections yet.
+
+| Finding | Correction | Evidence |
+|---|---|---|
+| 1 | The AppImage holds the GStreamer plugins, and the release check refuses one with no audio plugin (ADR 0124 item 26). | The rc.17 file on Xvfb gave the two log lines of finding 1. A local AppImage with plugins gave neither. It found the audio sinks and stopped at a limit of the sandbox, which has no `/var/tmp` and no sound device. No test heard the audio, and no CI run built this form. |
+| 2 | Confirmed, and corrected (ADR 0124 item 27). The cause is a blur that WebKitGTK does not draw. | Screenshots of the rc.17 file and the local AppImage on Xvfb, at the same scroll position. No test used a computer with a GPU. |
+| 4 | The `.kind` column is 5.5rem. | The label is 67 px with a mouse and 80 px with touch, in a column of 88 px. |
+| 6 | A draft with no edits moves to the file that Studio read (ADR 0007 item 6). | A core test, and a Chromium check of Read Again and Review. |
+| 7 | A new tag goes directly after `<channel>` (ADR 0128 item 12). | A core test. |
+| 8 | "Apply My Edits to the New File" merges the hosted file into the draft (ADR 0129). | Core tests, and a Chromium check. |
+| 9 | The refusal gives its source, the danger, the state and the next step (ADR 0126 item 28). | A Node test, and a Chromium check. |
+| 10 | "Simplified" shows only words, with local times. "Detailed" has a second line with the local time (ADR 0114 items 9 to 15). | Node tests, and a Chromium check. |
+| 12 | The version label has no quote mark. "Lock against import" has a help text and a user guide text. The operator removed `podcast:previousUrl` from ADR 0008 item 6. | A Node test, and the text. The macOS retry waits for a second failure. |
+
+The release workflow also needed `patchelf`, because the GStreamer plugin of the bundler stops without it. A local build found this.
 
 ## Recommended Sequence
 

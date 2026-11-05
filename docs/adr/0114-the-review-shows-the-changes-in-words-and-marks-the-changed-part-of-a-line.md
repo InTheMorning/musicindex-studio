@@ -4,6 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from the mockups in `.studio-dev/mockup-diff/site/`.
+- Changed: on 2026-11-05 the operator changed items 9 to 11 and added items 14 and 15, from finding 10 of the [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md). "Simplified" shows only words, and each time shows in local time.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the diff that the user approves. [ADR 0012](0012-lossless-tree-with-a-typed-model.md) for the typed model. [ADR 0010](0010-studio-uses-the-afterglow-direction.md) for a sign that is not only a color. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the core as the owner of each rule.
 
 ## Context
@@ -34,11 +35,13 @@
 ### The Two Views
 
 8. Each feed in a review has the select menu "View", with "Simplified" and "Detailed". "Simplified" is the default. The device remembers the last choice of the user. This is a convenience of one device, not a setting of the account.
-9. "Simplified" shows "What changes", which is the field view, then "Changed lines". A removed line and its added line can show as one line with the sign `±`. This occurs when the line has only added parts, or only removed parts. An added part has the add color. A removed part has the remove color and a line through it. Each other change shows as in "Detailed".
-10. "Detailed" shows each removed line with the sign `−` and each added line with the sign `+`. The changed parts have the same marks as in item 9.
-11. Each view shows three lines of context around each change. A run of hidden lines shows as "Show N more lines", which opens that run. The button "Show the Whole File" shows each line of the file. Then the button reads "Show Only the Changes".
+9. "Simplified" shows "What changes", which is the field view. It shows no lines of the file.
+10. "Detailed" shows each removed line with the sign `−` and each added line with the sign `+`. An added part has the add color. A removed part has the remove color and a line through it.
+11. "Detailed" shows three lines of context around each change. A run of hidden lines shows as "Show N more lines", which opens that run. The button "Show the Whole File" shows each line of the file. Then the button reads "Show Only the Changes".
 12. At 760 px or less, the diff removes the indent that all the shown lines share. Each line keeps its indent relative to the other lines. The file does not change.
 13. The two reviews use the same view: the review of a draft and the review of a change set.
+14. "Simplified" shows each time of a feed in the local time of the browser, with its date and its seconds. This is a display aid (ADR 0065), and the file keeps its text.
+15. "Detailed" keeps the text of the file. Below each changed line with a time, a muted second line gives "Local time:" and the local time. It works the same with a mouse and with touch.
 
 ## Alternatives Considered
 

@@ -6,6 +6,7 @@
 - Accepted: 2026-11-04 by the operator. The operator accepted items 5, 7, 12 and 26 as written.
 - Changed by: [ADR 0128](0128-a-moved-feed-names-its-own-address.md). The feed on the new host also gets a tag that names its own URL. That decides the tag that "Alternatives Considered" left open.
 - Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). Items 8 and 26: Review and a granted write can send the time request of that record. That request reads no feed.
+- Changed: on 2026-11-05 the operator added item 28, from finding 9 of the [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md). The operator said that the box did not explain anything, and selected the full explanation.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F0. Research note `research_notes/aggregation/itunes-new-feed-url.md` in `../musicindex-research`.
 - Changes: [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 19 (the sequence) and item 20 (a pointer file can become the feed). [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) item 9, for a move that stage 2 refuses. [ADR 0057](0057-the-private-network-guard-of-the-server.md) item 1, for the read of this record on the desktop.
 - Uses: [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) and [ADR 0065](0065-the-core-applies-each-feed-rule.md).
@@ -92,6 +93,7 @@ The review of the request found these facts at commit `4279546`:
 25. A change set applies this record to each feed. A refused feed keeps its draft, and the refusal does not stop the other feeds.
 26. A granted write makes no read and gets no refusal from this record, because it changes no link (ADR 0054 items 13 and 15). The write that records the grant is a normal write. The research request asks for the same check on a granted write. This record does not do that, so that a host failure or a stale link does not stop a live show.
 27. A feed with no connector gets the same check when it gets a write.
+28. A refusal gives the source of its first address: the tag, the self link or the move. The box says where the address came from, what is wrong, what can occur, what changed on a file host and what the user can do. The self link notice and the return warning also say why they show and what the user can do.
 
 ## Alternatives Considered
 

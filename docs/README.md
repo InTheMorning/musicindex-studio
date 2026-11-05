@@ -406,6 +406,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Task 028 human test, 2026-10-29](reviews/2026-10-29-task-028-human-test.md)
 - [Task 014 review checklist, 2026-10-22](reviews/2026-10-22-task-014-review-checklist.md)
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
+- [Human test findings of 0.1.0-rc.17](reviews/2026-11-05-rc17-human-test-findings.md)
 
 ## Runbooks
 

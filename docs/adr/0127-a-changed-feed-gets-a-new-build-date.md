@@ -45,7 +45,7 @@ The research did not examine how other indexes and apps treat a date in the futu
 
 ### The Checked Time
 
-7. The checked time is the earliest of the computer clock and the `Date` header of each server that answered. These servers are the musicindex API and the host of the public address of the feed. A cached answer can give a time that is too early, and that has no bad effect.
+7. The checked time is the earliest of the computer clock and the `Date` header of each server that answered. These servers are the musicindex API and the host of the public address of the feed. The time of a server is its `Date` header plus its `Age` header. A cache with no `Age` header can give a time that is too early, and that has no bad effect on the date.
 8. The core needs an answer from one server or more. With no answer, the draft keeps the date of its base, and the write continues. A feed with no date stays with no date. An equal date passes in the index, so this is safe. Review says that the build date does not change.
 9. The new date is the later of the checked time and the date of the base. A date never goes back.
 10. A date in the base that the core cannot read counts as no date, and the new date replaces it.

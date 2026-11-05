@@ -357,6 +357,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 089: Drop targets](tasks/studio-v1-task-089-drop-targets.md)
 - [Studio v1 task 090: Bad move links](tasks/studio-v1-task-090-bad-move-links.md)
 - [Studio v1 task 091: The own address tag](tasks/studio-v1-task-091-own-address-tag.md)
+- [Studio v1 task 092: The build date](tasks/studio-v1-task-092-build-date.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

@@ -69,6 +69,10 @@ pub struct Feed {
     /// `webMaster`, as the source wrote it (ADR 0064).
     #[serde(default)]
     pub web_master: Option<String>,
+    /// `lastBuildDate`, as the source wrote it (ADR 0127). Only the core sets
+    /// it. The user cannot edit it.
+    #[serde(default)]
+    pub last_build_date: Option<String>,
     /// The channel `image` of RSS 2.0 (ADR 0060). The model has this tag and
     /// `itunes:image` as two fields. The pipeline keeps the form of the
     /// cover at the draft save (ADR 0065 item 6).
@@ -146,6 +150,7 @@ impl Feed {
             language: read_text(channel, Ns::None, "language"),
             managing_editor: read_text(channel, Ns::None, "managingEditor"),
             web_master: read_text(channel, Ns::None, "webMaster"),
+            last_build_date: read_text(channel, Ns::None, "lastBuildDate"),
             rss_image: read_one(channel),
             podcast_guid: read_text(channel, Ns::Podcast, "guid"),
             medium: read_text(channel, Ns::Podcast, "medium"),
@@ -214,6 +219,7 @@ impl Feed {
         c.text(Ns::None, "language", self.language.as_ref());
         c.text(Ns::None, "managingEditor", self.managing_editor.as_ref());
         c.text(Ns::None, "webMaster", self.web_master.as_ref());
+        c.text(Ns::None, "lastBuildDate", self.last_build_date.as_ref());
         c.one(self.rss_image.as_ref());
         c.text(Ns::Podcast, "guid", self.podcast_guid.as_ref());
         c.text(Ns::Podcast, "medium", self.medium.as_ref());

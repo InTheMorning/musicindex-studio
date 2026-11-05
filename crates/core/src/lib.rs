@@ -11,6 +11,7 @@ pub mod announce;
 pub mod apps;
 pub mod assets;
 pub mod change_set;
+pub mod checked_time;
 pub mod collection;
 pub mod connector;
 pub mod datetime;

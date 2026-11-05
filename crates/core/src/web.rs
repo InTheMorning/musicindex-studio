@@ -91,6 +91,9 @@ pub struct Web {
     /// The client for [`Web::get_to_file`]. It has no time limit for the
     /// whole transfer, because a large file takes minutes.
     transfer: ureq::Agent,
+    /// The client for [`Web::server_date`]. It has a limit of 5 seconds and
+    /// follows no redirect (ADR 0127 item 13).
+    probe: ureq::Agent,
 }
 
 impl Default for Web {
@@ -127,9 +130,18 @@ impl Web {
             .max_redirects(5)
             .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
             .build();
+        let probe = ureq::Agent::config_builder()
+            .proxy(net::proxy(policy))
+            .timeout_global(Some(Duration::from_secs(PROBE_SECONDS)))
+            .http_status_as_error(false)
+            .max_redirects(0)
+            .max_redirects_will_error(false)
+            .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
+            .build();
         Self {
             agent: net::agent(config, policy),
             transfer: net::agent(transfer, policy),
+            probe: net::agent(probe, policy),
         }
     }
 
@@ -189,6 +201,31 @@ impl Web {
                 other => WebError::new(WebErrorKind::Network, format!("{url}: {other}")),
             })?;
         Ok(WebFile { final_url, bytes })
+    }
+}
+
+/// The time limit in seconds of [`Web::server_date`] (ADR 0127 item 13).
+const PROBE_SECONDS: u64 = 5;
+
+impl Web {
+    /// Ask a server for its `Date` header with one `HEAD` request.
+    ///
+    /// The request follows no redirect, and it has a limit of 5 seconds. The
+    /// function reads `Date` at each status, because each answer has the
+    /// time of the server (ADR 0127 item 7). Gives `None` for an address
+    /// that is not `http` or `https`, a failed request, or an answer with no
+    /// `Date` header. The second value is the `Age` header in seconds, or 0.
+    #[must_use]
+    pub fn server_date(&self, url: &str) -> Option<(String, i64)> {
+        let lower = url.trim().to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return None;
+        }
+        let response = self.probe.head(url.trim()).call().ok()?;
+        let age = header(&response, "age")
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            .map_or(0, i64::from);
+        Some((header(&response, "date")?, age))
     }
 }
 

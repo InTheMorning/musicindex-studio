@@ -807,3 +807,47 @@ fn a_model_json_with_no_new_field_reads_with_each_new_field_empty() {
     assert_eq!(back.items[0].explicit, None);
     assert_eq!(back.items[0].season, None);
 }
+
+const WITH_BUILD_DATE: &str = "<rss version=\"2.0\">\n<channel>\n  <title>T</title>\n  <lastBuildDate>Fri, 30 Oct 2026 20:00:00 +0000</lastBuildDate>\n  <language>en</language>\n  <item><guid>g1</guid></item>\n</channel>\n</rss>\n";
+
+#[test]
+fn the_build_date_reads_as_the_source_wrote_it_and_keeps_its_bytes_and_position() {
+    let feed = Feed::read(&Document::parse(WITH_BUILD_DATE).unwrap()).unwrap();
+    assert_eq!(
+        feed.last_build_date.as_deref(),
+        Some("Fri, 30 Oct 2026 20:00:00 +0000")
+    );
+    assert_eq!(edit(WITH_BUILD_DATE, |_| {}), WITH_BUILD_DATE);
+    let after = edit(WITH_BUILD_DATE, |f| f.title = Some("New".into()));
+    assert_eq!(after, WITH_BUILD_DATE.replace(">T<", ">New<"));
+    let unusual = WITH_BUILD_DATE.replace("Fri, 30 Oct 2026 20:00:00 +0000", "  30 oct 26 8pm  ");
+    assert_eq!(edit(&unusual, |_| {}), unusual);
+}
+
+#[test]
+fn a_set_build_date_replaces_the_value_in_place() {
+    let after = edit(WITH_BUILD_DATE, |f| {
+        f.last_build_date = Some("Sat, 31 Oct 2026 08:00:00 +0000".into());
+    });
+    assert_eq!(
+        after,
+        WITH_BUILD_DATE.replace("Fri, 30 Oct 2026 20:00", "Sat, 31 Oct 2026 08:00")
+    );
+}
+
+#[test]
+fn a_feed_with_no_build_date_gets_one_element_before_the_first_item() {
+    let after = edit(BARE, |f| {
+        f.last_build_date = Some("Fri, 30 Oct 2026 20:00:00 +0000".into());
+    });
+    assert_eq!(after.matches("<lastBuildDate>").count(), 1, "{after}");
+    let date = after.find("<lastBuildDate>").unwrap();
+    assert!(after.find("<link>").unwrap() < date, "{after}");
+    assert!(date < after.find("<item>").unwrap(), "{after}");
+}
+
+#[test]
+fn removing_the_build_date_removes_the_element() {
+    let after = edit(WITH_BUILD_DATE, |f| f.last_build_date = None);
+    assert!(!after.contains("lastBuildDate"), "{after}");
+}

@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md).
 
-Status: Open. Packet 091a is complete.
+Status: Complete, with its screenshot visual check. The human test waits until Stophammer ADR 0083 is accepted and deployed.
 
 ## Goal
 

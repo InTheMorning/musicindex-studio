@@ -114,6 +114,12 @@ The next write replaces it. Correct the cause, then select **Write to the File H
 Studio can also show "The self link names a different address." This is a notice, not a refusal.
 Studio can write the feed. Select **Use the Public Address** to make the self link the same as the address of the feed.
 
+## The tag in a moved feed
+
+Each move adds the tag `itunes:new-feed-url` to the feed, with the new address of the feed. The diff shows this change.
+Do not remove this tag. The index can need it if you move the feed back later.
+A feed that you do not move gets no such tag.
+
 ## Move a feed back to an earlier file host
 
 You can move a feed back to a file host that it used before.
@@ -121,6 +127,9 @@ That file host has a pointer file at the earlier path. The move row says "The po
 Studio replaces the pointer file with the feed only when the file has the same `podcast:guid` as the feed.
 If the file has a different `podcast:guid`, Studio writes nothing and shows an error.
 The file host that the feed leaves gets a pointer file with the new address.
+
+The sheet also shows "This is a return to an earlier address." This is a warning, not a refusal, and you can write the feed.
+The index can wait before it follows a return, and the wait grows with each return. During a wait, the index keeps the address from before the return.
 
 ## When the hosted file changed
 

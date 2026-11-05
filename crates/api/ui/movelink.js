@@ -51,6 +51,17 @@ export const NOTICE_TITLE = 'The self link names a different address.';
 export const NOTICE_END = 'Studio can still write it.';
 export const REPLACES_POINTER_NOTE = 'The pointer file at the new address becomes the feed.';
 
+// The warning of a return to an earlier address (ADR 0128 items 7 and 8). It
+// gives no time: Stophammer ADR 0083 owns the times, and Studio cannot read
+// the count of the index.
+export const RETURN_TITLE = 'This is a return to an earlier address.';
+export const RETURN_TEXT = 'The index can wait before it follows a return, and the wait grows with each return.';
+
+// The warning for a feed move of the core, or `null` when it is not a return.
+export function returnWarning(move) {
+  return move && move.replaces_pointer ? { title: RETURN_TITLE, text: RETURN_TEXT } : null;
+}
+
 const UNKNOWN_CONDITION = 'A link of the draft is not correct.';
 const UNKNOWN_HOP = 'Studio cannot use this address.';
 

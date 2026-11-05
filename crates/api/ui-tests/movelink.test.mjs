@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { isTitleCase } from '../ui/casing.js';
 import {
   CONDITION_TEXT, HOP_TEXT, STAGE_TEXT, REPAIRS, refusalView, refusalOfError, noticeViews, blocksWrite,
-  repairButtons, repairRoute, REPLACES_POINTER_NOTE,
+  repairButtons, repairRoute, REPLACES_POINTER_NOTE, returnWarning,
 } from '../ui/movelink.js';
 
 const source = readFileSync(new URL('../../core/src/move_link.rs', import.meta.url), 'utf8');
@@ -111,4 +111,14 @@ test('only a refusal of the check blocks the write', () => {
 test('the move row says that a pointer file becomes the feed', () => {
   assert.equal(REPLACES_POINTER_NOTE, 'The pointer file at the new address becomes the feed.');
   assert.deepEqual(repairButtons(undefined), []);
+});
+
+test('only a return gets the warning, and the warning gives no time', () => {
+  const owner = 'ADR 0128 items 7 to 9. Correct returnWarning in crates/api/ui/movelink.js.';
+  const view = returnWarning({ replaces_pointer: true });
+  assert.ok(view && view.title && view.text, owner);
+  assert.doesNotMatch(`${view.title} ${view.text}`, /\d|hour|day/, owner);
+  assert.equal(returnWarning({ replaces_pointer: false }), null, owner);
+  assert.equal(returnWarning(null), null, owner);
+  assert.equal(returnWarning(undefined), null, owner);
 });

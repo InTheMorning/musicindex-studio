@@ -14,7 +14,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, REPLACES_POINTER_NOTE } from './movelink.js';
+import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
 import { announceLines, announceStatus, isWaiting } from './announce.js';
@@ -1526,6 +1526,12 @@ function LinkNotices({ report, busy, onRepair }) {
   </div>`);
 }
 
+// The warning of a return (ADR 0128 items 7 to 9). It does not stop the write.
+function ReturnWarning({ move }) {
+  const view = returnWarning(move);
+  return view && html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`;
+}
+
 // A deletion that Studio refuses because a feed of the library refers to
 // the file (ADR 0036 item 13). The row uses the error color, not an
 // entity color (ADR 0018).
@@ -1832,6 +1838,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       </div>`}
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
+      ${diff && html`<${ReturnWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${sentCount > 0 && html`<div class="notice" role="status">${reviewNotice(sentCount)}</div>`}
       ${choosing && html`<div class="group rows">

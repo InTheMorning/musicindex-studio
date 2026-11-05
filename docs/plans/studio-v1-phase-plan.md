@@ -261,8 +261,8 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - The [research request on a feed check](research-feed-check-request.md) gives items F0 to F6. F0 and F2 have a decision.
 - Decision: [ADR 0126](../adr/0126-studio-refuses-a-bad-move-link.md). Studio refuses a bad move link, and a return to an earlier host works.
-- [Task 090](../tasks/studio-v1-task-090-bad-move-links.md) is complete in four packets, with its screenshot visual check. Its human test waits for task 091.
-- Decision: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md). A moved feed names its own address, and Review warns at each return. [Task 091](../tasks/studio-v1-task-091-own-address-tag.md) gives the work. It is open.
+- [Task 090](../tasks/studio-v1-task-090-bad-move-links.md) is complete in four packets, with its screenshot visual check. Its human test is open.
+- Decision: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md). A moved feed names its own address, and Review warns at each return. [Task 091](../tasks/studio-v1-task-091-own-address-tag.md) is complete, with its screenshot visual check. Its human test waits until Stophammer ADR 0083 is accepted and deployed.
 - Visual check: Review shows a refusal and a notice. The operator moves a feed between two real file hosts, and back.
 - Decision: [ADR 0127](../adr/0127-a-changed-feed-gets-a-new-build-date.md). A change of a feed also sets `lastBuildDate`, from a time that a server checks. No task and no code implement it yet.
 - On 2026-11-04 the operator stopped F1 until Stophammer has its findings, because they can change how Studio acts. Form A of the mockups in `.studio-dev/mockup-feedcheck/` is the selected place: an outline row with a count opens its own page.

@@ -134,6 +134,7 @@ The index can wait before it follows a return, and the wait grows with each retu
 ## The build date
 
 When you change a feed, Studio sets the build date of the feed: the element `lastBuildDate`. The diff shows it as "Build date". You cannot edit this value.
+
 An index refuses a date that is earlier than the date that it holds. Thus Studio does not use only the clock of this computer. It also asks a server for the time, and it uses the earliest time.
 Studio can show these notices. None of them stops the write:
 

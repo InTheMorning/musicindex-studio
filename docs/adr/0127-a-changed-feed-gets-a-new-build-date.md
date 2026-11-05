@@ -29,6 +29,8 @@ The Stophammer record measured 9,840 feeds with a date on 2026-09-24. No feed ha
 
 The research did not examine how other indexes and apps treat a date in the future. This stays open. The parser in `stophammer/stophammer-parser` reads `lastBuildDate` through `parse_date`, and its test passes for RFC 2822 with `+0000`.
 
+On 2026-11-04, after task 092, a one-time check ran in copies of both repositories. It sent the dated bytes that Studio writes (commit `6706556`) through the Stophammer parser and `POST /ingest/feed` (commit `61e8762`). A move, a return, a second return, an edit and a roll back each passed. An older copy and a roll back that keeps the date of its snapshot each got `stale_submission`. The check ran no real host and no deployed node.
+
 ## Decision
 
 ### The Exception

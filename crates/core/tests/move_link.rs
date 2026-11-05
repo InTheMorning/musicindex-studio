@@ -70,11 +70,15 @@ fn env(self_url: &str) -> Env {
 /// [`env`] with a host A of the connector kind `kind`. Host A is a local
 /// folder in each case.
 fn env_on(self_url: &str, kind: &str) -> Env {
+    env_with_xml(feed_xml(self_url), kind)
+}
+
+/// [`env_on`] with the file `original` on host A.
+fn env_with_xml(original: String, kind: &str) -> Env {
     let dir_a = tempfile::tempdir().unwrap();
     let dir_b = tempfile::tempdir().unwrap();
     let folder_a = LocalFolder::new(dir_a.path(), Some("https://a.example".into()));
     let folder_b = LocalFolder::new(dir_b.path(), Some("https://b.example".into()));
-    let original = feed_xml(self_url);
     folder_a
         .write("album.xml", original.as_bytes(), &Expected::Absent)
         .unwrap();
@@ -687,6 +691,7 @@ fn after_a_refusal_a_repair_lets_the_next_write_complete_the_move() {
     e.write(&reader).unwrap();
 
     assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), &repaired);
+    assert_names_own_url(&on_host(&e, e.b), DEST);
     assert!(
         !e.collection
             .is_placed_feed_file(e.b, "album.xml", e.feed)
@@ -898,13 +903,30 @@ fn is_pointer_to(text: &str, url: &str) -> bool {
 }
 
 fn is_feed_with_self(text: &str, url: &str) -> bool {
-    !text.contains("new-feed-url") && text.contains(&format!("href=\"{url}\""))
+    names_own_url(text) == Some(url.to_owned()) && text.contains(&format!("href=\"{url}\""))
+}
+
+/// The text of `itunes:new-feed-url` in a feed file.
+fn names_own_url(text: &str) -> Option<String> {
+    let start = text.find("new-feed-url>")? + "new-feed-url>".len();
+    let end = start + text[start..].find("</")?;
+    Some(text[start..end].to_owned())
+}
+
+/// The feed on the new host names its own URL by the tag (ADR 0128 item 1).
+fn assert_names_own_url(text: &str, url: &str) {
+    assert_eq!(
+        names_own_url(text).as_deref(),
+        Some(url),
+        "Stophammer ADR 0083 section 2 and ADR 0128 item 1: a moved feed names its own URL by itunes:new-feed-url, with the exact text of the URL. Fix: set the tag in set_feed_host."
+    );
 }
 
 #[test]
 fn a_move_from_a_to_b_and_back_to_a_completes() {
     let mut e = env(URL);
     move_to_b(&mut e);
+    assert_names_own_url(&on_host(&e, e.b), DEST);
     assert!(is_pointer_to(&on_host(&e, A_ID), DEST));
     assert!(e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
 
@@ -917,6 +939,7 @@ fn a_move_from_a_to_b_and_back_to_a_completes() {
 
     assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(A_ID));
     assert!(is_feed_with_self(&on_host(&e, A_ID), URL));
+    assert_names_own_url(&on_host(&e, A_ID), URL);
     assert!(is_pointer_to(&on_host(&e, e.b), URL));
     assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
     assert!(e.collection.is_feed_pointer(e.b, "album.xml").unwrap());
@@ -938,12 +961,15 @@ fn two_returns_in_sequence_keep_the_bytes_and_the_pointer_rows_right() {
         )
     };
     assert_eq!(rows(&e), (true, false));
+    assert_names_own_url(&on_host(&e, e.b), DEST);
     move_to(&mut e, A_ID, URL);
     assert!(is_feed_with_self(&on_host(&e, A_ID), URL));
+    assert_names_own_url(&on_host(&e, A_ID), URL);
     assert!(is_pointer_to(&on_host(&e, e.b), URL));
     assert_eq!(rows(&e), (false, true));
     move_to_b(&mut e);
     assert!(is_feed_with_self(&on_host(&e, e.b), DEST));
+    assert_names_own_url(&on_host(&e, e.b), DEST);
     assert!(is_pointer_to(&on_host(&e, A_ID), DEST));
     assert_eq!(rows(&e), (true, false));
     assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
@@ -1044,6 +1070,7 @@ fn a_stage_2_refusal_on_a_return_keeps_the_state_and_a_repair_completes() {
     e.write(&reader).unwrap();
     assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(A_ID));
     assert!(on_host(&e, A_ID).contains("Album (Repaired)"));
+    assert_names_own_url(&on_host(&e, A_ID), URL);
     assert!(is_pointer_to(&on_host(&e, e.b), URL));
     assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
     assert!(
@@ -1073,6 +1100,7 @@ fn a_stopped_write_of_a_return_continues() {
     let reader = ScriptedReader::empty().with_body(URL, draft_body(&e, URL));
     e.write(&reader).unwrap();
     assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(A_ID));
+    assert_names_own_url(&on_host(&e, A_ID), URL);
     assert!(is_pointer_to(&on_host(&e, e.b), URL));
     assert!(!e.collection.is_feed_pointer(A_ID, "album.xml").unwrap());
 }
@@ -1152,13 +1180,17 @@ fn a_stage_2_refusal_has_the_stage_and_the_repairs_that_apply() {
     assert_eq!(refusal.repairs, Vec::<Repair>::new());
 
     // A draft with a tag gets the repair "Remove the Tag" in stage 2.
+    // The tag of the move names the URL of the draft (ADR 0128), so it is
+    // not a link to repair. A tag that the user sets after the move is.
     let mut e = env(URL);
-    set_tag(&e, DEST);
     pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
-    let reader = ScriptedReader::empty().with_results(
-        DEST,
-        vec![Err(failure(FailKind::Gone)), Err(failure(FailKind::Gone))],
-    );
+    set_tag(&e, C);
+    let reader = ScriptedReader::empty()
+        .with_feed(C, C, Some(GUID), None, None)
+        .with_results(
+            DEST,
+            vec![Err(failure(FailKind::Gone)), Err(failure(FailKind::Gone))],
+        );
     let error = e.write(&reader).unwrap_err();
     let refusal = error.bad_move_link().unwrap();
     assert_eq!(refusal.stage, 2, "{error}");
@@ -1268,4 +1300,167 @@ fn remove_the_tag_removes_only_the_tag_and_a_repair_that_does_not_apply_gives_an
     )
     .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::InvalidOperation);
+}
+
+// ---- The tag of the own address (ADR 0128 items 1 to 6) ----
+
+/// The feed file of `feed_xml` with a tag, and with no self link when
+/// `self_link` is false.
+fn feed_with(self_link: bool, tag: Option<&str>) -> String {
+    let mut xml = feed_xml(URL);
+    if !self_link {
+        let start = xml.find("    <atom:link").unwrap();
+        let end = start + xml[start..].find('\n').unwrap() + 1;
+        xml.replace_range(start..end, "");
+    }
+    if let Some(tag) = tag {
+        xml = xml.replace(
+            "    <podcast:guid>",
+            &format!("    <itunes:new-feed-url>{tag}</itunes:new-feed-url>\n    <podcast:guid>"),
+        );
+        xml = xml.replace(
+            "xmlns:atom=",
+            "xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" xmlns:atom=",
+        );
+    }
+    xml
+}
+
+fn draft_bytes(e: &Env) -> Vec<u8> {
+    e.collection.draft(e.feed).unwrap().unwrap().draft_xml
+}
+
+#[test]
+fn a_move_gives_the_feed_the_tag_of_its_own_url_and_the_pointer_names_the_destination() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    assert_names_own_url(&on_host(&e, e.b), DEST);
+    assert!(is_pointer_to(&on_host(&e, A_ID), DEST));
+}
+
+#[test]
+fn a_feed_with_no_self_link_gets_the_tag_at_a_move() {
+    let mut e = env_with_xml(feed_with(false, None), LocalFolder::KIND);
+    move_to_b(&mut e);
+    let on_b = on_host(&e, e.b);
+    assert_names_own_url(&on_b, DEST);
+    assert!(!on_b.contains("rel=\"self\""), "the move adds no self link");
+    // The return gives the tag too.
+    move_to(&mut e, A_ID, URL);
+    assert_names_own_url(&on_host(&e, A_ID), URL);
+}
+
+#[test]
+fn a_tag_of_the_draft_before_the_move_gets_the_new_value() {
+    let mut e = env(URL);
+    set_tag(&e, C);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let draft = String::from_utf8(draft_bytes(&e)).unwrap();
+    assert_names_own_url(&draft, DEST);
+    assert!(!draft.contains(C));
+    // Stage 1 has no URL to follow, and the move completes.
+    move_to_b(&mut e);
+    assert_names_own_url(&on_host(&e, e.b), DEST);
+}
+
+#[test]
+fn the_diff_of_a_move_shows_the_tag_change() {
+    let e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    assert!(
+        diff.unified
+            .lines()
+            .any(|l| l.starts_with('+') && l.contains(&format!("new-feed-url>{DEST}</"))),
+        "{}",
+        diff.unified
+    );
+}
+
+#[test]
+fn undo_of_a_move_gives_the_bytes_of_a_base_with_no_tag() {
+    let e = env(URL);
+    let base = draft_bytes(&e);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    assert_ne!(draft_bytes(&e), base);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap();
+    assert_eq!(draft_bytes(&e), base, "ADR 0128 item 4");
+    assert!(!pipeline::draft_changed(&e.collection, e.feed).unwrap());
+}
+
+#[test]
+fn undo_of_a_move_puts_back_the_tag_of_the_base() {
+    // The base names its own URL already.
+    let e = env_with_xml(feed_with(true, Some(URL)), LocalFolder::KIND);
+    let base = draft_bytes(&e);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    assert_names_own_url(&String::from_utf8(draft_bytes(&e)).unwrap(), DEST);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap();
+    assert_eq!(draft_bytes(&e), base);
+    assert!(!pipeline::draft_changed(&e.collection, e.feed).unwrap());
+}
+
+#[test]
+fn a_second_host_choice_replaces_the_tag_and_undo_still_gives_the_base() {
+    let mut e = env(URL);
+    let dir_c = tempfile::tempdir().unwrap();
+    let folder_c = LocalFolder::new(dir_c.path(), Some("https://c.example".into()));
+    let c = e
+        .collection
+        .add_connector(LocalFolder::KIND, "C", &folder_c.config(), None)
+        .unwrap();
+    e.hosts.insert(c, Box::new(folder_c));
+    let base = draft_bytes(&e);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, c).unwrap();
+    let draft = String::from_utf8(draft_bytes(&e)).unwrap();
+    assert_names_own_url(&draft, "https://c.example/album.xml");
+    assert!(!draft.contains(DEST));
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, A_ID).unwrap();
+    assert_eq!(draft_bytes(&e), base);
+}
+
+#[test]
+fn a_write_with_no_move_adds_no_tag() {
+    let mut e = env(URL);
+    e.edit(|f| f.title = Some("Album (Deluxe)".into()));
+    e.write(&ScriptedReader::empty()).unwrap();
+    let written = fs::read_to_string(e.dir_a.path().join("album.xml")).unwrap();
+    assert!(
+        !written.contains("new-feed-url"),
+        "a feed that never moved gets no tag"
+    );
+}
+
+#[test]
+fn a_tag_that_names_the_address_gives_no_address_difference_after_a_write_and_a_refresh() {
+    let mut e = env(URL);
+    move_to_b(&mut e);
+    assert_eq!(
+        e.collection.feed(e.feed).unwrap().address_differences,
+        Vec::new()
+    );
+    pipeline::refresh(&mut e.collection, e.hosts.get(e.b).unwrap(), e.feed).unwrap();
+    let row = e.collection.feed(e.feed).unwrap();
+    assert_eq!(row.public_url.as_deref(), Some(DEST));
+    assert_eq!(row.address_differences, Vec::new());
+    // The same after a return and a refresh.
+    move_to(&mut e, A_ID, URL);
+    pipeline::refresh(&mut e.collection, e.hosts.get(A_ID).unwrap(), e.feed).unwrap();
+    let row = e.collection.feed(e.feed).unwrap();
+    assert_eq!(row.public_url.as_deref(), Some(URL));
+    assert_eq!(row.address_differences, Vec::new());
+}
+
+#[test]
+fn a_stopped_write_of_a_first_move_continues_with_the_tag() {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    let draft = draft_bytes(&e);
+    // The earlier write stopped after the feed XML reached the new host.
+    fs::write(e.dir_b.path().join("album.xml"), &draft).unwrap();
+    let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
+    e.write(&reader).unwrap();
+    assert_names_own_url(&on_host(&e, e.b), DEST);
+    assert!(is_pointer_to(&on_host(&e, A_ID), DEST));
 }

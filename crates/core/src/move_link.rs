@@ -384,7 +384,12 @@ pub fn repair_applies(repair: Repair, feed: &Feed, url: Option<&str>) -> bool {
             (feed.self_url(), url),
             (Some(self_url), Some(url)) if self_url != url
         ),
-        Repair::RemoveTag => feed.new_feed_url.is_some(),
+        // A tag that names the URL of the draft is the own-address tag of
+        // ADR 0128. It is not a link to repair.
+        Repair::RemoveTag => feed
+            .new_feed_url
+            .as_deref()
+            .is_some_and(|tag| Some(tag) != url),
     }
 }
 

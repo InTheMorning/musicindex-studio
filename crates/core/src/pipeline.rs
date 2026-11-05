@@ -31,7 +31,7 @@ use crate::media::{op3_prefix, plain_address};
 use crate::move_link::{self, BadMoveLink, FeedReader, LinkReport, OwnedDraftLinks, Repair};
 use crate::nostr_events::npub_text;
 use crate::roles;
-use crate::xml::{Document, ParseError};
+use crate::xml::{Document, Element, ParseError};
 
 /// The kind of a [`PipelineError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -678,8 +678,7 @@ pub fn rebase_linked_draft(
     };
     let row = collection.feed(id)?;
     let (_, path) = writable(&row)?;
-    collection.remove_draft_feed_move(id)?;
-    restore_self_link(collection, id, &draft)?;
+    remove_draft_move(collection, id, &draft)?;
     let Some(file) = connector.read(path)? else {
         return Ok(());
     };
@@ -2258,7 +2257,7 @@ fn grant_bytes(grants: &[(String, Option<i64>)]) -> Vec<u8> {
 /// `self` link (ADR 0038 item 16). The path stays the path from before.
 ///
 /// The host of the feed gives no move. The function then removes the move,
-/// and puts the `self` link back to the link of the live file.
+/// and puts the `self` link and the tag back to those of the live file.
 ///
 /// A feed with no connector has no host to name. Its path is the release
 /// folder, `/`, and the file name of its public address (ADR 0067
@@ -2300,8 +2299,7 @@ pub fn set_feed_host(
     let path = path.as_str();
     let draft = current_draft(collection, id)?;
     if Some(target) == from_id {
-        collection.remove_draft_feed_move(id)?;
-        restore_self_link(collection, id, &draft)?;
+        remove_draft_move(collection, id, &draft)?;
         return Ok(());
     }
     if draft.base_version.is_none() {
@@ -2330,8 +2328,11 @@ pub fn set_feed_host(
         )
     })?;
     collection.set_draft_feed_move(id, target, path)?;
+    // ADR 0128 item 1: the feed names its own new URL by the tag, also
+    // when it has no self link. A tag of the draft gets the new value.
     edit_draft(collection, id, |feed| {
         feed.set_self_url(&url);
+        feed.new_feed_url = Some(url.clone());
     })?;
     // The new file host has a public address, so the feed gets its real
     // GUID (ADR 0122 item 8).
@@ -2339,26 +2340,77 @@ pub fn set_feed_host(
     Ok(())
 }
 
-/// Put the `self` link of the draft back to the `self` link of its base,
-/// when the base has one.
+/// Remove the feed move of a draft, and put back the links that the move
+/// set: the `self` link of the base, when the base has one, and, when the
+/// draft had a move, the `itunes:new-feed-url` tag of the base, or no tag
+/// when the base has none (ADR 0128 item 4).
 ///
 /// # Errors
 ///
 /// Gives a [`PipelineError`] when the draft is not a feed.
-fn restore_self_link(
+fn remove_draft_move(
     collection: &Collection,
     id: FeedId,
     draft: &DraftRow,
 ) -> Result<(), PipelineError> {
-    let back = Feed::read(&Document::parse_bytes(&draft.base_xml)?)
-        .ok()
+    let had_move = collection.draft_feed_move(id)?.is_some();
+    collection.remove_draft_feed_move(id)?;
+    let base = Feed::read(&Document::parse_bytes(&draft.base_xml)?).ok();
+    let back = base
+        .as_ref()
         .and_then(|base| base.self_url().map(str::to_owned));
-    if let Some(back) = back {
-        edit_draft(collection, id, |feed| {
-            feed.set_self_url(&back);
+    let tag = base.and_then(|base| base.new_feed_url);
+    if back.is_some() || had_move {
+        let no_tag = tag.is_none();
+        let mut restored = edit_draft(collection, id, |feed| {
+            if let Some(back) = &back {
+                feed.set_self_url(back);
+            }
+            if had_move {
+                feed.new_feed_url = tag;
+            }
         })?;
+        // The move can add the `xmlns:itunes` declaration for the tag. A
+        // base with no tag then gets its root element back (ADR 0128 item 4).
+        if had_move && no_tag {
+            let base_doc = Document::parse_bytes(&draft.base_xml)?;
+            let mut doc = Document::parse_bytes(&restored.draft_xml)?;
+            if drop_added_declarations(&mut doc, base_doc.root()) {
+                restored.draft_xml = doc.write().into_bytes();
+                collection.save_draft(id, &restored)?;
+            }
+        }
     }
     Ok(())
+}
+
+/// Remove each `xmlns:` declaration of the root element of `doc` that
+/// `base` does not have, when no element or attribute of `doc` uses its
+/// prefix. Gives true when a declaration went out.
+fn drop_added_declarations(doc: &mut Document, base: &Element) -> bool {
+    fn uses(element: &Element, prefix: &str) -> bool {
+        let start = format!("{prefix}:");
+        element.name().starts_with(&start)
+            || element
+                .attributes()
+                .iter()
+                .any(|a| a.name().starts_with(&start))
+            || element.elements().any(|child| uses(child, prefix))
+    }
+    let added: Vec<String> = doc
+        .root()
+        .attributes()
+        .iter()
+        .filter_map(|a| {
+            let prefix = a.name().strip_prefix("xmlns:")?;
+            (base.attribute(a.name()).is_none() && !uses(doc.root(), prefix))
+                .then(|| a.name().to_owned())
+        })
+        .collect();
+    for name in &added {
+        doc.root_mut().set_attribute(name, None);
+    }
+    !added.is_empty()
 }
 
 /// Remove the host choice from the draft of a feed with no connector, and
@@ -2381,8 +2433,7 @@ pub fn clear_feed_host(collection: &Collection, id: FeedId) -> Result<(), Pipeli
         ));
     }
     let draft = current_draft(collection, id)?;
-    collection.remove_draft_feed_move(id)?;
-    restore_self_link(collection, id, &draft)
+    remove_draft_move(collection, id, &draft)
 }
 
 /// Each library file that an upload of `operations` will put on a host,

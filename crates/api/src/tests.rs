@@ -8512,13 +8512,14 @@ async fn the_draft_of_a_read_only_feed_has_no_host_and_a_saved_edit_gives_a_diff
 async fn a_host_choice_of_a_read_only_draft_gives_a_feed_move_and_a_write_moves_the_feed() {
     let server = web_feeds();
     // The new host serves the draft at its new address (ADR 0126 item 15).
-    // The feed has no self link, so the draft names nothing.
+    // The feed has no self link, so the draft names itself only by the tag
+    // of the move (ADR 0128 item 1).
     let new_url = "https://new.example/album/a.xml";
     let reader = studio_core::move_link::ScriptedReader::empty().with_feed(
         new_url,
         new_url,
         Some("g-1"),
-        None,
+        Some(new_url),
         None,
     );
     let app = app_with_reader(&server.url(""), None, Some(reader));
@@ -12891,7 +12892,7 @@ async fn a_feed_of_an_expired_area_moves_to_a_public_host_and_gets_its_real_guid
         new_url,
         new_url,
         Some(&studio_core::guid::podcast_guid_for_url(new_url)),
-        None,
+        Some(new_url),
         Some(new_url),
     );
     handle

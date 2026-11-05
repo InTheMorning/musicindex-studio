@@ -1883,7 +1883,10 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
 
     let on_b = fs::read_to_string(s.dir_b.path().join("album.xml")).unwrap();
     assert!(on_b.contains("href=\"https://b.example/album.xml\""));
-    assert!(!on_b.contains("new-feed-url"));
+    assert!(
+        on_b.contains("new-feed-url>https://b.example/album.xml</"),
+        "Stophammer ADR 0083 section 2 and ADR 0128 item 1: the feed on the new host names its own URL by itunes:new-feed-url. Fix: set the tag in set_feed_host."
+    );
     let on_a = fs::read_to_string(s.dir_a.path().join("album.xml")).unwrap();
     assert!(on_a.contains("new-feed-url>https://b.example/album.xml</"));
     let row = s.collection.feed(s.feed).unwrap();

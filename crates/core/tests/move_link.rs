@@ -1464,3 +1464,35 @@ fn a_stopped_write_of_a_first_move_continues_with_the_tag() {
     assert_names_own_url(&on_host(&e, e.b), DEST);
     assert!(is_pointer_to(&on_host(&e, A_ID), DEST));
 }
+
+#[test]
+fn a_repair_of_a_draft_gets_a_date_at_its_diff_and_keeps_the_id_of_a_second_diff() {
+    // ADR 0127 item 19: a repair is a change like each other.
+    let old = "https://old.example/album.xml";
+    let e = env(old);
+    e.edit(|f| f.title = Some("Album (Deluxe)".into()));
+    pipeline::apply_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        Repair::UsePublicAddress,
+        &revision_of(&e),
+    )
+    .unwrap();
+    let checked = studio_core::checked_time::CheckedTime {
+        seconds: 1_793_390_400,
+        computer_ahead_seconds: 0,
+    };
+    let state = pipeline::set_build_date(&e.collection, e.feed, Some(checked)).unwrap();
+    assert!(state.set);
+    let first = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    assert!(
+        first
+            .unified
+            .contains("<lastBuildDate>Fri, 30 Oct 2026 20:00:00 +0000")
+    );
+    // The next diff keeps the date, and the revision of the editor stays valid.
+    pipeline::set_build_date(&e.collection, e.feed, Some(checked)).unwrap();
+    let second = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    assert_eq!(first.id, second.id);
+}

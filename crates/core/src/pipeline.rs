@@ -12,6 +12,7 @@ use similar::TextDiff;
 
 use crate::address::AddressSource;
 use crate::announce::{self, AnnounceSettings, AnnounceSkip, PlannedAnnouncement, Timing};
+use crate::checked_time::{BuildDateOutcome, CheckedTime, new_build_date};
 use crate::collection::{
     Collection, CollectionError, ConnectorId, DraftFeedMove, DraftOperationKind, DraftRow, FeedId,
     FeedRow, LibraryFile, LibraryFileId, SnapshotId,
@@ -848,6 +849,9 @@ pub fn copy_feed(
     feed.author = Some(author.to_owned());
     feed.podcast_guid = Some(new_guid.clone());
     feed.new_feed_url = None;
+    // A copy keeps no date of its source and gets one at its first diff
+    // (ADR 0127 item 18).
+    feed.last_build_date = None;
     feed.publisher = None;
     feed.live_items.clear();
     feed.txts.retain(|t| t.purpose.as_deref() == Some("npub"));
@@ -949,7 +953,8 @@ pub fn assign_real_guids(
             next = changed_draft(next, |feed| relink(feed, change))?;
         }
         if next.draft_xml != draft.draft_xml {
-            saved.push((id, next));
+            // ADR 0127 item 16: a changed draft gets the date of its base.
+            saved.push((id, dated_like_base(next, &draft.draft_xml)?));
         }
     }
     collection.save_drafts(&saved)?;
@@ -1260,9 +1265,64 @@ pub fn edit_draft(
     id: FeedId,
     change: impl FnOnce(&mut Feed),
 ) -> Result<DraftRow, PipelineError> {
-    let draft = changed_draft(current_draft(collection, id)?, change)?;
+    let before = current_draft(collection, id)?;
+    let before_xml = before.draft_xml.clone();
+    let draft = dated_like_base(changed_draft(before, change)?, &before_xml)?;
     collection.save_draft(id, &draft)?;
     Ok(draft)
+}
+
+/// The draft of a save that changed the feed, with the date of its base
+/// (ADR 0127 item 3). `before` is the XML of the draft before the save.
+/// The compare ignores `lastBuildDate`. When the save changes nothing else,
+/// the draft keeps its date. The function makes no request and reads no
+/// clock.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the draft is not a feed.
+fn dated_like_base(draft: DraftRow, before: &[u8]) -> Result<DraftRow, PipelineError> {
+    if same_apart_from_date(&draft.draft_xml, before) {
+        return Ok(draft);
+    }
+    with_base_date(draft)
+}
+
+/// The draft with the `lastBuildDate` of its base, or with no such element
+/// when the base has none.
+fn with_base_date(draft: DraftRow) -> Result<DraftRow, PipelineError> {
+    let base_date = build_date_of(&draft.base_xml);
+    if build_date_of(&draft.draft_xml) == base_date {
+        return Ok(draft);
+    }
+    changed_draft(draft, |feed| feed.last_build_date = base_date)
+}
+
+/// The `lastBuildDate` of feed bytes. Gives none for bytes that are not a
+/// feed.
+fn build_date_of(bytes: &[u8]) -> Option<String> {
+    let doc = Document::parse_bytes(bytes).ok()?;
+    Feed::read(&doc).ok()?.last_build_date
+}
+
+/// The feed bytes without the `lastBuildDate` element. Gives none for bytes
+/// that are not a feed.
+fn without_build_date(bytes: &[u8]) -> Option<Vec<u8>> {
+    let mut doc = Document::parse_bytes(bytes).ok()?;
+    let mut feed = Feed::read(&doc).ok()?;
+    feed.last_build_date = None;
+    feed.write(&mut doc).ok()?;
+    Some(doc.write().into_bytes())
+}
+
+/// True when two feed documents differ at most in `lastBuildDate`. Bytes
+/// that are not a feed are equal only when they are the same bytes.
+fn same_apart_from_date(a: &[u8], b: &[u8]) -> bool {
+    a == b
+        || matches!(
+            (without_build_date(a), without_build_date(b)),
+            (Some(a), Some(b)) if a == b
+        )
 }
 
 /// The draft with the change applied, in memory. The draft is not saved.
@@ -1283,10 +1343,16 @@ fn changed_draft(
     Ok(draft)
 }
 
-/// The revision of a draft: a hash of its bytes (ADR 0022 item 5).
+/// The revision of a draft: a hash of its bytes without `lastBuildDate`
+/// (ADR 0022 item 5, ADR 0127 item 5).
 #[must_use]
 pub fn revision(draft: &DraftRow) -> String {
-    sha256_hex(&[&draft.draft_xml])
+    // The date that a diff sets must not make the revision of the editor
+    // stale (ADR 0127 item 5).
+    match without_build_date(&draft.draft_xml) {
+        Some(bytes) => sha256_hex(&[&bytes]),
+        None => sha256_hex(&[&draft.draft_xml]),
+    }
 }
 
 /// True when the draft of a feed is different from the live file that it
@@ -1343,9 +1409,12 @@ pub fn replace_model(
             "the draft changed after this model was read; read the draft again",
         ));
     }
+    let before_xml = draft.draft_xml.clone();
     let mut doc = Document::parse_bytes(&draft.draft_xml)?;
     let current = Feed::read(&doc)?;
     let invalid = |message: String| PipelineError::new(PipelineErrorKind::InvalidModel, message);
+    // The user cannot edit the build date (ADR 0127 item 1).
+    sent.last_build_date.clone_from(&current.last_build_date);
     sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
     keep_identity(&current, &mut sent).map_err(invalid)?;
     live::check_live_values(&sent)
@@ -1361,6 +1430,7 @@ pub fn replace_model(
     let hosted = hosted_document(&draft);
     sent.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
+    let draft = dated_like_base(draft, &before_xml)?;
     collection.save_draft(id, &draft)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     Ok((feed, revision(&draft)))
@@ -1797,6 +1867,100 @@ pub fn feed_addresses(feed: &Feed) -> Vec<Cow<'_, str>> {
         }
     }
     urls
+}
+
+/// What [`set_build_date`] did for the build date of a draft (ADR 0127).
+/// It is data only. The UI shows the texts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct BuildDateState {
+    /// True when the draft has a new date: the function set it, or a diff
+    /// set it earlier.
+    pub set: bool,
+    /// True when no server answered and the draft has a change with no new
+    /// date (item 8).
+    pub no_server: bool,
+    /// The date of the base, when it is later than the checked time and
+    /// stays (item 11).
+    pub later_base: Option<String>,
+    /// The seconds that the computer clock is ahead of the checked time,
+    /// when that is more than 5 minutes (item 12).
+    pub clock_ahead_seconds: Option<i64>,
+}
+
+/// True when the draft differs from its base in more than the date. The diff
+/// applies `one_cover`, so the compare does too.
+fn changes_feed(draft: &DraftRow) -> Result<bool, PipelineError> {
+    let covered = one_cover(draft.clone())?;
+    Ok(!same_apart_from_date(&covered.draft_xml, &covered.base_xml))
+}
+
+/// True when [`set_build_date`] needs a checked time for the draft of a
+/// feed: the draft has a change and no new date yet. A route asks the
+/// servers only then (ADR 0127 items 4, 5 and 13).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft or the draft is not
+/// a feed.
+pub fn needs_build_date(collection: &Collection, id: FeedId) -> Result<bool, PipelineError> {
+    let stored = current_draft(collection, id)?;
+    Ok(changes_feed(&stored)?
+        && build_date_of(&stored.draft_xml) == build_date_of(&stored.base_xml))
+}
+
+/// Set the build date of the draft of a feed before its diff (ADR 0127
+/// items 4 to 11). The function sets the date one time for a change:
+///
+/// - A draft that differs from its base only in the date gets none (items 2
+///   and 6).
+/// - A draft with a date that differs from the date of its base keeps it
+///   (item 5).
+/// - With `checked` of `None`, the draft keeps the date of its base
+///   (item 8).
+/// - Otherwise the date follows [`new_build_date`].
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft, the draft is not a
+/// feed, or the collection fails.
+pub fn set_build_date(
+    collection: &Collection,
+    id: FeedId,
+    checked: Option<CheckedTime>,
+) -> Result<BuildDateState, PipelineError> {
+    let stored = current_draft(collection, id)?;
+    if !changes_feed(&stored)? {
+        return Ok(BuildDateState::default());
+    }
+    let base_date = build_date_of(&stored.base_xml);
+    let notice = checked
+        .filter(CheckedTime::clock_notice)
+        .map(|checked| checked.computer_ahead_seconds);
+    let state = BuildDateState {
+        clock_ahead_seconds: notice,
+        ..BuildDateState::default()
+    };
+    if build_date_of(&stored.draft_xml) != base_date {
+        return Ok(BuildDateState { set: true, ..state });
+    }
+    let Some(checked) = checked else {
+        return Ok(BuildDateState {
+            no_server: true,
+            ..BuildDateState::default()
+        });
+    };
+    match new_build_date(base_date.as_deref(), checked) {
+        BuildDateOutcome::Write(text) => {
+            let dated = changed_draft(stored, |feed| feed.last_build_date = Some(text))?;
+            collection.save_draft(id, &dated)?;
+            Ok(BuildDateState { set: true, ..state })
+        }
+        BuildDateOutcome::KeepEqual => Ok(state),
+        BuildDateOutcome::KeepLater { base } => Ok(BuildDateState {
+            later_base: Some(base),
+            ..state
+        }),
+    }
 }
 
 /// The diff between the live file at the start of the draft and the draft,
@@ -3242,6 +3406,22 @@ fn draft_url(
     })
 }
 
+/// The URL of the draft of a feed for the check of the time of a server
+/// (ADR 0127 item 7): the destination of its move, else its public address.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection or the host set fails.
+pub fn time_url(
+    collection: &Collection,
+    hosts: &Hosts,
+    id: FeedId,
+) -> Result<Option<String>, PipelineError> {
+    let row = collection.feed(id)?;
+    let moved = feed_move(collection, hosts, &row)?;
+    draft_url(hosts, &row, moved.as_ref())
+}
+
 /// The owned facts of a draft that stage 1 of ADR 0126 examines. The self
 /// link counts as changed when it differs from the self link of the base.
 ///
@@ -3359,6 +3539,7 @@ pub fn apply_repair(
             "this repair does not apply to the draft",
         ));
     }
+    let before_xml = draft.draft_xml.clone();
     let changed = changed_draft(draft, |feed| match repair {
         Repair::UsePublicAddress => {
             if let Some(url) = &url {
@@ -3367,6 +3548,7 @@ pub fn apply_repair(
         }
         Repair::RemoveTag => feed.new_feed_url = None,
     })?;
+    let changed = dated_like_base(changed, &before_xml)?;
     collection.save_draft(id, &changed)?;
     Ok(changed)
 }
@@ -3902,7 +4084,8 @@ fn remove_sent_assets(
 /// 2. A draft of the user with no change goes out. A draft with a change
 ///    stops the write, and it does not change.
 /// 3. Studio makes a draft from the hosted file, and applies `change` to
-///    it.
+///    it. With a checked time, the draft also gets a new build date from
+///    the date of the hosted file (ADR 0127 item 21).
 /// 4. The draft must change only what the grant covers
 ///    ([`grant::covered`]). The write must also have no host operation and
 ///    no feed move.
@@ -3937,16 +4120,17 @@ pub fn write_granted(
     item_guid: &str,
     change: &GrantChange,
     app_name: &str,
+    checked: Option<CheckedTime>,
     now: u64,
 ) -> Result<Version, PipelineError> {
     let apply = |feed: &mut Feed| apply_grant_change(feed, item_guid, change);
     let written_at = i64::try_from(now).unwrap_or(i64::MAX);
     // ADR 0110 item 26: the live value check is in the core. It runs
     // before the host read, with the origin that the grant keeps.
-    let checked = check_granted_change(collection, feed_id, item_guid, change);
-    let version = match checked.and_then(|()| {
+    let value_check = check_granted_change(collection, feed_id, item_guid, change);
+    let version = match value_check.and_then(|()| {
         write_granted_with(
-            collection, hosts, library, addresses, feed_id, item_guid, apply, now,
+            collection, hosts, library, addresses, feed_id, item_guid, apply, checked, now,
         )
     }) {
         Ok(version) => version,
@@ -3994,7 +4178,7 @@ pub fn write_granted_edit(
     now: u64,
 ) -> Result<Version, PipelineError> {
     write_granted_with(
-        collection, hosts, library, addresses, feed_id, item_guid, edit, now,
+        collection, hosts, library, addresses, feed_id, item_guid, edit, None, now,
     )
 }
 
@@ -4098,6 +4282,7 @@ fn write_granted_with(
     feed_id: FeedId,
     item_guid: &str,
     edit: impl FnOnce(&mut Feed) -> Result<(), PipelineError>,
+    checked: Option<CheckedTime>,
     now: u64,
 ) -> Result<Version, PipelineError> {
     let not_active = || {
@@ -4148,6 +4333,15 @@ fn write_granted_with(
         let mut doc = hosted_doc.clone();
         let mut changed = hosted_feed.clone();
         edit(&mut changed)?;
+        // The new date is the one change outside the live item that the
+        // grant covers. With no checked time, or a base date that stays,
+        // the date does not change (ADR 0127 item 21).
+        if let Some(checked) = checked
+            && let BuildDateOutcome::Write(text) =
+                new_build_date(hosted_feed.last_build_date.as_deref(), checked)
+        {
+            changed.last_build_date = Some(text);
+        }
         changed.write_hosted(&mut doc, Some(&hosted_doc))?;
         let draft_xml = doc.write().into_bytes();
         collection.save_draft(
@@ -5141,7 +5335,13 @@ pub fn draft_from_snapshot(
 ) -> Result<DraftRow, PipelineError> {
     let xml = collection.snapshot_xml(id, snapshot)?;
     let mut draft = start_draft(collection, connector, id)?;
-    draft.draft_xml = xml;
+    // A snapshot that differs from the live file only in the date is no
+    // change. Otherwise the roll back is a change and gets the date of its
+    // base (ADR 0127 item 17).
+    if !same_apart_from_date(&xml, &draft.base_xml) {
+        draft.draft_xml = xml;
+        draft = with_base_date(draft)?;
+    }
     collection.save_draft(id, &draft)?;
     Ok(draft)
 }

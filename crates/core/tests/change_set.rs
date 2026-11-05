@@ -1553,3 +1553,47 @@ fn credit_feed_keeps_its_own_operation_kind_in_the_change_set() {
         "ADR 0118 item 12: the stored operation must keep its own kind."
     );
 }
+
+#[test]
+fn a_change_set_gets_a_date_at_its_diff_and_discard_puts_back_the_draft_with_no_date() {
+    // ADR 0127 item 19. The checked time is a fixed value of 2026-10-30.
+    let checked = studio_core::checked_time::CheckedTime {
+        seconds: 1_793_390_400,
+        computer_ahead_seconds: 0,
+    };
+    let date_of = |s: &Setup, feed: FeedId| {
+        let draft = s.collection.draft(feed).unwrap().unwrap();
+        studio_core::feed::Feed::read(
+            &studio_core::xml::Document::parse_bytes(&draft.draft_xml).unwrap(),
+        )
+        .unwrap()
+        .last_build_date
+    };
+    let s = setup();
+    let (one, two) = (s.feeds[0], s.feeds[1]);
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), one).unwrap();
+    let before = s.collection.draft(one).unwrap().unwrap();
+    let mut starter = start(&s);
+    let set = make_change_set(
+        &s.collection,
+        &mut starter,
+        &key(),
+        &change_address(),
+        &[one, two],
+    )
+    .unwrap();
+    assert_eq!(date_of(&s, one), None);
+    assert_eq!(date_of(&s, two), None);
+    for feed in [one, two] {
+        assert!(
+            pipeline::set_build_date(&s.collection, feed, Some(checked))
+                .unwrap()
+                .set
+        );
+        assert!(date_of(&s, feed).is_some());
+    }
+    discard_change_set(&s.collection, set.id).unwrap();
+    assert_eq!(s.collection.draft(one).unwrap().unwrap(), before);
+    assert_eq!(date_of(&s, one), None);
+    assert!(s.collection.draft(two).unwrap().is_none());
+}

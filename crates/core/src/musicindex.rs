@@ -319,6 +319,13 @@ impl MusicIndex {
         }
     }
 
+    /// The base address of the API. The check of the time of a server asks
+    /// it (ADR 0127 item 7).
+    #[must_use]
+    pub fn base_url(&self) -> &str {
+        &self.base
+    }
+
     /// The feed address that musicindex knows for a feed GUID. Gives `None`
     /// when musicindex does not know the feed.
     ///

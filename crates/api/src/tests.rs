@@ -13371,3 +13371,223 @@ async fn a_change_set_writes_the_other_feeds_when_one_feed_is_refused() {
             .is_some()
     );
 }
+
+// ---- The build date (ADR 0127 item 13, task 092b) ----
+
+/// 2026-10-30 20:00:00 UTC.
+const BUILD_T0: i64 = 1_793_390_400;
+
+/// A source of server time that answers `answer` for each URL. It records
+/// each URL, and it records whether the lock of the workspace was free
+/// during the request.
+struct TimeProbe {
+    shared: std::sync::Arc<std::sync::Mutex<Workspace>>,
+    free: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    answer: Option<i64>,
+}
+
+impl studio_core::checked_time::ServerTime for TimeProbe {
+    fn server_time(&self, url: &str) -> Option<i64> {
+        let limit = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let free = loop {
+            if self.shared.try_lock().is_ok() {
+                break true;
+            }
+            if std::time::Instant::now() > limit {
+                break false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        if !free {
+            self.free.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        self.seen.lock().unwrap().push(url.to_owned());
+        self.answer
+    }
+}
+
+/// What the test reads from a [`TimeProbe`].
+struct TimeLog {
+    free: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl TimeLog {
+    fn requests(&self) -> Vec<String> {
+        self.seen.lock().unwrap().clone()
+    }
+
+    fn lock_was_free(&self) -> bool {
+        self.free.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// An app with a connector for the feeds folder. The computer clock is
+/// `BUILD_T0`, and the source of server time is a [`TimeProbe`] with
+/// `answer`.
+async fn app_with_time_probe(answer: Option<i64>) -> (App, i64, TimeLog) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex("http://127.0.0.1:9")
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(None)
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_wall_clock(crate::WallClock::new(|| {
+            u64::try_from(BUILD_T0).unwrap_or(0)
+        }));
+    let (router, handle) = crate::workspace_router(workspace);
+    let log = TimeLog {
+        free: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        seen: std::sync::Arc::default(),
+    };
+    let probe = TimeProbe {
+        shared: handle.shared_for_test(),
+        free: std::sync::Arc::clone(&log.free),
+        seen: std::sync::Arc::clone(&log.seen),
+        answer,
+    };
+    handle
+        .with_workspace(move |w| {
+            w.server_time = crate::workspace::ServerTimeSource(std::sync::Arc::new(probe));
+        })
+        .await;
+    let app = App {
+        router,
+        data,
+        feeds,
+    };
+    let root = app.feeds.path().to_str().unwrap().to_owned();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    set_library_root(&app);
+    let id = connector["id"].as_i64().unwrap();
+    (app, id, log)
+}
+
+/// Change the title of the draft of a feed through the route.
+async fn rename_through_route(app: &App, id: i64, title: &str) {
+    let path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(app, "GET", &path, None).await;
+    let mut model = draft["model"].clone();
+    model["title"] = json!(title);
+    let (status, body) = call(
+        app,
+        "PUT",
+        &path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn the_time_requests_run_with_the_lock_free_and_a_second_diff_sends_no_new_request() {
+    let (app, connector, log) = app_with_time_probe(Some(BUILD_T0)).await;
+    let xml = paid_feed("A", "ga", &[ANN, BOB], &[], "");
+    let id = add_paid_feed(&app, connector, "a.xml", &xml).await;
+    let path = format!("/api/v1/feeds/{id}");
+
+    // A draft with no change needs no time, and a save sends no request.
+    let (_, draft) = call(&app, "GET", &format!("{path}/draft"), None).await;
+    let (status, diff) = call(&app, "GET", &format!("{path}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["changed"], false);
+    assert_eq!(diff["build_date"]["set"], false);
+    assert_eq!(diff["build_date"]["no_server"], false);
+    rename_through_route(&app, id, "A (Deluxe)").await;
+    assert_eq!(log.requests(), Vec::<String>::new());
+    assert!(!draft_bytes(&app, id).contains("lastBuildDate"));
+    let revision = call(&app, "GET", &format!("{path}/draft"), None).await.1["revision"].clone();
+    assert_ne!(revision, draft["revision"]);
+
+    // The diff of the change asks the musicindex API and the host of the
+    // feed, and the lock is free during the requests.
+    let (status, first) = call(&app, "GET", &format!("{path}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(
+        log.requests(),
+        ["http://127.0.0.1:9", "https://music.example/a.xml"]
+    );
+    assert!(
+        log.lock_was_free(),
+        "ADR 0127 item 13: the time request ran while the workspace was locked. Ask the servers outside the lock, in with_checked_time."
+    );
+    assert_eq!(first["build_date"]["set"], true);
+    assert_eq!(first["build_date"]["no_server"], false);
+    assert_eq!(first["build_date"]["later_base"], Value::Null);
+    assert_eq!(first["build_date"]["clock_ahead_seconds"], Value::Null);
+    assert!(draft_bytes(&app, id).contains("<lastBuildDate>Fri, 30 Oct 2026 20:00:00 +0000<"));
+
+    // A second diff in 10 minutes sends no new request and has the same ID.
+    let (_, second) = call(&app, "GET", &format!("{path}/diff"), None).await;
+    assert_eq!(second["id"], first["id"]);
+    assert_eq!(log.requests().len(), 2);
+
+    // The date does not make the revision of the editor stale.
+    let (_, current) = call(&app, "GET", &format!("{path}/draft"), None).await;
+    assert_eq!(current["revision"], revision);
+    rename_through_route(&app, id, "A (Remastered)").await;
+}
+
+#[tokio::test]
+async fn a_server_that_does_not_answer_gives_the_state_no_server_and_the_write_completes() {
+    let (app, connector, log) = app_with_time_probe(None).await;
+    let xml = paid_feed("A", "ga", &[ANN, BOB], &[], "");
+    let id = add_paid_feed(&app, connector, "a.xml", &xml).await;
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    rename_through_route(&app, id, "A (Deluxe)").await;
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["build_date"]["no_server"], true);
+    assert_eq!(diff["build_date"]["set"], false);
+    assert_eq!(log.requests().len(), 2);
+    let (status, body) = write_through_routes(&app, id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let written = std::fs::read_to_string(app.feeds.path().join("a.xml")).unwrap();
+    assert!(written.contains("A (Deluxe)"));
+    assert!(!written.contains("lastBuildDate"));
+}
+
+#[tokio::test]
+async fn a_clock_ahead_of_the_servers_gives_the_server_time_and_the_notice_in_the_diff() {
+    // The computer clock is BUILD_T0, and both servers say two years earlier.
+    let two_years = 2 * 365 * 86_400;
+    let (app, connector, _) = app_with_time_probe(Some(BUILD_T0 - two_years)).await;
+    let xml = paid_feed("A", "ga", &[ANN, BOB], &[], "");
+    let id = add_paid_feed(&app, connector, "a.xml", &xml).await;
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    rename_through_route(&app, id, "A (Deluxe)").await;
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(diff["build_date"]["set"], true);
+    assert_eq!(diff["build_date"]["clock_ahead_seconds"], two_years);
+    assert!(draft_bytes(&app, id).contains("<lastBuildDate>Wed, 30 Oct 2024 20:00:00 +0000<"));
+}
+
+#[tokio::test]
+async fn the_file_operation_route_gives_the_build_date_in_its_diff() {
+    let (app, connector, log) = app_with_time_probe(Some(BUILD_T0)).await;
+    let xml = paid_feed("A", "ga", &[ANN, BOB], &[], "");
+    let id = add_paid_feed(&app, connector, "a.xml", &xml).await;
+    call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    rename_through_route(&app, id, "A (Deluxe)").await;
+    // A route that returns a diff after a change gives the date.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "delete_unused", "urls": [] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["build_date"]["set"], true);
+    assert!(log.lock_was_free());
+}

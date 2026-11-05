@@ -3157,6 +3157,7 @@ fn granted(
         guid,
         change,
         "Show tool",
+        None,
         now,
     )
 }
@@ -3611,6 +3612,7 @@ fn a_bad_status_change_and_a_locked_vault_leave_no_draft() {
         &guid,
         &GrantChange::GoLive,
         "Show tool",
+        None,
         during_show(),
     )
     .unwrap_err();
@@ -4450,6 +4452,7 @@ fn a_granted_write_of_a_feed_with_no_connector_stays_refused() {
         "live-1",
         &GrantChange::GoLive,
         "Show tool",
+        None,
         time_now(),
     );
     assert!(result.is_err());
@@ -5101,4 +5104,551 @@ fn a_duration_that_is_not_readable_stays_when_the_sent_seconds_are_null() {
         f.title = Some("Album 2".into());
     });
     assert!(draft_xml(&s).contains("<itunes:duration>soon</itunes:duration>"));
+}
+
+// ---- The build date (ADR 0127, task 092b) ----
+
+/// 2026-10-30 20:00:00 UTC.
+const T0: i64 = 1_793_390_400;
+const YEAR: i64 = 365 * 86_400;
+
+fn stamp(seconds: i64) -> String {
+    studio_core::datetime::format_rfc2822(studio_core::datetime::Moment {
+        seconds,
+        offset_minutes: 0,
+    })
+}
+
+fn ck(seconds: i64) -> studio_core::checked_time::CheckedTime {
+    studio_core::checked_time::CheckedTime {
+        seconds,
+        computer_ahead_seconds: 0,
+    }
+}
+
+fn date_of(bytes: &[u8]) -> Option<String> {
+    Feed::read(&Document::parse_bytes(bytes).unwrap())
+        .unwrap()
+        .last_build_date
+}
+
+fn draft_bytes(s: &Setup) -> Vec<u8> {
+    s.collection.draft(s.feed).unwrap().unwrap().draft_xml
+}
+
+/// The feed with a build date after the title.
+fn with_build_date(date: &str) -> String {
+    FEED.replace(
+        "    <title>Album</title>\n",
+        &format!("    <title>Album</title>\n    <lastBuildDate>{date}</lastBuildDate>\n"),
+    )
+}
+
+fn assert_not_earlier(kind: &str, dates: &[Option<String>]) {
+    let seconds = |date: &Option<String>| {
+        date.as_deref()
+            .map(|text| studio_core::datetime::parse_rfc2822(text).unwrap().seconds)
+    };
+    for pair in dates.windows(2) {
+        let (before, after) = (seconds(&pair[0]), seconds(&pair[1]));
+        assert!(
+            before.is_none() || (after.is_some() && after >= before),
+            "Stophammer ADR 0053 section 3 and ADR 0127: the {kind} gave the date {:?} after the date {:?}. The index refuses an earlier date. Fix: give the write its date through pipeline::set_build_date.",
+            pair[1],
+            pair[0]
+        );
+    }
+}
+
+/// Edit the title, give the draft its date at `checked`, and write it.
+/// Gives the `lastBuildDate` of the live file.
+fn dated_write(s: &mut Setup, title: &str, checked: Option<i64>) -> Option<String> {
+    if s.collection.draft(s.feed).unwrap().is_none() {
+        pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    }
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some(title.into())).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, checked.map(ck)).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    write_s(s, &diff.id).unwrap();
+    date_of(live(s).as_bytes())
+}
+
+#[test]
+fn a_save_with_no_edit_gives_no_date_and_the_bytes_stay() {
+    let s = setup();
+    let base = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |_| {}).unwrap();
+    let (model, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    pipeline::replace_model(&s.collection, s.feed, &revision, model).unwrap();
+    assert_eq!(draft_bytes(&s), base.base_xml);
+    let state = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert_eq!(state, pipeline::BuildDateState::default());
+    assert_eq!(draft_bytes(&s), base.base_xml);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(!diff.changed);
+}
+
+#[test]
+fn a_diff_of_a_changed_draft_sets_the_date_one_time() {
+    let s = setup();
+    edit_title(&s);
+    let first = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert!(first.set);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(
+        diff.unified
+            .contains(&format!("<lastBuildDate>{}</lastBuildDate>", stamp(T0))),
+        "{}",
+        diff.unified
+    );
+    // A later diff keeps the date and the ID (ADR 0127 item 5).
+    let again = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0 + 60))).unwrap();
+    assert!(again.set);
+    let second = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.id, second.id);
+    assert_eq!(date_of(&draft_bytes(&s)), Some(stamp(T0)));
+}
+
+#[test]
+fn the_next_save_with_the_revision_of_the_editor_passes_after_a_diff() {
+    let s = setup();
+    edit_title(&s);
+    let (model, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert!(date_of(&draft_bytes(&s)).is_some());
+    let mut sent = model;
+    sent.title = Some("Changed again".into());
+    let (saved, new_revision) =
+        pipeline::replace_model(&s.collection, s.feed, &revision, sent).unwrap();
+    assert_eq!(saved.title.as_deref(), Some("Changed again"));
+    // The edit after the diff goes back to the date of the base. The next
+    // diff sets the date again.
+    assert_eq!(date_of(&draft_bytes(&s)), None);
+    let (_, current) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(new_revision, current);
+}
+
+#[test]
+fn a_sent_model_cannot_change_the_build_date() {
+    let s = setup_with(&with_build_date("Mon, 01 Jun 2026 08:00:00 +0000"));
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    for sent_date in [Some("Tue, 02 Jun 2026 08:00:00 +0000".to_owned()), None] {
+        let (mut model, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+        model.last_build_date = sent_date;
+        model.title = Some("Changed".into());
+        let (saved, _) = pipeline::replace_model(&s.collection, s.feed, &revision, model).unwrap();
+        assert_eq!(
+            saved.last_build_date.as_deref(),
+            Some("Mon, 01 Jun 2026 08:00:00 +0000")
+        );
+    }
+    // A sent date with no other edit changes nothing at all.
+    let before = draft_bytes(&s);
+    let (mut model, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    model.last_build_date = Some("Tue, 02 Jun 2026 08:00:00 +0000".into());
+    pipeline::replace_model(&s.collection, s.feed, &revision, model).unwrap();
+    assert_eq!(draft_bytes(&s), before);
+}
+
+#[test]
+fn an_edit_that_the_user_undoes_gives_the_bytes_of_the_base() {
+    let s = setup();
+    let base = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Changed".into())).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert!(date_of(&draft_bytes(&s)).is_some());
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Album".into())).unwrap();
+    assert_eq!(draft_bytes(&s), base.base_xml);
+    let state = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert_eq!(state, pipeline::BuildDateState::default());
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(!diff.unified.contains("lastBuildDate"));
+}
+
+#[test]
+fn a_clock_two_years_ahead_with_a_correct_server_gives_the_server_time_and_the_notice() {
+    let s = setup();
+    edit_title(&s);
+    let computer = T0 + 2 * YEAR;
+    let mut keeper = studio_core::checked_time::TimeKeeper::new();
+    keeper.record("api", T0, computer);
+    let checked = keeper.checked(computer).unwrap();
+    let state = pipeline::set_build_date(&s.collection, s.feed, Some(checked)).unwrap();
+    assert!(state.set);
+    assert_eq!(state.clock_ahead_seconds, Some(2 * YEAR));
+    assert_eq!(date_of(&draft_bytes(&s)), Some(stamp(T0)));
+}
+
+#[test]
+fn a_server_two_years_ahead_with_a_correct_clock_gives_the_computer_time() {
+    let s = setup();
+    edit_title(&s);
+    let mut keeper = studio_core::checked_time::TimeKeeper::new();
+    keeper.record("api", T0 + 2 * YEAR, T0);
+    let state = pipeline::set_build_date(&s.collection, s.feed, keeper.checked(T0)).unwrap();
+    assert!(state.set);
+    assert_eq!(state.clock_ahead_seconds, None);
+    assert_eq!(date_of(&draft_bytes(&s)), Some(stamp(T0)));
+}
+
+#[test]
+fn with_no_server_answer_the_draft_keeps_the_base_date_and_the_write_completes() {
+    let old = "Mon, 01 Jun 2026 08:00:00 +0000";
+    let mut s = setup_with(&with_build_date(old));
+    edit_title(&s);
+    let state = pipeline::set_build_date(&s.collection, s.feed, None).unwrap();
+    assert_eq!(
+        state,
+        pipeline::BuildDateState {
+            no_server: true,
+            ..pipeline::BuildDateState::default()
+        }
+    );
+    assert_eq!(date_of(&draft_bytes(&s)), Some(old.to_owned()));
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    write_s(&mut s, &diff.id).unwrap();
+    assert_eq!(date_of(live(&s).as_bytes()), Some(old.to_owned()));
+}
+
+#[test]
+fn a_feed_with_no_date_stays_with_no_date_when_no_server_answers() {
+    let mut s = setup();
+    assert_eq!(dated_write(&mut s, "Changed", None), None);
+}
+
+#[test]
+fn a_clock_behind_the_base_does_not_set_the_date_back() {
+    let old = stamp(T0 + 1000);
+    let s = setup_with(&with_build_date(&old));
+    edit_title(&s);
+    let state = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert_eq!(state.later_base.as_deref(), Some(old.as_str()));
+    assert!(!state.set);
+    assert_eq!(date_of(&draft_bytes(&s)), Some(old));
+}
+
+#[test]
+fn a_base_date_that_the_core_cannot_read_gets_a_new_date() {
+    let s = setup_with(&with_build_date("yesterday"));
+    edit_title(&s);
+    let state = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert!(state.set);
+    assert_eq!(date_of(&draft_bytes(&s)), Some(stamp(T0)));
+}
+
+#[test]
+fn a_feed_with_no_element_gets_one_and_a_feed_with_one_keeps_its_position() {
+    let s = setup();
+    edit_title(&s);
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    let text = String::from_utf8(draft_bytes(&s)).unwrap();
+    assert_eq!(text.matches("<lastBuildDate>").count(), 1);
+
+    let dated = setup_with(&with_build_date(&stamp(T0 - 1000)));
+    edit_title(&dated);
+    pipeline::set_build_date(&dated.collection, dated.feed, Some(ck(T0))).unwrap();
+    let text = String::from_utf8(draft_bytes(&dated)).unwrap();
+    assert_eq!(text.matches("<lastBuildDate>").count(), 1);
+    assert!(
+        text.contains(&format!(
+            "<title>Changed</title>\n    <lastBuildDate>{}</lastBuildDate>\n    <podcast:guid>",
+            stamp(T0)
+        )),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_write_of_only_file_operations_sets_no_date() {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            s.collection.feed(s.feed).unwrap().connector_id.unwrap(),
+            "old-file.mp3",
+        )
+        .unwrap();
+    let state = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert_eq!(state, pipeline::BuildDateState::default());
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert!(!diff.unified.contains("lastBuildDate"));
+    assert!(!diff.operations.is_empty() || !diff.blocked.is_empty());
+}
+
+#[test]
+fn a_roll_back_gets_a_date_and_no_date_goes_back() {
+    let mut s = setup();
+    let first = dated_write(&mut s, "Second", Some(T0));
+    let second = dated_write(&mut s, "Third", Some(T0 + 100));
+    let snapshot = s.collection.snapshots(s.feed).unwrap()[0].id;
+    pipeline::draft_from_snapshot(&s.collection, s.connector.as_ref(), s.feed, snapshot).unwrap();
+    // The snapshot has no date, so the roll back keeps the date of its base
+    // until the diff.
+    assert_eq!(date_of(&draft_bytes(&s)), second);
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0 + 200))).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    write_s(&mut s, &diff.id).unwrap();
+    let third = date_of(live(&s).as_bytes());
+    assert_eq!(third, Some(stamp(T0 + 200)));
+    assert_not_earlier("roll back", &[first, second, third.clone()]);
+
+    // A roll back at a checked time before the base date keeps the base date.
+    let snapshot = s.collection.snapshots(s.feed).unwrap()[1].id;
+    pipeline::draft_from_snapshot(&s.collection, s.connector.as_ref(), s.feed, snapshot).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    write_s(&mut s, &diff.id).unwrap();
+    assert_not_earlier("roll back", &[third, date_of(live(&s).as_bytes())]);
+}
+
+#[test]
+fn a_snapshot_that_differs_only_in_the_date_is_no_roll_back() {
+    let mut s = setup();
+    dated_write(&mut s, "Second", Some(T0));
+    // The live file now has the date T0. A snapshot of it would have
+    // the same XML apart from the date.
+    let base = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let older = String::from_utf8(base.base_xml.clone())
+        .unwrap()
+        .replace(&stamp(T0), &stamp(T0 - 500));
+    let id = s
+        .collection
+        .add_snapshot(
+            s.feed,
+            &base.base_version.clone().unwrap(),
+            older.as_bytes(),
+        )
+        .unwrap();
+    pipeline::draft_from_snapshot(&s.collection, s.connector.as_ref(), s.feed, id).unwrap();
+    assert_eq!(draft_bytes(&s), base.base_xml);
+}
+
+#[test]
+fn a_new_feed_and_a_copy_get_a_date_at_their_first_diff() {
+    let (dir, mut collection, connector, connector_id, hosts, library) = new_setup();
+    let id = pipeline::new_feed(
+        &mut collection,
+        connector.as_ref(),
+        connector_id,
+        "one.xml",
+        "One",
+        "Artist",
+        "music",
+    )
+    .unwrap();
+    let draft = collection.draft(id).unwrap().unwrap();
+    assert_eq!(date_of(&draft.draft_xml), None);
+    // The copy keeps no date of its source (ADR 0077).
+    pipeline::edit_draft(&collection, id, |_| {}).unwrap();
+    pipeline::set_build_date(&collection, id, Some(ck(T0))).unwrap();
+    assert_eq!(
+        date_of(&collection.draft(id).unwrap().unwrap().draft_xml),
+        Some(stamp(T0))
+    );
+    let copy = pipeline::copy_feed(
+        &mut collection,
+        connector.as_ref(),
+        connector_id,
+        "two.xml",
+        "Two",
+        "Artist",
+        id,
+    )
+    .unwrap();
+    assert_eq!(
+        date_of(&collection.draft(copy).unwrap().unwrap().draft_xml),
+        None
+    );
+    let mut written = Vec::new();
+    for (feed, name, at) in [(id, "one.xml", T0), (copy, "two.xml", T0 + 10)] {
+        pipeline::set_build_date(&collection, feed, Some(ck(at))).unwrap();
+        let diff = pipeline::diff(&collection, &hosts, &library, feed).unwrap();
+        pipeline::write_draft(
+            &mut collection,
+            &hosts,
+            &library,
+            &PassAll,
+            &ScriptedReader::empty(),
+            feed,
+            &diff.id,
+        )
+        .unwrap();
+        written.push(date_of(&fs::read(dir.path().join(name)).unwrap()));
+    }
+    assert_eq!(written, [Some(stamp(T0)), Some(stamp(T0 + 10))]);
+    assert_not_earlier("new feed and copy", &written);
+}
+
+#[test]
+fn a_feed_move_gives_the_pointer_file_the_date_of_its_draft_and_a_later_write_a_later_date() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &reader,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    let on_a = fs::read(s.dir_a.path().join("album.xml")).unwrap();
+    let on_b = fs::read(s.dir_b.path().join("album.xml")).unwrap();
+    assert_eq!(date_of(&on_a), Some(stamp(T0)), "the pointer file");
+    assert_eq!(date_of(&on_b), Some(stamp(T0)));
+
+    // A later write on the new host.
+    let b_host = s.hosts.get(s.b).unwrap();
+    pipeline::start_draft(&s.collection, b_host, s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Later".into())).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0 + 3600))).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    let later = date_of(&fs::read(s.dir_b.path().join("album.xml")).unwrap());
+    assert_not_earlier("feed move", &[date_of(&on_a), later.clone()]);
+    assert_eq!(later, Some(stamp(T0 + 3600)));
+}
+
+#[test]
+fn a_retry_of_a_stopped_move_finds_the_same_bytes() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let draft = s.collection.draft(s.feed).unwrap().unwrap();
+    fs::write(s.dir_b.path().join("album.xml"), &draft.draft_xml).unwrap();
+    // The retry takes a later checked time, and the bytes stay.
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0 + 600))).unwrap();
+    let retry = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.id, retry.id);
+    assert_eq!(s.collection.draft(s.feed).unwrap().unwrap(), draft);
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &reader,
+        s.feed,
+        &retry.id,
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read(s.dir_b.path().join("album.xml")).unwrap(),
+        draft.draft_xml
+    );
+}
+
+#[test]
+fn a_refusal_of_stage_2_then_a_repair_then_the_next_write_completes() {
+    let mut s = move_setup(false);
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::BadMoveLink, "{error}");
+    let placed = date_of(&fs::read(s.dir_b.path().join("album.xml")).unwrap());
+    assert_eq!(placed, Some(stamp(T0)));
+
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Repaired".into())).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0 + 10))).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &reader,
+        s.feed,
+        &diff.id,
+    )
+    .unwrap();
+    let done = date_of(&fs::read(s.dir_b.path().join("album.xml")).unwrap());
+    assert_not_earlier("repair after a refusal", &[placed, done]);
+}
+
+/// [`granted`] with a checked time.
+fn granted_at(
+    s: &mut Setup,
+    guid: &str,
+    change: &GrantChange,
+    checked: Option<i64>,
+) -> Result<Version, pipeline::PipelineError> {
+    pipeline::write_granted(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        s.feed,
+        guid,
+        change,
+        "Show tool",
+        checked.map(ck),
+        during_show(),
+    )
+}
+
+#[test]
+fn a_granted_write_sets_the_date_and_changes_only_the_live_item_and_the_date() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = hosted_feed(&s);
+    assert_eq!(before.last_build_date, None);
+    granted_at(&mut s, &guid, &GrantChange::GoLive, Some(T0)).unwrap();
+    let after = hosted_feed(&s);
+    assert_eq!(after.last_build_date, Some(stamp(T0)));
+    assert!(grant::covered(&before, &after, &guid));
+    assert!(live(&s).contains("status=\"live\""));
+
+    // A covered change with a different other element still fails.
+    let mut other = after.clone();
+    other.title = Some("Other".into());
+    assert!(!grant::covered(&before, &other, &guid));
+    // The check ignores the date, and only the date.
+    let mut only_date = before.clone();
+    only_date.last_build_date = Some(stamp(T0 + 1));
+    assert!(grant::covered(&before, &only_date, &guid));
+
+    // A checked time before the date in the file keeps the date.
+    let second = granted_at(&mut s, &guid, &GrantChange::End, Some(T0 - 100));
+    second.unwrap();
+    assert_not_earlier(
+        "granted write",
+        &[after.last_build_date, hosted_feed(&s).last_build_date],
+    );
+}
+
+#[test]
+fn a_granted_write_with_no_server_answer_completes_with_no_new_date() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    granted_at(&mut s, &guid, &GrantChange::GoLive, None).unwrap();
+    assert_eq!(hosted_feed(&s).last_build_date, None);
+    assert!(live(&s).contains("status=\"live\""));
 }

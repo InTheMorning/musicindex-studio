@@ -227,6 +227,13 @@ fn open_user(
         workspace =
             workspace.with_feed_reader(Arc::new(studio_core::move_link::ScriptedReader::empty()));
     }
+    // The same for the requests of the build date (ADR 0127 item 13).
+    #[cfg(test)]
+    {
+        workspace = workspace.with_server_time(Arc::new(
+            studio_core::checked_time::ScriptedServerTime::empty(),
+        ));
+    }
     #[cfg(test)]
     if let Some(clock) = clock {
         workspace = workspace.with_clock(clock);

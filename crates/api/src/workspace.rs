@@ -9,6 +9,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use axum::http::StatusCode;
 use serde_json::json;
+use studio_core::checked_time::{CheckedTime, ServerTime, TimeKeeper};
 use studio_core::collection::{Collection, FeedId};
 use studio_core::connector::{self, HostEnv};
 use studio_core::discover::Found;
@@ -527,6 +528,51 @@ fn default_link_reader() -> LinkReader {
     }
 }
 
+/// The source of the time of a server for the build date (ADR 0127 item
+/// 13). The real source uses the policy `Public` in both shells. Only a
+/// test replaces it, so that no test sends a request to the network.
+#[derive(Clone)]
+pub(crate) struct ServerTimeSource(pub(crate) Arc<dyn ServerTime>);
+
+impl std::fmt::Debug for ServerTimeSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ServerTimeSource")
+    }
+}
+
+/// The source of a new workspace. A test build answers nothing (ADR 0045).
+fn default_server_time() -> ServerTimeSource {
+    #[cfg(test)]
+    {
+        ServerTimeSource(Arc::new(
+            studio_core::checked_time::ScriptedServerTime::empty(),
+        ))
+    }
+    #[cfg(not(test))]
+    {
+        ServerTimeSource(Arc::new(studio_core::checked_time::WebServerTime::public()))
+    }
+}
+
+/// The URLs that a route asks for the time of a server, taken under the lock
+/// of the workspace (ADR 0127 item 13). The route asks them with no lock.
+pub(crate) struct TimeRequest {
+    urls: Vec<String>,
+    source: ServerTimeSource,
+}
+
+impl TimeRequest {
+    /// Ask each server and give its answer: the URL and the Unix seconds of
+    /// the server. A server that does not answer gives nothing. This
+    /// function holds no lock.
+    pub(crate) fn ask(&self) -> Vec<(String, i64)> {
+        self.urls
+            .iter()
+            .filter_map(|url| Some((url.clone(), self.source.0.server_time(url)?)))
+            .collect()
+    }
+}
+
 /// A change of the list of connected apps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppChange {
@@ -658,6 +704,11 @@ pub struct Workspace {
     pub(crate) address_check: Option<AddressChecker>,
     /// The reader of the public feeds of stage 1 (ADR 0126 item 7).
     pub(crate) link_reader: LinkReader,
+    /// The differences between the servers and the computer clock, and the
+    /// source that asks them (ADR 0127 item 13). The lock of the keeper is
+    /// never held during a request.
+    pub(crate) time_keeper: Arc<Mutex<TimeKeeper>>,
+    pub(crate) server_time: ServerTimeSource,
     pub(crate) index: MusicIndex,
     /// The relays that give the relay list and the server list of a key
     /// (ADR 0048 item 3). A test sets the address of a test relay.
@@ -830,6 +881,8 @@ impl Workspace {
             net_policy: NetPolicy::Open,
             address_check: None,
             link_reader: default_link_reader(),
+            time_keeper: Arc::new(Mutex::new(TimeKeeper::new())),
+            server_time: default_server_time(),
             index: MusicIndex::new(Web::with_policy(&NetPolicy::Open), DEFAULT_API),
             lookup_relays: LOOKUP_RELAYS.iter().map(|r| (*r).to_owned()).collect(),
             nip05_scheme: "https",
@@ -940,6 +993,53 @@ impl Workspace {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
         }
+    }
+
+    /// The servers to ask for the time before a route dates a change, and
+    /// their source (ADR 0127 item 13). `feed_url` is the URL of the draft.
+    /// A server with a current difference is not asked again.
+    pub(crate) fn time_request(&self, feed_url: Option<String>) -> TimeRequest {
+        let mut wanted = vec![self.index.base_url().to_owned()];
+        wanted.extend(feed_url);
+        let now = i64::try_from(self.now_secs()).unwrap_or(i64::MAX);
+        let urls = {
+            let keeper = self
+                .time_keeper
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let refs: Vec<&str> = wanted.iter().map(String::as_str).collect();
+            keeper
+                .missing(&refs, now)
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        };
+        TimeRequest {
+            urls,
+            source: self.server_time.clone(),
+        }
+    }
+
+    /// A request for no server: a route that dates no change.
+    pub(crate) fn time_request_none(&self) -> TimeRequest {
+        TimeRequest {
+            urls: Vec::new(),
+            source: self.server_time.clone(),
+        }
+    }
+
+    /// Keep the answers of the servers and give the checked time (ADR 0127
+    /// items 7 and 13). Gives `None` when no server has a current answer.
+    pub(crate) fn checked_time(&self, answers: &[(String, i64)]) -> Option<CheckedTime> {
+        let now = i64::try_from(self.now_secs()).unwrap_or(i64::MAX);
+        let mut keeper = self
+            .time_keeper
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for (url, seconds) in answers {
+            keeper.record(url, *seconds, now);
+        }
+        keeper.checked(now)
     }
 
     /// Use `clock` for the rule of the recent unlock (ADR 0106 item 2).
@@ -1086,6 +1186,15 @@ impl Workspace {
     #[must_use]
     pub fn with_address_check(mut self, check: Arc<dyn AddressCheck + Send + Sync>) -> Self {
         self.address_check = Some(AddressChecker(check));
+        self
+    }
+
+    /// Use a different source of server time, such as a test double (ADR
+    /// 0127 item 13).
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn with_server_time(mut self, source: Arc<dyn ServerTime>) -> Self {
+        self.server_time = ServerTimeSource(source);
         self
     }
 

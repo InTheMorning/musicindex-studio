@@ -169,16 +169,6 @@ impl TimeKeeper {
             .insert(url.to_owned(), (server_seconds - now, now));
     }
 
-    /// Ask the server of each URL in `urls` that has no current difference,
-    /// and record each answer.
-    pub fn refresh(&mut self, source: &dyn ServerTime, urls: &[&str], now: i64) {
-        for url in self.missing(urls, now) {
-            if let Some(seconds) = source.server_time(url) {
-                self.record(url, seconds, now);
-            }
-        }
-    }
-
     /// The checked time at `now`, or `None` when no difference is current
     /// (ADR 0127 item 8). Each current difference gives the time of its
     /// server at `now`.
@@ -432,9 +422,7 @@ mod tests {
     #[test]
     fn with_no_answer_there_is_no_checked_time() {
         assert_eq!(TimeKeeper::new().checked(NOW), None);
-        let mut keeper = TimeKeeper::new();
-        keeper.refresh(&ScriptedServerTime::empty(), &["a"], NOW);
-        assert_eq!(keeper.checked(NOW), None);
+        assert_eq!(ScriptedServerTime::empty().server_time("a"), None);
     }
 
     #[test]
@@ -451,17 +439,6 @@ mod tests {
         let keeper = keeper_with(&[("a", NOW - 1000)], NOW);
         let checked = keeper.checked(NOW + 100).unwrap();
         assert_eq!(checked.seconds, NOW + 100 - 1000);
-    }
-
-    #[test]
-    fn refresh_asks_only_the_urls_that_have_no_current_difference() {
-        let source = ScriptedServerTime::empty()
-            .with_time("a", NOW)
-            .with_time("b", NOW);
-        let mut keeper = TimeKeeper::new();
-        keeper.refresh(&source, &["a"], NOW);
-        keeper.refresh(&source, &["a", "b"], NOW + 10);
-        assert_eq!(source.requests(), ["a", "b"]);
     }
 
     #[test]

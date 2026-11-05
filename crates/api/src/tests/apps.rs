@@ -745,6 +745,54 @@ async fn the_approval_of_a_grant_fails_when_its_app_is_not_active() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_granted_write_asks_the_time_with_the_lock_free_and_sets_the_build_date() {
+    // ADR 0127 item 21. The servers say the time of the computer.
+    let live = live_app().await;
+    let id = set_up(&live.app).await;
+    let (client, app_id, _) = paired(&live, "Show tool").await;
+    let read = live.app.feeds.path().join("album.xml");
+    let guid = granted_show(&live.app, id, app_id, &|| {
+        std::fs::read_to_string(&read).unwrap()
+    })
+    .await;
+    let log = TimeLog {
+        free: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        seen: Arc::default(),
+    };
+    let probe = TimeProbe {
+        shared: live.handle.shared_for_test(),
+        free: Arc::clone(&log.free),
+        seen: Arc::clone(&log.seen),
+        answer: Some(real_now()),
+    };
+    live.handle
+        .with_workspace(move |w| {
+            w.server_time = crate::workspace::ServerTimeSource(Arc::new(probe));
+        })
+        .await;
+    assert!(!album_xml(&live).contains("lastBuildDate"));
+    let grant_id = on(&client, Client::shows).await.unwrap()[0].grant_id;
+    assert_ne!(guid, "");
+    on(&client, move |c| {
+        c.set_status(grant_id, studio_app_client::ShowStatus::Live)
+    })
+    .await
+    .unwrap();
+    assert!(album_xml(&live).contains("<lastBuildDate>"));
+    assert!(album_xml(&live).contains("status=\"live\""));
+    assert_eq!(log.requests().len(), 2, "{:?}", log.requests());
+    assert!(
+        log.lock_was_free(),
+        "ADR 0127 item 21: the time request of a granted write ran while the workspace was locked. Ask the servers in granted_change_timed."
+    );
+    // The next granted write in 10 minutes sends no new request.
+    on(&client, move |c| c.remove_live_value(grant_id))
+        .await
+        .unwrap();
+    assert_eq!(log.requests().len(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_connected_app_starts_a_show_sets_its_live_value_and_ends_it() {
     let live = live_app().await;
     let id = set_up(&live.app).await;

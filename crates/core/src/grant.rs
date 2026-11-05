@@ -383,7 +383,8 @@ pub fn grant_limit(live: &LiveItem) -> Option<i64> {
 /// or `live` to `ended`.
 ///
 /// The function compares the two typed models. In copies of the two
-/// models, it makes the status and the live value of that live item equal.
+/// models, it makes the status and the live value of that live item, and
+/// `lastBuildDate`, equal.
 /// Then all other parts must be equal. Each other entry also keeps its
 /// source element in the compare. Thus a change that the model does not
 /// hold also makes the result false.
@@ -411,6 +412,9 @@ pub fn covered(before: &Feed, after: &Feed, item_guid: &str) -> bool {
     entry.value.live_value.clone_from(&old.value.live_value);
     let mut changed = after.clone();
     changed.live_items[index] = entry;
+    // The new build date is the one other change that a grant covers
+    // (ADR 0127 item 21).
+    changed.last_build_date.clone_from(&before.last_build_date);
     changed == *before
 }
 

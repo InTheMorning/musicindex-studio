@@ -14,6 +14,7 @@ use studio_core::address::AddressSource;
 use studio_core::announce;
 use studio_core::apps::{self, ConnectedApp};
 use studio_core::change_set::{self, RecipientKey, RecipientOperation, Wallet};
+use studio_core::checked_time::CheckedTime;
 use studio_core::collection::{
     Collection, CollectionErrorKind, ConnectorId, ConnectorRow, DraftOperation, DraftOperationId,
     DraftOperationKind, FeedId, FeedRow, LibraryFile, LibraryFileId, PublisherRole, SnapshotId,
@@ -2727,9 +2728,86 @@ fn review_apps(w: &Workspace) -> Result<Vec<Value>, ApiError> {
         .collect())
 }
 
-fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
+/// Run a route that changes work with the time of a server (ADR 0127 item
+/// 13). The steps are:
+///
+/// 1. Under the lock, `prepare` does the work of the route and gives the URL
+///    of the draft. The workspace then names the servers with no current
+///    answer.
+/// 2. With no lock, the source asks each server.
+/// 3. Under the lock, the workspace keeps the answers, and `finish` gets the
+///    checked time.
+///
+/// No mutex is held during a request. A route that dates a change goes
+/// through this function, so that it cannot miss a step.
+async fn with_checked_time<T, P, F>(shared: Shared, prepare: P, finish: F) -> Result<T, ApiError>
+where
+    T: Send + 'static,
+    P: FnOnce(&mut Workspace) -> Result<TimeNeed, ApiError> + Send + 'static,
+    F: FnOnce(&mut Workspace, Option<CheckedTime>) -> Result<T, ApiError> + Send + 'static,
+{
+    let request = blocking(shared.clone(), move |w| {
+        Ok(match prepare(w)? {
+            TimeNeed::Servers { feed_url } => w.time_request(feed_url),
+            TimeNeed::None => w.time_request_none(),
+        })
+    })
+    .await?;
+    let answers = blocking_unlocked(move || Ok(request.ask())).await?;
+    blocking(shared, move |w| {
+        let checked = w.checked_time(&answers);
+        finish(w, checked)
+    })
+    .await
+}
+
+/// Whether a route needs the time of a server.
+enum TimeNeed {
+    /// The route dates no change, so it sends no request.
+    None,
+    /// The route dates a change. `feed_url` is the URL of the draft.
+    Servers { feed_url: Option<String> },
+}
+
+/// The URL of the draft of a feed for the check of the time of a server.
+/// A failure gives none, so that the check never stops a route.
+fn draft_time_url(w: &Workspace, id: FeedId) -> Option<String> {
+    let hosts = w.hosts().ok()?;
+    pipeline::time_url(&w.collection, &hosts, id).ok().flatten()
+}
+
+/// Run `prepare` under the lock, and then give the diff of the draft with
+/// its build date (ADR 0127 items 4 to 12). Each route that gives a diff
+/// goes through this function.
+async fn diff_after<P>(shared: Shared, id: FeedId, prepare: P) -> ApiResult
+where
+    P: FnOnce(&mut Workspace) -> Result<(), ApiError> + Send + 'static,
+{
+    with_checked_time(
+        shared,
+        move |w| {
+            prepare(w)?;
+            // A draft with no change, or with its new date, needs no time
+            // (ADR 0127 items 4 and 5).
+            Ok(if pipeline::needs_build_date(&w.collection, id)? {
+                TimeNeed::Servers {
+                    feed_url: draft_time_url(w, id),
+                }
+            } else {
+                TimeNeed::None
+            })
+        },
+        move |w, checked| diff_json(w, id, checked),
+    )
+    .await
+}
+
+fn diff_json(w: &Workspace, id: FeedId, checked: Option<CheckedTime>) -> ApiResult {
     let hosts = w.hosts()?;
     let library = w.library()?;
+    // The core sets the date one time for a change, so a second diff has
+    // the same ID (ADR 0127 items 4 and 5).
+    let build_date = pipeline::set_build_date(&w.collection, id, checked)?;
     let diff = pipeline::diff(&w.collection, &hosts, &library, id)?;
     // The app of each grant of the draft, for the review sheet (ADR 0110
     // item 19).
@@ -2752,6 +2830,7 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
         "announce_skip": diff.announce_skip,
         "grants": diff.grants,
         "grant_apps": grant_apps,
+        "build_date": build_date,
         "apps": review_apps(w)?,
         "events": diff
             .events
@@ -2766,12 +2845,8 @@ fn diff_json(w: &Workspace, id: FeedId) -> ApiResult {
 }
 
 pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
-    blocking(shared, move |w| {
-        let id = FeedId(id);
-        ensure_draft(w, id)?;
-        diff_json(w, id)
-    })
-    .await
+    let id = FeedId(id);
+    diff_after(shared, id, move |w| ensure_draft(w, id)).await
 }
 
 #[derive(Deserialize)]
@@ -3591,8 +3666,9 @@ pub(crate) async fn set_feed_host(
     Path(id): Path<i64>,
     Json(body): Json<SetFeedHost>,
 ) -> ApiResult {
-    blocking(shared, move |w| {
-        let id = FeedId(id);
+    let feed_id = FeedId(id);
+    diff_after(shared, feed_id, move |w| {
+        let id = feed_id;
         let has_connector = w.collection.feed(id)?.connector_id.is_some();
         match body.connector_id {
             Some(target) => {
@@ -3624,7 +3700,7 @@ pub(crate) async fn set_feed_host(
             }
         }
         w.sync_grant_vaults(Some(id));
-        diff_json(w, id)
+        Ok(())
     })
     .await
 }
@@ -3913,8 +3989,9 @@ pub(crate) async fn add_operation(
     Path(id): Path<i64>,
     Json(body): Json<FileOperation>,
 ) -> ApiResult {
-    blocking(shared, move |w| {
-        let id = FeedId(id);
+    let feed_id = FeedId(id);
+    diff_after(shared, feed_id, move |w| {
+        let id = feed_id;
         writer(w, id)?;
         let hosts = w.hosts()?;
         let feed_row = w.collection.feed(id)?;
@@ -4001,7 +4078,7 @@ pub(crate) async fn add_operation(
                 delete_unused_copies(w, &hosts, id, &urls)?;
             }
         }
-        diff_json(w, id)
+        Ok(())
     })
     .await
 }
@@ -6076,8 +6153,12 @@ fn unix_now() -> u64 {
 /// `pending` live item of the draft. The route never writes to a host.
 /// A grant names one active app (ADR 0110 item 19): an add carries the app
 /// ID of the request, which can be missing.
-fn change_draft_grant(w: &Workspace, id: i64, guid: &str, edit: GrantEdit) -> ApiResult {
-    let id = FeedId(id);
+fn change_draft_grant(
+    w: &Workspace,
+    id: FeedId,
+    guid: &str,
+    edit: GrantEdit,
+) -> Result<(), ApiError> {
     ensure_draft(w, id)?;
     let (model, _) = pipeline::draft_model(&w.collection, id)?;
     if !grant::is_pending_live_item(&model, guid) {
@@ -6106,7 +6187,7 @@ fn change_draft_grant(w: &Workspace, id: i64, guid: &str, edit: GrantEdit) -> Ap
     } else {
         w.collection.remove_draft_grant(id, guid)?;
     }
-    diff_json(w, id)
+    Ok(())
 }
 
 /// A change of the show grant of a draft.
@@ -6133,7 +6214,8 @@ pub(crate) async fn put_draft_grant(
     body: axum::body::Bytes,
 ) -> ApiResult {
     let body: GrantApp = app_body(&body)?;
-    blocking(shared, move |w| {
+    let id = FeedId(id);
+    diff_after(shared, id, move |w| {
         change_draft_grant(w, id, &guid, GrantEdit::Add(body.app_id))
     })
     .await
@@ -6144,7 +6226,8 @@ pub(crate) async fn delete_draft_grant(
     State(shared): State<Shared>,
     Path((id, guid)): Path<(i64, String)>,
 ) -> ApiResult {
-    blocking(shared, move |w| {
+    let id = FeedId(id);
+    diff_after(shared, id, move |w| {
         change_draft_grant(w, id, &guid, GrantEdit::Remove)
     })
     .await
@@ -6384,14 +6467,41 @@ pub(crate) async fn list_shows(
 /// after the write. The app never gets a secret. The connectors get their
 /// secrets from the grant vault, which the grant vault key of the body
 /// opens. The user vault can be locked, and the write never reads it.
+/// A granted write with the checked time (ADR 0127 item 21). The time
+/// requests run with no lock, with the limit of the source. A request that
+/// fails never stops the write. The user vault and the grant vault do not
+/// matter here: the URL is the public address of the feed.
+async fn granted_change_timed(
+    shared: Shared,
+    grant_id: i64,
+    app: ConnectedApp,
+    key: Zeroizing<String>,
+    change: grant::GrantChange,
+) -> ApiResult {
+    let named = app.clone();
+    with_checked_time(
+        shared,
+        move |w| {
+            let feed_url = grant_of_app(w, grant_id, &named)
+                .ok()
+                .and_then(|show| w.collection.feed(show.feed_id).ok())
+                .and_then(|row| row.public_url);
+            Ok(TimeNeed::Servers { feed_url })
+        },
+        move |w, checked| granted_change(w, grant_id, &app, &key, &change, checked),
+    )
+    .await
+}
+
 fn granted_change(
     w: &mut Workspace,
     grant_id: i64,
     app: &ConnectedApp,
     key: &str,
     change: &grant::GrantChange,
+    checked: Option<CheckedTime>,
 ) -> ApiResult {
-    let result = granted_write(w, grant_id, app, key, change);
+    let result = granted_write(w, grant_id, app, key, change, checked);
     // A write can end the grant, and then the grant vault goes.
     w.sync_grant_vaults(None);
     result.map_err(ApiError::for_app)
@@ -6403,6 +6513,7 @@ fn granted_write(
     app: &ConnectedApp,
     key: &str,
     change: &grant::GrantChange,
+    checked: Option<CheckedTime>,
 ) -> ApiResult {
     // The write counts as work until it ends (ADR 0124 item 17).
     let _work = w.work().write();
@@ -6445,6 +6556,7 @@ fn granted_write(
         &show.item_guid,
         change,
         &app.name,
+        checked,
         now,
     )?;
     // The write put its announcements into the queue (ADR 0052).
@@ -6486,21 +6598,18 @@ pub(crate) async fn set_show_status(
     body: axum::body::Bytes,
 ) -> ApiResult {
     let body: GrantedBody = app_body(&body)?;
-    blocking(shared, move |w| {
-        let change = match body.status.as_str() {
-            "live" => grant::GrantChange::GoLive,
-            "ended" => grant::GrantChange::End,
-            _ => {
-                return Err(ApiError::new(
-                    StatusCode::CONFLICT,
-                    "bad_status",
-                    "the status is live or ended",
-                ));
-            }
-        };
-        granted_change(w, grant_id, &app, &body.grant_key, &change)
-    })
-    .await
+    let change = match body.status.as_str() {
+        "live" => grant::GrantChange::GoLive,
+        "ended" => grant::GrantChange::End,
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "bad_status",
+                "the status is live or ended",
+            ));
+        }
+    };
+    granted_change_timed(shared, grant_id, app, body.grant_key, change).await
 }
 
 /// Set or change the `podcast:liveValue` of a show through its grant. The
@@ -6513,14 +6622,11 @@ pub(crate) async fn put_show_live_value(
     body: axum::body::Bytes,
 ) -> ApiResult {
     let body: GrantedBody = app_body(&body)?;
-    blocking(shared, move |w| {
-        let change = grant::GrantChange::SetLiveValue {
-            uri: body.uri.trim().to_owned(),
-            protocol: body.protocol.trim().to_owned(),
-        };
-        granted_change(w, grant_id, &app, &body.grant_key, &change)
-    })
-    .await
+    let change = grant::GrantChange::SetLiveValue {
+        uri: body.uri.trim().to_owned(),
+        protocol: body.protocol.trim().to_owned(),
+    };
+    granted_change_timed(shared, grant_id, app, body.grant_key, change).await
 }
 
 /// Remove the `podcast:liveValue` of a show through its grant.
@@ -6531,15 +6637,13 @@ pub(crate) async fn delete_show_live_value(
     body: axum::body::Bytes,
 ) -> ApiResult {
     let body: GrantedBody = app_body(&body)?;
-    blocking(shared, move |w| {
-        granted_change(
-            w,
-            grant_id,
-            &app,
-            &body.grant_key,
-            &grant::GrantChange::RemoveLiveValue,
-        )
-    })
+    granted_change_timed(
+        shared,
+        grant_id,
+        app,
+        body.grant_key,
+        grant::GrantChange::RemoveLiveValue,
+    )
     .await
 }
 

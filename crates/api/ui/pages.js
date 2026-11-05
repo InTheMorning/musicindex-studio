@@ -45,7 +45,7 @@ const PAGES = {
     { id: 'editors', tier: 'setup' },
   ],
   track: () => [
-    { id: 'track', tier: 'identity', fields: ['title', 'audio', 'duration', 'alternates', 'artwork', 'description'] },
+    { id: 'track', tier: 'identity', fields: ['title', 'audio', 'alternates', 'artwork', 'description'] },
     { id: 'credits', tier: 'details' },
     { id: 'lyrics', tier: 'details' },
     { id: 'payments', tier: 'details' },

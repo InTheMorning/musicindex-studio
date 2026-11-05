@@ -501,12 +501,11 @@ export function DateTimeField({ id, label, value, onChange, required = false, so
 // cannot read. `notice` is a hint that replaces the other hints. The field
 // keeps the typed text while the user types, and shows `value` again when it
 // loses the focus.
-export function DurationField({ id, value, onChange, sourceText = null, notice = null }) {
+export function DurationField({ id, value, onChange, sourceText = null }) {
   const [typed, setTyped] = useState(null);
   const [error, setError] = useState(null);
   let hint = 'Minutes and seconds, for example 4:21.';
-  if (notice) hint = notice;
-  else if (value == null && sourceText) hint = unreadDurationHint(sourceText);
+  if (value == null && sourceText) hint = unreadDurationHint(sourceText);
   return html`<${Field} id=${id} label="Duration" type="text" autocomplete="off"
     value=${typed == null ? durationText(value) : typed} hint=${hint} error=${error}
     onInput=${(e) => {

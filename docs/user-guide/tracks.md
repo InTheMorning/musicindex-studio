@@ -49,7 +49,7 @@ Studio does not keep the file.
 2. Select **The Audio Is Already Online**. The sheet **Add a track from an address** opens.
 3. Type a **Title** if you want.
 4. Type the web address of the audio file in **Audio file address**. Studio asks the file host for the size and the type.
-5. Examine the row **Properties**. Its summary shows the size and the type. If Studio could not find them, the row opens. Type **Audio file size in bytes** and **Audio file type**.
+5. Examine the row **Properties**. Its summary shows the size and the type. If Studio could not find them, the row opens. Select **Advanced**, read the warning and select **Edit Values**. Then type **Audio file size in bytes** and **Audio file type**.
 6. Select **＋ Add the Track**.
 
 To go back to the files on your computer, select **Choose Files from This Computer**.
@@ -59,7 +59,7 @@ To go back to the files on your computer, select **Choose Files from This Comput
 Select a track in the outline or on the album page.
 The track page has these sections:
 
-- **Track**. Fields: **Title**, **Description**, **Publication date** and **Duration**. Some apps sort the tracks by the publication date. Select the date and the time with the picker of your system, in your local time. Type the duration as minutes and seconds, for example `4:21`, or as hours, minutes and seconds, for example `1:02:03`.
+- **Track**. Fields: **Title**, **Description** and **Publication date**. The duration is in **Properties**. Some apps sort the tracks by the publication date. Select the date and the time with the picker of your system, in your local time. Type the duration as minutes and seconds, for example `4:21`, or as hours, minutes and seconds, for example `1:02:03`.
 - **Audio file**. The field **Audio file address** with **Choose…**, a player and the disclosure **Properties**. Alternative files show as lines with **Remove**.
 - **Value routes**. See [Value routes](value-routes.md).
 - **More**. **Track image** sets an image for this track. Use **Choose…** to pick the image file. **Identity** shows the track number and the track GUID. Studio gives a GUID when it saves a new track.
@@ -80,7 +80,7 @@ A file from **This Computer** goes in the release folder.
 A file from **This Release** or **File Hosts** is not copied. Studio uses its public address.
 
 Studio reads the duration from a file that you select from **This Release** or **File Hosts**.
-If Studio cannot read it, the field **Duration** asks you to type it.
+If Studio cannot read it, **Properties** opens and tells you. To type it, select **Advanced**.
 
 When you write, Studio deletes the file from before on the file host.
 The review lists that deletion.
@@ -92,9 +92,12 @@ See [Review and write your changes](review-and-write.md).
 
 The audio section shows the address with **Choose…**, then a player, then the disclosure **Properties**.
 The player plays the file when you press play.
-**Properties** is closed. Its summary shows the size and the type.
-It holds **Audio file size in bytes** and **Audio file type**.
-**Properties** opens by itself when a value is missing or not correct.
+**Properties** is closed. Its summary shows the size, the type and the duration.
+Open it to read each value. Studio reads these values from the audio file, so you usually do not change them.
+
+To change a value by hand, select **Advanced**, read the warning and select **Edit Values**. A wrong value stays in your feed, and apps can show the wrong length or fail to play the file. To change the values safely, select a new audio file.
+
+**Properties** opens by itself when a value is missing or not correct. It says which value. The boxes also show only after **Advanced**.
 
 ## Change the order or remove a track
 

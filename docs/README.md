@@ -131,6 +131,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0127: A changed feed gets a new build date](adr/0127-a-changed-feed-gets-a-new-build-date.md)
 - [ADR 0128: A moved feed names its own address](adr/0128-a-moved-feed-names-its-own-address.md)
 - [ADR 0129: A draft takes a change of the hosted file and keeps its edits](adr/0129-a-draft-takes-a-change-of-the-hosted-file.md)
+- [ADR 0130: The facts of an audio file stay locked behind Advanced](adr/0130-the-facts-of-an-audio-file-stay-locked.md)
 
 ## Plans
 

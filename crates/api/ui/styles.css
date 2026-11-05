@@ -1131,6 +1131,8 @@ select option { background: var(--level-3); color: var(--text); }
 .page-section { display: grid; gap: 8px; }
 .page-section > h2 { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
 .notice.error > p { margin: 8px 0 0; }
+.audio-values { display: grid; gap: 12px; padding: 4px 0 8px; }
+.audio-values > .actions { margin: 0; }
 .merge-panel { display: grid; gap: 20px; }
 .merge-panel > .actions { margin: 0; }
 .page-section > .note { padding: 0 4px; color: var(--muted); font-size: var(--text-callout); }

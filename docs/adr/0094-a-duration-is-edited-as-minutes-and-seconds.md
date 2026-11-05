@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
 - Uses: [ADR 0012](0012-lossless-tree-with-a-typed-model.md) (the lossless tree), [ADR 0042](0042-ui-models-with-node-tests.md) (the UI models), [ADR 0062](0062-a-file-picker-for-each-file-field.md) (the file picker and the audio player), [ADR 0065](0065-the-core-applies-each-feed-rule.md) (each feed rule is in the core) and [ADR 0093](0093-dates-and-times-use-a-picker-in-local-time.md) (the same method for `pubDate`).
+- Changed by: [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md). Item 3: the field "Duration" is in "Properties", after "Advanced".
 
 ## Context
 

@@ -24,6 +24,10 @@ export const CONFIRMS = {
     'Discard the draft?',
     'Studio deletes each change that you did not write. The feed file on its file host does not change.',
     'Discard the Draft'),
+  editAudioValues: () => destructive(
+    'Edit these values by hand?',
+    'Studio reads these values from the audio file. A wrong value stays in your feed, and apps can show the wrong length or fail to play the file. To change them safely, select a new audio file.',
+    'Edit Values'),
   replaceDraft: () => destructive(
     'Replace the draft with this version?',
     'Studio deletes each change in the draft. Then it starts a new draft from this earlier version.',

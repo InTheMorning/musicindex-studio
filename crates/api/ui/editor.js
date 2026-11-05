@@ -37,7 +37,7 @@ import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey }
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress } from './media.js';
-import { shortType as formatLabel, propertiesSummary, propertiesOpen, needsMetadataRead, clockText, DURATION_NOTICE } from './audio.js';
+import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -296,32 +296,56 @@ function LicenseFields({ license, onChange, bad }) {
 
 // ---- The audio file ----
 
-function Enclosure({ id, path, enclosure, onChange, bad, pick }) {
+// "Properties" of an audio file (ADR 0130). The values show as text. The boxes
+// are the children, and they show after "Advanced" and its warning. The
+// unlock lasts until the user leaves the page.
+function AudioProperties({ enclosure, duration, errors = [], mustOpen, children }) {
+  const [opened, setOpened] = useState(mustOpen);
+  const [unlocked, setUnlocked] = useState(false);
+  useEffect(() => { if (mustOpen) setOpened(true); }, [mustOpen]);
+  const unlock = async () => {
+    if (await askConfirm(CONFIRMS.editAudioValues())) setUnlocked(true);
+  };
+  const notice = propertiesNotice(enclosure, duration, errors);
+  return html`<details class="disclosure" open=${opened} onToggle=${(e) => setOpened(e.currentTarget.open)}>
+    <summary class="link-row"><span class="label">Properties</span>
+      <span class="summary">${propertiesSummary(enclosure, duration)}</span></summary>
+    <div class="form">
+      ${unlocked ? children : html`<div class="audio-values">
+        <dl class="facts">${propertyRows(enclosure, duration).map((row) => html`<dt>${row.label}</dt><dd>${row.value}</dd>`)}</dl>
+        ${notice && html`<p class="hint" role="status">${notice}</p>`}
+        <div class="actions"><button class="button" type="button" onClick=${unlock}>Advanced</button></div>
+      </div>`}
+    </div>
+  </details>`;
+}
+
+function Enclosure({ id, path, enclosure, onChange, bad, pick, duration }) {
   const value = enclosure || { url: null, length: null, media_type: null };
   // An enclosure with no field is no enclosure.
   const change = (name) => (text) => {
     const next = set(value, name, text);
     onChange(next.url === null && next.length === null && next.media_type === null ? null : next);
   };
-  // "Properties" opens by itself when a value is empty or has an error. It
-  // stays open until the user closes it (ADR 0062 items 24 and 25).
+  // "Properties" opens by itself when a value is empty or has an error, or
+  // after a read of the duration that failed (ADR 0130 item 4).
   const errors = ['length', 'media_type'].filter((name) => (bad || []).some((b) => b.field === `${path}enclosure/${name}`));
-  const mustOpen = propertiesOpen(enclosure, errors);
-  const [opened, setOpened] = useState(mustOpen);
-  useEffect(() => { if (mustOpen) setOpened(true); }, [mustOpen]);
+  const facts = duration && {
+    seconds: duration.value,
+    text: duration.sourceText,
+    failed: Boolean(pick.metadataFailed),
+  };
+  const mustOpen = propertiesOpen(enclosure, errors) || Boolean(facts && facts.failed && facts.seconds == null);
   // A placeholder address has the text of ADR 0122 item 14 (task 086d).
   const placeholder = isPlaceholderAddress(value.url) ? HOST_STEP.placeholderAddress : null;
   return html`<${TextField} id=${`${id}-url`} label="Audio file address" type="url" address=${`${path}enclosure/url`} bad=${bad} value=${value.url} onChange=${change('url')}
       hint=${placeholder} rootProps=${pick.rootProps}><${ChooseFile} pick=${pick} /><//>
     <${AudioPlayer} id=${id} url=${value.url} pick=${pick} />
-    <details class="disclosure" open=${opened} onToggle=${(e) => setOpened(e.currentTarget.open)}>
-      <summary class="link-row"><span class="label">Properties</span>
-        <span class="summary">${propertiesSummary(enclosure)}</span></summary>
-      <div class="form">
-        <${TextField} id=${`${id}-length`} label="Audio file size in bytes" inputmode="numeric" value=${value.length} onChange=${change('length')} />
-        <${TextField} id=${`${id}-type`} label="Audio file type" hint="For example audio/mpeg." value=${value.media_type} onChange=${change('media_type')} />
-      </div>
-    </details>`;
+    <${AudioProperties} enclosure=${enclosure} duration=${facts} errors=${errors} mustOpen=${mustOpen}>
+      <${TextField} id=${`${id}-length`} label="Audio file size in bytes" inputmode="numeric" value=${value.length} onChange=${change('length')} />
+      <${TextField} id=${`${id}-type`} label="Audio file type" hint="For example audio/mpeg." value=${value.media_type} onChange=${change('media_type')} />
+      ${duration && html`<${DurationField} id=${`${id}-duration`} value=${duration.value} sourceText=${duration.sourceText} onChange=${duration.onChange} />`}
+    <//>`;
 }
 
 // The player of an audio file (ADR 0062 items 26 to 29, ADR 0109). It plays
@@ -452,13 +476,13 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
   const [length, setLength] = useState('');
   const [type, setType] = useState('');
   const [facts, setFacts] = useState({ state: 'none', for: '' });
-  const [opened, setOpened] = useState(false);
+  // Each opening of the sheet starts locked (ADR 0130 item 2).
+  const [session, setSession] = useState(0);
   // "Properties" opens by itself when the lookup finds fewer than two facts.
   // It stays closed while the lookup is not done. The user can open it at
   // each time (ADR 0073 item 14).
   const mustOpen = (facts.state === 'partial' || facts.state === 'failed')
     && propertiesOpen({ length, media_type: type }, []);
-  useEffect(() => { if (mustOpen) setOpened(true); }, [mustOpen]);
   // Clear the sheet each time that it opens.
   useEffect(() => {
     if (!open) return;
@@ -467,7 +491,7 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
     setLength('');
     setType('');
     setFacts({ state: 'none', for: '' });
-    setOpened(false);
+    setSession((n) => n + 1);
   }, [open]);
   const readFacts = async () => {
     const address = url.trim();
@@ -514,9 +538,9 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
   };
   const FACTS = {
     reading: 'Studio asks the file host for the size and the type of the file…',
-    found: 'Studio found the size and the type on the file host. You can change them.',
-    partial: 'The file host did not give all the facts. Type the missing ones.',
-    failed: 'Studio could not read the facts from the file host. Type the size and the type.',
+    found: 'Studio found the size and the type on the file host.',
+    partial: 'The file host did not give all the facts. To type them, open Properties and select Advanced.',
+    failed: 'Studio could not read the facts from the file host. To type them, open Properties and select Advanced.',
   };
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-track-title" onClose=${onClose}>
     <header>
@@ -531,16 +555,12 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
           error=${facts.state === 'invalid' && facts.for === url.trim() ? BAD_ADDRESS : null}
           value=${url} onInput=${(e) => setUrl(e.target.value)} onBlur=${readFacts} />
         ${FACTS[facts.state] && html`<p class="hint" role="status">${FACTS[facts.state]}</p>`}
-        <details class="disclosure" open=${opened} onToggle=${(e) => setOpened(e.currentTarget.open)}>
-          <summary class="link-row"><span class="label">Properties</span>
-            <span class="summary">${propertiesSummary({ length, media_type: type })}</span></summary>
-          <div class="form">
-            <${Field} id="new-track-length" label="Audio file size in bytes" inputmode="numeric" required
-              value=${length} onInput=${(e) => setLength(e.target.value)} />
-            <${Field} id="new-track-type" label="Audio file type" hint="For example audio/mpeg." required
-              value=${type} onInput=${(e) => setType(e.target.value)} />
-          </div>
-        </details>
+        <${AudioProperties} key=${session} enclosure=${{ length, media_type: type }} mustOpen=${mustOpen}>
+          <${Field} id="new-track-length" label="Audio file size in bytes" inputmode="numeric" required
+            value=${length} onInput=${(e) => setLength(e.target.value)} />
+          <${Field} id="new-track-type" label="Audio file type" hint="For example audio/mpeg." required
+            value=${type} onInput=${(e) => setType(e.target.value)} />
+        <//>
       </div>
       <button class="button link" type="button" onClick=${onFiles}>Choose Files from This Computer</button>
     </form>
@@ -2890,9 +2910,8 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
       <div class="group">
         ${showEach(s.fields, {
           title: () => html`<${TextField} id=${`${id}-title`} label="Title" value=${item.title} onChange=${change('title')} />`,
-          audio: () => html`<${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio} />`,
-          duration: () => html`<${DurationField} id=${`${id}-duration`} value=${item.duration_seconds} sourceText=${item.duration}
-            notice=${pickAudio.metadataFailed && item.duration_seconds == null ? DURATION_NOTICE : null} onChange=${change('duration_seconds')} />`,
+          audio: () => html`<${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio}
+            duration=${{ value: item.duration_seconds, sourceText: item.duration, onChange: change('duration_seconds') }} />`,
           alternates: () => html`<${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />`,
           artwork: () => html`<${ArtworkRow} summary=${artworkSummary(item, 'track')} onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} />`,
           description: () => html`<${TextArea} id=${`${id}-description`} label="Description" value=${item.description} onChange=${change('description')} />`,
@@ -3172,7 +3191,8 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
       <div class="group">
         ${hasRecording(live)
           ? html`<${Enclosure} id=${`${id}-recording`} path=${`live_items/${liveIndex}/item/`} bad=${bad} enclosure=${live.item.enclosure}
-              onChange=${itemField('enclosure')} pick=${pickRecording} />
+              onChange=${itemField('enclosure')} pick=${pickRecording}
+              duration=${{ value: live.item.duration_seconds, sourceText: live.item.duration, onChange: itemField('duration_seconds') }} />
             <${AlternateEnclosures} list=${live.item.alternate_enclosures} onChange=${itemField('alternate_enclosures')} />`
           : html`<div class="field" ...${pickRecording.rootProps}><label for="choose-recording">Recording</label>
               <div class="field-body"><${ChooseFile} pick=${pickRecording} /></div></div>`}

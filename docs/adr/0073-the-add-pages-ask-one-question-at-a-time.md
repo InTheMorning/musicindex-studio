@@ -6,6 +6,7 @@
 - Accepted: 2026-10-28 by the operator.
 - Changes: [ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 6, [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) item 8, [ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6 and [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 2.
 - Amended: 2026-10-28 by operator decision. [ADR 0077](0077-a-new-album-can-start-from-an-album.md) adds the select menu "Start from" to the form of items 5 and 6, for the type Album.
+- Changed by: [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md). Item 14: "Properties" of the add sheet shows the values as text. The boxes show after "Advanced".
 
 ## Context
 

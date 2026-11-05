@@ -97,6 +97,8 @@ Open it to read each value. Studio reads these values from the audio file, so yo
 
 To change a value by hand, select **Advanced**, read the warning and select **Edit Values**. A wrong value stays in your feed, and apps can show the wrong length or fail to play the file. To change the values safely, select a new audio file.
 
+Select **Lock Values** to show the values as text again. Your edits stay in the draft.
+
 **Properties** opens by itself when a value is missing or not correct. It says which value. The boxes also show only after **Advanced**.
 
 ## Change the order or remove a track

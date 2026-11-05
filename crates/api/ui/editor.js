@@ -297,8 +297,9 @@ function LicenseFields({ license, onChange, bad }) {
 // ---- The audio file ----
 
 // "Properties" of an audio file (ADR 0130). The values show as text. The boxes
-// are the children, and they show after "Advanced" and its warning. The
-// unlock lasts until the user leaves the page.
+// are the children, and they show after "Advanced" and its warning. They stay
+// until the user selects "Lock Values" or leaves the page. A lock changes no
+// value.
 function AudioProperties({ enclosure, duration, errors = [], mustOpen, children }) {
   const [opened, setOpened] = useState(mustOpen);
   const [unlocked, setUnlocked] = useState(false);
@@ -311,7 +312,8 @@ function AudioProperties({ enclosure, duration, errors = [], mustOpen, children 
     <summary class="link-row"><span class="label">Properties</span>
       <span class="summary">${propertiesSummary(enclosure, duration)}</span></summary>
     <div class="form">
-      ${unlocked ? children : html`<div class="audio-values">
+      ${unlocked ? html`${children}
+        <div class="audio-values"><div class="actions"><button class="button" type="button" onClick=${() => setUnlocked(false)}>Lock Values</button></div></div>` : html`<div class="audio-values">
         <dl class="facts">${propertyRows(enclosure, duration).map((row) => html`<dt>${row.label}</dt><dd>${row.value}</dd>`)}</dl>
         ${notice && html`<p class="hint" role="status">${notice}</p>`}
         <div class="actions"><button class="button" type="button" onClick=${unlock}>Advanced</button></div>

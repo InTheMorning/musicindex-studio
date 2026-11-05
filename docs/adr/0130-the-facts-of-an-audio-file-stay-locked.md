@@ -17,7 +17,7 @@ The size, the type and the duration of an audio file come from the file. Studio 
 2. An open "Properties" shows each value as text, then the button "Advanced". A value that is empty shows "Missing".
 3. A value that is missing or not correct gets a notice that names it and points to "Advanced". The boxes do not show before "Advanced", also for a missing value. The operator selected one rule for each value.
 4. "Properties" opens by itself as ADR 0062 item 25 gives, and also after a read of the duration that failed.
-5. "Advanced" opens a confirmation sheet that says why a value by hand is a risk. "Edit Values" shows the boxes. The boxes stay until the user leaves the page.
+5. "Advanced" opens a confirmation sheet that says why a value by hand is a risk. "Edit Values" shows the boxes. The boxes stay until the user selects "Lock Values" or leaves the page. "Lock Values" gives no warning and changes no value. An edit stays in the draft.
 6. The track page, the recording of a live show and the sheet "Add a track from an address" use this one component. The rows of alternate files are read-only already.
 7. A selected file still sets its values with no warning (ADR 0062).
 
@@ -40,6 +40,6 @@ Mechanical:
 - A Node test: the rows show each value or "Missing", and the source text of a duration that the core cannot read.
 - A Node test: the notice names each value and points to "Advanced".
 
-Visual, by the planning model: a track shows closed, open, the warning sheet and the unlocked boxes. The check uses 1000 px, and 390 px with touch. A track with a missing size opens by itself.
+Visual, by the planning model: a track shows closed, open, the warning sheet, the unlocked boxes and the lock again. The check uses 1000 px, and 390 px with touch. A track with a missing size opens by itself.
 
 Human, by the operator: none beyond the human test of the next candidate.

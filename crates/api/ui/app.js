@@ -353,6 +353,12 @@ export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = fa
   return html`<button type="button" class="cover-button" aria-label=${label} title="Change the artwork" onClick=${onOpen}>${box}</button>`;
 }
 
+// Art with its type dot on the bottom right corner (musicindex ADR 0038
+// R-DOT-3 and R-DOT-4). The art is the child.
+function ArtWithDot({ dot, children }) {
+  return html`<span class="art-dot">${children}<span class=${`dot ${dot}`} aria-hidden="true"></span></span>`;
+}
+
 // The art of a publisher feed in the left panel (musicindex ADR 0021 R-ART-3
 // item 2, musicindex ADR 0038 R-DOT-3). One image shows as it is. More
 // images show as a mosaic in the logo shape. No image shows the logo shape
@@ -2889,7 +2895,7 @@ function Level({ panel, go, back }) {
   return html`${back && html`<button class="row" type="button" onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
     <button class="outline-feed" type="button" aria-label=${`${head.title}, ${head.typeLabel}`}
       onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
-      <${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" />
+      <${ArtWithDot} dot=${head.dot}><${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" /><//>
       <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
     </button>
     ${panel.sections.map((section) => html`<div class="destination-group">
@@ -2930,7 +2936,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     <button class="outline-feed" type="button" aria-current=${currentAttr(feed)}
       aria-label=${changedFeeds.has(feed.id) ? `${feed.label}, changes in the library folder` : feed.label}
       onClick=${() => { if (!feed.current) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
-      <${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always />
+      <${ArtWithDot} dot=${feed.dot}><${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always /><//>
       <div class="text">
         <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"></span>`}</span>
         <span class="sub">${feed.typeLabel}</span>
@@ -3082,7 +3088,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
         ? html`<ul class=${`releases-list ${releases.view}`}>
             ${releases.rows.map((row) => html`<li id=${`release-${row.id}`} data-marked=${row.marked ? 'true' : 'false'}>
               <button class=${releases.view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" onClick=${() => onOpen(row.id)}>
-                <${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always />
+                <${ArtWithDot} dot=${row.dot}><${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always /><//>
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
                   <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>

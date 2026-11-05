@@ -106,7 +106,7 @@ test('an open album gives the outline in the sequence of ADR 0039 item 6', () =>
   const panel = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [album], model, vaultOpen: true });
   assert.equal(panel.kind, 'outline');
   assert.deepEqual(panel.feed, {
-    id: 1, title: 'Night Songs', image: null, glow: 'var(--c-feed)', typeLabel: 'Album',
+    id: 1, title: 'Night Songs', image: null, glow: 'var(--c-feed)', typeLabel: 'Album', dot: 'feed',
     page: 'album', current: false, label: 'Night Songs, Album',
   });
   assert.deepEqual(panel.items[0], { id: 'releases', label: 'Releases' });
@@ -632,3 +632,15 @@ test('a publisher feed with no role is in the heading No role', () => {
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [bare], model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Releases', undefined], ['Bare', 'No role']], message);
 });
+
+test('each head and row with art and a type word gives its dot', () => {
+  const message = 'musicindex ADR 0038 R-DOT-4: art with a type word shows its type dot. Fix: give `dot` from feedKind in shell.js.';
+  const feeds = [
+    { id: 20, title: 'Zed', medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true, release_ids: [1] },
+    { id: 1, title: 'One', medium: 'music' },
+  ];
+  const list = releasesList({ feeds, connectors: [], sort: 'title', view: 'rows' });
+  assert.ok(list.rows.length > 0);
+  for (const row of list.rows) assert.ok(row.dot, message);
+});
+

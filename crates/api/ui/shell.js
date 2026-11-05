@@ -290,6 +290,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       image: feedCover(feed),
       glow: kindGlow(feedKind(feed)),
       typeLabel: feedKind(feed).label,
+      dot: feedKind(feed).dot,
       // The head opens the first page (ADR 0069).
       page: 'album',
       current: isCurrentPage(view, 'album'),
@@ -389,6 +390,7 @@ function feedLevel(owner, view, feeds) {
       art: publisherArt(owner, feeds),
       glow: kindGlow(feedKind(owner)),
       typeLabel: feedKind(owner).label,
+      dot: feedKind(owner).dot,
       from,
     },
     sections: headed(children, (feed) => ({
@@ -587,6 +589,7 @@ export function releasesList({ feeds, connectors, sort, view, marked, group }) {
     id: feed.id,
     title: displayTitle(feed),
     typeLabel: feedKind(feed).label,
+    dot: feedKind(feed).dot,
     glow: kindGlow(feedKind(feed)),
     host: hostOf(feed, connectors),
     image: feedCover(feed),

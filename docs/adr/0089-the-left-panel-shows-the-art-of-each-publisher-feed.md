@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
 - Changes: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) item 1 and [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 5, which give a row of a publisher feed a dot before its title.
+- Changed: on 2026-11-05 the operator changed item 4: "dots are better for clarity".
 - Uses: musicindex ADR 0038 R-DOT-3 (a dot on art), musicindex ADR 0021 R-ART-2 and R-ART-3 item 2 (the art of an artist or a label) and musicindex ADR 0032 R-DOT-1.
 
 ## Context
@@ -18,7 +19,7 @@
 1. Each row of a publisher feed in the left panel shows the art of the feed at 28 px, and then its title. This applies to the rows of level 0 and to the feeds below each level. It also applies to the root page and the pages of the levels at narrow width.
 2. The art is the cover of the feed. A feed with no cover shows a mosaic of the different covers of its releases. One cover shows as it is. Two or more covers show as a mosaic of 2 by 2 in the logo shape, as on musicindex.org. A feed with no cover and no release cover shows the logo shape in the color of its first role.
 3. The type dot is on the bottom right corner of the art, as R-DOT-3 says. The ring has the color of the left panel. On the current row, it has the color of the bottom of the row fill. The row shows no other dot.
-4. The head of a level shows the art of item 2 at 40 px, with no dot. The type label gives the type.
+4. The head of a level shows the art of item 2 at 40 px, with its type dot on the art (musicindex ADR 0038 R-DOT-4).
 5. The row "Not linked" has no art. A space of 28 px keeps its title in line with the other titles.
 
 ## Alternatives Considered

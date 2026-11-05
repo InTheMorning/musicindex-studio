@@ -123,6 +123,7 @@ No release candidate holds these corrections yet.
 |---|---|---|
 | 1 | The AppImage holds the GStreamer plugins, and the release check refuses one with no audio plugin (ADR 0124 item 26). | The rc.17 file on Xvfb gave the two log lines of finding 1. A local AppImage with plugins gave neither. It found the audio sinks and stopped at a limit of the sandbox, which has no `/var/tmp` and no sound device. No test heard the audio, and no CI run built this form. |
 | 2 | Confirmed, and corrected (ADR 0124 item 27). The cause is a blur that WebKitGTK does not draw. | Screenshots of the rc.17 file and the local AppImage on Xvfb, at the same scroll position. No test used a computer with a GPU. |
+| 3 | No code change. The collection last read the publisher feed on 2026-10-27, before the role code of 2026-10-29 (ADR 0082). **Read Again** gave the role. | The row of that collection before the read, and a screenshot after it. The operator can ask for a change. |
 | 4 | The `.kind` column is 5.5rem. | The label is 67 px with a mouse and 80 px with touch, in a column of 88 px. |
 | 6 | A draft with no edits moves to the file that Studio read (ADR 0007 item 6). | A core test, and a Chromium check of Read Again and Review. |
 | 7 | A new tag goes directly after `<channel>` (ADR 0128 item 12). | A core test. |

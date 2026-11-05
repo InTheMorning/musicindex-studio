@@ -85,3 +85,9 @@ test('the specificity helper counts the selectors of styles.css', () => {
   assert.deepEqual(specificity('#q'), [1, 0, 0]);
   assert.ok(isField('.field input') && isField('select.position') && !isField('.field-error'));
 });
+
+test('a group of the left panel does not grow with a long title', () => {
+  assert.match(css, /\.destination-group \{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
+    'The human test of 0.1.0-rc.18 found that a long release title widened the left panel, with a scrollbar and no ellipsis. Fix: give .destination-group the column minmax(0, 1fr) in styles.css.');
+});
+

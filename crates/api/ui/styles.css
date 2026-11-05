@@ -558,7 +558,8 @@ textarea.masked { -webkit-text-security: disc; }
 .row .text { display: grid; min-width: 0; }
 /* The destinations below Releases (ADR 0085 item 1): the dot, the name and
    the number of releases. */
-.destination-group { display: grid; gap: 2px; }
+/* A long title must not widen the panel (human test of rc.18). */
+.destination-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 /* A role heading of a level, as the headings of the outline (ADR 0088
    item 4). */
 .panel-heading,
@@ -579,13 +580,18 @@ textarea.masked { -webkit-text-security: disc; }
    2 px out of the art box. A hollow dot has that color in its ring. */
 .panel-art { position: relative; width: 28px; height: 28px; flex: none; --art-surface: var(--sidebar); }
 .row[aria-current="page"] .panel-art { --art-surface: var(--gloss-bottom); }
-.panel-art .dot {
+.art-dot { position: relative; display: block; flex: none; --art-surface: var(--level-1); }
+.outline-feed .art-dot { --art-surface: var(--sidebar); }
+.outline-feed[aria-current="page"] .art-dot { --art-surface: var(--gloss-bottom); }
+.panel-art .dot,
+.art-dot > .dot {
   position: absolute;
   right: 0;
   bottom: 0;
   box-shadow: 0 0 0 2px var(--art-surface);
 }
-.panel-art .dot.hollow {
+.panel-art .dot.hollow,
+.art-dot > .dot.hollow {
   background: var(--art-surface);
   box-shadow: inset 0 0 0 var(--dot-ring) var(--dot, var(--c-feed)), 0 0 0 2px var(--art-surface);
 }
@@ -1548,6 +1554,7 @@ button.outline-feed {
 .releases-tile .releases-cover { width: 100%; height: auto; aspect-ratio: 1; }
 .releases-tile .releases-cover .mark { width: 40%; height: auto; aspect-ratio: 132 / 117; }
 .releases-tile .releases-text { width: 100%; }
+.releases-tile .art-dot { width: 100%; }
 .empty-releases { display: grid; gap: 12px; justify-items: start; }
 
 /* The Welcome page and its first steps (ADR 0119). The large rows have an icon

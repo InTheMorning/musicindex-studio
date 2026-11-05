@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). A change of a feed also sets `lastBuildDate`.
 
 ## Context
 

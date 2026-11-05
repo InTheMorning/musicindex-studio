@@ -128,6 +128,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0124: The desktop app is a Tauri window on the local API](adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md)
 - [ADR 0125: Each file target shows that it takes a drop](adr/0125-each-file-target-shows-that-it-takes-a-drop.md)
 - [ADR 0126: Studio refuses a bad move link](adr/0126-studio-refuses-a-bad-move-link.md)
+- [ADR 0127: A changed feed gets a new build date](adr/0127-a-changed-feed-gets-a-new-build-date.md)
 
 ## Plans
 

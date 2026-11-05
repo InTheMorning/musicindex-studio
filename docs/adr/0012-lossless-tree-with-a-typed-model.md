@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). A change of a feed also sets `lastBuildDate`.
 
 ## Context
 
@@ -34,4 +35,4 @@ It also requires that the core does not both model an element and pass it throug
 
 ## Invariants
 
-- The writer does not change an element that the user did not change.
+- The writer does not change an element that the user did not change, other than `lastBuildDate` (ADR 0127).

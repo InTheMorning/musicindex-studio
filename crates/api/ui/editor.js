@@ -36,7 +36,7 @@ import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
-import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress } from './media.js';
+import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, playWasReplaced } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
@@ -368,6 +368,7 @@ function AudioPlayer({ id, url, pick }) {
   const [position, setPosition] = useState(0);
   const [length, setLength] = useState(NaN);
   const [error, setError] = useState(null);
+  const [starting, setStarting] = useState(false);
   const heldFiles = useHeldFiles(url);
   const source = mediaSource(url, heldFiles);
   const usable = canPlay(source);
@@ -398,6 +399,7 @@ function AudioPlayer({ id, url, pick }) {
     setPosition(0);
     setLength(NaN);
     setError(null);
+    setStarting(false);
   }, [url]);
   useEffect(() => {
     if (!reading || !usable) return;
@@ -405,8 +407,9 @@ function AudioPlayer({ id, url, pick }) {
   }, [url, pick.metadataFor, usable]);
   const toggle = async () => {
     const element = audio.current;
-    if (!element.paused) { element.pause(); return; }
+    if (!element.paused) { element.pause(); setStarting(false); return; }
     setError(null);
+    setStarting(true);
     const fresh = held.current && held.current.url === url
       && (source.kind === 'direct' || Date.now() - held.current.at < TICKET_RENEW_MS);
     try {
@@ -416,6 +419,8 @@ function AudioPlayer({ id, url, pick }) {
       }
       await element.play();
     } catch (e) {
+      if (playWasReplaced(e)) return;
+      setStarting(false);
       setError(playerError(source));
     }
   };
@@ -429,6 +434,7 @@ function AudioPlayer({ id, url, pick }) {
     // An element with no address gives no error of its own.
     if (!e.currentTarget.getAttribute('src')) return;
     setPlaying(false);
+    setStarting(false);
     setError(playerError(source));
     if (reading) pick.metadataDone(null);
   };
@@ -444,10 +450,11 @@ function AudioPlayer({ id, url, pick }) {
           onInput=${(e) => { audio.current.currentTime = Number(e.currentTarget.value); setPosition(Number(e.currentTarget.value)); }} />
         <span class="player-time">${clockText(position)} / ${clockText(length)}</span>
       </div>
+      ${starting && !error && html`<span class="hint" role="status">${PLAYER_STARTING}</span>`}
       ${error && html`<span class="field-error" role="alert">${error}</span>`}
       ${notice && html`<span class="hint" id=${`${id}-notice`} role="status">${notice}</span>`}
       <audio ref=${audio} preload="none" onLoadedMetadata=${onLoadedMetadata} onDurationChange=${(e) => setLength(e.currentTarget.duration)}
-        onTimeUpdate=${(e) => setPosition(e.currentTarget.currentTime)} onPlay=${() => setPlaying(true)} onPause=${() => setPlaying(false)}
+        onTimeUpdate=${(e) => setPosition(e.currentTarget.currentTime)} onPlay=${() => setPlaying(true)} onPlaying=${() => { setStarting(false); setError(null); }} onPause=${() => setPlaying(false)}
         onEnded=${() => setPlaying(false)} onError=${onError}></audio>
     </div>
   </div>`;

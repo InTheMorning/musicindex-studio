@@ -76,6 +76,16 @@ export function playerNotice(source) {
 // block it, so the text names that cause. A file that Studio holds loads
 // from Studio, so the setting has no effect on it.
 export const PLAYER_ERROR = 'Studio cannot play this file.';
+// The text below the player from a press of Play until the audio starts. A
+// slow start is not an error (human test of 0.1.0-rc.18).
+export const PLAYER_STARTING = 'Starting…';
+
+// True when `play()` stopped only because a later pause or load replaced it.
+// The audio can still start, so this is not an error.
+export function playWasReplaced(error) {
+  return Boolean(error) && error.name === 'AbortError';
+}
+
 export const DIRECT_PLAYER_ERROR = 'Studio cannot play this file. Your browser can block audio from other sites.';
 
 export function playerError(source) {

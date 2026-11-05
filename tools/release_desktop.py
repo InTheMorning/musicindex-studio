@@ -35,7 +35,15 @@ INSTALLERS = {
     "Darwin": [".dmg"],
     "Linux": [".AppImage", ".deb", ".rpm"],
 }
-APPIMAGE_AUDIO_PLUGINS = ("autodetect", "playback", "audioconvert", "mpg123", "flac", "libav", "debugutilsbad")
+# The GStreamer plugins of the AppImage, and no other (ADR 0124 item 26). Each
+# start of an AppImage has a new mount path, so GStreamer scans each plugin at
+# the first play. All the plugins of the runner made that wait several seconds.
+APPIMAGE_PLUGINS = (
+    "alsa", "apetag", "app", "audioconvert", "audiofx", "audioparsers", "audioresample",
+    "autodetect", "coreelements", "debugutilsbad", "flac", "id3demux", "isomp4", "libav",
+    "mpg123", "ogg", "opus", "opusparse", "pbtypes", "playback", "pulseaudio",
+    "typefindfunctions", "volume", "vorbis", "wavparse",
+)
 BUNDLE_FOLDERS = {".AppImage": "appimage", ".deb": "deb", ".rpm": "rpm",
                   ".dmg": "dmg", ".msi": "msi"}
 
@@ -244,18 +252,32 @@ def check_start_bytes(path, suffix):
         raise ValueError(f"{path.name} does not have the start bytes of a {suffix} file")
 
 
+def appimage_plugins(source, output):
+    """Copy the plugins of the AppImage to a folder for GSTREAMER_PLUGINS_DIR (ADR 0124 item 26)."""
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    for plugin in APPIMAGE_PLUGINS:
+        name = f"libgst{plugin}.so"
+        if not (Path(source) / name).is_file():
+            raise ValueError(f"ADR 0124 item 26: {source} has no {name}. "
+                             "Install its GStreamer package in the release workflow.")
+        shutil.copyfile(Path(source) / name, output / name)
+    print(output)
+
+
 def check_appimage_audio(path):
-    """Refuse an AppImage with no audio plugins, because Play then fails (ADR 0124 item 26)."""
+    """Refuse an AppImage with a wrong plugin set, because Play then fails or waits (ADR 0124 item 26)."""
+    expected = {f"libgst{plugin}.so" for plugin in APPIMAGE_PLUGINS}
     with tempfile.TemporaryDirectory() as folder:
-        for plugin in APPIMAGE_AUDIO_PLUGINS:
-            member = f"usr/lib/gstreamer-1.0/libgst{plugin}.so"
-            subprocess.run([path.resolve(), "--appimage-extract", member], cwd=folder,
-                           capture_output=True, check=False)
-            if not (Path(folder) / "squashfs-root" / member).is_file():
-                raise ValueError(
-                    f"ADR 0124 item 26: {path.name} has no {member}, so Play can fail or hang the app. "
-                    "Set bundleMediaFramework in tauri.conf.json, and install the "
-                    "GStreamer plugin packages and patchelf in the release workflow.")
+        subprocess.run([path.resolve(), "--appimage-extract", "usr/lib/gstreamer-1.0/*"], cwd=folder,
+                       capture_output=True, check=False)
+        found = {item.name for item in (Path(folder) / "squashfs-root/usr/lib/gstreamer-1.0").glob("*.so")}
+    if found != expected:
+        raise ValueError(
+            f"ADR 0124 item 26: {path.name} has the wrong GStreamer plugins. "
+            f"Missing: {sorted(expected - found)}. Not in the list: {len(found - expected)}. "
+            "A missing plugin can hang Play, and each other plugin makes the first play wait. "
+            "Set GSTREAMER_PLUGINS_DIR from the command appimage-plugins in the release workflow.")
 
 
 def installers(target, bundle_dir, output, skip):
@@ -318,6 +340,9 @@ def main():
     inst.add_argument("--output", required=True)
     # Only for a local check on a computer that cannot make every installer.
     inst.add_argument("--skip", action="append", default=[])
+    plugins = commands.add_parser("appimage-plugins")
+    plugins.add_argument("--source", required=True)
+    plugins.add_argument("--output", required=True)
     sums = commands.add_parser("checksums")
     sums.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -333,6 +358,8 @@ def main():
         print(json.dumps(bundle_config(args.format), separators=(",", ":")))
     elif args.command == "installers":
         installers(args.target, args.bundle_dir, args.output, args.skip)
+    elif args.command == "appimage-plugins":
+        appimage_plugins(args.source, args.output)
     else:
         checksums(args.output)
 

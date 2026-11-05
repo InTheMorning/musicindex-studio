@@ -76,7 +76,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
-          # The AppImage holds each GStreamer plugin of the runner, and the bundler needs patchelf for them (ADR 0124 item 26).
+          # The bundler needs patchelf for the GStreamer plugins of the AppImage (ADR 0124 item 26).
           sudo apt-get install -y patchelf gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-alsa gstreamer1.0-pulseaudio
       - name: Install Linux test server
         if: matrix.slug == 'linux-x86_64'
@@ -111,7 +111,10 @@ jobs:
         shell: bash
         working-directory: crates/desktop-app
         run: |
-          cargo tauri build --ci --bundles appimage,deb -- --locked
+          # The AppImage holds only the plugins of this list (ADR 0124 item 26).
+          GSTREAMER_PLUGINS_DIR="$(python ../../tools/release_desktop.py appimage-plugins \
+            --source "/usr/lib/$(uname -m)-linux-gnu/gstreamer-1.0" --output "$PWD/../../.studio-dev/gst-plugins")" \
+            cargo tauri build --ci --bundles appimage,deb -- --locked
           cargo tauri bundle --ci --bundles rpm --config "$(python ../../tools/release_desktop.py bundle-config rpm)"
       - name: Build macOS installer
         if: startsWith(matrix.slug, 'macos-')

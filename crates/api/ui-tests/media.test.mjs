@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress } from '../ui/media.js';
+import { HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress, playWasReplaced } from '../ui/media.js';
 
 // ADR 0109 item 5 and the acceptance criteria: the source of an image and of
 // the player. Fix a failure in crates/api/ui/media.js, not in the test.
@@ -67,3 +67,10 @@ test('ADR 0122 item 14: a placeholder address plays only from the file that Stud
   assert.deepEqual(mediaSource(placeholder, null), { kind: 'none', reason: 'loading' });
   assert.deepEqual(mediaSource('pending:other.mp3', holding), { kind: 'none', reason: 'other' });
 });
+
+test('a play that a later load replaced is not an error', () => {
+  assert.equal(playWasReplaced({ name: 'AbortError' }), true, 'The human test of 0.1.0-rc.18 showed a false error while the audio started. Fix: keep the AbortError out of the player error.');
+  assert.equal(playWasReplaced({ name: 'NotSupportedError' }), false);
+  assert.equal(playWasReplaced(null), false);
+});
+

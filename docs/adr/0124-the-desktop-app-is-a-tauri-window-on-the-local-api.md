@@ -70,7 +70,7 @@ WebKitGTK gives a page no file from a drop, and the page cannot read the file ad
 23. On Linux, the window keeps the drop handler of Tauri, so the engine does not put the file address in a text box. The app gives the page the names of the dropped files, the position and the ID of each regular file. A file path does not go to the page.
 24. On Linux, the app adds a script to the window. For a drag of `text/uri-list`, the script sends each `dragover` to the page as a file drag, so a field shows its drop state with no change to the UI. At a drop, it sends a `drop` with the files to the element at the position. When that element does not accept a file drag, or it takes one file and the drop has many, the script gets no bytes.
 25. On Linux, the same script connects Ctrl+Z to the undo command, and Ctrl+Shift+Z and Ctrl+Y to the redo command, in a text field.
-26. The AppImage holds the GStreamer plugins of the runner (`bundleMediaFramework`). The release workflow installs the plugin packages and `patchelf`, and `tools/release_desktop.py` refuses an AppImage with no audio plugin. The human test of `0.1.0-rc.17` found that Play hung the app with no audio sink.
+26. The AppImage holds a fixed list of GStreamer plugins (`bundleMediaFramework`, `APPIMAGE_PLUGINS` in `tools/release_desktop.py`). The release workflow installs the plugin packages and `patchelf`, and gives the bundler only that list. The release check refuses an AppImage with a different set. The human test of `0.1.0-rc.17` found that Play hung the app with no audio sink. The human test of `0.1.0-rc.18` found that all the plugins of the runner made the first play of each start wait, and a press of Play on the real file took 4.72 s against 0.41 s with the list.
 27. On Linux, the same script makes the toolbar opaque through `--bar-bg`. WebKitGTK does not always draw a backdrop blur, and the page text then shows through the translucent bar. The UI stays the same as in a browser. A browser and the other systems keep the translucent bar of musicindex ADR 0003.
 
 ## Alternatives Considered
@@ -120,7 +120,7 @@ Mechanical:
 - A test: the work count of item 17 increases during a write and during an upload in parts, and decreases after it. An upload with no new part for 2 minutes is not in the count.
 - A test: the decision of items 16 to 20 is a function of the work count and the button. It gives "end now", "show the dialog", "wait" or "continue".
 - The four commit checks pass, with the app crate in the workspace.
-- A release check: `tools/release_desktop.py installers` refuses an AppImage with no audio plugin of item 26.
+- A release check: `tools/release_desktop.py installers` refuses an AppImage whose plugins are not the list of item 26.
 
 Visual, by the planning model on Linux: the app starts and shows the UI in its window. It keeps the theme after a restart, hides on close, and shows again from the tray. A file drop and a download work. A page that scrolls shows no text through the toolbar (item 27). "Quit" during a slow write shows the dialog, and each of its three buttons does the action of items 19 and 20.
 

@@ -10,7 +10,7 @@
 
 ## Context
 
-Stophammer ADR 0083 is Proposed at this date, and its details can change. For a return to a URL that a record left, it needs a tag at each end. The body at that URL must have an `itunes:new-feed-url` that names its own URL. A self link cannot start a return.
+Stophammer ADR 0083 is Accepted, with its code on Stophammer `main` at commit `61e8762`. No release candidate of Stophammer holds it yet. For a return to a URL that a record left, it needs a tag at each end. The body at that URL must have an `itunes:new-feed-url` that names its own URL. A self link cannot start a return.
 
 The examination of Studio at commit `1283bc7` found these facts:
 
@@ -20,7 +20,9 @@ The examination of Studio at commit `1283bc7` found these facts:
 - ADR 0126 already passes a draft with a tag that names its own URL, with no read.
 - ADR 0083 section 5 gives a return a wait that grows, and the first return has no wait. Studio cannot read the return count from the index.
 
-This examination read the code of both repositories. No move ran against a Stophammer node.
+On 2026-11-04, a one-time check ran in copies of both repositories. It sent the bytes that Studio writes (commit `375ae55`) through the Stophammer parser and `POST /ingest/feed` (commit `61e8762`). Each test passed.
+
+A move, a first return and a later write reach the index. A second return waits for the cooldown, and it completes at a crawl after the wait. The same return with the tag removed stays at B with the refusal of ADR 0083. The check ran no real host, no real crawler and no deployed node.
 
 ## Decision
 
@@ -42,7 +44,7 @@ This examination read the code of both repositories. No move ran against a Stoph
 ### The Index
 
 10. Stophammer owns how the index reads a feed. Studio cites ADR 0083 and does not restate its rule as a rule of Studio.
-11. Before a report says that a return works in the index, examine the status of ADR 0083. If its rule changes, this record changes in the same commit as the code.
+11. If the rule of ADR 0083 changes, this record changes in the same commit as the code.
 
 ## Alternatives Considered
 
@@ -55,7 +57,7 @@ This examination read the code of both repositories. No move ran against a Stoph
 ## Consequences
 
 - The diff of each move has one more line.
-- The human test of task 090 waits for this work, because a return with no tag is not a correct test of the index.
+- A wait ends only at a later crawl of the destination. A Studio write announces each address one time, so a return in a wait can need a later crawl or a new write. The research did not examine how often the crawler reads such a feed.
 - A tag stays in a feed after its move. A copy of that file by hand then names the earlier address. Stophammer ADR 0083 section 2 item 3 examines this case.
 - ADR 0008 item 6 says that a move also writes `podcast:previousUrl`, and the pipeline has no code for it. This record does not decide that difference.
 
@@ -87,6 +89,6 @@ Visual, by the planning model:
 
 - Review shows the warning below the move row of a return, at 1280 px and at 390 px with touch. A move that is not a return has no warning.
 
-Human, by the operator, after ADR 0083 is accepted and deployed:
+Human, by the operator, after a release of Stophammer holds ADR 0083:
 
 - A move and a return between two real file hosts. After each step, `GET /v1/feeds/{guid}` of the index gives the new address.

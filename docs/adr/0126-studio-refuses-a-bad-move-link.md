@@ -4,6 +4,7 @@
 - Date: 2026-11-04
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-04 by the operator. The operator accepted items 5, 7, 12 and 26 as written.
+- Changed by: [ADR 0128](0128-a-moved-feed-names-its-own-address.md). The feed on the new host also gets a tag that names its own URL. That decides the tag that "Alternatives Considered" left open.
 - Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). Items 8 and 26: Review and a granted write can send the time request of that record. That request reads no feed.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F0. Research note `research_notes/aggregation/itunes-new-feed-url.md` in `../musicindex-research`.
 - Changes: [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 19 (the sequence) and item 20 (a pointer file can become the feed). [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) item 9, for a move that stage 2 refuses. [ADR 0057](0057-the-private-network-guard-of-the-server.md) item 1, for the read of this record on the desktop.

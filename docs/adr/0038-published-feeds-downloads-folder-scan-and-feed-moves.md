@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-24
 - Owner: operator, with the technical choices of the planning model
+- Changed by: [ADR 0128](0128-a-moved-feed-names-its-own-address.md). The feed on the new host also gets a tag that names its own URL.
 - Changed by: [ADR 0105](0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Items 6 to 10 and items 13 to 15 do not apply: the server has no downloads into the library and no folder scan. [ADR 0126](0126-studio-refuses-a-bad-move-link.md) adds a read of the destination to the sequence of item 19, and lets a pointer file become the feed.
 
 ## Context

@@ -137,6 +137,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/recipients.js"),
     ),
     (
+        "builddate.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/builddate.js"),
+    ),
+    (
         "movelink.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/movelink.js"),

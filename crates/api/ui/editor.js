@@ -14,6 +14,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
+import { buildDateNotices } from './builddate.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -1532,6 +1533,13 @@ function ReturnWarning({ move }) {
   return view && html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`;
 }
 
+// The notices of the build date (ADR 0127 items 8, 11 and 12). The core gives
+// each state, and no notice stops a write.
+function BuildDateNotices({ state }) {
+  return buildDateNotices(state).map((view) => html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}
+    ${view.value && html`${' '}<span class="mono">${view.value}</span>`}</div>`);
+}
+
 // A deletion that Studio refuses because a feed of the library refers to
 // the file (ADR 0036 item 13). The row uses the error color, not an
 // entity color (ADR 0018).
@@ -1840,6 +1848,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
       ${diff && html`<${ReturnWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
+      ${diff && html`<${BuildDateNotices} state=${diff.build_date} />`}
       ${sentCount > 0 && html`<div class="notice" role="status">${reviewNotice(sentCount)}</div>`}
       ${choosing && html`<div class="group rows">
         <p class="hint">Studio cannot write to the file host of this feed. Connect that file host, or move the feed to a file host that you connected.</p>

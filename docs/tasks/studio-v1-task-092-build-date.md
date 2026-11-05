@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0127](../adr/0127-a-changed-feed-gets-a-new-build-date.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F2.
 
-Status: Open. Packets 092a and 092b are complete.
+Status: Complete, with its screenshot visual check. The human test is open.
 
 ## Goal
 

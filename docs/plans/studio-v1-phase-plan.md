@@ -264,7 +264,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - [Task 090](../tasks/studio-v1-task-090-bad-move-links.md) is complete in four packets, with its screenshot visual check. Its human test is open.
 - Decision: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md). A moved feed names its own address, and Review warns at each return. [Task 091](../tasks/studio-v1-task-091-own-address-tag.md) is complete, with its screenshot visual check. Its human test waits for a release of Stophammer that holds ADR 0083.
 - Visual check: Review shows a refusal and a notice. The operator moves a feed between two real file hosts, and back.
-- Decision: [ADR 0127](../adr/0127-a-changed-feed-gets-a-new-build-date.md). A change of a feed also sets `lastBuildDate`, from a time that a server checks. [Task 092](../tasks/studio-v1-task-092-build-date.md) gives the work in three packets. It is open.
+- Decision: [ADR 0127](../adr/0127-a-changed-feed-gets-a-new-build-date.md). A change of a feed also sets `lastBuildDate`, from a time that a server checks. [Task 092](../tasks/studio-v1-task-092-build-date.md) is complete, with its screenshot visual check. Its human test is open.
 - On 2026-11-04 the operator stopped F1 until Stophammer has its findings, because they can change how Studio acts. Form A of the mockups in `.studio-dev/mockup-feedcheck/` is the selected place: an outline row with a count opens its own page.
 
 ### Phase 13: Desktop Shell

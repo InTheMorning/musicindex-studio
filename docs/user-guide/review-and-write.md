@@ -131,6 +131,16 @@ The file host that the feed leaves gets a pointer file with the new address.
 The sheet also shows "This is a return to an earlier address." This is a warning, not a refusal, and you can write the feed.
 The index can wait before it follows a return, and the wait grows with each return. During a wait, the index keeps the address from before the return.
 
+## The build date
+
+When you change a feed, Studio sets the build date of the feed: the element `lastBuildDate`. The diff shows it as "Build date". You cannot edit this value.
+An index refuses a date that is earlier than the date that it holds. Thus Studio does not use only the clock of this computer. It also asks a server for the time, and it uses the earliest time.
+Studio can show these notices. None of them stops the write:
+
+- "The clock of this computer is ahead." Studio uses the time of a server.
+- "The build date does not change." No server answered, so the feed keeps its date. A later write sets the date.
+- "The build date of this feed is in the future." Studio keeps the date, because an index refuses an earlier date. Only the operator of the index can correct a stored date.
+
 ## When the hosted file changed
 
 If someone else or a different tool changed the hosted file after you started the draft, Studio shows "The hosted file changed after the draft started."

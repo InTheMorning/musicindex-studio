@@ -15,7 +15,7 @@ import {
 import {
   peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonBody, initials,
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
-  toggledItem, dismissBody, addPersonBody,
+  toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
@@ -764,11 +764,14 @@ export function PersonPage({ id, feeds, go }) {
       onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
     more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>
       <p class="hint">${MORE_HINT}</p>
-      <div class="group">${moreRows(more, titles, profiles, person.name).map((row) => html`<div class="link-row static key-line" key=${row.key}>
+      <div class="group">${moreRows(more, titles, profiles, person.name).map((row) => html`<div class="link-row static key-line more-row" key=${row.key}>
           ${row.npub && html`<${PersonArt} person=${{ img: row.picture, name: row.title }} />`}<${KeyText} row=${row} />
           ${row.npub && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}
-          <button class="button action" type="button" aria-label=${`Add ${row.title}`}
-            onClick=${() => withLeave(() => act(async () => { await api(`/people/${id}/items`, { method: 'POST', body: row.body }); await loadMore(); }))}>Add</button></div>`)}</div></section>`,
+          <div class="actions more-actions">
+            ${row.warning && html`<button class="button action" type="button" onClick=${() => go({ name: 'check', id: person.id })}>Correct the Feeds</button>`}
+            <button class=${row.warning ? 'button' : 'button action'} type="button" aria-label=${`${moreAddLabel(row)}: ${row.title}`}
+              onClick=${() => withLeave(() => act(async () => { await api(`/people/${id}/items`, { method: 'POST', body: row.body }); await loadMore(); }))}>${moreAddLabel(row)}</button>
+          </div></div>`)}</div></section>`,
     payment: () => html`<section class="page-section"><h2>Payment</h2>
       ${groups.length > 0 && html`<div class="group rows"><${ChoiceSelect} id="person-default" label="Default address"
         value=${shown.default_address} options=${addressOptions(groups)}
@@ -1188,7 +1191,7 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
   });
   const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${fields.type}
     onChange=${(next) => setFields(walletTypeChange(recipient, fields, next))} options=${WALLET_TYPES} />`;
-  const addressFields = html`<${Field} id="op-address" label=${fields.type === 'lnaddress' ? 'Lightning address' : 'Lightning node key'} required
+  const addressFields = html`<${Field} id="op-address" label=${fields.type === 'lnaddress' ? 'LNURL address' : 'Node address key'} required
       value=${fields.address} onInput=${(e) => set({ address: e.target.value })} />
     ${fields.type !== 'lnaddress' && html`<${Field} id="op-custom-key" label="Custom key" hint=${CUSTOM_KEY_HINT}
         value=${fields.custom_key} onInput=${(e) => set({ custom_key: e.target.value })} />
@@ -1198,10 +1201,10 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
       ${kind === 'rename' && html`<div class="group rows"><${Field} id="op-name" label="Name" value=${fields.name}
         onInput=${(e) => set({ name: e.target.value })} /></div>`}
       ${kind === 'use_lnaddress' && html`<div class="group rows">
-        ${asks && field === null && html`<p class="hint" role="status">Studio looks for Lightning addresses of this wallet…</p>`}
-        ${field && field.menu && html`<${ChoiceSelect} id="op-suggestion" label="Lightning address" value=${choice}
+        ${asks && field === null && html`<p class="hint" role="status">Studio looks for LNURL addresses of this wallet…</p>`}
+        ${field && field.menu && html`<${ChoiceSelect} id="op-suggestion" label="LNURL address" value=${choice}
           options=${field.options} hint=${field.hints[choice]} onChange=${choose} />`}
-        ${!(field && field.menu && choice !== OTHER_ADDRESS) && html`<${Field} id="op-address" label=${field && field.menu ? 'Other address' : 'Lightning address'} required
+        ${!(field && field.menu && choice !== OTHER_ADDRESS) && html`<${Field} id="op-address" label=${field && field.menu ? 'Other address' : 'LNURL address'} required
           hint=${field && field.hint ? `${field.hint} The address must pay the same wallet. Studio checks it.` : 'The address must pay the same wallet. Studio checks it.'}
           value=${fields.address} onInput=${(e) => set({ address: e.target.value })} />`}
       </div>`}

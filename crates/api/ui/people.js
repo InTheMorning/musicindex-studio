@@ -44,7 +44,7 @@ const titleOf = (titles, id) => {
 export function addressText(key, type = '') {
   const address = key.address || '';
   const isAddress = type ? type === 'lnaddress' : address.includes('@');
-  return isAddress ? `Lightning address ${address}` : `Lightning node ${shortKey(address)}`;
+  return isAddress ? `LNURL address ${address}` : `Node address ${shortKey(address)}`;
 }
 
 // The second line of a suggestion row: the first evidence.
@@ -257,7 +257,7 @@ export function changeTitle(operation) {
     case 'rename': return 'Rename';
     case 'remove': return 'Remove';
     case 'add': return 'Add to All Releases';
-    case 'use_lnaddress': return 'Use the Lightning address';
+    case 'use_lnaddress': return 'Use the LNURL address';
     case 'use_address': return 'Use This Address';
     case 'rename_person': return 'Rename';
     case 'add_to_releases': return 'Add to All Releases';
@@ -417,10 +417,10 @@ const isLnaddress = (m) => (m.recipient_type ? m.recipient_type === 'lnaddress' 
 // node key in full. A node of a shared provider names the provider.
 export function memberLine(member, full = true) {
   const account = member.custom_value || null;
-  if (isLnaddress(member)) return { label: 'Lightning address', address: member.address, account: null };
+  if (isLnaddress(member)) return { label: 'LNURL address', address: member.address, account: null };
   if (member.provider) return { label: `${member.provider} node`, address: full ? member.address : null, account };
   // The account names the wallet on a shared node, so the line keeps it.
-  return { label: 'Lightning node', address: full ? member.address : shortKey(member.address), account };
+  return { label: 'Node address', address: full ? member.address : shortKey(member.address), account };
 }
 
 // One line of text for an address, for a select menu.
@@ -468,7 +468,7 @@ export const usedText = (count) => (count > 0 ? feedCount(count) : 'Not used');
 // The text for the evidence of a Nostr key of a person.
 export function keyEvidenceText(evidence) {
   switch (evidence) {
-    case 'keysend': return 'Found in a lookup of a Lightning address';
+    case 'keysend': return 'Found in a lookup of an LNURL address';
     case 'nostr': return 'Found in a Nostr profile';
     default: return 'Added by you';
   }
@@ -577,7 +577,7 @@ export const LINK_FORMS = {
     title: 'Add a Wallet',
     button: 'Add the Wallet',
     fields: [
-      { id: 'recipient_type', label: 'Type', select: [['lnaddress', 'Lightning Address'], ['node', 'Lightning Node']], start: 'lnaddress' },
+      { id: 'recipient_type', label: 'Type', select: [['lnaddress', 'LNURL Address'], ['node', 'Node Address']], start: 'lnaddress' },
       { id: 'address', label: 'Address', required: true },
       { id: 'custom_key', label: 'Custom key', node: true, hint: 'Some nodes need a custom key and an account to find the wallet.' },
       { id: 'custom_value', label: 'Account', node: true },
@@ -1155,7 +1155,7 @@ export function correctKeyStart(person, fields, profiles) {
 // findings `other_wallet` of the check, and the address is the default
 // address of the person. The texts are display values only.
 export function otherPayeesLine(name, defaultAddress, count) {
-  const to = defaultAddress ? addressText(defaultAddress).replace(/^Lightning (address|node) /, '') : 'the default address';
+  const to = defaultAddress ? addressText(defaultAddress).replace(/^(LNURL address|Node address) /, '') : 'the default address';
   const head = count === 1 ? `1 payment to the name "${name}" goes to an address that is not in this person. Studio replaces it`
     : count > 1 ? `${count} payments to the name "${name}" go to an address that is not in this person. Studio replaces them`
       : `A payment to the name "${name}" can go to an address that is not in this person. Studio replaces it`;
@@ -1583,6 +1583,10 @@ export function moreRows(items, titles = null, profiles = null, name = '') {
   });
 }
 
+// The label of the button that adds a row of "More from your feeds". A row with
+// a key warning also has "Correct the Feeds" (ADR 0138 item 1).
+export const moreAddLabel = (row) => (row.warning ? 'Add Anyway' : 'Add');
+
 // The body of `POST /people/{id}/items` for one item of "More from your feeds".
 export function moreItemBody(item) {
   if (item.kind === 'credit') return { credits: [[item.name, item.href, item.npub]], recipients: [], keys: [] };
@@ -1686,7 +1690,7 @@ const NO_KEY = 'This feed gives no Nostr key. Use “Add a Nostr Key” to searc
 const NO_ADDRESS = 'This wallet has no address, so Studio cannot save it.';
 const PAYS_CHECK = 'A feed can pay a band member, a collaborator or an app. Add this wallet only when this recipient is this person.';
 const NO_RECIPIENT_NAME = 'The feed gives no name for this recipient.';
-const WALLET_WORDS = { lnaddress: 'Lightning address', node: 'Lightning node' };
+const WALLET_WORDS = { lnaddress: 'LNURL address', node: 'Node address' };
 const KEYSEND_WORDS = { found: 'Checked with keysend', no_data: 'No keysend data', failed: 'The keysend check failed' };
 
 // A value of another person has the name of that person (ADR 0098 item 6).

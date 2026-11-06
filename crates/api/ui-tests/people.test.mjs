@@ -77,7 +77,7 @@ test('the row of a person gives the role, the membership, the address and the co
   };
   assert.deepEqual(personRow(person, { 7: 'The Ultras' }), {
     title: 'Sam Fiddle',
-    lines: ['Fiddle · Part of The Ultras', 'Pays Lightning address sam@getalby.com'],
+    lines: ['Fiddle · Part of The Ultras', 'Pays LNURL address sam@getalby.com'],
     count: '3 feeds',
   });
 });
@@ -90,7 +90,7 @@ test('the row of a person with two wallets and no role gives the wallet count', 
     feeds: 1, pays: 1, credited: 0,
   };
   const row = personRow(person, new Map());
-  assert.deepEqual(row.lines, ['Pays Lightning address jo@x.example · 2 wallets']);
+  assert.deepEqual(row.lines, ['Pays LNURL address jo@x.example · 2 wallets']);
   assert.equal(row.count, '1 feed');
   assert.deepEqual(personRow({ name: 'Jo Keys', usual_role: 'Keyboards', wallets: [], feeds: 4 }, {}).lines,
     ['Keyboards', 'No payment address']);
@@ -132,9 +132,9 @@ test('the feeds of a sheet start selected, with their lines', () => {
   const rows = sheetFeeds(PLACES, { 1: 'Neon Diner', 2: 'Midnight Arcade', 3: 'Basement Tapes' });
   assert.deepEqual(rows.map((r) => r.checked), [true, true, true],
     'ADR 0099 item 7: each check box starts selected. Fix sheetFeeds in crates/api/ui/people.js.');
-  assert.deepEqual(rows[0], { id: 1, title: 'Neon Diner', lines: ['Pays Lightning address mk@x.example', 'Credited as Vocals'], checked: true });
+  assert.deepEqual(rows[0], { id: 1, title: 'Neon Diner', lines: ['Pays LNURL address mk@x.example', 'Credited as Vocals'], checked: true });
   assert.deepEqual(rows[1].lines, ['Credited']);
-  assert.match(rows[2].lines[0], /^Pays Lightning node /);
+  assert.match(rows[2].lines[0], /^Pays Node address /);
 });
 
 test('the selection of a row turns over, and checkedIds gives the selected rows', () => {
@@ -282,20 +282,20 @@ test('a key makes a menu value and back', () => {
 
 test('the lines of an address follow ADR 0099 item 15', () => {
   assert.deepEqual(memberLine({ address: 'a@x.example', recipient_type: 'lnaddress' }),
-    { label: 'Lightning address', address: 'a@x.example', account: null });
+    { label: 'LNURL address', address: 'a@x.example', account: null });
   assert.equal(memberText({ address: '02ab', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'acct1' }), 'fountain.fm node · account acct1');
-  assert.equal(memberText({ address: 'a@x.example' }), 'Lightning address a@x.example');
-  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node' }), 'Lightning node 03d55f4d…aa67');
-  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node', custom_value: 'acct1' }), 'Lightning node 03d55f4d…aa67 · account acct1');
+  assert.equal(memberText({ address: 'a@x.example' }), 'LNURL address a@x.example');
+  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node' }), 'Node address 03d55f4d…aa67');
+  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node', custom_value: 'acct1' }), 'Node address 03d55f4d…aa67 · account acct1');
   assert.equal(usedText(0), 'Not used');
   assert.equal(usedText(1), '1 feed');
 });
 
-test('a wallet gives its addresses, the Lightning addresses first', () => {
+test('a wallet gives its addresses, the LNURL addresses first', () => {
   const groups = walletGroups(MK, RECIPIENTS);
   assert.equal(groups.length, 1);
   assert.deepEqual(groups[0].members.map((m) => m.key.address), ['mk@x.example', '02ab']);
-  assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['Lightning address mk@x.example', 'fountain.fm node · account acct1']);
+  assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['LNURL address mk@x.example', 'fountain.fm node · account acct1']);
   const alone = walletGroups({ ...MK, wallets: [{ id: 1, key: KEY('02ab'), recipient_type: 'node' }] }, []);
   assert.deepEqual(alone[0].members.map((m) => m.key.address), ['02ab']);
 });
@@ -358,9 +358,9 @@ test('the lines of each finding and the group of each state (ADR 0111 items 9 to
     'The information address in the credit differs from Ann');
   assert.equal(findingLine({ kind: 'credit_role' }, 'Ann').error, true);
   const key = KEY('mk@x.example');
-  assert.deepEqual(findingLine({ kind: 'not_default', key }, 'Ann'), { text: 'Pays Lightning address mk@x.example · not your default address', error: false });
-  assert.equal(findingLine({ kind: 'not_default', key }, 'Ann', null, 'not_default').text, 'Pays Lightning address mk@x.example · the same wallet as your default address');
-  assert.deepEqual(findingLine({ kind: 'other_wallet', key }, 'Ann'), { text: 'Pays Lightning address mk@x.example · not a wallet of Ann', error: true });
+  assert.deepEqual(findingLine({ kind: 'not_default', key }, 'Ann'), { text: 'Pays LNURL address mk@x.example · not your default address', error: false });
+  assert.equal(findingLine({ kind: 'not_default', key }, 'Ann', null, 'not_default').text, 'Pays LNURL address mk@x.example · the same wallet as your default address');
+  assert.deepEqual(findingLine({ kind: 'other_wallet', key }, 'Ann'), { text: 'Pays LNURL address mk@x.example · not a wallet of Ann', error: true });
   const check = { feeds: [
     { feed_id: 1, state: 'correct', findings: [] },
     { feed_id: 2, state: 'not_default', findings: [{ kind: 'not_default', key }] },
@@ -382,7 +382,7 @@ test('the feed rows give the type first, each selected', () => {
   const feeds = [{ id: 2, title: 'Neon Diner', medium: 'music' }];
   const rows = feedRows([{ feed_id: 2, pays: [KEY('02ab')], roles: ['Vocals'] }], feeds);
   assert.equal(rows[0].lines[0], 'Album');
-  assert.deepEqual(rows[0].lines.slice(1), ['Pays Lightning node 02ab', 'Credited as Vocals']);
+  assert.deepEqual(rows[0].lines.slice(1), ['Pays Node address 02ab', 'Credited as Vocals']);
   assert.ok(rows[0].checked);
   assert.equal(feedsHeading(rows), 'Feeds · 1 of 1 selected');
   assert.deepEqual(levelRows([2, 9], feeds).map((r) => [r.title, r.checked]), [['Neon Diner', true], ['Feed 9', true]]);
@@ -470,7 +470,7 @@ test('the review line of a change set of a person names the operation', () => {
   assert.equal(changeLine({ feeds, operation: { kind: 'rename_person', name: 'Ann Ultra', payment: true, credit: false } }, 'Ann Ultra'),
     'Rename to Ann Ultra in 2 feeds (payment name)');
   assert.equal(changeLine({ feeds, operation: { kind: 'use_address', address: 'ann@example.com', recipient_type: 'lnaddress' } }, 'Ann'),
-    'Use Lightning address ann@example.com for Ann');
+    'Use LNURL address ann@example.com for Ann');
   assert.equal(changeLine({ feeds, operation: { kind: 'add_to_releases', payee: { percent: 5 }, credit: {}, support_link: null } }, 'Ann'),
     'Add Ann as a payee with 5% and a credit in 2 feeds');
   assert.equal(changeLine({ feeds, operation: { kind: 'remove_person', payee: true, credit: true } }, 'Ann'),
@@ -488,16 +488,16 @@ test('no text of the People area shows an XML attribute or the words "change set
       .filter((line) => !line.trim().startsWith('//'))
       .join('\n');
     assert.ok(!/method=/.test(source),
-      `ADR 0099 item 17: ${name} shows an XML attribute such as method="lnaddress". Name the type with "Lightning Address" instead.`);
+      `ADR 0099 item 17: ${name} shows an XML attribute such as method="lnaddress". Name the type with "LNURL Address" instead.`);
     assert.ok(!/change sets?/i.test(source),
       `ADR 0099 item 13: ${name} has a text with the words "change set". Say "changes" instead.`);
   }
 });
 
 test('the words of an address line and a change title follow ADR 0099 items 15 and 18', () => {
-  assert.equal(memberText({ address: 'a@b.c', recipient_type: 'lnaddress' }), 'Lightning address a@b.c');
+  assert.equal(memberText({ address: 'a@b.c', recipient_type: 'lnaddress' }), 'LNURL address a@b.c');
   assert.equal(memberText({ address: '03aa', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'x1' }), 'fountain.fm node · account x1');
-  assert.equal(memberText({ address: '03aa', recipient_type: 'node', custom_value: 'x1' }), 'Lightning node 03aa · account x1');
+  assert.equal(memberText({ address: '03aa', recipient_type: 'node', custom_value: 'x1' }), 'Node address 03aa · account x1');
   assert.equal(changeTitle({ kind: 'add' }), 'Add to All Releases');
 });
 
@@ -519,7 +519,7 @@ test('recipientPickRows gives a person row with its default address and leaves o
   assert.deepEqual(people.map((r) => r.name), ['Mary Kate']);
   assert.equal(people[0].line, 'Adds fountain.fm node · account acct1');
   assert.deepEqual(payees.map((r) => r.name), ['BoostBot']);
-  assert.equal(payees[0].line, 'Lightning address bot@x.example');
+  assert.equal(payees[0].line, 'LNURL address bot@x.example');
 });
 
 test('recipientFromPerson gives the name and the values of the default address, and no split', () => {
@@ -540,7 +540,7 @@ test('the type menu of the value editor uses the words of ADR 0099 item 14', asy
   assert.match(source, /label: WALLET_TYPES\[0\]\[1\]/);
   assert.match(source, /label: WALLET_TYPES\[1\]\[1\]/);
   const { WALLET_TYPES } = await import('../ui/recipients.js');
-  assert.deepEqual(WALLET_TYPES.map(([, label]) => label), ['Lightning Node', 'Lightning Address']);
+  assert.deepEqual(WALLET_TYPES.map(([, label]) => label), ['Node Address', 'LNURL Address']);
   assert.match(source, /Add to People/);
 });
 
@@ -593,10 +593,10 @@ test('a fee payee gets the fee mark, and a picked fee payee starts as a fee', as
   const { withFee, memberText } = await import('../ui/people.js');
   const { rowLines } = await import('../ui/recipients.js');
   const fee = { address: '03ae9f910000005e33', recipient_type: 'node', fee: true };
-  assert.equal(withFee(memberText(fee), fee), 'Lightning node 03ae9f91…5e33 · fee');
-  assert.deepEqual(rowLines({ addresses: [fee] }), ['Lightning node 03ae9f91…5e33 · fee']);
+  assert.equal(withFee(memberText(fee), fee), 'Node address 03ae9f91…5e33 · fee');
+  assert.deepEqual(rowLines({ addresses: [fee] }), ['Node address 03ae9f91…5e33 · fee']);
   const rows = recipientPickRows([], [{ saved_id: null, name: 'Podcast Index', addresses: [{ ...fee, name: 'Podcast Index' }] }]);
-  assert.equal(rows.payees[0].line, 'Lightning node 03ae9f91…5e33 · fee');
+  assert.equal(rows.payees[0].line, 'Node address 03ae9f91…5e33 · fee');
   assert.equal(rows.payees[0].recipient.fee, 'true');
 });
 
@@ -665,7 +665,7 @@ test('Make a Person starts a key with a warning not selected', () => {
   assert.equal(keyItemRow(NPUB, profilesOf({ name: 'Someone Else' }), 'Mary Kate').warning !== null, true);
 });
 
-test('the Lightning address line names the profile and the key', () => {
+test('the LNURL address line names the profile and the key', () => {
   const short = keyRow(NPUB, null).title;
   assert.equal(profileAddressNote(NPUB, profilesOf({ name: 'Mary Kate' })), `From the Nostr profile Mary Kate (${short}) · keysend checked`);
   assert.equal(profileAddressNote(NPUB, null), `From the Nostr profile ${short} · keysend checked`);
@@ -684,7 +684,7 @@ test('a wallet gives each member, and the menu offers each one', () => {
   assert.deepEqual(groups[0].members.map((m) => m.key.address), ['a@getalby.com', '02cd']);
   assert.equal(groups[0].members[1].member.provider, 'Alby');
   assert.equal(groups[0].members[1].count, 2);
-  assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['Lightning address a@getalby.com', 'Alby node']);
+  assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['LNURL address a@getalby.com', 'Alby node']);
 });
 
 test('ADR 0102: the person page ends with the delete, the confirmation and the sheet title', () => {
@@ -761,7 +761,7 @@ test('the rows of More from your feeds give the item, its feeds and its cause', 
   assert.equal(moreRows([{ ...items[0], npub: '' }])[0].title, 'vocals');
   assert.ok(rows[0].lines.includes('One, Two'));
   assert.ok(rows[0].lines.includes(causeText('same_npub')));
-  assert.equal(rows[1].title, 'Lightning address a@x.example');
+  assert.equal(rows[1].title, 'LNURL address a@x.example');
   assert.ok(rows[1].lines.includes('The wallet is a wallet of this person'));
   assert.deepEqual(rows[0].body, { credits: [['Hey', '', 'npub1k']], recipients: [], keys: [] });
   assert.deepEqual(moreItemBody(items[1]), { credits: [], recipients: [[KEYP('a@x.example'), 'lnaddress']], keys: [] });
@@ -1040,7 +1040,7 @@ test('the start values and the rows of a fill (ADR 0117 items 9 to 12)', () => {
   assert.deepEqual(byId.href.lines, ['Already the value of this person']);
   assert.equal(byId['wallet:0'].selectable, true);
   assert.equal(byId['wallet:0'].selected, false, 'ADR 0117 item 11: a wallet starts not selected.');
-  assert.deepEqual(byId['wallet:0'].lines.slice(0, 3), ['Lightning address', 'The feed gives no name for this recipient.', 'The value block of the feed · 100%']);
+  assert.deepEqual(byId['wallet:0'].lines.slice(0, 3), ['LNURL address', 'The feed gives no name for this recipient.', 'The value block of the feed · 100%']);
   const named = fillRows({ ...values, wallets: [{ ...values.wallets[0], name: 'Music Side Project' }] }, PENDING);
   assert.ok(named.find((r) => r.id === 'wallet:0').lines.includes('Paid to: Music Side Project'),
     'ADR 0117 item 9: a wallet row names its recipient. The human test of 0.1.0-rc.19 found a row with no clue of who the recipient was.');
@@ -1286,7 +1286,7 @@ test('the blocks of a payment: the address of the feed and the default address (
     place: 'Payments',
     what: 'Payment · not a wallet of Ann',
     lines: [
-      { label: 'In the album', value: 'Lightning address mk@x.example', old: true },
+      { label: 'In the album', value: 'LNURL address mk@x.example', old: true },
       { label: 'Ann', value: 'None', old: false },
     ],
   }]);
@@ -1404,4 +1404,11 @@ test('the fill button needs an empty field', () => {
   assert.equal(creditCanFill({ name: 'A', role: 'B', img: 'c', href: 'd', npub: null }), true);
   assert.equal(recipientCanFill({ name: 'A', address: 'b' }), false);
   assert.equal(recipientCanFill({ name: null, address: 'b' }), true);
+});
+
+test('a row with a key warning adds only with the label Add Anyway', async () => {
+  const { moreAddLabel } = await import('../ui/people.js');
+  assert.equal(moreAddLabel({ warning: 'The profile name is not "Ann". Check this key.' }), 'Add Anyway');
+  assert.equal(moreAddLabel({ warning: null }), 'Add');
+  assert.equal(moreAddLabel({}), 'Add');
 });

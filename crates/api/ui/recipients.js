@@ -180,7 +180,7 @@ function sourceHint(sources) {
 export function suggestionField(suggestions) {
   const list = suggestions || [];
   if (list.length === 0) {
-    return { menu: false, options: [], hints: {}, start: '', hint: 'Studio found no Lightning address for this wallet.' };
+    return { menu: false, options: [], hints: {}, start: '', hint: 'Studio found no LNURL address for this wallet.' };
   }
   return {
     menu: true,
@@ -239,7 +239,7 @@ const CAUSES = {
   only_fees: 'Each split of the value block is a fee.',
   split_not_number: 'A split of the value block is not a number.',
   bad_percent: 'The percentage must be a number from 1 to 99.',
-  no_node_recipient: 'Each value block has the Lightning address already.',
+  no_node_recipient: 'Each value block has the LNURL address already.',
   in_open_change_set: 'The feed has other changes that Studio did not write.',
 };
 
@@ -383,7 +383,7 @@ export function hasWrittenFeed(changeSet, statuses) {
 const WALLET_TITLES = {
   change_address: 'Change Address',
   rename: 'Rename',
-  use_lnaddress: 'Use the Lightning Address',
+  use_lnaddress: 'Use the LNURL Address',
   add: 'Add to All Releases',
   remove: 'Remove from Feeds',
 };
@@ -393,7 +393,7 @@ const WALLET_TITLES = {
 const WALLET_LINES = {
   change_address: 'Pay a different address of this wallet in your feeds.',
   rename: 'Change the name of this payee in your feeds.',
-  use_lnaddress: 'Pay the Lightning address of this wallet in your feeds.',
+  use_lnaddress: 'Pay the LNURL address of this wallet in your feeds.',
   add: 'Add this payee to each release of an artist or label.',
   remove: 'Remove this payee from the value blocks of your feeds.',
 };
@@ -405,7 +405,7 @@ export function walletActions(entry) {
 }
 
 // The menu of the type of an address (ADR 0099 item 14).
-export const WALLET_TYPES = [['node', 'Lightning Node'], ['lnaddress', 'Lightning Address']];
+export const WALLET_TYPES = [['node', 'Node Address'], ['lnaddress', 'LNURL Address']];
 
 // The hint of the custom key (ADR 0099 item 14).
 export const CUSTOM_KEY_HINT = 'Most wallets do not need it. Copy it from your wallet when it gives one.';

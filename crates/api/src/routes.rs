@@ -5703,7 +5703,7 @@ fn check_lnaddress(
     if keysend::lookup_url(w.keysend_scheme.unwrap_or("https"), &address).is_none() {
         return Err(refused(
             "invalid_recipient",
-            "the Lightning address needs the form name@domain".to_owned(),
+            "the LNURL address needs the form name@domain".to_owned(),
         ));
     }
     let wallet = keysend::wallet_key(recipient, lookups);
@@ -5739,7 +5739,7 @@ fn check_lnaddress(
     if key_parts(&found) != key_parts(&wallet) {
         return Err(refused(
             "lnaddress_mismatch",
-            format!("the Lightning address {address} pays a different wallet"),
+            format!("the LNURL address {address} pays a different wallet"),
         ));
     }
     Ok(())

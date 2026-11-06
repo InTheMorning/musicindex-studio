@@ -37,9 +37,9 @@ A control with a change has a mark at its start edge.
 - Studio asks before you open a different page with a change that is not saved. Select **Keep Editing** to stay on the page. Select **Discard Changes** to open the other page.
 
 - **Suggestions for the picture** and **Suggestions for the information address** show below those two fields. Studio takes the values from the Nostr profile of a key of the person, from the credits of the feeds and from the artist or label feed. Each line names its source. Select **Use** to fill the field. Then select **Save**. When the field has a value, the other values are in a line that you open.
-- **More from your feeds** lists items that can belong to this person. Select **Add** for an item.
+- **More from your feeds** lists items that can belong to this person. Select **Add** for an item. A row can warn that the name of a Nostr profile is not the name of this person. Select **Correct the Feeds** to open **Check your feeds** and replace that key. Select **Add Anyway** when the key is correct, for example for a band or a label.
 - **Payment** shows the wallets and the default address. Select **Add a Wallet** to add one. Select **Remove Wallet** below a wallet to remove it from the person.
-- A Lightning address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, remove the key in **Credits**.
+- An LNURL address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, remove the key in **Credits**.
 - **Credits** shows the credit names and the Nostr keys.
 - **Add a Nostr Key** opens the sheet **Find a Nostr profile**. Type a name, an `npub` key or a NIP-05 address in the field. Then select **Search**, and select a result to add the key.
 - The row **Nostr key** of **Add a Credit Name** opens the same sheet.

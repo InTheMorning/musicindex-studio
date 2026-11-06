@@ -174,8 +174,8 @@ This run used the plain binary, not an AppImage. It uses the system GStreamer wi
 
 Corrected for the next candidate. The page of a person named a node key "Lightning address". Two paths stored a node key with the type "Lightning address": the form "Add a Wallet", which starts on that type, and a wallet from the Lightning address of a Nostr profile. A picker could then write that type with a node key into a feed. The core now gives a wallet its type from its address (ADR 0098 item 26). This also corrects each stored row at a read.
 
-The labels are now "Lightning node" and "Lightning address". A proposal to rename them is open.
+The labels are now "Node address" and "LNURL address" ([ADR 0138](../adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md)).
 
 ### 20. A Wrong Nostr Key Has Only The Button Add
 
-Open. "More from your feeds" shows a Nostr key of a different account with a warning. Its only button is "Add", which is not a correction. "Check your feeds" can correct that key, but the row does not lead to it.
+Corrected ([ADR 0138](../adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md)). "More from your feeds" showed a Nostr key of a different account with a warning. Its only button was "Add", which is not a correction. The row now has "Correct the Feeds", which opens "Check your feeds", and "Add Anyway".

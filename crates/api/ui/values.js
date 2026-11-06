@@ -61,7 +61,7 @@ function fresh(value) {
 
 const TYPES = [
   { value: 'node', label: WALLET_TYPES[0][1], hint: 'The public key of the Lightning node, 66 hexadecimal characters.' },
-  { value: 'lnaddress', label: WALLET_TYPES[1][1], hint: 'A Lightning address, for example name@example.com.' },
+  { value: 'lnaddress', label: WALLET_TYPES[1][1], hint: 'An LNURL address, for example name@example.com.' },
 ];
 
 // One load of `GET /recipients` for the page. Each `Recipients` shares it. The
@@ -136,7 +136,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         </div>
         <${TextField} id=${`${rid}-address`} label="Address"
           hint=${r.recipient_type === 'lnaddress' && r.address && lookups && lookups.get(r.address.trim().toLowerCase()) === 'none'
-            ? lookupHint(r.address.trim()) : type ? type.hint : 'A node public key, or a Lightning address.'}
+            ? lookupHint(r.address.trim()) : type ? type.hint : 'A node public key, or an LNURL address.'}
           value=${r.address} onChange=${change('address')} />
         ${r.recipient_type !== 'lnaddress' && html`<div class="grid2">
           <${TextField} id=${`${rid}-key`} label="Custom key" hint=${CUSTOM_KEY_HINT} value=${r.custom_key} onChange=${change('custom_key')} />

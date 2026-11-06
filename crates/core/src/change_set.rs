@@ -1775,7 +1775,7 @@ pub fn check_operation(operation: &RecipientOperation) -> Result<(), PipelineErr
             Err(invalid("the recipient needs a type"))
         }
         RecipientOperation::UseLnaddress { address } if address.trim().is_empty() => {
-            Err(invalid("the Lightning address is empty"))
+            Err(invalid("the LNURL address is empty"))
         }
         RecipientOperation::UseAddress {
             address,

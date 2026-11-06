@@ -205,3 +205,7 @@ Corrected ([ADR 0141](../adr/0141-the-form-of-add-a-wallet-comes-first.md) items
 ### 26. A Row Of "Check Your Feeds" Does Not Name The Track
 
 Corrected ([ADR 0143](../adr/0143-a-feed-row-names-the-tracks-of-a-person.md)). A row in the group "Correct" gave the feed, the address and the role. It did not name the track that has them, so the row was not very useful for a feed with many tracks.
+
+### 27. An Open Recipient Has Too Many Controls
+
+Corrected ([ADR 0144](../adr/0144-recipients-use-one-picker-and-sort-by-split.md)). An open recipient had three rows of buttons, three ways to add or fill a recipient, and move buttons. The operator selected one sheet and a short row from a mockup, and asked that the rows sort by split.

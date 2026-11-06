@@ -476,7 +476,7 @@ export function defaultFirst(groups, value) {
     .map((g) => ({ ...g, members: [...g.members].sort((x, y) => rank(x) - rank(y)) }))
     .sort((x, y) => rank(x.members[0]) - rank(y.members[0]));
 }
-export const DEFAULT_HINT = '"Pick from your people" adds the default address of this person.';
+export const DEFAULT_HINT = '"Add a Recipient" uses the default address of this person.';
 
 // The roles of a credit name, with the usual role of the person first and in
 // brackets, when the credit name has that role (ADR 0140 item 7).
@@ -1402,14 +1402,6 @@ export function recipientPickRows(people, recipients) {
   return { people: rows, payees };
 }
 
-// The rows that match the text of the filter field, by name and address. This
-// is a display filter only.
-export function filterPickRows(rows, query) {
-  const q = String(query ?? '').trim().toLowerCase();
-  if (q === '') return rows;
-  return rows.filter((r) => `${r.name || ''} ${r.recipient.address || ''}`.toLowerCase().includes(q));
-}
-
 // ---- The pickers of the credits and the support links (ADR 0099 items 20 and 21) ----
 
 const lowerName = (name) => String(name ?? '').trim().toLowerCase();
@@ -1461,20 +1453,8 @@ export function fillCredit(credit, person) {
   };
 }
 
-// The recipient with each empty field filled from a person. The address comes
-// with its type, its custom key and its custom value. The split and the fee
-// mark stay (ADR 0137 item 6).
-export function fillRecipient(recipient, person) {
-  const start = recipientFromPerson(person);
-  const name = isEmpty(recipient.name) ? start.name : recipient.name;
-  if (!isEmpty(recipient.address) || isEmpty(start.address)) return { ...recipient, name };
-  return { ...recipient, name, recipient_type: start.recipient_type, address: start.address,
-    custom_key: start.custom_key, custom_value: start.custom_value };
-}
-
 const hasEmpty = (subject, fields) => fields.some((field) => isEmpty(subject[field]));
 export const creditCanFill = (credit) => hasEmpty(credit, ['name', 'role', 'img', 'href', 'npub']);
-export const recipientCanFill = (recipient) => hasEmpty(recipient, ['name', 'address']);
 
 // The rows of the sheet "Fill From a Person": each person that fills a field,
 // and a person with the name of the subject first (ADR 0137 item 7).
@@ -1490,9 +1470,6 @@ function personFillRows(people, subject, fill, fields) {
 
 export const creditFillRows = (people, credit) => personFillRows(people, credit, fillCredit, [
   ['name', 'name'], ['role', 'role'], ['img', 'picture'], ['href', 'information address'], ['npub', 'Nostr key'],
-]);
-export const recipientFillRows = (people, recipient) => personFillRows(people, recipient, fillRecipient, [
-  ['name', 'name'], ['address', 'address'],
 ]);
 
 // The new support link from a link of a person: a start value.

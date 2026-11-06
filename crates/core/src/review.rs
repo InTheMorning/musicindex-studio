@@ -800,6 +800,39 @@ fn match_entries(olds: &[Obj], news: &[Obj]) -> Vec<Match> {
     matches
 }
 
+/// Match the recipients of a block by address, custom key and custom value,
+/// because a save sorts them and a recipient can change its place (ADR 0144
+/// item 7). With as many other old as new recipients, the k-th old is the k-th
+/// new, so a new address shows as a change.
+fn match_recipients(olds: &[Obj], news: &[Obj]) -> Vec<Match> {
+    let identity =
+        |obj: &Obj| ["address", "custom_key", "custom_value"].map(|key| string_at(obj.map, key));
+    let mut other_news: Vec<usize> = (0..news.len()).collect();
+    let mut matches = Vec::new();
+    let mut other_olds = Vec::new();
+    for (i, old) in olds.iter().enumerate() {
+        let found = other_news
+            .iter()
+            .position(|&j| identity(&news[j]) == identity(old));
+        match found {
+            Some(at) => matches.push(Match::Pair(i, other_news.remove(at))),
+            None => other_olds.push(i),
+        }
+    }
+    if other_olds.len() == other_news.len() {
+        matches.extend(
+            other_olds
+                .into_iter()
+                .zip(other_news)
+                .map(|(i, j)| Match::Pair(i, j)),
+        );
+    } else {
+        matches.extend(other_olds.into_iter().map(Match::Removed));
+        matches.extend(other_news.into_iter().map(Match::Added));
+    }
+    matches
+}
+
 /// The role and the credit name that a change inherits from its entry.
 #[derive(Debug, Clone, Copy, Default)]
 struct Who<'a> {
@@ -959,7 +992,12 @@ fn walk_field(
         Via::List(ns, local, sub) => {
             let olds = entries(old, field.key, *ns, local);
             let news = entries(new, field.key, *ns, local);
-            for matched in match_entries(&olds, &news) {
+            let matches = if field.key == "recipients" {
+                match_recipients(&olds, &news)
+            } else {
+                match_entries(&olds, &news)
+            };
+            for matched in matches {
                 match_changes(&matched, sub, &olds, &news, path, field.key, who, out);
             }
         }
@@ -1401,6 +1439,29 @@ mod tests {
         assert!(!changes.is_empty(), "{:?}", review.fields);
         assert!(changes.iter().all(|c| c.name.is_none()), "{changes:?}");
         assert_eq!(changes[0].entry.as_deref(), Some("Ann"));
+    }
+
+    #[test]
+    fn a_recipient_at_a_new_place_shows_only_the_changes_of_its_values() {
+        let value = |rows: [(&str, &str); 2]| {
+            let [first, second] = rows.map(|(name, split)| {
+                format!(
+                    "<podcast:valueRecipient name=\"{name}\" type=\"node\" address=\"{name}\" split=\"{split}\"/>\n"
+                )
+            });
+            feed(&format!(
+                "<podcast:value type=\"lightning\" method=\"keysend\">\n{first}{second}</podcast:value>\n"
+            ))
+        };
+        let review = run(
+            &value([("a", "10"), ("b", "10")]),
+            &value([("b", "99"), ("a", "10")]),
+        );
+        let changes: Vec<_> = review.fields.iter().flat_map(|g| &g.changes).collect();
+        assert_eq!(changes.len(), 1, "ADR 0144 item 7: {changes:?}");
+        assert_eq!(changes[0].op, ChangeOp::Changed);
+        assert_eq!(changes[0].entry.as_deref(), Some("b"));
+        assert_eq!(changes[0].new.as_ref().and_then(Value::as_str), Some("99"));
     }
 
     fn two_items(order: [&str; 2], second_title: &str) -> String {

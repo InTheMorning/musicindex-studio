@@ -611,10 +611,11 @@ fn rename_and_change_address_change_each_member_of_a_wallet_in_one_feed() {
     let names: Vec<_> = feed.recipients().iter().map(|r| r.name.clone()).collect();
     assert_eq!(
         names,
+        // The saved block sorts by split (ADR 0144 item 5).
         [
             Some("Anna".into()),
-            Some("Anna".into()),
-            Some("Other".into())
+            Some("Other".into()),
+            Some("Anna".into())
         ],
         "ADR 0095 item 9: Rename must act on each member of the wallet."
     );
@@ -635,7 +636,7 @@ fn rename_and_change_address_change_each_member_of_a_wallet_in_one_feed() {
     .unwrap();
     assert_eq!(
         addresses(&s.collection, one),
-        ["new", "new", "other"],
+        ["new", "other", "new"],
         "ADR 0095 item 9: Change address must act on each member of the wallet."
     );
 }

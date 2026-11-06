@@ -502,7 +502,7 @@ test('the words of an address line and a change title follow ADR 0099 items 15 a
 });
 
 // ---- The recipient picker (task 066a) ----
-import { recipientPickRows, recipientFromPerson, filterPickRows } from '../ui/people.js';
+import { recipientPickRows, recipientFromPerson } from '../ui/people.js';
 
 const PICK_PEOPLE = [
   { id: 1, name: 'Mary Kate', img: '', default_address: { address: '03aa', custom_key: '696969', custom_value: 'acct1' },
@@ -528,12 +528,6 @@ test('recipientFromPerson gives the name and the values of the default address, 
   });
 });
 
-test('filterPickRows filters by name and address', () => {
-  const { payees } = recipientPickRows(PICK_PEOPLE, PICK_RECIPIENTS);
-  assert.equal(filterPickRows(payees, 'BOT@').length, 1);
-  assert.equal(filterPickRows(payees, 'zzz').length, 0);
-});
-
 test('the type menu of the value editor uses the words of ADR 0099 item 14', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../ui/values.js', import.meta.url), 'utf8');
@@ -551,7 +545,7 @@ test('a default address that is not a wallet row gets the type of its form', () 
   assert.equal(recipientFromPerson(node).recipient_type, 'node');
 });
 
-import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel, nostrPickRows, fillCredit, fillRecipient, creditFillRows, recipientFillRows, creditCanFill, recipientCanFill } from '../ui/people.js';
+import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel, nostrPickRows, fillCredit, creditFillRows, creditCanFill } from '../ui/people.js';
 
 const CREDIT_SRC = [
   { id: 1, name: 'Mary Kate', usual_role: 'Vocals', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1mku7abcdefghijklmnopq2xh' }, { npub: 'npub1second' }],
@@ -1382,29 +1376,17 @@ test('fillCredit fills only the empty fields, and a role comes with its group', 
   assert.equal(fillCredit(own, FILL_PERSON).group, null);
 });
 
-test('fillRecipient keeps an address, the split and the fee mark', () => {
-  const empty = { _cid: 1, name: null, recipient_type: 'node', address: null, split: '10', custom_key: null, custom_value: null, fee: 'true' };
-  assert.deepEqual(fillRecipient(empty, FILL_PERSON), { ...empty, name: 'Mary Kate', recipient_type: 'lnaddress', address: 'mk@example.com' });
-  const own = { ...empty, address: '03abc' };
-  assert.deepEqual(fillRecipient(own, FILL_PERSON), { ...own, name: 'Mary Kate' });
-  assert.deepEqual(fillRecipient(empty, { id: 2, name: 'Jo', wallets: [] }), { ...empty, name: 'Jo' });
-});
-
 test('the fill rows name the fields, leave out a person with nothing to fill and put the same name first', () => {
   const other = { id: 8, name: 'Jo', keys: [] };
   const credit = { name: 'Mary Kate', role: 'Vocals', group: null, img: null, href: 'https://mine', npub: null };
   const rows = creditFillRows([other, FILL_PERSON], credit);
   assert.deepEqual(rows.map((r) => [r.id, r.line]), [[7, 'Fills: picture, Nostr key']]);
   assert.deepEqual(creditFillRows([{ ...FILL_PERSON, id: 9, name: 'Other' }, FILL_PERSON], credit).map((r) => r.id), [7, 9]);
-  assert.deepEqual(recipientFillRows([FILL_PERSON], { name: 'Mary Kate', address: null }).map((r) => r.line), ['Fills: address']);
-  assert.deepEqual(recipientFillRows([other], { name: 'Mary Kate', address: null }), []);
 });
 
 test('the fill button needs an empty field', () => {
   assert.equal(creditCanFill({ name: 'A', role: 'B', img: 'c', href: 'd', npub: 'e' }), false);
   assert.equal(creditCanFill({ name: 'A', role: 'B', img: 'c', href: 'd', npub: null }), true);
-  assert.equal(recipientCanFill({ name: 'A', address: 'b' }), false);
-  assert.equal(recipientCanFill({ name: null, address: 'b' }), true);
 });
 
 test('a row with a key warning adds only with the label Add Anyway', async () => {
@@ -1510,4 +1492,14 @@ test('a feed row names the tracks of a payment and of a credit', async () => {
   }], null);
   assert.match(row.lines[0], /^Pays .*a@b\.example · Channel, One$/);
   assert.equal(row.lines[1], 'Credited as composer, guitarist · One, Two and 2 more');
+});
+
+test('the rows sort by split and the sheet keeps the fields of a recipient', async () => {
+  const { splitOrder, recipientFields, recipientFromFields } = await import('../ui/recipients.js');
+  assert.deepEqual(splitOrder([{ split: '1' }, { split: '99' }, { split: '' }, { split: '99' }, { split: 'x' }]), [1, 3, 0, 2, 4]);
+  assert.deepEqual(recipientFields({ recipient_type: 'node' }), { name: '', recipient_type: 'node', address: '', custom_key: '', custom_value: '' });
+  assert.deepEqual(recipientFromFields({ name: ' ', recipient_type: 'lnaddress', address: ' a@b.example ', custom_key: 'k', custom_value: 'v' }),
+    { name: null, recipient_type: 'lnaddress', address: 'a@b.example', custom_key: null, custom_value: null });
+  assert.deepEqual(recipientFromFields({ name: 'A', recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' }),
+    { name: 'A', recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' });
 });

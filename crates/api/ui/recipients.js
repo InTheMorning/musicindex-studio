@@ -514,6 +514,33 @@ export function walletBodyOf(entry) {
   };
 }
 
+// The rows of a list by split, the biggest first, with the sequence of the list
+// for equal splits (ADR 0144 item 4). This is only the sequence on the screen.
+// The core sorts the feed. `split` of a row can be any text while the user types.
+export function splitOrder(recipients) {
+  const amount = (r) => {
+    const value = Number(String(r.split ?? '').trim());
+    return Number.isFinite(value) ? value : 0;
+  };
+  return recipients.map((r, i) => [amount(r), i]).sort((x, y) => y[0] - x[0] || x[1] - y[1]).map(([, i]) => i);
+}
+
+// The fields of a recipient that the sheet "Add a Recipient" edits (ADR 0144
+// item 2). The split and the fee mark belong to the row.
+export const recipientFields = (r) => ({
+  name: r.name ?? '', recipient_type: r.recipient_type ?? 'node', address: r.address ?? '',
+  custom_key: r.custom_key ?? '', custom_value: r.custom_value ?? '',
+});
+
+// The values that the sheet gives to the row. Empty text is no value, and a
+// Lightning-style address has no custom key.
+export function recipientFromFields(fields) {
+  const text = (value) => (String(value ?? '').trim() === '' ? null : String(value).trim());
+  const node = fields.recipient_type !== 'lnaddress';
+  return { name: text(fields.name), recipient_type: fields.recipient_type, address: text(fields.address),
+    custom_key: node ? text(fields.custom_key) : null, custom_value: node ? text(fields.custom_value) : null };
+}
+
 // The sections of the sheet "Add a Wallet" of a person (ADR 0141). The form
 // comes first and has no title. Each payee with no person is a row that fills
 // the form.

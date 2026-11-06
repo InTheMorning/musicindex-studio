@@ -1,11 +1,10 @@
 // The value editor (task 012): the payment recipients of the album and of
 // each track. The editor does not change a value time split.
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
-import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
+import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts } from './recipients.js';
-import { recipientPickRows, filterPickRows, recipientIdentity, personKeys, recipientFillRows, fillRecipient, recipientCanFill } from './people.js';
-import { FillSheet } from './editor.js';
+import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
+import { recipientPickRows, recipientIdentity, personKeys, memberLine } from './people.js';
 import { PersonArt } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
@@ -102,78 +101,151 @@ function Choice({ id, label, value, options, onChange }) {
 // and the add row sit as direct rows of the group, each with the group's
 // own inset separator (review of task 014c, defect 3). The rows form two
 // groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
-// fee "true" is in "Fees". The model keeps the sequence of the recipients.
+// fee "true" is in "Fees". The screen sorts each group by split (ADR 0144).
 function Recipients({ id, recipients, defaultType, onChange }) {
   const percent = percentages(recipients);
-  const [lookups, setLookups] = useState(null);
-  useEffect(() => { loadLookups().then(setLookups); }, []);
+  // The sheet of a new recipient or of one address: null when closed, else
+  // `{ cid }` with the `_cid` of the row to change, or `{}` for a new row.
+  const [sheet, setSheet] = useState(null);
+  const [copying, setCopying] = useState(false);
   const blank = { name: null, recipient_type: defaultType, address: null, split: '', custom_key: null, custom_value: null, fee: null };
-  // The picker sheet (task 013c, ADR 0027). It only adds a recipient. It
-  // does not replace or remove a recipient of this list.
-  const [picking, setPicking] = useState(false);
-  const [filling, setFilling] = useState(null);
-  const fillingRecipient = recipients.find((r) => r._cid === filling);
-  const addPicked = (added) => {
-    onChange([...recipients, ...added]);
-    setPicking(false);
+  const changing = sheet && recipients.find((r) => r._cid === sheet.cid);
+  const save = (values) => {
+    if (changing) {
+      onChange(recipients.map((r) => (r._cid === changing._cid ? { ...r, ...values } : r)));
+    } else {
+      const added = withCids([{ ...blank, ...values }])[0];
+      startOpen.add(added._cid);
+      onChange([...recipients, added]);
+    }
   };
+  const addCopied = (added) => {
+    onChange([...recipients, ...added]);
+    setCopying(false);
+  };
+  // The rows stay where they are while the focus is in a row. They sort when
+  // the focus leaves it, and when a row comes or goes (ADR 0144 item 4). The
+  // delay lets a click finish before the row under the pointer moves.
+  const [sortAt, setSortAt] = useState(0);
+  const order = useRef({ at: -1, cids: [] });
+  const same = order.current.cids.length === recipients.length && recipients.every((r) => order.current.cids.includes(r._cid));
+  if (order.current.at !== sortAt || !same) {
+    order.current = { at: sortAt, cids: splitOrder(recipients).map((i) => recipients[i]._cid) };
+  }
   const row = (r, i) => {
       const change = (name) => (value) => onChange(setAt(recipients, i, set(r, name, value)));
       const rid = `${id}-r-${r._cid}`;
-      const name = r.name || r.address || 'this recipient';
-      const type = TYPES.find((t) => t.value === r.recipient_type);
-      return html`<details class="recipient" name=${`${id}-recipients`} key=${r._cid} ref=${openOnce(r._cid)}>
+      const line = r.address ? memberLine(r, true) : { label: 'No address', address: null, account: null };
+      return html`<details class="recipient" name=${`${id}-recipients`} key=${r._cid} ref=${openOnce(r._cid)}
+        onfocusout=${(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setTimeout(() => setSortAt((n) => n + 1), 200); }}>
         <summary>
-          <span class="title">${r.name || 'New recipient'}</span>
+          <span class="title">${r.name || r.address || 'New recipient'}</span>
           <${Meter} percent=${percent[i]} />
           <span class="share">${percentText(percent[i])}${isFee(r) ? ' fee' : ''}</span>
           <span class="mono address">${r.address || 'No address'}</span>
         </summary>
         <div class="form">
-        <div class="grid2">
-          <${TextField} id=${`${rid}-name`} label="Name" value=${r.name} onChange=${change('name')} />
-          <${Choice} id=${`${rid}-type`} label="Type" value=${r.recipient_type} options=${TYPES} onChange=${change('recipient_type')} />
-        </div>
-        <${TextField} id=${`${rid}-address`} label="Address"
-          hint=${r.recipient_type === 'lnaddress' && r.address && lookups && lookups.get(r.address.trim().toLowerCase()) === 'none'
-            ? lookupHint(r.address.trim()) : type ? type.hint : 'A node public key, or an LNURL address.'}
-          value=${r.address} onChange=${change('address')} />
-        ${r.recipient_type !== 'lnaddress' && html`<div class="grid2">
-          <${TextField} id=${`${rid}-key`} label="Custom key" hint=${CUSTOM_KEY_HINT} value=${r.custom_key} onChange=${change('custom_key')} />
-          <${TextField} id=${`${rid}-value`} label="Account" hint="The account on that node." value=${r.custom_value} onChange=${change('custom_value')} />
-        </div>`}
-        <div class="grid2">
-          <${TextField} id=${`${rid}-split`} label=${isFee(r) ? 'Split (percent)' : 'Split (shares)'} inputmode="numeric" value=${r.split} onChange=${change('split')} />
-        </div>
+        <${TextField} id=${`${rid}-split`} label=${isFee(r) ? 'Split (percent)' : 'Split (shares)'} inputmode="numeric" value=${r.split} onChange=${change('split')} />
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
-          Fee: this recipient gets its split as a percentage before the others share the rest</label>
-        ${recipientCanFill(r) && html`<div class="actions"><button class="button action" type="button" onClick=${() => setFilling(r._cid)}>Fill from a Person</button></div>`}
-        <${SaveRecipientButton} recipient=${r} />
-        <${EntryActions} list=${recipients} index=${i} name=${name} onChange=${onChange} />
+          Fee, paid first</label>
+        <div class="link-row static address-row"><span class="text"><span class="label">${line.label}</span>
+            ${line.address && html`<span class="summary mono address-text">${line.address}</span>`}
+            ${line.account && html`<span class="summary">Account ${line.account}</span>`}</span>
+          <${SaveRecipientButton} recipient=${r} />
+          <button class="button" type="button" aria-label=${`Change the address of ${r.name || r.address || 'this recipient'}`} onClick=${() => setSheet({ cid: r._cid })}>Change…</button>
+        </div>
+        <div class="actions"><button class="button destructive" type="button"
+          aria-label=${`Remove ${r.name || r.address || 'this recipient'}`} onClick=${() => onChange(recipients.filter((_, k) => k !== i))}>Remove</button></div>
         </div>
       </details>`;
   };
   // A group holds the rows of one kind. Each row keeps its index in the list.
-  const ofGroup = (fee) => recipients.map((r, i) => (isFee(r) === fee ? row(r, i) : null));
+  const ofGroup = (fee) => order.current.cids.map((cid) => {
+    const i = recipients.findIndex((r) => r._cid === cid);
+    return i >= 0 && isFee(recipients[i]) === fee ? row(recipients[i], i) : null;
+  });
   return html`<h3 class="value-group">Recipients</h3>
     ${ofGroup(false)}
     ${!recipients.some((r) => !isFee(r)) && html`<p class="hint">No recipients.</p>`}
-    <button class="link-row add" type="button"
-      onClick=${() => {
-        const added = withCids([blank])[0];
-        startOpen.add(added._cid);
-        onChange([...recipients, added]);
-      }}><span class="num">＋</span><span class="title">Add a recipient</span></button>
-    <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
-      <span class="num">＋</span><span class="title">Pick from your people</span></button>
+    <button class="link-row add" type="button" onClick=${() => setSheet({})}><span class="num">＋</span><span class="title">Add a recipient</span></button>
     <h3 class="value-group">Fees</h3>
     ${ofGroup(true)}
     ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
-    <${PickerSheet} open=${picking} recipients=${recipients} onAdd=${addPicked} onClose=${() => setPicking(false)} />
-    <${FillSheet} open=${!!fillingRecipient} load=${(people) => recipientFillRows(people, fillingRecipient)}
-      onPick=${(row) => onChange(recipients.map((r) => (r._cid === filling ? fillRecipient(r, row.person) : r)))}
-      onClose=${() => setFilling(null)} />`;
+    <${RecipientSheet} open=${sheet !== null} recipient=${changing || null} defaultType=${defaultType} recipients=${recipients}
+      onSave=${save} onCopy=${() => { setSheet(null); setCopying(true); }} onClose=${() => setSheet(null)} />
+    <${PickerSheet} open=${copying} recipients=${recipients} onAdd=${addCopied} onClose=${() => setCopying(false)} />`;
+}
+
+// The sheet "Add a Recipient", or "Change the Address" of a row (ADR 0144). It
+// has the layout of the sheet "Add a Wallet" (ADR 0123, ADR 0141): the form
+// first, then the rows that fill it.
+function RecipientSheet({ open, recipient, defaultType, recipients, onSave, onCopy, onClose }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="recipient-title" onClose=${onClose}>
+    ${open && html`<${RecipientForm} key=${recipient ? recipient._cid : 'new'} recipient=${recipient} defaultType=${defaultType}
+      recipients=${recipients} onSave=${(values) => { onSave(values); ref.current.close(); }} onCopy=${onCopy} onCancel=${() => ref.current.close()} />`}
+  </dialog>`;
+}
+
+function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onCancel }) {
+  const [fields, setFields] = useState(() => recipientFields(recipient || { recipient_type: defaultType }));
+  const [list, setList] = useState(null);
+  const [lookups, setLookups] = useState(null);
+  const loading = useAction();
+  useEffect(() => {
+    loadLookups().then(setLookups);
+    loading.run(async () => {
+      const [people, known] = await Promise.all([api('/people'), api('/recipients')]);
+      setList(recipientPickRows(people, known));
+    });
+  }, []);
+  const set = (name) => (value) => setFields((current) => ({ ...current, [name]: value ?? '' }));
+  const type = TYPES.find((t) => t.value === fields.recipient_type);
+  const address = fields.address.trim();
+  const others = new Set(recipients.filter((r) => r !== recipient).map(identityOf));
+  const values = recipientFromFields(fields);
+  const taken = address !== '' && others.has(identityOf(values));
+  const pickRow = (r) => {
+    const rowKey = recipientIdentity(r.recipient);
+    const used = others.has(rowKey);
+    return html`<div class="link-row static pick-fill" key=${rowKey}>
+      <button class="link-row" type="button" disabled=${used} aria-current=${rowKey === recipientIdentity(values) ? 'true' : undefined}
+        onClick=${() => setFields((current) => ({ ...current, ...recipientFields(r.recipient) }))}>
+        ${r.person && html`<${PersonArt} person=${r.person} />`}
+        <span class="text"><span class="label">${r.name}</span><span class="summary">${used ? 'Already in this list' : r.line}</span></span>
+      </button>
+      ${!r.person && html`<${SaveRecipientButton} recipient=${r.recipient} />`}
+    </div>`;
+  };
+  return html`<header>
+      <h2 id="recipient-title">${recipient ? 'Change the Address' : 'Add a Recipient'}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
+    </header>
+    <form class="body" id="recipient-form" onSubmit=${(e) => { e.preventDefault(); if (address !== '' && !taken) onSave(values); }}>
+      <section class="page-section pinned-form"><div class="group rows">
+        <${Choice} id="recipient-type" label="Type" value=${fields.recipient_type} options=${TYPES} onChange=${set('recipient_type')} />
+        <${TextField} id="recipient-address" label="Address" required
+          hint=${fields.recipient_type === 'lnaddress' && address && lookups && lookups.get(address.toLowerCase()) === 'none'
+            ? lookupHint(address) : type ? type.hint : ''}
+          value=${fields.address} onChange=${set('address')} />
+        <${TextField} id="recipient-name" label="Name" required value=${fields.name} onChange=${set('name')} />
+        ${fields.recipient_type !== 'lnaddress' && html`
+          <${TextField} id="recipient-key" label="Custom key" required hint=${CUSTOM_KEY_HINT} value=${fields.custom_key} onChange=${set('custom_key')} />
+          <${TextField} id="recipient-account" label="Account" required hint="The account on that node." value=${fields.custom_value} onChange=${set('custom_value')} />`}
+      </div>${taken && html`<p class="field-error">This address is already in this list.</p>`}</section>
+      <${ErrorNotice} error=${loading.error} />
+      ${list === null && !loading.error && html`<p class="hint" role="status">Loading your people…</p>`}
+      ${list !== null && list.people.length > 0 && html`<section class="page-section"><h2>Your people</h2>
+        <div class="group">${list.people.map(pickRow)}</div></section>`}
+      ${list !== null && list.payees.length > 0 && html`<section class="page-section"><h2>Payees with no person</h2>
+        <div class="group">${list.payees.map(pickRow)}</div></section>`}
+      ${!recipient && html`<div class="group"><button class="link-row" type="button" onClick=${onCopy}>
+        <span class="text"><span class="label">Copy from a Feed on musicindex</span>
+          <span class="summary">Select many recipients of a different feed.</span></span>
+        <span class="go" aria-hidden="true">›</span></button></div>`}
+    </form>
+    <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>`;
 }
 
 // ---- Save a recipient (task 013c, ADR 0027 item 5) ----
@@ -206,7 +278,8 @@ function SaveRecipientButton({ recipient }) {
     recipientsPromise = null;
     setTimeout(() => { setSaved(false); setInPeople(true); }, 2000);
   });
-  if (inPeople && !saved) return html`<p class="hint">This recipient is in People.</p>`;
+  // Only a recipient with an address that no person holds can be added (ADR 0144 item 3).
+  if (!recipient.address || (inPeople !== false && !saved)) return null;
   return html`<${ErrorNotice} error=${error} />
     <div class="actions">
       <button class="button action" type="button" disabled=${busy} onClick=${save}>
@@ -239,25 +312,11 @@ export function PickRow({ name, address, line, status, checked, taken, onToggle,
   </div>`;
 }
 
-// The picker sheet: the people, the payees with no person, then musicindex
-// (ADR 0099 item 19, ADR 0027 items 5 to 7, and ADR 0030). `Recipients` opens it from the album and from each track.
+// The sheet that copies many recipients of a feed on musicindex (ADR 0027
+// items 5 to 7, ADR 0030, ADR 0144 item 2).
 function PickerSheet({ open, recipients, onAdd, onClose }) {
   const ref = useSheet(open);
   const taken = new Set(recipients.map(identityOf));
-
-  // ---- Your recipients ----
-  const [list, setList] = useState(null);
-  const [filter, setFilter] = useState('');
-  const [yoursSelected, setYoursSelected] = useState(new Set());
-  const yours = useAction();
-  const toggleYours = (key) => setYoursSelected((selected) => {
-    const next = new Set(selected);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
-  const shownPeople = list ? filterPickRows(list.people, filter) : [];
-  const shownPayees = list ? filterPickRows(list.payees, filter) : [];
-  const yoursRows = list ? [...list.people, ...list.payees] : [];
 
   // ---- From musicindex ----
   const [query, setQuery] = useState('');
@@ -316,8 +375,6 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
   // The sheet starts fresh each time that it opens.
   useEffect(() => {
     if (!open) return;
-    setFilter('');
-    setYoursSelected(new Set());
     setShowSelected(false);
     setMoved(0);
     setQuery('');
@@ -326,25 +383,15 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     setFeedData(null);
     setTrackData(null);
     setIndexSelected(new Map());
-    setList(null);
-    yours.run(async () => {
-      const [people, recipients] = await Promise.all([api('/people'), api('/recipients')]);
-      setList(recipientPickRows(people, recipients));
-    });
   }, [open]);
 
-  const total = yoursSelected.size + indexSelected.size;
+  const total = indexSelected.size;
   const selectedRows = [
-    ...yoursRows.filter((r) => yoursSelected.has(r.identity))
-      .map((r) => ({ key: r.identity, recipient: r.recipient, from: r.person ? 'People' : 'Payees', clear: () => toggleYours(r.identity) })),
     ...[...indexSelected].map(([key, entry]) => ({ key, recipient: entry.recipient, from: entry.from,
       clear: () => toggleIndex(entry.recipient) })),
   ];
   const add = () => {
     const combined = new Map();
-    for (const r of yoursRows) {
-      if (yoursSelected.has(r.identity)) combined.set(r.identity, r.recipient);
-    }
     // An imported recipient keeps its fee mark but gets no split. The user
     // gives each new recipient its split (ADR 0030).
     for (const [key, entry] of indexSelected) combined.set(key, { ...entry.recipient, split: '' });
@@ -353,34 +400,10 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
 
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="picker-title" onClose=${onClose}>
     <header>
-      <h2 id="picker-title">Pick From Your People</h2>
+      <h2 id="picker-title">Copy from a Feed on musicindex</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <section class="page-section">
-        <h2>People</h2>
-        <${Field} id="picker-filter" label="Filter" value=${filter} placeholder="Name or address"
-          onInput=${(e) => setFilter(e.target.value)} />
-        <${ErrorNotice} error=${yours.error} />
-        ${list === null
-          ? html`<p class="hint" role="status">Loading your people…</p>`
-          : html`<div class="group">
-              ${shownPeople.length === 0 && html`<p class="hint">${list.people.length === 0
-                ? 'You have no people with a wallet yet.' : 'No person matches this filter.'}</p>`}
-              ${shownPeople.map((r) => html`<${PickRow} key=${`p-${r.id}`} name=${r.name} line=${r.line}
-                lead=${html`<${PersonArt} person=${r.person} />`}
-                checked=${yoursSelected.has(r.identity)} taken=${taken.has(r.identity)} onToggle=${() => toggleYours(r.identity)} />`)}
-            </div>`}
-      </section>
-
-      ${list !== null && list.payees.length > 0 && html`<section class="page-section">
-        <h2>Payees with no person</h2>
-        <div class="group">
-          ${shownPayees.length === 0 && html`<p class="hint">No payee matches this filter.</p>`}
-          ${shownPayees.map((r) => html`<${PickRow} key=${`y-${r.identity}`} name=${r.name} line=${r.line}
-            checked=${yoursSelected.has(r.identity)} taken=${taken.has(r.identity)} onToggle=${() => toggleYours(r.identity)} />`)}
-        </div>
-      </section>`}
       <section class="page-section">
         <h2>From musicindex</h2>
         <form class="form" onSubmit=${runSearch} role="search">

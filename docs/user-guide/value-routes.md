@@ -33,28 +33,24 @@ Select **Add a recipient**. Studio opens a new line. Fill in these fields:
 Each line shows the name, a bar, the percent and the address.
 The percent comes from the shares of all recipients.
 
-To make a recipient a fee, select the check box "Fee: this recipient gets its split as a percentage before the others share the rest".
+To make a recipient a fee, select the check box "Fee, paid first".
 The recipient then moves to the group **Fees**, and the field is **Split (percent)**.
+
+The rows sort by split, the biggest first. They sort when you leave the row. When you change a list of recipients, the feed gets the same sequence. A list that you do not change stays as it is in the feed.
 
 In an open recipient you can also use:
 
-- **Save to Your Recipients**. This keeps the recipient in your list for other feeds.
-- **Move Up**, **Move Down** and **Remove**.
+- **Change…** to change the address.
+- **Add to People**, when no person holds the address.
+- **Remove**.
 
-## Pick a recipient that you used before
+## Add a recipient
 
-1. Select **Pick from your recipients**. The sheet "Pick recipients" opens.
-2. Under **From musicindex**, search for a feed by name. Open the feed or one of its tracks and select recipients. 
-3. Under **Your recipients**, select recipients from your list. Use **Filter** to find a name or an address.
-4. Select **Add N Recipients**.
+1. Select **Add a recipient**. The sheet **Add a Recipient** opens. The form is at the top.
+2. Type the values, or select a row from **Your people** or **Payees with no person** to fill the form.
+3. Select **Add the Recipient**, then type the split in the row.
 
-Studio does not set a split for a recipient that you add this way.
-Type the split for each new recipient.
-
-## Fill a recipient from a person
-
-An open recipient with no name or no address has the button **Fill from a Person**.
-Select the button, then select a person. Studio fills only the empty fields. The split does not change.
+To copy many recipients of a different feed, select **Copy from a Feed on musicindex** in the sheet. Search for the feed, open it or one of its tracks and select the recipients. Then select **Add N Recipients**.
 
 ## Recipients for one track
 

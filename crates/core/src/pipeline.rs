@@ -12,6 +12,7 @@ use similar::TextDiff;
 
 use crate::address::AddressSource;
 use crate::announce::{self, AnnounceSettings, AnnounceSkip, PlannedAnnouncement, Timing};
+use crate::change_set::is_fee;
 use crate::checked_time::{BuildDateOutcome, CheckedTime, new_build_date};
 use crate::collection::{
     Collection, CollectionError, ConnectorId, DraftFeedMove, DraftOperationKind, DraftRow, FeedId,
@@ -22,7 +23,7 @@ use crate::connector::{
     PlannedWrite, Version,
 };
 use crate::digest::sha256_hex;
-use crate::feed::{AtomLink, Entry, Feed, FeedError, Item, Person};
+use crate::feed::{AtomLink, Entry, Feed, FeedError, Item, Person, Recipient, ValueBlock};
 use crate::grant::{self, GrantChange};
 use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
@@ -1480,7 +1481,9 @@ fn changed_draft(
 ) -> Result<DraftRow, PipelineError> {
     let mut doc = Document::parse_bytes(&draft.draft_xml)?;
     let mut feed = Feed::read(&doc)?;
+    let current = feed.clone();
     change(&mut feed);
+    sort_changed_recipients(&current, &mut feed);
     let hosted = hosted_document(&draft);
     feed.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
@@ -1565,6 +1568,7 @@ pub fn replace_model(
         .map_err(|e| PipelineError::new(PipelineErrorKind::InvalidLiveValue, e.to_string()))?;
     number_tracks(&current, &mut sent);
     keep_cover_form(&current, &mut sent);
+    sort_changed_recipients(&current, &mut sent);
     keep_explicit_form(&current, &mut sent);
     apply_op3(&current, &mut sent);
     apply_pub_date_time(&current, &mut sent).map_err(invalid)?;
@@ -1676,6 +1680,58 @@ fn apply_duration_seconds(current: &Feed, sent: &mut Feed) {
         } else {
             item.duration_seconds.map(crate::duration::format_duration)
         };
+    }
+}
+
+/// Sort each value block that this save changed, the biggest split first and
+/// each fee after the others (ADR 0144 item 5). A block that the save does not
+/// change keeps its sequence, because the writer changes only what the user
+/// changed (ADR 0012).
+fn sort_changed_recipients(current: &Feed, sent: &mut Feed) {
+    sort_changed_blocks(&current.values, &mut sent.values);
+    for item in &mut sent.items {
+        let old = current.items.iter().find(|old| old.guid == item.guid);
+        sort_changed_blocks(
+            old.map_or(&[], |old| old.values.as_slice()),
+            &mut item.value.values,
+        );
+    }
+    for live in &mut sent.live_items {
+        let old = current
+            .live_items
+            .iter()
+            .find(|old| old.item.guid == live.item.guid);
+        sort_changed_blocks(
+            old.map_or(&[], |old| old.item.values.as_slice()),
+            &mut live.value.item.values,
+        );
+    }
+}
+
+fn sort_changed_blocks(old: &[Entry<ValueBlock>], sent: &mut [Entry<ValueBlock>]) {
+    for (index, block) in sent.iter_mut().enumerate() {
+        let same = old.get(index).is_some_and(|old| {
+            old.recipients.len() == block.recipients.len()
+                && old
+                    .recipients
+                    .iter()
+                    .zip(&block.recipients)
+                    .all(|(a, b)| a.value == b.value)
+        });
+        if !same {
+            let split = |r: &Recipient| {
+                r.split
+                    .as_deref()
+                    .and_then(|s| s.trim().parse::<f64>().ok())
+                    .unwrap_or(0.0)
+            };
+            // A stable sort keeps the sequence of equal splits.
+            block.value.recipients.sort_by(|a, b| {
+                is_fee(a)
+                    .cmp(&is_fee(b))
+                    .then(split(b).total_cmp(&split(a)))
+            });
+        }
     }
 }
 
@@ -5609,4 +5665,75 @@ fn diff_id(draft: &DraftRow, extra: &[u8]) -> DiffId {
     bytes.extend_from_slice(&draft.draft_xml);
     bytes.extend_from_slice(extra);
     DiffId(sha256_hex(&[&bytes]))
+}
+
+#[cfg(test)]
+mod sort_tests {
+    use super::*;
+    use crate::xml::Document;
+
+    fn feed(channel: &str, item: &str) -> Feed {
+        let xml = format!(
+            r#"<rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>T</title>{channel}<item><guid>t1</guid><title>One</title>{item}</item></channel></rss>"#
+        );
+        Feed::read(&Document::parse_bytes(xml.as_bytes()).unwrap()).unwrap()
+    }
+
+    fn block(rows: &[(&str, &str, bool)]) -> String {
+        let rows = rows
+            .iter()
+            .map(|(name, split, fee)| {
+                let fee = if *fee { r#" fee="true""# } else { "" };
+                format!(
+                    r#"<podcast:valueRecipient name="{name}" type="node" address="{name}" split="{split}"{fee}/>"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .concat();
+        format!(r#"<podcast:value type="lightning" method="keysend">{rows}</podcast:value>"#)
+    }
+
+    fn names(blocks: &[Entry<ValueBlock>]) -> Vec<String> {
+        blocks[0]
+            .recipients
+            .iter()
+            .map(|r| r.value.name.clone().unwrap_or_default())
+            .collect()
+    }
+
+    #[test]
+    fn a_changed_block_sorts_with_the_biggest_split_first_and_each_fee_last() {
+        let source = block(&[
+            ("a", "1", false),
+            ("fee", "50", true),
+            ("b", "9", false),
+            ("c", "9", false),
+        ]);
+        let current = feed(&source, "");
+        let mut sent = current.clone();
+        sent.values[0].value.recipients[0].value.split = Some("2".to_owned());
+        sort_changed_recipients(&current, &mut sent);
+        assert_eq!(
+            names(&sent.values),
+            ["b", "c", "a", "fee"],
+            "ADR 0144 item 5"
+        );
+    }
+
+    #[test]
+    fn a_block_that_the_save_does_not_change_keeps_its_sequence() {
+        let source = block(&[("small", "1", false), ("big", "99", false)]);
+        let current = feed(&source, &source);
+        let mut sent = current.clone();
+        sent.items[0].value.values[0].value.recipients[0]
+            .value
+            .split = Some("2".to_owned());
+        sort_changed_recipients(&current, &mut sent);
+        assert_eq!(names(&sent.values), ["small", "big"], "ADR 0144 item 6");
+        assert_eq!(
+            names(&sent.items[0].values),
+            ["big", "small"],
+            "ADR 0144 item 5"
+        );
+    }
 }

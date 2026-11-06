@@ -102,6 +102,8 @@ fn app_with_rules(storage_limit: u64) -> App {
             folder: data.path().to_path_buf(),
             library_root: data.path().join("library"),
             hold_assets: true,
+            vault_idle: std::time::Duration::from_secs(600),
+            vault_idle_max: std::time::Duration::from_secs(3600),
         })
         .unwrap();
     App {
@@ -6439,6 +6441,43 @@ async fn a_failed_request_waits_and_then_succeeds() {
 }
 
 #[tokio::test]
+async fn the_desktop_has_never_as_the_start_of_the_lock_time() {
+    let app = app();
+    let (status, body) = call(&app, "GET", "/api/v1/settings/lock", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "minutes": 0, "choices": [0, 5, 10, 30, 60] }));
+    let (status, body) = call(
+        &app,
+        "PUT",
+        "/api/v1/settings/lock",
+        Some(json!({ "minutes": 30 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["minutes"], 30);
+    let (_, body) = call(&app, "GET", "/api/v1/settings/lock", None).await;
+    assert_eq!(body["minutes"], 30);
+    let (status, _) = call(
+        &app,
+        "PUT",
+        "/api/v1/settings/lock",
+        Some(json!({ "minutes": 7 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn a_stored_never_from_a_desktop_does_not_count_on_a_server() {
+    let app = app_with_rules(1 << 30);
+    collection_of(&app)
+        .set_setting("vault_lock_minutes", &json!(0))
+        .unwrap();
+    let (_, body) = call(&app, "GET", "/api/v1/settings/lock", None).await;
+    assert_eq!(body, json!({ "minutes": 10, "choices": [5, 10, 30, 60] }));
+}
+
+#[tokio::test]
 async fn the_announcement_settings_are_on_in_a_new_workspace() {
     let app = app();
     let (status, body) = call(&app, "GET", "/api/v1/settings/announcements", None).await;
@@ -7291,6 +7330,8 @@ async fn the_handle_reports_the_storage_and_locks_an_idle_vault() {
             folder: data.path().to_path_buf(),
             library_root: data.path().join("library"),
             hold_assets: true,
+            vault_idle: std::time::Duration::from_secs(600),
+            vault_idle_max: std::time::Duration::from_secs(3600),
         })
         .unwrap();
     let (_router, handle) = crate::workspace_router(workspace);
@@ -11582,6 +11623,8 @@ fn app_assets(
             folder: data.path().to_path_buf(),
             library_root: data.path().join("library"),
             hold_assets: hold,
+            vault_idle: std::time::Duration::from_secs(600),
+            vault_idle_max: std::time::Duration::from_secs(3600),
         })
         .unwrap();
     if let Some(lifetime) = ticket_lifetime {
@@ -12695,6 +12738,8 @@ fn server_app_with_handle() -> (App, crate::WorkspaceHandle) {
             folder: data.path().to_path_buf(),
             library_root: data.path().join("library"),
             hold_assets: true,
+            vault_idle: std::time::Duration::from_secs(600),
+            vault_idle_max: std::time::Duration::from_secs(3600),
         })
         .unwrap();
     let (router, handle) = crate::workspace_router(workspace);

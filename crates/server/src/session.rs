@@ -46,8 +46,6 @@ pub struct ServerState {
     pub session_idle: i64,
     /// A session ends after this many seconds in total.
     pub session_max: i64,
-    /// The vault of a user locks after this time with no use of a secret.
-    pub vault_idle: Duration,
     /// The permits of the Argon2id derivations (ADR 0055 item 22).
     pub argon2: Arc<Semaphore>,
     /// How long a request waits for a permit.

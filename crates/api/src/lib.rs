@@ -122,7 +122,8 @@ pub fn local_router_with_drops(
     } else {
         workspace
     };
-    let (workspace_routes, _handle) = workspace_router(workspace);
+    let (workspace_routes, handle) = workspace_router(workspace);
+    handle.spawn_lock_watch();
     ui_router()
         .route("/auth/v1/session", get(local_session))
         .route(
@@ -393,6 +394,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/library/limits", put(routes::put_library_limits))
         .route("/library/scan", post(routes::scan_library))
         .route("/feeds/{id}/library-changes", post(routes::library_changes))
+        .route(
+            "/settings/lock",
+            get(routes::get_lock_settings).put(routes::put_lock_settings),
+        )
         .route(
             "/settings/announcements",
             get(routes::get_announce_settings).put(routes::put_announce_settings),

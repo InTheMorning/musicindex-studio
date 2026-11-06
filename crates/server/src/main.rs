@@ -11,7 +11,8 @@
 //!   `--musicindex URL`, `--podcastindex-hub URL` and `--nip46-relay URL`
 //!   (more than one time, default `wss://relay.nsec.app`) are optional.
 //!   Limit options: `--session-idle-days` (default 7), `--session-max-days`
-//!   (default 30), `--vault-idle-minutes` (default 10), `--storage-limit-gib`
+//!   (default 30), `--vault-idle-minutes` (default 10), `--vault-idle-max-minutes`
+//!   (default 60), `--storage-limit-gib`
 //!   (default 10) and `--argon2-concurrency` (default 2). The option
 //!   `--hold-assets off|on` (default `off`) sets whether the server keeps
 //!   audio files and images (ADR 0105).
@@ -122,6 +123,8 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         rules,
         storage_limit: options.storage_limit,
         hold_assets: options.hold_assets,
+        vault_idle: options.vault_idle,
+        vault_idle_max: options.vault_idle_max,
         nip46_relays: options.nip46_relays.clone(),
         accounts: Arc::clone(&accounts),
         public_origin: options.origin.text.clone(),
@@ -137,7 +140,6 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
         dummy_wrapper: dummy.file().clone(),
         session_idle: options.session_idle,
         session_max: options.session_max,
-        vault_idle: options.vault_idle,
         argon2: Arc::new(tokio::sync::Semaphore::new(options.argon2_concurrency)),
         argon2_wait: options.argon2_wait,
         attempts: limits::Attempts::default(),

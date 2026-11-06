@@ -3027,6 +3027,38 @@ pub(crate) async fn draft_from_snapshot(
 /// Milestone 7b uses the limits.
 const DEFAULT_DOWNLOAD_LIMIT_BYTES: u64 = download::DEFAULT_LIMIT_BYTES;
 
+/// The time before the vault locks, and the times of this shell (ADR 0142).
+pub(crate) async fn get_lock_settings(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        Ok(Json(
+            json!({ "minutes": w.lock_minutes(), "choices": w.lock_choices() }),
+        ))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct LockSettingsBody {
+    minutes: u64,
+}
+
+/// Keep the time before the vault locks (ADR 0142).
+pub(crate) async fn put_lock_settings(
+    State(shared): State<Shared>,
+    Json(body): Json<LockSettingsBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        if !w.lock_choices().contains(&body.minutes) {
+            return Err(invalid_config("this server does not offer this time"));
+        }
+        w.set_lock_minutes(body.minutes)?;
+        Ok(Json(
+            json!({ "minutes": w.lock_minutes(), "choices": w.lock_choices() }),
+        ))
+    })
+    .await
+}
+
 /// The last choice for the announcement of a write (ADR 0136).
 pub(crate) async fn get_announce_settings(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {

@@ -99,6 +99,8 @@ pub struct ServeOptions {
     /// The vault of a user locks after this time with no use of a secret
     /// (ADR 0055 item 16).
     pub vault_idle: Duration,
+    /// The longest time that a user can select (ADR 0142 item 3).
+    pub vault_idle_max: Duration,
     /// The most bytes in the folder of a user (ADR 0055 item 21).
     pub storage_limit: u64,
     /// False for `--hold-assets off`, the default: the server keeps an
@@ -157,6 +159,10 @@ fn on_or_off(text: &str) -> Result<bool, String> {
 /// # Errors
 ///
 /// Gives a message for an unknown command or option, or a missing value.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one match arm for each option keeps the options in one place"
+)]
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> {
     let mut args = args.into_iter();
     let command = args.next().ok_or("give a command: serve or invite")?;
@@ -171,6 +177,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
     let mut session_idle_days = 7;
     let mut session_max_days = 30;
     let mut vault_idle_minutes = 10;
+    let mut vault_idle_max_minutes = 60;
     let mut storage_limit_gib = 10;
     let mut argon2_concurrency = 2;
     let mut hold_assets = false;
@@ -208,6 +215,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
                 vault_idle_minutes =
                     number("--vault-idle-minutes", &value("--vault-idle-minutes")?)?;
             }
+            ("serve", "--vault-idle-max-minutes") => {
+                vault_idle_max_minutes = number(
+                    "--vault-idle-max-minutes",
+                    &value("--vault-idle-max-minutes")?,
+                )?;
+            }
             ("serve", "--storage-limit-gib") => {
                 storage_limit_gib = number("--storage-limit-gib", &value("--storage-limit-gib")?)?;
             }
@@ -239,6 +252,9 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             session_idle: i64::try_from(session_idle_days).unwrap_or(i64::MAX) * DAY,
             session_max: i64::try_from(session_max_days).unwrap_or(i64::MAX) * DAY,
             vault_idle: Duration::from_secs(vault_idle_minutes * 60),
+            vault_idle_max: Duration::from_secs(
+                vault_idle_max_minutes.max(vault_idle_minutes) * 60,
+            ),
             storage_limit: storage_limit_gib.saturating_mul(GIB),
             hold_assets,
             argon2_concurrency: usize::try_from(argon2_concurrency).unwrap_or(usize::MAX),

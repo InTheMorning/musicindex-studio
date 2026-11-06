@@ -44,6 +44,13 @@ const GRANT_RECORD_PREFIX: &str = "grant-vault/";
 /// How often the sync of the grant vaults runs (ADR 0058 item 10).
 const GRANT_SYNC_INTERVAL: Duration = Duration::from_hours(1);
 
+/// The setting of the time before the vault locks (ADR 0142).
+const LOCK_SETTING: &str = "vault_lock_minutes";
+/// The times of the menu, in minutes.
+const LOCK_CHOICES: [u64; 4] = [5, 10, 30, 60];
+/// How often the desktop checks the time of the vault.
+const LOCK_WATCH_INTERVAL: Duration = Duration::from_secs(30);
+
 /// A clone of the shared workspace, for the shell that owns it. The server
 /// uses it for the vault (ADR 0055 items 4 and 5). Each function runs on a
 /// blocking thread.
@@ -328,10 +335,33 @@ impl WorkspaceHandle {
         .await
     }
 
-    /// Close the vault when nothing has used a secret for `limit`. Gives
-    /// true when this call closed the vault (ADR 0055 item 16).
-    pub async fn lock_if_idle(&self, limit: Duration) -> bool {
+    /// Close the vault when nothing has used a secret for `limit`.
+    #[cfg(test)]
+    pub(crate) async fn lock_if_idle(&self, limit: Duration) -> bool {
         matches!(self.run(move |w| Ok(w.lock_if_idle(limit))).await, Ok(true))
+    }
+
+    /// Close the vault when the time of the setting is over. Gives true when
+    /// this call closed the vault (ADR 0142).
+    pub async fn lock_if_due(&self) -> bool {
+        matches!(self.run(|w| Ok(w.lock_if_due())).await, Ok(true))
+    }
+
+    /// Check the time of the vault until the workspace goes away. The server
+    /// has its own task for each user (ADR 0142 item 5).
+    pub(crate) fn spawn_lock_watch(&self) {
+        let weak = Arc::downgrade(&self.shared);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(LOCK_WATCH_INTERVAL);
+                let Some(shared) = weak.upgrade() else {
+                    return;
+                };
+                if let Ok(mut w) = lock_workspace(&shared) {
+                    w.lock_if_due();
+                }
+            }
+        });
     }
 
     /// The bytes in the user folder. Gives 0 when the workspace has no
@@ -429,6 +459,11 @@ pub struct ServerRules {
     /// False for `--hold-assets off`: the server keeps an audio file or an
     /// image only until the write that sends it (ADR 0105 item 1).
     pub hold_assets: bool,
+    /// The time before the vault locks when the user selected no time
+    /// (ADR 0142 item 3).
+    pub vault_idle: Duration,
+    /// The longest time that the user can select (ADR 0142 item 3).
+    pub vault_idle_max: Duration,
 }
 
 impl ServerRules {
@@ -1088,9 +1123,70 @@ impl Workspace {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Instant::now();
     }
 
+    /// The times that this shell offers, in minutes (ADR 0142 items 2 and 3).
+    /// 0 is "Never", and only the desktop has it.
+    pub(crate) fn lock_choices(&self) -> Vec<u64> {
+        let Some(rules) = &self.rules else {
+            return std::iter::once(0).chain(LOCK_CHOICES).collect();
+        };
+        let longest = rules.vault_idle_max.as_secs() / 60;
+        let mut choices: Vec<u64> = LOCK_CHOICES.into_iter().filter(|m| *m <= longest).collect();
+        let start = (rules.vault_idle.as_secs() / 60).max(1);
+        if !choices.contains(&start) {
+            choices.push(start);
+            choices.sort_unstable();
+        }
+        choices
+    }
+
+    /// The stored time, when this shell offers it. A time from a different
+    /// shell, or above a new maximum, does not count (ADR 0142 item 4).
+    fn selected_lock_minutes(&self) -> Option<u64> {
+        let stored = self
+            .collection
+            .setting(LOCK_SETTING)
+            .ok()
+            .flatten()?
+            .as_u64()?;
+        self.lock_choices().contains(&stored).then_some(stored)
+    }
+
+    /// The selected time in minutes, or the start value of this shell.
+    pub(crate) fn lock_minutes(&self) -> u64 {
+        self.selected_lock_minutes().unwrap_or_else(|| {
+            self.rules
+                .as_ref()
+                .map_or(0, |rules| (rules.vault_idle.as_secs() / 60).max(1))
+        })
+    }
+
+    /// Keep the time. The caller gives a value of [`Self::lock_choices`].
+    pub(crate) fn set_lock_minutes(
+        &self,
+        minutes: u64,
+    ) -> Result<(), studio_core::collection::CollectionError> {
+        self.collection
+            .set_setting(LOCK_SETTING, &serde_json::json!(minutes))
+    }
+
+    /// The time with no use of a secret before the vault locks. `None` is "Never".
+    pub(crate) fn lock_limit(&self) -> Option<Duration> {
+        match self.selected_lock_minutes() {
+            Some(0) => None,
+            Some(minutes) => Some(Duration::from_secs(minutes * 60)),
+            None => self.rules.as_ref().map(|rules| rules.vault_idle),
+        }
+    }
+
+    /// Close the vault when the time of the setting is over.
+    pub(crate) fn lock_if_due(&mut self) -> bool {
+        self.lock_limit()
+            .is_some_and(|limit| self.lock_if_idle(limit))
+    }
+
     /// Close the vault when no secret has been in use for `limit`. Gives
     /// true when it closed the vault.
-    pub(crate) fn lock_if_idle(&mut self, limit: Duration) -> bool {
+    fn lock_if_idle(&mut self, limit: Duration) -> bool {
         let used = *self
             .vault_used
             .lock()

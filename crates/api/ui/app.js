@@ -2,6 +2,7 @@
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { pageSequence } from './pages.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
+import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
@@ -112,8 +113,7 @@ function askUnlock(reason = null) {
   return unlocking;
 }
 
-// Run a request. On a server, the answer 423 `vault_locked` opens the unlock
-// sheet, and after an unlock the request runs one more time. The answer 401
+// Run a request. The answer 423 `vault_locked` opens the unlock sheet (ADR 0142 item 6), and after an unlock the request runs one more time. The answer 401
 // `unlock_required` does the same, in both shells, and the sheet says why (ADR 0106 items 4 and 7). If the user
 // closes the sheet, the request gives its error. The answer 401
 // `session_required` or `session_ended` shows the sign-in page.
@@ -122,7 +122,7 @@ async function withUnlock(work) {
     try {
       return await work();
     } catch (error) {
-      if (serverMode && error.status === 423 && error.code === 'vault_locked' && attempt === 0 && await askUnlock()) continue;
+      if (error.status === 423 && error.code === 'vault_locked' && attempt === 0 && await askUnlock()) continue;
       if (needsRecentUnlock(error) && attempt === 0 && await askUnlock(UNLOCK_AGAIN_TEXT)) continue;
       if (serverMode && error.status === 401 && (error.code === 'session_required' || error.code === 'session_ended') && onSessionLost) {
         onSessionLost();
@@ -2596,6 +2596,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
 function SettingsPage() {
   const panels = {
     scale: ScalePanel,
+    lock: LockPanel,
     window: WindowPanel,
     account: AccountPanel,
     apps: ConnectedAppsPanel,
@@ -4063,7 +4064,7 @@ function UnlockSheet({ session, reason, onDone }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <p>This step needs the vault. Your passphrase, your signer or your passkey opens it.</p>
+      <p>This step needs the vault. ${serverMode ? 'Your passphrase, your signer or your passkey opens it.' : 'Your passphrase opens it.'}</p>
       ${reason && html`<p class="hint" role="status">${reason}</p>`}
       ${methods.includes('passphrase') && html`<form class="form" onSubmit=${byPassphrase}>
         ${session && session.email && html`<input class="visually-hidden" type="email" autocomplete="username" value=${session.email}
@@ -4281,6 +4282,26 @@ function ScalePanel() {
         </select>
       </div>
     </div>
+  </article>`;
+}
+
+// The time before the vault locks (ADR 0142). The core gives the times.
+function LockPanel() {
+  const [setting, setSetting] = useState(null);
+  const { busy, error, run } = useAction();
+  useEffect(() => { run(async () => setSetting(await api('/settings/lock'))); }, []);
+  const change = (value) => run(async () => setSetting(await api('/settings/lock', { method: 'PUT', body: { minutes: Number(value) } })));
+  return html`<article class="panel">
+    <h2>Lock</h2>
+    <${ErrorNotice} error=${error} />
+    ${setting && html`<div class="field"><label for="lock-minutes">Lock Studio after</label>
+      <div class="field-body">
+        <span class="hint">${LOCK_HINT}</span>
+        <select id="lock-minutes" class="button" disabled=${busy} value=${String(setting.minutes)} onChange=${(e) => change(e.target.value)}>
+          ${setting.choices.map((minutes) => html`<option value=${String(minutes)}>${lockChoiceText(minutes)}</option>`)}
+        </select>
+      </div>
+    </div>`}
   </article>`;
 }
 

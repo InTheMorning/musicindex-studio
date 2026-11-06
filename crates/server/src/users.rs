@@ -41,6 +41,10 @@ pub struct UserSettings {
     pub storage_limit: u64,
     /// False for `--hold-assets off` (ADR 0105 item 1).
     pub hold_assets: bool,
+    /// The start value of the time before a vault locks (ADR 0142 item 3).
+    pub vault_idle: std::time::Duration,
+    /// The longest time that a user can select (ADR 0142 item 3).
+    pub vault_idle_max: std::time::Duration,
     /// The relays for a `nostrconnect://` address (ADR 0056 item 13).
     pub nip46_relays: Vec<String>,
     /// The database that keeps the index of the apps (ADR 0110 item 39).
@@ -215,6 +219,8 @@ fn open_user(
             folder: path.to_path_buf(),
             library_root: path.join("library"),
             hold_assets: settings.hold_assets,
+            vault_idle: settings.vault_idle,
+            vault_idle_max: settings.vault_idle_max,
         })?;
     #[cfg(test)]
     if pass_all {

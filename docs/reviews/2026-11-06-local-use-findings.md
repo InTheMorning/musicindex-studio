@@ -98,9 +98,9 @@ Corrected for the next candidate (ADR 0133). With six recipients at 16.7 %, the 
 
 ### 11. The Time Of The Automatic Lock
 
-Open. Requested change: a setting on the Settings page gives the time before Studio locks. ADR 0055 item 16 fixes the time of the server at 10 minutes with no use of a vault secret. The user guide states that the desktop app does not lock the vault by itself, so the setting adds a new function on the desktop.
+Corrected ([ADR 0142](../adr/0142-a-user-selects-the-time-before-the-vault-locks.md)). Requested change: a setting on the Settings page gives the time before Studio locks. ADR 0055 item 16 fixes the time of the server at 10 minutes with no use of a vault secret. The user guide states that the desktop app does not lock the vault by itself, so the setting adds a new function on the desktop.
 
-Proposal, with no decision: one select menu. The desktop starts at "Never". The server keeps 10 minutes at first and has a maximum. A longer time keeps a vault key in the memory of a public server for longer. The change needs a record that changes ADR 0055 item 16.
+The setting is one select menu. The desktop starts at "Never". The server keeps 10 minutes at first and has a maximum. A longer time keeps a vault key in the memory of a public server for longer.
 
 ### 12. The Export Does Not Tell The User How To Import
 
@@ -197,3 +197,11 @@ Corrected ([ADR 0140](../adr/0140-a-credit-name-shows-where-it-is-used.md)). A r
 ### 24. The Sheet Add a Wallet And The Remove Buttons
 
 Corrected ([ADR 0141](../adr/0141-the-form-of-add-a-wallet-comes-first.md)). The form was below a long list of payees, and a select of a payee added it at once and closed the sheet. The form is now first, and a payee fills it. The buttons that remove a link of a person did not have the destructive role of ADR 0037, and they have it now. The default address is now always first (ADR 0139 item 7).
+
+### 25. The Addresses Of A Wallet Cannot Be Edited
+
+Open. The page of a person shows the addresses of a wallet with no way to change them. The operator asks that an edit reuses the sheet "Add a Wallet" (ADR 0123).
+
+### 26. A Row Of "Check Your Feeds" Does Not Name The Track
+
+Open. A row in the group "Correct" gives the feed, the address and the role. It does not name the track that has them, so the row is not very useful for a feed with many tracks.

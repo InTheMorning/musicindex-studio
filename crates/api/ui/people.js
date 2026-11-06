@@ -538,7 +538,7 @@ export function creditFoldSummary(person) {
   if (keys.length > 0) parts.push(keys.length === 1 ? '1 Nostr key' : `${keys.length} Nostr keys`);
   return { title: `Credited as ${first ? first.name : person.name}`, line: parts.join(' · ') };
 }
-export const CREDIT_FOLD_HINT = 'Credits in your feeds with these values are credits of this person. Brackets mark the usual role.';
+export const CREDIT_FOLD_HINT = 'How Studio recognizes this person in your feeds. A credit with this key, or this name and website, counts as this person. This changes no feed. Brackets mark the usual role.';
 
 // The text of the count of feeds of an address.
 export const usedText = (count) => (count > 0 ? feedCount(count) : 'Not used');

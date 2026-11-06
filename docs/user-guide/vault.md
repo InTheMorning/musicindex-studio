@@ -58,7 +58,7 @@ On a narrow window, it is at the bottom of the first page.
 The button shows only when the vault is open.
 
 On the desktop, the Unlock page then opens.
-The desktop app does not lock the vault by itself.
+To lock the vault by itself, select a time at **Settings**, **Lock Studio after**. The start value on the desktop is **Never**. When Studio then needs a key, it asks for the passphrase.
 
 ## The vault on a server
 
@@ -68,7 +68,7 @@ A step that needs a secret, such as a write to a file host, needs an open vault.
 
 The server locks the vault in these cases:
 
-- 10 minutes after the last use of a secret. The operator can change this time.
+- After the last use of a secret, when the time at **Settings**, **Lock Studio after** is over. The start value is 10 minutes. The operator of the server sets the longest time.
 - When you select **Lock Studio**.
 - When you sign out, or when your last session ends.
 - When the server stops.

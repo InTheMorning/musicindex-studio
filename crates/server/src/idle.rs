@@ -24,8 +24,8 @@ pub fn spawn(state: Shared) {
 /// One run of the task. For each open user:
 ///
 /// - With no active session, the vault locks.
-/// - With a session, the vault locks after the idle limit with no use of a
-///   secret.
+/// - With a session, the vault locks after the time of the user with no use
+///   of a secret (ADR 0142).
 /// - A user with no session, a closed vault, no waiting announcement and no
 ///   queued download closes. The router and the handle go out of memory.
 pub async fn sweep(state: &Shared) {
@@ -51,7 +51,7 @@ pub async fn sweep(state: &Shared) {
             .has_session(id, state.session_idle, state.session_max)
             .unwrap_or(true);
         if active {
-            user.handle.lock_if_idle(state.vault_idle).await;
+            user.handle.lock_if_due().await;
             continue;
         }
         let open = matches!(user.handle.vault_state().await, Ok(VaultState::Open));

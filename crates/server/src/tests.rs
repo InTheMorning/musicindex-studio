@@ -51,6 +51,7 @@ fn app_with_rules(
         session_idle: 7 * 86_400,
         session_max: 30 * 86_400,
         vault_idle: std::time::Duration::from_secs(600),
+        vault_idle_max: std::time::Duration::from_secs(3600),
         storage_limit: 10 * 1024 * 1024 * 1024,
         // The tests of the server keep the library as before ADR 0105.
         hold_assets: true,
@@ -706,6 +707,29 @@ fn sign_in_call<'a>(email: &str, passphrase: &str) -> Call<'a> {
         "/auth/v1/signin/email",
         Some(json!({ "email": email, "passphrase": passphrase })),
     )
+}
+
+#[tokio::test]
+async fn a_user_selects_a_lock_time_up_to_the_maximum_and_has_no_never() {
+    let app = app_with(Signup::Invite, |o| {
+        o.vault_idle_max = std::time::Duration::from_mins(30);
+    });
+    let who = new_user(&app, "a@example.org", PASS_ONE).await;
+    let path = "/api/v1/settings/lock";
+    let reply = api(&app, &who, "GET", path, None).await;
+    assert_eq!(reply.json, json!({ "minutes": 10, "choices": [5, 10, 30] }));
+    for refused in [0, 60] {
+        let reply = api(&app, &who, "PUT", path, Some(json!({ "minutes": refused }))).await;
+        assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY, "{refused}");
+    }
+    let reply = api(&app, &who, "PUT", path, Some(json!({ "minutes": 30 }))).await;
+    assert_eq!(reply.json["minutes"], 30);
+    // A shorter time of a different user does not change this user.
+    let other = new_user(&app, "b@example.org", PASS_ONE).await;
+    assert_eq!(
+        api(&app, &other, "GET", path, None).await.json["minutes"],
+        10
+    );
 }
 
 #[tokio::test]

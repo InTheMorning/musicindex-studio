@@ -53,7 +53,7 @@ On 2026-10-26 the operator selected the decisions below.
 
 14. A session and an open vault are two different states. With a session and a locked vault, a user can read the collection and edit a draft. The user can also see a diff that needs no secret of a host.
 15. The vault opens only through an unlock of the user: a sign-in with a passphrase, or an unlock with a method of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
-16. The server locks the vault of a user after 10 minutes with no use of a vault secret. It also locks the vault at "Lock Studio", at sign-out, at the end of the last session of the user, and when the process stops. The operator can change the limit of 10 minutes. A lock removes the vault key from memory ([ADR 0003](0003-user-unlocked-secret-vault.md), ADR 0013 item 15).
+16. Changed by [ADR 0142](0142-a-user-selects-the-time-before-the-vault-locks.md). The server locks the vault of a user after the time of the user, with a start of 10 minutes, with no use of a vault secret. It also locks the vault at "Lock Studio", at sign-out, at the end of the last session of the user, and when the process stops. The operator can change the limit of 10 minutes. A lock removes the vault key from memory ([ADR 0003](0003-user-unlocked-secret-vault.md), ADR 0013 item 15).
 17. A route that needs a secret while the vault is locked gives 423 `vault_locked`, as on the desktop. The UI then asks for an unlock and sends the request again.
 
 ### Server Access

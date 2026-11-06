@@ -395,6 +395,17 @@ pub fn rename_with_wallets(
     Ok(())
 }
 
+/// The type of a wallet row from its address (ADR 0098 item 26). A Lightning
+/// address has `@`, and a node key has none. A row from before this rule can
+/// hold a different type, so a read also applies it. A row with no type stays.
+fn wallet_type(address: &str, stored: &str) -> String {
+    match stored.trim() {
+        "lnaddress" | "node" if address.contains('@') => "lnaddress".to_owned(),
+        "lnaddress" | "node" => "node".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
 fn wallets_of(db: &Connection, id: PersonId) -> Result<Vec<PersonWallet>, CollectionError> {
     let mut statement = db.prepare(
         "SELECT id, address, custom_key, custom_value, recipient_type, position, evidence, linked_at
@@ -403,14 +414,16 @@ fn wallets_of(db: &Connection, id: PersonId) -> Result<Vec<PersonWallet>, Collec
     let rows = statement.query_map([id.0], |r| {
         let custom_key: String = r.get(2)?;
         let custom_value: String = r.get(3)?;
+        let address: String = r.get(1)?;
+        let stored: String = r.get(4)?;
         Ok(PersonWallet {
             id: r.get(0)?,
+            recipient_type: wallet_type(&address, &stored),
             key: RecipientKey {
-                address: r.get(1)?,
+                address,
                 custom_key: Some(custom_key).filter(|t| !t.is_empty()),
                 custom_value: Some(custom_value).filter(|t| !t.is_empty()),
             },
-            recipient_type: r.get(4)?,
             position: r.get(5)?,
             evidence: r.get(6)?,
             linked_at: r.get(7)?,
@@ -630,7 +643,7 @@ fn insert_wallet<S: BuildHasher>(
             address,
             custom_key,
             custom_value,
-            recipient_type.trim(),
+            wallet_type(address, recipient_type),
             position,
             evidence.as_str(),
             now()
@@ -2999,7 +3012,7 @@ pub fn detail_suggestions(
 /// Add the Lightning address of a profile to a wallet of a person. The
 /// function requests and stores the keysend lookup of `address`. With a
 /// `Found` result, it links the wallet of the lookup with the type
-/// `lnaddress` and the evidence `nostr`.
+/// `node` and the evidence `nostr`.
 ///
 /// # Errors
 ///
@@ -3020,7 +3033,7 @@ pub fn add_profile_address(
         .get(&address)
         .and_then(Lookup::key)
         .ok_or_else(|| CollectionError::invalid("the address has no keysend data"))?;
-    add_wallet(collection, id, &key, "lnaddress", LinkEvidence::Nostr)
+    add_wallet(collection, id, &key, "node", LinkEvidence::Nostr)
 }
 
 // ---- The export (ADR 0098 items 24 and 25) ----
@@ -3255,6 +3268,52 @@ mod tests {
         assert_eq!(
             names,
             [("Ann".into(), 2), ("ANN".into(), 3), ("bob".into(), 1)]
+        );
+    }
+
+    #[test]
+    fn a_wallet_takes_its_type_from_its_address() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_wallet(
+            &collection,
+            ann,
+            &key("03abc"),
+            "lnaddress",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        add_wallet(
+            &collection,
+            ann,
+            &key("ann@example.com"),
+            "node",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        // A row from before this rule keeps its text, and a read corrects it.
+        collection
+            .db()
+            .execute(
+                "INSERT INTO person_wallets
+                     (person_id, address, custom_key, custom_value, recipient_type, position, evidence, linked_at)
+                 VALUES (?1, '03old', '', '', 'lnaddress', 2, 'user', 0)",
+                [ann.0],
+            )
+            .unwrap();
+        let types: Vec<(String, String)> = person(&collection, ann)
+            .unwrap()
+            .wallets
+            .into_iter()
+            .map(|w| (w.key.address, w.recipient_type))
+            .collect();
+        assert_eq!(
+            types,
+            vec![
+                ("03abc".to_owned(), "node".to_owned()),
+                ("ann@example.com".to_owned(), "lnaddress".to_owned()),
+                ("03old".to_owned(), "node".to_owned()),
+            ]
         );
     }
 

@@ -10829,7 +10829,7 @@ async fn a_profile_address_is_a_suggestion_and_the_user_adds_it_with_the_evidenc
     let wallets = person["wallets"].as_array().unwrap();
     assert_eq!(wallets.len(), 1, "{person}");
     assert_eq!(wallets[0]["evidence"], "nostr");
-    assert_eq!(wallets[0]["recipient_type"], "lnaddress");
+    assert_eq!(wallets[0]["recipient_type"], "node");
     assert_eq!(wallets[0]["key"]["address"], "02abc");
     assert_eq!(collection_of(&app).keysend_lookups().unwrap().len(), 1);
 

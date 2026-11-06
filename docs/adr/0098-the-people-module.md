@@ -76,6 +76,7 @@
 
 24. The route `GET /people/export` gives a JSON file of the people. Each link has its evidence: the statement of the user, the keysend lookup or a Nostr signature, and the time of the link.
 25. The export holds no secret. An import is not a part of this decision.
+26. The core gives a wallet of a person its type from its address, at each write and at each read. An address with `@` is a Lightning address, and each other address is a node key. A form cannot store a node key as a Lightning address (the [local use findings](../reviews/2026-11-06-local-use-findings.md), finding 19).
 
 ## Alternatives Considered
 

@@ -169,3 +169,13 @@ Partly corrected for the next candidate. In the desktop app, a song took a long 
 The bar now draws both from one value, and a check in WebKitGTK showed that they agree. The button now shows the wait, and the page paints before playback starts. The sandbox has no sound device, so no check measured the wait, and the wait itself is not corrected.
 
 This run used the plain binary, not an AppImage. It uses the system GStreamer with all its plugins, so the shorter plugin list of ADR 0124 item 26 does not apply. The cause of the wait in this run is not measured.
+
+### 19. A Node Key Shows As A Lightning Address
+
+Corrected for the next candidate. The page of a person named a node key "Lightning address". Two paths stored a node key with the type "Lightning address": the form "Add a Wallet", which starts on that type, and a wallet from the Lightning address of a Nostr profile. A picker could then write that type with a node key into a feed. The core now gives a wallet its type from its address (ADR 0098 item 26). This also corrects each stored row at a read.
+
+The labels are now "Lightning node" and "Lightning address". A proposal to rename them is open.
+
+### 20. A Wrong Nostr Key Has Only The Button Add
+
+Open. "More from your feeds" shows a Nostr key of a different account with a warning. Its only button is "Add", which is not a correction. "Check your feeds" can correct that key, but the row does not lead to it.

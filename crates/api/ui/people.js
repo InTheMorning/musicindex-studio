@@ -1581,7 +1581,8 @@ const ALREADY_VALUE = 'Already the value of this person';
 const ALREADY_WALLET = 'Already a wallet of this person';
 const NO_KEY = 'This feed gives no Nostr key. Use “Add a Nostr Key” to search the Nostr profiles.';
 const NO_ADDRESS = 'This wallet has no address, so Studio cannot save it.';
-const PAYS_ARTIST = 'The feed pays the artist. Make sure that the artist is this person.';
+const PAYS_CHECK = 'A feed can pay a band member, a collaborator or an app. Add this wallet only when this recipient is this person.';
+const NO_RECIPIENT_NAME = 'The feed gives no name for this recipient.';
 const WALLET_WORDS = { lnaddress: 'Lightning address', node: 'Lightning node' };
 const KEYSEND_WORDS = { found: 'Checked with keysend', no_data: 'No keysend data', failed: 'The keysend check failed' };
 
@@ -1621,9 +1622,9 @@ export function fillRows(values, pending) {
     else if (name !== null) status = `A wallet of ${name}`;
     else if (!wallet.key) status = NO_ADDRESS;
     const split = /^\d+$/.test(wallet.split || '') ? ` · ${wallet.split}%` : '';
-    const lines = [`The value block of the feed${split}`];
+    const lines = [wallet.name ? `Paid to: ${wallet.name}` : NO_RECIPIENT_NAME, `The value block of the feed${split}`];
     if (wallet.lookup) lines.push(KEYSEND_WORDS[wallet.lookup]);
-    lines.push(selectable ? PAYS_ARTIST : status);
+    lines.push(selectable ? PAYS_CHECK : status);
     rows.push({
       id: `wallet:${index}`, title: 'Wallet', value: wallet.value, lines: [WALLET_WORDS[wallet.recipient_type] || 'Wallet', ...lines],
       selectable, selected: selectable && pending.wallets.some((w) => keyValue(w.key) === keyValue(wallet.key)),

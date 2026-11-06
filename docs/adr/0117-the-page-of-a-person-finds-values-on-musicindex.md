@@ -53,7 +53,7 @@
 9. The section "Fill" has one check box row for each value:
     - "Picture": the `image_url` of the feed, with a preview.
     - "Information address": the `website` link of `source_links`, with the line "The link of the feed".
-    - "Wallet": one row for each channel route of `payment_routes` with the type `node` or `lnaddress`. The row shows the split. A Lightning address gets the keysend lookup of ADR 0095, and the row shows the result. The row has the line "The feed pays the artist. Make sure that the artist is this person."
+    - "Wallet": one row for each channel route of `payment_routes` with the type `node` or `lnaddress`. The row shows the split. A Lightning address gets the keysend lookup of ADR 0095, and the row shows the result. The row has the line "Paid to:" with the name of the recipient, or "The feed gives no name for this recipient." It also has the line "A feed can pay a band member, a collaborator or an app. Add this wallet only when this recipient is this person." The operator changed this text on 2026-11-05, because the row gave no clue of who the recipient was.
     - "Nostr key": the `nostr_npub` value of `source_ids`. When the feed gives none, the row has no check box, and it reads "This feed gives no Nostr key. Use “Add a Nostr Key” to search the Nostr profiles."
 10. A picture or an information address is an `http` or `https` address. A different value is not in the list.
 11. A picture row and an information address row start selected when the field of the person is empty. A wallet row and a Nostr key row start not selected.

@@ -1040,9 +1040,12 @@ test('the start values and the rows of a fill (ADR 0117 items 9 to 12)', () => {
   assert.deepEqual(byId.href.lines, ['Already the value of this person']);
   assert.equal(byId['wallet:0'].selectable, true);
   assert.equal(byId['wallet:0'].selected, false, 'ADR 0117 item 11: a wallet starts not selected.');
-  assert.deepEqual(byId['wallet:0'].lines.slice(0, 2), ['Lightning address', 'The value block of the feed · 100%']);
+  assert.deepEqual(byId['wallet:0'].lines.slice(0, 3), ['Lightning address', 'The feed gives no name for this recipient.', 'The value block of the feed · 100%']);
+  const named = fillRows({ ...values, wallets: [{ ...values.wallets[0], name: 'Music Side Project' }] }, PENDING);
+  assert.ok(named.find((r) => r.id === 'wallet:0').lines.includes('Paid to: Music Side Project'),
+    'ADR 0117 item 9: a wallet row names its recipient. The human test of 0.1.0-rc.19 found a row with no clue of who the recipient was.');
   assert.ok(byId['wallet:0'].lines.includes('Checked with keysend'));
-  assert.ok(byId['wallet:0'].lines.includes('The feed pays the artist. Make sure that the artist is this person.'));
+  assert.ok(byId['wallet:0'].lines.includes('A feed can pay a band member, a collaborator or an app. Add this wallet only when this recipient is this person.'));
   assert.equal(byId['wallet:1'].selectable, false);
   assert.ok(byId['wallet:1'].lines.includes('Already a wallet of this person'));
   assert.equal(byId['wallet:2'].selectable, false);

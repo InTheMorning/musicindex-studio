@@ -1995,6 +1995,15 @@ button.outline-feed {
 .key-line .summary, .key-row .summary { white-space: normal; }
 .more-actions { flex: none; }
 .credit-fold > .hint { margin: 0; padding: 4px 16px 8px; }
+/* A row of the fold "Credited as": an icon, a label and a value for each kind of value (ADR 0140). */
+.credit-row { align-items: flex-start; }
+.attributes { display: grid; gap: 4px; margin: 6px 0 0; }
+.attribute { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; font-size: var(--text-callout); }
+.attribute dt { display: flex; align-items: center; gap: 6px; align-self: start; min-height: 1lh; color: var(--muted); }
+.attribute dt .icon { flex: none; display: block; width: 14px; height: 14px; }
+.attribute dd { position: relative; margin: 0; overflow-wrap: anywhere; padding-right: 32px; }
+.attribute dd .copy-button { position: absolute; top: -4px; right: 0; }
+.attribute-sub { display: block; color: var(--muted); }
 /* The tag of the default address (ADR 0139 item 2). It has the radius of a badge (musicindex ADR 0024). */
 .default-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: var(--accent-tint); color: var(--accent); font-size: var(--text-footnote); font-weight: 600; vertical-align: 1px; }
 .default-tag .icon { display: block; width: 12px; height: 12px; stroke-width: 3; }

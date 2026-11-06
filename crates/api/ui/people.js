@@ -469,27 +469,53 @@ export const addressOptions = (groups) => groups.flatMap((g) => g.members.map((m
 export const isDefaultAddress = (key, value) => keyValue(key) === value;
 export const DEFAULT_HINT = '"Pick from your people" adds the default address of this person.';
 
+// The roles of a credit name, with the usual role of the person first and in
+// brackets, when the credit name has that role (ADR 0140 item 7).
+export function roleText(roles, usual) {
+  const wanted = lowerName(usual);
+  const found = wanted === '' ? undefined : roles.find((role) => lowerName(role) === wanted);
+  if (found === undefined) return roles.join(', ');
+  return [`[${found}]`, ...roles.filter((role) => role !== found)].join(', ');
+}
+
+// The text of an information address, with no scheme and no last slash.
+const webText = (address) => String(address).replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+// The labeled row of a Nostr key. `value` is the profile name, or the short key
+// with no profile. `sub` holds the other lines.
+function nostrAttribute(row, notes = []) {
+  const named = !row.mono;
+  return { id: 'nostr', icon: 'nostr', label: 'Nostr', value: named ? row.title : row.short, mono: !named,
+    sub: [...(named ? [row.short] : []), ...row.lines.filter((line) => line !== row.short), ...notes] };
+}
+
 // The rows of the fold "Credited as" (ADR 0140). A credit name with a key of
 // the person is one row with that key. `keyId` is the ID of that key, for the
-// removal of the row. A key with no credit name has its own row.
+// removal of the row. Each value is one labeled attribute.
 export function creditNameRows(person, profiles = null) {
   const uses = new Map((person.credit_name_uses || []).map((u) => [u.id, u]));
   return (person.credit_names || []).map((c) => {
     const use = uses.get(c.id) || { feeds: 0, roles: [] };
     const key = c.npub ? keyRow(c.npub, profiles, person.name) : null;
     const found = (person.keys || []).find((k) => c.npub && k.npub === c.npub);
-    const lines = [
-      use.feeds > 0 ? `In ${feedCount(use.feeds)}` : 'Not in a feed yet',
-      ...(use.roles.length > 0 ? [`As ${use.roles.join(', ')}`] : []),
-      ...(c.href ? [c.href] : []),
-      ...(key && !key.mono ? [`Nostr: ${key.title}`] : []),
-      ...(key ? [key.short] : []),
+    const attributes = [
+      { id: 'feeds', icon: 'disc', label: 'Used in', value: use.feeds > 0 ? feedCount(use.feeds) : 'No feed yet', sub: [] },
+      ...(use.roles.length > 0 ? [{ id: 'roles', icon: 'tag', label: 'Roles', value: roleText(use.roles, person.usual_role), sub: [] }] : []),
+      ...(c.href ? [{ id: 'website', icon: 'globe', label: 'Website', value: webText(c.href), sub: [] }] : []),
+      ...(key ? [nostrAttribute(key)] : []),
     ];
     return {
-      key: `c${c.id}`, title: c.name || (key ? key.title : 'Credit name'), lines, short: key ? key.short : null, mono: false,
+      key: `c${c.id}`, title: c.name || (key ? key.title : 'Credit name'), attributes,
       picture: key ? key.picture : null, warning: key ? key.warning : null, npub: c.npub || null, creditId: c.id, keyId: found ? found.id : null,
     };
   });
+}
+
+// The row of a Nostr key that is not in a credit name.
+export function keyOnlyRow(key, profiles, name) {
+  const row = keyRow(key.npub, profiles, name);
+  return { key: `k${key.id}`, title: row.mono ? 'Nostr key' : row.title, attributes: [nostrAttribute(row, [keyEvidenceText(key.evidence)])],
+    picture: row.picture, warning: row.warning, npub: key.npub, keyId: key.id };
 }
 
 // The keys of a person that are not in a credit name.
@@ -505,7 +531,7 @@ export function creditFoldSummary(person) {
   if (keys.length > 0) parts.push(keys.length === 1 ? '1 Nostr key' : `${keys.length} Nostr keys`);
   return { title: `Credited as ${first ? first.name : person.name}`, line: parts.join(' · ') };
 }
-export const CREDIT_FOLD_HINT = 'Credits in your feeds with these values are credits of this person.';
+export const CREDIT_FOLD_HINT = 'Credits in your feeds with these values are credits of this person. Brackets mark the usual role.';
 
 // The text of the count of feeds of an address.
 export const usedText = (count) => (count > 0 ? feedCount(count) : 'Not used');

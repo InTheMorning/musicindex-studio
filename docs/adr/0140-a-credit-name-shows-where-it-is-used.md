@@ -17,19 +17,22 @@ A credit name is a match: a credit in a feed with that identity is a credit of t
 
 1. The credit names and the Nostr keys of a person are in one fold. It starts closed. Its summary line reads "Credited as {name}", with the number of credit names and Nostr keys. The name is the credit name that is the name of the person, else the first credit name, else the name of the person.
 2. A text in the fold tells what the rows do.
-3. Each credit name row has the name as its title. Its lines give the number of feeds and the roles of the credits with its identity, or "Not in a feed yet". The core gives these values in `credit_name_uses`.
+3. Each credit name row has the name as its title. Below the title, each value has an icon, a label and its text: "Used in", "Roles", "Website" and "Nostr". "Used in" gives the number of feeds with a credit of its identity, or "No feed yet". The core gives these values in `credit_name_uses`.
 4. A credit name with the same key as a Nostr key of the person is one row. A key with no credit name keeps its own row.
 5. "Remove" on one row removes the credit name and its key from the person. A removal changes no feed.
 6. "Add a Credit Name" and "Add a Nostr Key" stay outside the fold.
+7. When a credit name has the usual role of the person, "Roles" shows that role first and in brackets. Else the sequence does not change, because the row shows only the roles of the feeds.
+8. "Nostr" uses the mark of `icons/custom/nostr.svg` of `../musicindex-assets`, which musicindex.org also shows. The other icons are the Lucide icons `disc`, `tag` and `globe`.
 
 ## Alternatives Considered
 
 - The rows with no fold. Not chosen: the user seldom changes them.
+- Role chips, two columns and a sentence. Not chosen by the operator, from drawings.
 - A fold with the rows from before. Not chosen: the rows then stay hard to understand.
 
 ## Consequences
 
-- A credit with a name and a different key has a different identity, so a name row can read "Not in a feed yet" while "Check your feeds" finds that credit by its name (ADR 0111 item 10).
+- A credit with a name and a different key has a different identity, so a name row can read "No feed yet" while "Check your feeds" finds that credit by its name (ADR 0111 item 10).
 
 ## How This Decision Is Checked
 

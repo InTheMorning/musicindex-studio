@@ -1429,25 +1429,32 @@ test('one row is the default address, with the parts of its key', async () => {
   assert.equal(isDefaultAddress(key, ''), false);
 });
 
-test('a credit name row shows where it is used and joins its key', async () => {
-  const { creditNameRows, keysWithNoCreditName, creditFoldSummary } = await import('../ui/people.js');
+test('a credit name row gives one labeled attribute for each value and joins its key', async () => {
+  const { creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, roleText } = await import('../ui/people.js');
   const npub = 'npub109pabcdefghijklmnopqrstuvwxyz5aaj';
   const person = {
-    name: 'HeyCitizen',
-    credit_names: [{ id: 1, name: 'HeyCitizen', href: 'https://musicindex.org', npub }, { id: 2, name: 'H. Citizen', href: '', npub: '' }],
+    name: 'HeyCitizen', usual_role: 'Guitarist',
+    credit_names: [{ id: 1, name: 'HeyCitizen', href: 'https://musicindex.org/', npub }, { id: 2, name: 'H. Citizen', href: '', npub: '' }],
     credit_name_uses: [{ id: 1, feeds: 3, roles: ['composer', 'guitarist'] }, { id: 2, feeds: 0, roles: [] }],
-    keys: [{ id: 9, npub }, { id: 10, npub: 'npub1other' }],
+    keys: [{ id: 9, npub }, { id: 10, npub: 'npub1other', evidence: 'user' }],
   };
   const profiles = new Map([[npub, { npub, name: 'Sir HeyCitizen' }]]);
   const [first, second] = creditNameRows(person, profiles);
   assert.equal(first.title, 'HeyCitizen');
   assert.equal(first.keyId, 9);
-  assert.deepEqual(first.lines.slice(0, 4), ['In 3 feeds', 'As composer, guitarist', 'https://musicindex.org', 'Nostr: Sir HeyCitizen']);
-  assert.deepEqual(second.lines, ['Not in a feed yet']);
+  assert.deepEqual(first.attributes.map((a) => [a.label, a.value]), [['Used in', '3 feeds'], ['Roles', '[guitarist], composer'], ['Website', 'musicindex.org'], ['Nostr', 'Sir HeyCitizen']]);
+  assert.deepEqual(second.attributes.map((a) => [a.label, a.value]), [['Used in', 'No feed yet']]);
   assert.equal(second.keyId, null);
   assert.deepEqual(keysWithNoCreditName(person).map((k) => k.id), [10]);
+  const only = keyOnlyRow(person.keys[1], null, person.name);
+  assert.equal(only.keyId, 10);
+  assert.equal(only.title, 'Nostr key');
+  assert.equal(only.attributes[0].mono, true);
+  assert.equal(only.attributes[0].sub.at(-1), 'Added by you');
   assert.deepEqual(creditFoldSummary(person), { title: 'Credited as HeyCitizen', line: '2 credit names · 2 Nostr keys' });
   assert.deepEqual(creditFoldSummary({ name: 'Ann', credit_names: [], keys: [{ id: 1, npub: 'a' }] }), { title: 'Credited as Ann', line: '1 Nostr key' });
   assert.equal(creditFoldSummary({ name: 'Ann Lee', credit_names: [{ id: 1, name: 'A. Lee' }, { id: 2, name: 'ann lee' }] }).title, 'Credited as ann lee');
   assert.equal(creditFoldSummary({ name: 'Ann Lee', credit_names: [{ id: 1, name: 'A. Lee' }] }).title, 'Credited as A. Lee');
+  assert.equal(roleText(['composer', 'guitarist'], ''), 'composer, guitarist');
+  assert.equal(roleText(['composer'], 'Drummer'), 'composer');
 });

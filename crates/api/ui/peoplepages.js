@@ -17,7 +17,7 @@ import {
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
-  creditNameRows, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
+  creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
@@ -67,6 +67,24 @@ function KeyText({ row }) {
   return html`<span class="text"><span class=${row.mono ? 'label mono key-text' : 'label'}>${row.title}</span>
     ${row.lines.map((line, i) => html`<span class=${line === row.short ? 'summary key-text' : 'summary'} key=${i}>${line}</span>`)}
     ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</span>`;
+}
+
+// The mark of Nostr, from `icons/custom/nostr.svg` of musicindex-assets.
+const NostrMark = () => html`<svg class="icon" aria-hidden="true" viewBox="0 0 18 18"><rect width="18" height="18" rx="4" fill="var(--badge-nostr)" />
+  <path d="M10.8 2.5l-5 7.5h3.4l-1 5.5 5-7.5h-3.4z" fill="#ffffff" /></svg>`;
+
+// A row of the fold "Credited as": each value has an icon and a label (ADR 0140).
+function CreditRow({ row, removeLabel, onRemove }) {
+  return html`<div class="link-row static key-line more-row credit-row">
+    <${PersonArt} person=${{ img: row.picture, name: row.title }} />
+    <div class="text"><span class="label">${row.title}</span>
+      <dl class="attributes">${row.attributes.map((a) => html`<div key=${a.id} class="attribute">
+        <dt>${a.icon === 'nostr' ? html`<${NostrMark} />` : html`<${Icon} name=${a.icon} />`}${a.label}</dt>
+        <dd><span class=${a.mono ? 'mono key-text' : ''}>${a.value}</span>
+          ${a.sub.map((line) => html`<span class=${line.startsWith('npub') ? 'attribute-sub mono key-text' : 'attribute-sub'} key=${line}>${line}</span>`)}
+          ${a.id === 'nostr' && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}</dd></div>`)}</dl>
+      ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</div>
+    <div class="actions more-actions"><button class="button" type="button" aria-label=${removeLabel} onClick=${onRemove}>Remove</button></div></div>`;
 }
 
 // A Nostr key with its profile, a copy button and an optional action.
@@ -805,21 +823,13 @@ export function PersonPage({ id, feeds, go }) {
         <summary class="link-row"><span class="text"><span class="label">${creditFoldSummary(person).title}</span>
           <span class="summary">${creditFoldSummary(person).line}</span></span></summary>
         <p class="hint">${CREDIT_FOLD_HINT}</p>
-        ${creditNameRows(person, profiles).map((row) => html`<div class="link-row static key-line more-row" key=${row.key}>
-          <${PersonArt} person=${{ img: row.picture, name: row.title }} /><${KeyText} row=${row} />
-          ${row.npub && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}
-          <div class="actions more-actions"><button class="button" type="button" aria-label=${`Remove ${row.title}`}
-            onClick=${() => withLeave(() => act(async () => {
-              await api(`/people/${id}/credit-names/${row.creditId}`, { method: 'DELETE' });
-              if (row.keyId !== null) await api(`/people/${id}/keys/${row.keyId}`, { method: 'DELETE' });
-            }))}>Remove</button></div></div>`)}
-        ${keysWithNoCreditName(person).map((k) => {
-          const row = keyRow(k.npub, profiles, person.name);
-          return html`<div class="link-row static key-line more-row" key=${`k${k.id}`}>
-            <${PersonArt} person=${{ img: row.picture, name: row.title }} /><${KeyText} row=${{ ...row, lines: [...row.lines, keyEvidenceText(k.evidence)] }} />
-            <${CopyButton} text=${k.npub} label="the Nostr key" />
-            <div class="actions more-actions">${removeButton('keys', k.id, `Remove the Nostr key ${shortKey(k.npub)}`)}</div></div>`;
-        })}</details>`}
+        ${creditNameRows(person, profiles).map((row) => html`<${CreditRow} key=${row.key} row=${row} removeLabel=${`Remove ${row.title}`}
+          onRemove=${() => withLeave(() => act(async () => {
+            await api(`/people/${id}/credit-names/${row.creditId}`, { method: 'DELETE' });
+            if (row.keyId !== null) await api(`/people/${id}/keys/${row.keyId}`, { method: 'DELETE' });
+          }))} />`)}
+        ${keysWithNoCreditName(person).map((k) => keyOnlyRow(k, profiles, person.name)).map((row) => html`<${CreditRow} key=${row.key} row=${row}
+          removeLabel=${`Remove the Nostr key ${shortKey(row.npub)}`} onRemove=${() => remove('keys', row.keyId)} />`)}</details>`}
       ${shown.keys.length > 0 && html`<div class="group">${shown.keys.map((npub) => html`<div class="link-row static" key=${`p${npub}`}>
         <span class="text"><span class="label">Nostr key</span><span class="summary mono">${shortKey(npub)}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
       <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => withLeave(() => setLinking('credit-names'))} />

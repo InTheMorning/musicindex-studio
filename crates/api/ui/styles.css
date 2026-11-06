@@ -252,6 +252,9 @@ code, .mono {
   border-radius: 8px;
 }
 
+/* A group clips its content, so the ring of a row is inside the row. */
+.group .link-row:focus-visible, .group summary:focus-visible { outline-offset: -2px; }
+
 /* ---- Controls: a minimum of 44 px high (ADR 0010). ---- */
 
 .button {

@@ -46,11 +46,11 @@ In an open recipient you can also use:
 
 ## Add a recipient
 
-1. Select **Add a recipient**. The sheet **Add a Recipient** opens. The form is at the top.
+1. Select **Add a recipient**. The sheet **Add a Recipient** opens.
 2. Type the values, or select a row from **Your people** or **Payees with no person** to fill the form.
 3. Select **Add the Recipient**, then type the split in the row.
 
-To copy many recipients of a different feed, select **Copy from a Feed on musicindex** in the sheet. Search for the feed, open it or one of its tracks and select the recipients. Then select **Add N Recipients**.
+To copy many recipients of a different feed, select **Copy from a Feed on musicindex** at the top of the sheet. Search for the feed, open it or one of its tracks and select the recipients. Then select **Add N Recipients**.
 
 ## Recipients for one track
 

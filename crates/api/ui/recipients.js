@@ -45,7 +45,9 @@ export function shareParts(recipients) {
   const percent = percentages(recipients);
   const parts = recipients
     .map((r, i) => ({ name: r.name || r.address || 'Recipient', percent: percent[i], share: shares(r), fee: isFee(r) }))
-    .filter((p) => p.percent !== null && p.percent > 0);
+    .filter((p) => p.percent !== null && p.percent > 0)
+    // The sequence of the rows: the biggest first, then the fees (ADR 0144 item 4).
+    .sort((a, b) => Number(a.fee) - Number(b.fee) || b.percent - a.percent);
   const named = new Set();
   let rest = parts.reduce((sum, p) => sum + p.percent, 0);
   for (const part of [...parts].sort((a, b) => b.percent - a.percent)) {

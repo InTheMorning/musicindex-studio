@@ -178,8 +178,8 @@ function Recipients({ id, recipients, defaultType, onChange }) {
 }
 
 // The sheet "Add a Recipient", or "Change the Address" of a row (ADR 0144). It
-// has the layout of the sheet "Add a Wallet" (ADR 0123, ADR 0141): the form
-// first, then the rows that fill it.
+// has the layout of the sheet "Add a Wallet" (ADR 0123, ADR 0141): the row of
+// the musicindex search and the form first, then the rows that fill the form.
 function RecipientSheet({ open, recipient, defaultType, recipients, onSave, onCopy, onClose }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="recipient-title" onClose=${onClose}>
@@ -223,7 +223,12 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <form class="body" id="recipient-form" onSubmit=${(e) => { e.preventDefault(); if (address !== '' && !taken) onSave(values); }}>
-      <section class="page-section pinned-form"><div class="group rows">
+      <section class="page-section pinned-form">
+        ${!recipient && html`<div class="group"><button class="link-row" type="button" onClick=${onCopy}>
+          <span class="text"><span class="label">Copy from a Feed on musicindex</span>
+            <span class="summary">Select many recipients of a different feed.</span></span>
+          <span class="go" aria-hidden="true">›</span></button></div>`}
+        <div class="group rows">
         <${Choice} id="recipient-type" label="Type" value=${fields.recipient_type} options=${TYPES} onChange=${set('recipient_type')} />
         <${TextField} id="recipient-address" label="Address" required
           hint=${fields.recipient_type === 'lnaddress' && address && lookups && lookups.get(address.toLowerCase()) === 'none'
@@ -240,10 +245,6 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
         <div class="group">${list.people.map(pickRow)}</div></section>`}
       ${list !== null && list.payees.length > 0 && html`<section class="page-section"><h2>Payees with no person</h2>
         <div class="group">${list.payees.map(pickRow)}</div></section>`}
-      ${!recipient && html`<div class="group"><button class="link-row" type="button" onClick=${onCopy}>
-        <span class="text"><span class="label">Copy from a Feed on musicindex</span>
-          <span class="summary">Select many recipients of a different feed.</span></span>
-        <span class="go" aria-hidden="true">›</span></button></div>`}
     </form>
     <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>`;
 }

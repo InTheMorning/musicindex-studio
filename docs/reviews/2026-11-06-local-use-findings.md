@@ -209,3 +209,11 @@ Corrected ([ADR 0143](../adr/0143-a-feed-row-names-the-tracks-of-a-person.md)). 
 ### 27. An Open Recipient Has Too Many Controls
 
 Corrected ([ADR 0144](../adr/0144-recipients-use-one-picker-and-sort-by-split.md)). An open recipient had three rows of buttons, three ways to add or fill a recipient, and move buttons. The operator selected one sheet and a short row from a mockup, and asked that the rows sort by split.
+
+### 28. The Bar, The Focus Ring And The Copy Row
+
+Corrected ([ADR 0144](../adr/0144-recipients-use-one-picker-and-sort-by-split.md)). The share bar kept the sequence of the file when the rows had the sequence of the splits. A group clipped the sides of the focus ring of a row. The row "Copy from a Feed on musicindex" was at the end of the sheet, far from the top. The ring now is inside the row, and the bar and the row have new positions.
+
+### 29. The Sheet "Add a Wallet" Has No Search Of musicindex
+
+Open. "Add a Recipient" has a search of musicindex, and "Add a Wallet" does not. The operator asked that these sheets are the same.

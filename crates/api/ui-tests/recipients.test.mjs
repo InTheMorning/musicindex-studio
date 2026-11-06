@@ -19,6 +19,12 @@ test('the share bar shows each equal part, and the legend gives the sum of the r
   assert.ok(Math.abs(legend[3].percent - 50) < 0.001, SHARE_BAR);
 });
 
+test('the share bar has the sequence of the rows', () => {
+  const recipients = [['Small', '1', null], ['Fee', '50', 'true'], ['Big', '99', null]]
+    .map(([name, split, fee]) => ({ name, split, fee }));
+  assert.deepEqual(shareParts(recipients).shown.map((p) => p.name), ['Big', 'Small', 'Fee'], 'ADR 0144 item 4');
+});
+
 test('the share bar folds only small parts, up to 10 %', () => {
   const recipients = [['A', 80], ['B', 5], ['C', 3], ['D', 3], ['E', 3], ['F', 3], ['G', 3]]
     .map(([name, split]) => ({ name, split: String(split) }));

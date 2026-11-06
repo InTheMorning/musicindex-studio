@@ -4182,7 +4182,7 @@ function AccountPanel() {
       <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${closeNotice}>Close</button></div>
     </div>`}
     <div class="form"><h3>Move this account</h3>
-      <p class="hint">Make one file with your feeds, drafts, versions, people and vault. Import it on a different server, or in Studio desktop.</p>
+      <p class="hint">Make one file with your feeds, drafts, versions, people and vault. To import it, select Import an Account when you make an account on a different server, or in a new Studio desktop before you add a feed.</p>
       <div class="actions"><button class="button action" type="button" disabled=${busy} onClick=${() => setExporting(true)}>Export Account</button></div></div>
     ${exporting && html`<${ExportSheet} onClose=${() => setExporting(false)} />`}
     ${hasPasskeys && html`<${PasskeyList} />`}
@@ -4278,7 +4278,7 @@ function MovePanel() {
   const [open, setOpen] = useState(false);
   return html`<article class="panel">
     <h2>Move Studio</h2>
-    <p class="hint">Make one file with your feeds, drafts, versions, people and vault. Import it on a server, or in Studio on a different computer.</p>
+    <p class="hint">Make one file with your feeds, drafts, versions, people and vault. To import it, select Import an Account in a new Studio before you add a feed, or when you make an account on a server.</p>
     <div class="actions"><button class="button action" type="button" onClick=${() => setOpen(true)}>Export Studio</button></div>
     ${open && html`<${ExportSheet} onClose=${() => setOpen(false)} />`}
   </article>`;

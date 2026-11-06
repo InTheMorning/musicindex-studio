@@ -15,7 +15,7 @@ export const WELCOME = {
   },
   mspBefore: 'Moving from MSP 2.0?',
   mspButton: 'Import the Backups',
-  importBefore: 'Moving from a different server?',
+  importBefore: 'Moving from a different computer or server?',
   importButton: 'Import an Account',
 };
 

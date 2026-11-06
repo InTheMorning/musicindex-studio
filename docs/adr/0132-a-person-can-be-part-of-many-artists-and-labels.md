@@ -59,7 +59,7 @@ On 2026-11-05 the operator asked what "Member of" does, and if its name and its 
 - The API body of a Save changes from one member to a list, and the page values change with it.
 - `person_members`, the suggestions of ADR 0113 and the export use a list, so they do not change.
 - The code keeps the names `member` and `person_members`. Only the interface uses "Part of".
-- A task packet gives the work. No code holds this decision now.
+- [Task 093](../tasks/studio-v1-task-093-part-of.md) gives the work.
 
 ## Non-goals
 

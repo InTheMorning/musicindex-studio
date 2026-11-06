@@ -6,7 +6,7 @@
 - Accepted: 2026-11-02 by the operator, from screens 7 and 8 of the mockups in `.studio-dev/mockup-lookup/site/`.
 - Amended: 2026-11-02 by the operator, after the visual check of task 081. Items 11 and 12 come from that check.
 - Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 3, the hint of "Member of".
-- Changed by: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md). Items 1, 2, 3 and 8 to 10, and the non-goal of one membership, when its code is complete.
+- Changed by: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md). Items 1, 2, 3 and 8 to 10, and the non-goal of one membership.
 - Uses: [ADR 0098](0098-the-people-module.md) items 2, 6 and 8 for the membership and the change sets. [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change set. [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 10 for the credits of a person. [ADR 0112](0112-a-credit-role-comes-from-a-list.md) for the role. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for Save. [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) for a read-only feed. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers.
 
 ## Context

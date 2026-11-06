@@ -77,7 +77,7 @@ test('the row of a person gives the role, the membership, the address and the co
   };
   assert.deepEqual(personRow(person, { 7: 'The Ultras' }), {
     title: 'Sam Fiddle',
-    lines: ['Fiddle · Member of The Ultras', 'Pays Lightning address sam@getalby.com'],
+    lines: ['Fiddle · Part of The Ultras', 'Pays Lightning address sam@getalby.com'],
     count: '3 feeds',
   });
 });
@@ -315,7 +315,7 @@ test('the evidence of a key and the row Check your feeds have their texts', () =
 test('the saved values and the pending changes of a person (ADR 0116 items 1 to 3)', () => {
   const saved = savedValues(MK);
   assert.deepEqual(saved, {
-    name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), member: '3',
+    name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), members: ['3'],
     wallets: [], keys: [],
   });
   assert.deepEqual(pendingKeys(saved, saved), []);
@@ -334,8 +334,8 @@ test('the saved values and the pending changes of a person (ADR 0116 items 1 to 
   assert.deepEqual(pendingKeys(saved, address), ['default_address']);
   assert.deepEqual(saveBody(saved, address), { default_address: KEY('new@x.example') });
   assert.deepEqual(saveBody(saved, { ...saved, default_address: '' }), { default_address: null });
-  assert.deepEqual(saveBody(saved, { ...saved, member: '5' }), { member: 5 });
-  assert.deepEqual(saveBody(saved, { ...saved, member: '' }), { member: null });
+  assert.deepEqual(saveBody(saved, { ...saved, members: ['3', '5'] }), { members: [3, 5] });
+  assert.deepEqual(saveBody(saved, { ...saved, members: [] }), { members: [] });
   assert.deepEqual(saveBody(saved, { ...saved, img: 'https://x.example/p.jpg', name: 'Mary' }), {
     fields: { name: 'Mary', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: '' },
   });
@@ -374,7 +374,7 @@ test('the lines of each finding and the group of each state (ADR 0111 items 9 to
   assert.deepEqual(checkFeedLines(check.feeds[2], ['Album'], 'Ann', profiles).map((l) => l.error), [false, true, true]);
 });
 
-test('Member of labels each feed with its first role (ADR 0111 item 3)', () => {
+test('the operation menu labels each feed with its first role (ADR 0111 item 3)', () => {
   assert.deepEqual(memberChoices([{ id: 2, medium: 'publisher', title: 'HeyCitizen', publisher_roles: ['artist', 'label'] }]), [['2', 'HeyCitizen · Artist']]);
 });
 
@@ -478,7 +478,7 @@ test('the review line of a change set of a person names the operation', () => {
   assert.equal(changeLine({ feeds, operation: { kind: 'merge' } }, 'Ann'), '');
 });
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 test('no text of the People area shows an XML attribute or the words "change set" (ADR 0099 items 13 and 17)', () => {
   for (const name of ['people.js', 'peoplepages.js', 'recipients.js']) {
@@ -1126,7 +1126,8 @@ test('the source line of a filled field names the kind of the row (ADR 0117 item
 // The credit of a member (ADR 0118 items 2, 4, 6, 9 and 10, task 081b).
 import {
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation,
-  REMOVE_CREDIT_OPERATION, feedWord, memberSectionNote, memberRowLine, MEMBER_HINT,
+  REMOVE_CREDIT_OPERATION, feedWord, memberSectionNote, memberRowLine, LINK_HINT, LINK_EMPTY, linkChoices, linkRows,
+  creditPosition, afterCredits,
 } from '../ui/people.js';
 
 const LABEL = { id: 3, medium: 'publisher', title: 'Band', connector_id: 'local', publisher_roles: ['artist'] };
@@ -1140,12 +1141,12 @@ const PERSON = 7;
 
 test('creditOffers gives an add for a new membership with no credit', () => {
   const m = members([['3', [{ person_id: PERSON, in_credits: false }]]]);
-  assert.deepEqual(creditOffers('', '3', FEEDS, m, PERSON), [{ kind: 'add', feedId: '3' }]);
+  assert.deepEqual(creditOffers([], ['3'], FEEDS, m, PERSON), [{ kind: 'add', feedId: '3' }]);
 });
 
 test('creditOffers gives a remove for a removed membership with a credit', () => {
   const m = members([['3', [{ person_id: PERSON, in_credits: true }]]]);
-  assert.deepEqual(creditOffers('3', '', FEEDS, m, PERSON), [{ kind: 'remove', feedId: '3' }]);
+  assert.deepEqual(creditOffers(['3'], [], FEEDS, m, PERSON), [{ kind: 'remove', feedId: '3' }]);
 });
 
 test('creditOffers gives the remove first, then the add, when the feed changes', () => {
@@ -1153,7 +1154,7 @@ test('creditOffers gives the remove first, then the add, when the feed changes',
     ['3', [{ person_id: PERSON, in_credits: true }]],
     ['5', [{ person_id: PERSON, in_credits: false }]],
   ]);
-  assert.deepEqual(creditOffers('3', '5', FEEDS, m, PERSON), [
+  assert.deepEqual(creditOffers(['3'], ['5'], FEEDS, m, PERSON), [
     { kind: 'remove', feedId: '3' },
     { kind: 'add', feedId: '5' },
   ]);
@@ -1161,34 +1162,34 @@ test('creditOffers gives the remove first, then the add, when the feed changes',
 
 test('creditOffers gives no offer for a read-only feed', () => {
   const m = members([['4', [{ person_id: PERSON, in_credits: false }]]]);
-  assert.deepEqual(creditOffers('', '4', FEEDS, m, PERSON), []);
+  assert.deepEqual(creditOffers([], ['4'], FEEDS, m, PERSON), []);
 });
 
 test('creditOffers gives no add when the feed has the credit of the person', () => {
   const m = members([['3', [{ person_id: PERSON, in_credits: true }]]]);
-  assert.deepEqual(creditOffers('', '3', FEEDS, m, PERSON), []);
+  assert.deepEqual(creditOffers([], ['3'], FEEDS, m, PERSON), []);
 });
 
 test('creditOffers gives no offer when the membership does not change', () => {
   const m = members([['3', [{ person_id: PERSON, in_credits: true }]]]);
-  assert.deepEqual(creditOffers('3', '3', FEEDS, m, PERSON), []);
-  assert.deepEqual(creditOffers('', '', FEEDS, m, PERSON), []);
+  assert.deepEqual(creditOffers(['3'], ['3'], FEEDS, m, PERSON), []);
+  assert.deepEqual(creditOffers([], [], FEEDS, m, PERSON), []);
 });
 
 test('creditOffers ignores the rows of other persons', () => {
   const m = members([['3', [{ person_id: 99, in_credits: true }]]]);
-  assert.deepEqual(creditOffers('3', '', FEEDS, m, PERSON), []);
+  assert.deepEqual(creditOffers(['3'], [], FEEDS, m, PERSON), []);
 });
 
-test('the texts of the credit sheets and of Member of (ADR 0118 items 2, 4, 6 and 10)', () => {
-  assert.equal(MEMBER_HINT, 'The artist or label that this person is in. After Save, Studio can add this person to the credits of that feed.');
+test('the texts of the credit sheets and of the links (ADR 0132 items 2 and 10)', () => {
+  assert.equal(LINK_HINT, 'Links this person to an artist or label. Each link stays in Studio. After Save, you can also add a credit to each new feed.');
   assert.equal(creditAddTitle('Sam', 'Band'), 'Add Sam to the Credits of Band?');
   assert.equal(creditRemoveTitle('Sam', 'Band'), 'Remove Sam from the Credits of Band?');
-  assert.equal(creditAddNote('Sam', 'Band'), 'Sam is a member of Band in Studio. The credits of the artist feed can also show it, so that apps and musicindex.org can find Sam.');
+  assert.equal(creditAddNote('Sam', 'Band'), 'Sam is part of Band in Studio. The credits of the feed can also show it, so that apps and musicindex.org can find Sam.');
   assert.equal(creditPublicNote(false), 'The feed is public. The name, the picture and the information address go in it.');
   assert.equal(creditPublicNote(true), 'The feed is public. The name, the picture, the information address and the Nostr key go in it.');
-  assert.equal(creditRemoveNote('Sam'), 'The artist feed then does not name Sam. Studio shows the review first.');
-  assert.equal(memberSectionNote('artist'), 'The people that are members of this artist. A member that is not in the credits is only in Studio.');
+  assert.equal(creditRemoveNote('Sam'), 'The feed then does not name Sam. Studio shows the review first.');
+  assert.equal(memberSectionNote('artist'), 'The people that are part of this artist. A person that is not in the credits is only in Studio.');
 });
 
 test('the operations of a credit and its removal', () => {
@@ -1199,9 +1200,9 @@ test('the operations of a credit and its removal', () => {
 test('feedWord and memberRowLine give the words of the members list', () => {
   assert.equal(feedWord(LABEL), 'artist');
   assert.equal(feedWord({ medium: 'publisher', publisher_roles: [] }), 'feed');
-  assert.equal(memberRowLine({ usual_role: 'Fiddle', in_credits: true }), 'Fiddle · in the credits of this feed');
+  assert.equal(memberRowLine({ usual_role: 'Fiddle', in_credits: true }), 'Fiddle · In the credits of this feed');
   assert.equal(memberRowLine({ usual_role: '', in_credits: false }), 'Only in Studio');
-  assert.equal(memberRowLine({ usual_role: 'Vocals', in_credits: false }), 'Vocals · only in Studio');
+  assert.equal(memberRowLine({ usual_role: 'Vocals', in_credits: false }), 'Vocals · Only in Studio');
 });
 
 // ---- Task 084b: the entries of the check (ADR 0120) ----
@@ -1289,4 +1290,75 @@ test('the blocks of a payment: the address of the feed and the default address (
       { label: 'Ann', value: 'None', old: false },
     ],
   }]);
+});
+
+// ---- ADR 0132: a person can be part of many artists and labels ----
+
+const LINK_FEEDS = [
+  { id: 1, medium: 'publisher', title: 'Moss Choir', publisher_roles: ['artist'], connector_id: 1 },
+  { id: 2, medium: 'publisher', title: 'Aurora Lane', publisher_roles: ['artist'], connector_id: 1 },
+  { id: 3, medium: 'publisher', title: 'Cloud Host', publisher_roles: ['hosting'], connector_id: 1 },
+  { id: 4, medium: 'publisher', title: 'Night Owl', publisher_roles: ['label', 'hosting'], connector_id: 1 },
+  { id: 5, medium: 'publisher', title: 'Untagged', publisher_roles: [], connector_id: 1 },
+  { id: 6, medium: 'music', title: 'An Album', connector_id: 1 },
+];
+
+test('ADR 0132 item 6: the menu leaves out a link and a hosting feed, and keeps a feed with no role', () => {
+  assert.deepEqual(linkChoices(LINK_FEEDS, ['1']), [['2', 'Aurora Lane · Artist'], ['4', 'Night Owl · Label'], ['5', 'Untagged']]);
+  assert.equal(linkChoices(LINK_FEEDS).length, 4);
+});
+
+test('ADR 0132 items 3 and 4: the rows are A to Z, each with its condition', () => {
+  const saved = { members: ['1', '2'] };
+  const rows = linkRows({ members: ['1', '2', '4'] }, saved, LINK_FEEDS, [2]);
+  assert.deepEqual(rows.map((r) => [r.id, r.title, r.line]), [
+    ['2', 'Aurora Lane', 'Artist · In the credits of this feed'],
+    ['1', 'Moss Choir', 'Artist · Only in Studio'],
+    ['4', 'Night Owl', 'Label · Not saved yet'],
+  ]);
+  assert.equal(linkRows({ members: ['5'] }, { members: ['5'] }, LINK_FEEDS)[0].line, 'Only in Studio');
+  assert.equal(LINK_EMPTY, 'This person is not part of an artist or label yet.');
+});
+
+test('ADR 0132 item 8: each added and each removed link is one change, and Save sends the list', () => {
+  const saved = savedValues({ ...MK, members: [1, 2] });
+  assert.deepEqual(saved.members, ['1', '2']);
+  const values = { ...saved, members: ['2', '4', '5'] };
+  assert.deepEqual(pendingKeys(saved, values), ['member', 'member', 'member']);
+  assert.equal(isPending(saved, values, 'members'), true);
+  assert.deepEqual(saveBody(saved, values), { members: [2, 4, 5] });
+  // The same links in a different sequence are no change.
+  assert.deepEqual(pendingKeys(saved, { ...saved, members: ['2', '1'] }), []);
+  assert.equal(saveBody(saved, { ...saved, members: ['2', '1'] }), null);
+});
+
+test('ADR 0132 item 11: one sheet for each feed, the removals first, each with its position', () => {
+  const m = new Map([
+    ['1', [{ person_id: 7, in_credits: true }]],
+    ['2', [{ person_id: 7, in_credits: true }]],
+    ['4', [{ person_id: 7, in_credits: false }]],
+    ['5', [{ person_id: 7, in_credits: false }]],
+  ]);
+  assert.deepEqual(creditOffers(['1', '2'], ['4', '5'], LINK_FEEDS, m, 7), [
+    { kind: 'remove', feedId: '1' }, { kind: 'remove', feedId: '2' },
+    { kind: 'add', feedId: '4' }, { kind: 'add', feedId: '5' },
+  ]);
+  assert.deepEqual(creditOffers(['1'], ['1', '4'], LINK_FEEDS, m, 7), [{ kind: 'add', feedId: '4' }]);
+  assert.equal(creditPosition(0, 1), '');
+  assert.equal(creditPosition(0, 2), '1 of 2.');
+  assert.equal(creditPosition(1, 2), '2 of 2.');
+});
+
+test('ADR 0132 item 12: the view after the last sheet', () => {
+  assert.equal(afterCredits([]), null);
+  assert.deepEqual(afterCredits([8]), { name: 'change-set', id: 8 });
+  assert.deepEqual(afterCredits([8, 9]), { name: 'people' });
+});
+
+test('ADR 0132 item 10: the UI has no text "Member of"', () => {
+  const dir = new URL('../ui/', import.meta.url);
+  for (const name of readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+    assert.equal(readFileSync(new URL(name, dir), 'utf8').includes('Member of'), false,
+      `ADR 0132 item 10: ${name} has "Member of". Use the words "Part of".`);
+  }
 });

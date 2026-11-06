@@ -43,10 +43,11 @@ A control with a change has a mark at its start edge.
 - **Credits** shows the credit names and the Nostr keys.
 - **Add a Nostr Key** opens the sheet **Find a Nostr profile**. Type a name, an `npub` key or a NIP-05 address in the field. Then select **Search**, and select a result to add the key.
 - The row **Nostr key** of **Add a Credit Name** opens the same sheet.
-- **Artist or label** shows the menu **Member of**. After you select **Save** with a changed **Member of**, Studio can offer a credit on that artist or label feed.
-  - The sheet asks to add this person to the credits of the feed. Select **Review in 1 Feed** to make a change set. Studio writes the feed only after you review it.
-  - Select **Not Now** to keep the membership in Studio only. No feed changes.
-  - When you remove the membership, the sheet asks to remove the credit.
+- **Artists and labels** lists each artist or label that this person is part of. Each link stays in Studio. Use the menu **Add an artist or label** to add a link, and **Remove** to remove one. **Save** keeps the changes.
+  - After **Save**, one sheet opens for each new link. It asks to add this person to the credits of that feed, with a role for that feed. Select **Review in 1 Feed** to make a change set. Studio writes the feed only after you review it.
+  - Select **Not Now** to keep the link in Studio only. No feed changes.
+  - When you remove a link, a sheet asks to remove the credit.
+  - After the last sheet, one change set opens its review. Two or more show in **Changes to write** on the People page.
 - **Merge with a Person** moves the items of a different person to this person.
 - **Delete Person** deletes the person. No feed changes.
 

@@ -1048,9 +1048,9 @@ pub struct PersonSave {
     /// A new default address. `Some(None)` removes it.
     #[serde(deserialize_with = "double_option")]
     pub default_address: Option<Option<RecipientKey>>,
-    /// The one membership to keep. `Some(None)` removes each membership.
-    #[serde(deserialize_with = "double_option")]
-    pub member: Option<Option<FeedId>>,
+    /// The complete list of links to publisher feeds (ADR 0132 item 9). An
+    /// empty list removes each link.
+    pub members: Option<Vec<FeedId>>,
     /// Each wallet to link to the person (ADR 0117 item 7).
     pub wallets: Vec<WalletAdd>,
     /// Each Nostr key to link to the person (ADR 0117 item 7).
@@ -1104,18 +1104,10 @@ pub fn save_person(
     if let Some(fields) = &save.fields {
         update_fields(&tx, id, fields)?;
     }
-    if let Some(key) = &save.member {
-        match key {
-            Some(feed) => {
-                insert_member(&tx, id, *feed)?;
-                tx.execute(
-                    "DELETE FROM person_members WHERE person_id = ?1 AND feed_id <> ?2",
-                    params![id.0, feed.0],
-                )?;
-            }
-            None => {
-                tx.execute("DELETE FROM person_members WHERE person_id = ?1", [id.0])?;
-            }
+    if let Some(members) = &save.members {
+        tx.execute("DELETE FROM person_members WHERE person_id = ?1", [id.0])?;
+        for feed in members {
+            insert_member(&tx, id, *feed)?;
         }
     }
     for wallet in &save.wallets {
@@ -1929,6 +1921,25 @@ pub fn feed_members(
         }
     }
     Ok(list)
+}
+
+/// The publisher feeds of `person` that have a credit of the person (ADR 0132
+/// item 4). The test is the test of [`feed_members`].
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when the collection cannot be read.
+pub fn linked_credits(
+    collection: &Collection,
+    person: &Person,
+) -> Result<Vec<FeedId>, CollectionError> {
+    let credits = person_credits(collection, person, &person_normal_names(person))?;
+    Ok(person
+        .members
+        .iter()
+        .copied()
+        .filter(|feed| credits.iter().any(|row| row.feed_id == *feed))
+        .collect())
 }
 
 /// The findings of the credits of a person, with the feed of each. A credit
@@ -3561,6 +3572,27 @@ mod tests {
         assert!(feed_members(&collection, FeedId(99)).is_err());
     }
 
+    #[test]
+    fn linked_credits_give_only_a_link_with_a_credit_of_the_person() {
+        let collection = Collection::open_in_memory().unwrap();
+        publisher(&collection, 1);
+        publisher(&collection, 2);
+        publisher(&collection, 3);
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_member(&collection, ann, FeedId(1)).unwrap();
+        add_member(&collection, ann, FeedId(2)).unwrap();
+        // A credit that only the name matches counts. A credit on a feed with
+        // no link does not.
+        credit(&collection, 1, "Ann", "", "", "");
+        credit(&collection, 3, "Ann", "", "", "");
+        let found = person(&collection, ann).unwrap();
+        assert_eq!(
+            linked_credits(&collection, &found).unwrap(),
+            [FeedId(1)],
+            "ADR 0132 item 4: the condition must agree with the members of the feed."
+        );
+    }
+
     fn suggest(collection: &Collection) -> Vec<Suggestion> {
         suggestions(collection, &lookup_map(collection).unwrap()).unwrap()
     }
@@ -3918,7 +3950,7 @@ mod tests {
         let save = PersonSave {
             fields: Some(fields("Ann B")),
             default_address: Some(Some(key.clone())),
-            member: Some(Some(publisher)),
+            members: Some(vec![publisher]),
             ..PersonSave::default()
         };
         save_person(&collection, ann, &save).unwrap();
@@ -3935,7 +3967,7 @@ mod tests {
         let ann = add_person(&collection, &fields("Ann")).unwrap();
         let save = PersonSave {
             fields: Some(fields("Ann B")),
-            member: Some(Some(album)),
+            members: Some(vec![album]),
             ..PersonSave::default()
         };
         let error = save_person(&collection, ann, &save).unwrap_err();
@@ -3991,22 +4023,36 @@ mod tests {
     }
 
     #[test]
-    fn a_save_keeps_one_membership_and_none_removes_each() {
+    fn a_save_replaces_the_links_and_an_empty_list_removes_each() {
         let mut collection = Collection::open_in_memory().unwrap();
         let (_, first) = publisher_and_album(&mut collection);
         let (_, second) = publisher_and_album(&mut collection);
+        let (album, third) = publisher_and_album(&mut collection);
         let ann = add_person(&collection, &fields("Ann")).unwrap();
         add_member(&collection, ann, first).unwrap();
         save_person(&collection, ann, &PersonSave::default()).unwrap();
         assert_eq!(person(&collection, ann).unwrap().members, [first]);
         let save = PersonSave {
-            member: Some(Some(second)),
+            members: Some(vec![first, second]),
             ..PersonSave::default()
         };
         save_person(&collection, ann, &save).unwrap();
-        assert_eq!(person(&collection, ann).unwrap().members, [second]);
+        assert_eq!(person(&collection, ann).unwrap().members, [first, second]);
         let save = PersonSave {
-            member: Some(None),
+            members: Some(vec![second, third]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        assert_eq!(person(&collection, ann).unwrap().members, [second, third]);
+        // ADR 0132 item 9: a feed that is not a publisher feed changes nothing.
+        let save = PersonSave {
+            members: Some(vec![first, album]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap_err();
+        assert_eq!(person(&collection, ann).unwrap().members, [second, third]);
+        let save = PersonSave {
+            members: Some(Vec::new()),
             ..PersonSave::default()
         };
         save_person(&collection, ann, &save).unwrap();

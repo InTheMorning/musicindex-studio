@@ -92,7 +92,8 @@ function feedsOf(person) {
 // `feedTitles` maps the ID of a publisher feed to its title.
 export function personRow(person, feedTitles) {
   const lines = [];
-  const membership = (person.members || []).map((id) => `Member of ${titleOf(feedTitles, id)}`);
+  const links = (person.members || []).map((id) => titleOf(feedTitles, id));
+  const membership = links.length > 0 ? [`Part of ${links.join(', ')}`] : [];
   const first = [person.usual_role, ...membership].filter((t) => t && t.trim() !== '');
   if (first.length > 0) lines.push(first.join(' · '));
   const wallets = (person.wallets || []).length;
@@ -297,10 +298,9 @@ export const afterDiscard = (set) => (set && set.person_id != null ? { name: 'pe
 // merged person to the ID of the person that kept its items.
 export const afterMissing = (id, merged) => (merged.has(String(id)) ? { name: 'person', id: merged.get(String(id)) } : { name: 'people' });
 
-// The choices of "Member of": each publisher feed, A to Z, as
-// [value, label] pairs. A feed with a role shows its first role, for example
-// "HeyCitizen · Artist" (ADR 0111 item 3). `None` is the placeholder of the
-// menu.
+// Each publisher feed, A to Z, as [value, label] pairs, for the menu "Artist
+// or label" of an operation. A feed with a role shows its first role, for
+// example "HeyCitizen · Artist" (ADR 0111 item 3).
 export function memberChoices(feeds) {
   return (feeds || []).filter((f) => f.medium === 'publisher')
     .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }))
@@ -638,7 +638,7 @@ export function savedValues(person) {
     img: person.img ?? '',
     href: person.href ?? '',
     default_address: person.default_address ? keyValue(person.default_address) : '',
-    member: (person.members || []).length > 0 ? String(person.members[0]) : '',
+    members: (person.members || []).map(String),
     // The wallets and the Nostr keys that a fill adds (ADR 0117 item 14).
     wallets: [],
     keys: [],
@@ -647,24 +647,33 @@ export function savedValues(person) {
 
 // The controls of the page, in their sequence. The usual role and its group
 // are one control. The field controls are sent in the `fields` of a save.
-const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'member', 'wallets', 'keys'];
+const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'members', 'wallets', 'keys'];
 const FIELD_CONTROLS = ['name', 'usual_role', 'img', 'href'];
 // The list controls. Each added item is one pending change.
 const LIST_NAMES = { wallets: 'wallet', keys: 'npub' };
 
 const listLength = (list) => (list || []).length;
 
+// The links that one list has and the other does not.
+const changedLinks = (saved, values) => [
+  ...values.members.filter((id) => !saved.members.includes(id)),
+  ...saved.members.filter((id) => !values.members.includes(id)),
+];
+
 // Whether one control has a value that differs from the saved value. A list
 // control compares its lengths.
 export function isPending(saved, values, control) {
   if (control === 'usual_role') return values.usual_role !== saved.usual_role || values.usual_group !== saved.usual_group;
+  if (control === 'members') return changedLinks(saved, values).length > 0;
   if (control in LIST_NAMES) return listLength(values[control]) !== listLength(saved[control]);
   return values[control] !== saved[control];
 }
 
-// The pending changes, one entry for each control. Each added wallet and
-// each added Nostr key is one entry of its own.
+// The pending changes, one entry for each control. Each added wallet, each
+// added Nostr key and each added or removed link is one entry of its own
+// (ADR 0132 item 8).
 export const pendingKeys = (saved, values) => CONTROLS.flatMap((control) => {
+  if (control === 'members') return changedLinks(saved, values).map(() => 'member');
   if (control in LIST_NAMES) {
     const added = listLength(values[control]) - listLength(saved[control]);
     return Array.from({ length: Math.max(0, added) }, () => LIST_NAMES[control]);
@@ -685,7 +694,7 @@ export function saveBody(saved, values) {
     body.fields = { name: values.name, usual_role: values.usual_role, usual_group: values.usual_group, img: values.img, href: values.href };
   }
   if (keys.includes('default_address')) body.default_address = values.default_address === '' ? null : keyFromValue(values.default_address);
-  if (keys.includes('member')) body.member = values.member === '' ? null : Number(values.member);
+  if (keys.includes('member')) body.members = values.members.map(Number);
   if (keys.includes('wallet')) {
     body.wallets = values.wallets.slice(listLength(saved.wallets)).map((w) => ({ key: w.key, recipient_type: w.recipient_type }));
   }
@@ -700,7 +709,7 @@ const LEAVE_NAMES = {
   img: 'the picture address',
   href: 'the information address',
   default_address: 'the default address',
-  member: 'the artist or label',
+  member: 'the artists and labels',
   wallet: 'a wallet',
   npub: 'a Nostr key',
 };
@@ -732,28 +741,62 @@ export function profileLine(person, titles, feeds = []) {
   };
 }
 
-// The hint of "Member of" (ADR 0111 item 3, ADR 0118 item 2).
-export const MEMBER_HINT = 'The artist or label that this person is in. After Save, Studio can add this person to the credits of that feed.';
+// The hint of the section "Artists and labels" (ADR 0132 item 2).
+export const LINK_HINT = 'Links this person to an artist or label. Each link stays in Studio. After Save, you can also add a credit to each new feed.';
 
-// The offers of a credit after a Save that changes "Member of" (ADR 0118
-// items 2 and 6). `before` and `after` are the feed IDs of the membership
-// before and after the Save, as text, or ''. `feeds` is the feed list.
-// `members` is a Map from each feed ID to its `GET /feeds/{id}/members` list.
-// The result has `remove` first, and each offer is `{ kind, feedId }`.
+// The row of the section with no link (ADR 0132 item 3).
+export const LINK_EMPTY = 'This person is not part of an artist or label yet.';
+
+// The choices of the menu "Add an artist or label" and of the menu "Part of" of
+// a new person (ADR 0132 item 6). `linked` holds the feed IDs as text.
+export const linkChoices = (feeds, linked = []) => memberChoices((feeds || []).filter((f) => (
+  (f.publisher_roles || [])[0] !== 'hosting' && !linked.includes(String(f.id)))));
+
+// The rows of the links of the page, A to Z (ADR 0132 items 3 and 4).
+// `linkedCredits` is the list of the core: the links with a credit of the person.
+export function linkRows(values, saved, feeds, linkedCredits = []) {
+  const byId = new Map((feeds || []).map((f) => [String(f.id), f]));
+  return values.members.map((id) => {
+    const feed = byId.get(id);
+    const role = feed && (feed.publisher_roles || []).length > 0 ? firstRole(feed) : '';
+    const state = !saved.members.includes(id) ? 'Not saved yet'
+      : linkedCredits.map(String).includes(id) ? 'In the credits of this feed' : 'Only in Studio';
+    return {
+      id,
+      title: (feed && feed.title) || 'Untitled feed',
+      dot: feed ? feedKind(feed).dot : 'feed',
+      line: [role, state].filter((text) => text).join(' · '),
+    };
+  }).sort((x, y) => x.title.localeCompare(y.title, undefined, { sensitivity: 'base' }));
+}
+
+// The offers of a credit after a Save that changes the links (ADR 0118 items 3
+// and 6, ADR 0132 item 11). `before` and `after` are the links before and
+// after the Save, as text IDs. `feeds` is the feed list. `members` is a Map
+// from each feed ID to its `GET /feeds/{id}/members` list. Each removal comes
+// first, and each offer is `{ kind, feedId }`.
 export function creditOffers(before, after, feeds, members, personId) {
   const byId = new Map((feeds || []).map((f) => [String(f.id), f]));
   // The row of the person in the members of a feed, or undefined.
   const rowOf = (feedId) => ((members && members.get(String(feedId))) || []).find((m) => m.person_id === personId);
-  const offers = [];
-  if (before && before !== after && (rowOf(before) || {}).in_credits) {
-    offers.push({ kind: 'remove', feedId: before });
-  }
+  const removes = before.filter((feedId) => !after.includes(feedId) && (rowOf(feedId) || {}).in_credits)
+    .map((feedId) => ({ kind: 'remove', feedId }));
   // A read-only feed gets no offer, because its change set cannot be written (ADR 0067).
-  const feed = after && after !== before ? byId.get(after) : undefined;
-  if (feed && !isReadOnly(feed) && !(rowOf(after) || {}).in_credits) {
-    offers.push({ kind: 'add', feedId: after });
-  }
-  return offers;
+  const adds = after.filter((feedId) => {
+    const feed = before.includes(feedId) ? undefined : byId.get(feedId);
+    return feed && !isReadOnly(feed) && !(rowOf(feedId) || {}).in_credits;
+  }).map((feedId) => ({ kind: 'add', feedId }));
+  return [...removes, ...adds];
+}
+
+// The position of a credit sheet, with two or more sheets (ADR 0132 item 11).
+export const creditPosition = (index, total) => (total >= 2 ? `${index + 1} of ${total}.` : '');
+
+// The view after the last credit sheet (ADR 0132 item 12). `made` holds the ID
+// of each change set of the sheets. The People page holds "Changes to write".
+export function afterCredits(made) {
+  if (made.length === 0) return null;
+  return made.length === 1 ? { name: 'change-set', id: made[0] } : { name: 'people' };
 }
 
 // The title of the sheet that adds a credit (ADR 0118 item 4).
@@ -763,7 +806,7 @@ export const creditAddTitle = (name, feed) => `Add ${name} to the Credits of ${f
 export const creditRemoveTitle = (name, feed) => `Remove ${name} from the Credits of ${feed}?`;
 
 // The note of the sheet that adds a credit (ADR 0118 item 4).
-export const creditAddNote = (name, feed) => `${name} is a member of ${feed} in Studio. The credits of the artist feed can also show it, so that apps and musicindex.org can find ${name}.`;
+export const creditAddNote = (name, feed) => `${name} is part of ${feed} in Studio. The credits of the feed can also show it, so that apps and musicindex.org can find ${name}.`;
 
 // The note about the public data of a credit (ADR 0118 item 4). It names the
 // Nostr key only when the person has one.
@@ -772,7 +815,7 @@ export const creditPublicNote = (hasKey) => (hasKey
   : 'The feed is public. The name, the picture and the information address go in it.');
 
 // The text of the sheet that removes a credit (ADR 0118 item 6).
-export const creditRemoveNote = (name) => `The artist feed then does not name ${name}. Studio shows the review first.`;
+export const creditRemoveNote = (name) => `The feed then does not name ${name}. Studio shows the review first.`;
 
 // The body of the operation `credit_feed` of `POST /people/{id}/changes`.
 export const creditOperation = (role, group) => ({ kind: 'credit_feed', role, group });
@@ -786,15 +829,15 @@ export const feedWord = (feed) => ((feed.publisher_roles || []).length > 0
   ? feedKind(feed).label.split(' · ')[0].toLowerCase()
   : 'feed');
 
-// The note of the section "Members" (ADR 0118 item 10).
-export const memberSectionNote = (word) => `The people that are members of this ${word}. A member that is not in the credits is only in Studio.`;
+// The note of the section "People" of a publisher feed (ADR 0132 item 10).
+export const memberSectionNote = (word) => `The people that are part of this ${word}. A person that is not in the credits is only in Studio.`;
 
 // The second line of a member row: its usual role, then whether the channel
 // of the feed has a credit of the person (ADR 0118 item 9).
 export function memberRowLine(member) {
-  const state = member.in_credits ? 'in the credits of this feed' : 'only in Studio';
+  const state = member.in_credits ? 'In the credits of this feed' : 'Only in Studio';
   const role = (member.usual_role || '').trim();
-  return role ? `${role} · ${state}` : `${state.charAt(0).toUpperCase()}${state.slice(1)}`;
+  return role ? `${role} · ${state}` : state;
 }
 
 // ---- The suggestions of the picture and the information address (ADR 0113) ----
@@ -1401,8 +1444,8 @@ export const checkSheetTitle = (name) => `Check: ${name}`;
 // the suggestion (ADR 0111 item 6).
 export const MATCH_HINT = 'You have a person with this name. Studio adds the selected items to it.';
 
-// The hint under the menu "Member of" of a new person.
-export const NEW_MEMBER_HINT = 'The artist or label that this person is in. Studio changes no feed.';
+// The hint under the menu "Part of" of a new person (ADR 0132 item 10).
+export const NEW_MEMBER_HINT = 'The artist or label that this person is part of. Studio changes no feed.';
 
 // The hint under the items of a new person.
 export const NEW_PERSON_HINT = 'Select the items that are this person. Studio changes no feed.';

@@ -26,7 +26,7 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  detailList, MEMBER_HINT, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
@@ -219,8 +219,8 @@ function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, 
           hint=${checkSheetHint(suggestion, state.personId)} onChange=${(personId) => setState({ ...state, personId })} />
         ${!person && html`<${Field} id="check-name" label="Name" required value=${state.name}
           onInput=${(e) => setState({ ...state, name: e.target.value })} />
-          <${ChoiceSelect} id="check-member" label="Member of" value=${state.memberOf} placeholder="None"
-            hint=${NEW_MEMBER_HINT} options=${memberChoices(feeds)} onChange=${(memberOf) => setState({ ...state, memberOf })} />`}
+          <${ChoiceSelect} id="check-member" label="Part of" value=${state.memberOf} placeholder="None"
+            hint=${NEW_MEMBER_HINT} options=${linkChoices(feeds)} onChange=${(memberOf) => setState({ ...state, memberOf })} />`}
       </div>
       ${groups.map((g) => html`<section class="page-section" key=${g.group}><h2>${g.title}</h2>
         <div class="group rows">${g.rows.map(rowView)}</div></section>`)}
@@ -611,9 +611,12 @@ export function PersonPage({ id, feeds, go }) {
   // row that the values sheet shows (ADR 0117 items 2 and 8).
   const [finding, setFinding] = useState(null);
   const [picked, setPicked] = useState(null);
-  // The credit offers of the last Save that changed "Member of" (ADR 0118).
-  // The first offer has its sheet open.
+  // The credit offers of the last Save that changed the links (ADR 0132 items
+  // 11 and 12). The first offer has its sheet open. `made` holds the ID of each
+  // change set of these sheets.
   const [offers, setOffers] = useState([]);
+  const [offerTotal, setOfferTotal] = useState(0);
+  const made = useRef([]);
   const loadMore = () => api(`/people/${id}/more`).then((r) => setMore(r.items || []), () => setMore([]));
   // "Add a Nostr Key" adds the key that the sheet "Find a Nostr profile" picks (ADR 0123).
   const addKey = (npub) => act(async () => {
@@ -643,7 +646,7 @@ export function PersonPage({ id, feeds, go }) {
   ]);
   // Each change of a link reads the person again (task 065 item 5).
   const act = (work) => run(async () => { try { await work(); } finally { await reload(); } });
-  // The pending changes of the fields, the default address and "Member of"
+  // The pending changes of the fields, the default address and the links
   // (ADR 0116 items 1 to 6). The saved values come from each read of the person.
   const [values, setValues] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -671,8 +674,9 @@ export function PersonPage({ id, feeds, go }) {
   // keeps the pending changes, and shows the error.
   const save = async () => {
     if (!dirty) return;
-    const before = saved.member;
-    const after = shown.member;
+    const before = saved.members;
+    const after = shown.members;
+    const linksChanged = keys.includes('member');
     setSaving(true);
     setSaveFailure(null);
     let saveDone = false;
@@ -685,15 +689,27 @@ export function PersonPage({ id, feeds, go }) {
     } finally {
       setSaving(false);
     }
-    if (saveDone && before !== after) await offerCredits(before, after);
+    if (saveDone && linksChanged) await offerCredits(before, after);
   };
-  // The offers of a credit for a changed "Member of" (ADR 0118 items 2 and 3).
-  // A failed read of the members gives no offer for that feed.
+  // The offers of a credit for changed links (ADR 0118 item 3, ADR 0132 item
+  // 11). A failed read of the members gives no offer for that feed.
   const offerCredits = async (before, after) => {
-    const feedIds = [before, after].filter((feedId, i, all) => feedId && all.indexOf(feedId) === i);
+    const feedIds = [...new Set([...before, ...after])];
     const lists = await Promise.all(feedIds.map((feedId) => api(`/feeds/${feedId}/members`).then((r) => r.members || [], () => [])));
     const members = new Map(feedIds.map((feedId, i) => [feedId, lists[i]]));
-    setOffers(creditOffers(before, after, feeds, members, Number(id)));
+    const list = creditOffers(before, after, feeds, members, Number(id));
+    made.current = [];
+    setOfferTotal(list.length);
+    setOffers(list);
+  };
+  // The next sheet. After the last sheet, the view of ADR 0132 item 12 opens.
+  const nextOffer = () => {
+    const rest = offers.slice(1);
+    setOffers(rest);
+    if (rest.length > 0) return;
+    const view = afterCredits(made.current);
+    made.current = [];
+    if (view) go(view);
   };
   // Asks before the page leaves with a pending change (ADR 0116 items 8 and 11).
   // "Discard Changes" puts back the saved values, and gives true.
@@ -794,9 +810,18 @@ export function PersonPage({ id, feeds, go }) {
           <span class="label">${l.label || 'Support link'}</span><span class="summary address-text">${l.url}</span></span>
           ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div>`)}
         <${AddRow} title="Add a Support Link" onClick=${() => withLeave(() => setLinking('support-links'))} /></div></section>`,
-    member: () => html`<section class="page-section"><h2>Artist or label</h2><div class="group rows">
-      <${ChoiceSelect} id="person-member" label="Member of" value=${shown.member} pending=${isPending(saved, shown, 'member')} placeholder="None"
-        hint=${MEMBER_HINT} options=${memberChoices(feeds)} onChange=${(value) => update({ member: value })} /></div></section>`,
+    member: () => {
+      const rows = linkRows(shown, saved, feeds, person.linked_credits);
+      return html`<section class="page-section"><h2>Artists and labels</h2><p class="hint">${LINK_HINT}</p>
+      <div class="group">${rows.length === 0
+        ? html`<div class="link-row static"><span class="text"><span class="summary">${LINK_EMPTY}</span></span></div>`
+        : rows.map((row) => html`<div class="link-row static" key=${row.id}><span class=${`dot ${row.dot}`} aria-hidden="true"></span>
+          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
+          <button class="button" type="button" aria-label=${`Remove the link to ${row.title}`}
+            onClick=${() => update({ members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
+      <div class="group rows"><${ChoiceSelect} id="person-link-add" label="Add an artist or label" value="" placeholder="Select…"
+        options=${linkChoices(feeds, shown.members)} onChange=${(value) => { if (value) update({ members: [...shown.members, value] }); }} /></div></section>`;
+    },
     change: () => html`<section class="page-section"><h2>Change your feeds</h2>
       <p class="hint">${CHANGE_NOTE}</p>
       <div class="group">${CHANGE_ROWS.map(([kind, line]) => html`<${ListRow} key=${kind} title=${SHEET_TITLES[kind]} lines=${[line]}
@@ -825,13 +850,15 @@ export function PersonPage({ id, feeds, go }) {
   <${ValuesSheet} personId=${person.id} row=${picked} shown=${shown}
     onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} />
   ${offers.length > 0 && html`<${CreditSheet} key=${`${offers[0].kind}${offers[0].feedId}`} offer=${offers[0]} person=${person}
-    feeds=${feeds} go=${go} onNotNow=${() => setOffers((current) => current.slice(1))} />`}</div>`;
+    feeds=${feeds} position=${creditPosition(offerTotal - offers.length, offerTotal)}
+    onMade=${(setId) => { made.current.push(setId); }} onNotNow=${nextOffer} />`}</div>`;
 }
 
 // The sheets "Add {name} to the Credits of {feed}?" and "Remove {name} from
 // the Credits of {feed}?" (ADR 0118 items 4 to 7). The sheet is open while it
-// is shown. "Not Now" closes it, and changes no feed.
-function CreditSheet({ offer, person, feeds, go, onNotNow }) {
+// is shown. "Not Now" closes it, and changes no feed. Each close opens the next
+// sheet (ADR 0132 item 12).
+function CreditSheet({ offer, person, feeds, position, onMade, onNotNow }) {
   const ref = useSheet(true);
   const feed = (feeds || []).find((f) => String(f.id) === offer.feedId);
   const title = feed ? (feed.title || 'Untitled feed') : 'this feed';
@@ -843,25 +870,26 @@ function CreditSheet({ offer, person, feeds, go, onNotNow }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${close}>✕</button>
     </header>
     ${adding
-      ? html`<${CreditAddForm} person=${person} feedId=${offer.feedId} title=${title} go=${go} close=${close} />`
-      : html`<${CreditRemoveForm} person=${person} feedId=${offer.feedId} go=${go} close=${close} />`}
+      ? html`<${CreditAddForm} person=${person} feedId=${offer.feedId} title=${title} position=${position} onMade=${onMade} close=${close} />`
+      : html`<${CreditRemoveForm} person=${person} feedId=${offer.feedId} position=${position} onMade=${onMade} close=${close} />`}
   </dialog>`;
 }
 
 // The body of the sheet that adds a credit. The role starts with the usual
 // role of the person (ADR 0118 item 4).
-function CreditAddForm({ person, feedId, title, go, close }) {
+function CreditAddForm({ person, feedId, title, position, onMade, close }) {
   const [role, setRole] = useState(person.usual_role || '');
   const [group, setGroup] = useState(person.usual_group || '');
   const { busy, error, run } = useAction();
   const hasKey = person.keys.length > 0;
   const review = () => run(async () => {
     const made = await api(`/people/${person.id}/changes`, { method: 'POST', body: { operation: creditOperation(role, group), feed_ids: [Number(feedId)] } });
-    go({ name: 'change-set', id: made.id });
+    onMade(made.id);
+    close();
   });
   const roleLine = [role, group].filter((text) => text).join(' · ');
   return html`<div class="body">
-      <p class="hint">${creditAddNote(person.name, title)}</p>
+      <p class="hint">${position && html`<strong>${position}</strong> `}${creditAddNote(person.name, title)}</p>
       <div class="group rows"><${RoleMenu} id="credit-role" label="Role" role=${role} group=${group}
         onChange=${(nextRole, nextGroup) => { setRole(nextRole); setGroup(nextGroup); }} /></div>
       <section class="page-section"><h2>The credit</h2>
@@ -884,14 +912,15 @@ function CreditAddForm({ person, feedId, title, go, close }) {
 }
 
 // The body of the sheet that removes a credit (ADR 0118 item 6).
-function CreditRemoveForm({ person, feedId, go, close }) {
+function CreditRemoveForm({ person, feedId, position, onMade, close }) {
   const { busy, error, run } = useAction();
   const review = () => run(async () => {
     const made = await api(`/people/${person.id}/changes`, { method: 'POST', body: { operation: REMOVE_CREDIT_OPERATION, feed_ids: [Number(feedId)] } });
-    go({ name: 'change-set', id: made.id });
+    onMade(made.id);
+    close();
   });
   return html`<div class="body">
-      <p class="hint">${creditRemoveNote(person.name)}</p>
+      <p class="hint">${position && html`<strong>${position}</strong> `}${creditRemoveNote(person.name)}</p>
       <${ErrorNotice} error=${error} />
     </div>
     <footer>

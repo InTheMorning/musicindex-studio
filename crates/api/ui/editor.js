@@ -3387,7 +3387,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         })}
       </div>
     </section>`,
-    members: () => members.length > 0 && html`<section class="page-section"><h2>Members</h2>
+    members: () => members.length > 0 && html`<section class="page-section"><h2>People</h2>
       <p class="hint">${memberSectionNote(feedWord(feed))}</p>
       <div class="group">${members.map((m) => html`<button class="link-row" type="button" key=${m.person_id}
         onClick=${() => go({ name: 'person', id: m.person_id })}>

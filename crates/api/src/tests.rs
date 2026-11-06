@@ -10222,7 +10222,7 @@ async fn one_save_changes_a_person() {
         &format!("{base}/save"),
         Some(json!({
             "fields": { "name": "Ann B", "img": "https://x.example/a.png" },
-            "member": label,
+            "members": [label],
         })),
     )
     .await;
@@ -10231,6 +10231,7 @@ async fn one_save_changes_a_person() {
     assert_eq!(body["name"], "Ann B");
     assert_eq!(body["img"], "https://x.example/a.png");
     assert_eq!(body["members"], json!([label]));
+    assert_eq!(body["linked_credits"], json!([]));
 
     let (status, body) = call(
         &app,
@@ -10246,7 +10247,7 @@ async fn one_save_changes_a_person() {
         &app,
         "POST",
         &format!("{base}/save"),
-        Some(json!({ "member": null })),
+        Some(json!({ "members": [] })),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);

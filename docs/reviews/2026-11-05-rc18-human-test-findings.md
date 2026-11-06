@@ -34,4 +34,4 @@ Corrected for the next candidate. A long release title gave the left panel a scr
 
 ### 4. The Dot Of A Head
 
-Corrected for the next candidate (musicindex ADR 0038 R-DOT-4). The operator said: "dots are better for clarity".
+Corrected for the next candidate (musicindex ADR 0038 R-DOT-4). A head with a dot is more clear.

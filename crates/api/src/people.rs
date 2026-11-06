@@ -317,6 +317,30 @@ pub(crate) async fn add_link(
     .await
 }
 
+/// Change a link of a person. Only a wallet can change (ADR 0141 item 6).
+pub(crate) async fn change_link(
+    State(shared): State<Shared>,
+    Path((id, kind, link_id)): Path<(i64, String, i64)>,
+    Json(body): Json<Value>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        if kind != "wallets" {
+            return Err(unknown_kind(&kind));
+        }
+        let body: WalletBody = serde_json::from_value(body).map_err(|e| bad_body(&e))?;
+        let new_id = people::change_wallet(
+            &w.collection,
+            PersonId(id),
+            link_id,
+            &body.key,
+            &body.recipient_type,
+        )
+        .map_err(person_error)?;
+        Ok(Json(json!({ "id": new_id })))
+    })
+    .await
+}
+
 /// Remove a link of a person. For `members`, `link_id` is the feed ID.
 pub(crate) async fn remove_link(
     State(shared): State<Shared>,

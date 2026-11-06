@@ -200,7 +200,7 @@ Corrected ([ADR 0141](../adr/0141-the-form-of-add-a-wallet-comes-first.md)). The
 
 ### 25. The Addresses Of A Wallet Cannot Be Edited
 
-Open. The page of a person shows the addresses of a wallet with no way to change them. The operator asks that an edit reuses the sheet "Add a Wallet" (ADR 0123).
+Corrected ([ADR 0141](../adr/0141-the-form-of-add-a-wallet-comes-first.md) items 6 to 8). The page of a person showed the addresses of a wallet with no way to change them. "Edit" now reuses the sheet "Add a Wallet", as the operator asked (ADR 0123).
 
 ### 26. A Row Of "Check Your Feeds" Does Not Name The Track
 

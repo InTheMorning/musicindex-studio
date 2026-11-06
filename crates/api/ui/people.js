@@ -716,6 +716,21 @@ export function walletSelected(values, body) {
   return ['address', 'custom_key', 'custom_value'].every((id) => String(values[id] ?? '').trim() === String(given[id]).trim());
 }
 
+// The start of the sheet "Edit a Wallet" for one address of a wallet (ADR 0141
+// item 6). `others` lists each other address that the wallet holds, because
+// the change replaces the whole wallet.
+export function walletEdit(group, member) {
+  return {
+    walletId: group.id,
+    start: walletValues({ ...member.key, recipient_type: member.member.recipient_type }),
+    others: group.members.filter((m) => m !== member).map((m) => m.key.address),
+  };
+}
+
+// The warning of the sheet "Edit a Wallet" (ADR 0141 item 7).
+export const walletEditNote = (others) => (others.length === 0 ? null
+  : `This wallet also holds ${others.join(', ')}. A saved change replaces the wallet and removes ${others.length === 1 ? 'that address' : 'those addresses'} from this person. This changes no feed.`);
+
 export const linkReady = (kind, values) => linkFields(kind, values).every((f) => !f.required || String(values[f.id] ?? '').trim() !== '');
 
 // ---- The pending changes of the page of a person (ADR 0116 items 1 to 5) ----

@@ -17,7 +17,7 @@ import {
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
-  defaultFirst, walletValues, walletSelected, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
+  defaultFirst, walletValues, walletSelected, walletEdit, walletEditNote, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
@@ -336,17 +336,17 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
 }
 
 // The sheet that adds a link to a person (ADR 0099 item 4).
-function LinkSheet({ kind, personId, onClose, onAdded }) {
+function LinkSheet({ kind, personId, edit = null, onClose, onAdded }) {
   const ref = useSheet(kind !== null);
   return html`<dialog ref=${ref} class=${kind === 'wallets' ? 'sheet' : 'sheet small'} aria-labelledby="link-title" onClose=${onClose}>
-    ${kind && html`<${LinkForm} key=${kind} kind=${kind} personId=${personId} onCancel=${() => ref.current.close()}
+    ${kind && html`<${LinkForm} key=${edit ? `edit-${edit.walletId}-${edit.start.address}` : kind} kind=${kind} personId=${personId} edit=${edit} onCancel=${() => ref.current.close()}
       onAdded=${() => { ref.current.close(); onAdded(); }} />`}
   </dialog>`;
 }
 
-function LinkForm({ kind, personId, onCancel, onAdded }) {
+function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
   const form = LINK_FORMS[kind];
-  const [values, setValues] = useState(() => linkStart(kind));
+  const [values, setValues] = useState(() => (edit ? edit.start : linkStart(kind)));
   // The payees with no person of the sheet "Add a Wallet" (ADR 0141). `null`
   // while the list loads.
   const [recipients, setRecipients] = useState(kind === 'wallets' ? null : []);
@@ -363,7 +363,8 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
     e.preventDefault();
     if (!linkReady(kind, values)) return;
     run(async () => {
-      await api(`/people/${personId}/${kind}`, { method: 'POST', body: linkBody(kind, values) });
+      await api(edit ? `/people/${personId}/${kind}/${edit.walletId}` : `/people/${personId}/${kind}`,
+        { method: edit ? 'PUT' : 'POST', body: linkBody(kind, values) });
       onAdded();
     });
   };
@@ -374,9 +375,10 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
     : html`<${Field} key=${f.id} id=${`link-${f.id}`} label=${f.label} hint=${f.hint} required=${!!f.required}
         value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}
     ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" summary=${keySummary(values.name, values.npub)} value=${values.npub}
-      onOpen=${() => setKeyOpen(true)} />`}</div>`;
+      onOpen=${() => setKeyOpen(true)} />`}</div>
+    ${edit && walletEditNote(edit.others) && html`<p class="hint" role="status">${walletEditNote(edit.others)}</p>`}`;
   return html`<header>
-      <h2 id="link-title">${form.title}</h2>
+      <h2 id="link-title">${edit ? 'Edit a Wallet' : form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <form class="body" id="link-form" onSubmit=${add}>
@@ -389,7 +391,7 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
     </form>
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}
-    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${busy ? 'Adding…' : form.button}</button></footer>`;
+    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${edit ? (busy ? 'Saving…' : 'Save the Wallet') : (busy ? 'Adding…' : form.button)}</button></footer>`;
 }
 
 // The sheet of one operation of a person (ADR 0099 items 7 to 12). The
@@ -616,6 +618,8 @@ export function PersonPage({ id, feeds, go }) {
   const [suggestions, setSuggestions] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [linking, setLinking] = useState(null);
+  // The wallet of the sheet "Edit a Wallet", from `walletEdit` (ADR 0141).
+  const [editing, setEditing] = useState(null);
   const [more, setMore] = useState([]);
   const [merging, setMerging] = useState(false);
   // The search of "Find on musicindex" (its text, or null when closed), and the
@@ -792,7 +796,9 @@ export function PersonPage({ id, feeds, go }) {
           pending=${isDefault && isPending(saved, shown, 'default_address')}
           tag=${isDefault && html` <span class="default-tag"><${Icon} name="check" />Default</span>`}
           mark=${!isDefault && html`<button class="button action" type="button" aria-label=${`Make Default: ${m.member.address}`}
-            onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`} />`;
+            onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`}
+          action=${html`<button class="button" type="button" aria-label=${`Edit ${m.member.address}`}
+            onClick=${() => withLeave(() => setEditing(walletEdit(g, m)))}>Edit</button>`} />`;
       })}
         <div class="actions"><button class="button destructive" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>
@@ -860,6 +866,8 @@ export function PersonPage({ id, feeds, go }) {
   </section>
   <${OperationSheet} kind=${sheet} person=${person} groups=${groups} rows=${feedRows(person.places, feeds)} feeds=${feeds}
     go=${go} onClose=${() => setSheet(null)} />
+  <${LinkSheet} kind=${editing ? 'wallets' : null} personId=${person.id} edit=${editing} onClose=${() => setEditing(null)}
+    onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />
   <${LinkSheet} kind=${linking === 'keys' ? null : linking} personId=${person.id} onClose=${() => setLinking(null)}
     onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />
   <${NostrSheet} open=${linking === 'keys'} value=${null} offerPeople=${false} onSet=${(npub) => { if (npub) addKey(npub); }}

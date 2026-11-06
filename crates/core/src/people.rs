@@ -768,6 +768,54 @@ pub fn remove_wallet(
     Ok(())
 }
 
+/// Change a wallet of a person (ADR 0141 items 6 to 8). The new key replaces the
+/// whole wallet, also each address that the keysend lookup joined to it, and it
+/// keeps the place of the wallet. A default address in the old wallet moves to
+/// the new key. A change writes no feed.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::NotFound`] for an unknown wallet,
+/// [`CollectionErrorKind::Invalid`] for an empty address and
+/// [`CollectionErrorKind::Conflict`] when a different person has the new wallet.
+pub fn change_wallet(
+    collection: &Collection,
+    id: PersonId,
+    wallet_id: i64,
+    key: &RecipientKey,
+    recipient_type: &str,
+) -> Result<i64, CollectionError> {
+    let lookups = lookup_map(collection)?;
+    let tx = collection.db().unchecked_transaction()?;
+    let person = read_person(&tx, id)?;
+    let old = person
+        .wallets
+        .iter()
+        .find(|w| w.id == wallet_id)
+        .ok_or_else(|| {
+            CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("wallet {wallet_id} does not exist"),
+            )
+        })?;
+    let had_default = person.default_address.as_ref().is_some_and(|default| {
+        wallet_members(old, &lookups)
+            .iter()
+            .any(|m| m.key.parts() == default.parts())
+    });
+    tx.execute("DELETE FROM person_wallets WHERE id = ?1", [wallet_id])?;
+    let new_id = insert_wallet(&tx, id, key, recipient_type, LinkEvidence::User, &lookups)?;
+    tx.execute(
+        "UPDATE person_wallets SET position = ?2 WHERE id = ?1",
+        params![new_id, old.position],
+    )?;
+    if had_default {
+        write_default_address(&tx, id, Some(key), &lookups)?;
+    }
+    tx.commit()?;
+    Ok(new_id)
+}
+
 fn insert_key(db: &Connection, id: PersonId, npub: &str) -> Result<i64, CollectionError> {
     check_person(db, id)?;
     let npub = npub.trim().to_lowercase();
@@ -3343,6 +3391,61 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn a_change_of_a_wallet_keeps_its_place_and_moves_the_default() {
+        let collection = Collection::open_in_memory().unwrap();
+        let lookups = HashMap::new();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let first =
+            add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
+        add_wallet(&collection, ann, &key("node-2"), "node", LinkEvidence::User).unwrap();
+        let effective =
+            |collection: &Collection| default_address(&person(collection, ann).unwrap(), &lookups);
+
+        // With no selected default, the first wallet stays the default by its place.
+        change_wallet(&collection, ann, first, &key("ann@example.com"), "node").unwrap();
+        let p = person(&collection, ann).unwrap();
+        let rows: Vec<(String, String)> = p
+            .wallets
+            .iter()
+            .map(|w| (w.key.address.clone(), w.recipient_type.clone()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("ann@example.com".to_owned(), "lnaddress".to_owned()),
+                ("node-2".to_owned(), "node".to_owned()),
+            ]
+        );
+        assert_eq!(effective(&collection), Some(key("ann@example.com")));
+
+        // A selected default moves with its wallet.
+        set_default_address(&collection, ann, Some(&key("node-2"))).unwrap();
+        change_wallet(&collection, ann, p.wallets[1].id, &key("node-3"), "node").unwrap();
+        assert_eq!(effective(&collection), Some(key("node-3")));
+
+        // A wallet with no default leaves the default where it is.
+        let p = person(&collection, ann).unwrap();
+        change_wallet(&collection, ann, p.wallets[0].id, &key("node-4"), "node").unwrap();
+        assert_eq!(effective(&collection), Some(key("node-3")));
+    }
+
+    #[test]
+    fn a_change_of_a_wallet_refuses_the_wallet_of_a_different_person_and_changes_nothing() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let bob = add_person(&collection, &fields("Bob")).unwrap();
+        let wallet =
+            add_wallet(&collection, ann, &key("node-1"), "node", LinkEvidence::User).unwrap();
+        add_wallet(&collection, bob, &key("node-2"), "node", LinkEvidence::User).unwrap();
+        change_wallet(&collection, ann, wallet, &key("node-2"), "node").unwrap_err();
+        assert_eq!(
+            person(&collection, ann).unwrap().wallets[0].key,
+            key("node-1")
+        );
+        change_wallet(&collection, ann, 9999, &key("node-9"), "node").unwrap_err();
     }
 
     #[test]

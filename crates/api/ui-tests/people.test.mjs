@@ -1485,3 +1485,15 @@ test('a payee row stays selected while the form holds its values', async () => {
   assert.equal(walletSelected({ ...walletValues(body), custom_value: '3' }, body), false);
   assert.equal(walletSelected({ recipient_type: 'lnaddress', address: '' }, body), false);
 });
+
+test('the sheet Edit a Wallet starts with the address and names the other addresses', async () => {
+  const { walletEdit, walletEditNote } = await import('../ui/people.js');
+  const node = { key: { address: '03a', custom_key: '696969', custom_value: '2' }, member: { recipient_type: 'node' } };
+  const ln = { key: { address: 'a@b.example', custom_key: null, custom_value: null }, member: { recipient_type: 'lnaddress' } };
+  const edit = walletEdit({ id: 4, members: [node, ln] }, node);
+  assert.equal(edit.walletId, 4);
+  assert.deepEqual(edit.start, { recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' });
+  assert.deepEqual(edit.others, ['a@b.example']);
+  assert.match(walletEditNote(edit.others), /also holds a@b\.example\. A saved change replaces the wallet and removes that address/);
+  assert.equal(walletEditNote([]), null);
+});

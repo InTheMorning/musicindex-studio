@@ -18,8 +18,14 @@ The sheet "Add a Wallet" showed a long list of payees above its form, so the for
 4. A payee row has no chevron, because it opens no page.
 5. The payee row that the form holds stays selected, with the accent tint and outline. A change of the address, the custom key or the account ends the selection.
 
+### Edit A Wallet
+
+6. Each address of a wallet has the button "Edit". It opens the same sheet with the title "Edit a Wallet", with the values of that address in the form and the button "Save the Wallet" (ADR 0123).
+7. A save replaces the whole wallet, because a keysend lookup joins the other addresses to the old key. When the wallet holds other addresses, the sheet names them before the save. The wallet keeps its place.
+8. A default address in the old wallet moves to the new address. A save writes no feed (ADR 0098), and "Check your feeds" then shows each feed that differs.
+
 ## How This Decision Is Checked
 
-Mechanical: `crates/api/ui-tests/people.test.mjs` examines the sequence of the sections and the values from a payee.
+Mechanical: `crates/api/ui-tests/people.test.mjs` examines the sequence of the sections, the values from a payee and the start of an edit. `crates/core/src/people.rs` and `crates/api/src/tests.rs` examine a change of a wallet.
 
 Visual: the planning model looks at the sheet with a long list at 1280 px, and at 390 px with touch, with `$edges()`, `$fieldText()` and `$overflow()`.

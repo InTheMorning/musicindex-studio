@@ -6441,6 +6441,47 @@ async fn a_failed_request_waits_and_then_succeeds() {
 }
 
 #[tokio::test]
+async fn a_wallet_changes_through_its_route_and_only_a_wallet_can() {
+    let app = app();
+    let (_, person) = call(
+        &app,
+        "POST",
+        "/api/v1/people",
+        Some(json!({ "name": "Ann" })),
+    )
+    .await;
+    let id = person["id"].as_i64().unwrap();
+    let wallets = format!("/api/v1/people/{id}/wallets");
+    let (_, made) = call(
+        &app,
+        "POST",
+        &wallets,
+        Some(json!({ "address": "02abc", "recipient_type": "node" })),
+    )
+    .await;
+    let wallet = made["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("{wallets}/{wallet}"),
+        Some(json!({ "address": "ann@example.com", "recipient_type": "node" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, person) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(person["wallets"][0]["key"]["address"], "ann@example.com");
+    assert_eq!(person["wallets"][0]["recipient_type"], "lnaddress");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/people/{id}/keys/1"),
+        Some(json!({})),
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn the_desktop_has_never_as_the_start_of_the_lock_time() {
     let app = app();
     let (status, body) = call(&app, "GET", "/api/v1/settings/lock", None).await;

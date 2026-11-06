@@ -261,7 +261,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             post(people::preview_changes),
         )
         .route("/people/{id}/{kind}", post(people::add_link))
-        .route("/people/{id}/{kind}/{link_id}", delete(people::remove_link))
+        .route(
+            "/people/{id}/{kind}/{link_id}",
+            delete(people::remove_link).put(people::change_link),
+        )
         .route("/recipients", get(routes::list_recipients))
         .route("/recipients/uses", post(routes::recipient_uses))
         .route(

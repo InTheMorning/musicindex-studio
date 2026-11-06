@@ -34,8 +34,8 @@ Each difference is one row. Select a button to decide:
 
 ## Choose the file hosts
 
-- **Default file host of the release files**. New files go to this file host.
-- **File host of the feed XML**. If you select a different file host, the feed file moves when you write. The address from before gets a redirect or a pointer file with the new address. The page tells you which.
+- **Default file host of the release files**. New files go to this file host. The current files stay where they are. This change occurs immediately, and it is not in the draft.
+- **File host of the feed XML**. If you select a different file host, the feed file moves when you write. The address from before gets a pointer file with the new address.
 
 A feed file can name a new feed address in the tag `itunes:new-feed-url`. This page and **Feed facts** show that address. If it is a different address, the top of each page of the feed also shows a notice. An app or an index can follow the tag to that address.
 
@@ -49,7 +49,7 @@ Select a line to open it.
 - **Copy to** a file host. Studio sends a spare copy when you write.
 - **Reference**. The feed uses the copy on this file host.
 - **Delete**. Studio deletes the copy on that file host when you write.
-- **Move to** a file host. The feed uses the file on that file host. Studio copies it there when you write.
+- **Move to** a file host. The feed uses the file on that file host. When you write, Studio copies the file there and then deletes the copy on the file host from before. To keep that copy, use **Copy to** and then **Reference**.
 - **File host of this file**. Select a file host for this file, or **Use the default file host of the release**.
 - **Undo**. Takes a pending copy or deletion out of the draft.
 

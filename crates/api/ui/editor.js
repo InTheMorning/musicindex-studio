@@ -3987,7 +3987,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
           <label for="files-feed-host">File host of the feed XML</label>
           <select id="files-feed-host" class="button" value=${feedHost} disabled=${busy}
             onChange=${(e) => setFeedHost(Number(e.target.value))}>
-            ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+            ${connectors.filter((c) => c.kind !== 'blossom').map((c) => html`<option value=${c.id}>${c.name}</option>`)}
           </select>
           ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write${moveInfo && moveInfo.url ? html`, at <span class="mono">${moveInfo.url}</span>` : ''}.
             The address from before${moveInfo && moveInfo.from_url ? html`, <span class="mono">${moveInfo.from_url}</span>,` : ''} gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}

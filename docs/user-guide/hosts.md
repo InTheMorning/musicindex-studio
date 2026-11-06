@@ -134,7 +134,7 @@ The line **Different addresses** shows when the address of a feed does not agree
 - Select **Remove** to remove the file host. Studio asks you to confirm. The files in the file host do not change.
 
 You cannot remove a file host while feeds use it.
-Studio shows "Feeds use this file host." Remove those feeds from your collection first.
+Studio shows "Feeds use this file host." Move those feeds to a different file host, or remove them from your collection.
 
 ## Studio settings
 

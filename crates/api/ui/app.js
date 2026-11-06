@@ -2584,7 +2584,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
     <${Bar}><span class="bar-title">File hosts</span><//>
     <section class="section">
       ${error && error.code === 'in_use'
-        ? html`<div class="notice error" role="alert"><strong>Feeds use this file host.</strong>Remove those feeds from your collection first.</div>`
+        ? html`<div class="notice error" role="alert"><strong>Feeds use this file host.</strong>Move those feeds to a different file host, or remove them from your collection.</div>`
         : html`<${ErrorNotice} error=${error} />`}
       ${linked && html`<div ref=${resultRef}></div>`}
       ${linked && linked.feeds.length > 0 && html`<div class="notice" role="status">

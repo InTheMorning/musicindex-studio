@@ -1690,6 +1690,10 @@ pub struct FeedPlaces {
     /// Each role of a credit of the person in the feed, each one time, A to
     /// Z. A credit with no role gives empty text.
     pub roles: Vec<String>,
+    /// The places of each address of `pays`, in the same sequence (ADR 0143).
+    pub pay_places: Vec<Vec<CreditPlace>>,
+    /// Each place of the credits of `roles` (ADR 0143).
+    pub role_places: Vec<CreditPlace>,
 }
 
 impl FeedPlaces {
@@ -1698,6 +1702,8 @@ impl FeedPlaces {
             feed_id,
             pays: Vec::new(),
             roles: Vec::new(),
+            pay_places: Vec::new(),
+            role_places: Vec::new(),
         }
     }
 }
@@ -1723,7 +1729,7 @@ pub fn uses<S: BuildHasher>(
     let mut places: BTreeMap<i64, FeedPlaces> = BTreeMap::new();
     if !wallets.is_empty() {
         let mut statement = collection.db().prepare(
-            "SELECT feed_id, address, custom_key, custom_value FROM feed_recipients
+            "SELECT feed_id, address, custom_key, custom_value, places FROM feed_recipients
              ORDER BY feed_id, address, custom_key, custom_value",
         )?;
         let rows = statement.query_map([], |r| {
@@ -1736,10 +1742,11 @@ pub fn uses<S: BuildHasher>(
                     custom_key: Some(custom_key).filter(|t| !t.is_empty()),
                     custom_value: Some(custom_value).filter(|t| !t.is_empty()),
                 },
+                r.get::<_, String>(4)?,
             ))
         })?;
         for row in rows {
-            let (feed, key) = row?;
+            let (feed, key, found) = row?;
             if wallets.contains(&parts(&keysend::wallet_key(&key, lookups))) {
                 pays.insert(feed);
                 let place = places
@@ -1747,6 +1754,10 @@ pub fn uses<S: BuildHasher>(
                     .or_insert_with(|| FeedPlaces::new(FeedId(feed)));
                 if !place.pays.contains(&key) {
                     place.pays.push(key);
+                    // A row with places that are not correct gives no places.
+                    place
+                        .pay_places
+                        .push(serde_json::from_str(&found).unwrap_or_default());
                 }
             }
         }
@@ -1765,11 +1776,15 @@ pub fn uses<S: BuildHasher>(
         let keyed = !row.npub.is_empty() && npubs.contains(row.npub.to_lowercase().as_str());
         if named || keyed {
             credited.insert(row.feed_id.0);
-            places
+            let place = places
                 .entry(row.feed_id.0)
-                .or_insert_with(|| FeedPlaces::new(row.feed_id))
-                .roles
-                .push(row.role.trim().to_owned());
+                .or_insert_with(|| FeedPlaces::new(row.feed_id));
+            place.roles.push(row.role.trim().to_owned());
+            for found in row.places {
+                if !place.role_places.contains(&found) {
+                    place.role_places.push(found);
+                }
+            }
         }
     }
     for place in places.values_mut() {

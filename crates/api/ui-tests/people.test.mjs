@@ -1497,3 +1497,17 @@ test('the sheet Edit a Wallet starts with the address and names the other addres
   assert.match(walletEditNote(edit.others), /also holds a@b\.example\. A saved change replaces the wallet and removes that address/);
   assert.equal(walletEditNote([]), null);
 });
+
+test('a feed row names the tracks of a payment and of a credit', async () => {
+  const { sheetFeeds } = await import('../ui/people.js');
+  const track = (title) => ({ kind: 'item', guid: title, title });
+  const [row] = sheetFeeds([{
+    feed_id: 1,
+    pays: [{ address: 'a@b.example' }],
+    pay_places: [[{ kind: 'channel' }, track('One')]],
+    roles: ['composer', 'guitarist'],
+    role_places: [track('One'), track('Two'), track('Three'), track('Four')],
+  }], null);
+  assert.match(row.lines[0], /^Pays .*a@b\.example · Channel, One$/);
+  assert.equal(row.lines[1], 'Credited as composer, guitarist · One, Two and 2 more');
+});

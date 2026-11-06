@@ -383,6 +383,20 @@ impl Feed {
         found
     }
 
+    /// Each recipient of [`Feed::recipients`], with its place (ADR 0143).
+    #[must_use]
+    pub fn recipient_places(&self) -> Vec<(CreditPlace, &Recipient)> {
+        let mut found = Vec::new();
+        push_placed_recipients(&mut found, &CreditPlace::Channel, &self.values);
+        for item in &self.items {
+            push_placed_recipients(&mut found, &item_place(item), &item.values);
+        }
+        for live in &self.live_items {
+            push_placed_recipients(&mut found, &item_place(&live.item), &live.item.values);
+        }
+        found
+    }
+
     /// Each `podcast:person` of the channel, of each item and of each live
     /// item, in that sequence, with the place of each credit (ADR 0098 item
     /// 10, ADR 0120 item 2).
@@ -427,11 +441,28 @@ pub enum CreditPlace {
 }
 
 /// The credits of one item or live item, each with the place of the item.
-fn item_credits(item: &Item) -> Vec<(CreditPlace, &Person)> {
-    let place = CreditPlace::Item {
+fn item_place(item: &Item) -> CreditPlace {
+    CreditPlace::Item {
         guid: item.guid.clone().unwrap_or_default(),
         title: item.title.clone().unwrap_or_default(),
-    };
+    }
+}
+
+/// Add each recipient of `values` with its place (ADR 0143).
+fn push_placed_recipients<'a>(
+    found: &mut Vec<(CreditPlace, &'a Recipient)>,
+    place: &CreditPlace,
+    values: &'a [Entry<ValueBlock>],
+) {
+    for value in values {
+        let mut list = Vec::new();
+        push_recipients(&mut list, &value.recipients);
+        found.extend(list.into_iter().map(|recipient| (place.clone(), recipient)));
+    }
+}
+
+fn item_credits(item: &Item) -> Vec<(CreditPlace, &Person)> {
+    let place = item_place(item);
     item.persons
         .iter()
         .map(|entry| (place.clone(), &entry.value))

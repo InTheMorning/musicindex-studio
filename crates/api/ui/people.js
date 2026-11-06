@@ -145,10 +145,12 @@ export function makePersonBody(state) {
 // (ADR 0099 items 5 and 7). `places` is the list `places` of a person.
 export function sheetFeeds(places, titles) {
   return (places || []).map((place) => {
-    const lines = (place.pays || []).map((key) => `Pays ${addressText(key)}`);
+    // Each line names the tracks, or the channel (ADR 0143).
+    const where = (places) => ((places || []).length > 0 ? ` · ${placeText(places)}` : '');
+    const lines = (place.pays || []).map((key, i) => `Pays ${addressText(key)}${where((place.pay_places || [])[i])}`);
     const roles = (place.roles || []).filter((role) => role !== '');
-    if (roles.length > 0) lines.push(`Credited as ${roles.join(', ')}`);
-    else if ((place.roles || []).length > 0) lines.push('Credited');
+    if (roles.length > 0) lines.push(`Credited as ${roles.join(', ')}${where(place.role_places)}`);
+    else if ((place.roles || []).length > 0) lines.push(`Credited${where(place.role_places)}`);
     return { id: place.feed_id, title: titleOf(titles, place.feed_id), lines, checked: true };
   });
 }

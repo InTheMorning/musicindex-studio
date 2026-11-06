@@ -144,6 +144,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0140: A credit name shows where it is used](adr/0140-a-credit-name-shows-where-it-is-used.md)
 - [ADR 0141: The form of Add a Wallet comes first](adr/0141-the-form-of-add-a-wallet-comes-first.md)
 - [ADR 0142: A user selects the time before the vault locks](adr/0142-a-user-selects-the-time-before-the-vault-locks.md)
+- [ADR 0143: A feed row names the tracks of a person](adr/0143-a-feed-row-names-the-tracks-of-a-person.md)
 
 ## Plans
 

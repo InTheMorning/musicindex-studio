@@ -537,6 +537,11 @@ CREATE TABLE placed_feed_files (
     PRIMARY KEY (connector_id, path)
 );
 ",
+    // ADR 0143: the payment index keeps the places of each recipient, as the
+    // credit index does. A row from before has no places until the refill.
+    r"
+ALTER TABLE feed_recipients ADD COLUMN places TEXT NOT NULL DEFAULT '[]';
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -584,6 +589,10 @@ const APP_KEYS_MIGRATION: usize = 24;
 /// credit (ADR 0120 item 1). A run that applies it refills the credit index
 /// from the library copies (ADR 0120 item 4).
 const CREDIT_PLACES_MIGRATION: usize = 27;
+
+/// The index in `MIGRATIONS` of the migration that adds the places of each
+/// recipient (ADR 0143). A run that applies it refills the payment index.
+const RECIPIENT_PLACES_MIGRATION: usize = 29;
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1230,8 +1239,8 @@ impl Collection {
         // from CREDIT_PLACES_MIGRATION on, so the refill runs after the last
         // migration of this run, and only when this run applied that
         // migration (ADR 0120 item 4).
-        if current <= CREDIT_PLACES_MIGRATION {
-            self.refill_credits()?;
+        if current <= RECIPIENT_PLACES_MIGRATION {
+            self.refill_credits(current <= CREDIT_PLACES_MIGRATION)?;
         }
         Ok(())
     }
@@ -1332,7 +1341,7 @@ impl Collection {
     /// Replace the `feed_credits` rows of each feed that has a library copy
     /// (ADR 0098 item 10, ADR 0120 item 4). A feed with no library copy, or
     /// with a copy that does not parse, keeps its rows as they are.
-    fn refill_credits(&mut self) -> Result<(), CollectionError> {
+    fn refill_credits(&mut self, credits: bool) -> Result<(), CollectionError> {
         let Some(root) = self.library_root()?.filter(|root| root.is_dir()) else {
             return Ok(());
         };
@@ -1347,7 +1356,10 @@ impl Collection {
         let tx = self.db.transaction()?;
         for row in rows {
             if let Some(feed) = library_copy(&library, &row) {
-                put_credits(&tx, row.id, feed.credit_places())?;
+                if credits {
+                    put_credits(&tx, row.id, feed.credit_places())?;
+                }
+                put_recipients(&tx, row.id, feed.recipient_places())?;
             }
         }
         tx.commit()?;
@@ -1712,7 +1724,7 @@ impl Collection {
             feed.new_feed_url.as_deref(),
         )?;
         choose_address(&tx, id)?;
-        put_recipients(&tx, id, feed.recipients())?;
+        put_recipients(&tx, id, feed.recipient_places())?;
         put_credits(&tx, id, feed.credit_places())?;
         // A publisher feed with no confirmed roles gets the roles that its
         // links give (ADR 0082 item 4).
@@ -3858,12 +3870,12 @@ fn put_address(
 fn put_recipients(
     db: &Connection,
     id: FeedId,
-    recipients: Vec<&Recipient>,
+    recipients: Vec<(CreditPlace, &Recipient)>,
 ) -> Result<(), CollectionError> {
     db.execute("DELETE FROM feed_recipients WHERE feed_id = ?1", [id.0])?;
     let seen_at = now();
     let mut rows: Vec<RecipientRow> = Vec::new();
-    for recipient in recipients {
+    for (place, recipient) in recipients {
         // `Feed::recipients` gives only a recipient with an address.
         let Some(address) = recipient.address.clone() else {
             continue;
@@ -3879,6 +3891,9 @@ fn put_recipients(
             Some(row) => {
                 row.name.clone_from(&recipient.name);
                 row.recipient_type.clone_from(&recipient.recipient_type);
+                if !row.places.contains(&place) {
+                    row.places.push(place);
+                }
             }
             None => rows.push(RecipientRow {
                 address,
@@ -3886,14 +3901,17 @@ fn put_recipients(
                 custom_value,
                 name: recipient.name.clone(),
                 recipient_type: recipient.recipient_type.clone(),
+                places: vec![place],
             }),
         }
     }
     for row in rows {
+        let places = serde_json::to_string(&row.places)
+            .map_err(|e| CollectionError::invalid(e.to_string()))?;
         db.execute(
             "INSERT INTO feed_recipients
-                 (feed_id, address, custom_key, custom_value, name, recipient_type, seen_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                 (feed_id, address, custom_key, custom_value, name, recipient_type, seen_at, places)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 id.0,
                 row.address,
@@ -3901,7 +3919,8 @@ fn put_recipients(
                 row.custom_value,
                 row.name,
                 row.recipient_type,
-                seen_at
+                seen_at,
+                places
             ],
         )?;
     }
@@ -4033,6 +4052,7 @@ struct RecipientRow {
     custom_value: String,
     name: Option<String>,
     recipient_type: Option<String>,
+    places: Vec<CreditPlace>,
 }
 
 /// The address of each source of a feed.
@@ -4686,6 +4706,44 @@ mod tests {
                 item("t2", "Track 2"),
             ],
             "ADR 0120 item 2: each place is one time, in the sequence of the feed"
+        );
+    }
+
+    #[test]
+    fn put_recipients_keeps_one_row_with_the_places_of_each_recipient() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let value = "<podcast:value type=\"lightning\" method=\"keysend\">\
+             <podcast:valueRecipient name=\"Ann\" type=\"node\" address=\"02ab\" split=\"1\"/></podcast:value>";
+        let doc = credit_doc(&format!(
+            "{value}<item><guid>t1</guid><title>Track 1</title>{value}</item>"
+        ));
+        collection
+            .record_state(feed, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        let places: String = collection
+            .db
+            .query_row("SELECT places FROM feed_recipients", [], |r| r.get(0))
+            .unwrap();
+        let places: Vec<CreditPlace> = serde_json::from_str(&places).unwrap();
+        assert_eq!(
+            places,
+            [
+                CreditPlace::Channel,
+                CreditPlace::Item {
+                    guid: "t1".into(),
+                    title: "Track 1".into()
+                }
+            ],
+            "ADR 0143: each place is one time, in the sequence of the feed"
+        );
+    }
+
+    #[test]
+    fn the_recipient_places_migration_has_its_index() {
+        assert!(
+            MIGRATIONS[RECIPIENT_PLACES_MIGRATION].contains("feed_recipients ADD COLUMN places"),
+            "ADR 0143: RECIPIENT_PLACES_MIGRATION must be the index of its entry in MIGRATIONS"
         );
     }
 

@@ -93,7 +93,7 @@ function feedsOf(person) {
 export function personRow(person, feedTitles) {
   const lines = [];
   const links = (person.members || []).map((id) => titleOf(feedTitles, id));
-  const membership = links.length > 0 ? [`Part of ${links.join(', ')}`] : [];
+  const membership = links.length > 0 ? [`Linked to ${links.join(', ')}`] : [];
   const first = [person.usual_role, ...membership].filter((t) => t && t.trim() !== '');
   if (first.length > 0) lines.push(first.join(' · '));
   const wallets = (person.wallets || []).length;
@@ -850,13 +850,13 @@ export function profileLine(person, titles, feeds = []) {
   };
 }
 
-// The hint of the section "Artists and labels" (ADR 0132 item 2).
+// The hint of the links of a person (ADR 0132 item 2, ADR 0146 item 1).
 export const LINK_HINT = 'Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. The link itself stays in Studio.';
 
 // The row of the section with no link (ADR 0132 item 3).
-export const LINK_EMPTY = 'This person is not part of an artist or label yet.';
+export const LINK_EMPTY = 'This person is not linked to an artist or label page yet.';
 
-// The choices of the menu "Add an artist or label" and of the menu "Part of" of
+// The choices of the menu "Link to an artist or label page" of a person and of
 // a new person (ADR 0132 item 6). `linked` holds the feed IDs as text.
 export const linkChoices = (feeds, linked = []) => memberChoices((feeds || []).filter((f) => (
   (f.publisher_roles || [])[0] !== 'hosting' && !linked.includes(String(f.id)))));
@@ -1472,6 +1472,14 @@ export function creditChoices(values, hit = null) {
   return Object.keys(start).length === 0 ? [] : [{ id: 'feed', values: start }];
 }
 
+// A result of "Find a Nostr profile" with a missing name or picture takes it from
+// the person that holds the key (ADR 0146 item 5).
+export function withPersonValues(profile, people) {
+  const person = (people || []).find((p) => (p.keys || []).some((k) => k.npub === profile.npub));
+  if (!person) return profile;
+  return { ...profile, name: profile.name || person.name || null, picture: profile.picture || person.img || null };
+}
+
 // The Nostr key of a feed. It comes with the name and the picture that the sheet
 // "Find a Nostr profile" can use (ADR 0145 item 15).
 export const nostrChoices = (values) => (isEmpty(values.npub) ? [] : [{ id: 'key', values: { npub: values.npub, name: values.title ?? null, picture: values.image_url ?? null } }]);
@@ -1593,8 +1601,8 @@ export const checkSheetTitle = (name) => `Check: ${name}`;
 // the suggestion (ADR 0111 item 6).
 export const MATCH_HINT = 'You have a person with this name. Studio adds the selected items to it.';
 
-// The hint under the menu "Part of" of a new person (ADR 0132 item 10).
-export const NEW_MEMBER_HINT = 'The artist or label that this person is part of. Studio changes no feed.';
+// The hint under the menu of the link of a new person (ADR 0132 item 10).
+export const NEW_MEMBER_HINT = 'The artist or label page of this person. Studio changes no feed.';
 
 // The hint under the items of a new person.
 export const NEW_PERSON_HINT = 'Select the items that are this person. Studio changes no feed.';
@@ -1775,7 +1783,7 @@ export function hasLine(row) {
 
 // The start value, the state and the words of each value of a feed (ADR 0117
 // items 9 to 12).
-const ALREADY_VALUE = 'Already the value of this person';
+export const ALREADY_VALUE = 'Already the value of this person';
 const ALREADY_WALLET = 'Already a wallet of this person';
 const NO_KEY = 'This feed gives no Nostr key. Use “Add a Nostr Key” to search the Nostr profiles.';
 const NO_ADDRESS = 'This wallet has no address, so Studio cannot save it.';

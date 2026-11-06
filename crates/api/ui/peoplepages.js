@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
-import { PickerLayout, FindOneSheet } from './pickers.js';
+import { PickerLayout, FindOneSheet, TakenTag } from './pickers.js';
 import { api, assetMode, askConfirm, Bar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
@@ -30,7 +30,7 @@ import {
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
-  recipientChoices, creditChoices, fundingChoices, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
+  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
 } from './people.js';
 
@@ -215,13 +215,16 @@ function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, 
     onDismissed();
   });
   const rowView = (row) => {
-    const text = html`<span class="text"><span class=${row.mono ? 'label mono key-text' : 'label'}>${row.title}</span>
-      ${row.lines.map((line, i) => html`<span class=${line === row.short ? 'summary key-text' : 'summary'} key=${i}>${line}</span>`)}
+    // A row that the person has already keeps its content and has a tag (ADR 0146 item 3).
+    const lines = row.already ? row.lines.slice(0, -1) : row.lines;
+    const text = html`<span class="text"><span class="pick-name"><span class=${row.mono ? 'label mono key-text' : 'label'}>${row.title}</span>
+        ${row.already && html`<${TakenTag} text=${row.lines.at(-1)} />`}</span>
+      ${lines.map((line, i) => html`<span class=${line === row.short ? 'summary key-text' : 'summary'} key=${i}>${line}</span>`)}
       ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</span>`;
     const lead = row.group === 'keys' ? html`<${PersonArt} person=${{ img: row.picture, name: row.title }} />` : null;
     const copy = row.group === 'keys' ? html`<${CopyButton} text=${state.keys[row.index].item} label="the Nostr key" />` : null;
     const key = `${row.group}${row.index}`;
-    if (row.already) return html`<div class=${copy ? 'key-row' : ''} key=${key}><div class="link-row static">${lead}${text}</div>${copy}</div>`;
+    if (row.already) return html`<div class=${copy ? 'key-row' : ''} key=${key}><div class="link-row static pick-taken">${lead}${text}</div>${copy}</div>`;
     return html`<div class=${copy ? 'key-row' : ''} key=${key}><label class="link-row use-row">
       <input type="checkbox" checked=${row.checked} onChange=${() => setState(toggledItem(state, row.group, row.index))} />${lead}${text}</label>${copy}</div>`;
   };
@@ -235,7 +238,7 @@ function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, 
           hint=${checkSheetHint(suggestion, state.personId)} onChange=${(personId) => setState({ ...state, personId })} />
         ${!person && html`<${Field} id="check-name" label="Name" required value=${state.name}
           onInput=${(e) => setState({ ...state, name: e.target.value })} />
-          <${ChoiceSelect} id="check-member" label="Part of" value=${state.memberOf} placeholder="None"
+          <${ChoiceSelect} id="check-member" label="Link to an artist or label page" value=${state.memberOf} placeholder="None"
             hint=${NEW_MEMBER_HINT} options=${linkChoices(feeds)} onChange=${(memberOf) => setState({ ...state, memberOf })} />`}
       </div>
       ${groups.map((g) => html`<section class="page-section" key=${g.group}><h2>${g.title}</h2>
@@ -622,10 +625,12 @@ function ValuesForm({ personId, row, shown, onBack, onFill }) {
 // A row of the Fill section. A row that cannot be selected has no check box.
 function FillRow({ row, checked, onToggle }) {
   const lead = row.art ? html`<${PersonArt} person=${{ img: row.art, name: row.title }} />` : null;
-  const text = html`<span class="text"><span class="label">${row.title}</span>
+  // A value that the person has already keeps its content and has a tag (ADR 0146 item 3).
+  const taken = row.lines.includes(ALREADY_VALUE);
+  const text = html`<span class="text"><span class="pick-name"><span class="label">${row.title}</span>${taken && html`<${TakenTag} text=${ALREADY_VALUE} />`}</span>
     ${row.value && html`<span class="summary mono address-text">${row.value}</span>`}
-    ${row.lines.map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span>`;
-  if (!row.selectable) return html`<div class="link-row static">${lead}${text}</div>`;
+    ${row.lines.filter((line) => line !== ALREADY_VALUE).map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span>`;
+  if (!row.selectable) return html`<div class=${taken ? 'link-row static pick-taken' : 'link-row static'}>${lead}${text}</div>`;
   return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onToggle} />${lead}${text}</label>`;
 }
 
@@ -857,14 +862,14 @@ export function PersonPage({ id, feeds, go }) {
         <${AddRow} title="Add a Support Link" onClick=${() => withLeave(() => setLinking('support-links'))} /></div></section>`,
     member: () => {
       const rows = linkRows(shown, saved, feeds, person.linked_credits);
-      return html`<section class="page-section"><h2>Artists and labels</h2><p class="hint">${LINK_HINT}</p>
+      return html`<section class="page-section"><h2>Linked artist and label pages</h2><p class="hint">${LINK_HINT}</p>
       <div class="group">${rows.length === 0
         ? html`<div class="link-row static"><span class="text"><span class="summary">${LINK_EMPTY}</span></span></div>`
         : rows.map((row) => html`<div class="link-row static" key=${row.id}><span class=${`dot ${row.dot}`} aria-hidden="true"></span>
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
           <button class="button destructive" type="button" aria-label=${`Remove the link to ${row.title}`}
             onClick=${() => update({ members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
-      <div class="group rows"><${ChoiceSelect} id="person-link-add" label="Add an artist or label" value="" placeholder="Select…"
+      <div class="group rows"><${ChoiceSelect} id="person-link-add" label="Link to an artist or label page" value="" placeholder="Select…"
         options=${linkChoices(feeds, shown.members)} onChange=${(value) => { if (value) update({ members: [...shown.members, value] }); }} /></div></section>`;
     },
     change: () => html`<section class="page-section"><h2>Change your feeds</h2>

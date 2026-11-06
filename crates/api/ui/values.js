@@ -5,7 +5,7 @@ import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from '
 import { CONFIRMS } from './confirms.js';
 import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
 import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine, memberText, addRecipientsLabel, trackHeading } from './people.js';
-import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults } from './pickers.js';
+import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag } from './pickers.js';
 import { PersonArt, useLookup } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
@@ -210,7 +210,7 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
   const pickRow = (r) => {
     const rowKey = recipientIdentity(r.recipient);
     const used = others.has(rowKey);
-    return html`<${PickFillRow} key=${rowKey} title=${r.name} line=${used ? 'Already in this list' : r.line} disabled=${used}
+    return html`<${PickFillRow} key=${rowKey} title=${r.name} line=${r.line} taken=${used}
       lead=${r.person && html`<${PersonArt} person=${r.person} />`}
       selected=${rowKey === recipientIdentity(values)}
       after=${!r.person && html`<${SaveRecipientButton} recipient=${r.recipient} />`}
@@ -294,13 +294,12 @@ const identityOf = recipientIdentity;
 
 // One row of the sheet "Copy from a Feed": a check box, the name, the line of
 // the address and the share in the source. A row that the list has already
-// has no check box (ADR 0145 item 10).
+// has no check box (ADR 0145 item 10, ADR 0146 item 3).
 function PickRow({ name, line, share, note, checked, taken, onToggle }) {
-  return html`<div class="link-row pick-row">
+  return html`<div class=${taken ? 'link-row pick-row pick-taken' : 'link-row pick-row'}>
     ${taken ? html`<span class="pick-box"></span>` : html`<label class="pick-box"><input type="checkbox" checked=${checked}
       aria-label=${name} onChange=${onToggle} /></label>`}
-    <span class="text"><span class="title">${name}</span><span class="sub">${line}</span>
-      ${taken && html`<span class="sub">Already in this list</span>`}
+    <span class="text"><span class="pick-name"><span class="title">${name}</span>${taken && html`<${TakenTag} />`}</span><span class="sub">${line}</span>
       ${note && html`<span class="sub">${note}</span>`}</span>
     ${share && html`<span class="summary">${share}</span>`}
   </div>`;

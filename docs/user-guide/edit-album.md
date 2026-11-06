@@ -104,7 +104,7 @@ This section has one row.
 
 - **Feed facts**. Shows the address source, the feed GUID, the file, the version and the last announcement. It also has the button **Remove from Collection**.
 
-### Artists and labels
+### Linked artist and label pages
 
 This section shows the artist feeds and the label feeds that link to this album.
 See [Artist and label feeds](artist-and-label-feeds.md).

@@ -7,9 +7,9 @@ import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady } from './review.js';
 import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
-import { PickerLayout, PickFillRow, FindOneSheet, PickFold } from './pickers.js';
+import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
-import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrChoices, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
+import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
@@ -177,7 +177,7 @@ function CreditForm({ persons, feedId, onAdd, onCancel }) {
   const change = (name) => (value) => setValues((current) => set(current, name, value));
   const ready = String(values.name ?? '').trim() !== '';
   const rows = creditPickRows(people || [], persons).map((r) => html`<${PickFillRow} key=${r.id} title=${r.name}
-    line=${r.taken ? 'Already in this list' : r.line} disabled=${r.taken} lead=${html`<${PersonArt} person=${r.person} />`}
+    line=${r.line} taken=${r.taken} lead=${html`<${PersonArt} person=${r.person} />`}
     selected=${values.name === r.credit.name} onSelect=${() => setValues((current) => ({ ...current, ...r.credit }))} />`);
   return html`<header>
       <h2 id="credit-title">Add a Credit</h2>
@@ -221,7 +221,7 @@ function FundingForm({ fundings, onAdd, onCancel }) {
   const change = (name) => (value) => setValues((current) => set(current, name, value));
   const ready = String(values.url ?? '').trim() !== '';
   const rows = supportPickRows(people || [], fundings).map((r) => html`<${PickFillRow} key=${r.id} title=${r.name}
-    line=${r.taken ? 'Already in this list' : r.line} disabled=${r.taken}
+    line=${r.line} taken=${r.taken}
     selected=${values.url === r.funding.url} onSelect=${() => setValues(r.funding)} />`);
   return html`<header>
       <h2 id="funding-title">Add a Support Link</h2>
@@ -639,14 +639,16 @@ const FAILED_TEXT = {
 // through the image route (ADR 0016).
 function ProfileBody({ profile }) {
   const { src } = useImage(profile.picture);
+  const inFeeds = profile.sources.some((s) => s.kind === 'collection');
+  const sources = profile.sources.filter((s) => s.kind !== 'collection');
   const domain = profile.nip05 && profile.nip05.includes('@') ? profile.nip05.split('@').pop() : '';
   return html`<span style="flex:none;width:40px;height:40px;border-radius:8px;overflow:hidden;display:block">
       ${src && html`<img src=${src} alt="" width="40" height="40" />`}</span>
     <span class="text">
-      <span class="title">${profile.name || shortKey(profile.npub)}</span>
+      <span class="pick-name"><span class="title">${profile.name || shortKey(profile.npub)}</span>${inFeeds && html`<${TakenTag} text="In your feeds" />`}</span>
       ${profile.nip05 && html`<span class="summary">${profile.nip05}${profile.nip05_ok ? ' ✓' : ''}</span>`}
       <span class="summary mono">${shortKey(profile.npub)}</span>
-      <span class="summary">${profile.sources.map(sourceText).join(' · ')}</span>
+      ${sources.length > 0 && html`<span class="summary">${sources.map(sourceText).join(' · ')}</span>`}
       ${profile.domain_match && html`<span class="summary">Confirmed at ${domain}</span>`}
     </span>`;
 }
@@ -741,7 +743,7 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
         ${found && found.failed.length > 0 && html`<p class="hint" role="status">${found.failed.map((f) => FAILED_TEXT[f] || 'A source did not answer.').join(' ')}</p>`}
         ${found && found.profiles.length === 0 && html`<p class="empty">Studio found no profile.</p>`}
         ${found && found.profiles.length > 0 && html`<section class="page-section"><h2>Search results</h2><div class="group rows">
-          ${found.profiles.map((p) => html`<button class="link-row" type="button" key=${p.npub} onClick=${() => choose(p.npub, p)}>
+          ${found.profiles.map((found1) => withPersonValues(found1, people)).map((p) => html`<button class=${p.sources.some((s) => s.kind === 'collection') ? 'link-row pick-taken' : 'link-row'} type="button" key=${p.npub} onClick=${() => choose(p.npub, p)}>
             <${ProfileBody} profile=${p} /></button>`)}
         </div></section>`}
       </form>`}
@@ -2202,10 +2204,10 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
     })).changed);
     if (done) setChosen('');
   };
-  return html`<section class="page-section"><h2>Artists and labels</h2>
+  return html`<section class="page-section"><h2>Linked artist and label pages</h2>
     <div class="group">
       <${ChangedNotices} changed=${changed} go=${go} />
-      ${rows.length === 0 && html`<p class="hint">No artist or label yet.</p>`}
+      ${rows.length === 0 && html`<p class="hint">Not linked to an artist or label page yet.</p>`}
       ${rows.map((row) => html`<div class="release-row" key=${row.entry._cid}>
         <span class="title">${row.entry.title || row.entry.feed_url}</span>
         <span class="sub">${publisherLine(row.entry, row.match, row.index)}</span>
@@ -2222,17 +2224,17 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
         </div>
       </div>`)}
       ${candidates.length > 0 && html`<div class="field">
-        <label for="album-publisher">Artist or label</label>
+        <label for="album-publisher">Link to an artist or label page</label>
         <div class="field-body">
           <select id="album-publisher" value=${chosen} onChange=${(e) => setChosen(e.target.value)}>
-            <option value="">Select an artist or a label</option>
+            <option value="">Select a page</option>
             ${candidates.map((f) => html`<option value=${f.id}>${f.title || f.path || 'Untitled feed'}</option>`)}
           </select>
         </div>
       </div>
       <div class="actions"><button class="button action" type="button" disabled=${!chosen || linkAction.busy}
-        onClick=${addPublisher}>Add the Feed</button></div>`}
-      ${candidates.length === 0 && html`<p class="hint">Studio has no other artist feed or label feed in the collection to add.</p>`}
+        onClick=${addPublisher}>Link to This Page</button></div>`}
+      ${candidates.length === 0 && html`<p class="hint">Studio has no other artist or label page to link to.</p>`}
       <${ErrorNotice} error=${publisherError(linkAction.error, 'Open that feed and select its role first.')} />
     </div>
   </section>`;

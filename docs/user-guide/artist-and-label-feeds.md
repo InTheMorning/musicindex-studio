@@ -66,8 +66,8 @@ If the feed has no role, Studio asks you to select the role first.
 ## Add an artist or a label to a release
 
 1. Open the album or the playlist.
-2. In the section **Artists and labels**, select a feed in the field **Artist or label**.
-3. Select **Add the Feed**.
+2. In the section **Linked artist and label pages**, select a feed in the field **Link to an artist or label page**.
+3. Select **Link to This Page**.
 
 The first feed in the list is the primary one.
 The row shows the role and "Primary".

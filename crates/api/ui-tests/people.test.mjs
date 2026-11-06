@@ -77,7 +77,7 @@ test('the row of a person gives the role, the membership, the address and the co
   };
   assert.deepEqual(personRow(person, { 7: 'The Ultras' }), {
     title: 'Sam Fiddle',
-    lines: ['Fiddle · Part of The Ultras', 'Pays LNURL address sam@getalby.com'],
+    lines: ['Fiddle · Linked to The Ultras', 'Pays LNURL address sam@getalby.com'],
     count: '3 feeds',
   });
 });
@@ -1307,7 +1307,7 @@ test('ADR 0132 items 3 and 4: the rows are A to Z, each with its condition', () 
     ['4', 'Night Owl', 'Label · Not saved yet'],
   ]);
   assert.equal(linkRows({ members: ['5'] }, { members: ['5'] }, LINK_FEEDS)[0].line, 'Only in Studio');
-  assert.equal(LINK_EMPTY, 'This person is not part of an artist or label yet.');
+  assert.equal(LINK_EMPTY, 'This person is not linked to an artist or label page yet.');
 });
 
 test('ADR 0132 item 8: each added and each removed link is one change, and Save sends the list', () => {
@@ -1513,4 +1513,14 @@ test('a row of the copy sheet names a shared node and its account, and the foote
   assert.equal(addRecipientsLabel(2), 'Add 2 Recipients', WHY);
   assert.equal(trackHeading('Song', 'Song'), 'Recipients of this track', WHY);
   assert.equal(trackHeading('Song', 'Album'), 'Recipients of Song', WHY);
+});
+
+test('a Nostr result takes a missing name and picture from the person that holds the key', async () => {
+  const { withPersonValues } = await import('../ui/people.js');
+  const WHY = 'ADR 0146 item 5';
+  const people = [{ name: 'Ann', img: 'https://i.example/a.jpg', keys: [{ npub: 'npub1a' }] }];
+  assert.deepEqual(withPersonValues({ npub: 'npub1a', name: null, picture: null }, people), { npub: 'npub1a', name: 'Ann', picture: 'https://i.example/a.jpg' }, WHY);
+  assert.deepEqual(withPersonValues({ npub: 'npub1a', name: 'Own', picture: 'https://own' }, people), { npub: 'npub1a', name: 'Own', picture: 'https://own' }, WHY);
+  assert.deepEqual(withPersonValues({ npub: 'npub1b', name: null, picture: null }, people), { npub: 'npub1b', name: null, picture: null }, WHY);
+  assert.deepEqual(withPersonValues({ npub: 'npub1b', name: null, picture: null }, null), { npub: 'npub1b', name: null, picture: null }, WHY);
 });

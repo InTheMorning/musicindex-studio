@@ -1997,6 +1997,12 @@ button.outline-feed {
 .pick-fold > summary { display: flex; align-items: center; gap: 8px; min-height: var(--target); padding: 0 4px; cursor: pointer; }
 .pick-fold-title { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .pick-fold-count { margin-left: auto; font-size: var(--text-callout); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* A value that is already there keeps its content, in gray, with a tag (ADR 0146 item 3). */
+.pick-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
+.pick-name > .title, .pick-name > .label { flex: none; max-width: 100%; }
+.taken-tag { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 6px; background: var(--fill-soft); color: var(--text); font-size: var(--text-footnote); font-weight: 600; }
+.taken-tag .icon { display: block; width: 12px; height: 12px; stroke-width: 3; }
+.pick-taken .label, .pick-taken .title, .pick-taken .summary, .pick-taken .sub, .pick-taken .person-art, .pick-taken img { opacity: .5; }
 /* A row of a sheet that fills the form, with "Add to People" beside it (ADR 0144). */
 .pick-fill { padding: 0; gap: 8px; }
 .pick-fill > .link-row { flex: 1 1 auto; min-width: 0; }

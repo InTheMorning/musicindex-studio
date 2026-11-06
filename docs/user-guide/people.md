@@ -44,7 +44,7 @@ A control with a change has a mark at its start edge.
 - **Add a Nostr Key** opens the sheet **Find a Nostr profile**. Type a name, an `npub` key or a NIP-05 address in the field. Then select **Search**, and select a result to add the key.
 - The row **Nostr key** of **Add a Credit Name** opens the same sheet.
 - **Add a Wallet**, **Add a Credit Name**, **Add a Support Link** and **Find a Nostr profile** each have **Find on musicindex**. Select a feed, and Studio fills the form with its values. You then add the values.
-- **Artists and labels** lists each artist or label that this person is part of. Each link stays in Studio. Use the menu **Add an artist or label** to add a link, and **Remove** to remove one. **Save** keeps the changes.
+- **Linked artist and label pages** lists each artist or label page that this person links to. Each link stays in Studio. Use the menu **Link to an artist or label page** to add a link, and **Remove** to remove one. **Save** keeps the changes.
   - After **Save**, one sheet opens for each new link. It asks to add this person to the credits of that feed, with a role for that feed. Select **Review in 1 Feed** to make a change set. Studio writes the feed only after you review it.
   - Select **Not Now** to keep the link in Studio only. No feed changes.
   - When you remove a link, a sheet asks to remove the credit.

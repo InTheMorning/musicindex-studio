@@ -229,3 +229,11 @@ Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md
 ### 32. The Credit Name And Nostr Sheets Have No Search Of musicindex
 
 Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md) items 14 and 15). The operator asked for the reused search in the credit picker and the Nostr picker. "Add a Credit" had it already. "Add a Credit Name", "Add a Support Link" of a person and "Find a Nostr profile" now have it. The search of musicindex is limited now, and Studio adopts the engine of Stophammer and v4vmm later.
+
+### 33. The Words Of An Artist Or Label Link
+
+Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md)). The section "Artists and labels" did not tell that it makes a link to a page. The controls now say "Link to an artist or label page".
+
+### 34. A Value That Is Already There Lost Its Content
+
+Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md)). A row that a list had already showed only a text in the place of its line. A Nostr result in the feeds could have no picture. Each row now keeps its content, in gray, with a tag.

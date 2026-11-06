@@ -3,7 +3,7 @@
 
 import { html, useState, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
-import { api, ErrorNotice, Field } from './app.js';
+import { api, ErrorNotice, Field, Icon } from './app.js';
 import { LookupRow, PersonArt, useLookup } from './peoplepages.js';
 import { foldStartsOpen, lookupGroups, FIND_ONE_EMPTY, FIND_WAIT, FIND_ONE_HINT } from './people.js';
 
@@ -36,11 +36,18 @@ export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists }
   </form>`;
 }
 
-// A row of a list that fills the form. `after` is a control beside the row.
-export function PickFillRow({ title, line, lead, after, disabled, selected, onSelect }) {
-  return html`<div class="link-row static pick-fill">
-    <button class="link-row" type="button" disabled=${disabled} aria-current=${selected ? 'true' : undefined} onClick=${onSelect}>
-      ${lead}<span class="text"><span class="label">${title}</span><span class="summary">${line}</span></span>
+// The tag of a value that is already there (ADR 0146 item 3).
+export function TakenTag({ text = 'Already in this list' }) {
+  return html`<span class="taken-tag"><${Icon} name="check" />${text}</span>`;
+}
+
+// A row of a list that fills the form. `after` is a control beside the row. A
+// row that the list has already keeps its content and has a tag.
+export function PickFillRow({ title, line, lead, after, taken, selected, onSelect }) {
+  return html`<div class=${taken ? 'link-row static pick-fill pick-taken' : 'link-row static pick-fill'}>
+    <button class="link-row" type="button" disabled=${taken} aria-current=${selected ? 'true' : undefined} onClick=${onSelect}>
+      ${lead}<span class="text"><span class="pick-name"><span class="label">${title}</span>${taken && html`<${TakenTag} />`}</span>
+        <span class="summary">${line}</span></span>
     </button>${after}</div>`;
 }
 

@@ -153,3 +153,11 @@ This research used published documents. No person examined the signed-in screens
 Corrected for the next candidate (ADR 0134). A browser can zoom a page, and the desktop app cannot. Settings now has the five UI scale levels of v4vmm, and a release tile has a minimum width of 200 px.
 
 The terminal also shows a warning that `libayatana-appindicator` is deprecated. The tray library of Tauri causes it, it does not show outside a terminal, and it stays.
+
+### 16. The Focus Ring Of A Select Menu
+
+Corrected for the next candidate (musicindex ADR 0041 R-SCALE-4 item 6). The ring was too heavy, and it did not match a text field. The ring is now 2 px with no gap.
+
+### 17. Test Data From Production
+
+Open. A check of the tile dimension needs four real releases. The operator wants an easy way to bring the file host settings from production to a test collection. Finding 13 can cover this.

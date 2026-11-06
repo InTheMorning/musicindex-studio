@@ -133,6 +133,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0129: A draft takes a change of the hosted file and keeps its edits](adr/0129-a-draft-takes-a-change-of-the-hosted-file.md)
 - [ADR 0130: The facts of an audio file stay locked behind Advanced](adr/0130-the-facts-of-an-audio-file-stay-locked.md)
 - [ADR 0131: Delete a feed from its file host](adr/0131-delete-a-feed-from-its-file-host.md)
+- [ADR 0132: A person can be part of many artists and labels](adr/0132-a-person-can-be-part-of-many-artists-and-labels.md)
 
 ## Plans
 

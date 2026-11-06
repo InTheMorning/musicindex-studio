@@ -1,4 +1,4 @@
-# ADR 0146: Link Words, The Mark Of A Value That Is Already There And Edits Of A Person
+# ADR 0146: Link Words, The Mark Of A Value That Is Already There, Edits Of A Person And Credits Of A Feed
 
 - Status: Accepted
 - Date: 2026-11-06
@@ -6,7 +6,7 @@
 - Accepted: 2026-11-06 by the operator, from screenshots of the local build. The operator gave the words "link to Artist or Label page", and asked that a row that is already there keeps its content with a mark.
 - Technical choices: item 5 is a choice of the planning model.
 - Changes: the words of [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md), "Part of" and "Add an artist or label". [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) item 10, the look of a row that the list has already.
-- Source: [findings of local use, findings 33 to 35](../reviews/2026-11-06-local-use-findings.md)
+- Source: [findings of local use, findings 33 to 36](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context
 
@@ -30,16 +30,22 @@ The section "Artists and labels" did not tell what it does. A row that a list ha
 6. A credit name and a support link of a person have the button "Edit", which opens the sheet that adds them, with the saved values. A save replaces the values and changes no feed. A Nostr key that the person holds with the old value of the credit name goes with that value.
 7. A Nostr key with no credit name has no "Edit", because it has one value. The user removes it and adds a different key.
 
+### Credits Of A Feed
+
+8. In "Add a Credit" and "Add a Credit Name", a selected feed lists its credits and the credits of its first 25 tracks, each name and role one time, after the row of the feed. One selection fills the form with the name, the role, the group, the picture, the information address and the Nostr key. A feed with no credit has only its own row.
+9. The search still finds a feed, not a person. A search for the name of a contributor finds that person only when the search of musicindex does.
+
 ## Alternatives Considered
 
 - A Nostr result in the feeds that cannot be selected. Not chosen by the planning model: the user could then not use that key.
 
 ## Consequences
 
+- A selected feed sends up to 26 requests to musicindex, because the API gives the credits of each track in its own response. The sheet shows no progress during those requests.
 - A gray row that can be selected is a different meaning from a gray row that cannot. The tag and the pointer show the difference.
 
 ## How This Decision Is Checked
 
-Mechanical: `crates/api/ui-tests/people.test.mjs` examines the words, the merge of a result with a person and the start of an edit sheet. `crates/core/src/people.rs` examines each change.
+Mechanical: `crates/api/ui-tests/people.test.mjs` examines the words, the merge of a result with a person and the start of an edit sheet. `crates/core/src/people.rs` examines each change. `crates/core/src/musicindex.rs` examines the credits of a feed and its tracks.
 
 Visual: the planning model looks at each sheet at 1280 px, and at 390 px with touch, with `$edges()`, `$fieldText()` and `$overflow()`.

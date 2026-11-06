@@ -122,7 +122,7 @@ It has three sections.
 ### People
 
 1. Select **Add a credit**. The sheet **Add a Credit** opens.
-2. Type the name in **Name**, or fill the form: select a row of **Your people**, or select **Find on musicindex** and then a feed. An artist or label feed gives the most values. Each other feed gives only the name of its artist and its picture.
+2. Type the name in **Name**, or fill the form: select a row of **Your people**, or select **Find on musicindex** and then a feed. The sheet then lists the feed and each credit of the feed and its tracks. Select one.
 3. Fill in the other fields if you want: **Role**, **Picture address** and **Information address**. Select the role from the menu. Studio writes the group of the role. If no role in the menu fits, select **Other role…**, write the role and select a group. If you leave **Role** empty, apps show the credit as host.
 4. Select **Add the Credit**.
 

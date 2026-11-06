@@ -198,7 +198,7 @@ function CreditForm({ persons, feedId, onAdd, onCancel }) {
     <footer><button class="button primary" type="submit" form="credit-form" disabled=${!ready}>Add the Credit</button></footer>
     <${NostrSheet} open=${keyOpen} value=${values.npub} feedId=${feedId} person=${{ name: values.name, img: values.img }}
       onSet=${(npub, picked) => setValues((current) => withPersonKey(current, npub, picked))} onClose=${() => setKeyOpen(false)} />
-    <${FindOneSheet} open=${finding} start=${values.name} choices=${creditChoices} empty="musicindex has no values of this feed."
+    <${FindOneSheet} open=${finding} start=${values.name} choices=${creditChoices} credits=${true} empty="musicindex has no values of this feed."
       onPick=${(found) => setValues((current) => ({ ...current, ...found }))} onClose=${() => setFinding(false)} />`;
 }
 

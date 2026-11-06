@@ -1489,6 +1489,11 @@ test('a long list of a sheet starts closed, and each sheet takes the values of a
   assert.deepEqual(creditChoices({ ...feed, title: 'One Song' }, { artist: 'The Wolf' })[0].values, { name: 'The Wolf', img: 'https://i.example/a.jpg' }, 'ADR 0145 item 5: a feed title is not a name');
   assert.deepEqual(fundingChoices(feed)[0].values, { url: 'https://a.example' }, WHY);
   assert.deepEqual(fundingChoices({ website: null }), [], WHY);
+  const withCredits = creditChoices({ ...feed, credits: [{ name: 'Anna', role: 'vocalist' }, { name: 'Bo', role: 'bassist', group: 'Music', npub: 'npub1bo' }, { name: 'Cy', role: null }] });
+  assert.deepEqual(withCredits.map((c) => [c.title, c.line]), [['Anna', 'vocalist'], ['Bo', 'bassist'], ['Cy', 'No role']], 'ADR 0146 item 8');
+  assert.equal(withCredits[0].values.role, 'vocalist', 'ADR 0146 item 8: the row keeps the role');
+  assert.equal(withCredits[0].values.href, 'https://a.example', 'ADR 0146 item 8');
+  assert.deepEqual(withCredits[1].values, { name: 'Bo', role: 'bassist', group: 'Music', npub: 'npub1bo' }, 'ADR 0146 item 8');
   const { nostrChoices } = await import('../ui/people.js');
   assert.deepEqual(nostrChoices(feed), [], WHY);
   assert.deepEqual(nostrChoices({ ...feed, npub: 'npub1a' })[0].values, { npub: 'npub1a', name: 'Anna', picture: 'https://i.example/a.jpg' }, WHY);

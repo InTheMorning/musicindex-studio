@@ -12,6 +12,10 @@ pub const DEFAULT_API: &str = "https://api.musicindex.org";
 /// The largest musicindex response that Studio reads, in bytes.
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 
+/// The number of tracks of a feed that [`MusicIndex::feed_credits`] reads. Each
+/// track is one request.
+const MAX_CREDIT_TRACKS: usize = 25;
+
 /// A feed that a musicindex search found.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SearchHit {
@@ -85,6 +89,23 @@ pub struct PublisherValues {
     pub npub: Option<String>,
     /// Each payment route of the feed, as a recipient.
     pub routes: Vec<Recipient>,
+}
+
+/// One credit of a feed or a track in musicindex (ADR 0146 item 8).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IndexCredit {
+    /// The name.
+    pub name: String,
+    /// The role as the source gives it.
+    pub role: Option<String>,
+    /// The group of the role.
+    pub group: Option<String>,
+    /// The picture address.
+    pub img: Option<String>,
+    /// The information address.
+    pub href: Option<String>,
+    /// The Nostr key.
+    pub npub: Option<String>,
 }
 
 /// The Nostr keys that musicindex records for a feed (ADR 0074 item 9).
@@ -185,6 +206,24 @@ struct FeedRoutesData {
 struct TrackSummaryData {
     track_guid: String,
     title: String,
+}
+
+/// One `source_contributors` entry of a feed or a track response.
+#[derive(Deserialize)]
+struct CreditData {
+    name: String,
+    role: Option<String>,
+    group_name: Option<String>,
+    img: Option<String>,
+    href: Option<String>,
+    npub: Option<String>,
+}
+
+/// The credits of a feed or a track response, and the tracks of a feed.
+#[derive(Deserialize)]
+struct CreditsData {
+    source_contributors: Option<Vec<CreditData>>,
+    tracks: Option<Vec<TrackSummaryData>>,
 }
 
 /// One `GET /v1/feeds/{guid}/tracks/{track_guid}` response, with only the
@@ -452,6 +491,65 @@ impl MusicIndex {
         }
     }
 
+    /// The credits of a feed and of its first tracks, each name and role one
+    /// time (ADR 0146 item 8). A feed that musicindex does not know has none.
+    /// A track that fails gives no credit.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request of the feed fails.
+    pub fn feed_credits(&self, feed_guid: &str) -> Result<Vec<IndexCredit>, WebError> {
+        let url = format!("{}/v1/feeds/{}", self.base, filter_guid(feed_guid));
+        let file = match self.web.get_with_query(
+            &url,
+            &[("include", "source_contributors,tracks"), ("limit", "200")],
+            MAX_RESPONSE_BYTES,
+        ) {
+            Ok(file) => file,
+            Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => {
+                return Ok(Vec::new());
+            }
+            Err(e) => return Err(e),
+        };
+        let Ok(feed) = serde_json::from_slice::<Envelope<CreditsData>>(&file.bytes) else {
+            return Ok(Vec::new());
+        };
+        let mut found = feed.data.source_contributors.unwrap_or_default();
+        for track in feed
+            .data
+            .tracks
+            .unwrap_or_default()
+            .iter()
+            .take(MAX_CREDIT_TRACKS)
+        {
+            let url = format!("{url}/tracks/{}", path_segment(&track.track_guid));
+            let credits = self
+                .web
+                .get_with_query(
+                    &url,
+                    &[("include", "source_contributors")],
+                    MAX_RESPONSE_BYTES,
+                )
+                .ok()
+                .and_then(|file| serde_json::from_slice::<Envelope<CreditsData>>(&file.bytes).ok())
+                .and_then(|e| e.data.source_contributors);
+            found.extend(credits.unwrap_or_default());
+        }
+        let mut seen = std::collections::HashSet::new();
+        Ok(found
+            .into_iter()
+            .filter(|c| seen.insert((c.name.to_lowercase(), c.role.clone())))
+            .map(|c| IndexCredit {
+                name: c.name,
+                role: c.role,
+                group: c.group_name,
+                img: c.img,
+                href: c.href,
+                npub: c.npub,
+            })
+            .collect())
+    }
+
     /// Search musicindex for feeds by name.
     ///
     /// # Errors
@@ -665,6 +763,32 @@ mod tests {
         );
         assert_eq!(hits[1].two_way_link_count, None);
         assert_eq!(hits[1].agreed_roles, Vec::<String>::new());
+    }
+
+    #[test]
+    fn feed_credits_join_the_feed_and_its_tracks_with_each_name_and_role_one_time() {
+        let server = TestServer::start(vec![
+            (
+                "/v1/feeds/c0ffee-01",
+                200,
+                br#"{"data":{"source_contributors":[{"name":"Ann","role":"vocalist","group_name":"Music","href":"https://a.example"}],
+                    "tracks":[{"track_guid":"t1","title":"One"},{"track_guid":"t2","title":"Two"}]}}"#
+                    .to_vec(),
+            ),
+            (
+                "/v1/feeds/c0ffee-01/tracks/t1",
+                200,
+                br#"{"data":{"source_contributors":[{"name":"ann","role":"vocalist"},{"name":"Bo","role":"bassist","npub":"npub1bo"}]}}"#
+                    .to_vec(),
+            ),
+        ]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let credits = index.feed_credits("c0ffee-01").unwrap();
+        let names: Vec<_> = credits.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["Ann", "Bo"], "ADR 0146 item 8");
+        assert_eq!(credits[0].group.as_deref(), Some("Music"));
+        assert_eq!(credits[1].npub.as_deref(), Some("npub1bo"));
+        assert_eq!(index.feed_credits("c0ffee-09").unwrap().len(), 0);
     }
 
     #[test]

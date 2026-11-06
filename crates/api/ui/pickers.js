@@ -76,16 +76,17 @@ export function SearchResults({ query, search, disabled, onPick }) {
 
 // The sheet "Find on musicindex": one selection fills the form (ADR 0145 item 3).
 // `choices` turns the values of a feed into the choices of that feed, each with
-// `values`. With many choices, the sheet asks for one of them.
-export function FindOneSheet({ open, start, choices, empty, onPick, onClose }) {
+// `values`. With many choices, the sheet asks for one of them. With `credits`,
+// the values also hold the credits of the feed and its tracks (ADR 0146 item 8).
+export function FindOneSheet({ open, start, choices, empty, credits = false, onPick, onClose }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="find-one-title" onClose=${onClose}>
-    ${open && html`<${FindOneForm} start=${start} choices=${choices} empty=${empty} onCancel=${() => ref.current.close()}
+    ${open && html`<${FindOneForm} start=${start} choices=${choices} empty=${empty} credits=${credits} onCancel=${() => ref.current.close()}
       onPick=${(values) => { onPick(values); ref.current.close(); }} />`}
   </dialog>`;
 }
 
-function FindOneForm({ start, choices, empty, onPick, onCancel }) {
+function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
   const [query, setQuery] = useState(start || '');
   const search = useLookup(query, '/musicindex/search');
   const [options, setOptions] = useState(null);
@@ -95,7 +96,7 @@ function FindOneForm({ start, choices, empty, onPick, onCancel }) {
     setProblem(null);
     setNone(false);
     try {
-      const list = choices(await api(`/musicindex/values/${encodeURIComponent(row.feed_guid)}`), isFeed ? row : null);
+      const list = choices(await api(`/musicindex/values/${encodeURIComponent(row.feed_guid)}${credits ? '?credits=true' : ''}`), isFeed ? row : null);
       if (list.length === 1) onPick(list[0].values);
       else if (list.length === 0) setNone(true);
       else setOptions(list);

@@ -1486,7 +1486,19 @@ export function creditChoices(values, hit = null) {
   const start = present(hit
     ? [['name', hit.artist], ['img', values.image_url]]
     : [['name', values.title], ['img', values.image_url], ['href', values.website], ['npub', values.npub]]);
-  return Object.keys(start).length === 0 ? [] : [{ id: 'feed', values: start }];
+  // The credits of the feed and its tracks (ADR 0146 item 8). A credit with the
+  // name of the feed joins its row, so the row keeps the role of that credit.
+  const creditValues = (c) => present([['name', c.name], ['role', c.role], ['group', c.group], ['img', c.img], ['href', c.href], ['npub', c.npub]]);
+  const credits = (values.credits || []).filter((c) => !isEmpty(c.name));
+  const same = credits.find((c) => c.name === start.name);
+  const whole = Object.keys(start).length === 0 ? [] : [{
+    id: 'feed', title: start.name || 'The feed',
+    line: (same && same.role) || (hit ? 'The artist of this feed' : 'This artist or label feed'),
+    values: same ? { ...start, ...creditValues(same) } : start,
+  }];
+  return [...whole, ...credits.filter((c) => c !== same).map((c) => ({
+    id: `${c.name} ${c.role ?? ''}`, title: c.name, line: c.role || 'No role', values: creditValues(c),
+  }))];
 }
 
 // A result of "Find a Nostr profile" with a missing name or picture takes it from

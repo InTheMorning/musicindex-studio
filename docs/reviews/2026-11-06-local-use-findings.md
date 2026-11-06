@@ -243,3 +243,7 @@ Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md))
 Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md) item 6). Only a wallet of a person had "Edit" (ADR 0141). A credit name and a support link had only "Remove".
 
 The drive of this correction also found that "Add a Credit Name" with no Nostr key gave an error, because the form sends a null key and the route refused it. The route now takes it.
+
+### 36. The Credit Picker Takes Only The Author Of A Feed
+
+Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md) item 8). A selected feed filled the whole release artist text as one name. It now lists the credits of the feed and its tracks. The change needs no new search. A search by the name of a contributor waits for the new search of Stophammer.

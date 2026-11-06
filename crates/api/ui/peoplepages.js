@@ -401,7 +401,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
     <${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
       musicindex=${{ title: 'Find on musicindex', summary: find.summary, onOpen: () => setFinding(true) }}
       lists=${[{ title: 'Payees with no person', rows: payees }]} />
-    <${FindOneSheet} open=${finding} start=${values.name} choices=${find.choices} empty=${find.empty}
+    <${FindOneSheet} open=${finding} start=${values.name} choices=${find.choices} credits=${kind === 'credit-names'} empty=${find.empty}
       onPick=${(found) => setValues((current) => ({ ...current, ...(kind === 'wallets' ? walletValues(found) : found) }))} onClose=${() => setFinding(false)} />
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}

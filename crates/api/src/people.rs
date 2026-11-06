@@ -614,6 +614,13 @@ pub(crate) async fn search_musicindex(
     .await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct IndexValuesQuery {
+    /// True when the sheet also lists the credits of the feed and its tracks.
+    #[serde(default)]
+    credits: bool,
+}
+
 /// The one search of the sheets that add a value (ADR 0145 item 3): the artist
 /// and label feeds in `rows`, and the other feeds in `feeds`. The requests run
 /// with no lock of the workspace.
@@ -635,6 +642,7 @@ pub(crate) async fn search_index(
 pub(crate) async fn index_values(
     State(shared): State<Shared>,
     Path(guid): Path<String>,
+    Query(query): Query<IndexValuesQuery>,
 ) -> ApiResult {
     let (index, known) = blocking(shared, move |w| {
         Ok((w.index.clone(), lookups(&w.collection)?))
@@ -650,6 +658,9 @@ pub(crate) async fn index_values(
         })?;
         let mut body = json!(values);
         crate::routes::name_providers(&mut body["routes"], &known);
+        if query.credits {
+            body["credits"] = json!(index.feed_credits(&guid)?);
+        }
         Ok(Json(body))
     })
     .await

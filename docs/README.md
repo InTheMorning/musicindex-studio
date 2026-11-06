@@ -147,7 +147,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0143: A feed row names the tracks of a person](adr/0143-a-feed-row-names-the-tracks-of-a-person.md)
 - [ADR 0144: Recipients use one picker and sort by split](adr/0144-recipients-use-one-picker-and-sort-by-split.md)
 - [ADR 0145: Each sheet that adds a value has one layout](adr/0145-each-sheet-that-adds-a-value-has-one-layout.md)
-- [ADR 0146: Link words, the mark of a value that is already there and edits of a person](adr/0146-link-words-already-marks-and-credit-edits.md)
+- [ADR 0146: Link words, the mark of a value that is already there, edits of a person and credits of a feed](adr/0146-link-words-already-marks-and-credit-edits.md)
 
 ## Plans
 

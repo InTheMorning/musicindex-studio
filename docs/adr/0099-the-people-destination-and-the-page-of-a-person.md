@@ -73,8 +73,8 @@
 ### The Pickers
 
 19. The recipient picker of the value editor shows "People" first. A person row shows the address that it adds, which is the default address. Then the picker shows "Payees with no person". An added recipient gets no split (ADR 0030).
-20. The credits editor gets "Pick From Your People". A person row shows the usual role and the Nostr key. A pick adds one credit with the name, the usual role, the picture, the information address and the key of the person.
-21. The support links editor gets "Pick From Your People", with the support links of each person.
+20. Changed by [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md): the list is in the sheet "Add a Credit", and a selection fills its form. The credits editor gets "Pick From Your People". A person row shows the usual role and the Nostr key. A pick adds one credit with the name, the usual role, the picture, the information address and the key of the person.
+21. Changed by ADR 0145: the list is in the sheet "Add a Support Link". The support links editor gets "Pick From Your People", with the support links of each person.
 
 ## Alternatives Considered
 

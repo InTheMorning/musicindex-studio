@@ -20,12 +20,12 @@ An inventory found these other fields that can hold a value of a person: the rec
 1. The sheet "Find a Nostr profile" shows "Your people" below its one field, before the first search. The text in the field narrows the list. "Search" adds "Search results" below the list. The field has the label "Name, npub or NIP-05 address".
 2. The list has one row for each Nostr key of each person. The key of the field has no row.
 3. The sheet on the page of a person does not show the list, because a key of a different person is a merge ("Merge with a Person" of ADR 0103).
-4. Changed by [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md) for a recipient. An open credit has the button "Fill from a Person" when a field is empty. The button opens a sheet with one row for each person that fills a field. A selection fills the entry and closes the sheet.
-5. For a credit, Studio fills only the empty fields of name, role, picture address, information address and Nostr key. A role comes with its group.
+4. Removed by [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md). An open credit has no "Fill from a Person".
+5. Removed by ADR 0145.
 6. Removed by ADR 0144.
-7. Each row names the fields that it fills. A person with the name of the entry is first.
-8. A fill is a start value in the draft. The user sees it in the entry and in Review. No value in the entry changes when it has text.
-9. The functions are `nostrPickRows`, `fillCredit` and `creditFillRows` of `crates/api/ui/people.js`.
+7. Removed by ADR 0145.
+8. Removed by ADR 0145.
+9. The function is `nostrPickRows` of `crates/api/ui/people.js`.
 
 ## Alternatives Considered
 

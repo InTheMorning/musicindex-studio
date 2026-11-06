@@ -121,19 +121,19 @@ It has three sections.
 
 ### People
 
-1. Select **Add a person**.
-2. Type the name in **Name**.
+1. Select **Add a credit**. The sheet **Add a Credit** opens.
+2. Type the name in **Name**, or fill the form: select a row of **Your people**, or select **Find on musicindex** and then an artist or label feed.
 3. Fill in the other fields if you want: **Role**, **Picture address** and **Information address**. Select the role from the menu. Studio writes the group of the role. If no role in the menu fits, select **Other role…**, write the role and select a group. If you leave **Role** empty, apps show the credit as host.
+4. Select **Add the Credit**.
 
 When Studio can read the image at **Picture address**, the open entry of the person shows the picture.
 
-To fill the empty fields of an open person, select **Fill from a Person**, then select a person from your People list. A value that you typed does not change.
-
 ### Support links
 
-1. Select **Add a support link**.
+1. Select **Add a support link**. The sheet **Add a Support Link** opens. You can select a row of **Your people**, or select **Find on musicindex** to use the website of a feed.
 2. Type the link text in **Text**.
 3. Type the web address in **Address**.
+4. Select **Add the Support Link**.
 
 ### License
 

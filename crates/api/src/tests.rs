@@ -6622,6 +6622,34 @@ async fn the_playlist_tracks_route_gives_the_tracks_of_the_collection() {
 }
 
 #[tokio::test]
+async fn the_publisher_routes_need_no_person() {
+    let server = web_feeds();
+    server.set(
+        "/v1/search",
+        200,
+        br#"{"data":[{"entity_type":"publisher","entity_id":"c0ffee-01","title":"Ann"}]}"#.to_vec(),
+    );
+    server.set(
+        "/v1/feeds/c0ffee-01",
+        200,
+        br#"{"data":{"title":"Ann","image_url":"https://img.example/a.png",
+            "source_links":[{"link_type":"website","url":"https://ann.example"}],
+            "source_ids":[],"payment_routes":[{"recipient_name":"Ann","route_type":"lnaddress","address":"ann@x.example","split":100,"fee":false}]}}"#
+            .to_vec(),
+    );
+    let app = app_with_index(&server.url(""));
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/publishers?q=ann", None).await;
+    assert_eq!(status, StatusCode::OK, "ADR 0145 item 3: {body}");
+    assert_eq!(body["rows"][0]["title"], "Ann");
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/publishers/c0ffee-01", None).await;
+    assert_eq!(status, StatusCode::OK, "ADR 0145 item 3: {body}");
+    assert_eq!(body["website"], "https://ann.example");
+    assert_eq!(body["routes"][0]["address"], "ann@x.example");
+    let (status, _) = call(&app, "GET", "/api/v1/musicindex/publishers/c0ffee-02", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn the_musicindex_tracks_route_gives_the_address_and_the_tracks() {
     let server = web_feeds();
     server.set(

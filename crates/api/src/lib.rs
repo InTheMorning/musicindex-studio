@@ -286,6 +286,11 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/recipients/saved/{id}",
             delete(routes::remove_saved_recipient),
         )
+        .route("/musicindex/publishers", get(people::search_publishers))
+        .route(
+            "/musicindex/publishers/{guid}",
+            get(people::publisher_values),
+        )
         .route(
             "/musicindex/feeds/{guid}/recipients",
             get(routes::index_feed_recipients),

@@ -1437,41 +1437,6 @@ export function nostrPickRows(people, current) {
 
 const isEmpty = (value) => value === null || value === undefined || String(value).trim() === '';
 
-// The credit with each empty field filled from a person (ADR 0137 item 5). A
-// role comes with its group. A value that the credit has does not change.
-export function fillCredit(credit, person) {
-  const start = creditFromPerson(person);
-  const emptyRole = isEmpty(credit.role);
-  return {
-    ...credit,
-    name: isEmpty(credit.name) ? start.name : credit.name,
-    role: emptyRole ? start.role : credit.role,
-    group: emptyRole ? start.group : credit.group,
-    img: isEmpty(credit.img) ? start.img : credit.img,
-    href: isEmpty(credit.href) ? start.href : credit.href,
-    npub: isEmpty(credit.npub) ? start.npub : credit.npub,
-  };
-}
-
-const hasEmpty = (subject, fields) => fields.some((field) => isEmpty(subject[field]));
-export const creditCanFill = (credit) => hasEmpty(credit, ['name', 'role', 'img', 'href', 'npub']);
-
-// The rows of the sheet "Fill From a Person": each person that fills a field,
-// and a person with the name of the subject first (ADR 0137 item 7).
-function personFillRows(people, subject, fill, fields) {
-  const rows = (people || []).flatMap((person) => {
-    const filled = fill(subject, person);
-    const words = fields.filter(([field]) => filled[field] !== subject[field] && !isEmpty(filled[field])).map(([, word]) => word);
-    return words.length === 0 ? [] : [{ id: person.id, name: person.name, line: `Fills: ${words.join(', ')}`, filled, person }];
-  });
-  const name = lowerName(subject.name);
-  return name === '' ? rows : [...rows.filter((r) => lowerName(r.name) === name), ...rows.filter((r) => lowerName(r.name) !== name)];
-}
-
-export const creditFillRows = (people, credit) => personFillRows(people, credit, fillCredit, [
-  ['name', 'name'], ['role', 'role'], ['img', 'picture'], ['href', 'information address'], ['npub', 'Nostr key'],
-]);
-
 // The new support link from a link of a person: a start value.
 export const fundingFromLink = (link) => ({ label: link.label ?? '', url: link.url ?? null });
 
@@ -1487,6 +1452,31 @@ export function supportPickRows(people, fundings) {
 
 // The footer button of a picker. `one` and `many` are the nouns.
 export const addPickLabel = (n, one, many) => `Add ${n} ${n === 1 ? one : many}`;
+
+// A list of a sheet with this number of rows or more starts closed (ADR 0145
+// item 2).
+const FOLD_AT = 6;
+export const foldStartsOpen = (count) => count < FOLD_AT;
+
+const present = (entries) => Object.fromEntries(entries.filter(([, value]) => !isEmpty(value)));
+
+// The choices of a feed of musicindex for each sheet (ADR 0145 item 3). The
+// values come from `GET /musicindex/publishers/{guid}`. Each is a start value.
+export function creditChoices(values) {
+  const start = present([['name', values.title], ['img', values.image_url], ['href', values.website], ['npub', values.npub]]);
+  return Object.keys(start).length === 0 ? [] : [{ id: 'feed', values: start }];
+}
+
+export const fundingChoices = (values) => (isEmpty(values.website) ? [] : [{ id: 'website', values: { url: values.website } }]);
+
+export const recipientChoices = (values) => (values.routes || []).filter((r) => !isEmpty(r.address)).map((r) => {
+  const line = memberLine(r, false);
+  return {
+    id: `${r.address} ${r.custom_key ?? ''} ${r.custom_value ?? ''}`, title: r.name || r.address,
+    line: [line.label, line.address, line.account && `account ${line.account}`].filter(Boolean).join(' '), values: r,
+  };
+});
+
 
 // The rows that match the filter text, by name and line. A display filter.
 export function filterRows(rows, query) {
@@ -1721,6 +1711,7 @@ export const mergeBody = (otherId) => ({ other: Number(otherId) });
 
 // The text of the search sheet (ADR 0117 item 2).
 export const FIND_HINT = 'Studio searches the artist and label feeds on musicindex.org. Select the feed of this person.';
+export const FIND_ONE_HINT = 'Studio searches the artist and label feeds on musicindex.org.';
 export const FIND_EMPTY = 'No artist or label feed on musicindex has this name.';
 export const FIND_WAIT = 'Searching…';
 export const FILL_NOTE = 'Studio puts the values in the fields. Select Save to keep them. Studio changes no feed.';

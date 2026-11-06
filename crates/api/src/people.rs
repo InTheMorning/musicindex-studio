@@ -590,6 +590,40 @@ pub(crate) async fn search_musicindex(
     .await
 }
 
+/// The artist and label feeds of a search, for a sheet with no person (ADR 0145
+/// item 3). The request runs with no lock of the workspace.
+pub(crate) async fn search_publishers(
+    State(shared): State<Shared>,
+    Query(query): Query<MusicIndexQuery>,
+) -> ApiResult {
+    let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
+    blocking_unlocked(move || {
+        let rows = lookup::search(&index, &query.q)?;
+        Ok(Json(json!({ "rows": rows })))
+    })
+    .await
+}
+
+/// The values of one artist or label feed, for a sheet with no person (ADR 0145
+/// item 3). Gives 404 when musicindex does not know the feed.
+pub(crate) async fn publisher_values(
+    State(shared): State<Shared>,
+    Path(guid): Path<String>,
+) -> ApiResult {
+    let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
+    blocking_unlocked(move || {
+        let values = index.publisher_values(&guid)?.ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_in_index",
+                format!("musicindex has no feed {guid}"),
+            )
+        })?;
+        Ok(Json(json!(values)))
+    })
+    .await
+}
+
 /// The values of one musicindex feed for a person, with the state of each
 /// value (ADR 0117 items 5 and 6). The musicindex and keysend requests run
 /// with no lock of the workspace. The collection is read again under the

@@ -545,7 +545,7 @@ test('a default address that is not a wallet row gets the type of its form', () 
   assert.equal(recipientFromPerson(node).recipient_type, 'node');
 });
 
-import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel, nostrPickRows, fillCredit, creditFillRows, creditCanFill } from '../ui/people.js';
+import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel, nostrPickRows } from '../ui/people.js';
 
 const CREDIT_SRC = [
   { id: 1, name: 'Mary Kate', usual_role: 'Vocals', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1mku7abcdefghijklmnopq2xh' }, { npub: 'npub1second' }],
@@ -576,11 +576,6 @@ test('supportPickRows gives each support link and marks an address in the list',
   assert.equal(rows[0].taken, false);
   assert.equal(supportPickRows(CREDIT_SRC, [{ label: 'a', url: 'https://x/support' }])[0].taken, true);
   assert.deepEqual(fundingFromLink(CREDIT_SRC[0].support_links[0]), { label: 'Support Mary Kate', url: 'https://x/support' });
-});
-
-test('addPickLabel uses title case and the plural', () => {
-  assert.equal(addPickLabel(1, 'Person', 'People'), 'Add 1 Person');
-  assert.equal(addPickLabel(2, 'Person', 'People'), 'Add 2 People');
 });
 
 test('a fee payee gets the fee mark, and a picked fee payee starts as a fee', async () => {
@@ -1365,30 +1360,6 @@ test('nostrPickRows gives one row for each key and leaves out the key of the fie
   assert.deepEqual(nostrPickRows(null, null), []);
 });
 
-const FILL_PERSON = { id: 7, name: 'Mary Kate', usual_role: 'Vocals', usual_group: 'Music', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1a' }],
-  default_address: { address: 'mk@example.com' }, wallets: [{ key: { address: 'mk@example.com' }, recipient_type: 'lnaddress' }] };
-
-test('fillCredit fills only the empty fields, and a role comes with its group', () => {
-  const credit = { _cid: 3, name: 'M. Kate', role: null, group: null, img: ' ', href: 'https://mine', npub: null };
-  assert.deepEqual(fillCredit(credit, FILL_PERSON), { _cid: 3, name: 'M. Kate', role: 'Vocals', group: 'Music', img: 'https://x/mk.jpg', href: 'https://mine', npub: 'npub1a' });
-  const own = { name: 'A', role: 'Bass', group: null, img: null, href: null, npub: null };
-  assert.equal(fillCredit(own, FILL_PERSON).role, 'Bass');
-  assert.equal(fillCredit(own, FILL_PERSON).group, null);
-});
-
-test('the fill rows name the fields, leave out a person with nothing to fill and put the same name first', () => {
-  const other = { id: 8, name: 'Jo', keys: [] };
-  const credit = { name: 'Mary Kate', role: 'Vocals', group: null, img: null, href: 'https://mine', npub: null };
-  const rows = creditFillRows([other, FILL_PERSON], credit);
-  assert.deepEqual(rows.map((r) => [r.id, r.line]), [[7, 'Fills: picture, Nostr key']]);
-  assert.deepEqual(creditFillRows([{ ...FILL_PERSON, id: 9, name: 'Other' }, FILL_PERSON], credit).map((r) => r.id), [7, 9]);
-});
-
-test('the fill button needs an empty field', () => {
-  assert.equal(creditCanFill({ name: 'A', role: 'B', img: 'c', href: 'd', npub: 'e' }), false);
-  assert.equal(creditCanFill({ name: 'A', role: 'B', img: 'c', href: 'd', npub: null }), true);
-});
-
 test('a row with a key warning adds only with the label Add Anyway', async () => {
   const { moreAddLabel } = await import('../ui/people.js');
   assert.equal(moreAddLabel({ warning: 'The profile name is not "Ann". Check this key.' }), 'Add Anyway');
@@ -1502,4 +1473,28 @@ test('the rows sort by split and the sheet keeps the fields of a recipient', asy
     { name: null, recipient_type: 'lnaddress', address: 'a@b.example', custom_key: null, custom_value: null });
   assert.deepEqual(recipientFromFields({ name: 'A', recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' }),
     { name: 'A', recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' });
+});
+
+test('a long list of a sheet starts closed, and each sheet takes the values of a feed', async () => {
+  const { foldStartsOpen, creditChoices, fundingChoices, recipientChoices } = await import('../ui/people.js');
+  const WHY = 'ADR 0145';
+  assert.equal(foldStartsOpen(5), true, WHY);
+  assert.equal(foldStartsOpen(6), false, WHY);
+  const feed = { title: 'Anna', image_url: 'https://i.example/a.jpg', website: 'https://a.example', npub: null, routes: [
+    { name: 'Anna', recipient_type: 'lnaddress', address: 'a@b.example', custom_key: null, custom_value: null },
+    { name: null, recipient_type: 'node', address: null },
+  ] };
+  assert.deepEqual(creditChoices(feed)[0].values, { name: 'Anna', img: 'https://i.example/a.jpg', href: 'https://a.example' }, WHY);
+  assert.deepEqual(creditChoices({}), [], WHY);
+  assert.deepEqual(fundingChoices(feed)[0].values, { url: 'https://a.example' }, WHY);
+  assert.deepEqual(fundingChoices({ website: null }), [], WHY);
+  const routes = recipientChoices(feed);
+  assert.equal(routes.length, 1, WHY);
+  assert.equal(routes[0].line, 'LNURL address a@b.example', WHY);
+  assert.deepEqual(recipientChoices({ routes: [] }), [], WHY);
+});
+
+test('addPickLabel uses title case and the plural', () => {
+  assert.equal(addPickLabel(1, 'Person', 'People'), 'Add 1 Person');
+  assert.equal(addPickLabel(2, 'Person', 'People'), 'Add 2 People');
 });

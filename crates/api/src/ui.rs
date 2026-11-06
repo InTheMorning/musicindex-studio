@@ -182,6 +182,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/artwork.js"),
     ),
     (
+        "pickers.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/pickers.js"),
+    ),
+    (
         "vaultlock.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/vaultlock.js"),

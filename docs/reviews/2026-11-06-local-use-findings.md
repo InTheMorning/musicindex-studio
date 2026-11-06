@@ -212,8 +212,8 @@ Corrected ([ADR 0144](../adr/0144-recipients-use-one-picker-and-sort-by-split.md
 
 ### 28. The Bar, The Focus Ring And The Copy Row
 
-Corrected ([ADR 0144](../adr/0144-recipients-use-one-picker-and-sort-by-split.md)). The share bar kept the sequence of the file when the rows had the sequence of the splits. A group clipped the sides of the focus ring of a row. The row "Copy from a Feed on musicindex" was at the end of the sheet, far from the top. The ring now is inside the row, and the bar and the row have new positions.
+Corrected ([ADR 0144](../adr/0144-recipients-use-one-picker-and-sort-by-split.md)). The share bar kept the sequence of the file when the rows had the sequence of the splits. A group clipped the sides of the focus ring of a row. The row "Copy from a Feed" was at the end of the sheet, far from the top. The ring now is inside the row, the bar has the sequence of the rows, and the row is after the form ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md)).
 
-### 29. The Sheet "Add a Wallet" Has No Search Of musicindex
+### 29. The Sheets That Add A Value Are Different
 
-Open. "Add a Recipient" has a search of musicindex, and "Add a Wallet" does not. The operator asked that these sheets are the same.
+Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md)). "Add a Recipient" had a search of musicindex, and "Add a Wallet" did not. The operator asked that the sheets are the same, and selected one layout for four sheets from a mockup. Long lists now fold.

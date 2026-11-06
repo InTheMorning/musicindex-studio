@@ -15,7 +15,7 @@ An open recipient had three rows of buttons. "Add a recipient", "Pick from your 
 ## Decision
 
 1. An open recipient holds its split, the check box "Fee, paid first", its address with "Change…", and "Remove".
-2. "Add a recipient" and "Change…" open one sheet: first the row "Copy from a Feed on musicindex", then the form, then "Your people", then "Payees with no person". A selection of a person or a payee fills the form. The first row opens the search with check boxes for many recipients.
+2. "Add a recipient" and "Change…" open one sheet: the layout of [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md). A selection of a person or a payee fills the form. The row "Copy from a Feed" opens the search with check boxes for many recipients.
 3. "Add to People" shows only for a row with an address that no person holds, on an open recipient and on a payee row of the sheet.
 4. The rows have no move buttons and no position menu. The screen shows the biggest split first, with each fee in its own group. The rows sort when the focus leaves the open row, so that a row does not move during the typing or before a click in that row. The share bar has the same sequence.
 5. The core sorts a value block that a save changes: the biggest split first, each fee after the others, and equal splits in their sequence.

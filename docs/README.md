@@ -146,6 +146,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0142: A user selects the time before the vault locks](adr/0142-a-user-selects-the-time-before-the-vault-locks.md)
 - [ADR 0143: A feed row names the tracks of a person](adr/0143-a-feed-row-names-the-tracks-of-a-person.md)
 - [ADR 0144: Recipients use one picker and sort by split](adr/0144-recipients-use-one-picker-and-sort-by-split.md)
+- [ADR 0145: Each sheet that adds a value has one layout](adr/0145-each-sheet-that-adds-a-value-has-one-layout.md)
 
 ## Plans
 

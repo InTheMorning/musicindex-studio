@@ -6,9 +6,10 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady } from './review.js';
 import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
-import { AlbumPayments, TrackPayments, PickRow } from './values.js';
+import { AlbumPayments, TrackPayments } from './values.js';
+import { PickerLayout, PickFillRow, FindOneSheet } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
-import { creditPickRows, supportPickRows, addPickLabel, filterRows, nostrPickRows, creditFillRows, fillCredit, creditCanFill, feedWord, memberRowLine, memberSectionNote } from './people.js';
+import { creditPickRows, supportPickRows, creditChoices, fundingChoices, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
@@ -156,114 +157,93 @@ function PersonPicture({ url }) {
   return src ? html`<div class="person-picture"><img src=${src} alt="" /></div>` : null;
 }
 
-// The sheet "Pick From Your People" of the credits and of the support links
-// (ADR 0099 items 20 and 21). It only adds. `load` turns the list of people
-// into rows, and `noun` gives the footer words. A new entry gets its client
-// ID from `addOpen`, in the caller (ADR 0022).
-function PeoplePickerSheet({ open, load, hint, one, many, art, onAdd, onClose }) {
+// The sheet "Add a Credit" (ADR 0145). A row of a person or a feed of musicindex
+// fills the form, and the user adds the values of the form.
+function CreditSheet({ open, persons, feedId, onAdd, onClose }) {
   const ref = useSheet(open);
-  const [people, setPeople] = useState(null);
-  const [filter, setFilter] = useState('');
-  const [selected, setSelected] = useState(new Set());
-  const loading = useAction();
-  useEffect(() => {
-    if (!open) return;
-    setFilter('');
-    setSelected(new Set());
-    setPeople(null);
-    loading.run(async () => setPeople(await api('/people')));
-  }, [open]);
-  const rows = people === null ? [] : load(people);
-  const shown = filterRows(rows, filter);
-  const toggle = (id) => setSelected((current) => {
-    const next = new Set(current);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
-  const total = rows.filter((r) => selected.has(r.id) && !r.taken).length;
-  const add = () => onAdd(rows.filter((r) => selected.has(r.id) && !r.taken));
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="people-picker-title" onClose=${onClose}>
-    <header>
-      <h2 id="people-picker-title">Pick From Your People</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
-    </header>
-    <div class="body">
-      <section class="page-section">
-        <${Field} id="people-picker-filter" label="Filter" value=${filter} placeholder="Name or address"
-          onInput=${(e) => setFilter(e.target.value)} />
-        <${ErrorNotice} error=${loading.error} />
-        ${people === null
-          ? html`<p class="hint" role="status">Loading your people…</p>`
-          : html`<div class="group">
-              ${shown.length === 0 && html`<p class="hint">${rows.length === 0 ? 'You have nothing to pick yet.' : 'Nothing matches this filter.'}</p>`}
-              ${shown.map((r) => html`<${PickRow} key=${r.id} name=${r.name} line=${r.line}
-                lead=${art ? html`<${PersonArt} person=${r.person} />` : null}
-                checked=${selected.has(r.id)} taken=${r.taken} onToggle=${() => toggle(r.id)} />`)}
-            </div>`}
-        <p class="hint">${hint}</p>
-      </section>
-    </div>
-    <footer>
-      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-      <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
-        ${addPickLabel(total, one, many)}</button>
-    </footer>
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="credit-title" onClose=${onClose}>
+    ${open && html`<${CreditForm} persons=${persons} feedId=${feedId} onCancel=${() => ref.current.close()}
+      onAdd=${(values) => { onAdd(values); ref.current.close(); }} />`}
   </dialog>`;
 }
 
-// The sheet "Fill from a Person" of one open entry (ADR 0137 item 4). `load`
-// gives the rows from the list of people. A selection calls `onPick(row)`.
-export function FillSheet({ open, load, onPick, onClose }) {
-  const ref = useSheet(open);
+function CreditForm({ persons, feedId, onAdd, onCancel }) {
+  const [values, setValues] = useState(BLANK_PERSON);
   const [people, setPeople] = useState(null);
-  const [filter, setFilter] = useState('');
+  const [finding, setFinding] = useState(false);
+  const [keyOpen, setKeyOpen] = useState(false);
   const loading = useAction();
-  useEffect(() => {
-    if (!open) return;
-    setFilter('');
-    setPeople(null);
-    loading.run(async () => setPeople(await api('/people')));
-  }, [open]);
-  const rows = open && people !== null ? load(people) : [];
-  const shown = filterRows(rows, filter);
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="fill-sheet-title" onClose=${onClose}>
-    <header>
-      <h2 id="fill-sheet-title">Fill from a Person</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+  useEffect(() => { loading.run(async () => setPeople(await api('/people'))); }, []);
+  const change = (name) => (value) => setValues((current) => set(current, name, value));
+  const ready = String(values.name ?? '').trim() !== '';
+  const rows = creditPickRows(people || [], persons).map((r) => html`<${PickFillRow} key=${r.id} title=${r.name}
+    line=${r.taken ? 'Already in this list' : r.line} disabled=${r.taken} lead=${html`<${PersonArt} person=${r.person} />`}
+    selected=${values.name === r.credit.name} onSelect=${() => setValues((current) => ({ ...current, ...r.credit }))} />`);
+  return html`<header>
+      <h2 id="credit-title">Add a Credit</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
-    <div class="body">
-      <section class="page-section">
-        <${Field} id="fill-sheet-filter" label="Filter" value=${filter} placeholder="Name"
-          onInput=${(e) => setFilter(e.target.value)} />
-        <${ErrorNotice} error=${loading.error} />
-        ${people === null
-          ? !loading.error && html`<p class="hint" role="status">Loading your people…</p>`
-          : html`<div class="group rows">
-              ${shown.length === 0 && html`<p class="hint">${rows.length === 0 ? 'No person has a value for the empty fields.' : 'Nothing matches this filter.'}</p>`}
-              ${shown.map((r) => html`<button class="link-row" type="button" key=${r.id} onClick=${() => { onPick(r); ref.current.close(); }}>
-                <${PersonArt} person=${r.person} /><span class="text"><span class="title">${r.name}</span>
-                  <span class="summary">${r.line}</span></span></button>`)}
-            </div>`}
-        <p class="hint">Studio fills only the empty fields. You can change each value in the entry.</p>
-      </section>
-    </div>
-    <footer>
-      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-    </footer>
+    <${PickerLayout} id="credit-form" onSubmit=${(e) => { e.preventDefault(); if (ready) onAdd(values); }}
+      fields=${html`<div class="group rows">
+        <${TextField} id="credit-name" label="Name" required value=${values.name} onChange=${change('name')} />
+        <${RoleMenu} id="credit-role" role=${values.role} group=${values.group}
+          onChange=${(role, group) => setValues((current) => ({ ...current, role: role || null, group: group || null }))} />
+        <${TextField} id="credit-img" label="Picture address" type="url" value=${values.img} onChange=${change('img')} />
+        <${TextField} id="credit-href" label="Information address" type="url" value=${values.href} onChange=${change('href')} />
+        <${NostrKeyRow} label="Nostr" summary=${keySummary(values.name, values.npub)} value=${values.npub} onOpen=${() => setKeyOpen(true)} />
+      </div>`}
+      notice=${html`<${ErrorNotice} error=${loading.error} />`}
+      musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from an artist or label feed.', onOpen: () => setFinding(true) }}
+      lists=${[{ title: 'Your people', rows }]} />
+    <footer><button class="button primary" type="submit" form="credit-form" disabled=${!ready}>Add the Credit</button></footer>
+    <${NostrSheet} open=${keyOpen} value=${values.npub} feedId=${feedId} person=${{ name: values.name, img: values.img }}
+      onSet=${(npub, picked) => setValues((current) => withPersonKey(current, npub, picked))} onClose=${() => setKeyOpen(false)} />
+    <${FindOneSheet} open=${finding} start=${values.name} choices=${creditChoices} empty="musicindex has no values of this feed."
+      onPick=${(found) => setValues((current) => ({ ...current, ...found }))} onClose=${() => setFinding(false)} />`;
+}
+
+// The sheet "Add a Support Link" (ADR 0145). The API of musicindex has no support
+// link, so its row gives only the website of a feed.
+function FundingSheet({ open, fundings, onAdd, onClose }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="funding-title" onClose=${onClose}>
+    ${open && html`<${FundingForm} fundings=${fundings} onCancel=${() => ref.current.close()}
+      onAdd=${(values) => { onAdd(values); ref.current.close(); }} />`}
   </dialog>`;
+}
+
+function FundingForm({ fundings, onAdd, onCancel }) {
+  const [values, setValues] = useState({ label: '', url: null });
+  const [people, setPeople] = useState(null);
+  const [finding, setFinding] = useState(false);
+  const loading = useAction();
+  useEffect(() => { loading.run(async () => setPeople(await api('/people'))); }, []);
+  const change = (name) => (value) => setValues((current) => set(current, name, value));
+  const ready = String(values.url ?? '').trim() !== '';
+  const rows = supportPickRows(people || [], fundings).map((r) => html`<${PickFillRow} key=${r.id} title=${r.name}
+    line=${r.taken ? 'Already in this list' : r.line} disabled=${r.taken}
+    selected=${values.url === r.funding.url} onSelect=${() => setValues(r.funding)} />`);
+  return html`<header>
+      <h2 id="funding-title">Add a Support Link</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
+    </header>
+    <${PickerLayout} id="funding-form" onSubmit=${(e) => { e.preventDefault(); if (ready) onAdd(values); }}
+      fields=${html`<div class="group rows">
+        <${TextField} id="funding-label" label="Text" required value=${values.label} onChange=${change('label')} />
+        <${TextField} id="funding-url" label="Address" type="url" value=${values.url} onChange=${change('url')} />
+      </div>`}
+      notice=${html`<${ErrorNotice} error=${loading.error} />`}
+      musicindex=${{ title: 'Find on musicindex', summary: 'Fill the address from the website of a feed.', onOpen: () => setFinding(true) }}
+      lists=${[{ title: 'Your people', rows }]} />
+    <footer><button class="button primary" type="submit" form="funding-form" disabled=${!ready}>Add the Support Link</button></footer>
+    <${FindOneSheet} open=${finding} choices=${fundingChoices} empty="This feed has no website."
+      onPick=${(found) => setValues((current) => ({ ...current, ...found }))} onClose=${() => setFinding(false)} />`;
 }
 
 function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
-  const blank = BLANK_PERSON;
   const { feedId } = useContext(PickerContext) || {};
-  const [picking, setPicking] = useState(false);
-  const [filling, setFilling] = useState(null);
-  const fillingCredit = persons.find((p) => p._cid === filling);
+  const [adding, setAdding] = useState(false);
   const roles = useRoleList();
-  const addPicked = (rows) => {
-    setPicking(false);
-    onChange(rows.reduce((list, row) => addOpen(list, row.credit), persons));
-  };
   return html`${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
     ${persons.map((p, i) => {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
@@ -281,31 +261,18 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
           bad=${(bad || []).some((b) => b.field === `${path}/${i}/npub`)}
           person=${{ name: p.name, img: p.img }}
           onSet=${(npub, picked) => onChange(setAt(persons, i, withPersonKey(p, npub, picked)))} />
-        ${creditCanFill(p) && html`<div class="actions"><button class="button action" type="button" onClick=${() => setFilling(p._cid)}>Fill from a Person</button></div>`}
         <${EntryActions} list=${persons} index=${i} name=${p.name || 'this person'} onChange=${onChange} />
       <//>`;
     })}
-    <button class="link-row add" type="button" onClick=${() => onChange(addOpen(persons, blank))}>
-      <span class="num">＋</span><span class="title">Add a person</span>
+    <button class="link-row add" type="button" onClick=${() => setAdding(true)}>
+      <span class="num">＋</span><span class="title">Add a credit</span>
     </button>
-    <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
-      <span class="num">＋</span><span class="title">Pick from your people</span>
-    </button>
-    <${PeoplePickerSheet} open=${picking} load=${(people) => creditPickRows(people, persons)} art=${true}
-      hint="Each person comes with the usual role, the picture and the Nostr key. You can change them in the credit."
-      one="Person" many="People" onAdd=${addPicked} onClose=${() => setPicking(false)} />
-    <${FillSheet} open=${!!fillingCredit} load=${(people) => creditFillRows(people, fillingCredit)}
-      onPick=${(row) => onChange(persons.map((p) => (p._cid === filling ? fillCredit(p, row.person) : p)))}
-      onClose=${() => setFilling(null)} />`;
+    <${CreditSheet} open=${adding} persons=${persons} feedId=${feedId} onAdd=${(values) => onChange(addOpen(persons, values))}
+      onClose=${() => setAdding(false)} />`;
 }
 
 function Fundings({ fundings, onChange, bad }) {
-  const blank = { label: '', url: null };
-  const [picking, setPicking] = useState(false);
-  const addPicked = (rows) => {
-    setPicking(false);
-    onChange(rows.reduce((list, row) => addOpen(list, row.funding), fundings));
-  };
+  const [adding, setAdding] = useState(false);
   return html`${fundings.length === 0 && html`<p class="hint">No support links yet.</p>`}
     ${fundings.map((f, i) => {
       const change = (name) => (value) => onChange(setAt(fundings, i, set(f, name, value)));
@@ -318,15 +285,11 @@ function Fundings({ fundings, onChange, bad }) {
         <${EntryActions} list=${fundings} index=${i} name=${f.label || 'this support link'} onChange=${onChange} />
       <//>`;
     })}
-    <button class="link-row add" type="button" onClick=${() => onChange(addOpen(fundings, blank))}>
+    <button class="link-row add" type="button" onClick=${() => setAdding(true)}>
       <span class="num">＋</span><span class="title">Add a support link</span>
     </button>
-    <button class="link-row add" type="button" onClick=${() => setPicking(true)}>
-      <span class="num">＋</span><span class="title">Pick from your people</span>
-    </button>
-    <${PeoplePickerSheet} open=${picking} load=${(people) => supportPickRows(people, fundings)} art=${false}
-      hint="Each support link comes with its text and its address. You can change them in the support link."
-      one="Support Link" many="Support Links" onAdd=${addPicked} onClose=${() => setPicking(false)} />`;
+    <${FundingSheet} open=${adding} fundings=${fundings} onAdd=${(values) => onChange(addOpen(fundings, values))}
+      onClose=${() => setAdding(false)} />`;
 }
 
 // The license fields, returned with no wrapper, so that they sit as two

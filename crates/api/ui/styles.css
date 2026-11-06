@@ -1997,12 +1997,17 @@ button.outline-feed {
 .key-line .text, .key-row .text { min-width: 0; }
 .key-line .summary, .key-row .summary { white-space: normal; }
 .more-actions { flex: none; }
-/* A row of "Add a Recipient" that fills the form, with "Add to People" beside it (ADR 0144). */
+/* A list of a sheet that folds, with its count (ADR 0145 item 2). */
+.pick-fold { display: grid; gap: 8px; }
+.pick-fold > summary { display: flex; align-items: center; gap: 8px; min-height: var(--target); padding: 0 4px; cursor: pointer; }
+.pick-fold-title { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pick-fold-count { margin-left: auto; font-size: var(--text-callout); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* A row of a sheet that fills the form, with "Add to People" beside it (ADR 0144). */
 .pick-fill { padding: 0; gap: 8px; }
 .pick-fill > .link-row { flex: 1 1 auto; min-width: 0; }
 .pick-fill > .link-row + * { flex: none; margin-right: 12px; }
 .link-row[aria-current="true"], .link-row[aria-current="true"]:hover { border-radius: 10px; background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent); }
-/* The form of "Add a Wallet" stays in view above the list of payees (ADR 0141 item 1). */
+/* The form of a sheet stays in view above its lists (ADR 0141 item 1, ADR 0145). */
 .pinned-form { position: sticky; top: -16px; z-index: 1; margin-top: -16px; padding: 16px 0 12px; background: var(--level-2); }
 @media (max-width: 760px) { .pinned-form { position: static; margin-top: 0; padding: 0; } }
 .credit-fold > .hint { margin: 0; padding: 4px 16px 8px; }

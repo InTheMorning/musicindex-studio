@@ -3,6 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
+import { PickerLayout, FindOneSheet } from './pickers.js';
 import { api, assetMode, askConfirm, Bar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
@@ -29,7 +30,7 @@ import {
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
-  FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
+  recipientChoices, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
 } from './people.js';
 
@@ -359,6 +360,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
   const set = (id, value) => setValues((current) => ({ ...current, [id]: value }));
   // The sheet "Find a Nostr profile" of a form with a Nostr key (ADR 0123).
   const [keyOpen, setKeyOpen] = useState(false);
+  const [finding, setFinding] = useState(false);
   const add = (e) => {
     e.preventDefault();
     if (!linkReady(kind, values)) return;
@@ -368,7 +370,6 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       onAdded();
     });
   };
-  const sections = kind === 'wallets' ? addWalletSections(recipients || []) : [{ id: 'different', title: '', rows: [] }];
   const fields = html`<div class="group rows">${linkFields(kind, values).map((f) => (f.select
     ? html`<${ChoiceSelect} key=${f.id} id=${`link-${f.id}`} label=${f.label} value=${values[f.id]} options=${f.select}
         onChange=${(v) => set(f.id, v)} />`
@@ -377,18 +378,23 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
     ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" summary=${keySummary(values.name, values.npub)} value=${values.npub}
       onOpen=${() => setKeyOpen(true)} />`}</div>
     ${edit && walletEditNote(edit.others) && html`<p class="hint" role="status">${walletEditNote(edit.others)}</p>`}`;
+  const payees = addWalletSections(recipients || []).filter((section) => section.id === 'payees')
+    .flatMap((section) => section.rows).map((row) => html`<${ListRow} key=${JSON.stringify(row.body)} title=${row.title} lines=${row.lines} count=${row.count}
+      chevron=${false} selected=${walletSelected(values, row.body)} onClick=${() => setValues((current) => ({ ...current, ...walletValues(row.body) }))} />`);
   return html`<header>
       <h2 id="link-title">${edit ? 'Edit a Wallet' : form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
-    <form class="body" id="link-form" onSubmit=${add}>
-      ${sections.map((section) => (section.id === 'payees'
-    ? html`<section class="page-section" key=${section.id}><h2>${section.title}</h2><div class="group">${section.rows.map((row) =>
-      html`<${ListRow} key=${JSON.stringify(row.body)} title=${row.title} lines=${row.lines} count=${row.count}
-        chevron=${false} selected=${walletSelected(values, row.body)} onClick=${() => setValues((current) => ({ ...current, ...walletValues(row.body) }))} />`)}</div></section>`
-    : html`<section class=${kind === 'wallets' ? 'page-section pinned-form' : 'page-section'} key=${section.id}>${section.title && html`<h2>${section.title}</h2>`}${fields}</section>`))}
-      <${ErrorNotice} error=${error} />
-    </form>
+    ${kind === 'wallets'
+    ? html`<${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
+        musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from an artist or label feed.', onOpen: () => setFinding(true) }}
+        lists=${[{ title: 'Payees with no person', rows: payees }]} />
+      <${FindOneSheet} open=${finding} choices=${recipientChoices} empty="This feed has no payment address."
+        onPick=${(route) => setValues((current) => ({ ...current, ...walletValues(route) }))} onClose=${() => setFinding(false)} />`
+    : html`<form class="body" id="link-form" onSubmit=${add}>
+        <section class="page-section">${fields}</section>
+        <${ErrorNotice} error=${error} />
+      </form>`}
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}
     <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${edit ? (busy ? 'Saving…' : 'Save the Wallet') : (busy ? 'Adding…' : form.button)}</button></footer>`;
@@ -513,7 +519,9 @@ function FindSheet({ open, personId, name, query, onQuery, onClose, onPick }) {
   </dialog>`;
 }
 
-function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
+// The rows of a search. It runs at the start, and 300 ms after each change of
+// the text. `rows` is null while the first search runs.
+export function useLookup(query, path) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const first = useRef(true);
@@ -521,7 +529,7 @@ function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
     const text = query.trim();
     if (text === '') { setRows([]); setError(null); return undefined; }
     let live = true;
-    const load = () => api(`/people/${personId}/musicindex?q=${encodeURIComponent(text)}`).then(
+    const load = () => api(`${path}?q=${encodeURIComponent(text)}`).then(
       (result) => { if (live) { setRows(result.rows || []); setError(null); } },
       (e) => { if (live) { setRows([]); setError(e); } },
     );
@@ -529,6 +537,11 @@ function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
     first.current = false;
     return () => { live = false; clearTimeout(timer); };
   }, [query]);
+  return { rows, error };
+}
+
+function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
+  const { rows, error } = useLookup(query, `/people/${personId}/musicindex`);
   return html`<header><h2 id="find-title">${`Find on musicindex: ${name}`}</h2></header>
     <div class="body">
       <div class="group rows"><${Field} id="find-query" label="Name" type="search" value=${query}
@@ -547,7 +560,7 @@ function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
 
 // A row of a search: the picture, the title, the type line with its dot, and
 // the line of the values (ADR 0117 items 4 and 7).
-function LookupRow({ row, onClick }) {
+export function LookupRow({ row, onClick }) {
   const kind = lookupKind(row);
   const detail = hasLine(row);
   return html`<button class="link-row" type="button" onClick=${onClick}>

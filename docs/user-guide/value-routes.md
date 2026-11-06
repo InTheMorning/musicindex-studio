@@ -19,16 +19,23 @@ The page has two groups: **Recipients** and **Fees**.
 
 ## Add a recipient
 
-Select **Add a recipient**. Studio opens a new line. Fill in these fields:
+1. Select **Add a recipient**. The sheet **Add a Recipient** opens.
+2. Fill in the form. You can also select a row from **Your people** or **Payees with no person**, and the form gets its values. A long list starts closed: select its heading to open it.
+3. Select **Add the Recipient**, then type the split in the row.
+
+The form has these fields:
 
 | Field | What to enter |
 | --- | --- |
-| Name | The name of the recipient. |
-| Type | **node (keysend)** or **lnaddress**. |
+| Type | **Node Address** or **LNURL Address**. |
 | Address | The public key of the Node address (66 hexadecimal characters), or an LNURL address such as `name@example.com`. |
-| Custom key | Only for a node that many people share. This field shows only for the type **node (keysend)**. |
-| Custom value | The account on that node. This field shows only for the type **node (keysend)**. |
-| Split (shares) | The share of this recipient. |
+| Name | The name of the recipient. |
+| Custom key | Only for a node that many people share. This field shows only for the type **Node Address**. |
+| Account | The account on that node. This field shows only for the type **Node Address**. |
+
+To copy many recipients of a different feed, select **Copy from a Feed** below the form. Search for the feed, open it or one of its tracks and select the recipients. Then select **Add N Recipients**.
+
+## An open recipient
 
 Each line shows the name, a bar, the percent and the address.
 The percent comes from the shares of all recipients.
@@ -38,19 +45,11 @@ The recipient then moves to the group **Fees**, and the field is **Split (percen
 
 The rows sort by split, the biggest first. They sort when you leave the row. When you change a list of recipients, the feed gets the same sequence. A list that you do not change stays as it is in the feed.
 
-In an open recipient you can also use:
+An open recipient also has:
 
-- **Change…** to change the address.
+- **Change…** to change the address. **Find on musicindex** in that sheet fills the form from an artist or label feed.
 - **Add to People**, when no person holds the address.
 - **Remove**.
-
-## Add a recipient
-
-1. Select **Add a recipient**. The sheet **Add a Recipient** opens.
-2. Type the values, or select a row from **Your people** or **Payees with no person** to fill the form.
-3. Select **Add the Recipient**, then type the split in the row.
-
-To copy many recipients of a different feed, select **Copy from a Feed on musicindex** at the top of the sheet. Search for the feed, open it or one of its tracks and select the recipients. Then select **Add N Recipients**.
 
 ## Recipients for one track
 

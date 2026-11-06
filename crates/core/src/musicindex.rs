@@ -71,7 +71,7 @@ pub struct PublisherHit {
 
 /// The values of a publisher feed in musicindex, for the fields of a person
 /// (ADR 0117 item 2). The addresses are not checked here.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PublisherValues {
     /// The feed title.
     pub title: Option<String>,

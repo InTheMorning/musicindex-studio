@@ -4,7 +4,8 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
 import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
-import { recipientPickRows, recipientIdentity, personKeys, memberLine } from './people.js';
+import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine } from './people.js';
+import { PickerLayout, PickFillRow, FindOneSheet } from './pickers.js';
 import { PersonArt } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
@@ -178,8 +179,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
 }
 
 // The sheet "Add a Recipient", or "Change the Address" of a row (ADR 0144). It
-// has the layout of the sheet "Add a Wallet" (ADR 0123, ADR 0141): the row of
-// the musicindex search and the form first, then the rows that fill the form.
+// has the layout of each sheet that adds a value (ADR 0145).
 function RecipientSheet({ open, recipient, defaultType, recipients, onSave, onCopy, onClose }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="recipient-title" onClose=${onClose}>
@@ -192,6 +192,7 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
   const [fields, setFields] = useState(() => recipientFields(recipient || { recipient_type: defaultType }));
   const [list, setList] = useState(null);
   const [lookups, setLookups] = useState(null);
+  const [finding, setFinding] = useState(false);
   const loading = useAction();
   useEffect(() => {
     loadLookups().then(setLookups);
@@ -209,26 +210,18 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
   const pickRow = (r) => {
     const rowKey = recipientIdentity(r.recipient);
     const used = others.has(rowKey);
-    return html`<div class="link-row static pick-fill" key=${rowKey}>
-      <button class="link-row" type="button" disabled=${used} aria-current=${rowKey === recipientIdentity(values) ? 'true' : undefined}
-        onClick=${() => setFields((current) => ({ ...current, ...recipientFields(r.recipient) }))}>
-        ${r.person && html`<${PersonArt} person=${r.person} />`}
-        <span class="text"><span class="label">${r.name}</span><span class="summary">${used ? 'Already in this list' : r.line}</span></span>
-      </button>
-      ${!r.person && html`<${SaveRecipientButton} recipient=${r.recipient} />`}
-    </div>`;
+    return html`<${PickFillRow} key=${rowKey} title=${r.name} line=${used ? 'Already in this list' : r.line} disabled=${used}
+      lead=${r.person && html`<${PersonArt} person=${r.person} />`}
+      selected=${rowKey === recipientIdentity(values)}
+      after=${!r.person && html`<${SaveRecipientButton} recipient=${r.recipient} />`}
+      onSelect=${() => setFields((current) => ({ ...current, ...recipientFields(r.recipient) }))} />`;
   };
   return html`<header>
       <h2 id="recipient-title">${recipient ? 'Change the Address' : 'Add a Recipient'}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
-    <form class="body" id="recipient-form" onSubmit=${(e) => { e.preventDefault(); if (address !== '' && !taken) onSave(values); }}>
-      <section class="page-section pinned-form">
-        ${!recipient && html`<div class="group"><button class="link-row" type="button" onClick=${onCopy}>
-          <span class="text"><span class="label">Copy from a Feed on musicindex</span>
-            <span class="summary">Select many recipients of a different feed.</span></span>
-          <span class="go" aria-hidden="true">›</span></button></div>`}
-        <div class="group rows">
+    <${PickerLayout} id="recipient-form" onSubmit=${(e) => { e.preventDefault(); if (address !== '' && !taken) onSave(values); }}
+      fields=${html`<div class="group rows">
         <${Choice} id="recipient-type" label="Type" value=${fields.recipient_type} options=${TYPES} onChange=${set('recipient_type')} />
         <${TextField} id="recipient-address" label="Address" required
           hint=${fields.recipient_type === 'lnaddress' && address && lookups && lookups.get(address.toLowerCase()) === 'none'
@@ -238,15 +231,16 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
         ${fields.recipient_type !== 'lnaddress' && html`
           <${TextField} id="recipient-key" label="Custom key" required hint=${CUSTOM_KEY_HINT} value=${fields.custom_key} onChange=${set('custom_key')} />
           <${TextField} id="recipient-account" label="Account" required hint="The account on that node." value=${fields.custom_value} onChange=${set('custom_value')} />`}
-      </div>${taken && html`<p class="field-error">This address is already in this list.</p>`}</section>
-      <${ErrorNotice} error=${loading.error} />
-      ${list === null && !loading.error && html`<p class="hint" role="status">Loading your people…</p>`}
-      ${list !== null && list.people.length > 0 && html`<section class="page-section"><h2>Your people</h2>
-        <div class="group">${list.people.map(pickRow)}</div></section>`}
-      ${list !== null && list.payees.length > 0 && html`<section class="page-section"><h2>Payees with no person</h2>
-        <div class="group">${list.payees.map(pickRow)}</div></section>`}
-    </form>
-    <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>`;
+      </div>${taken && html`<p class="field-error">This address is already in this list.</p>`}`}
+      notice=${html`<${ErrorNotice} error=${loading.error} />
+        ${list === null && !loading.error && html`<p class="hint" role="status">Loading your people…</p>`}`}
+      musicindex=${recipient
+        ? { title: 'Find on musicindex', summary: 'Fill the form from an artist or label feed.', onOpen: () => setFinding(true) }
+        : { title: 'Copy from a Feed', summary: 'Select many recipients of a different feed.', onOpen: onCopy }}
+      lists=${list === null ? [] : [{ title: 'Your people', rows: list.people.map(pickRow) }, { title: 'Payees with no person', rows: list.payees.map(pickRow) }]} />
+    <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>
+    <${FindOneSheet} open=${finding} start=${fields.name} choices=${recipientChoices} empty="This feed has no payment address."
+      onPick=${(route) => setFields((current) => ({ ...current, ...recipientFields(route) }))} onClose=${() => setFinding(false)} />`;
 }
 
 // ---- Save a recipient (task 013c, ADR 0027 item 5) ----

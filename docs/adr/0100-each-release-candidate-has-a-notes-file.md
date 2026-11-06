@@ -19,7 +19,7 @@
 2. The file has three sections: "What changed", "What to test" and "Known gaps". It is written for the operator and the testers, not as a list of commits. It is in ASD-STE100 Simplified Technical English.
 3. `tools/release-candidate.sh VERSION` stops before its first change when the file is missing, empty, or not committed. For a tag that exists, the file must be in the commit of the tag. The message names this ADR and the path of the file.
 4. `desktop-release.yml` stops before the build when the file of the tag is missing. A manual run with no tag does not need a file.
-5. The draft GitHub Release gets the file as its notes, then the fixed sentence about the archives and the server image. When a draft exists already, a new run replaces its notes with the same text.
+5. The draft GitHub Release gets the file as its notes, then the fixed sentence about the archives and the server image. When a draft exists already, a new run replaces its notes with the same text. A link to a repository document in the file stays relative. The workflow changes it to an address that names the tag, because a relative link gave 404 on the Release page of `0.1.0-rc.19`.
 6. The server image of a candidate uses the notes of the GitHub Release of its tag. The image gets no copy.
 7. A candidate from before this ADR, `0.1.0-rc.9` and older, needs no file. A file for `0.1.0-rc.9` is permitted, and the operator can put it on that draft by hand.
 

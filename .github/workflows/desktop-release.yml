@@ -169,9 +169,11 @@ jobs:
           tag="$GITHUB_REF_NAME"
           version="${tag#v}"
           # The notes file of the candidate, then the fixed sentence (ADR 0100 item 5).
+          # A link to a repository document must name the tag, because a relative
+          # link gives 404 on a Release page.
           {
             if [[ -f "docs/releases/$version.md" ]]; then
-              cat "docs/releases/$version.md"
+              sed "s#](\.\./#](https://github.com/$GITHUB_REPOSITORY/blob/$tag/docs/#g" "docs/releases/$version.md"
               echo
             fi
             echo "Desktop archives and installers. These files are unsigned. The server image is ghcr.io/inthemorning/studio-server:$version."

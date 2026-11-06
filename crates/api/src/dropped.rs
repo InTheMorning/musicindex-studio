@@ -104,7 +104,12 @@ mod tests {
 
     fn router(data: &tempfile::TempDir, dropped: DroppedFiles) -> axum::Router {
         let workspace = Workspace::open(data.path()).unwrap();
-        local_router_with_drops(workspace, Access::with_token(TOKEN, 42069), dropped)
+        local_router_with_drops(
+            workspace,
+            Access::with_token(TOKEN, 42069),
+            dropped,
+            crate::WindowClose::default(),
+        )
     }
 
     #[tokio::test]

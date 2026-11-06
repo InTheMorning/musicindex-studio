@@ -17,6 +17,7 @@ mod routes;
 mod temporary;
 mod ui;
 mod uploads;
+mod window_close;
 mod work;
 mod workspace;
 
@@ -33,6 +34,7 @@ pub use error::ApiError;
 pub use import::{
     Credential, ImportOpen, ImportStore, PART_SIZE as IMPORT_PART_SIZE, Staged, verify_credential,
 };
+pub use window_close::{OnClose, WindowClose};
 pub use work::{Work, WriteGuard};
 pub use workspace::{
     AccountIdentity, AppChange, AppHook, ClientAddress, Clock, ServerRules, VaultState, WallClock,
@@ -98,15 +100,21 @@ async fn local_session() -> axum::Json<serde_json::Value> {
 /// session route and the routes of one workspace, all under the access
 /// layer (ADR 0017).
 pub fn local_router(workspace: Workspace, access: Access) -> Router {
-    local_router_with_drops(workspace, access, DroppedFiles::default())
+    local_router_with_drops(
+        workspace,
+        access,
+        DroppedFiles::default(),
+        WindowClose::default(),
+    )
 }
 
-/// The local router with the route of the file of a drop on the window of
-/// the desktop app (ADR 0124 item 22).
+/// The local router with the routes of the window of the desktop app: the
+/// file of a drop (ADR 0124 item 22) and the choice for a close (item 29).
 pub fn local_router_with_drops(
     workspace: Workspace,
     access: Access,
     dropped: DroppedFiles,
+    window_close: WindowClose,
 ) -> Router {
     // The desktop public origin is its loopback address (ADR 0110 item 12).
     let workspace = if workspace.public_origin.is_none() {
@@ -120,6 +128,12 @@ pub fn local_router_with_drops(
         .route(
             "/api/v1/dropped-files/{id}",
             get(dropped::serve).with_state(dropped),
+        )
+        .route(
+            "/api/v1/window-close",
+            get(window_close::get)
+                .put(window_close::put)
+                .with_state(window_close),
         )
         .merge(workspace_routes)
         .layer(middleware::from_fn_with_state(access, access::check))

@@ -81,7 +81,7 @@ test('studio-settings has account only on a server', () => {
   const ids = (server) => pageSequence('studio-settings', { server }).map((s) => s.id);
   assert.deepEqual(ids(true), ['scale', 'account', 'apps', 'announcements', 'nostr', 'library']);
   // ADR 0107 item 3: the desktop has the section "Move Studio" in the tier setup.
-  assert.deepEqual(ids(false), ['scale', 'apps', 'announcements', 'nostr', 'move', 'library']);
+  assert.deepEqual(ids(false), ['scale', 'window', 'apps', 'announcements', 'nostr', 'move', 'library']);
   const desktop = pageSequence('studio-settings', { server: false });
   assert.equal(desktop.find((s) => s.id === 'move').tier, 'setup');
   assert.equal(tierError('studio-settings', desktop), null);

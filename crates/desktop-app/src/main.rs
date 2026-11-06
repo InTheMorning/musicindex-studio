@@ -15,14 +15,14 @@ mod quit;
 mod renderer;
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
 use tauri::tray::TrayIconId;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{
     AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
@@ -35,15 +35,18 @@ use tokio::sync::oneshot;
 
 use links::{LinkAction, link_action};
 use quit::{QuitAction, QuitEvent, QuitState, WorkCount};
+use studio_desktop::{OnClose, WindowClose};
 
 const WINDOW_LABEL: &str = "main";
 const TITLE: &str = "Music Index Studio";
 /// The ID of the tray icon, so that the app can change its menu.
 const TRAY_ID: &str = "main";
-/// The file in the data folder that records the first close of the window
-/// (ADR 0124 item 29).
-const TRAY_NOTICE_FILE: &str = "tray-notice-shown";
-const TRAY_NOTICE: &str = "Studio continues to run in the tray, so that a connected app can still write. To open the window or to quit, use the menu of the tray icon.";
+/// The question at the first close of the window (ADR 0124 item 29).
+const CLOSE_TITLE: &str = "Keep Studio running in the tray?";
+const CLOSE_MESSAGE: &str =
+    "A connected app can only write while Studio runs. You can change this in Settings.";
+const KEEP_IN_TRAY: &str = "Keep in Tray";
+const QUIT_ON_CLOSE: &str = "Quit on Close";
 
 /// The shutdown signal of the API. "Quit" sends it.
 struct Shutdown(Mutex<Option<oneshot::Sender<()>>>);
@@ -73,14 +76,73 @@ fn data_dir() -> Option<PathBuf> {
     studio_desktop::default_data_dir()
 }
 
-/// True at the first call for `data_dir`. A failed write gives false, so that
-/// a read-only folder does not show the notice at each close.
-fn first_close(data_dir: &Path) -> bool {
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(data_dir.join(TRAY_NOTICE_FILE))
-        .is_ok()
+/// What a close of the window does (ADR 0124 item 29).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CloseStep {
+    Hide,
+    Quit,
+    Ask,
+}
+
+/// With no tray host the app has no icon, so a hidden window cannot return.
+fn close_step(choice: Option<OnClose>, has_tray_host: bool) -> CloseStep {
+    if !has_tray_host {
+        return CloseStep::Quit;
+    }
+    match choice {
+        Some(OnClose::Tray) => CloseStep::Hide,
+        Some(OnClose::Quit) => CloseStep::Quit,
+        None => CloseStep::Ask,
+    }
+}
+
+/// True when a tray host can show the icon. Only Linux can have no tray.
+#[cfg(target_os = "linux")]
+fn has_tray_host() -> bool {
+    let ask = || -> zbus::Result<bool> {
+        let connection = zbus::blocking::Connection::session()?;
+        let bus = zbus::blocking::fdo::DBusProxy::new(&connection)?;
+        let name = zbus::names::BusName::try_from("org.kde.StatusNotifierWatcher")?;
+        Ok(bus.name_has_owner(name)?)
+    };
+    ask().unwrap_or(false)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn has_tray_host() -> bool {
+    true
+}
+
+/// Ask what a close does, keep the answer, and apply it. A dialog that the
+/// user closes changes nothing, and the window stays.
+fn ask_about_close(app: &AppHandle, window: &WebviewWindow, choice: WindowClose) {
+    let handle = app.clone();
+    let hidden = window.clone();
+    app.dialog()
+        .message(CLOSE_MESSAGE)
+        .title(CLOSE_TITLE)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            KEEP_IN_TRAY.to_string(),
+            QUIT_ON_CLOSE.to_string(),
+        ))
+        .show_with_result(move |result| {
+            let answer = match result {
+                MessageDialogResult::Custom(label) if label == KEEP_IN_TRAY => Some(OnClose::Tray),
+                MessageDialogResult::Custom(label) if label == QUIT_ON_CLOSE => Some(OnClose::Quit),
+                _ => None,
+            };
+            let Some(answer) = answer else {
+                return;
+            };
+            // A failed write asks again at the next close.
+            let _ = choice.write(answer);
+            match answer {
+                OnClose::Tray => {
+                    let _ = hidden.hide();
+                }
+                OnClose::Quit => handle_quit(&handle, QuitEvent::Quit),
+            }
+        });
 }
 
 /// Show the window of the app and give it the focus.
@@ -264,7 +326,7 @@ fn open_outside(app: &AppHandle, address: &Url) {
 fn build_window(
     app: &AppHandle,
     ui_url: &str,
-    data_dir: PathBuf,
+    window_close: WindowClose,
     dropped: studio_desktop::DroppedFiles,
 ) -> Result<WebviewWindow, String> {
     let address = Url::parse(ui_url).map_err(|e| e.to_string())?;
@@ -347,14 +409,14 @@ fn build_window(
     window.on_window_event(move |event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
-            let _ = hidden.hide();
-            if first_close(&data_dir) {
-                notice_app
-                    .dialog()
-                    .message(TRAY_NOTICE)
-                    .title(TITLE)
-                    .buttons(MessageDialogButtons::Ok)
-                    .show(|_| {});
+            let tray =
+                notice_app.tray_by_id(&TrayIconId::new(TRAY_ID)).is_some() && has_tray_host();
+            match close_step(window_close.read(), tray) {
+                CloseStep::Hide => {
+                    let _ = hidden.hide();
+                }
+                CloseStep::Quit => handle_quit(&notice_app, QuitEvent::Quit),
+                CloseStep::Ask => ask_about_close(&notice_app, &hidden, window_close.clone()),
             }
         }
         #[cfg(target_os = "linux")]
@@ -377,6 +439,20 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             "quit" => handle_quit(app, QuitEvent::Quit),
             "quit_now" => handle_quit(app, QuitEvent::QuitNow),
             _ => {}
+        })
+        // ADR 0124 item 8: a left click opens the window, as "Open Studio" does.
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                show_window(app);
+                handle_quit(app, QuitEvent::OpenStudio);
+            }
         });
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
@@ -394,7 +470,8 @@ fn setup(app: &AppHandle) -> Result<(), String> {
         let listener = studio_desktop::bind(None)
             .await
             .map_err(|e| format!("Studio could not start. {e}"))?;
-        let options = studio_desktop::StartOptions::new(&data_dir);
+        let mut options = studio_desktop::StartOptions::new(&data_dir);
+        options.has_window = true;
         let shutdown = async {
             let _ = receiver.await;
         };
@@ -423,8 +500,12 @@ fn setup(app: &AppHandle) -> Result<(), String> {
         }
         let _ = ended_sender.send(());
     });
-    build_window(app, &started.ui_url, data_dir, started.dropped)?;
-    build_tray(app).map_err(|e| e.to_string())?;
+    build_window(app, &started.ui_url, started.window_close, started.dropped)?;
+    // A desktop with no tray host gives an error here. The app works without
+    // an icon, and a close then quits (ADR 0124 item 29).
+    if let Err(error) = build_tray(app) {
+        eprintln!("studio-desktop-app: no tray icon: {error}");
+    }
     Ok(())
 }
 
@@ -461,13 +542,24 @@ fn main() {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn the_tray_notice_shows_at_the_first_close_only() {
-        let folder = tempfile::tempdir().expect("the test needs a temporary folder");
-        let message = "ADR 0124 item 29: the notice shows one time for a data folder. Check first_close in main.rs.";
-        assert!(super::first_close(folder.path()), "{message}");
-        assert!(!super::first_close(folder.path()), "{message}");
-        assert!(
-            !super::first_close(&folder.path().join("missing")),
+    fn a_close_follows_the_choice_and_quits_with_no_tray() {
+        use super::{CloseStep, OnClose, close_step};
+        let message = "ADR 0124 item 29: with no tray host a close quits, and no choice asks. Check close_step in main.rs.";
+        assert_eq!(close_step(None, true), CloseStep::Ask, "{message}");
+        assert_eq!(
+            close_step(Some(OnClose::Tray), true),
+            CloseStep::Hide,
+            "{message}"
+        );
+        assert_eq!(
+            close_step(Some(OnClose::Quit), true),
+            CloseStep::Quit,
+            "{message}"
+        );
+        assert_eq!(close_step(None, false), CloseStep::Quit, "{message}");
+        assert_eq!(
+            close_step(Some(OnClose::Tray), false),
+            CloseStep::Quit,
             "{message}"
         );
     }

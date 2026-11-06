@@ -27,6 +27,10 @@ url = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 serde_json = "1"
+# The ksni backend gives the left click of the tray icon (ADR 0124 item 8).
+tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }
+# The bus tells if a tray host runs (ADR 0124 item 29).
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
 
 [dev-dependencies]
 tempfile = "3"

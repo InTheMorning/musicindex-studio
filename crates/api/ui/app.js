@@ -2611,6 +2611,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
 function SettingsPage() {
   const panels = {
     scale: ScalePanel,
+    window: WindowPanel,
     account: AccountPanel,
     apps: ConnectedAppsPanel,
     announcements: AnnouncePanel,
@@ -4294,6 +4295,29 @@ function ScalePanel() {
         </select>
       </div>
     </div>
+  </article>`;
+}
+
+// What a close of the window does (ADR 0124 item 29). The route says if this
+// shell has a window, so a browser shows no section.
+function WindowPanel() {
+  const [state, setState] = useState(null);
+  const { error, run } = useAction();
+  useEffect(() => { api('/window-close').then(setState, () => {}); }, []);
+  if (!state || !state.available) return null;
+  const change = (onClose) => run(async () => setState(await api('/window-close', { method: 'PUT', body: { on_close: onClose } })));
+  return html`<article class="panel">
+    <h2>Window</h2>
+    <div class="field"><label for="window-close">When I close the window</label>
+      <div class="field-body">
+        <span class="hint">A connected app can only write while Studio runs. If your desktop has no tray, Studio quits.</span>
+        <select id="window-close" class="button" value=${state.on_close || 'tray'} onChange=${(e) => change(e.target.value)}>
+          <option value="tray">Keep Studio in the tray</option>
+          <option value="quit">Quit Studio</option>
+        </select>
+      </div>
+    </div>
+    <${ErrorNotice} error=${error} />
   </article>`;
 }
 

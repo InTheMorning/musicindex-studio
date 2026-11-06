@@ -68,6 +68,8 @@ const PAGES = {
   ],
   'studio-settings': ({ server, holdAssets = true }) => [
     { id: 'scale', tier: 'setup' },
+    // Only the desktop app has a window to close (ADR 0124 item 29).
+    ...(server ? [] : [{ id: 'window', tier: 'setup' }]),
     ...(server ? [{ id: 'account', tier: 'setup' }] : []),
     { id: 'apps', tier: 'setup' },
     { id: 'announcements', tier: 'setup' },

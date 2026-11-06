@@ -67,9 +67,9 @@ The change also gave a group row the height of the target plus 16 px, and the bo
 
 ### 6. The Tray Icon And The Close Of The Window
 
-Corrected for the next candidate (ADR 0124 item 29). A left click on the tray icon does nothing on Linux. No message told the user that a close of the window keeps the app in the tray.
+Corrected for the next candidate (ADR 0124 item 29). A left click on the tray icon did nothing on Linux. No message told the user that a close of the window keeps the app in the tray.
 
-ADR 0124 item 8 records the first fault as a limit of Linux. The Tauri source states that the tray click event is not emitted on Linux. The app now shows a native message at the first close. A check on a virtual screen showed the message and its marker file. The user guide tells a Linux user to right-click.
+The first fault was a limit of the `libappindicator` backend, not of Linux. With i3 and `snixembed` on a virtual screen, that backend gave no left click, and the `ksni` backend opened the window. The app now uses `ksni` on Linux. With no tray host it shows no icon, so a close quits. The first close asks what to do, and Settings changes the choice.
 
 ### 7. One Announcement Check Box At The Write
 

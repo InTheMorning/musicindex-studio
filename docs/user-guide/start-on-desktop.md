@@ -53,8 +53,11 @@ The app uses the same data folder as `studio-desktop`, and it needs no token fro
 Links to other web sites open in your web browser.
 A download goes to your Downloads folder, and the app shows the name of the file.
 
-When you close the window, the app stays in the tray, and Studio continues to run. The first time, the app shows a message about this.
-On Linux, right-click the tray icon to open its menu. A left click does nothing, because Linux gives the app no click event.
+The first time that you close the window, Studio asks what to do. Select **Keep in Tray** or **Quit on Close**. To change this later, select **Settings** and find **When I close the window**.
+A connected app can only write while Studio runs.
+If your desktop has no tray, closing the window quits Studio. On i3, run a tray bridge such as `snixembed` to show the icon.
+
+Select the tray icon to open the window. Right-click it to open its menu.
 Select **Open Studio** in the tray menu to show the window again.
 Select **Quit** in the tray menu to stop Studio.
 When you start the app a second time, it shows the first window.

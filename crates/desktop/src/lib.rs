@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use studio_api::{Access, Workspace, local_router_with_drops};
-pub use studio_api::{DroppedFiles, Work};
+pub use studio_api::{DroppedFiles, OnClose, WindowClose, Work};
 use tokio::net::TcpListener;
 
 /// The port that the desktop shells try first (ADR 0124 item 7). A fixed
@@ -80,6 +80,8 @@ pub struct StartOptions {
     pub musicindex: Option<String>,
     /// A different hub for the announcements.
     pub hub: Option<String>,
+    /// The shell has a window, so the user can choose what a close does.
+    pub has_window: bool,
 }
 
 impl StartOptions {
@@ -90,6 +92,7 @@ impl StartOptions {
             data_dir: data_dir.to_path_buf(),
             musicindex: None,
             hub: None,
+            has_window: false,
         }
     }
 }
@@ -111,6 +114,8 @@ pub struct Started {
     pub work: studio_api::Work,
     /// The file of the last drop on the window of the app (ADR 0124 item 22).
     pub dropped: studio_api::DroppedFiles,
+    /// The choice for a close of the window (ADR 0124 item 29).
+    pub window_close: studio_api::WindowClose,
 }
 
 impl std::fmt::Debug for Started {
@@ -244,7 +249,12 @@ where
     let ui_url = access.ui_url();
     let work = workspace.work();
     let dropped = studio_api::DroppedFiles::default();
-    let router = local_router_with_drops(workspace, access, dropped.clone());
+    let window_close = if options.has_window {
+        studio_api::WindowClose::in_folder(&options.data_dir)
+    } else {
+        studio_api::WindowClose::default()
+    };
+    let router = local_router_with_drops(workspace, access, dropped.clone(), window_close.clone());
     let serve = async move {
         // The lock stays until the serve ends.
         let _lock = lock;
@@ -258,6 +268,7 @@ where
         serve: Box::pin(serve),
         work,
         dropped,
+        window_close,
     })
 }
 

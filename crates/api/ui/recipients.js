@@ -8,6 +8,74 @@ import { memberLine, memberText, withFee, reviewLabel, checkedIds, payeesWithNoP
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+// ---- Shares and percentages ----
+// A split is a number of shares, not a percentage. A fee recipient
+// (fee="true") takes its split as a percentage first. The other recipients
+// share the rest in proportion to their shares. The editor shows the
+// percentage as information and does not change a split.
+
+export const isFee = (r) => (r.fee || '').toLowerCase() === 'true';
+export const shares = (r) => {
+  const n = Number(r.split);
+  return r.split !== null && r.split !== '' && Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+export function percentages(recipients) {
+  const fees = recipients.filter(isFee).reduce((sum, r) => sum + (shares(r) ?? 0), 0);
+  const total = recipients.filter((r) => !isFee(r)).reduce((sum, r) => sum + (shares(r) ?? 0), 0);
+  const rest = Math.max(0, 100 - fees);
+  return recipients.map((r) => {
+    const n = shares(r);
+    if (n === null) return null;
+    if (isFee(r)) return n;
+    return total > 0 ? (n / total) * rest : null;
+  });
+}
+
+// The parts of the share bar (ADR 0133). "Other" holds at most MAX_OTHER
+// percent, and a part of SMALL_PART percent or more stays visible. The bar has
+// room for MAX_PARTS parts, so a longer list can give a larger "Other".
+const MAX_OTHER = 10;
+const SMALL_PART = 5;
+const MAX_PARTS = 20;
+// The legend names this number of parts.
+const NAMED_PARTS = 3;
+
+export function shareParts(recipients) {
+  const percent = percentages(recipients);
+  const parts = recipients
+    .map((r, i) => ({ name: r.name || r.address || 'Recipient', percent: percent[i], share: shares(r), fee: isFee(r) }))
+    .filter((p) => p.percent !== null && p.percent > 0);
+  const named = new Set();
+  let rest = parts.reduce((sum, p) => sum + p.percent, 0);
+  for (const part of [...parts].sort((a, b) => b.percent - a.percent)) {
+    if (named.size === MAX_PARTS || (rest <= MAX_OTHER && part.percent < SMALL_PART)) break;
+    named.add(part);
+    rest -= part.percent;
+  }
+  // "Other" with one part hides one name for no space.
+  if (parts.length - named.size === 1) parts.forEach((p) => named.add(p));
+  const shown = parts.filter((p) => named.has(p));
+  const other = parts.filter((p) => !named.has(p));
+  if (other.length > 0) {
+    shown.push({ name: `${other.length} others`, percent: other.reduce((sum, p) => sum + p.percent, 0), other: true, members: other });
+  }
+  return { all: parts, shown, legend: shareLegend(parts, shown) };
+}
+
+// The legend names the biggest parts, in the sequence of the bar, and gives
+// the sum of the rest.
+function shareLegend(parts, shown) {
+  const visible = shown.filter((p) => !p.other);
+  const largest = new Set([...visible].sort((a, b) => b.percent - a.percent).slice(0, NAMED_PARTS));
+  const legend = visible.filter((p) => largest.has(p)).map((p) => ({ name: p.name, percent: p.percent }));
+  const hidden = parts.length - legend.length;
+  if (hidden > 0) {
+    legend.push({ more: hidden, percent: parts.reduce((sum, p) => sum + p.percent, 0) - legend.reduce((sum, p) => sum + p.percent, 0) });
+  }
+  return legend;
+}
+
 // The key that the routes use to name a recipient (ADR 0027).
 export function recipientKey(recipient) {
   return {

@@ -4,8 +4,39 @@ import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
   initialStatuses, refreshedStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
-  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT,
+  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT, shareParts,
 } from '../ui/recipients.js';
+
+const equalParts = (count) => Array.from({ length: count }, (_, i) => ({ name: `R${i}`, address: `r${i}`, split: '1' }));
+const SHARE_BAR = 'ADR 0133: "Other" holds at most 10 % and each part of 5 % or more stays visible. Check shareParts in recipients.js.';
+
+test('the share bar shows each equal part, and the legend gives the sum of the rest', () => {
+  const { shown, legend } = shareParts(equalParts(6));
+  assert.equal(shown.length, 6, SHARE_BAR);
+  assert.ok(shown.every((p) => !p.other), SHARE_BAR);
+  assert.deepEqual(legend.slice(0, 3).map((p) => p.name), ['R0', 'R1', 'R2'], SHARE_BAR);
+  assert.equal(legend[3].more, 3, SHARE_BAR);
+  assert.ok(Math.abs(legend[3].percent - 50) < 0.001, SHARE_BAR);
+});
+
+test('the share bar folds only small parts, up to 10 %', () => {
+  const recipients = [['A', 80], ['B', 5], ['C', 3], ['D', 3], ['E', 3], ['F', 3], ['G', 3]]
+    .map(([name, split]) => ({ name, split: String(split) }));
+  const { shown } = shareParts(recipients);
+  const other = shown.find((p) => p.other);
+  assert.deepEqual(shown.filter((p) => !p.other).map((p) => p.name), ['A', 'B', 'C', 'D'], SHARE_BAR);
+  assert.equal(other.members.length, 3, SHARE_BAR);
+  assert.ok(other.percent <= 10, SHARE_BAR);
+});
+
+test('one small part keeps its name, and the bar has a limit of parts', () => {
+  const one = shareParts([{ name: 'A', split: '98' }, { name: 'B', split: '2' }]);
+  assert.deepEqual(one.shown.map((p) => p.name), ['A', 'B'], SHARE_BAR);
+  assert.equal(one.legend.length, 2, SHARE_BAR);
+  const many = shareParts(equalParts(100)).shown;
+  assert.equal(many.length, 21, 'ADR 0133: the bar shows at most 20 parts and "Other".');
+  assert.ok(many.at(-1).other, 'ADR 0133: the bar shows at most 20 parts and "Other".');
+});
 
 test('the row of a used recipient gives the title, the count and the lines', () => {
   const row = recipientRow({ name: 'Ann', recipient_type: 'lnaddress', address: 'ann@example.com', feeds: 3, saved_id: null });

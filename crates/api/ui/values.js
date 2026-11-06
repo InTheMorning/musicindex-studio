@@ -3,34 +3,10 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT } from './recipients.js';
+import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts } from './recipients.js';
 import { recipientPickRows, filterPickRows, recipientIdentity, personKeys } from './people.js';
 import { PersonArt } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
-
-// ---- Shares and percentages ----
-// A split is a number of shares, not a percentage. A fee recipient
-// (fee="true") takes its split as a percentage first. The other recipients
-// share the rest in proportion to their shares. The editor shows the
-// percentage as information and does not change a split.
-
-const isFee = (r) => (r.fee || '').toLowerCase() === 'true';
-const shares = (r) => {
-  const n = Number(r.split);
-  return r.split !== null && r.split !== '' && Number.isFinite(n) && n >= 0 ? n : null;
-};
-
-export function percentages(recipients) {
-  const fees = recipients.filter(isFee).reduce((sum, r) => sum + (shares(r) ?? 0), 0);
-  const total = recipients.filter((r) => !isFee(r)).reduce((sum, r) => sum + (shares(r) ?? 0), 0);
-  const rest = Math.max(0, 100 - fees);
-  return recipients.map((r) => {
-    const n = shares(r);
-    if (n === null) return null;
-    if (isFee(r)) return n;
-    return total > 0 ? (n / total) * rest : null;
-  });
-}
 
 const percentText = (p) => (p === null ? '—' : `${p.toFixed(p < 1 && p > 0 ? 2 : 1)} %`);
 
@@ -46,40 +22,17 @@ function Meter({ percent }) {
   return html`<span class="share-meter" aria-hidden="true"><span style=${{ width: `${width}%` }}></span></span>`;
 }
 
-// A part under this percentage folds into "Other". The legend names at most
-// this number of parts (dataviz guidance: fold the tail into "Other").
-const SMALL_PART = 5;
-const NAMED_PARTS = 3;
-
 // A short name for the legend: a Lightning address shows its user part.
 const shortName = (name) => (name.includes('@') ? name.split('@')[0] : name);
-
-function shareParts(recipients) {
-  const percent = percentages(recipients);
-  const parts = recipients
-    .map((r, i) => ({ name: r.name || r.address || 'Recipient', percent: percent[i], share: shares(r), fee: isFee(r) }))
-    .filter((p) => p.percent !== null && p.percent > 0);
-  const named = new Set(
-    [...parts].filter((p) => p.percent >= SMALL_PART).sort((a, b) => b.percent - a.percent).slice(0, NAMED_PARTS),
-  );
-  const shown = parts.filter((p) => named.has(p));
-  const other = parts.filter((p) => !named.has(p));
-  const otherPercent = other.reduce((sum, p) => sum + p.percent, 0);
-  if (other.length > 0) {
-    shown.push({ name: other.length === 1 ? other[0].name : `${other.length} others`, percent: otherPercent, other: true, members: other });
-  }
-  return { all: parts, shown };
-}
 
 // The tooltip of one part has the name, the percentage and the raw share.
 // A fee part also has the word "fee".
 const partDetail = (p) => `${p.name} ${percentText(p.percent)} (share ${p.share}${p.fee ? ', fee' : ''})`;
 
-// The stacked bar and its legend. The legend names the biggest parts and
-// "Other", in the sequence of the bar. A segment takes the focus from the
+// The stacked bar and its legend. A segment takes the focus from the
 // keyboard, unless the bar is inside a button (`focusable` false).
 export function ShareStack({ recipients, focusable = true }) {
-  const { all, shown } = shareParts(recipients);
+  const { all, shown, legend } = shareParts(recipients);
   if (shown.length === 0) return null;
   const label = all.map((p) => `${p.name} ${percentText(p.percent)}${p.fee ? ' (fee)' : ''}`).join(', ');
   const tip = (p) => (p.other ? p.members.map(partDetail).join(', ') : partDetail(p));
@@ -89,7 +42,7 @@ export function ShareStack({ recipients, focusable = true }) {
         data-tip=${tip(p)} tabindex=${focusable ? '0' : null} role="img" aria-label=${tip(p)}></span>`)}
     </span>
     <span class="share-legend" aria-hidden="true">
-      ${shown.map((p, i) => html`${i > 0 ? ' · ' : ''}<span class="part">${p.other ? 'Other' : shortName(p.name)} ${percentText(p.percent)}</span>`)}
+      ${legend.map((p, i) => html`${i > 0 ? ' · ' : ''}<span class="part">${p.more ? `${p.more} more` : shortName(p.name)} ${percentText(p.percent)}</span>`)}
     </span>
   </span>`;
 }

@@ -26,9 +26,9 @@ The sheet now says: "A person who has this file can read your feeds, drafts, ver
 
 ### 3. The Nostr Sheet Does Not Offer The People Of The User
 
-Open. The sheet "Find a Nostr profile" searches only by npub, NIP-05 address or name. It does not show the Nostr keys of the People list, so the user must search for a key that Studio already has. The requirement is wider than this sheet: each field that a person can fill must offer the People list.
+Corrected ([ADR 0137](../adr/0137-the-people-list-fills-nostr-keys-and-open-entries.md)). The sheet "Find a Nostr profile" searched only by npub, NIP-05 address or name. It did not show the Nostr keys of the People list, so the user had to search for a key that Studio already had. The requirement is wider than this sheet: each field that a person can fill must offer the People list.
 
-"Pick From Your People" is now in three locations: the recipients, the credits and the support links (task 066). The sheet is one component, `NostrSheet` of `crates/api/ui/editor.js`, and ADR 0123 gives each Nostr key field that sheet. A change to that sheet therefore covers each Nostr key field. Proposal, with no decision: the sheet lists the people with a key before the first search, and the search stays below this list. The other fields that a person can fill need an inventory first.
+"Pick From Your People" is now in three locations: the recipients, the credits and the support links (task 066). The sheet is one component, `NostrSheet` of `crates/api/ui/editor.js`, and ADR 0123 gives each Nostr key field that sheet. The sheet now lists the people with a key, and an open credit and an open recipient have "Fill from a Person". The inventory of the other fields is in the ADR.
 
 ### 4. The Outline Of An Album Has No Clear Structure
 

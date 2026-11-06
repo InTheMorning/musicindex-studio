@@ -551,7 +551,7 @@ test('a default address that is not a wallet row gets the type of its form', () 
   assert.equal(recipientFromPerson(node).recipient_type, 'node');
 });
 
-import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel } from '../ui/people.js';
+import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel, nostrPickRows, fillCredit, fillRecipient, creditFillRows, recipientFillRows, creditCanFill, recipientCanFill } from '../ui/people.js';
 
 const CREDIT_SRC = [
   { id: 1, name: 'Mary Kate', usual_role: 'Vocals', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1mku7abcdefghijklmnopq2xh' }, { npub: 'npub1second' }],
@@ -1361,4 +1361,47 @@ test('ADR 0132 item 10: the UI has no text "Member of"', () => {
     assert.equal(readFileSync(new URL(name, dir), 'utf8').includes('Member of'), false,
       `ADR 0132 item 10: ${name} has "Member of". Use the words "Part of".`);
   }
+});
+
+test('nostrPickRows gives one row for each key and leaves out the key of the field', () => {
+  const people = [{ id: 1, name: 'Mary Kate', keys: [{ npub: 'npub1a' }, { npub: 'npub1b' }] }, { id: 2, name: 'Jo', keys: [] }];
+  assert.deepEqual(nostrPickRows(people, null).map((r) => [r.name, r.npub]), [['Mary Kate', 'npub1a'], ['Mary Kate', 'npub1b']]);
+  assert.deepEqual(nostrPickRows(people, 'npub1a').map((r) => r.npub), ['npub1b']);
+  assert.deepEqual(nostrPickRows(null, null), []);
+});
+
+const FILL_PERSON = { id: 7, name: 'Mary Kate', usual_role: 'Vocals', usual_group: 'Music', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1a' }],
+  default_address: { address: 'mk@example.com' }, wallets: [{ key: { address: 'mk@example.com' }, recipient_type: 'lnaddress' }] };
+
+test('fillCredit fills only the empty fields, and a role comes with its group', () => {
+  const credit = { _cid: 3, name: 'M. Kate', role: null, group: null, img: ' ', href: 'https://mine', npub: null };
+  assert.deepEqual(fillCredit(credit, FILL_PERSON), { _cid: 3, name: 'M. Kate', role: 'Vocals', group: 'Music', img: 'https://x/mk.jpg', href: 'https://mine', npub: 'npub1a' });
+  const own = { name: 'A', role: 'Bass', group: null, img: null, href: null, npub: null };
+  assert.equal(fillCredit(own, FILL_PERSON).role, 'Bass');
+  assert.equal(fillCredit(own, FILL_PERSON).group, null);
+});
+
+test('fillRecipient keeps an address, the split and the fee mark', () => {
+  const empty = { _cid: 1, name: null, recipient_type: 'node', address: null, split: '10', custom_key: null, custom_value: null, fee: 'true' };
+  assert.deepEqual(fillRecipient(empty, FILL_PERSON), { ...empty, name: 'Mary Kate', recipient_type: 'lnaddress', address: 'mk@example.com' });
+  const own = { ...empty, address: '03abc' };
+  assert.deepEqual(fillRecipient(own, FILL_PERSON), { ...own, name: 'Mary Kate' });
+  assert.deepEqual(fillRecipient(empty, { id: 2, name: 'Jo', wallets: [] }), { ...empty, name: 'Jo' });
+});
+
+test('the fill rows name the fields, leave out a person with nothing to fill and put the same name first', () => {
+  const other = { id: 8, name: 'Jo', keys: [] };
+  const credit = { name: 'Mary Kate', role: 'Vocals', group: null, img: null, href: 'https://mine', npub: null };
+  const rows = creditFillRows([other, FILL_PERSON], credit);
+  assert.deepEqual(rows.map((r) => [r.id, r.line]), [[7, 'Fills: picture, Nostr key']]);
+  assert.deepEqual(creditFillRows([{ ...FILL_PERSON, id: 9, name: 'Other' }, FILL_PERSON], credit).map((r) => r.id), [7, 9]);
+  assert.deepEqual(recipientFillRows([FILL_PERSON], { name: 'Mary Kate', address: null }).map((r) => r.line), ['Fills: address']);
+  assert.deepEqual(recipientFillRows([other], { name: 'Mary Kate', address: null }), []);
+});
+
+test('the fill button needs an empty field', () => {
+  assert.equal(creditCanFill({ name: 'A', role: 'B', img: 'c', href: 'd', npub: 'e' }), false);
+  assert.equal(creditCanFill({ name: 'A', role: 'B', img: 'c', href: 'd', npub: null }), true);
+  assert.equal(recipientCanFill({ name: 'A', address: 'b' }), false);
+  assert.equal(recipientCanFill({ name: null, address: 'b' }), true);
 });

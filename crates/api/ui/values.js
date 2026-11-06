@@ -4,7 +4,8 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { TextField, EntryActions, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
 import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts } from './recipients.js';
-import { recipientPickRows, filterPickRows, recipientIdentity, personKeys } from './people.js';
+import { recipientPickRows, filterPickRows, recipientIdentity, personKeys, recipientFillRows, fillRecipient, recipientCanFill } from './people.js';
+import { FillSheet } from './editor.js';
 import { PersonArt } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
@@ -110,6 +111,8 @@ function Recipients({ id, recipients, defaultType, onChange }) {
   // The picker sheet (task 013c, ADR 0027). It only adds a recipient. It
   // does not replace or remove a recipient of this list.
   const [picking, setPicking] = useState(false);
+  const [filling, setFilling] = useState(null);
+  const fillingRecipient = recipients.find((r) => r._cid === filling);
   const addPicked = (added) => {
     onChange([...recipients, ...added]);
     setPicking(false);
@@ -145,6 +148,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
           Fee: this recipient gets its split as a percentage before the others share the rest</label>
+        ${recipientCanFill(r) && html`<div class="actions"><button class="button" type="button" onClick=${() => setFilling(r._cid)}>Fill from a Person</button></div>`}
         <${SaveRecipientButton} recipient=${r} />
         <${EntryActions} list=${recipients} index=${i} name=${name} onChange=${onChange} />
         </div>
@@ -166,7 +170,10 @@ function Recipients({ id, recipients, defaultType, onChange }) {
     <h3 class="value-group">Fees</h3>
     ${ofGroup(true)}
     ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
-    <${PickerSheet} open=${picking} recipients=${recipients} onAdd=${addPicked} onClose=${() => setPicking(false)} />`;
+    <${PickerSheet} open=${picking} recipients=${recipients} onAdd=${addPicked} onClose=${() => setPicking(false)} />
+    <${FillSheet} open=${!!fillingRecipient} load=${(people) => recipientFillRows(people, fillingRecipient)}
+      onPick=${(row) => onChange(recipients.map((r) => (r._cid === filling ? fillRecipient(r, row.person) : r)))}
+      onClose=${() => setFilling(null)} />`;
 }
 
 // ---- Save a recipient (task 013c, ADR 0027 item 5) ----

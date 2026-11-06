@@ -138,6 +138,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0134: A UI scale and larger release tiles](adr/0134-a-ui-scale-and-larger-release-tiles.md)
 - [ADR 0135: The panel holds the content and the page has tabs](adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md)
 - [ADR 0136: One announcement choice at the write](adr/0136-one-announcement-choice-at-the-write.md)
+- [ADR 0137: The people list fills Nostr keys and open entries](adr/0137-the-people-list-fills-nostr-keys-and-open-entries.md)
 
 ## Plans
 

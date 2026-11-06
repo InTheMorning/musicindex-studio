@@ -1325,6 +1325,66 @@ export function creditPickRows(people, persons) {
   });
 }
 
+// The people list of the sheet "Find a Nostr profile" (ADR 0137 items 1 and 2):
+// one row for each Nostr key of each person. The key of the field has no row.
+export function nostrPickRows(people, current) {
+  return (people || []).flatMap((person) => (person.keys || []).filter((k) => k.npub && k.npub !== current).map((k) => ({
+    id: `${person.id}-${k.npub}`, name: person.name, line: k.npub, npub: k.npub, person,
+  })));
+}
+
+const isEmpty = (value) => value === null || value === undefined || String(value).trim() === '';
+
+// The credit with each empty field filled from a person (ADR 0137 item 5). A
+// role comes with its group. A value that the credit has does not change.
+export function fillCredit(credit, person) {
+  const start = creditFromPerson(person);
+  const emptyRole = isEmpty(credit.role);
+  return {
+    ...credit,
+    name: isEmpty(credit.name) ? start.name : credit.name,
+    role: emptyRole ? start.role : credit.role,
+    group: emptyRole ? start.group : credit.group,
+    img: isEmpty(credit.img) ? start.img : credit.img,
+    href: isEmpty(credit.href) ? start.href : credit.href,
+    npub: isEmpty(credit.npub) ? start.npub : credit.npub,
+  };
+}
+
+// The recipient with each empty field filled from a person. The address comes
+// with its type, its custom key and its custom value. The split and the fee
+// mark stay (ADR 0137 item 6).
+export function fillRecipient(recipient, person) {
+  const start = recipientFromPerson(person);
+  const name = isEmpty(recipient.name) ? start.name : recipient.name;
+  if (!isEmpty(recipient.address) || isEmpty(start.address)) return { ...recipient, name };
+  return { ...recipient, name, recipient_type: start.recipient_type, address: start.address,
+    custom_key: start.custom_key, custom_value: start.custom_value };
+}
+
+const hasEmpty = (subject, fields) => fields.some((field) => isEmpty(subject[field]));
+export const creditCanFill = (credit) => hasEmpty(credit, ['name', 'role', 'img', 'href', 'npub']);
+export const recipientCanFill = (recipient) => hasEmpty(recipient, ['name', 'address']);
+
+// The rows of the sheet "Fill From a Person": each person that fills a field,
+// and a person with the name of the subject first (ADR 0137 item 7).
+function personFillRows(people, subject, fill, fields) {
+  const rows = (people || []).flatMap((person) => {
+    const filled = fill(subject, person);
+    const words = fields.filter(([field]) => filled[field] !== subject[field] && !isEmpty(filled[field])).map(([, word]) => word);
+    return words.length === 0 ? [] : [{ id: person.id, name: person.name, line: `Fills: ${words.join(', ')}`, filled, person }];
+  });
+  const name = lowerName(subject.name);
+  return name === '' ? rows : [...rows.filter((r) => lowerName(r.name) === name), ...rows.filter((r) => lowerName(r.name) !== name)];
+}
+
+export const creditFillRows = (people, credit) => personFillRows(people, credit, fillCredit, [
+  ['name', 'name'], ['role', 'role'], ['img', 'picture'], ['href', 'information address'], ['npub', 'Nostr key'],
+]);
+export const recipientFillRows = (people, recipient) => personFillRows(people, recipient, fillRecipient, [
+  ['name', 'name'], ['address', 'address'],
+]);
+
 // The new support link from a link of a person: a start value.
 export const fundingFromLink = (link) => ({ label: link.label ?? '', url: link.url ?? null });
 

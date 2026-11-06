@@ -127,6 +127,8 @@ It has three sections.
 
 When Studio can read the image at **Picture address**, the open entry of the person shows the picture.
 
+To fill the empty fields of an open person, select **Fill from a Person**, then select a person from your People list. A value that you typed does not change.
+
 ### Support links
 
 1. Select **Add a support link**.

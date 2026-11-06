@@ -13,8 +13,11 @@ Studio writes a key only when you select a result or type the key.
 ## Find a key
 
 1. Select the row **Nostr** or **Nostr profile**. The sheet **Find a Nostr profile** opens.
-2. Type an `npub` key, a NIP-05 address or a name in the field. Then select **Search**.
-3. Select a result. Studio sets the key and closes the sheet.
+2. The sheet shows **Your people**: each person with a Nostr key. To use one of these keys, select the person. Type in the field to make the list shorter.
+3. To find a different key, type an `npub` key, a NIP-05 address or a name in the field. Then select **Search**.
+4. Select a result. Studio sets the key and closes the sheet.
+
+On the page of a person, the sheet does not show **Your people**.
 
 On a server where you signed in with a Nostr key, the button **Use My Key** sets that key.
 

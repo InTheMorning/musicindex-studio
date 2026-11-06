@@ -51,6 +51,11 @@ In an open recipient you can also use:
 Studio does not set a split for a recipient that you add this way.
 Type the split for each new recipient.
 
+## Fill a recipient from a person
+
+An open recipient with no name or no address has the button **Fill from a Person**.
+Select the button, then select a person. Studio fills only the empty fields. The split does not change.
+
 ## Recipients for one track
 
 A track uses the album recipients by default.

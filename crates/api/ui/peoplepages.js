@@ -376,7 +376,7 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
     : html`<section class="page-section" key=${section.id}>${section.title && html`<h2>${section.title}</h2>`}${fields}</section>`))}
       <${ErrorNotice} error=${error} />
     </form>
-    ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} onSet=${(npub) => set('npub', npub)}
+    ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}
     <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${busy ? 'Adding…' : form.button}</button></footer>`;
 }
@@ -841,7 +841,7 @@ export function PersonPage({ id, feeds, go }) {
     go=${go} onClose=${() => setSheet(null)} />
   <${LinkSheet} kind=${linking === 'keys' ? null : linking} personId=${person.id} onClose=${() => setLinking(null)}
     onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />
-  <${NostrSheet} open=${linking === 'keys'} value=${null} onSet=${(npub) => { if (npub) addKey(npub); }}
+  <${NostrSheet} open=${linking === 'keys'} value=${null} offerPeople=${false} onSet=${(npub) => { if (npub) addKey(npub); }}
     onClose=${() => setLinking(null)} />
   <${MergeSheet} open=${merging} person=${person} onClose=${() => setMerging(false)}
     onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} />

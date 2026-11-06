@@ -8,7 +8,7 @@ import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNot
 import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments, PickRow } from './values.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
-import { creditPickRows, supportPickRows, addPickLabel, filterRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
+import { creditPickRows, supportPickRows, addPickLabel, filterRows, nostrPickRows, creditFillRows, fillCredit, creditCanFill, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
@@ -211,10 +211,54 @@ function PeoplePickerSheet({ open, load, hint, one, many, art, onAdd, onClose })
   </dialog>`;
 }
 
+// The sheet "Fill from a Person" of one open entry (ADR 0137 item 4). `load`
+// gives the rows from the list of people. A selection calls `onPick(row)`.
+export function FillSheet({ open, load, onPick, onClose }) {
+  const ref = useSheet(open);
+  const [people, setPeople] = useState(null);
+  const [filter, setFilter] = useState('');
+  const loading = useAction();
+  useEffect(() => {
+    if (!open) return;
+    setFilter('');
+    setPeople(null);
+    loading.run(async () => setPeople(await api('/people')));
+  }, [open]);
+  const rows = open && people !== null ? load(people) : [];
+  const shown = filterRows(rows, filter);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="fill-sheet-title" onClose=${onClose}>
+    <header>
+      <h2 id="fill-sheet-title">Fill from a Person</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <section class="page-section">
+        <${Field} id="fill-sheet-filter" label="Filter" value=${filter} placeholder="Name"
+          onInput=${(e) => setFilter(e.target.value)} />
+        <${ErrorNotice} error=${loading.error} />
+        ${people === null
+          ? !loading.error && html`<p class="hint" role="status">Loading your people…</p>`
+          : html`<div class="group rows">
+              ${shown.length === 0 && html`<p class="hint">${rows.length === 0 ? 'No person has a value for the empty fields.' : 'Nothing matches this filter.'}</p>`}
+              ${shown.map((r) => html`<button class="link-row" type="button" key=${r.id} onClick=${() => { onPick(r); ref.current.close(); }}>
+                <${PersonArt} person=${r.person} /><span class="text"><span class="title">${r.name}</span>
+                  <span class="summary">${r.line}</span></span></button>`)}
+            </div>`}
+        <p class="hint">Studio fills only the empty fields. You can change each value in the entry.</p>
+      </section>
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+    </footer>
+  </dialog>`;
+}
+
 function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
   const blank = BLANK_PERSON;
   const { feedId } = useContext(PickerContext) || {};
   const [picking, setPicking] = useState(false);
+  const [filling, setFilling] = useState(null);
+  const fillingCredit = persons.find((p) => p._cid === filling);
   const roles = useRoleList();
   const addPicked = (rows) => {
     setPicking(false);
@@ -237,6 +281,7 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
           bad=${(bad || []).some((b) => b.field === `${path}/${i}/npub`)}
           person=${{ name: p.name, img: p.img }}
           onSet=${(npub, picked) => onChange(setAt(persons, i, withPersonKey(p, npub, picked)))} />
+        ${creditCanFill(p) && html`<div class="actions"><button class="button" type="button" onClick=${() => setFilling(p._cid)}>Fill from a Person</button></div>`}
         <${EntryActions} list=${persons} index=${i} name=${p.name || 'this person'} onChange=${onChange} />
       <//>`;
     })}
@@ -248,7 +293,10 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
     </button>
     <${PeoplePickerSheet} open=${picking} load=${(people) => creditPickRows(people, persons)} art=${true}
       hint="Each person comes with the usual role, the picture and the Nostr key. You can change them in the credit."
-      one="Person" many="People" onAdd=${addPicked} onClose=${() => setPicking(false)} />`;
+      one="Person" many="People" onAdd=${addPicked} onClose=${() => setPicking(false)} />
+    <${FillSheet} open=${!!fillingCredit} load=${(people) => creditFillRows(people, fillingCredit)}
+      onPick=${(row) => onChange(persons.map((p) => (p._cid === filling ? fillCredit(p, row.person) : p)))}
+      onClose=${() => setFilling(null)} />`;
 }
 
 function Fundings({ fundings, onChange, bad }) {
@@ -643,14 +691,16 @@ function ProfileBody({ profile }) {
 // `value` is the key of the row, or `null`. A person entry gives `person`
 // with its name and picture. A selection calls `onSet(npub, picked)`. The key
 // `null` removes the key. `picked` has the profile name and picture that the
-// user chose to use.
-export function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
+// user chose to use. The page of a person sets `offerPeople` to false, because
+// a key of a different person is a merge (ADR 0137 item 3).
+export function NostrSheet({ open, value, feedId, person, offerPeople = true, onSet, onClose }) {
   const ref = useSheet(open);
   const session = useContext(SessionContext);
   const mine = session && session.session && session.session.pubkey ? npubOf(session.session.pubkey) : null;
   const [changing, setChanging] = useState(false);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState(null);
+  const [people, setPeople] = useState(null);
   const [card, setCard] = useState(null);
   const [useName, setUseName] = useState(false);
   const [usePicture, setUsePicture] = useState(false);
@@ -664,6 +714,8 @@ export function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
     setCard(null);
     setUseName(!!person && !person.name);
     setUsePicture(!!person && !person.img);
+    setPeople(null);
+    if (offerPeople) api('/people').then(setPeople, () => setPeople(null));
     if (!value) return undefined;
     let current = true;
     api(`/nostr/profiles?q=${encodeURIComponent(value)}${suffix}`).then(
@@ -683,6 +735,7 @@ export function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
     search.run(async () => setFound(await api(`/nostr/profiles?q=${encodeURIComponent(text)}${suffix}`)));
   };
   const showCard = !!value && !changing;
+  const peopleRows = filterRows(nostrPickRows(people, value), query);
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="nostr-sheet-title" onClose=${onClose}>
     <header>
       <h2 id="nostr-sheet-title">Find a Nostr profile</h2>
@@ -701,7 +754,7 @@ export function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
       </div>`}
       ${!showCard && html`<form class="form" role="search" onSubmit=${runSearch}>
         <div class="field">
-          <label for="nostr-query">npub, NIP-05 address or name</label>
+          <label for="nostr-query">Name, npub or NIP-05 address</label>
           <div class="inline"><input id="nostr-query" type="search" value=${query} onInput=${(e) => setQuery(e.target.value)} />
             <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
         </div>
@@ -713,12 +766,17 @@ export function NostrSheet({ open, value, feedId, person, onSet, onClose }) {
           <label class="check"><input type="checkbox" checked=${usePicture} onChange=${(e) => setUsePicture(e.target.checked)} />
             <span>Use the profile picture</span></label>
         </div>`}
+        ${peopleRows.length > 0 && html`<section class="page-section"><h2>Your people</h2><div class="group rows">
+          ${peopleRows.map((r) => html`<button class="link-row" type="button" key=${r.id} onClick=${() => choose(r.npub, { name: r.name, picture: r.person.img })}>
+            <${PersonArt} person=${r.person} /><span class="text"><span class="title">${r.name}</span>
+              <span class="summary mono">${shortKey(r.npub)}</span></span></button>`)}
+        </div></section>`}
         ${found && found.failed.length > 0 && html`<p class="hint" role="status">${found.failed.map((f) => FAILED_TEXT[f] || 'A source did not answer.').join(' ')}</p>`}
         ${found && found.profiles.length === 0 && html`<p class="empty">Studio found no profile.</p>`}
-        ${found && found.profiles.length > 0 && html`<div class="group rows">
+        ${found && found.profiles.length > 0 && html`<section class="page-section"><h2>Search results</h2><div class="group rows">
           ${found.profiles.map((p) => html`<button class="link-row" type="button" key=${p.npub} onClick=${() => choose(p.npub, p)}>
             <${ProfileBody} profile=${p} /></button>`)}
-        </div>`}
+        </div></section>`}
       </form>`}
     </div>
     <footer>

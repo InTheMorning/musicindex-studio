@@ -42,7 +42,7 @@
     - Identity: the picture, the name, the usual role, "Member of" with a link to each publisher feed, and the Nostr key with the result of its check.
     - The buttons "Use This Address", "Rename" and "Add to All Releases" (action), then "Remove" (destructive).
     - One navigation row "Where used", with "Pays in N feeds · Credited in N feeds" and the number of feeds.
-    - Content: "Payment", with the select menu "Default address", one group for each wallet, a `lud16` suggestion with its lookup result, and "Add a Wallet".
+    - Content: "Payment", with the default address on its own row ([ADR 0139](0139-the-default-address-is-on-its-row.md)), one group for each wallet, a `lud16` suggestion with its lookup result, and "Add a Wallet".
     - Details: "Credits", with the fields "Usual role", "Picture address" and "Information address".
     - Details: "Support links", with each link and "Add a Support Link".
 5. The page "Where used" lists each feed of the person. A row shows the type and the places, the line "Pays {address}", and the line "Credited as {role}". A row opens the feed in the editor.

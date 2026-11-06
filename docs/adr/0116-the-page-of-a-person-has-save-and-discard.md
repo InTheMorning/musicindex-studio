@@ -19,7 +19,7 @@
 
 1. The page of a person keeps each change of these controls as a pending change until the user selects Save:
     - The fields "Name", "Picture address" and "Information address".
-    - The menus "Usual role", with its usual group (ADR 0112), "Default address" and "Member of".
+    - The menus "Usual role", with its usual group (ADR 0112), and "Member of", and the button "Make Default" ([ADR 0139](0139-the-default-address-is-on-its-row.md)).
     - The fills of the lookup of [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md).
 2. The toolbar of the page has the status, "Discard" (normal) and "Save" (primary), at the place of the draft toolbar of a feed. They use the markup of the draft toolbar. The toolbar stays in view at all scroll positions and widths (ADR 0039).
 3. The status is "No changes", "1 change not saved" or "N changes not saved". With no pending change, "Discard" and "Save" are disabled.

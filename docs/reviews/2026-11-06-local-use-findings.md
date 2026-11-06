@@ -182,7 +182,7 @@ Corrected ([ADR 0138](../adr/0138-the-names-of-a-wallet-address-and-the-correcti
 
 ### 21. The Selector Of The Default Address
 
-Open. The operator does not like the select menu "Default address" on the page of a person. The operator asks for inspiration from other products before a change. No design is selected.
+Corrected ([ADR 0139](../adr/0139-the-default-address-is-on-its-row.md)). The select menu "Default address" on the page of a person repeated the rows below it. The operator asked for inspiration from other products, and selected a button on each row from the [examples](../research/2026-11-06-default-address-examples.md).
 
 ### 22. A Change Set Can Write With No Diff On The Page
 

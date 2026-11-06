@@ -1420,3 +1420,11 @@ test('a feed row names each role of a credit on one line', async () => {
   assert.deepEqual(rows(['']), ['Credited']);
   assert.deepEqual(rows([]), []);
 });
+
+test('one row is the default address, with the parts of its key', async () => {
+  const { isDefaultAddress, keyValue } = await import('../ui/people.js');
+  const key = { address: '03a', custom_key: '696969', custom_value: '2' };
+  assert.equal(isDefaultAddress(key, keyValue(key)), true);
+  assert.equal(isDefaultAddress({ address: '03a' }, keyValue(key)), false);
+  assert.equal(isDefaultAddress(key, ''), false);
+});

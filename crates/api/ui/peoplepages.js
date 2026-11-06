@@ -16,7 +16,7 @@ import {
   peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonBody, initials,
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
-  checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions,
+  checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
@@ -268,13 +268,13 @@ function AddPersonForm({ go, onCancel }) {
 // ---- The page of a person (ADR 0099 items 4 to 12) ----
 
 // One address row of a wallet: its line, its feeds and an optional note.
-function AddressRow({ member, count, note, action }) {
+function AddressRow({ member, count, note, mark, pending, action }) {
   const { label, address, account } = memberLine(member, true);
-  return html`<div class="link-row static"><span class="text"><span class="label">${label}</span>
+  return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`}><span class="text"><span class="label">${label}</span>
       ${address && html`<span class="summary mono address-text">${address}</span>`}
       ${account && html`<span class="summary">Account ${account}</span>`}
       ${note && html`<span class="summary">${note}</span>`}</span>
-    ${count && html`<span class="count">${count}</span>`}
+    ${count && html`<span class="count">${count}</span>`}${mark}
     ${member.address && html`<${CopyButton} text=${member.address} label="the address" />`}${action}</div>`;
 }
 
@@ -773,13 +773,17 @@ export function PersonPage({ id, feeds, go }) {
               onClick=${() => withLeave(() => act(async () => { await api(`/people/${id}/items`, { method: 'POST', body: row.body }); await loadMore(); }))}>${moreAddLabel(row)}</button>
           </div></div>`)}</div></section>`,
     payment: () => html`<section class="page-section"><h2>Payment</h2>
-      ${groups.length > 0 && html`<div class="group rows"><${ChoiceSelect} id="person-default" label="Default address"
-        value=${shown.default_address} options=${addressOptions(groups)}
-        hint="The picker adds this address for this person."
-        pending=${isPending(saved, shown, 'default_address')} onChange=${(value) => update({ default_address: value })} /></div>`}
+      ${groups.length > 0 && html`<p class="hint">${DEFAULT_HINT}</p>`}
       ${groups.length === 0 && html`<p class="empty">No wallet yet. Add a wallet to give this person a payment address.</p>`}
-      ${groups.map((g) => html`<div class="group" key=${g.id}>${g.members.map((m) => html`<${AddressRow} key=${JSON.stringify(m.key)}
-          member=${m.member} count=${usedText(m.count)} />`)}
+      ${groups.map((g) => html`<div class="group" key=${g.id}>${g.members.map((m) => {
+        const isDefault = isDefaultAddress(m.key, shown.default_address);
+        return html`<${AddressRow} key=${JSON.stringify(m.key)} member=${m.member} count=${usedText(m.count)}
+          pending=${isDefault && isPending(saved, shown, 'default_address')}
+          mark=${isDefault
+            ? html`<span class="default-mark">Default</span>`
+            : html`<button class="button" type="button" aria-label=${`Make Default: ${m.member.address}`}
+                onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`} />`;
+      })}
         <div class="actions"><button class="button" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>
         <span class="text"><span class="label">Wallet</span><span class="summary mono address-text">${w.key.address}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}

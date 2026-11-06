@@ -140,6 +140,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0136: One announcement choice at the write](adr/0136-one-announcement-choice-at-the-write.md)
 - [ADR 0137: The people list fills Nostr keys and open entries](adr/0137-the-people-list-fills-nostr-keys-and-open-entries.md)
 - [ADR 0138: The names of a wallet address and the correction of a wrong key](adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md)
+- [ADR 0139: The default address is on its row](adr/0139-the-default-address-is-on-its-row.md)
 
 ## Plans
 
@@ -452,6 +453,7 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [Host secrets under a show grant, 2026-11-01](research/2026-11-01-connected-app-host-secrets.md)
 - [People module design note, 2026-11-01](research/2026-11-01-people-module-design-note.md)
 - [Tauri desktop shell research, 2026-11-03](research/2026-11-03-tauri-desktop-shell-research.md)
+- [Examples of a default among many addresses, 2026-11-06](research/2026-11-06-default-address-examples.md)
 
 ## Notes
 

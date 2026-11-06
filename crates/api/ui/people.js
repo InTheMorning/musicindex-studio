@@ -464,6 +464,11 @@ export function walletGroups(person, recipients) {
 // The menu entries for each address of each wallet, as [value, text].
 export const addressOptions = (groups) => groups.flatMap((g) => g.members.map((m) => [keyValue(m.key), memberText(m.member)]));
 
+// The default address of a person shows on its own row (ADR 0139). `value` is
+// the value of `keyValue`, or an empty text with no default.
+export const isDefaultAddress = (key, value) => keyValue(key) === value;
+export const DEFAULT_HINT = '"Pick from your people" adds the default address of this person.';
+
 // The text of the count of feeds of an address.
 export const usedText = (count) => (count > 0 ? feedCount(count) : 'Not used');
 

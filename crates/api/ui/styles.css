@@ -1994,11 +1994,14 @@ button.outline-feed {
 .key-line .text, .key-row .text { min-width: 0; }
 .key-line .summary, .key-row .summary { white-space: normal; }
 .more-actions { flex: none; }
+.default-mark { flex: none; color: var(--muted); font-size: var(--text-callout); font-weight: 600; }
 /* At narrow width the buttons of a row go on their own line, so that the text keeps its width. */
 @media (max-width: 760px) {
   .more-row { flex-wrap: wrap; }
   .more-row > .text { flex: 1 1 0; }
   .more-actions { flex: 1 0 100%; }
+  .address-row { flex-wrap: wrap; }
+  .address-row > .text { flex: 1 1 100%; }
 }
 .copy-button { flex: none; color: var(--muted); }
 .copy-button .icon { display: block; width: 16px; height: 16px; }

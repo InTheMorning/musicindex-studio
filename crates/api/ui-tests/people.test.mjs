@@ -1412,3 +1412,11 @@ test('a row with a key warning adds only with the label Add Anyway', async () =>
   assert.equal(moreAddLabel({ warning: null }), 'Add');
   assert.equal(moreAddLabel({}), 'Add');
 });
+
+test('a feed row names each role of a credit on one line', async () => {
+  const { sheetFeeds } = await import('../ui/people.js');
+  const rows = (roles) => sheetFeeds([{ feed_id: 1, roles }], null)[0].lines;
+  assert.deepEqual(rows(['composer', 'guitarist', '']), ['Credited as composer, guitarist']);
+  assert.deepEqual(rows(['']), ['Credited']);
+  assert.deepEqual(rows([]), []);
+});

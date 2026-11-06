@@ -306,3 +306,11 @@ test('after an unlock, a feed that the vault blocked can be written and a writte
   assert.deepEqual(refreshedStatuses(before, open), { 1: { state: 'waiting' }, 2: { state: 'written' } },
     'A feed that the vault blocked must be waiting after the unlock. Check refreshedStatuses in recipients.js.');
 });
+
+test('the review of a change set opens the first changed feed', async () => {
+  const { firstOpenId } = await import('../ui/recipients.js');
+  const feed = (feed_id, outcome) => ({ feed_id, outcome: { outcome } });
+  assert.equal(firstOpenId({ feeds: [feed(1, 'not_changed'), feed(2, 'changed'), feed(3, 'changed')] }), 2);
+  assert.equal(firstOpenId({ feeds: [feed(1, 'not_changed')] }), null);
+  assert.equal(firstOpenId({ feeds: [] }), null);
+});

@@ -300,6 +300,13 @@ export function isWritable(feed) {
   return !!feed.outcome && feed.outcome.outcome === 'changed' && !feed.blocked && feed.written_at == null;
 }
 
+// The feed that opens its diff when the review opens, so that the page shows a
+// diff before the first write (ADR 0091 item 21).
+export function firstOpenId(changeSet) {
+  const feed = (changeSet.feeds || []).find((f) => outcomeText(f.outcome).changed);
+  return feed ? feed.feed_id : null;
+}
+
 export function writableIds(changeSet) {
   return (changeSet.feeds || []).filter(isWritable).map((feed) => feed.feed_id);
 }

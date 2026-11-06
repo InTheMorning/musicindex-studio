@@ -1010,7 +1010,7 @@ function DifferenceBlock({ block }) {
   </div>`;
 }
 
-// The page "Check your releases" (ADR 0111 items 9 to 13, ADR 0120). The core
+// The page "Check your feeds" (ADR 0111 items 9 to 13, ADR 0120). The core
 // compares each feed with the person. A feed with a difference opens in the list.
 // The button "Correct N Feeds" opens the sheet of the correction (ADR 0111
 // item 14). A feed that is correct opens the feed in the editor.

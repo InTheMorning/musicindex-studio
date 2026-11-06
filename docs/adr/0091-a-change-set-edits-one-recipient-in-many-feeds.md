@@ -60,7 +60,7 @@
 
 ### The Review And The Write
 
-21. The review of a change set lists each feed with its outcome. Each changed feed opens its diff. The diff of a feed with an earlier draft also shows the earlier edits.
+21. The review of a change set lists each feed with its outcome. Each changed feed opens its diff. The first changed feed starts open, so the page shows a diff before the first write ([findings of local use, finding 22](../reviews/2026-11-06-local-use-findings.md)). The diff of a feed with an earlier draft also shows the earlier edits.
 22. The review also lists each changed feed that Studio cannot write now, with the cause. For example, a read-only feed has no host ([ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md)), or the vault is locked.
 23. "Write" writes each feed that the user can write, one at a time, through `pipeline::write_draft` with the ID of the diff of that feed. The review shows the status of each feed during the write.
 24. When the write of one feed fails, Studio does not stop the write of the other feeds. A conflict of ADR 0007 item 3 stops only that feed. The draft of a feed that is not written stays, and the change set stays open.

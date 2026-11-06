@@ -179,3 +179,13 @@ The labels are now "Node address" and "LNURL address" ([ADR 0138](../adr/0138-th
 ### 20. A Wrong Nostr Key Has Only The Button Add
 
 Corrected ([ADR 0138](../adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md)). "More from your feeds" showed a Nostr key of a different account with a warning. Its only button was "Add", which is not a correction. The row now has "Correct the Feeds", which opens "Check your feeds", and "Add Anyway".
+
+### 21. The Selector Of The Default Address
+
+Open. The operator does not like the select menu "Default address" on the page of a person. The operator asks for inspiration from other products before a change. No design is selected.
+
+### 22. A Change Set Can Write With No Diff On The Page
+
+Corrected for the next candidate. "Correct 1 Feed" opened the review page with each feed row closed, and "Write 1 Feed" was in the toolbar. The user could thus write without a diff on the page. A check with test data showed that the write did not occur before the select of "Write". The review now opens the diff of the first changed feed. With many feeds, the other rows stay closed.
+
+The same test showed one line for each role in a row of "Check your feeds". The rows now give one line for all the roles. The page title now agrees with the row that opens it.

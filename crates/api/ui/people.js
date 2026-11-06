@@ -146,7 +146,9 @@ export function makePersonBody(state) {
 export function sheetFeeds(places, titles) {
   return (places || []).map((place) => {
     const lines = (place.pays || []).map((key) => `Pays ${addressText(key)}`);
-    for (const role of place.roles || []) lines.push(role === '' ? 'Credited' : `Credited as ${role}`);
+    const roles = (place.roles || []).filter((role) => role !== '');
+    if (roles.length > 0) lines.push(`Credited as ${roles.join(', ')}`);
+    else if ((place.roles || []).length > 0) lines.push('Credited');
     return { id: place.feed_id, title: titleOf(titles, place.feed_id), lines, checked: true };
   });
 }
@@ -950,7 +952,7 @@ export const checkKeys = (check) => [...new Set(((check && check.feeds) || [])
 
 // ---- The entries of the check (ADR 0120, task 084b) ----
 
-export const CHECK_TITLE = 'Check your releases';
+export const CHECK_TITLE = 'Check your feeds';
 
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -1168,7 +1170,8 @@ export const otherWalletCount = (check) => ((check && check.feeds) || [])
 
 export function correctOptions(person, fields, profiles = null, check = null) {
   const can = correctAvailable(person);
-  const who = profileName(fields.npub, profiles) || shortKey(fields.npub || '');
+  const profile = profileName(fields.npub, profiles);
+  const who = profile ? `the Nostr key of ${profile}` : `the Nostr key ${shortKey(fields.npub || '')}`;
   const role = trimmed(person.usual_role);
   const all = [
     ['key', 'Nostr key', [`Each credit of ${person.name} gets ${who}`, keyWarning(fields.npub, profiles, person.name)].filter(Boolean).join('. ')],

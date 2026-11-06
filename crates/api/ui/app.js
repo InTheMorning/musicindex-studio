@@ -7,7 +7,7 @@ import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
 import {
   recipientKey,
-  outcomeText, blockedText, operationLine, nameOf, writableIds, initialStatuses, refreshedStatuses, startWrite,
+  outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
   finishWrite, nextToWrite, retryStatuses, statusText, statusError, writeLabel, hasWrittenFeed,
 } from './recipients.js';
 import {
@@ -2718,6 +2718,7 @@ function ChangeSetPage({ id, go, onChanged }) {
       const loaded = await api(`/change-sets/${id}`);
       setSet(loaded);
       setStatuses(initialStatuses(loaded));
+      setOpenId(firstOpenId(loaded));
       setKnown(await api('/recipients'));
       if (loaded.person_id != null) {
         const person = await api(`/people/${loaded.person_id}`).catch(() => null);

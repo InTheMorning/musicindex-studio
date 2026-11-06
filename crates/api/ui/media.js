@@ -80,6 +80,13 @@ export const PLAYER_ERROR = 'Studio cannot play this file.';
 // slow start is not an error (human test of 0.1.0-rc.18).
 export const PLAYER_STARTING = 'Starting…';
 
+// The part of the position bar that is done, from 0 to 1. `styles.css` draws
+// the fill and the cursor from this one value, so that they agree.
+export function playerProgress(position, length) {
+  if (!Number.isFinite(length) || length <= 0 || !Number.isFinite(position)) return 0;
+  return Math.min(1, Math.max(0, position / length));
+}
+
 // True when `play()` stopped only because a later pause or load replaced it.
 // The audio can still start, so this is not an error.
 export function playWasReplaced(error) {

@@ -1805,7 +1805,45 @@ button.outline-feed {
 /* The audio player of a track (ADR 0062 item 26): a play button, a position
    bar and the time. The sizes and the colors are tokens. */
 .player { display: flex; align-items: center; gap: 8px 12px; min-width: 0; }
-.player-bar { flex: 1 1 120px; min-width: 0; min-height: var(--target); accent-color: var(--accent); }
+/* The bar draws its fill and its cursor from one value. The native bar of
+   WebKitGTK showed them at different positions. */
+.player-bar {
+  --thumb: 14px;
+  flex: 1 1 120px;
+  min-width: 0;
+  min-height: var(--target);
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.player-bar::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) calc(var(--progress, 0) * (100% - var(--thumb)) + var(--thumb) / 2), var(--fill) 0);
+}
+.player-bar::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) calc(var(--progress, 0) * (100% - var(--thumb)) + var(--thumb) / 2), var(--fill) 0);
+}
+.player-bar::-webkit-slider-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.player-bar::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+}
+.player-bar:disabled { opacity: .5; }
 .player-time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* A drop target (ADR 0125). During a file drag, each target has a light
    outline, and the target below the pointer has the strong state. */

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress, playWasReplaced } from '../ui/media.js';
+import { playerProgress, HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress, playWasReplaced } from '../ui/media.js';
 
 // ADR 0109 item 5 and the acceptance criteria: the source of an image and of
 // the player. Fix a failure in crates/api/ui/media.js, not in the test.
@@ -74,3 +74,10 @@ test('a play that a later load replaced is not an error', () => {
   assert.equal(playWasReplaced(null), false);
 });
 
+test('the position bar gives one value for its fill and its cursor', () => {
+  assert.equal(playerProgress(10, 200), 0.05);
+  assert.equal(playerProgress(0, NaN), 0);
+  assert.equal(playerProgress(10, 0), 0);
+  assert.equal(playerProgress(300, 200), 1);
+  assert.equal(playerProgress(-1, 200), 0);
+});

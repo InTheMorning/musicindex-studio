@@ -161,3 +161,11 @@ Corrected for the next candidate (musicindex ADR 0041 R-SCALE-4 item 6). The rin
 ### 17. Test Data From Production
 
 Open. A check of the tile dimension needs four real releases. The operator wants an easy way to bring the file host settings from production to a test collection. Finding 13 can cover this.
+
+### 18. The Player Gives No Feedback At The Start, And Its Cursor Is Offset
+
+Partly corrected for the next candidate. In the desktop app, a song took a long time to start, and the user saw no change during the wait. The fill of the position bar and its cursor were at different positions.
+
+The bar now draws both from one value, and a check in WebKitGTK showed that they agree. The button now shows the wait, and the page paints before playback starts. The sandbox has no sound device, so no check measured the wait, and the wait itself is not corrected.
+
+This run used the plain binary, not an AppImage. It uses the system GStreamer with all its plugins, so the shorter plugin list of ADR 0124 item 26 does not apply. The cause of the wait in this run is not measured.

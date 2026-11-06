@@ -36,7 +36,7 @@ import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
-import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, playWasReplaced } from './media.js';
+import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
@@ -358,6 +358,9 @@ function Enclosure({ id, path, enclosure, onChange, bad, pick, duration }) {
 // `pick.metadataDone` puts it in the track.
 const TICKET_RENEW_MS = 50 * 60 * 1000;
 
+// Wait until the browser has painted the current state.
+const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
 function AudioPlayer({ id, url, pick }) {
   const audio = useRef(null);
   // The address that the element holds, with the time of its ticket.
@@ -410,6 +413,9 @@ function AudioPlayer({ id, url, pick }) {
     if (!element.paused) { element.pause(); setStarting(false); return; }
     setError(null);
     setStarting(true);
+    // The start of playback can hold the page, so the state paints first. A
+    // touch browser needs the call of play() directly in the gesture.
+    if (!matchMedia('(pointer: coarse)').matches) await nextPaint();
     const fresh = held.current && held.current.url === url
       && (source.kind === 'direct' || Date.now() - held.current.at < TICKET_RENEW_MS);
     try {
@@ -444,8 +450,10 @@ function AudioPlayer({ id, url, pick }) {
     <div class="field-body">
       <div class="player">
         <button id=${`${id}-play`} class="button icon-button" type="button" disabled=${!usable}
-          aria-label=${playing ? 'Pause' : 'Play'} onClick=${toggle}>${playing ? '❚❚' : '▶'}</button>
+          aria-busy=${starting ? 'true' : undefined}
+          aria-label=${starting ? PLAYER_STARTING : playing ? 'Pause' : 'Play'} onClick=${toggle}>${starting ? '…' : playing ? '❚❚' : '▶'}</button>
         <input class="player-bar" type="range" min="0" max=${known ? length : 0} step="any" value=${position}
+          style=${{ '--progress': playerProgress(position, length) }}
           aria-label="Position" disabled=${!known}
           onInput=${(e) => { audio.current.currentTime = Number(e.currentTarget.value); setPosition(Number(e.currentTarget.value)); }} />
         <span class="player-time">${clockText(position)} / ${clockText(length)}</span>

@@ -1264,10 +1264,10 @@ select.position:focus { background: var(--fill); }
    to row: the checkbox, the name and address, the status. */
 .pick-row {
   display: grid;
-  grid-template-columns: var(--target) minmax(0, 1fr) 9.5rem;
+  grid-template-columns: var(--target) minmax(0, 1fr) auto;
   cursor: default;
 }
-.pick-row .summary { white-space: normal; }
+.pick-row .summary { white-space: nowrap; text-align: right; }
 .pick-row .title .person-art { display: inline-grid; vertical-align: middle; margin-right: 8px; }
 /* The footer of the picker: the list of the selections, when it is open,
    then the handle and the buttons. */
@@ -1277,12 +1277,7 @@ select.position:focus { background: var(--fill); }
 .pick-footer-row .button.primary { margin-left: auto; }
 .pick-arrow { font-size: var(--text-caption-2); }
 .pick-selected { max-height: calc(var(--window-height) * 0.4); overflow-y: auto; }
-.pick-anchor { display: block; scroll-margin-top: 8px; }
 /* The name of the feed or the track that the musicindex part shows. */
-.pick-head { position: relative; display: block; padding: 12px 16px 4px; font-size: var(--text-body); font-weight: 700; overflow-wrap: anywhere; }
-.pick-head .dot { display: inline-block; margin-right: 8px; vertical-align: middle; }
-.pick-head.sub { font-size: var(--text-footnote); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.pick-head .muted { color: var(--muted); font-weight: 400; }
 /* The track picker of a playlist (task 032c). The title takes the free
    width, and the button or the status keeps its own width. */
 .playlist-pick { cursor: default; }
@@ -1295,7 +1290,7 @@ select.position:focus { background: var(--fill); }
 /* At a narrow width, the status goes below the name. */
 @media (max-width: 760px) {
   .pick-row { grid-template-columns: var(--target) minmax(0, 1fr) auto; }
-  .pick-row .summary { grid-column: 2; grid-row: 2; }
+  .pick-row .summary { grid-column: 2; grid-row: 2; text-align: left; }
 }
 .pick-row .pick-box {
   display: inline-flex;

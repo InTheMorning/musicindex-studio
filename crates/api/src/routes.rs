@@ -5841,9 +5841,36 @@ pub(crate) async fn index_feed_recipients(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let routes = w.index.feed_routes(&guid)?;
-        to_json(routes.ok_or_else(|| index_not_found("feed", &guid))?)
+        routes_with_providers(w, &routes.ok_or_else(|| index_not_found("feed", &guid))?)
     })
     .await
+}
+
+/// Set the provider of each node route of a list of recipients (ADR 0145 item
+/// 9). The sheet shows it, and a copied recipient does not keep it.
+pub(crate) fn name_providers(routes: &mut Value, lookups: &HashMap<String, Lookup>) {
+    for route in routes.as_array_mut().into_iter().flatten() {
+        let provider = (route["recipient_type"] == "node")
+            .then(|| {
+                route["address"]
+                    .as_str()
+                    .and_then(|a| keysend::provider_of(a, lookups))
+            })
+            .flatten();
+        route["provider"] = json!(provider);
+    }
+}
+
+fn routes_with_providers(
+    w: &Workspace,
+    routes: &studio_core::musicindex::IndexRoutes,
+) -> ApiResult {
+    let mut body = json!(routes);
+    name_providers(
+        &mut body["recipients"],
+        &crate::people::lookups(&w.collection)?,
+    );
+    Ok(Json(body))
 }
 
 /// The title and the payment routes of one track in musicindex (ADR 0027
@@ -5854,7 +5881,7 @@ pub(crate) async fn index_track_recipients(
 ) -> ApiResult {
     blocking(shared, move |w| {
         let routes = w.index.track_routes(&guid, &track)?;
-        to_json(routes.ok_or_else(|| index_not_found("track", &track))?)
+        routes_with_providers(w, &routes.ok_or_else(|| index_not_found("track", &track))?)
     })
     .await
 }

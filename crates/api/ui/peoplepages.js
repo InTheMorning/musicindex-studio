@@ -527,14 +527,15 @@ export function useLookup(query, path) {
   const first = useRef(true);
   useEffect(() => {
     const text = query.trim();
+    const wait = first.current ? 0 : 300;
+    first.current = false;
     if (text === '') { setRows([]); setError(null); return undefined; }
     let live = true;
     const load = () => api(`${path}?q=${encodeURIComponent(text)}`).then(
-      (result) => { if (live) { setRows(result.rows || []); setError(null); } },
+      (result) => { if (live) { setRows(Array.isArray(result) ? result : result.rows || []); setError(null); } },
       (e) => { if (live) { setRows([]); setError(e); } },
     );
-    const timer = setTimeout(load, first.current ? 0 : 300);
-    first.current = false;
+    const timer = setTimeout(load, wait);
     return () => { live = false; clearTimeout(timer); };
   }, [query]);
   return { rows, error };

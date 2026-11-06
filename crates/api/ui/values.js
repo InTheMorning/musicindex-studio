@@ -4,9 +4,9 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
 import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
-import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine } from './people.js';
-import { PickerLayout, PickFillRow, FindOneSheet } from './pickers.js';
-import { PersonArt } from './peoplepages.js';
+import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine, memberText, addRecipientsLabel, trackHeading, FIND_WAIT } from './people.js';
+import { PickerLayout, PickFillRow, FindOneSheet, PickFold } from './pickers.js';
+import { PersonArt, useLookup } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
 const percentText = (p) => (p === null ? '—' : `${p.toFixed(p < 1 && p > 0 ? 2 : 1)} %`);
@@ -292,41 +292,48 @@ function SaveRecipientButton({ recipient }) {
 // recipient, even with a different name.
 const identityOf = recipientIdentity;
 
-// One row of a part of the picker: a checkbox, the name, the address and a
-// status word. The checkbox sits in its own label of one target size
-// (musicindex ADR 0041 R-SCALE-4). `lead` is a picture before the name.
-export function PickRow({ name, address, line, status, checked, taken, onToggle, lead }) {
-  const label = taken ? 'Already in this list' : status;
+// One row of the sheet "Copy from a Feed": a check box, the name, the line of
+// the address and the share in the source. A row that the list has already
+// has no check box (ADR 0145 item 10).
+function PickRow({ name, line, share, note, checked, taken, onToggle }) {
   return html`<div class="link-row pick-row">
-    <label class="pick-box"><input type="checkbox" checked=${checked || taken} disabled=${taken}
-      aria-label=${name} onChange=${onToggle} /></label>
-    <span class="text"><span class="title">${lead || ''}${name}</span>${line
-      ? html`<span class="sub">${line}</span>`
-      : html`<span class="sub mono">${address}</span>`}</span>
-    <span class="summary">${label || ''}</span>
+    ${taken ? html`<span class="pick-box"></span>` : html`<label class="pick-box"><input type="checkbox" checked=${checked}
+      aria-label=${name} onChange=${onToggle} /></label>`}
+    <span class="text"><span class="title">${name}</span><span class="sub">${line}</span>
+      ${taken && html`<span class="sub">Already in this list</span>`}
+      ${note && html`<span class="sub">${note}</span>`}</span>
+    ${share && html`<span class="summary">${share}</span>`}
   </div>`;
 }
 
+// The rows of the recipients of one feed or track, with the share of each in
+// that source (ADR 0145 item 11).
+function copyRows(recipients, taken, selected, toggle, from) {
+  const percent = percentages(recipients);
+  return recipients.map((r, i) => {
+    const key = identityOf(r);
+    return html`<${PickRow} key=${key} name=${r.name || r.address || 'Recipient'} line=${memberText(r)}
+      share=${`${percentText(percent[i])}${isFee(r) ? ' fee' : ''}`}
+      checked=${selected.has(key)} taken=${taken.has(key)} onToggle=${() => toggle(r, from)} />`;
+  });
+}
+
+const COPY_NOTE = 'A percent is the share in this source. A new recipient gets no split, and you give it in the editor.';
+
 // The sheet that copies many recipients of a feed on musicindex (ADR 0027
-// items 5 to 7, ADR 0030, ADR 0144 item 2).
+// items 5 to 7, ADR 0030, ADR 0145 items 9 to 13).
 function PickerSheet({ open, recipients, onAdd, onClose }) {
   const ref = useSheet(open);
   const taken = new Set(recipients.map(identityOf));
 
   // ---- From musicindex ----
   const [query, setQuery] = useState('');
-  const [hits, setHits] = useState(null);
+  const { rows: hits, error: searchError } = useLookup(query, '/search');
   const [view, setView] = useState('hits'); // 'hits', 'feed' or 'track'
   const [feedData, setFeedData] = useState(null);
   const [trackData, setTrackData] = useState(null);
   const [indexSelected, setIndexSelected] = useState(new Map());
-  const search = useAction();
   const indexLoad = useAction();
-  const runSearch = (event) => {
-    event.preventDefault();
-    if (!query.trim()) return;
-    search.run(async () => setHits(await api(`/search?q=${encodeURIComponent(query.trim())}`)));
-  };
   const openFeed = (guid) => indexLoad.run(async () => {
     const data = await api(`/musicindex/feeds/${encodeURIComponent(guid)}/recipients`);
     setFeedData({ guid, ...data });
@@ -343,13 +350,12 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
   });
   const backToHits = () => { setFeedData(null); setView('hits'); setMoved((n) => n + 1); };
   const backToFeed = () => { setTrackData(null); setView('feed'); setMoved((n) => n + 1); };
-  // After each move between the hits, a feed and a track, the sheet
-  // scrolls to the top of the musicindex results. The user then sees the
-  // recipients of the page that opened.
+  // After each move between the hits, a feed and a track, the sheet scrolls to
+  // its top. The user then sees the page that opened.
   const [moved, setMoved] = useState(0);
-  const resultsRef = useRef(null);
+  const bodyRef = useRef(null);
   useEffect(() => {
-    if (moved > 0 && resultsRef.current) resultsRef.current.scrollIntoView({ block: 'start' });
+    if (moved > 0 && bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [moved]);
   // The list of the selections opens from a handle in the footer, so that
   // it does not move the parts of the sheet.
@@ -373,7 +379,6 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     setShowSelected(false);
     setMoved(0);
     setQuery('');
-    setHits(null);
     setView('hits');
     setFeedData(null);
     setTrackData(null);
@@ -389,7 +394,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     const combined = new Map();
     // An imported recipient keeps its fee mark but gets no split. The user
     // gives each new recipient its split (ADR 0030).
-    for (const [key, entry] of indexSelected) combined.set(key, { ...entry.recipient, split: '' });
+    for (const [key, { recipient: { provider, ...recipient } }] of indexSelected) combined.set(key, { ...recipient, split: '' });
     onAdd(withCids(fresh([...combined.values()])));
   };
 
@@ -398,75 +403,60 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
       <h2 id="picker-title">Copy from a Feed on musicindex</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
-    <div class="body">
-      <section class="page-section">
-        <h2>From musicindex</h2>
-        <form class="form" onSubmit=${runSearch} role="search">
-          <div class="field">
-            <label for="picker-search">Search musicindex</label>
-            <div class="inline">
-              <input id="picker-search" type="search" value=${query} placeholder="Artist or feed name"
-                onInput=${(e) => setQuery(e.target.value)} />
-              <button class="button" type="submit" disabled=${search.busy || !query.trim()}>
-                ${search.busy ? 'Searching…' : 'Search'}</button>
-            </div>
-          </div>
-        </form>
-        <span class="pick-anchor" ref=${resultsRef}></span>
-        <${ErrorNotice} error=${search.error} />
-        <${ErrorNotice} error=${indexLoad.error} />
-        ${view === 'hits' && hits && hits.length === 0 && html`<p class="hint">musicindex found no feed with that name.</p>`}
-        ${view === 'hits' && hits && hits.length > 0 && html`<div class="group">
-          ${hits.map((h) => html`<button class="link-row" type="button" key=${h.feed_guid} disabled=${indexLoad.busy}
-            onClick=${() => openFeed(h.feed_guid)}>
-            <span class="dot feed"></span><span class="title">${h.title || h.feed_guid}</span>
-            <span class="go" aria-hidden="true">›</span>
-          </button>`)}
-        </div>`}
-        ${view === 'feed' && feedData && html`<div class="group">
+    <div class="body" ref=${bodyRef}>
+      <section class="page-section pinned-form"><div class="group rows">
+        <${Field} id="picker-search" label="Name" type="search" value=${query} placeholder="Artist or feed name"
+          onInput=${(e) => { setQuery(e.target.value); if (view !== 'hits') { setView('hits'); setMoved((n) => n + 1); } }} />
+      </div></section>
+      <${ErrorNotice} error=${searchError} />
+      <${ErrorNotice} error=${indexLoad.error} />
+      ${view === 'hits' && query.trim() !== '' && hits === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
+      ${view === 'hits' && query.trim() !== '' && hits && hits.length === 0 && !searchError && html`<p class="hint">musicindex found no feed with that name.</p>`}
+      ${view === 'hits' && hits && hits.length > 0 && html`<div class="group">
+        ${hits.map((h) => html`<button class="link-row" type="button" key=${h.feed_guid} disabled=${indexLoad.busy}
+          onClick=${() => openFeed(h.feed_guid)}>
+          <${PersonArt} person=${{ img: h.image_url, name: h.title || '' }} />
+          <span class="text"><span class="label">${h.title || h.feed_guid}</span>
+            <span class="summary"><span class="dot feed" aria-hidden="true"></span>${h.artist ? `Feed · ${h.artist}` : 'Feed'}</span></span>
+          <span class="go" aria-hidden="true">›</span>
+        </button>`)}
+      </div>`}
+      ${view === 'feed' && feedData && html`<div class="group">
           <button class="link-row" type="button" onClick=${backToHits}>
             <span class="go" aria-hidden="true">‹</span><span class="title">Search results</span></button>
-          <h3 class="pick-head"><span class="dot feed"></span>${feedName}</h3>
-          ${feedData.recipients.map((r) => {
-            const key = identityOf(r);
-            return html`<${PickRow} key=${`f-${key}`} name=${r.name || r.address || 'Recipient'} address=${r.address}
-              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r, feedName)} />`;
-          })}
-          ${feedData.tracks.length > 0 && html`<h3 class="pick-head sub">Tracks</h3>`}
-          ${feedData.tracks.map((t) => html`<button class="link-row" type="button" key=${t.track_guid} disabled=${indexLoad.busy}
-            onClick=${() => openTrack(t.track_guid)}>
-            <span class="title">${t.title}</span><span class="go" aria-hidden="true">›</span>
-          </button>`)}
-        </div>`}
-        ${view === 'track' && trackData && html`<div class="group">
+        </div>
+        <${PickFold} title="Tracks" rows=${feedData.tracks.map((t) => html`<button class="link-row" type="button" key=${t.track_guid} disabled=${indexLoad.busy}
+          onClick=${() => openTrack(t.track_guid)}>
+          <span class="title">${t.title}</span><span class="go" aria-hidden="true">›</span>
+        </button>`)} />
+        <section class="page-section"><h2>${feedName}</h2>
+          ${feedData.recipients.length === 0 && html`<p class="hint">This feed has no recipients.</p>`}
+          ${feedData.recipients.length > 0 && html`<div class="group">${copyRows(feedData.recipients, taken, indexSelected, toggleIndex, feedName)}</div>`}
+          <p class="hint">${COPY_NOTE}</p></section>`}
+      ${view === 'track' && trackData && html`<div class="group">
           <button class="link-row" type="button" onClick=${backToFeed}>
             <span class="go" aria-hidden="true">‹</span><span class="title">${feedName}</span></button>
-          <h3 class="pick-head">${trackName}${trackName !== feedName && html`<span class="muted"> · ${feedName}</span>`}</h3>
+        </div>
+        <section class="page-section"><h2>${trackHeading(trackName, feedName)}</h2>
           ${trackData.recipients.length === 0 && html`<p class="hint">This track has no recipients.</p>`}
-          ${trackData.recipients.map((r) => {
-            const key = identityOf(r);
-            return html`<${PickRow} key=${`t-${key}`} name=${r.name || r.address || 'Recipient'} address=${r.address}
-              status=${null} checked=${indexSelected.has(key)} taken=${taken.has(key)} onToggle=${() => toggleIndex(r, trackPlace)} />`;
-          })}
-        </div>`}
-      </section>
-      <p class="hint">A new recipient gets no split. You give the splits in the editor.</p>
+          ${trackData.recipients.length > 0 && html`<div class="group">${copyRows(trackData.recipients, taken, indexSelected, toggleIndex, trackPlace)}</div>`}
+          <p class="hint">${COPY_NOTE}</p></section>`}
     </div>
     <footer class="pick-footer">
       ${showSelected && selectedRows.length > 0 && html`<div class="group pick-selected" id="picker-selected">
         ${selectedRows.map((row) => html`<${PickRow} key=${`s-${row.key}`}
-          name=${row.recipient.name || row.recipient.address || 'Recipient'} address=${row.recipient.address}
-          status=${row.from} checked=${true} taken=${false} onToggle=${row.clear} />`)}
+          name=${row.recipient.name || row.recipient.address || 'Recipient'} line=${memberText(row.recipient)}
+          note=${row.from} checked=${true} taken=${false} onToggle=${row.clear} />`)}
       </div>`}
       <div class="pick-footer-row">
-        <button class="button" type="button" disabled=${total === 0}
-          aria-expanded=${showSelected && total > 0 ? 'true' : 'false'} aria-controls="picker-selected"
+        ${total > 0 && html`<button class="button" type="button"
+          aria-expanded=${showSelected ? 'true' : 'false'} aria-controls="picker-selected"
           onClick=${() => setShowSelected(!showSelected)}>
-          ${total} Selected <span class="pick-arrow" aria-hidden="true">${showSelected && total > 0 ? '▼' : '▲'}</span></button>
+          ${total} Selected <span class="pick-arrow" aria-hidden="true">${showSelected ? '▼' : '▲'}</span></button>`}
         <span class="spacer"></span>
         <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${total === 0} onClick=${add}>
-          Add ${total} Recipient${total === 1 ? '' : 's'}</button>
+          ${addRecipientsLabel(total)}</button>
       </div>
     </footer>
   </dialog>`;

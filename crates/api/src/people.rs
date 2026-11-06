@@ -46,7 +46,7 @@ fn person_error(error: CollectionError) -> ApiError {
 }
 
 /// The stored keysend lookups, by lowercase address.
-fn lookups(collection: &Collection) -> Result<HashMap<String, Lookup>, ApiError> {
+pub(crate) fn lookups(collection: &Collection) -> Result<HashMap<String, Lookup>, ApiError> {
     Ok(collection
         .keysend_lookups()?
         .into_iter()
@@ -610,7 +610,10 @@ pub(crate) async fn publisher_values(
     State(shared): State<Shared>,
     Path(guid): Path<String>,
 ) -> ApiResult {
-    let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
+    let (index, known) = blocking(shared, move |w| {
+        Ok((w.index.clone(), lookups(&w.collection)?))
+    })
+    .await?;
     blocking_unlocked(move || {
         let values = index.publisher_values(&guid)?.ok_or_else(|| {
             ApiError::new(
@@ -619,7 +622,9 @@ pub(crate) async fn publisher_values(
                 format!("musicindex has no feed {guid}"),
             )
         })?;
-        Ok(Json(json!(values)))
+        let mut body = json!(values);
+        crate::routes::name_providers(&mut body["routes"], &known);
+        Ok(Json(body))
     })
     .await
 }

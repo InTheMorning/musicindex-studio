@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-11-06
 - Owner: operator
-- Accepted: 2026-11-06 by the operator, through the questionnaire and from the mockup in `.studio-dev/mockup-pickers/`. The operator selected one selection that fills the form, a row with a heading after the form, lists that fold, and all four sheets.
+- Accepted: 2026-11-06 by the operator, through the questionnaire and from the mockup in `.studio-dev/mockup-pickers/`. The operator selected one selection that fills the form, a row with a heading after the form, lists that fold, and all four sheets. The operator accepted items 9 to 13 from a list of proposed changes, and asked for the share on each row and for the name of a large node.
 - Technical choices: the limit of 6 rows in item 2 and the two routes of item 3 are choices of the planning model.
 - Changes: [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md) item 2, the position of the row of musicindex. [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 20 and 21, "Pick From Your People". [ADR 0137](0137-the-people-list-fills-nostr-keys-and-open-entries.md) items 4 to 9, "Fill from a Person".
 - Uses: [ADR 0123](0123-one-type-of-value-has-one-picker.md) and [ADR 0141](0141-the-form-of-add-a-wallet-comes-first.md) item 1, the form stays in view. [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) for the search of artist and label feeds. [ADR 0098](0098-the-people-module.md), a value from a person is a start value.
@@ -26,6 +26,14 @@ The API of musicindex has few values for these sheets. `../musicindex/api.json` 
 7. A selection of a row of a list fills the form. It adds nothing and does not close the sheet. At 760 px or less, the sheet scrolls to the form.
 8. The credits and the support links have one row each: "Add a credit" and "Add a support link". An open credit has no "Fill from a Person".
 
+### The Sheet "Copy From A Feed"
+
+9. A row names a known shared node with its provider, for example "fountain.fm node", and it gives the account. The core gives the provider from the table and the lookups of ADR 0095. The name is not in the feed.
+10. A row that the list has already shows the text "Already in this list" and has no check box.
+11. A row shows the share of the recipient in its source, for information. A new recipient still gets no split (ADR 0030).
+12. A row shows a short address, on one line. The search runs during the typing, and its field stays in view. A result row shows its picture, its type word and its artist.
+13. The tracks of a feed are a list that folds, above the recipients. The footer shows the number of selections only when it is more than 0.
+
 ## Alternatives Considered
 
 - Only "Add a Recipient" and "Add a Wallet". Not chosen by the operator.
@@ -40,6 +48,6 @@ The API of musicindex has few values for these sheets. `../musicindex/api.json` 
 
 ## How This Decision Is Checked
 
-Mechanical: `crates/api/ui-tests/people.test.mjs` examines the start of a fold and the values that each sheet takes from a feed. `crates/api/src/tests.rs` examines the two routes.
+Mechanical: `crates/api/ui-tests/people.test.mjs` examines the start of a fold and the values that each sheet takes from a feed. `crates/api/src/tests.rs` examines the two routes and the provider of a route.
 
 Visual: the planning model drives each sheet against a local musicindex stub at 1280 px. It also drives "Add a Credit" at 390 px with touch, with `$edges()`, `$fieldText()` and `$overflow()`.

@@ -6622,6 +6622,31 @@ async fn the_playlist_tracks_route_gives_the_tracks_of_the_collection() {
 }
 
 #[tokio::test]
+async fn a_route_of_musicindex_names_the_provider_of_a_shared_node() {
+    let server = web_feeds();
+    server.set(
+        "/v1/feeds/b-1",
+        200,
+        br#"{"data":{"title":"Album B","payment_routes":[
+            {"recipient_name":"Ann","route_type":"node","address":"03b6f613e88bd874177c28c6ad83b3baba43c4c656f56be1f8df84669556054b79","split":90,"custom_key":"112111100","custom_value":"abc","fee":false},
+            {"recipient_name":"Bob","route_type":"node","address":"02aa","split":10,"fee":false}]}}"#
+            .to_vec(),
+    );
+    let app = app_with_index(&server.url(""));
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/feeds/b-1/recipients", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["recipients"][0]["provider"], "fountain.fm",
+        "ADR 0145 item 9"
+    );
+    assert_eq!(body["recipients"][0]["custom_value"], "abc");
+    assert!(
+        body["recipients"][1]["provider"].is_null(),
+        "ADR 0145 item 9"
+    );
+}
+
+#[tokio::test]
 async fn the_publisher_routes_need_no_person() {
     let server = web_feeds();
     server.set(

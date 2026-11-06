@@ -1498,3 +1498,15 @@ test('addPickLabel uses title case and the plural', () => {
   assert.equal(addPickLabel(1, 'Person', 'People'), 'Add 1 Person');
   assert.equal(addPickLabel(2, 'Person', 'People'), 'Add 2 People');
 });
+
+test('a row of the copy sheet names a shared node and its account, and the footer has no zero', async () => {
+  const { memberText, addRecipientsLabel, trackHeading } = await import('../ui/people.js');
+  const WHY = 'ADR 0145 items 9, 12 and 13';
+  assert.equal(memberText({ address: '03b6f6', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'abc' }), 'fountain.fm node · account abc', WHY);
+  assert.equal(memberText({ address: 'a'.repeat(66), recipient_type: 'node', provider: null, custom_value: '5' }), `Node address ${'a'.repeat(8)}…aaaa · account 5`, WHY);
+  assert.equal(addRecipientsLabel(0), 'Add Recipients', WHY);
+  assert.equal(addRecipientsLabel(1), 'Add 1 Recipient', WHY);
+  assert.equal(addRecipientsLabel(2), 'Add 2 Recipients', WHY);
+  assert.equal(trackHeading('Song', 'Song'), 'Recipients of this track', WHY);
+  assert.equal(trackHeading('Song', 'Album'), 'Recipients of Song', WHY);
+});

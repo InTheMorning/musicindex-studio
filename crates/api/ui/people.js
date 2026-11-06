@@ -1470,12 +1470,15 @@ export function creditChoices(values) {
 export const fundingChoices = (values) => (isEmpty(values.website) ? [] : [{ id: 'website', values: { url: values.website } }]);
 
 export const recipientChoices = (values) => (values.routes || []).filter((r) => !isEmpty(r.address)).map((r) => {
-  const line = memberLine(r, false);
-  return {
-    id: `${r.address} ${r.custom_key ?? ''} ${r.custom_value ?? ''}`, title: r.name || r.address,
-    line: [line.label, line.address, line.account && `account ${line.account}`].filter(Boolean).join(' '), values: r,
-  };
+  return { id: `${r.address} ${r.custom_key ?? ''} ${r.custom_value ?? ''}`, title: r.name || r.address, line: memberText(r), values: r };
 });
+
+// The footer button of the sheet "Copy from a Feed" (ADR 0145 item 13).
+export const addRecipientsLabel = (n) => (n === 0 ? 'Add Recipients' : addPickLabel(n, 'Recipient', 'Recipients'));
+
+// The heading of the recipients of a track. A single has one track with the
+// title of its feed, and the back row already names that title.
+export const trackHeading = (track, feed) => (track === feed ? 'Recipients of this track' : `Recipients of ${track}`);
 
 
 // The rows that match the filter text, by name and line. A display filter.

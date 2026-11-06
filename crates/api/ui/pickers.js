@@ -8,7 +8,7 @@ import { LookupRow, useLookup } from './peoplepages.js';
 import { foldStartsOpen, lookupGroups, FIND_EMPTY, FIND_WAIT, FIND_ONE_HINT } from './people.js';
 
 // A list of a sheet. A long list starts closed, with its count.
-function PickFold({ title, rows, onClick }) {
+export function PickFold({ title, rows, onClick }) {
   return html`<details class="disclosure pick-fold" open=${foldStartsOpen(rows.length)} onClick=${onClick}>
     <summary><span class="pick-fold-title">${title}</span><span class="pick-fold-count">${rows.length}</span></summary>
     <div class="group">${rows}</div>

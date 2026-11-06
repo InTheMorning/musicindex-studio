@@ -33,7 +33,7 @@ The form has these fields:
 | Custom key | Only for a node that many people share. This field shows only for the type **Node Address**. |
 | Account | The account on that node. This field shows only for the type **Node Address**. |
 
-To copy many recipients of a different feed, select **Copy from a Feed** below the form. Search for the feed, open it or one of its tracks and select the recipients. Then select **Add N Recipients**.
+To copy many recipients of a different feed, select **Copy from a Feed** below the form. Type the name of the feed, open it or one of its tracks and select the recipients. Each row shows the share in that feed, and the new recipient gets no split. Then select **Add N Recipients**.
 
 ## An open recipient
 

@@ -217,3 +217,7 @@ Corrected ([ADR 0144](../adr/0144-recipients-use-one-picker-and-sort-by-split.md
 ### 29. The Sheets That Add A Value Are Different
 
 Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md)). "Add a Recipient" had a search of musicindex, and "Add a Wallet" did not. The operator asked that the sheets are the same, and selected one layout for four sheets from a mockup. Long lists now fold.
+
+### 30. The Sheet "Copy From A Feed" Is Hard To Read
+
+Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md) items 9 to 13). A row showed a full key on many lines and no account, so wallets on one shared node looked like duplicates. A row that the list had showed a checked box when the footer showed 0 selections. The tracks were below the recipients, and the search needed a button.

@@ -47,22 +47,25 @@
   --grain-opacity: .22;
   --brand-filter: none;
   --bar-h: 56px;
-  /* musicindex ADR 0029 R-SCALE-3: the web scale of the Desktop profile. */
-  --target: 32px;
-  --target-min: 24px;
-  /* musicindex ADR 0029 R-SCALE-1 and R-SCALE-2: the text styles of the web scale.
+  /* musicindex ADR 0041 R-SCALE-4 and ADR 0024 R-TARGET-1: the macOS targets. */
+  --target: 28px;
+  --target-min: 20px;
+  /* A group row, and the line height of the body text of R-TYPE-1. */
+  --row: calc(var(--target) + 16px);
+  --leading: 1.23;
+  /* musicindex ADR 0041 R-SCALE-4 and ADR 0024 R-TYPE-1: the macOS text styles.
      With Touch, the block below gives the iOS sizes of ADR 0024 R-TYPE-1. */
-  --text-large-title: 34px;
-  --text-title-1: 28px;
-  --text-title-2: 22px;
-  --text-title-3: 18px;
-  --text-headline: 15px;
-  --text-body: 15px;
-  --text-callout: 14px;
-  --text-subheadline: 13px;
-  --text-footnote: 12px;
-  --text-caption-1: 12px;
-  --text-caption-2: 11px;
+  --text-large-title: 26px;
+  --text-title-1: 22px;
+  --text-title-2: 17px;
+  --text-title-3: 15px;
+  --text-headline: 13px;
+  --text-body: 13px;
+  --text-callout: 12px;
+  --text-subheadline: 11px;
+  --text-footnote: 10px;
+  --text-caption-1: 10px;
+  --text-caption-2: 10px;
   /* The type dot and the ring of the hollow dot (musicindex ADR 0032
      R-DOT-1). The values are the values of assets/tokens.json. */
   --dot-size: 8px;
@@ -97,10 +100,10 @@
 
 /* musicindex ADR 0024 R-PROFILE-1 and R-TARGET-1: a coarse pointer selects Touch. */
 @media (pointer: coarse) {
-  :root { --target: 44px; --target-min: 28px; }
+  :root { --target: 44px; --target-min: 28px; --row: 52px; --leading: 1.45; }
 }
 
-/* musicindex ADR 0029 R-SCALE-1 item 3: with Touch, the iOS text sizes of ADR 0024 R-TYPE-1. */
+/* musicindex ADR 0041 R-SCALE-4 item 2: with Touch, the iOS text sizes of ADR 0024 R-TYPE-1. */
 @media (pointer: coarse) {
   :root { --text-large-title: 34px; --text-title-1: 28px; --text-title-2: 22px; --text-title-3: 20px; --text-headline: 17px; --text-body: 17px; --text-callout: 16px; --text-subheadline: 15px; --text-footnote: 13px; --text-caption-1: 12px; --text-caption-2: 11px; }
 }
@@ -223,7 +226,7 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Figtree", system-ui, sans-serif;
   font-size: var(--text-body);
-  line-height: 1.45;
+  line-height: var(--leading);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -313,6 +316,7 @@ code, .mono {
   color: var(--text);
   font: inherit;
 }
+.field textarea { padding-block: calc((var(--target) - 1lh) / 2); }
 /* The buttons "Now" and "Clear" of a date and time field (ADR 0093). They
    wrap below the input when the body has no room. */
 .datetime-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
@@ -1017,7 +1021,7 @@ select option { background: var(--level-3); color: var(--text); }
   grid-template-columns: auto minmax(0, 13rem) 64px 6.5rem minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  min-height: 52px;
+  min-height: var(--row);
   padding: 10px 16px;
   cursor: pointer;
   list-style: none;
@@ -1101,7 +1105,7 @@ select option { background: var(--level-3); color: var(--text); }
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 52px;
+  min-height: var(--row);
   padding: 10px 16px;
   cursor: pointer;
   list-style: none;
@@ -1177,12 +1181,12 @@ select option { background: var(--level-3); color: var(--text); }
 }
 .group > .disclosure > .form > :where(:not(.entry-row, .link-row)) { padding: 10px 16px; }
 .group > .disclosure > .form > .check { padding: 0 16px; }
-.group > .field, .group > .disclosure > .form > .field { min-height: 52px; }
+.group > .field, .group > .disclosure > .form > .field { min-height: var(--row); }
 /* At more than 760 px, a field in a group puts its label at the left, in a
    column of 170 px (task 014c step 8). */
 @media (min-width: 761px) {
   .group > .field, .group > .disclosure > .form > .field { display: grid; grid-template-columns: 170px 1fr; align-items: start; gap: 4px 16px; }
-  .group > .field > label, .group > .disclosure > .form > .field > label { padding-top: 12px; }
+  .group > .field > label, .group > .disclosure > .form > .field > label { padding-top: calc((var(--target) - 1lh) / 2); }
 }
 
 /* A row of a group that goes to a page, or opens a disclosure. */
@@ -1191,7 +1195,7 @@ select option { background: var(--level-3); color: var(--text); }
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 52px;
+  min-height: var(--row);
   padding: 10px 16px;
   border: 0;
   background: none;
@@ -1236,7 +1240,7 @@ select.position:focus { background: var(--fill); }
 .link-row .num { flex: none; width: 2ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .link-row .dur { color: var(--muted); font-variant-numeric: tabular-nums; font-size: var(--text-callout); }
 .link-row.add { color: var(--accent); font-weight: 600; }
-.disclosure > summary.link-row { min-height: 52px; }
+.disclosure > summary.link-row { min-height: var(--row); }
 
 /* The recipient picker (task 013c, ADR 0027). A row is a .link-row in a
    .group; the sheet already puts a .group on level 3 (below). The checkbox
@@ -1671,7 +1675,7 @@ button.outline-feed {
    ADR 0033 item 8). */
 .import-files { list-style: none; margin: 0; padding: 0; }
 .import-file {
-  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 0;
+  display: flex; align-items: center; gap: 12px; min-height: var(--row); padding: 6px 0;
   border-top: 1px solid var(--sep);
 }
 /* The format badge. The import sheet uses it in a file row (above), and
@@ -1689,7 +1693,7 @@ button.outline-feed {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 52px;
+  min-height: var(--row);
   padding: 10px 16px;
 }
 .alt-enclosure .title { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1698,7 +1702,7 @@ button.outline-feed {
 /* A host operation of the diff sheet: its kind, its host, its path and
    its size (task 021g, ADR 0036 item 14). A blocked deletion uses the
    error color on its own row only, not an entity color (ADR 0018). */
-.host-op-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 16px; flex-wrap: wrap; }
+.host-op-row { display: flex; align-items: center; gap: 12px; min-height: var(--row); padding: 10px 16px; flex-wrap: wrap; }
 .host-op-row .kind { flex: none; width: 5.5rem; font-weight: 600; }
 .host-op-row .text { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .host-op-row .title { font-weight: 600; }

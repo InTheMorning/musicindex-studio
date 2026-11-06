@@ -48,7 +48,7 @@ The page behind the outline head has the settings that a user changes often, and
 
 ### 5. Studio Uses The Sizes Of macOS And iOS
 
-Decided by the operator on 2026-11-06, with no record yet and no code change. With touch, Studio already has the iOS sizes. With a mouse, Studio uses the web scale of musicindex ADR 0029. It must change to the macOS table of musicindex ADR 0024 R-TYPE-1 and R-TARGET-1.
+Corrected for the next candidate (musicindex ADR 0041 R-SCALE-4). The operator selected this table after a compare of screenshots. With touch, Studio already has the iOS sizes. With a mouse, Studio uses the web scale of musicindex ADR 0029. It must change to the macOS table of musicindex ADR 0024 R-TYPE-1 and R-TARGET-1.
 
 | Value, with a mouse | Now (`type.web`) | New (`type.desktop`) |
 |---|---|---|
@@ -60,13 +60,10 @@ Decided by the operator on 2026-11-06, with no record yet and no code change. Wi
 | Target, default | 32 | 28 |
 | Target, minimum | 24 | 20 |
 
-The change applies to each mouse profile, also to a browser on a server, because the UI has no code for one shell (ADR 0124). Three items must change together:
+The change applies to each mouse profile, also to a browser on a server, because the UI has no code for one shell (ADR 0124). musicindex.org keeps the web scale, so Studio and that site have different sizes with a mouse. v4vmm uses the macOS table, as musicindex ADR 0029 records.
 
-- A record in `../musicindex` supersedes ADR 0029 R-SCALE-1 item 1 for Studio, because R-SCALE-1 names Studio in its desktop shell. musicindex.org keeps the web scale, so Studio and that site then have different sizes with a mouse. v4vmm already uses the macOS table.
-- `crates/api/ui/styles.css` gets the new tokens, and `crates/api/ui-tests/text-styles.test.mjs` compares them with `type.desktop`.
-- AGENTS.md changes its statement of the sizes, and a visual check examines each page, because each row and each field becomes smaller.
-
-The operator confirmed this scope: the desktop app and the web app are a little too large, and the website stays as it is. "A little" can be less than the change in the table. The operator also gave a screenshot of the Apple Music web app. Its sidebar rows are 40 px apart in that image, and its text does not look like 13 px. The zoom of that image is not known, so these are not measured values. Before a commit, screenshots of Studio at the current scale and at the macOS table must go to the operator.
+The operator confirmed this scope: the desktop app and the web app are a little too large, and the website stays as it is. "A little" can be less than the change in the table. The operator also gave a screenshot of the Apple Music web app. Its sidebar rows are 40 px apart in that image, and its text does not look like 13 px. The zoom of that image is not known, so these are not measured values. 
+The change also gave a group row the height of the target plus 16 px, and the body text the line height of the table. It corrected the place of a field label and the inner space of a field with several lines.
 
 ### 6. The Tray Icon And The Close Of The Window
 

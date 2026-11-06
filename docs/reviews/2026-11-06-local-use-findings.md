@@ -225,3 +225,7 @@ Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md
 ### 31. Two Searches Of musicindex Gave Different Results
 
 Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md) item 3). "Find on musicindex" searched only artist and label feeds, and "Copy from a Feed" searched only the other feeds. So one text found a feed in one sheet and nothing in the other. All these sheets now use one search.
+
+### 32. The Credit Name And Nostr Sheets Have No Search Of musicindex
+
+Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md) items 14 and 15). The operator asked for the reused search in the credit picker and the Nostr picker. "Add a Credit" had it already. "Add a Credit Name", "Add a Support Link" of a person and "Find a Nostr profile" now have it. The search of musicindex is limited now, and Studio adopts the engine of Stophammer and v4vmm later.

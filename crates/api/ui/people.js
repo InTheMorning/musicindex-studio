@@ -1472,6 +1472,10 @@ export function creditChoices(values, hit = null) {
   return Object.keys(start).length === 0 ? [] : [{ id: 'feed', values: start }];
 }
 
+// The Nostr key of a feed. It comes with the name and the picture that the sheet
+// "Find a Nostr profile" can use (ADR 0145 item 15).
+export const nostrChoices = (values) => (isEmpty(values.npub) ? [] : [{ id: 'key', values: { npub: values.npub, name: values.title ?? null, picture: values.image_url ?? null } }]);
+
 export const fundingChoices = (values) => (isEmpty(values.website) ? [] : [{ id: 'website', values: { url: values.website } }]);
 
 export const recipientChoices = (values) => (values.routes || []).filter((r) => !isEmpty(r.address)).map((r) => {

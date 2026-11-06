@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-11-06
 - Owner: operator
-- Accepted: 2026-11-06 by the operator, through the questionnaire and from the mockup in `.studio-dev/mockup-pickers/`. The operator selected one selection that fills the form, a row with a heading after the form, lists that fold, and all four sheets. The operator accepted items 9 to 13 from a list of proposed changes, and asked for the share on each row and for the name of a large node. The operator selected one search in all sheets, from a recommendation.
+- Accepted: 2026-11-06 by the operator, through the questionnaire and from the mockup in `.studio-dev/mockup-pickers/`. The operator selected one selection that fills the form, a row with a heading after the form, lists that fold, and all four sheets. The operator accepted items 9 to 13 from a list of proposed changes, and asked for the share on each row and for the name of a large node. The operator selected one search in all sheets, from a recommendation. The operator asked for the row in the credit picker and the Nostr picker.
 - Technical choices: the limit of 6 rows in item 2 and the two routes of item 3 are choices of the planning model.
 - Changes: [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md) item 2, the position of the row of musicindex. [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 20 and 21, "Pick From Your People". [ADR 0137](0137-the-people-list-fills-nostr-keys-and-open-entries.md) items 4 to 9, "Fill from a Person".
 - Uses: [ADR 0123](0123-one-type-of-value-has-one-picker.md) and [ADR 0141](0141-the-form-of-add-a-wallet-comes-first.md) item 1, the form stays in view. [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) for the search of artist and label feeds. [ADR 0098](0098-the-people-module.md), a value from a person is a start value.
@@ -25,6 +25,11 @@ The API of musicindex has few values for these sheets. `../musicindex/api.json` 
 6. In "Add a Recipient", the row is "Copy from a Feed", which selects many recipients and adds many rows. In "Change the Address", it is "Find on musicindex".
 7. A selection of a row of a list fills the form. It adds nothing and does not close the sheet. At 760 px or less, the sheet scrolls to the form.
 8. The credits and the support links have one row each: "Add a credit" and "Add a support link". An open credit has no "Fill from a Person".
+
+### The Other Sheets
+
+14. On the page of a person, "Add a Credit Name" and "Add a Support Link" have this layout too.
+15. The sheet "Find a Nostr profile" keeps its own search, and it has the row "Find on musicindex" under the same heading. A selection uses the Nostr key of the feed, and a feed with no key gives a text. Its list "Your people" folds.
 
 ### The Sheet "Copy From A Feed"
 

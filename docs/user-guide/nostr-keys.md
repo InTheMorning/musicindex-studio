@@ -17,6 +17,8 @@ Studio writes a key only when you select a result or type the key.
 3. To find a different key, type an `npub` key, a NIP-05 address or a name in the field. Then select **Search**.
 4. Select a result. Studio sets the key and closes the sheet.
 
+To use the key of a feed, select **Find on musicindex**, then select the feed. Few feeds have a key. If the feed has none, the sheet tells you.
+
 On the page of a person, the sheet does not show **Your people**.
 
 On a server where you signed in with a Nostr key, the button **Use My Key** sets that key.

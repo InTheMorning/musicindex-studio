@@ -7,9 +7,9 @@ import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady } from './review.js';
 import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
-import { PickerLayout, PickFillRow, FindOneSheet } from './pickers.js';
+import { PickerLayout, PickFillRow, FindOneSheet, PickFold } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
-import { creditPickRows, supportPickRows, creditChoices, fundingChoices, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
+import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrChoices, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
@@ -667,6 +667,7 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
   const [card, setCard] = useState(null);
   const [useName, setUseName] = useState(false);
   const [usePicture, setUsePicture] = useState(false);
+  const [finding, setFinding] = useState(false);
   const search = useAction();
   const suffix = feedId ? `&feed=${feedId}` : '';
   useEffect(() => {
@@ -729,11 +730,14 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
           <label class="check"><input type="checkbox" checked=${usePicture} onChange=${(e) => setUsePicture(e.target.checked)} />
             <span>Use the profile picture</span></label>
         </div>`}
-        ${peopleRows.length > 0 && html`<section class="page-section"><h2>Your people</h2><div class="group rows">
-          ${peopleRows.map((r) => html`<button class="link-row" type="button" key=${r.id} onClick=${() => choose(r.npub, { name: r.name, picture: r.person.img })}>
+        <section class="page-section"><h2>From musicindex</h2>
+          <div class="group"><button class="link-row" type="button" onClick=${() => setFinding(true)}>
+            <span class="text"><span class="label">Find on musicindex</span>
+              <span class="summary">Use the Nostr key of a feed. Few feeds have one.</span></span>
+            <span class="go" aria-hidden="true">›</span></button></div></section>
+        ${peopleRows.length > 0 && html`<${PickFold} title="Your people" rows=${peopleRows.map((r) => html`<button class="link-row" type="button" key=${r.id} onClick=${() => choose(r.npub, { name: r.name, picture: r.person.img })}>
             <${PersonArt} person=${r.person} /><span class="text"><span class="title">${r.name}</span>
-              <span class="summary mono">${shortKey(r.npub)}</span></span></button>`)}
-        </div></section>`}
+              <span class="summary mono">${shortKey(r.npub)}</span></span></button>`)} />`}
         ${found && found.failed.length > 0 && html`<p class="hint" role="status">${found.failed.map((f) => FAILED_TEXT[f] || 'A source did not answer.').join(' ')}</p>`}
         ${found && found.profiles.length === 0 && html`<p class="empty">Studio found no profile.</p>`}
         ${found && found.profiles.length > 0 && html`<section class="page-section"><h2>Search results</h2><div class="group rows">
@@ -745,6 +749,8 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
     <footer>
       <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
     </footer>
+    <${FindOneSheet} open=${finding} start=${query} choices=${nostrChoices} empty="This feed has no Nostr key."
+      onPick=${(found) => choose(found.npub, found)} onClose=${() => setFinding(false)} />
   </dialog>`;
 }
 

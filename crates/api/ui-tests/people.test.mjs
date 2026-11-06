@@ -1489,6 +1489,9 @@ test('a long list of a sheet starts closed, and each sheet takes the values of a
   assert.deepEqual(creditChoices({ ...feed, title: 'One Song' }, { artist: 'The Wolf' })[0].values, { name: 'The Wolf', img: 'https://i.example/a.jpg' }, 'ADR 0145 item 5: a feed title is not a name');
   assert.deepEqual(fundingChoices(feed)[0].values, { url: 'https://a.example' }, WHY);
   assert.deepEqual(fundingChoices({ website: null }), [], WHY);
+  const { nostrChoices } = await import('../ui/people.js');
+  assert.deepEqual(nostrChoices(feed), [], WHY);
+  assert.deepEqual(nostrChoices({ ...feed, npub: 'npub1a' })[0].values, { npub: 'npub1a', name: 'Anna', picture: 'https://i.example/a.jpg' }, WHY);
   const routes = recipientChoices(feed);
   assert.equal(routes.length, 1, WHY);
   assert.equal(routes[0].line, 'LNURL address a@b.example', WHY);

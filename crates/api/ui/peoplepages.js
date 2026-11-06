@@ -30,7 +30,7 @@ import {
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
-  recipientChoices, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
+  recipientChoices, creditChoices, fundingChoices, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
 } from './people.js';
 
@@ -336,6 +336,13 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
     ${suggestions('href')}`;
 }
 
+// The row of musicindex of each link form (ADR 0145 items 3 and 14).
+const LINK_FINDS = {
+  wallets: { choices: recipientChoices, empty: 'This feed has no payment address.', summary: 'Fill the form from a feed.' },
+  'credit-names': { choices: creditChoices, empty: 'musicindex has no values of this feed.', summary: 'Fill the form from a feed.' },
+  'support-links': { choices: fundingChoices, empty: 'This feed has no website.', summary: 'Fill the address from the website of a feed.' },
+};
+
 // The sheet that adds a link to a person (ADR 0099 item 4).
 function LinkSheet({ kind, personId, edit = null, onClose, onAdded }) {
   const ref = useSheet(kind !== null);
@@ -347,6 +354,7 @@ function LinkSheet({ kind, personId, edit = null, onClose, onAdded }) {
 
 function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
   const form = LINK_FORMS[kind];
+  const find = LINK_FINDS[kind];
   const [values, setValues] = useState(() => (edit ? edit.start : linkStart(kind)));
   // The payees with no person of the sheet "Add a Wallet" (ADR 0141). `null`
   // while the list loads.
@@ -385,16 +393,11 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       <h2 id="link-title">${edit ? 'Edit a Wallet' : form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
-    ${kind === 'wallets'
-    ? html`<${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
-        musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }}
-        lists=${[{ title: 'Payees with no person', rows: payees }]} />
-      <${FindOneSheet} open=${finding} choices=${recipientChoices} empty="This feed has no payment address."
-        onPick=${(route) => setValues((current) => ({ ...current, ...walletValues(route) }))} onClose=${() => setFinding(false)} />`
-    : html`<form class="body" id="link-form" onSubmit=${add}>
-        <section class="page-section">${fields}</section>
-        <${ErrorNotice} error=${error} />
-      </form>`}
+    <${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
+      musicindex=${{ title: 'Find on musicindex', summary: find.summary, onOpen: () => setFinding(true) }}
+      lists=${[{ title: 'Payees with no person', rows: payees }]} />
+    <${FindOneSheet} open=${finding} start=${values.name} choices=${find.choices} empty=${find.empty}
+      onPick=${(found) => setValues((current) => ({ ...current, ...(kind === 'wallets' ? walletValues(found) : found) }))} onClose=${() => setFinding(false)} />
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}
     <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${edit ? (busy ? 'Saving…' : 'Save the Wallet') : (busy ? 'Adding…' : form.button)}</button></footer>`;

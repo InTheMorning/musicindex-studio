@@ -414,8 +414,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Task 014 visual check, 2026-10-22](reviews/2026-10-22-task-014-visual-check.md)
 - [Human test findings of 0.1.0-rc.17](reviews/2026-11-05-rc17-human-test-findings.md)
 - [Human test findings of 0.1.0-rc.18](reviews/2026-11-05-rc18-human-test-findings.md)
-
 - [Findings of local use on 2026-11-06](reviews/2026-11-06-local-use-findings.md)
+
 ## Runbooks
 
 - [studio-server](runbooks/studio-server.md)

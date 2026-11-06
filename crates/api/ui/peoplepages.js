@@ -17,7 +17,7 @@ import {
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
-  creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
+  defaultFirst, walletValues, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
@@ -80,7 +80,7 @@ function CreditRow({ row, removeLabel, onRemove }) {
           ${a.sub.map((line) => html`<span class=${line.startsWith('npub') ? 'attribute-sub mono key-text' : 'attribute-sub'} key=${line}>${line}</span>`)}
           ${a.id === 'nostr' && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}</dd></div>`)}</dl>
       ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</div>
-    <div class="actions more-actions"><button class="button" type="button" aria-label=${removeLabel} onClick=${onRemove}>Remove</button></div></div>`;
+    <div class="actions more-actions"><button class="button destructive" type="button" aria-label=${removeLabel} onClick=${onRemove}>Remove</button></div></div>`;
 }
 
 // A Nostr key with its profile, a copy button and an optional action.
@@ -94,13 +94,13 @@ function KeyRowView({ npub, profiles, name, action, note }) {
 // One row of a list: a button with the lines of its model. A line is text, or
 // `{ text, error }`. An error line shows in the error color, with the warning
 // icon.
-function ListRow({ title, lines, count, lead, onClick, disabled = false }) {
+function ListRow({ title, lines, count, lead, onClick, disabled = false, chevron = true }) {
   const line = (l, i) => (typeof l === 'string'
     ? html`<span class="summary" key=${i}>${l}</span>`
     : html`<span class=${l.error ? 'summary check-error' : 'summary'} key=${i}>${l.error && html`<${Icon} name="alert" />`}${l.text}</span>`);
   return html`<button class="link-row" type="button" disabled=${disabled} onClick=${onClick}>${lead}
     <span class="text"><span class="label">${title}</span>${lines.map(line)}</span>
-    ${count && html`<span class="count">${count}</span>`}<span class="go">›</span></button>`;
+    ${count && html`<span class="count">${count}</span>`}${chevron && html`<span class="go">›</span>`}</button>`;
 }
 
 // Download the file of `GET /people/export`. The route needs the access
@@ -347,8 +347,8 @@ function LinkSheet({ kind, personId, onClose, onAdded }) {
 function LinkForm({ kind, personId, onCancel, onAdded }) {
   const form = LINK_FORMS[kind];
   const [values, setValues] = useState(() => linkStart(kind));
-  // The sheet "Add a Wallet" lists the payees with no person first
-  // (ADR 0111 item 8). `null` while the list loads.
+  // The payees with no person of the sheet "Add a Wallet" (ADR 0141). `null`
+  // while the list loads.
   const [recipients, setRecipients] = useState(kind === 'wallets' ? null : []);
   const { busy, error, run } = useAction();
   useEffect(() => {
@@ -367,10 +367,6 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
       onAdded();
     });
   };
-  const addPayee = (body) => run(async () => {
-    await api(`/people/${personId}/wallets`, { method: 'POST', body });
-    onAdded();
-  });
   const sections = kind === 'wallets' ? addWalletSections(recipients || []) : [{ id: 'different', title: '', rows: [] }];
   const fields = html`<div class="group rows">${linkFields(kind, values).map((f) => (f.select
     ? html`<${ChoiceSelect} key=${f.id} id=${`link-${f.id}`} label=${f.label} value=${values[f.id]} options=${f.select}
@@ -387,8 +383,8 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
       ${sections.map((section) => (section.id === 'payees'
     ? html`<section class="page-section" key=${section.id}><h2>${section.title}</h2><div class="group">${section.rows.map((row) =>
       html`<${ListRow} key=${JSON.stringify(row.body)} title=${row.title} lines=${row.lines} count=${row.count}
-        onClick=${() => addPayee(row.body)} />`)}</div></section>`
-    : html`<section class="page-section" key=${section.id}>${section.title && html`<h2>${section.title}</h2>`}${fields}</section>`))}
+        chevron=${false} onClick=${() => setValues((current) => ({ ...current, ...walletValues(row.body) }))} />`)}</div></section>`
+    : html`<section class=${kind === 'wallets' ? 'page-section pinned-form' : 'page-section'} key=${section.id}>${section.title && html`<h2>${section.title}</h2>`}${fields}</section>`))}
       <${ErrorNotice} error=${error} />
     </form>
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
@@ -757,7 +753,7 @@ export function PersonPage({ id, feeds, go }) {
   const profile = profileLine(person, titles, feeds);
   const check = checkRow(person);
   const remove = (kind, linkId) => withLeave(() => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' })));
-  const removeButton = (kind, linkId, label) => html`<button class="button" type="button" aria-label=${label}
+  const removeButton = (kind, linkId, label) => html`<button class="button destructive" type="button" aria-label=${label}
     onClick=${() => remove(kind, linkId)}>Remove</button>`;
   const open = (kind) => withLeave(() => setSheet(kind));
   // The delete changes no feed (ADR 0102). Then the People page opens.
@@ -790,7 +786,7 @@ export function PersonPage({ id, feeds, go }) {
     payment: () => html`<section class="page-section"><h2>Payment</h2>
       ${groups.length > 0 && html`<p class="hint">${DEFAULT_HINT}</p>`}
       ${groups.length === 0 && html`<p class="empty">No wallet yet. Add a wallet to give this person a payment address.</p>`}
-      ${groups.map((g) => html`<div class="group" key=${g.id}>${g.members.map((m) => {
+      ${defaultFirst(groups, shown.default_address).map((g) => html`<div class="group" key=${g.id}>${g.members.map((m) => {
         const isDefault = isDefaultAddress(m.key, shown.default_address);
         return html`<${AddressRow} key=${JSON.stringify(m.key)} member=${m.member} count=${usedText(m.count)}
           pending=${isDefault && isPending(saved, shown, 'default_address')}
@@ -798,7 +794,7 @@ export function PersonPage({ id, feeds, go }) {
           mark=${!isDefault && html`<button class="button" type="button" aria-label=${`Make Default: ${m.member.address}`}
             onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`} />`;
       })}
-        <div class="actions"><button class="button" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
+        <div class="actions"><button class="button destructive" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>
         <span class="text"><span class="label">Wallet</span><span class="summary mono address-text">${w.key.address}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
       ${suggestions.map((s) => html`<div class="group" key=${s.address}><${AddressRow} member=${{ address: s.address, recipient_type: 'lnaddress' }}
@@ -842,7 +838,7 @@ export function PersonPage({ id, feeds, go }) {
         ? html`<div class="link-row static"><span class="text"><span class="summary">${LINK_EMPTY}</span></span></div>`
         : rows.map((row) => html`<div class="link-row static" key=${row.id}><span class=${`dot ${row.dot}`} aria-hidden="true"></span>
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
-          <button class="button" type="button" aria-label=${`Remove the link to ${row.title}`}
+          <button class="button destructive" type="button" aria-label=${`Remove the link to ${row.title}`}
             onClick=${() => update({ members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
       <div class="group rows"><${ChoiceSelect} id="person-link-add" label="Add an artist or label" value="" placeholder="Select…"
         options=${linkChoices(feeds, shown.members)} onChange=${(value) => { if (value) update({ members: [...shown.members, value] }); }} /></div></section>`;

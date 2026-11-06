@@ -898,15 +898,16 @@ test('the sheet Add to a Person of a payee starts on a new person with the name 
   assert.equal(walletToPersonReady({ ...start, personId: '4', name: '' }), true);
 });
 
-test('the sheet Add a Wallet lists the payees with no person first', () => {
+test('the sheet Add a Wallet has its form first, then the payees with no person', () => {
   const recipients = [
     { address: 'saved@x.example', recipient_type: 'lnaddress', saved_id: 5, feeds: 1 },
     { address: 'duh@x.example', name: 'DuhLaurien', recipient_type: 'lnaddress', saved_id: null, feeds: 1 },
   ];
   const sections = addWalletSections(recipients);
-  assert.deepEqual(sections.map((s) => s.id), ['payees', 'different']);
-  assert.deepEqual(sections[0].rows.map((r) => r.title), ['DuhLaurien']);
-  assert.deepEqual(sections[0].rows[0].body, { address: 'duh@x.example', custom_key: null, custom_value: null, recipient_type: 'lnaddress' });
+  assert.deepEqual(sections.map((s) => s.id), ['different', 'payees']);
+  assert.equal(sections[0].title, '');
+  assert.deepEqual(sections[1].rows.map((r) => r.title), ['DuhLaurien']);
+  assert.deepEqual(sections[1].rows[0].body, { address: 'duh@x.example', custom_key: null, custom_value: null, recipient_type: 'lnaddress' });
   assert.deepEqual(addWalletSections([]).map((s) => s.id), ['different']);
   assert.equal(walletBodyOf({ address: 'a', addresses: [{ address: '02ab', recipient_type: 'node' }, { address: 'a@x.example', recipient_type: 'lnaddress' }] }).address, 'a@x.example');
 });
@@ -1457,4 +1458,22 @@ test('a credit name row gives one labeled attribute for each value and joins its
   assert.equal(creditFoldSummary({ name: 'Ann Lee', credit_names: [{ id: 1, name: 'A. Lee' }] }).title, 'Credited as A. Lee');
   assert.equal(roleText(['composer', 'guitarist'], ''), 'composer, guitarist');
   assert.equal(roleText(['composer'], 'Drummer'), 'composer');
+});
+
+test('a payee fills the form of Add a Wallet', async () => {
+  const { walletValues, linkReady } = await import('../ui/people.js');
+  assert.deepEqual(walletValues({ address: 'a@b.example', custom_key: null, custom_value: null, recipient_type: '' }),
+    { recipient_type: 'lnaddress', address: 'a@b.example', custom_key: '', custom_value: '' });
+  const node = walletValues({ address: '03a', custom_key: '696969', custom_value: '2', recipient_type: 'node' });
+  assert.deepEqual(node, { recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' });
+  assert.equal(linkReady('wallets', node), true);
+});
+
+test('the default address and its wallet are first', async () => {
+  const { defaultFirst, keyValue } = await import('../ui/people.js');
+  const member = (address) => ({ key: { address } });
+  const groups = [{ id: 1, members: [member('a'), member('b')] }, { id: 2, members: [member('c'), member('d')] }];
+  const order = (value) => defaultFirst(groups, value).map((g) => [g.id, g.members.map((m) => m.key.address)]);
+  assert.deepEqual(order(keyValue({ address: 'd' })), [[2, ['d', 'c']], [1, ['a', 'b']]]);
+  assert.deepEqual(order(''), [[1, ['a', 'b']], [2, ['c', 'd']]]);
 });

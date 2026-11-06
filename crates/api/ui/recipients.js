@@ -514,13 +514,13 @@ export function walletBodyOf(entry) {
   };
 }
 
-// The sections of the sheet "Add a Wallet" of a person. The payees with no
-// person come first, each as a row that adds its wallet. The form for a
-// different address follows.
+// The sections of the sheet "Add a Wallet" of a person (ADR 0141). The form
+// comes first and has no title. Each payee with no person is a row that fills
+// the form.
 export function addWalletSections(recipients) {
   const payees = payeesWithNoPerson(recipients).map((entry) => ({ ...recipientRow(entry), recipient: entry, body: walletBodyOf(entry) }));
   return [
+    { id: 'different', title: '', rows: [] },
     ...(payees.length > 0 ? [{ id: 'payees', title: 'Payees with no person', rows: payees }] : []),
-    { id: 'different', title: 'A different address', rows: [] },
   ];
 }

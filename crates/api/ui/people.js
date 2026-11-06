@@ -467,6 +467,13 @@ export const addressOptions = (groups) => groups.flatMap((g) => g.members.map((m
 // The default address of a person shows on its own row (ADR 0139). `value` is
 // the value of `keyValue`, or an empty text with no default.
 export const isDefaultAddress = (key, value) => keyValue(key) === value;
+// The wallets and the addresses with the default address first (ADR 0139 item 7).
+export function defaultFirst(groups, value) {
+  const rank = (m) => (isDefaultAddress(m.key, value) ? 0 : 1);
+  return groups
+    .map((g) => ({ ...g, members: [...g.members].sort((x, y) => rank(x) - rank(y)) }))
+    .sort((x, y) => rank(x.members[0]) - rank(y.members[0]));
+}
 export const DEFAULT_HINT = '"Pick from your people" adds the default address of this person.';
 
 // The roles of a credit name, with the usual role of the person first and in
@@ -694,6 +701,13 @@ export function linkBody(kind, values) {
   if (LINK_FORMS[kind].nostrKey) body.npub = String(values.npub ?? '').trim() || null;
   return body;
 }
+
+// The values of the form "Add a Wallet" from a payee row (ADR 0141 item 2). The
+// type follows the address when the payee gives none.
+export const walletValues = (body) => ({
+  recipient_type: body.recipient_type || (String(body.address ?? '').includes('@') ? 'lnaddress' : 'node'),
+  address: body.address ?? '', custom_key: body.custom_key ?? '', custom_value: body.custom_value ?? '',
+});
 
 export const linkReady = (kind, values) => linkFields(kind, values).every((f) => !f.required || String(values[f.id] ?? '').trim() !== '');
 

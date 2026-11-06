@@ -1994,6 +1994,9 @@ button.outline-feed {
 .key-line .text, .key-row .text { min-width: 0; }
 .key-line .summary, .key-row .summary { white-space: normal; }
 .more-actions { flex: none; }
+/* The form of "Add a Wallet" stays in view above the list of payees (ADR 0141 item 1). */
+.pinned-form { position: sticky; top: -16px; z-index: 1; margin-top: -16px; padding: 16px 0 12px; background: var(--level-2); }
+@media (max-width: 760px) { .pinned-form { position: static; margin-top: 0; padding: 0; } }
 .credit-fold > .hint { margin: 0; padding: 4px 16px 8px; }
 /* A row of the fold "Credited as": an icon, a label and a value for each kind of value (ADR 0140). */
 .credit-row { align-items: flex-start; }

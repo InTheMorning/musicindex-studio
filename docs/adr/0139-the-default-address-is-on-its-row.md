@@ -19,10 +19,11 @@ The page of a person had a select menu "Default address" above the rows of the s
 4. The button makes a pending change. "Save" keeps it and "Discard" removes it, as ADR 0116 gives. The row of a pending default has the pending mark.
 5. A text above the wallets tells that "Pick from your people" adds the default address.
 6. At 760 px or less, the button goes on a line below the address.
+7. The default address is always first in its wallet, and its wallet is first in the section. A selection of "Make Default" moves the row at once.
 
 ## Alternatives Considered
 
-- The default as the first row. Not chosen: the rows then change places after a selection.
+- A fixed sequence of the rows. Not chosen: on 2026-11-06 the operator asked for the default to be first, after seeing the rows with real data.
 - A menu of three dots on each row. Not chosen: the action needs one more click, and a user finds it less easily.
 - A shorter select menu. Not chosen: it still repeats the rows.
 

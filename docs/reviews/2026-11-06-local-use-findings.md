@@ -193,3 +193,7 @@ The same test showed one line for each role in a row of "Check your feeds". The 
 ### 23. A Credit Name Row Does Not Tell What It Does
 
 Corrected ([ADR 0140](../adr/0140-a-credit-name-shows-where-it-is-used.md)). A row "Credit name" showed the values of a match, with no words for what the match does, and the same Nostr key showed in a second row. The rows are now in a fold, and each row gives its feeds and roles.
+
+### 24. The Sheet Add a Wallet And The Remove Buttons
+
+Corrected ([ADR 0141](../adr/0141-the-form-of-add-a-wallet-comes-first.md)). The form was below a long list of payees, and a select of a payee added it at once and closed the sheet. The form is now first, and a payee fills it. The buttons that remove a link of a person did not have the destructive role of ADR 0037, and they have it now. The default address is now always first (ADR 0139 item 7).

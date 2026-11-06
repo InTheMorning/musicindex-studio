@@ -52,6 +52,10 @@
   --target-min: 20px;
   /* A group row, and the line height of the body text of R-TYPE-1. */
   --row: calc(var(--target) + 16px);
+  /* The window, in the units of the page. A zoom also scales dvh and vw (ADR 0134). */
+  --ui-zoom: 1;
+  --window-height: calc(100dvh / var(--ui-zoom));
+  --window-width: calc(100vw / var(--ui-zoom));
   --leading: 1.23;
   /* musicindex ADR 0041 R-SCALE-4 and ADR 0024 R-TYPE-1: the macOS text styles.
      With Touch, the block below gives the iOS sizes of ADR 0024 R-TYPE-1. */
@@ -418,7 +422,7 @@ textarea.masked { -webkit-text-security: disc; }
 
 .center {
   position: relative;
-  min-height: 100dvh;
+  min-height: var(--window-height);
   display: grid;
   place-items: center;
   padding: 32px 16px;
@@ -455,7 +459,7 @@ textarea.masked { -webkit-text-security: disc; }
   gap: 22px;
 }
 .card h1 {
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  font-size: clamp(1.8rem, calc(var(--window-width) * 0.04), 2.4rem);
   font-weight: 800;
   letter-spacing: -.03em;
   line-height: 1.05;
@@ -499,10 +503,18 @@ textarea.masked { -webkit-text-security: disc; }
 
 /* ---- Shell: sidebar and detail pane. ---- */
 
+@media not (pointer: coarse) {
+  /* ADR 0134: the UI scale, with the factors of v4vmm. */
+  :root[data-ui-scale="x-small"] { zoom: 0.85; --ui-zoom: 0.85; }
+  :root[data-ui-scale="small"] { zoom: 0.92; --ui-zoom: 0.92; }
+  :root[data-ui-scale="large"] { zoom: 1.12; --ui-zoom: 1.12; }
+  :root[data-ui-scale="x-large"] { zoom: 1.25; --ui-zoom: 1.25; }
+}
+
 .shell {
   display: grid;
-  grid-template-columns: clamp(280px, 24vw, 340px) 1fr;
-  height: 100dvh;
+  grid-template-columns: clamp(280px, calc(var(--window-width) * 0.24), 340px) 1fr;
+  height: var(--window-height);
 }
 .sidebar {
   display: flex;
@@ -707,8 +719,8 @@ dialog {
 dialog::backdrop { background: var(--scrim); }
 dialog.sheet[open] {
   margin: auto;
-  width: min(760px, calc(100vw - 32px));
-  max-height: calc(100dvh - 64px);
+  width: min(760px, calc(var(--window-width) - 32px));
+  max-height: calc(var(--window-height) - 64px);
   display: grid;
   grid-template-rows: auto 1fr auto;
   background: var(--level-2);
@@ -716,7 +728,7 @@ dialog.sheet[open] {
   box-shadow: 0 30px 80px var(--art-shadow);
   overflow: hidden;
 }
-dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
+dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); }
 .sheet header {
   display: flex;
   align-items: center;
@@ -755,8 +767,8 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   dialog.sheet[open],
   dialog.sheet.small[open] {
     margin: auto 0 0;
-    width: 100vw;
-    max-height: 92dvh;
+    width: var(--window-width);
+    max-height: calc(var(--window-height) * 0.92);
     border-radius: 18px 18px 0 0;
   }
 }
@@ -774,7 +786,7 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
 /* The cover of a feed that the editor does not open (ADR 0090 item 3). With
    no cover, it shows the logo shape in the color of the feed. */
 .hero .hero-cover {
-  width: clamp(120px, 16vw, 200px);
+  width: clamp(120px, calc(var(--window-width) * 0.16), 200px);
   aspect-ratio: 1;
   border-radius: 12px;
   overflow: hidden;
@@ -791,7 +803,7 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
   mask: var(--mark-mask) center / contain no-repeat;
 }
 .hero h1 {
-  font-size: clamp(2rem, 4.4vw, 4.5rem);
+  font-size: clamp(2rem, calc(var(--window-width) * 0.044), 4.5rem);
   font-weight: 800;
   letter-spacing: -.035em;
   line-height: 1.02;
@@ -829,7 +841,7 @@ dialog.sheet.small[open] { width: min(520px, calc(100vw - 32px)); }
      the color of the panel. The bar keeps its own color (ADR 0039 items 11
      and 11a). */
   .panel-page { min-height: 100%; background: var(--sidebar); }
-  .stack-page { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 24px; min-height: calc(100dvh - var(--bar-h)); }
+  .stack-page { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 24px; min-height: calc(var(--window-height) - var(--bar-h)); }
   .stack-page header { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; }
   .stack-page footer { margin-top: auto; display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--sep); }
   /* The bar of a feed has two rows at this width: the back control and the
@@ -943,7 +955,7 @@ textarea:focus { background: var(--fill); }
 
 /* A diff line has a sign and an edge. Color is not the only sign (ADR 0010). */
 .diff {
-  max-height: 60vh;
+  max-height: calc(var(--window-height) * 0.6);
   overflow: auto;
   padding: 12px 0;
   border: 1px solid var(--sep);
@@ -1261,7 +1273,7 @@ select.position:focus { background: var(--fill); }
 .pick-footer-row .spacer { flex: 1; }
 .pick-footer-row .button.primary { margin-left: auto; }
 .pick-arrow { font-size: var(--text-caption-2); }
-.pick-selected { max-height: 40vh; overflow-y: auto; }
+.pick-selected { max-height: calc(var(--window-height) * 0.4); overflow-y: auto; }
 .pick-anchor { display: block; scroll-margin-top: 8px; }
 /* The name of the feed or the track that the musicindex part shows. */
 .pick-head { position: relative; display: block; padding: 12px 16px 4px; font-size: var(--text-body); font-weight: 700; overflow-wrap: anywhere; }
@@ -1554,7 +1566,7 @@ button.outline-feed {
   mask: var(--mark-mask) center / contain no-repeat;
 }
 .releases-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.releases-list.tiles { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.releases-list.tiles { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .releases-tile { flex-direction: column; align-items: flex-start; gap: 8px; }
 .releases-tile .releases-cover { width: 100%; height: auto; aspect-ratio: 1; }
 .releases-tile .releases-cover .mark { width: 40%; height: auto; aspect-ratio: 132 / 117; }

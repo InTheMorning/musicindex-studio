@@ -67,6 +67,7 @@ const PAGES = {
     { id: 'delete', tier: 'limits' },
   ],
   'studio-settings': ({ server, holdAssets = true }) => [
+    { id: 'scale', tier: 'setup' },
     ...(server ? [{ id: 'account', tier: 'setup' }] : []),
     { id: 'apps', tier: 'setup' },
     { id: 'announcements', tier: 'setup' },

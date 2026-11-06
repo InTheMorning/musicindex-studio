@@ -147,3 +147,9 @@ The trace found these gaps:
 - The select of the feed XML host lists each connector, also a Blossom host, which cannot keep a feed XML. The result of that selection is not examined.
 
 This research used published documents. No person examined the signed-in screens of these products. The ADR must also examine the outline of a publisher feed and of a playlist.
+
+### 15. The Desktop App Has No Size Control, And The Tiles Are Small
+
+Corrected for the next candidate (ADR 0134). A browser can zoom a page, and the desktop app cannot. Settings now has the five UI scale levels of v4vmm, and a release tile has a minimum width of 200 px.
+
+The terminal also shows a warning that `libayatana-appindicator` is deprecated. The tray library of Tauri causes it, it does not show outside a terminal, and it stays.

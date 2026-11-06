@@ -128,6 +128,10 @@ Studio then shows "Studio found N changes in the library folder."
 Select **Show** to open the **Files** page of the first release. See [Manage the files of a release](release-files.md).
 A small mark on a release shows that its folder changed.
 
+## UI scale
+
+Select **Settings**, then find **UI scale**, to make Studio smaller or larger on this computer. With touch, Studio follows the size of your device.
+
 ## Light and dark theme
 
 Use the sun and moon button in the left panel to change the theme.

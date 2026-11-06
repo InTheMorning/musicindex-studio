@@ -1,6 +1,7 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { pageSequence } from './pages.js';
+import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
 import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
@@ -2609,6 +2610,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
 // shows on a server only.
 function SettingsPage() {
   const panels = {
+    scale: ScalePanel,
     account: AccountPanel,
     apps: ConnectedAppsPanel,
     announcements: AnnouncePanel,
@@ -4270,6 +4272,29 @@ function ExportSheet({ onClose }) {
     <div class="body">${body}<${ErrorNotice} error=${error} /></div>
     <footer>${footer}</footer>
   </dialog>`;
+}
+
+// The section "UI scale" of the Settings page (ADR 0134). With touch, the
+// system gives the size, so the section does not show.
+function ScalePanel() {
+  const [level, setLevel] = useState(() => normalizeScale(document.documentElement.dataset.uiScale));
+  if (matchMedia('(pointer: coarse)').matches) return null;
+  const change = (next) => {
+    document.documentElement.dataset.uiScale = next;
+    try { localStorage.setItem(SCALE_KEY, next); } catch (_) {}
+    setLevel(next);
+  };
+  return html`<article class="panel">
+    <h2>Appearance</h2>
+    <div class="field"><label for="ui-scale">UI scale</label>
+      <div class="field-body">
+        <span class="hint">The size of Studio on this computer.</span>
+        <select id="ui-scale" class="button" value=${level} onChange=${(e) => change(e.target.value)}>
+          ${UI_SCALES.map(([id, name]) => html`<option value=${id}>${name}</option>`)}
+        </select>
+      </div>
+    </div>
+  </article>`;
 }
 
 // The section "Move Studio" of the Settings page on the desktop (ADR 0107

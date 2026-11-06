@@ -182,6 +182,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/artwork.js"),
     ),
     (
+        "uiscale.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/uiscale.js"),
+    ),
+    (
         "pages.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/pages.js"),

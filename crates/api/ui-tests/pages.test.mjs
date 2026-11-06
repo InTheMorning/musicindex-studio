@@ -79,9 +79,9 @@ test('tierError gives a message that names ADR 0071 item 1 for an unknown tier',
 
 test('studio-settings has account only on a server', () => {
   const ids = (server) => pageSequence('studio-settings', { server }).map((s) => s.id);
-  assert.deepEqual(ids(true), ['account', 'apps', 'announcements', 'nostr', 'library']);
+  assert.deepEqual(ids(true), ['scale', 'account', 'apps', 'announcements', 'nostr', 'library']);
   // ADR 0107 item 3: the desktop has the section "Move Studio" in the tier setup.
-  assert.deepEqual(ids(false), ['apps', 'announcements', 'nostr', 'move', 'library']);
+  assert.deepEqual(ids(false), ['scale', 'apps', 'announcements', 'nostr', 'move', 'library']);
   const desktop = pageSequence('studio-settings', { server: false });
   assert.equal(desktop.find((s) => s.id === 'move').tier, 'setup');
   assert.equal(tierError('studio-settings', desktop), null);
@@ -89,7 +89,7 @@ test('studio-settings has account only on a server', () => {
 
 test('a server that holds no assets shows files on this server in the tier limits (ADR 0105 item 17)', () => {
   const sections = pageSequence('studio-settings', { server: true, holdAssets: false });
-  assert.deepEqual(sections.map((s) => s.id), ['account', 'apps', 'announcements', 'nostr', 'files']);
+  assert.deepEqual(sections.map((s) => s.id), ['scale', 'account', 'apps', 'announcements', 'nostr', 'files']);
   assert.equal(sections.at(-1).tier, 'limits');
   assert.equal(tierError('studio-settings', sections), null);
   const on = pageSequence('studio-settings', { server: true, holdAssets: true }).map((s) => s.id);

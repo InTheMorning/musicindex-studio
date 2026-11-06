@@ -135,6 +135,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0131: Delete a feed from its file host](adr/0131-delete-a-feed-from-its-file-host.md)
 - [ADR 0132: A person can be part of many artists and labels](adr/0132-a-person-can-be-part-of-many-artists-and-labels.md)
 - [ADR 0133: The share bar shows the divisions of a payment](adr/0133-the-share-bar-shows-the-divisions-of-a-payment.md)
+- [ADR 0134: A UI scale and larger release tiles](adr/0134-a-ui-scale-and-larger-release-tiles.md)
 
 ## Plans
 

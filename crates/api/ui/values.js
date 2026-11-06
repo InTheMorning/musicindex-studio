@@ -468,14 +468,6 @@ function Payments({ id, blocks, onChange }) {
     ${blocks.length > 1 && html`<p class="hint">This feed has ${blocks.length - 1} more payment block${blocks.length === 2 ? '' : 's'} here. Studio keeps ${blocks.length === 2 ? 'it' : 'them'} with no change.</p>`}`;
 }
 
-// The recipients of the album.
-// A short summary of the recipients of a block list. `editor.js` uses this
-// for the Recipients link row of the album page.
-export function recipientSummary(blocks) {
-  const count = blocks.length > 0 ? blocks[0].recipients.length : 0;
-  return `${count} recipient${count === 1 ? '' : 's'}`;
-}
-
 // The Value routes page of an album or a publisher feed: a section, not a
 // disclosure group (ADR 0029 item 9). `editor.js` puts this behind the Value
 // routes link row. A publisher feed has no tracks, so it shows no track hint

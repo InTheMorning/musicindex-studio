@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-28
+- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). Value Routes and Credits are tabs, not rows of the page.
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
 - Changes: [ADR 0041](0041-publisher-feeds-and-two-way-links.md) Non-Goals, for the value block.

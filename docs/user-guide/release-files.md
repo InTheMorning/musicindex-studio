@@ -1,6 +1,6 @@
 # Manage the files of a release
 
-Open a release. Select **Files** in the outline.
+Open a release. Select the tab **Files**.
 This page shows the files of the release and the file hosts that hold them.
 Use this page to keep copies on more than one file host.
 You can also move a release to a different file host.

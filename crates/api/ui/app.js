@@ -41,8 +41,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, navAtWidth,
-} from './shell.js';
+  isFeedView, openFeedView, navAtWidth, pageTabs } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -1954,7 +1953,26 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
 }
 
 // The names of the pages that are not the album page or a track.
-const PAGE_NAMES = { credits: 'Credits and links', settings: 'Feed settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
+const PAGE_NAMES = { lives: 'Live shows', credits: 'Credits', settings: 'Settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
+
+// The tabs of the page of a feed (ADR 0135). At a narrow width they are one
+// select menu, so that no tab starts outside the window.
+function PageTabs({ feed, view, go }) {
+  const narrow = useNarrow();
+  const tabs = pageTabs(feed, view);
+  if (tabs.length === 0) return null;
+  const open = (page) => go({ name: 'feed', id: feed.id, page, ...(view.from ? { from: view.from } : {}) });
+  if (narrow) {
+    return html`<select class="button page-tab-menu" aria-label="Page of this feed"
+      value=${tabs.find((tab) => tab.current)?.page} onChange=${(e) => open(e.target.value)}>
+      ${tabs.map((tab) => html`<option key=${tab.page} value=${tab.page}>${tab.label}</option>`)}
+    </select>`;
+  }
+  return html`<nav class="page-tabs" aria-label="Pages of this feed">
+    ${tabs.map((tab) => html`<button key=${tab.page} class="button" type="button"
+      aria-current=${tab.current ? 'page' : undefined} onClick=${() => open(tab.page)}>${tab.label}</button>`)}
+  </nav>`;
+}
 
 // The toolbar title: the feed title on the album page, or the feed title in
 // the muted color, then the name of the open page (review of task 014c,
@@ -2033,6 +2051,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       </div>`}
       <${AddressDifferences} feed=${feed} />
     </div>
+    <${PageTabs} feed=${feed} view=${view} go=${go} />
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
       connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
@@ -2938,7 +2957,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   return html`${releases && html`<button class="row" type="button" onClick=${up}><${Chevron} direction="back" />${releases.label}</button>`}
     <button class="outline-feed" type="button" aria-current=${currentAttr(feed)}
       aria-label=${changedFeeds.has(feed.id) ? `${feed.label}, changes in the library folder` : feed.label}
-      onClick=${() => { if (!feed.current) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
+      onClick=${() => { if (!feed.first) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
       <${ArtWithDot} dot=${feed.dot}><${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always /><//>
       <div class="text">
         <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"></span>`}</span>
@@ -2959,7 +2978,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
           return html`<li key=${item.id}><button class="node add" type="button" onClick=${open}>
             <span class="num">＋</span><span class="label">${item.label}</span></button></li>`;
         }
-        const open = () => go({
+        const open = () => go(item.target || {
           name: 'feed', id: feed.id, page: item.page,
           ...(item.track === undefined ? {} : { track: item.track }),
         });

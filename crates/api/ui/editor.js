@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady } from './review.js';
 import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
-import { AlbumPayments, TrackPayments, ShareStack, recipientSummary, PickRow } from './values.js';
+import { AlbumPayments, TrackPayments, PickRow } from './values.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
 import { creditPickRows, supportPickRows, addPickLabel, filterRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
@@ -2046,19 +2046,6 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
 
 // ---- The editor pages (ADR 0029 items 5 to 10) ----
 
-// The summary line of the credits: the people, the support links and the
-// license.
-function creditSummary(model) {
-  const people = model.persons.length;
-  const names = model.persons.slice(0, 3).map((p) => p.name).filter(Boolean).join(', ');
-  const links = model.fundings.length;
-  return [
-    people === 0 ? 'No people' : `${people} ${people === 1 ? 'person' : 'people'}: ${names}${people > 3 ? ', …' : ''}`,
-    `${links} support link${links === 1 ? '' : 's'}`,
-    model.license ? model.license.identifier || 'license' : 'No license',
-  ].join(' · ');
-}
-
 // The Feed facts row of the album page (task 014c step 5): the facts that
 // the former Facts section showed, and the Remove from collection button.
 function FeedFacts({ feed, onRemoved }) {
@@ -2278,28 +2265,6 @@ function ExplicitField({ id, model, update }) {
 // Does the channel lock say "yes"? This is a display value only.
 const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase() === 'yes';
 
-// The summary line of the page "Feed settings": the values that are set.
-function settingsSummary(model) {
-  const owner = model.owner && (model.owner.name || model.owner.email);
-  const parts = [
-    model.language && `Language ${model.language}`,
-    owner && 'Owner set',
-    model.keywords && 'Keywords set',
-    isLocked(model.locked) && 'Locked',
-    model.managing_editor && 'Editor set',
-    model.web_master && 'Webmaster set',
-  ].filter(Boolean);
-  return parts.length === 0 ? 'No settings' : parts.join(' · ');
-}
-
-// The row of a details section that opens the page "Feed settings".
-function SettingsRow({ model, onOpen }) {
-  return html`<button class="link-row" type="button" onClick=${onOpen}>
-      <span class="label">Feed settings</span><span class="summary">${settingsSummary(model)}</span>
-      <span class="go" aria-hidden="true">›</span>
-    </button>`;
-}
-
 // The page "Feed settings": the language, the owner, the keywords, the lock
 // and the two editor fields (ADR 0064 items 3 to 7, ADR 0068 item 8). An empty field gives `null`, so that
 // Studio writes no empty element. No field refuses a value that is not an
@@ -2410,23 +2375,6 @@ function ListingField({ id, feedId, draft, model }) {
     </details>`}`;
 }
 
-// The rows "Value routes" and "Credits and links" of the section Details.
-// The album page and the publisher page both show them (ADR 0075 item 2).
-// `openPage({ page })` opens the page of a row.
-function detailRows(rows, model, openPage) {
-  return showEach(rows, {
-    recipients: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'recipients' })}>
-      <span class="label">Value routes</span><span class="summary">${recipientSummary(model.values)}</span>
-      ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} focusable=${false} />`}
-      <span class="go" aria-hidden="true">›</span>
-    </button>`,
-    credits: () => html`<button class="link-row" type="button" onClick=${() => openPage({ page: 'credits' })}>
-      <span class="label">Credits and links</span><span class="summary">${creditSummary(model)}</span>
-      <span class="go" aria-hidden="true">›</span>
-    </button>`,
-  });
-}
-
 function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged, onArtwork }) {
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   // No wrapper: each section is a direct row of .page, with the gap of
@@ -2437,16 +2385,10 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
         <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} fields=${s.fields} />
       </div>
     </section>`,
-    details: (s) => html`<section class="page-section"><h2>Album details</h2>
-      <div class="group">
-        ${detailRows(s.rows, model, openPage)}
-      </div>
-    </section>`,
     publishers: () => html`<${ArtistsAndLabels} feed=${feed} feeds=${feeds} model=${model} update=${update} draft=${draft} go=${go} onListChanged=${onListChanged} />`,
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          settings: () => html`<${SettingsRow} model=${model} onOpen=${() => openPage({ page: 'settings' })} />`,
           facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
         })}
       </div>
@@ -2484,7 +2426,6 @@ function PlaylistPage({ feed, feeds, draft, model, update, bad, go, onRemoved, o
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          settings: () => html`<${SettingsRow} model=${model} onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} />`,
           facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
         })}
       </div>
@@ -3080,6 +3021,23 @@ function ContentLinks({ id, links, onChange }) {
 // The page of one live item. It edits the show, the stream, the content
 // links, the live value and the value routes. "Go live" and "End the show"
 // change the draft and open the review sheet (ADR 0054 items 3 and 5).
+// The tab "Live Shows" of an album (ADR 0135 item 5): one row for each show,
+// then the button that opens the sheet "Add a live show".
+function LiveShowsPage({ feed, model, go, onAdding }) {
+  const lives = model.live_items || [];
+  return html`<section class="page-section"><h2>Live shows</h2>
+    ${lives.length === 0
+      ? html`<p class="hint">No live show yet.</p>`
+      : html`<div class="group">${lives.map((live) => html`<button key=${live._cid} class="link-row" type="button"
+          onClick=${() => go({ name: 'feed', id: feed.id, page: 'live', track: liveKey(live) })}>
+          <span class="label">${live.item.title || 'Untitled show'}</span>
+          <span class="summary">${statusLabel(live.status)}</span>
+          <span class="go" aria-hidden="true">›</span>
+        </button>`)}</div>`}
+    <div class="actions"><button class="button action" type="button" onClick=${() => onAdding('live')}>＋ Add a Live Show</button></div>
+  </section>`;
+}
+
 function LivePage({ feed, model, update, bad, liveIndex, draft }) {
   const lives = model.live_items;
   const live = lives[liveIndex];
@@ -3394,11 +3352,6 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         <${PersonArt} person=${m} />
         <span class="text"><span class="label">${m.name}</span><span class="summary">${memberRowLine(m)}</span></span><span class="go">›</span></button>`)}</div>
     </section>`,
-    details: (s) => html`<section class="page-section"><h2>Details</h2>
-      <div class="group">
-        ${detailRows(s.rows, model, openPage)}
-      </div>
-    </section>`,
     role: () => html`<section class="page-section"><h2>Role</h2>
       <div class="group">
         <div class="field">
@@ -3462,7 +3415,6 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          settings: () => html`<${SettingsRow} model=${model} onOpen=${() => go({ name: 'feed', id: feed.id, page: 'settings' })} />`,
           facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
         })}
       </div>
@@ -4077,6 +4029,8 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${TrackPage} key=${model.items[trackIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} onArtwork=${onArtwork} />`;
   } else if (page === 'live' && liveIndex !== -1 && !publisher && !playlist) {
     body = html`<${LivePage} key=${model.live_items[liveIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
+  } else if (page === 'lives' && !publisher && !playlist) {
+    body = html`<${LiveShowsPage} feed=${feed} model=${model} go=${go} onAdding=${onAdding} />`;
   } else if (page === 'credits') {
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {

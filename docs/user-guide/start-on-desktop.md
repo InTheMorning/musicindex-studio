@@ -109,7 +109,7 @@ A server can keep no audio and no images. Then your computer holds the full libr
 
 1. Connect the same file hosts in Studio on your computer. See [Connect a file host](hosts.md).
 2. Add the feeds that you want to keep. See [Add feeds](add-feeds.md).
-3. Open a release. Select **Files** in the outline.
+3. Open a release. Select the tab **Files**.
 4. Select **Download All** to download each file that is not in the library.
 5. Select **Stop All** to stop the downloads.
 

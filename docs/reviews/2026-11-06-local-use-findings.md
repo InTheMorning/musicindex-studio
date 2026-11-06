@@ -32,7 +32,7 @@ Open. The sheet "Find a Nostr profile" searches only by npub, NIP-05 address or 
 
 ### 4. The Outline Of An Album Has No Clear Structure
 
-Open. Only "Live shows" has a heading, and no heading ends its group, so the rows below it look like parts of that group. The tracks have no heading. The outline has four forms of row and two left edges. An empty "Live shows" takes two rows, and one of them is a blue link.
+Corrected for the next candidate (ADR 0135). Only "Live shows" had a heading, and no heading ends its group, so the rows below it look like parts of that group. The tracks have no heading. The outline has four forms of row and two left edges. An empty "Live shows" takes two rows, and one of them is a blue link.
 
 In an album with 19 tracks, the feed rows are below the track list. The user must scroll through each track to find them. The left panel uses levels: an artist holds its releases, and the page of the artist holds its settings. The album mixes its content and its settings in one list.
 
@@ -44,7 +44,7 @@ The direction is open. Published documents of other products show three patterns
 - The edit page has tabs for each level of settings. Search summaries of the SoundCloud help center give Basic Info, Metadata and Permissions. Third-party guides give the tabs of the Apple Music info window and of the MusicBrainz release editor.
 - The list is one row, and it opens in the main area. Apple Podcasts Connect and Spotify for Creators work in this way for a podcast.
 
-The page behind the outline head has the settings that a user changes often, and "Feed settings" has the settings that a user seldom changes. Proposal, with no decision: the panel holds only the tracks, and the head opens the album page. The first tab of that page is the current page, and the other rows become later tabs. The next step is mockups of this proposal, before an ADR.
+The page behind the outline head has the settings that a user changes often, and "Feed settings" has the settings that a user seldom changes. Proposal, with no decision: the panel holds only the tracks, and the head opens the album page. The first tab of that page is the current page, and the other rows become later tabs. The operator selected this proposal from mockups, with a select menu at a narrow width.
 
 ### 5. Studio Uses The Sizes Of macOS And iOS
 

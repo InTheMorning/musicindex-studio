@@ -10,7 +10,7 @@ For example, it keeps value time splits and extra payment blocks the same.
 ## Album recipients
 
 1. Open the album.
-2. Select **Value routes** in the outline.
+2. Select the tab **Value Routes**.
 
 The album recipients get the payments for each track that has no recipients of its own.
 If the album has no recipients, select **Add recipients**.

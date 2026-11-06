@@ -23,12 +23,12 @@ A show feed is a music feed, so Studio opens it as an album.
 ## Add a live show
 
 1. Open the feed.
-2. Select **Add a live show** in the outline.
+2. Select the tab **Live Shows**, then select **＋ Add a Live Show**.
 3. Type a **Title**.
 4. Select a **Start time**.
 5. Select **＋ Add the Show**.
 
-Studio opens the page of the show. The outline lists the show under **Live shows** with its status.
+Studio opens the page of the show. The tab **Live Shows** lists the show with its status.
 
 ## The page of a show
 

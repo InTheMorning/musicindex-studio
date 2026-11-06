@@ -76,21 +76,18 @@ To add a link, see [Artist and label feeds](artist-and-label-feeds.md).
 ## The outline of a release
 
 When you open a release, the left panel shows its outline.
-The outline lists the pages of the release.
+The outline lists the content of the release.
 
-For an album, the outline has these entries:
+For an album, the outline has its title, one entry for each track, and **Add tracks**.
+An artist or label feed has its title and its releases. A playlist has its title.
 
-- **Album**
-- One entry for each track
-- **Add tracks**
-- The live shows, and **Add a live show**
-- **Value routes**
-- **Credits and links**
-- **Files**
+Select the title to open the page of the release. The page has tabs:
 
-An artist feed has **Artist** and **Files**. A label feed has **Label** and **Files**.
-A playlist has **Playlist**, **Tracks**, **Value routes** and **Files**.
-A read-only feed has one page, **Feed**.
+- An album has **Album**, **Live Shows**, **Value Routes**, **Credits**, **Files** and **Settings**.
+- An artist or label feed has **Artist** or **Label**, **Value Routes**, **Credits**, **Files** and **Settings**.
+- A playlist has **Playlist**, **Tracks**, **Value Routes**, **Files** and **Settings**.
+
+In a narrow window, one menu takes the place of the tabs. A track page has no tabs.
 
 Select **Releases** at the top of the outline to go back to the list.
 
@@ -117,7 +114,7 @@ They move through the pages that you opened.
 When the window is 760 pixels wide or less, Studio shows one page at a time. It opens on **Releases**.
 Select the back button to go to the first page.
 The first page lists **Releases**, the top artists and labels, **File hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
-When you open a release, you see its outline first. Select a page in the outline to open it.
+When you open a release, you see its outline first. Select the title to open the page of the release, then use the menu to change the page.
 Use the back button to go back.
 
 ## Changes in the library folder

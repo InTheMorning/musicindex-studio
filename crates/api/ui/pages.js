@@ -17,9 +17,8 @@ const PAGES = {
   album: () => [
     { id: 'album', tier: 'identity', fields: [...FEED_FIELDS] },
     { id: 'tracks', tier: 'content' },
-    { id: 'details', tier: 'details', rows: ['recipients', 'credits'] },
     { id: 'publishers', tier: 'details' },
-    { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
+    { id: 'feed', tier: 'setup', rows: ['facts'] },
   ],
   publisher: () => [
     // The role says what the page is, so it is first (ADR 0075 item 1, as
@@ -28,13 +27,12 @@ const PAGES = {
     { id: 'channel', tier: 'identity', fields: [...FEED_FIELDS] },
     { id: 'releases', tier: 'content' },
     { id: 'members', tier: 'details' },
-    { id: 'details', tier: 'details', rows: ['recipients', 'credits'] },
-    { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
+    { id: 'feed', tier: 'setup', rows: ['facts'] },
   ],
   playlist: () => [
     { id: 'channel', tier: 'identity', fields: [...FEED_FIELDS] },
     { id: 'publishers', tier: 'details' },
-    { id: 'feed', tier: 'setup', rows: ['settings', 'facts'] },
+    { id: 'feed', tier: 'setup', rows: ['facts'] },
   ],
   settings: ({ album = false } = {}) => [
     { id: 'language', tier: 'setup' },

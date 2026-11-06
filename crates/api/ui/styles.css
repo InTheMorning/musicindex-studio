@@ -1315,6 +1315,11 @@ select.position:focus { background: var(--fill); }
    defect 1). */
 /* The column does not grow past the page for a long address in the head,
    so that a notice keeps the padding at its right side. */
+/* The tabs of the page of a feed (ADR 0135). A selected tab has a tint and an
+   outline, never a fill (musicindex ADR 0020 R-ACT-1 item 3). */
+.page-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 32px 8px; max-width: 880px; }
+.page-tabs .button[aria-current="page"] { background: var(--accent-tint); color: var(--accent); border-color: var(--accent); }
+.page-tab-menu { display: block; width: calc(100% - 32px); margin: 0 16px 8px; }
 .feed-head { padding: 16px 32px 20px; max-width: 880px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (max-width: 760px) {
   .feed-head { padding: 16px 16px 20px; }

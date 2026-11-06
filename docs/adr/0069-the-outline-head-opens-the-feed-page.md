@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-27
+- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The head stays selected on each tab of the feed.
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
 - Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 6 and 7.

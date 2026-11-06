@@ -1,6 +1,6 @@
 # Edit the album details
 
-Open a release from **Releases**. Select **Album** in the outline.
+Open a release from **Releases**. Select its title in the outline. The tab **Album** opens.
 Studio saves each change in the draft as you type.
 The hosted file does not change until you write. See [Review and write your changes](review-and-write.md).
 
@@ -78,11 +78,11 @@ The switch does not change these blocks.
 
 OP3 counts the downloads of each track.
 
-The check box **Lock against import** is on the page **Feed settings**. It asks other podcast platforms not to import this feed. If you move the feed to a platform that imports it, turn this off first. A platform can ignore this request, and an app or an index can still read the feed.
+The check box **Lock against import** is on the tab **Settings**. It asks other podcast platforms not to import this feed. If you move the feed to a platform that imports it, turn this off first. A platform can ignore this request, and an app or an index can still read the feed.
 
 The **Lock owner email** is optional. A platform can use this address to confirm that you own the feed. The address is public in the feed.
 
-The switch **OP3 Statistics** is on the page **Feed settings**.
+The switch **OP3 Statistics** is on the tab **Settings**.
 Set it to add the OP3 address to the audio address of each track.
 The new start of the address is `https://op3.dev/e,pg=GUID/`, with the feed GUID.
 The diff shows each address that changes.
@@ -98,10 +98,10 @@ Studio then changes no address until you set the switch.
 
 ### Album details
 
-This section has three rows.
+The tabs **Credits** and **Value Routes** open the credits and the payment recipients. See [Value routes](value-routes.md).
 
-- **Credits and links**. Opens the credits page.
-- **Value routes**. Opens the page for payment recipients. See [Value routes](value-routes.md).
+This section has one row.
+
 - **Feed facts**. Shows the address source, the feed GUID, the file, the version and the last announcement. It also has the button **Remove from Collection**.
 
 ### Artists and labels
@@ -116,7 +116,7 @@ See [Add, import and change tracks](tracks.md).
 
 ## Credits and links
 
-Select **Credits and links** to open the page.
+Select the tab **Credits** to open the page.
 It has three sections.
 
 ### People

@@ -21,12 +21,13 @@ Write it to make the file. See [Review and write your changes](review-and-write.
 
 ## The pages of a playlist
 
-The outline of a playlist has these pages:
+A playlist has these tabs:
 
 - **Playlist**. Fields: **Title**, **Author**, **Description**, **Cover image address** (with **Choose…**), **Website** and **Language**. **Feed facts** is also on this page.
 - **Tracks**
-- **Value routes**. See [Value routes](value-routes.md).
+- **Value Routes**. See [Value routes](value-routes.md).
 - **Files**. See [Manage the files of a release](release-files.md).
+- **Settings**.
 
 ## Add tracks
 

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  pageTabs, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
@@ -102,17 +102,16 @@ test('Lock Studio shows only when the vault is open', () => {
   assert.equal(panel.bottom[1].current, true);
 });
 
-test('an open album gives the outline in the sequence of ADR 0039 item 6', () => {
+test('an open album gives the outline of ADR 0135 item 1', () => {
   const panel = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [album], model, vaultOpen: true });
   assert.equal(panel.kind, 'outline');
   assert.deepEqual(panel.feed, {
     id: 1, title: 'Night Songs', image: null, glow: 'var(--c-feed)', typeLabel: 'Album', dot: 'feed',
-    page: 'album', current: false, label: 'Night Songs, Album',
+    page: 'album', first: false, current: false, label: 'Night Songs, Album',
   });
   assert.deepEqual(panel.items[0], { id: 'releases', label: 'Releases' });
   assert.deepEqual(labels(panel.items), [
     'Releases', 'First', 'Untitled track', 'Add tracks',
-    'Live shows', 'Add a live show', 'Value routes', 'Credits and links', 'Feed settings', 'Files',
   ]);
   assert.equal(panel.items[1].number, 1);
   assert.equal(panel.items[1].current, true);
@@ -120,35 +119,6 @@ test('an open album gives the outline in the sequence of ADR 0039 item 6', () =>
   assert.equal(panel.items[3].action, 'add-tracks', 'ADR 0073 item 11: the outline has one row "Add tracks". Give it the action add-tracks.');
   assert.ok(!panel.items.some((item) => item.action === 'add-track' || item.action === 'import'),
     'ADR 0073 item 11: the outline has no row with the action add-track or import. Remove it.');
-  assert.equal(panel.items[4].heading, true);
-  assert.equal(panel.items[5].action, 'add-live');
-  assert.equal(panel.items[6].page, 'recipients');
-});
-
-test('the live shows come after the tracks, one entry for each live item', () => {
-  const withLive = {
-    ...model,
-    live_items: [
-      { _cid: 11, status: 'pending', item: { guid: 'l-1', title: 'Launch' } },
-      { _cid: 12, status: 'live', item: { title: '' } },
-    ],
-  };
-  const view = { name: 'feed', id: 1, page: 'live', track: 'l-1' };
-  const panel = leftPanel({ view, feeds: [album], model: withLive, vaultOpen: false });
-  assert.deepEqual(labels(panel.items).slice(3, 9), [
-    'Add tracks', 'Live shows', 'Launch', 'Untitled show', 'Add a live show', 'Value routes',
-  ]);
-  const entry = panel.items[5];
-  assert.equal(entry.page, 'live');
-  assert.equal(entry.track, 'l-1');
-  assert.equal(entry.status, 'Planned');
-  assert.equal(entry.current, true);
-  assert.equal(panel.items[6].track, 'cid-12');
-  assert.equal(panel.items[6].status, 'Live now');
-  assert.equal(panel.items[6].current, false);
-  assert.equal(panel.items[7].action, 'add-live');
-  // The track entries do not become current on a live page.
-  assert.equal(panel.items.filter((i) => i.current).length, 1);
 });
 
 test('a playlist and a publisher feed have no live shows', () => {
@@ -160,18 +130,20 @@ test('a playlist and a publisher feed have no live shows', () => {
   }
 });
 
-test('an open album before its draft loads gives the Releases link and Files', () => {
+test('an open album before its draft loads gives the Releases link', () => {
   const panel = leftPanel({ view: { name: 'feed', id: 1 }, feeds: [album], model: null, vaultOpen: false });
-  assert.deepEqual(labels(panel.items), ['Releases', 'Files']);
+  assert.deepEqual(labels(panel.items), ['Releases']);
 });
 
-test('a publisher feed gives Feed settings and Files, and a feed that the editor does not open gives no page', () => {
+test('a publisher feed gives its releases, and a feed that the editor does not open gives no page', () => {
   // musicindex ADR 0033 R-WORD-3: the page has the role word.
   const label = { ...publisher, publisher_roles: ['label'], roles_confirmed: true };
   const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [label], model: null, vaultOpen: false });
-  assert.deepEqual(labels(pub.items), ['Releases', 'Feed settings', 'Files']);
-  const noRole = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [publisher], model: null, vaultOpen: false });
-  assert.deepEqual(labels(noRole.items), ['Releases', 'Feed settings', 'Files']);
+  assert.deepEqual(labels(pub.items), ['Releases'], 'ADR 0135 item 4: a publisher feed with no release has only the head.');
+  const owner = { ...label, release_ids: [1] };
+  const full = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [owner, album], model: null, vaultOpen: false });
+  assert.deepEqual(labels(full.items), ['Releases', 'Releases', 'Night Songs'], 'ADR 0135 item 4: the outline of a publisher feed lists its releases.');
+  assert.deepEqual(full.items[2].target, { name: 'feed', id: 1, from: { group: 2, trail: [] } });
   const podcast = { ...readOnly, medium: 'podcast' };
   const read = leftPanel({ view: { name: 'feed', id: 3 }, feeds: [podcast], model: null, vaultOpen: false });
   assert.deepEqual(labels(read.items), ['Releases']);
@@ -321,8 +293,7 @@ test('the outline at narrow width has no Releases row, and the wide outline keep
   assert.equal(narrow.kind, 'outline');
   assert.equal(narrow.items.some((item) => item.id === 'releases'), false);
   assert.deepEqual(labels(narrow.items), [
-    'First', 'Untitled track', 'Add tracks', 'Live shows', 'Add a live show',
-    'Value routes', 'Credits and links', 'Feed settings', 'Files',
+    'First', 'Untitled track', 'Add tracks',
   ]);
   assert.equal(narrow.items.some((item) => item.current), false);
   const wide = leftPanel({ view: { name: 'feed', id: 1 }, feeds: [album], model, vaultOpen: true });
@@ -371,12 +342,33 @@ test('a musicL feed is a playlist, with no regard to case', () => {
   assert.equal(isPlaylist({}), false);
 });
 
-test('a playlist gives Playlist, Tracks, Value routes and Files, with no add or import entry', () => {
+test('a playlist has only its head in the outline', () => {
   const playlist = { ...album, id: 4, medium: 'musicL' };
   const panel = leftPanel({ view: { name: 'feed', id: 4, page: 'tracks' }, feeds: [playlist], model, vaultOpen: false });
-  assert.deepEqual(labels(panel.items), ['Releases', 'Tracks', 'Value routes', 'Feed settings', 'Files']);
-  assert.equal(panel.items.find((item) => item.label === 'Tracks').current, true);
-  assert.equal(panel.items.some((item) => item.action), false);
+  assert.deepEqual(labels(panel.items), ['Releases'], 'ADR 0135 item 4: a playlist has no track pages.');
+});
+
+test('the page of a feed gives the tabs of its type', () => {
+  const tabs = (feed, view) => pageTabs(feed, { name: 'feed', id: feed.id, ...view }).map((tab) => tab.label);
+  const owner = 'ADR 0135 item 2: check pageTabs in shell.js.';
+  assert.deepEqual(tabs(album), ['Album', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Settings'], owner);
+  const artist = { ...publisher, publisher_roles: ['artist'], roles_confirmed: true };
+  assert.deepEqual(tabs(artist), ['Artist', 'Value Routes', 'Credits', 'Files', 'Settings'], owner);
+  assert.deepEqual(tabs({ ...album, medium: 'musicL' }), ['Playlist', 'Tracks', 'Value Routes', 'Files', 'Settings'], owner);
+  assert.deepEqual(tabs({ ...readOnly, medium: 'podcast' }), [], owner);
+});
+
+test('a track page has no tabs, and the page of a show keeps the tab Live Shows', () => {
+  const owner = 'ADR 0135 items 3 and 5: check pageTabs in shell.js.';
+  assert.deepEqual(pageTabs(album, { name: 'feed', id: 1, page: 'track', track: 'g-1' }), [], owner);
+  const current = (page) => pageTabs(album, { name: 'feed', id: 1, page }).filter((tab) => tab.current).map((tab) => tab.page);
+  assert.deepEqual(current(undefined), ['album'], owner);
+  assert.deepEqual(current('live'), ['lives'], owner);
+  assert.deepEqual(current('settings'), ['settings'], owner);
+  const panel = (view) => leftPanel({ view: { name: 'feed', id: 1, ...view }, feeds: [album], model, vaultOpen: false }).feed;
+  assert.equal(panel({ page: 'settings' }).current, true, owner);
+  assert.equal(panel({ page: 'settings' }).first, false, owner);
+  assert.equal(panel({ page: 'track', track: 'g-1' }).current, false, owner);
 });
 
 test('a feed row with only rss_image_url gives that address as the cover of the outline and of the release row', () => {

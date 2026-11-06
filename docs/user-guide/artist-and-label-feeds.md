@@ -27,13 +27,12 @@ Select **Review** and **Write to the File Host** to make the file. See [Review a
 
 ## The pages of the feed
 
-An artist feed has these pages: **Artist**, **Value routes**, **Credits and links** and **Files**. A label feed has **Label**, not **Artist**.
+An artist feed has these tabs: **Artist**, **Value Routes**, **Credits**, **Files** and **Settings**. A label feed has **Label**, not **Artist**.
 
 The page **Artist** or **Label** has these sections:
 
 - **Artist** or **Label**. Fields: **Title**, **Name**, **Description**, **Cover image address** and **Website**. Select **Choose…** to pick an image file. See [Edit the album details](edit-album.md).
 - **Releases**. The releases of this artist or this label.
-- **Details**. Two rows: **Value routes** and **Credits and links**. They open the same pages as the details of an album.
 - **Role**. Select **Artist**, **Label**, **Hosting** or **Custom**. **Custom** shows a check box for each role. Select one or more roles.
   - When Studio finds the roles in the feed, it names them. Select the roles to keep them.
   - On a read-only feed, connect the folder that holds the feed in File hosts before you change the roles.
@@ -41,8 +40,8 @@ The page **Artist** or **Label** has these sections:
 ## Add a value route or a funding link
 
 1. Open the artist feed or the label feed.
-2. In **Details**, select **Value routes** to add the recipients of the payments.
-3. In **Details**, select **Credits and links** to add persons, funding links and the license.
+2. Select the tab **Value Routes** to add the recipients of the payments.
+3. Select the tab **Credits** to add persons, funding links and the license.
 4. Examine the diff, and write the feed.
 
 Studio does not put these recipients into the releases of the feed.

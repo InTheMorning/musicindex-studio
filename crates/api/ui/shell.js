@@ -157,7 +157,7 @@ function isCurrentPage(view, page, track) {
   return page !== 'track' || view.track === track;
 }
 
-// The entries of the outline of an open feed (ADR 0039 item 6). The head of
+// The entries of the outline of an open feed (ADR 0135 item 1). The head of
 // the outline opens the first page of the feed, so no entry is for that page
 // (ADR 0069). At narrow width there is no "Releases" entry, because Back
 // opens Releases (ADR 0039 item 11a).
@@ -175,57 +175,55 @@ function outlineItems(feed, view, model, narrow, feeds) {
     current: isCurrentPage(view, pageName, track),
   });
   if (isPublisher(feed)) {
-    // A publisher feed has two pages and no tracks (ADR 0041 item 3).
-    items.push(page('settings', 'Feed settings', 'settings'));
-    items.push(page('files', 'Files', 'files'));
+    // The panel of a publisher feed lists its releases, and the tabs hold its
+    // pages (ADR 0135 item 4).
+    const byId = new Map((feeds || []).map((f) => [f.id, f]));
+    const owned = (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
+    if (owned.length > 0) items.push({ id: 'releases-heading', label: 'Releases', heading: true });
+    const level = { group: feed.id, trail: from ? [...from.trail, from.group] : [] };
+    owned.forEach((release) => items.push({
+      id: `release:${release.id}`,
+      label: displayTitle(release),
+      target: openFeedView(release.id, narrow, level),
+    }));
     return items;
   }
-  if (isEditable(feed) && isPlaylist(feed)) {
-    // A playlist has no track pages and no import (ADR 0053 item 4).
-    items.push(page('tracks', 'Tracks', 'tracks'));
-    items.push(page('recipients', 'Value routes', 'recipients'));
-    items.push(page('settings', 'Feed settings', 'settings'));
-    items.push(page('files', 'Files', 'files'));
-    return items;
-  }
-  if (!isEditable(feed)) {
-    // A feed that the editor cannot open shows one page.
-    return items;
-  }
-  if (model) {
-    model.items.forEach((item, i) => {
-      const key = trackKey(item);
-      items.push({
-        id: `track:${key}`,
-        page: 'track',
-        track: key,
-        number: i + 1,
-        label: item.title || 'Untitled track',
-        current: isCurrentPage(view, 'track', key),
-      });
+  // A playlist has no track pages, so its tracks are a tab (ADR 0053 item 4).
+  if (!isEditable(feed) || isPlaylist(feed) || !model) return items;
+  model.items.forEach((item, i) => {
+    const key = trackKey(item);
+    items.push({
+      id: `track:${key}`,
+      page: 'track',
+      track: key,
+      number: i + 1,
+      label: item.title || 'Untitled track',
+      current: isCurrentPage(view, 'track', key),
     });
-    items.push({ id: 'add-tracks', label: 'Add tracks', action: 'add-tracks' });
-    // The live shows come after the tracks (ADR 0054 item 3). An entry of
-    // a live show uses `track` for the key of the live item.
-    items.push({ id: 'live-shows', label: 'Live shows', heading: true });
-    (model.live_items || []).forEach((live) => {
-      const key = liveKey(live);
-      items.push({
-        id: `live:${key}`,
-        page: 'live',
-        track: key,
-        label: live.item.title || 'Untitled show',
-        status: statusLabel(live.status),
-        current: view.name === 'feed' && view.page === 'live' && isLiveItem(live, view.track),
-      });
-    });
-    items.push({ id: 'add-live', label: 'Add a live show', action: 'add-live' });
-    items.push(page('recipients', 'Value routes', 'recipients'));
-    items.push(page('credits', 'Credits and links', 'credits'));
-    items.push(page('settings', 'Feed settings', 'settings'));
-  }
-  items.push(page('files', 'Files', 'files'));
+  });
+  items.push({ id: 'add-tracks', label: 'Add tracks', action: 'add-tracks' });
   return items;
+}
+
+// The tabs of the page of a feed (ADR 0135 items 2 to 6). A track page has no
+// tabs. The page of one live show keeps the tab "Live Shows". The labels use
+// title case (musicindex ADR 0023 R-CASE-1).
+export function pageTabs(feed, view) {
+  if (!isEditable(feed) || view.name !== 'feed') return [];
+  const page = view.page || 'album';
+  if (page === 'track') return [];
+  const first = { page: 'album', label: feedKind(feed).label };
+  const routes = { page: 'recipients', label: 'Value Routes' };
+  const credits = { page: 'credits', label: 'Credits' };
+  const files = { page: 'files', label: 'Files' };
+  const settings = { page: 'settings', label: 'Settings' };
+  const list = isPublisher(feed)
+    ? [first, routes, credits, files, settings]
+    : isPlaylist(feed)
+      ? [first, { page: 'tracks', label: 'Tracks' }, routes, files, settings]
+      : [first, { page: 'lives', label: 'Live Shows' }, routes, credits, files, settings];
+  const shown = page === 'live' ? 'lives' : page;
+  return list.map((tab) => ({ ...tab, current: tab.page === shown }));
 }
 
 // Is the view a feed, or the outline of a feed? Both open one feed.
@@ -291,9 +289,11 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       glow: kindGlow(feedKind(feed)),
       typeLabel: feedKind(feed).label,
       dot: feedKind(feed).dot,
-      // The head opens the first page (ADR 0069).
+      // The head opens the first page (ADR 0069). It stays selected on each
+      // tab of the feed (ADR 0135 item 3).
       page: 'album',
-      current: isCurrentPage(view, 'album'),
+      first: isCurrentPage(view, 'album'),
+      current: view.name === 'feed' && view.page !== 'track',
       label: `${displayTitle(feed)}, ${feedKind(feed).label}`,
     },
     items: outlineItems(feed, view, model, narrow, feeds),

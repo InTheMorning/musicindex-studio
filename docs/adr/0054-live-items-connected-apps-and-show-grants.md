@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-26
+- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The live shows are on the tab Live Shows, not in the outline.
 - Owner: operator
 - Amended: 2026-10-26 by operator decision. [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) items 12 and 16 supersede item 16 for a locked vault and item 9 for the server. A granted write uses a grant vault.
 - Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). Items 13 and 15: a granted write also sets `lastBuildDate`, and the check ignores that element.

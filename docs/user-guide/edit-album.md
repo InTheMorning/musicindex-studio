@@ -77,7 +77,10 @@ The switch does not change these blocks.
 ### OP3 statistics
 
 OP3 counts the downloads of each track.
-The check box **Lock against import** is on the page **Feed settings**. It tells other podcast platforms not to import this feed. A platform can use the **Lock owner email** to confirm who owns the feed. This does not stop an app or an index from reading the feed.
+
+The check box **Lock against import** is on the page **Feed settings**. It asks other podcast platforms not to import this feed. If you move the feed to a platform that imports it, turn this off first. A platform can ignore this request, and an app or an index can still read the feed.
+
+The **Lock owner email** is optional. A platform can use this address to confirm that you own the feed. The address is public in the feed.
 
 The switch **OP3 Statistics** is on the page **Feed settings**.
 Set it to add the OP3 address to the audio address of each track.

@@ -2348,7 +2348,7 @@ function SettingsPage({ model, update, album, op3Tracks }) {
             <span class="hint">${LOCK_HELP}</span>
           </div>
         </div>
-        ${locked && html`<${TextField} id="set-lock-owner" label="Lock owner email" value=${locked.owner} onChange=${setLockOwner} />`}
+        ${locked && html`<${TextField} id="set-lock-owner" label="Lock owner email" hint="Optional. A platform can use this address to confirm that you own the feed. The address is public in the feed." value=${locked.owner} onChange=${setLockOwner} />`}
       </div>
     </section>`,
     op3: () => html`<section class="page-section"><h2>OP3 statistics</h2>

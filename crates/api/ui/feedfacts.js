@@ -1,7 +1,7 @@
 // The display of the facts of a feed (ADR 0042). This module has no Preact and
 // no browser state. The Node tests in `ui-tests/feedfacts.test.mjs` examine it.
 
-export const LOCK_HELP = 'This tells other podcast platforms not to import this feed. A platform can use the lock owner email to confirm who owns the feed.';
+export const LOCK_HELP = 'This asks other podcast platforms not to import this feed. If you move the feed to a platform that imports it, turn this off first. A platform can ignore this request, and apps can still read the feed.';
 
 // A version marker of a file host, in a short form. An S3 or R2 ETag has
 // quote marks, and a weak ETag also has a prefix.

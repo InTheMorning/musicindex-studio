@@ -6382,7 +6382,7 @@ async fn a_write_sends_one_announcement_to_the_hub() {
 }
 
 #[tokio::test]
-async fn pubnotify_off_sends_no_announcement() {
+async fn the_choice_off_sends_no_announcement() {
     let hub = studio_core::testing::TestHub::start();
     let (app, announcer) = announce_app(&hub, studio_core::announce::Timing::DEFAULT);
     let id = set_up(&app).await;
@@ -6390,7 +6390,7 @@ async fn pubnotify_off_sends_no_announcement() {
         &app,
         "PUT",
         "/api/v1/settings/announcements",
-        Some(json!({ "pubnotify": false, "podping": true })),
+        Some(json!({ "enabled": false })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -6406,27 +6406,6 @@ async fn pubnotify_off_sends_no_announcement() {
     )
     .await;
     assert_eq!(list, json!([]));
-}
-
-#[tokio::test]
-async fn podping_off_leaves_out_the_podping_parameter() {
-    let hub = studio_core::testing::TestHub::start();
-    let (app, announcer) = announce_app(&hub, studio_core::announce::Timing::DEFAULT);
-    let id = set_up(&app).await;
-    let (status, _) = call(
-        &app,
-        "PUT",
-        "/api/v1/settings/announcements",
-        Some(json!({ "pubnotify": true, "podping": false })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    write_once(&app, id).await;
-    announce_now(&app, &announcer);
-    announcements_when(&app, id, |l| l.iter().any(|a| a["state"] == "sent")).await;
-    let requests = hub.requests();
-    assert_eq!(requests.len(), 1, "{requests:?}");
-    assert_eq!(requests[0].podping, None);
 }
 
 #[tokio::test]
@@ -6464,12 +6443,12 @@ async fn the_announcement_settings_are_on_in_a_new_workspace() {
     let app = app();
     let (status, body) = call(&app, "GET", "/api/v1/settings/announcements", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "pubnotify": true, "podping": true }));
+    assert_eq!(body, json!({ "enabled": true }));
     let (status, _) = call(
         &app,
         "PUT",
         "/api/v1/settings/announcements",
-        Some(json!({ "pubnotify": false })),
+        Some(json!({})),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);

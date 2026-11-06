@@ -73,7 +73,7 @@ The first fault was a limit of the `libappindicator` backend, not of Linux. With
 
 ### 7. One Announcement Check Box At The Write
 
-Open. A user who saves frequently also sends many podpings. Requested change: one check box replaces the two settings of ADR 0052 items 5 and 6. It is at the Write button, and the user sets it for each write.
+Corrected for the next candidate (ADR 0136). A user who saves frequently also sent many podpings. Requested change: one check box replaces the two settings of ADR 0052 items 5 and 6. It is at the Write button, and the user sets it for each write.
 
 The hub sends the podping, so one check box loses only the choice of a pubnotify with no podping. These items need a decision in the record that changes ADR 0052:
 

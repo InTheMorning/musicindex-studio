@@ -3,27 +3,23 @@
 After you write a feed, Studio can tell the Podcast Index hub about the change.
 The hub is the Podcast Index service that lists feeds.
 
-## Set the announcements
+## Choose for each write
 
-1. Select **Settings** in the left panel.
-2. Find the panel **Announcements**.
-3. Use the check boxes:
-   - **Tell Podcast Index after each write**
-   - **Send a podping with it**. This box works only when the first box is on.
-4. Select **Save**.
+The check box **Tell Podcast Index and send a podping** is directly above the Write button. It is also on the review page of a change, where it applies to each feed.
 
-Both boxes are on until you change them.
+Studio remembers your last choice for the next write. The box is on until you change it.
 Studio sends the announcement 30 seconds after a write.
+
+Clear the box when you save frequently and do not want to announce each save. An index then learns about the write only when it reads the feed by itself.
+
+A write under a show grant always announces, because a live show needs it.
 
 ## See the announcement in the review
 
 Before a write, the sheet "Review changes" lists the announcements.
 Each line starts with **Announce**. It shows the address that Studio sends.
 
-The sheet can also tell you why Studio sends no announcement:
-
-- "No announcement: the announcements are off in Settings."
-- "No announcement: this feed has no public address."
+When the feed has no public address, the sheet shows "No announcement: this feed has no public address." and no check box.
 
 ## See the state of the last announcement
 

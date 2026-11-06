@@ -2145,6 +2145,19 @@ pub fn diff_at(
     id: FeedId,
     now: u64,
 ) -> Result<Diff, PipelineError> {
+    diff_planned(collection, hosts, library, id, now, false)
+}
+
+/// The diff of a draft. `granted` is true for the diff of a granted write,
+/// which has its own plan of announcements (ADR 0136 item 6).
+fn diff_planned(
+    collection: &Collection,
+    hosts: &Hosts,
+    library: &Library,
+    id: FeedId,
+    now: u64,
+    granted: bool,
+) -> Result<Diff, PipelineError> {
     let feed_row = collection.feed(id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
@@ -2153,7 +2166,7 @@ pub fn diff_at(
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let (announcements, announce_skip) =
-        plan_announcements(collection, hosts, &feed_row, feed_move.as_ref())?;
+        plan_announcements(collection, hosts, &feed_row, feed_move.as_ref(), granted)?;
     extra.extend(announce_bytes(&announcements, announce_skip));
     let grants = draft_grant_list(collection, id, &feed)?;
     extra.extend(grant_bytes(&grant_apps(collection, id, &grants)?));
@@ -2441,8 +2454,15 @@ fn plan_announcements(
     hosts: &Hosts,
     row: &FeedRow,
     feed_move: Option<&FeedMove>,
+    granted: bool,
 ) -> Result<(Vec<PlannedAnnouncement>, Option<AnnounceSkip>), PipelineError> {
-    let settings = AnnounceSettings::load(collection)?;
+    // A granted write always announces, because a live show needs it (ADR 0136
+    // item 6).
+    let settings = if granted {
+        AnnounceSettings { enabled: true }
+    } else {
+        AnnounceSettings::load(collection)?
+    };
     let addresses = announce_addresses(collection, hosts, row, feed_move)?;
     Ok(announce::plan(&settings, &addresses))
 }
@@ -3922,8 +3942,9 @@ pub fn write_draft_signed(
     let feed_move = feed_move(collection, hosts, &row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
+    let granted = matches!(links, LinkCheck::GrantedWrite);
     let (announcements, announce_skip) =
-        plan_announcements(collection, hosts, &row, feed_move.as_ref())?;
+        plan_announcements(collection, hosts, &row, feed_move.as_ref(), granted)?;
     extra.extend(announce_bytes(&announcements, announce_skip));
     let grants = draft_grant_list(collection, id, &feed)?;
     // The apps of the grants are read now. The draft goes out later in this
@@ -4564,7 +4585,7 @@ fn write_granted_with(
         // Step 5: the diff and the write. A plan of an earlier diff does
         // not apply to this draft.
         collection.remove_signing_plan(feed_id)?;
-        let diff = diff_at(collection, hosts, library, feed_id, now)?;
+        let diff = diff_planned(collection, hosts, library, feed_id, now, true)?;
         if !diff.operations.is_empty() || !diff.blocked.is_empty() || diff.feed_move.is_some() {
             return Err(not_covered());
         }

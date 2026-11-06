@@ -3027,7 +3027,7 @@ pub(crate) async fn draft_from_snapshot(
 /// Milestone 7b uses the limits.
 const DEFAULT_DOWNLOAD_LIMIT_BYTES: u64 = download::DEFAULT_LIMIT_BYTES;
 
-/// The two settings of the announcements (ADR 0052 item 5).
+/// The last choice for the announcement of a write (ADR 0136).
 pub(crate) async fn get_announce_settings(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         to_json(announce::AnnounceSettings::load(&w.collection)?)
@@ -3037,19 +3037,17 @@ pub(crate) async fn get_announce_settings(State(shared): State<Shared>) -> ApiRe
 
 #[derive(Deserialize)]
 pub(crate) struct AnnounceSettingsBody {
-    pubnotify: bool,
-    podping: bool,
+    enabled: bool,
 }
 
-/// Save the two settings of the announcements (ADR 0052 item 5).
+/// Keep the choice for the announcement of a write (ADR 0136).
 pub(crate) async fn put_announce_settings(
     State(shared): State<Shared>,
     Json(body): Json<AnnounceSettingsBody>,
 ) -> ApiResult {
     blocking(shared, move |w| {
         let settings = announce::AnnounceSettings {
-            pubnotify: body.pubnotify,
-            podping: body.podping,
+            enabled: body.enabled,
         };
         settings.save(&w.collection)?;
         to_json(settings)

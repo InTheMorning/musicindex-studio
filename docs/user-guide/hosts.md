@@ -142,5 +142,4 @@ The settings of Studio are not on the File hosts page. Select **Settings** at th
 
 - **Account**, on a server only. See [Your account on a server](account.md).
 - **Connected apps**. See [Connected apps and show grants](connected-apps.md).
-- **Announcements**. See [Announcements](announcements.md).
 - **Library**. On the desktop, it shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the Limits**.

@@ -70,7 +70,6 @@ const PAGES = {
     ...(server ? [] : [{ id: 'window', tier: 'setup' }]),
     ...(server ? [{ id: 'account', tier: 'setup' }] : []),
     { id: 'apps', tier: 'setup' },
-    { id: 'announcements', tier: 'setup' },
     { id: 'nostr', tier: 'setup' },
     // The desktop moves its data from here. A server has "Export Account" in
     // the Account panel (ADR 0107 item 3).

@@ -1639,6 +1639,26 @@ function HostOperations({ diff, connectors, onRemove, onUndoMove, busy }) {
   </div>`;
 }
 
+// The one announcement choice of a write (ADR 0136). Studio remembers it for
+// the next write. `onChange` gets the diff again after a change.
+export function AnnounceChoice({ onChange }) {
+  const [enabled, setEnabled] = useState(null);
+  const { busy, error, run } = useAction();
+  useEffect(() => { api('/settings/announcements').then((result) => setEnabled(result.enabled), () => {}); }, []);
+  if (enabled === null) return null;
+  const change = (next) => run(async () => {
+    const result = await api('/settings/announcements', { method: 'PUT', body: { enabled: next } });
+    setEnabled(result.enabled);
+    if (onChange) await onChange();
+  });
+  return html`<div class="announce-choice">
+    <label class="check"><input type="checkbox" checked=${enabled} disabled=${busy} onChange=${(e) => change(e.target.checked)} />
+      <span>Tell Podcast Index and send a podping</span></label>
+    <p class="hint">${enabled ? 'Studio sends it 30 seconds after the write.' : 'No index learns about this write until it reads the feed by itself.'}</p>
+    <${ErrorNotice} error=${error} />
+  </div>`;
+}
+
 // The announcements of a write (ADR 0052 item 11). The lines show when the
 // sheet can write, also when the feed text did not change. Each line has the
 // form of a host operation row, with no button.
@@ -1762,6 +1782,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     setDiff(await api(`/feeds/${feedId}/diff`));
     await checkLinks();
   });
+  const refreshDiff = async () => setDiff(await api(`/feeds/${feedId}/diff`));
   // The sheet examines the draft each time that it opens.
   useEffect(() => { if (open) examine(); }, [open]);
   const removeOperation = (operationId) => run(async () => {
@@ -1973,6 +1994,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
       ${!merge && html`<div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
       </div>`}
+      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && html`<${AnnounceChoice} onChange=${refreshDiff} />`}
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the Draft</button>

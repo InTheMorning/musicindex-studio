@@ -3091,37 +3091,17 @@ fn a_write_of_a_feed_with_a_public_address_queues_one_announcement() {
 }
 
 #[test]
-fn with_pubnotify_off_the_diff_gives_off_and_the_write_queues_nothing() {
+fn with_the_choice_off_the_diff_gives_off_and_the_write_queues_nothing() {
     let mut s = setup();
-    announce::AnnounceSettings {
-        pubnotify: false,
-        podping: true,
-    }
-    .save(&s.collection)
-    .unwrap();
+    announce::AnnounceSettings { enabled: false }
+        .save(&s.collection)
+        .unwrap();
     edit_title(&s);
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(diff.announce_skip, Some(AnnounceSkip::Off));
     assert_eq!(announced(&diff), []);
     write_s(&mut s, &diff.id).unwrap();
     assert_eq!(queued(&s.collection, s.feed), 0);
-}
-
-#[test]
-fn with_podping_off_the_queued_announcement_has_no_podping() {
-    let mut s = setup();
-    announce::AnnounceSettings {
-        pubnotify: true,
-        podping: false,
-    }
-    .save(&s.collection)
-    .unwrap();
-    edit_title(&s);
-    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    write_s(&mut s, &diff.id).unwrap();
-    let rows = announce::recent(&s.collection, s.feed).unwrap();
-    assert_eq!(rows.len(), 1);
-    assert!(!rows[0].podping);
 }
 
 #[test]
@@ -3198,16 +3178,32 @@ fn a_feed_move_queues_the_new_address_and_the_address_from_before() {
 }
 
 #[test]
+fn a_granted_write_announces_with_the_choice_off() {
+    let mut s = setup();
+    announce::AnnounceSettings { enabled: false }
+        .save(&s.collection)
+        .unwrap();
+    let guid = write_granted_show(&mut s);
+    assert_eq!(
+        queued(&s.collection, s.feed),
+        0,
+        "The first write follows the choice."
+    );
+    granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap();
+    assert!(
+        queued(&s.collection, s.feed) > 0,
+        "ADR 0136 item 6: a granted write always announces. Check plan_announcements in pipeline.rs."
+    );
+}
+
+#[test]
 fn a_change_of_a_setting_after_the_diff_gives_diff_not_approved() {
     let mut s = setup();
     edit_title(&s);
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    announce::AnnounceSettings {
-        pubnotify: true,
-        podping: false,
-    }
-    .save(&s.collection)
-    .unwrap();
+    announce::AnnounceSettings { enabled: false }
+        .save(&s.collection)
+        .unwrap();
     let error = write_s(&mut s, &diff.id).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::DiffNotApproved);
     assert_eq!(queued(&s.collection, s.feed), 0);

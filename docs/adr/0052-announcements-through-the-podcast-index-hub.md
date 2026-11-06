@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-25
+- Changed by: [ADR 0136](0136-one-announcement-choice-at-the-write.md). One choice at the write replaces the two settings of items 5 and 6.
 - Owner: operator
 - Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
 - Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 14 moves the two settings from the Hosts page to the Settings page.

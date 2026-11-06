@@ -9,14 +9,10 @@ export function announceLines(diff) {
   const lines = [];
   const entries = diff && Array.isArray(diff.announcements) ? diff.announcements : [];
   for (const entry of entries) {
-    lines.push(entry.podping
-      ? `Tell Podcast Index and send a podping: ${entry.url}`
-      : `Tell Podcast Index: ${entry.url}`);
+    lines.push(`Tell Podcast Index and send a podping: ${entry.url}`);
   }
   const skip = diff ? diff.announce_skip : null;
-  if (skip === 'off') {
-    lines.push('No announcement: the announcements are off in Settings.');
-  } else if (skip === 'no_address') {
+  if (skip === 'no_address') {
     lines.push('No announcement: this feed has no public address.');
   }
   return lines;

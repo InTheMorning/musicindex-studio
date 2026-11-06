@@ -13,19 +13,19 @@ test('announceLines gives one line for each address', () => {
   const diff = {
     announcements: [
       { url: 'https://a.example/f.xml', podping: true },
-      { url: 'https://b.example/f.xml', podping: false },
+      { url: 'https://b.example/f.xml', podping: true },
     ],
     announce_skip: null,
   };
   assert.deepEqual(announceLines(diff), [
     'Tell Podcast Index and send a podping: https://a.example/f.xml',
-    'Tell Podcast Index: https://b.example/f.xml',
+    'Tell Podcast Index and send a podping: https://b.example/f.xml',
   ]);
 });
 
 test('announceLines gives the reason for no announcement', () => {
-  assert.deepEqual(announceLines({ announcements: [], announce_skip: 'off' }),
-    ['No announcement: the announcements are off in Settings.']);
+  // ADR 0136 item 1: the check box shows the choice, so no line repeats it.
+  assert.deepEqual(announceLines({ announcements: [], announce_skip: 'off' }), []);
   assert.deepEqual(announceLines({ announcements: [], announce_skip: 'no_address' }),
     ['No announcement: this feed has no public address.']);
   assert.deepEqual(announceLines({ announcements: [], announce_skip: null }), []);

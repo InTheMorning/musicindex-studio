@@ -4,7 +4,7 @@ import { pageSequence } from './pages.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD } from './editor.js';
+import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, initialStatuses, refreshedStatuses, startWrite,
@@ -2186,45 +2186,6 @@ function LibraryPanel() {
   </article>`;
 }
 
-// The two announcement settings (ADR 0052 items 5 and 6). The podping check box
-// is off and disabled while the first check box is off.
-function AnnouncePanel() {
-  const [saved, setSaved] = useState(null);
-  const [pubnotify, setPubnotify] = useState(false);
-  const [podping, setPodping] = useState(false);
-  const { busy, error, run } = useAction();
-  const load = () => api('/settings/announcements').then((result) => {
-    setSaved(result);
-    setPubnotify(result.pubnotify);
-    setPodping(result.podping);
-  });
-  useEffect(() => { load(); }, []);
-  const submit = (event) => {
-    event.preventDefault();
-    run(async () => {
-      await api('/settings/announcements', { method: 'PUT', body: { pubnotify, podping } });
-      await load();
-    });
-  };
-  if (!saved) return null;
-  const same = pubnotify === saved.pubnotify && podping === saved.podping;
-  return html`<article class="panel">
-    <h2>Announcements</h2>
-    <form class="form" onSubmit=${submit}>
-      <label class="check"><input type="checkbox" checked=${pubnotify}
-        onChange=${(e) => setPubnotify(e.target.checked)} />
-        <span>Tell Podcast Index after each write</span></label>
-      <label class="check"><input type="checkbox" checked=${pubnotify && podping} disabled=${!pubnotify}
-        onChange=${(e) => setPodping(e.target.checked)} />
-        <span>Send a podping with it</span></label>
-      <p class="hint">Studio sends the announcement 30 seconds after a write.</p>
-      <${ErrorNotice} error=${error} />
-      <div class="actions"><button class="button primary" type="submit" disabled=${busy || same}>
-        ${busy ? 'Saving…' : 'Save'}</button></div>
-    </form>
-  </article>`;
-}
-
 // The Nostr search relay (ADR 0074 items 16 and 17). An empty field stops the
 // relay search. The core checks the address.
 function NostrPanel() {
@@ -2633,7 +2594,6 @@ function SettingsPage() {
     window: WindowPanel,
     account: AccountPanel,
     apps: ConnectedAppsPanel,
-    announcements: AnnouncePanel,
     nostr: NostrPanel,
     move: MovePanel,
     library: LibraryPanel,
@@ -2827,6 +2787,7 @@ function ChangeSetPage({ id, go, onChanged }) {
     ${set === null && !error && html`<p class="empty" role="status">Loading the changes…</p>`}
     ${set && html`<header class="recipient-head"><h1>${changeTitle(set.operation)}</h1>
       <p class="hint">${set.person_id != null ? changeLine(set, personName) : operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
+      <${AnnounceChoice} />
       <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
         const outcome = outcomeText(feed.outcome);
         const blocked = blockedText(feed.blocked);

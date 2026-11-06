@@ -19,9 +19,6 @@ pub const DEFAULT_HUB: &str = "https://hub.podcastindex.org/pubnotify";
 /// The setting that turns the request to the hub on or off.
 pub const PUBNOTIFY_SETTING: &str = "announce_pubnotify";
 
-/// The setting that adds `podping=1` to the request.
-pub const PODPING_SETTING: &str = "announce_podping";
-
 /// The number of finished announcements that Studio keeps for each feed
 /// (ADR 0052 item 19).
 const KEEP_FINISHED: i64 = 10;
@@ -32,14 +29,12 @@ const MAX_ANSWER_BYTES: u64 = 64 * 1024;
 /// The two global settings of the announcements (ADR 0052 item 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct AnnounceSettings {
-    /// Tell Podcast Index after each write.
-    pub pubnotify: bool,
-    /// Send a podping with the request.
-    pub podping: bool,
+    /// Tell Podcast Index and send a podping after a write (ADR 0136).
+    pub enabled: bool,
 }
 
 impl AnnounceSettings {
-    /// Read the settings. A setting that is not set is on.
+    /// Read the last choice. With no choice, it is on.
     ///
     /// # Errors
     ///
@@ -47,19 +42,17 @@ impl AnnounceSettings {
     /// boolean.
     pub fn load(collection: &Collection) -> Result<Self, CollectionError> {
         Ok(Self {
-            pubnotify: flag(collection, PUBNOTIFY_SETTING)?,
-            podping: flag(collection, PODPING_SETTING)?,
+            enabled: flag(collection, PUBNOTIFY_SETTING)?,
         })
     }
 
-    /// Keep the settings.
+    /// Keep the choice.
     ///
     /// # Errors
     ///
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn save(&self, collection: &Collection) -> Result<(), CollectionError> {
-        collection.set_setting(PUBNOTIFY_SETTING, &Value::Bool(self.pubnotify))?;
-        collection.set_setting(PODPING_SETTING, &Value::Bool(self.podping))
+        collection.set_setting(PUBNOTIFY_SETTING, &Value::Bool(self.enabled))
     }
 }
 
@@ -106,7 +99,7 @@ pub struct PlannedAnnouncement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnnounceSkip {
-    /// The setting `announce_pubnotify` is off.
+    /// The user turned the announcement off (ADR 0136).
     Off,
     /// The write has no public address to announce.
     NoAddress,
@@ -131,7 +124,7 @@ pub fn plan(
     settings: &AnnounceSettings,
     addresses: &[String],
 ) -> (Vec<PlannedAnnouncement>, Option<AnnounceSkip>) {
-    if !settings.pubnotify {
+    if !settings.enabled {
         return (Vec::new(), Some(AnnounceSkip::Off));
     }
     if addresses.is_empty() {
@@ -141,7 +134,7 @@ pub fn plan(
         .iter()
         .map(|url| PlannedAnnouncement {
             url: url.clone(),
-            podping: settings.podping,
+            podping: true,
         })
         .collect();
     (planned, None)
@@ -459,8 +452,8 @@ mod tests {
         .unwrap();
     }
 
-    fn settings(pubnotify: bool, podping: bool) -> AnnounceSettings {
-        AnnounceSettings { pubnotify, podping }
+    fn settings(enabled: bool) -> AnnounceSettings {
+        AnnounceSettings { enabled }
     }
 
     #[test]
@@ -470,7 +463,7 @@ mod tests {
             "https://m.example/a.xml".to_owned(),
             "https://m.example/b.xml".to_owned(),
         ];
-        let (got, skip) = plan(&settings(true, true), &addresses);
+        let (got, skip) = plan(&settings(true), &addresses);
         assert_eq!(skip, None);
         assert_eq!(
             got,
@@ -483,21 +476,34 @@ mod tests {
     }
 
     #[test]
-    fn plan_copies_the_podping_setting() {
+    fn a_setting_that_is_not_a_boolean_gives_an_error_that_names_it() {
+        let (collection, _) = setup();
+        collection
+            .set_setting(PUBNOTIFY_SETTING, &serde_json::json!("yes"))
+            .unwrap();
+        let error = AnnounceSettings::load(&collection).unwrap_err();
+        assert!(error.to_string().contains(PUBNOTIFY_SETTING));
+    }
+
+    #[test]
+    fn plan_always_asks_for_a_podping() {
         let addresses = vec!["https://m.example/a.xml".to_owned()];
-        let (planned, _) = plan(&settings(true, false), &addresses);
-        assert!(!planned[0].podping);
+        let (planned, _) = plan(&settings(true), &addresses);
+        assert!(
+            planned[0].podping,
+            "ADR 0136 item 3: each request has podping=1."
+        );
     }
 
     #[test]
     fn plan_gives_off_when_pubnotify_is_off_even_with_no_address() {
         let addresses = vec!["https://m.example/a.xml".to_owned()];
         assert_eq!(
-            plan(&settings(false, true), &addresses),
+            plan(&settings(false), &addresses),
             (Vec::new(), Some(AnnounceSkip::Off))
         );
         assert_eq!(
-            plan(&settings(false, true), &[]),
+            plan(&settings(false), &[]),
             (Vec::new(), Some(AnnounceSkip::Off))
         );
     }
@@ -505,7 +511,7 @@ mod tests {
     #[test]
     fn plan_gives_no_address_when_there_is_no_address() {
         assert_eq!(
-            plan(&settings(true, true), &[]),
+            plan(&settings(true), &[]),
             (Vec::new(), Some(AnnounceSkip::NoAddress))
         );
     }
@@ -514,41 +520,20 @@ mod tests {
     fn the_settings_are_on_when_they_are_not_set() {
         let (collection, _) = setup();
         let settings = AnnounceSettings::load(&collection).unwrap();
-        assert!(settings.pubnotify);
-        assert!(settings.podping);
+        assert!(settings.enabled);
     }
 
     #[test]
-    fn a_saved_setting_is_read_again() {
+    fn a_saved_choice_is_read_again() {
         let (collection, _) = setup();
-        AnnounceSettings {
-            pubnotify: true,
-            podping: false,
-        }
-        .save(&collection)
-        .unwrap();
-        let settings = AnnounceSettings::load(&collection).unwrap();
-        assert!(settings.pubnotify);
-        assert!(!settings.podping);
-        AnnounceSettings {
-            pubnotify: false,
-            podping: true,
-        }
-        .save(&collection)
-        .unwrap();
-        let settings = AnnounceSettings::load(&collection).unwrap();
-        assert!(!settings.pubnotify);
-        assert!(settings.podping);
-    }
-
-    #[test]
-    fn a_setting_that_is_not_a_boolean_gives_an_error_that_names_it() {
-        let (collection, _) = setup();
-        collection
-            .set_setting(PODPING_SETTING, &serde_json::json!("yes"))
+        AnnounceSettings { enabled: false }
+            .save(&collection)
             .unwrap();
-        let error = AnnounceSettings::load(&collection).unwrap_err();
-        assert!(error.to_string().contains(PODPING_SETTING));
+        assert!(!AnnounceSettings::load(&collection).unwrap().enabled);
+        AnnounceSettings { enabled: true }
+            .save(&collection)
+            .unwrap();
+        assert!(AnnounceSettings::load(&collection).unwrap().enabled);
     }
 
     #[test]

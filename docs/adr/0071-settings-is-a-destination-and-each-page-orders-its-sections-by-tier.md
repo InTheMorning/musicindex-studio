@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-10-28
+- Changed by: [ADR 0136](0136-one-announcement-choice-at-the-write.md). Item 14 ends: the Settings page has no announcement section.
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
 

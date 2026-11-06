@@ -11,9 +11,11 @@ mod links;
 #[cfg(target_os = "linux")]
 mod linux_page;
 mod quit;
+#[cfg(target_os = "linux")]
+mod renderer;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -38,6 +40,10 @@ const WINDOW_LABEL: &str = "main";
 const TITLE: &str = "Music Index Studio";
 /// The ID of the tray icon, so that the app can change its menu.
 const TRAY_ID: &str = "main";
+/// The file in the data folder that records the first close of the window
+/// (ADR 0124 item 29).
+const TRAY_NOTICE_FILE: &str = "tray-notice-shown";
+const TRAY_NOTICE: &str = "Studio continues to run in the tray, so that a connected app can still write. To open the window or to quit, use the menu of the tray icon.";
 
 /// The shutdown signal of the API. "Quit" sends it.
 struct Shutdown(Mutex<Option<oneshot::Sender<()>>>);
@@ -65,6 +71,16 @@ impl QuitControl {
 /// The data folder of the app: the folder of `studio-desktop` (ADR 0124 item 11).
 fn data_dir() -> Option<PathBuf> {
     studio_desktop::default_data_dir()
+}
+
+/// True at the first call for `data_dir`. A failed write gives false, so that
+/// a read-only folder does not show the notice at each close.
+fn first_close(data_dir: &Path) -> bool {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(data_dir.join(TRAY_NOTICE_FILE))
+        .is_ok()
 }
 
 /// Show the window of the app and give it the focus.
@@ -248,6 +264,7 @@ fn open_outside(app: &AppHandle, address: &Url) {
 fn build_window(
     app: &AppHandle,
     ui_url: &str,
+    data_dir: PathBuf,
     dropped: studio_desktop::DroppedFiles,
 ) -> Result<WebviewWindow, String> {
     let address = Url::parse(ui_url).map_err(|e| e.to_string())?;
@@ -326,10 +343,19 @@ fn build_window(
         .build()
         .map_err(|e| e.to_string())?;
     let hidden = window.clone();
+    let notice_app = app.clone();
     window.on_window_event(move |event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
             let _ = hidden.hide();
+            if first_close(&data_dir) {
+                notice_app
+                    .dialog()
+                    .message(TRAY_NOTICE)
+                    .title(TITLE)
+                    .buttons(MessageDialogButtons::Ok)
+                    .show(|_| {});
+            }
         }
         #[cfg(target_os = "linux")]
         if let WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, position }) = event {
@@ -397,7 +423,7 @@ fn setup(app: &AppHandle) -> Result<(), String> {
         }
         let _ = ended_sender.send(());
     });
-    build_window(app, &started.ui_url, started.dropped)?;
+    build_window(app, &started.ui_url, data_dir, started.dropped)?;
     build_tray(app).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -405,6 +431,8 @@ fn setup(app: &AppHandle) -> Result<(), String> {
 fn main() {
     // ADR 0104 item 1: this call comes first.
     studio_desktop::harden_process();
+    #[cfg(target_os = "linux")]
+    renderer::restart_if_necessary();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_window(app);
@@ -432,6 +460,18 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_tray_notice_shows_at_the_first_close_only() {
+        let folder = tempfile::tempdir().expect("the test needs a temporary folder");
+        let message = "ADR 0124 item 29: the notice shows one time for a data folder. Check first_close in main.rs.";
+        assert!(super::first_close(folder.path()), "{message}");
+        assert!(!super::first_close(folder.path()), "{message}");
+        assert!(
+            !super::first_close(&folder.path().join("missing")),
+            "{message}"
+        );
+    }
+
     #[test]
     fn the_app_uses_the_data_folder_of_studio_desktop() {
         let folder = super::data_dir().expect("the test computer must have a data folder");

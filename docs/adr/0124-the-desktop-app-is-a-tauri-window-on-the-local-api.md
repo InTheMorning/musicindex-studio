@@ -72,6 +72,8 @@ WebKitGTK gives a page no file from a drop, and the page cannot read the file ad
 25. On Linux, the same script connects Ctrl+Z to the undo command, and Ctrl+Shift+Z and Ctrl+Y to the redo command, in a text field.
 26. The AppImage holds a fixed list of GStreamer plugins (`bundleMediaFramework`, `APPIMAGE_PLUGINS` in `tools/release_desktop.py`). The release workflow installs the plugin packages and `patchelf`, and gives the bundler only that list. The release check refuses an AppImage with a different set. The human test of `0.1.0-rc.17` found that Play hung the app with no audio sink. The human test of `0.1.0-rc.18` found that all the plugins of the runner made the first play of each start wait, and a press of Play on the real file took 4.72 s against 0.41 s with the list.
 27. On Linux, the same script makes the toolbar opaque through `--bar-bg`. WebKitGTK does not always draw a backdrop blur, and the page text then shows through the translucent bar. The UI stays the same as in a browser. A browser and the other systems keep the translucent bar of musicindex ADR 0003.
+28. On Linux with an NVIDIA graphics card, the app starts itself again one time with `WEBKIT_DISABLE_DMABUF_RENDERER=1`. A value that the user sets stays. On 2026-11-06, one computer with a GTX 750 Ti loaded the page very slowly, with many lines "Failed to import DMABuf". With the variable, the page loaded fast and the lines stopped.
+29. At the first close of the window for a data folder, the app shows a native message. The message tells the user that Studio continues to run in the tray, and that the menu of the tray icon opens the window or quits. A file in the data folder records this.
 
 ## Alternatives Considered
 

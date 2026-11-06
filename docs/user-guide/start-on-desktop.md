@@ -53,7 +53,8 @@ The app uses the same data folder as `studio-desktop`, and it needs no token fro
 Links to other web sites open in your web browser.
 A download goes to your Downloads folder, and the app shows the name of the file.
 
-When you close the window, the app stays in the tray, and Studio continues to run.
+When you close the window, the app stays in the tray, and Studio continues to run. The first time, the app shows a message about this.
+On Linux, right-click the tray icon to open its menu. A left click does nothing, because Linux gives the app no click event.
 Select **Open Studio** in the tray menu to show the window again.
 Select **Quit** in the tray menu to stop Studio.
 When you start the app a second time, it shows the first window.

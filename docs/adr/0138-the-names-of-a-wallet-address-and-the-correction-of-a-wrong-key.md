@@ -16,7 +16,7 @@ The two kinds of wallet address had names that start with the same word, so a li
 
 ## Decision
 
-1. A row of "More from your feeds" with a key warning has two buttons. "Correct the Feeds" opens "Check your feeds". "Add Anyway" adds the key, and it has the role normal.
+1. A row of "More from your feeds" with a key warning has two buttons. "Correct the Feeds" opens "Check your feeds". "Add Anyway" adds the key. Both have the role action of ADR 0037.
 2. A row with no warning keeps the button "Add".
 3. The UI names an address with `@` "LNURL address", and it names a node key "Node address". The type menus use "LNURL Address" and "Node Address".
 4. A node of a shared provider keeps its name, for example "Alby node" (ADR 0095).

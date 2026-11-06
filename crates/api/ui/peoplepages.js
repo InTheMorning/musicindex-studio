@@ -780,7 +780,7 @@ export function PersonPage({ id, feeds, go }) {
           ${row.npub && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}
           <div class="actions more-actions">
             ${row.warning && html`<button class="button action" type="button" onClick=${() => go({ name: 'check', id: person.id })}>Correct the Feeds</button>`}
-            <button class=${row.warning ? 'button' : 'button action'} type="button" aria-label=${`${moreAddLabel(row)}: ${row.title}`}
+            <button class="button action" type="button" aria-label=${`${moreAddLabel(row)}: ${row.title}`}
               onClick=${() => withLeave(() => act(async () => { await api(`/people/${id}/items`, { method: 'POST', body: row.body }); await loadMore(); }))}>${moreAddLabel(row)}</button>
           </div></div>`)}</div></section>`,
     payment: () => html`<section class="page-section"><h2>Payment</h2>
@@ -791,7 +791,7 @@ export function PersonPage({ id, feeds, go }) {
         return html`<${AddressRow} key=${JSON.stringify(m.key)} member=${m.member} count=${usedText(m.count)}
           pending=${isDefault && isPending(saved, shown, 'default_address')}
           tag=${isDefault && html` <span class="default-tag"><${Icon} name="check" />Default</span>`}
-          mark=${!isDefault && html`<button class="button" type="button" aria-label=${`Make Default: ${m.member.address}`}
+          mark=${!isDefault && html`<button class="button action" type="button" aria-label=${`Make Default: ${m.member.address}`}
             onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`} />`;
       })}
         <div class="actions"><button class="button destructive" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}

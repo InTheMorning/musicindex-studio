@@ -281,7 +281,7 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
           bad=${(bad || []).some((b) => b.field === `${path}/${i}/npub`)}
           person=${{ name: p.name, img: p.img }}
           onSet=${(npub, picked) => onChange(setAt(persons, i, withPersonKey(p, npub, picked)))} />
-        ${creditCanFill(p) && html`<div class="actions"><button class="button" type="button" onClick=${() => setFilling(p._cid)}>Fill from a Person</button></div>`}
+        ${creditCanFill(p) && html`<div class="actions"><button class="button action" type="button" onClick=${() => setFilling(p._cid)}>Fill from a Person</button></div>`}
         <${EntryActions} list=${persons} index=${i} name=${p.name || 'this person'} onChange=${onChange} />
       <//>`;
     })}

@@ -148,7 +148,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
           Fee: this recipient gets its split as a percentage before the others share the rest</label>
-        ${recipientCanFill(r) && html`<div class="actions"><button class="button" type="button" onClick=${() => setFilling(r._cid)}>Fill from a Person</button></div>`}
+        ${recipientCanFill(r) && html`<div class="actions"><button class="button action" type="button" onClick=${() => setFilling(r._cid)}>Fill from a Person</button></div>`}
         <${SaveRecipientButton} recipient=${r} />
         <${EntryActions} list=${recipients} index=${i} name=${name} onChange=${onChange} />
         </div>

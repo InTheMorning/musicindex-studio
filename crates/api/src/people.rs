@@ -590,23 +590,25 @@ pub(crate) async fn search_musicindex(
     .await
 }
 
-/// The artist and label feeds of a search, for a sheet with no person (ADR 0145
-/// item 3). The request runs with no lock of the workspace.
-pub(crate) async fn search_publishers(
+/// The one search of the sheets that add a value (ADR 0145 item 3): the artist
+/// and label feeds in `rows`, and the other feeds in `feeds`. The requests run
+/// with no lock of the workspace.
+pub(crate) async fn search_index(
     State(shared): State<Shared>,
     Query(query): Query<MusicIndexQuery>,
 ) -> ApiResult {
     let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
     blocking_unlocked(move || {
         let rows = lookup::search(&index, &query.q)?;
-        Ok(Json(json!({ "rows": rows })))
+        let feeds = index.search(&query.q)?;
+        Ok(Json(json!({ "rows": rows, "feeds": feeds })))
     })
     .await
 }
 
-/// The values of one artist or label feed, for a sheet with no person (ADR 0145
-/// item 3). Gives 404 when musicindex does not know the feed.
-pub(crate) async fn publisher_values(
+/// The values of one feed of a search (ADR 0145 item 3). Gives 404 when
+/// musicindex does not know the feed.
+pub(crate) async fn index_values(
     State(shared): State<Shared>,
     Path(guid): Path<String>,
 ) -> ApiResult {

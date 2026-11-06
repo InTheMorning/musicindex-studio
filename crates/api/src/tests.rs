@@ -6647,12 +6647,14 @@ async fn a_route_of_musicindex_names_the_provider_of_a_shared_node() {
 }
 
 #[tokio::test]
-async fn the_publisher_routes_need_no_person() {
+async fn the_one_search_gives_artists_labels_and_other_feeds() {
     let server = web_feeds();
     server.set(
         "/v1/search",
         200,
-        br#"{"data":[{"entity_type":"publisher","entity_id":"c0ffee-01","title":"Ann"}]}"#.to_vec(),
+        br#"{"data":[{"entity_type":"publisher","entity_id":"c0ffee-01","title":"Ann"},
+            {"entity_type":"feed","entity_id":"c0ffee-03","title":"Ann Album","release_artist":"Ann"}]}"#
+            .to_vec(),
     );
     server.set(
         "/v1/feeds/c0ffee-01",
@@ -6663,14 +6665,16 @@ async fn the_publisher_routes_need_no_person() {
             .to_vec(),
     );
     let app = app_with_index(&server.url(""));
-    let (status, body) = call(&app, "GET", "/api/v1/musicindex/publishers?q=ann", None).await;
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/search?q=ann", None).await;
     assert_eq!(status, StatusCode::OK, "ADR 0145 item 3: {body}");
     assert_eq!(body["rows"][0]["title"], "Ann");
-    let (status, body) = call(&app, "GET", "/api/v1/musicindex/publishers/c0ffee-01", None).await;
+    assert_eq!(body["feeds"][0]["title"], "Ann Album", "ADR 0145 item 3");
+    assert_eq!(body["feeds"][0]["artist"], "Ann");
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/values/c0ffee-01", None).await;
     assert_eq!(status, StatusCode::OK, "ADR 0145 item 3: {body}");
     assert_eq!(body["website"], "https://ann.example");
     assert_eq!(body["routes"][0]["address"], "ann@x.example");
-    let (status, _) = call(&app, "GET", "/api/v1/musicindex/publishers/c0ffee-02", None).await;
+    let (status, _) = call(&app, "GET", "/api/v1/musicindex/values/c0ffee-02", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 

@@ -1460,10 +1460,15 @@ export const foldStartsOpen = (count) => count < FOLD_AT;
 
 const present = (entries) => Object.fromEntries(entries.filter(([, value]) => !isEmpty(value)));
 
-// The choices of a feed of musicindex for each sheet (ADR 0145 item 3). The
-// values come from `GET /musicindex/publishers/{guid}`. Each is a start value.
-export function creditChoices(values) {
-  const start = present([['name', values.title], ['img', values.image_url], ['href', values.website], ['npub', values.npub]]);
+// The choices of a feed of musicindex for each sheet (ADR 0145 items 3 and 5).
+// The values come from `GET /musicindex/values/{guid}`, and `hit` is the row of
+// a feed that is not an artist or a label. The title of such a feed is not the
+// name of a person, and its website and key are not of the artist. Each value
+// is a start value.
+export function creditChoices(values, hit = null) {
+  const start = present(hit
+    ? [['name', hit.artist], ['img', values.image_url]]
+    : [['name', values.title], ['img', values.image_url], ['href', values.website], ['npub', values.npub]]);
   return Object.keys(start).length === 0 ? [] : [{ id: 'feed', values: start }];
 }
 
@@ -1714,7 +1719,8 @@ export const mergeBody = (otherId) => ({ other: Number(otherId) });
 
 // The text of the search sheet (ADR 0117 item 2).
 export const FIND_HINT = 'Studio searches the artist and label feeds on musicindex.org. Select the feed of this person.';
-export const FIND_ONE_HINT = 'Studio searches the artist and label feeds on musicindex.org.';
+export const FIND_ONE_HINT = 'Studio searches the feeds on musicindex.org.';
+export const FIND_ONE_EMPTY = 'No feed on musicindex has this name.';
 export const FIND_EMPTY = 'No artist or label feed on musicindex has this name.';
 export const FIND_WAIT = 'Searching…';
 export const FILL_NOTE = 'Studio puts the values in the fields. Select Save to keep them. Studio changes no feed.';

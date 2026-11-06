@@ -221,3 +221,7 @@ Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md
 ### 30. The Sheet "Copy From A Feed" Is Hard To Read
 
 Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md) items 9 to 13). A row showed a full key on many lines and no account, so wallets on one shared node looked like duplicates. A row that the list had showed a checked box when the footer showed 0 selections. The tracks were below the recipients, and the search needed a button.
+
+### 31. Two Searches Of musicindex Gave Different Results
+
+Corrected ([ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md) item 3). "Find on musicindex" searched only artist and label feeds, and "Copy from a Feed" searched only the other feeds. So one text found a feed in one sheet and nothing in the other. All these sheets now use one search.

@@ -193,7 +193,7 @@ function CreditForm({ persons, feedId, onAdd, onCancel }) {
         <${NostrKeyRow} label="Nostr" summary=${keySummary(values.name, values.npub)} value=${values.npub} onOpen=${() => setKeyOpen(true)} />
       </div>`}
       notice=${html`<${ErrorNotice} error=${loading.error} />`}
-      musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from an artist or label feed.', onOpen: () => setFinding(true) }}
+      musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }}
       lists=${[{ title: 'Your people', rows }]} />
     <footer><button class="button primary" type="submit" form="credit-form" disabled=${!ready}>Add the Credit</button></footer>
     <${NostrSheet} open=${keyOpen} value=${values.npub} feedId=${feedId} person=${{ name: values.name, img: values.img }}

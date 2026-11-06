@@ -47,7 +47,7 @@ The rows sort by split, the biggest first. They sort when you leave the row. Whe
 
 An open recipient also has:
 
-- **Change…** to change the address. **Find on musicindex** in that sheet fills the form from an artist or label feed.
+- **Change…** to change the address. **Find on musicindex** in that sheet fills the form from a feed.
 - **Add to People**, when no person holds the address.
 - **Remove**.
 

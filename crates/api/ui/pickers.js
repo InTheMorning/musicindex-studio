@@ -4,8 +4,8 @@
 import { html, useState, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
 import { api, ErrorNotice, Field } from './app.js';
-import { LookupRow, useLookup } from './peoplepages.js';
-import { foldStartsOpen, lookupGroups, FIND_EMPTY, FIND_WAIT, FIND_ONE_HINT } from './people.js';
+import { LookupRow, PersonArt, useLookup } from './peoplepages.js';
+import { foldStartsOpen, lookupGroups, FIND_ONE_EMPTY, FIND_WAIT, FIND_ONE_HINT } from './people.js';
 
 // A list of a sheet. A long list starts closed, with its count.
 export function PickFold({ title, rows, onClick }) {
@@ -44,6 +44,29 @@ export function PickFillRow({ title, line, lead, after, disabled, selected, onSe
     </button>${after}</div>`;
 }
 
+// The results of the one search (ADR 0145 item 3): the artist and label feeds,
+// then the other feeds. `onPick` gets the row, and for a row of the other feeds
+// it gets `true` as its second argument.
+export function SearchResults({ query, search, disabled, onPick }) {
+  const { rows, feeds, error } = search;
+  const searching = query.trim() !== '';
+  return html`<${ErrorNotice} error=${error} />
+    ${searching && rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
+    ${searching && rows !== null && rows.length === 0 && feeds.length === 0 && !error && html`<p class="empty">${FIND_ONE_EMPTY}</p>`}
+    ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
+      <h2>${group.heading}</h2><p class="hint">${group.note}</p>
+      <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row, false)} />`)}</div>
+    </section>`)}
+    ${feeds.length > 0 && html`<section class="page-section"><h2>Feeds</h2>
+      <div class="group">${feeds.map((h) => html`<button class="link-row" type="button" key=${h.feed_guid} disabled=${disabled}
+        onClick=${() => onPick(h, true)}>
+        <${PersonArt} person=${{ img: h.image_url, name: h.title || '' }} />
+        <span class="text"><span class="label">${h.title || h.feed_guid}</span>
+          <span class="summary"><span class="dot feed" aria-hidden="true"></span>${h.artist ? `Feed · ${h.artist}` : 'Feed'}</span></span>
+        <span class="go" aria-hidden="true">›</span>
+      </button>`)}</div></section>`}`;
+}
+
 // The sheet "Find on musicindex": one selection fills the form (ADR 0145 item 3).
 // `choices` turns the values of a feed into the choices of that feed, each with
 // `values`. With many choices, the sheet asks for one of them.
@@ -57,15 +80,15 @@ export function FindOneSheet({ open, start, choices, empty, onPick, onClose }) {
 
 function FindOneForm({ start, choices, empty, onPick, onCancel }) {
   const [query, setQuery] = useState(start || '');
-  const { rows, error } = useLookup(query, '/musicindex/publishers');
+  const search = useLookup(query, '/musicindex/search');
   const [options, setOptions] = useState(null);
   const [problem, setProblem] = useState(null);
   const [none, setNone] = useState(false);
-  const open = async (row) => {
+  const open = async (row, isFeed) => {
     setProblem(null);
     setNone(false);
     try {
-      const list = choices(await api(`/musicindex/publishers/${encodeURIComponent(row.feed_guid)}`));
+      const list = choices(await api(`/musicindex/values/${encodeURIComponent(row.feed_guid)}`), isFeed ? row : null);
       if (list.length === 1) onPick(list[0].values);
       else if (list.length === 0) setNone(true);
       else setOptions(list);
@@ -73,20 +96,14 @@ function FindOneForm({ start, choices, empty, onPick, onCancel }) {
       setProblem(e);
     }
   };
-  const searching = query.trim() !== '';
   return html`<header><h2 id="find-one-title">Find on musicindex</h2></header>
     <div class="body">
       ${options === null && html`<div class="group rows"><${Field} id="find-one-query" label="Name" type="search" value=${query}
         onInput=${(e) => setQuery(e.target.value)} /></div>
       <p class="hint">${FIND_ONE_HINT}</p>`}
-      <${ErrorNotice} error=${error || problem} />
+      <${ErrorNotice} error=${problem} />
       ${none && html`<p class="hint" role="status">${empty}</p>`}
-      ${options === null && searching && rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
-      ${options === null && searching && rows !== null && rows.length === 0 && !error && html`<p class="empty">${FIND_EMPTY}</p>`}
-      ${options === null && rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
-        <h2>${group.heading}</h2><p class="hint">${group.note}</p>
-        <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => open(row)} />`)}</div>
-      </section>`)}
+      ${options === null && html`<${SearchResults} query=${query} search=${search} onPick=${open} />`}
       ${options !== null && html`<div class="group">${options.map((option) => html`<button class="link-row" type="button" key=${option.id} onClick=${() => onPick(option.values)}>
         <span class="text"><span class="label">${option.title}</span><span class="summary">${option.line}</span></span></button>`)}</div>`}
     </div>

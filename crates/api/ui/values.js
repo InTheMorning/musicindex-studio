@@ -4,8 +4,8 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
 import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
-import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine, memberText, addRecipientsLabel, trackHeading, FIND_WAIT } from './people.js';
-import { PickerLayout, PickFillRow, FindOneSheet, PickFold } from './pickers.js';
+import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine, memberText, addRecipientsLabel, trackHeading } from './people.js';
+import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults } from './pickers.js';
 import { PersonArt, useLookup } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
@@ -235,7 +235,7 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
       notice=${html`<${ErrorNotice} error=${loading.error} />
         ${list === null && !loading.error && html`<p class="hint" role="status">Loading your people…</p>`}`}
       musicindex=${recipient
-        ? { title: 'Find on musicindex', summary: 'Fill the form from an artist or label feed.', onOpen: () => setFinding(true) }
+        ? { title: 'Find on musicindex', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }
         : { title: 'Copy from a Feed', summary: 'Select many recipients of a different feed.', onOpen: onCopy }}
       lists=${list === null ? [] : [{ title: 'Your people', rows: list.people.map(pickRow) }, { title: 'Payees with no person', rows: list.payees.map(pickRow) }]} />
     <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>
@@ -328,7 +328,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
 
   // ---- From musicindex ----
   const [query, setQuery] = useState('');
-  const { rows: hits, error: searchError } = useLookup(query, '/search');
+  const search = useLookup(query, '/musicindex/search');
   const [view, setView] = useState('hits'); // 'hits', 'feed' or 'track'
   const [feedData, setFeedData] = useState(null);
   const [trackData, setTrackData] = useState(null);
@@ -408,19 +408,8 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
         <${Field} id="picker-search" label="Name" type="search" value=${query} placeholder="Artist or feed name"
           onInput=${(e) => { setQuery(e.target.value); if (view !== 'hits') { setView('hits'); setMoved((n) => n + 1); } }} />
       </div></section>
-      <${ErrorNotice} error=${searchError} />
       <${ErrorNotice} error=${indexLoad.error} />
-      ${view === 'hits' && query.trim() !== '' && hits === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
-      ${view === 'hits' && query.trim() !== '' && hits && hits.length === 0 && !searchError && html`<p class="hint">musicindex found no feed with that name.</p>`}
-      ${view === 'hits' && hits && hits.length > 0 && html`<div class="group">
-        ${hits.map((h) => html`<button class="link-row" type="button" key=${h.feed_guid} disabled=${indexLoad.busy}
-          onClick=${() => openFeed(h.feed_guid)}>
-          <${PersonArt} person=${{ img: h.image_url, name: h.title || '' }} />
-          <span class="text"><span class="label">${h.title || h.feed_guid}</span>
-            <span class="summary"><span class="dot feed" aria-hidden="true"></span>${h.artist ? `Feed · ${h.artist}` : 'Feed'}</span></span>
-          <span class="go" aria-hidden="true">›</span>
-        </button>`)}
-      </div>`}
+      ${view === 'hits' && html`<${SearchResults} query=${query} search=${search} disabled=${indexLoad.busy} onPick=${(row) => openFeed(row.feed_guid)} />`}
       ${view === 'feed' && feedData && html`<div class="group">
           <button class="link-row" type="button" onClick=${backToHits}>
             <span class="go" aria-hidden="true">‹</span><span class="title">Search results</span></button>

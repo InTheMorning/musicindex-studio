@@ -387,7 +387,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
     </header>
     ${kind === 'wallets'
     ? html`<${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
-        musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from an artist or label feed.', onOpen: () => setFinding(true) }}
+        musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }}
         lists=${[{ title: 'Payees with no person', rows: payees }]} />
       <${FindOneSheet} open=${finding} choices=${recipientChoices} empty="This feed has no payment address."
         onPick=${(route) => setValues((current) => ({ ...current, ...walletValues(route) }))} onClose=${() => setFinding(false)} />`
@@ -523,22 +523,23 @@ function FindSheet({ open, personId, name, query, onQuery, onClose, onPick }) {
 // the text. `rows` is null while the first search runs.
 export function useLookup(query, path) {
   const [rows, setRows] = useState(null);
+  const [feeds, setFeeds] = useState([]);
   const [error, setError] = useState(null);
   const first = useRef(true);
   useEffect(() => {
     const text = query.trim();
     const wait = first.current ? 0 : 300;
     first.current = false;
-    if (text === '') { setRows([]); setError(null); return undefined; }
+    if (text === '') { setRows([]); setFeeds([]); setError(null); return undefined; }
     let live = true;
     const load = () => api(`${path}?q=${encodeURIComponent(text)}`).then(
-      (result) => { if (live) { setRows(Array.isArray(result) ? result : result.rows || []); setError(null); } },
-      (e) => { if (live) { setRows([]); setError(e); } },
+      (result) => { if (live) { setRows(result.rows || []); setFeeds(result.feeds || []); setError(null); } },
+      (e) => { if (live) { setRows([]); setFeeds([]); setError(e); } },
     );
     const timer = setTimeout(load, wait);
     return () => { live = false; clearTimeout(timer); };
   }, [query]);
-  return { rows, error };
+  return { rows, feeds, error };
 }
 
 function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {

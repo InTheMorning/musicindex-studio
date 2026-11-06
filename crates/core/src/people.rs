@@ -930,6 +930,70 @@ pub fn add_credit_name(
     insert_credit_name(collection.db(), id, name, href, npub)
 }
 
+/// Change a credit name of a person (ADR 0146 item 6). A Nostr key that the
+/// person holds with the old value of the credit name goes with that value.
+/// No feed changes.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] when the credit has no identity,
+/// [`CollectionErrorKind::Conflict`] when a different credit name has the
+/// identity, and [`CollectionErrorKind::NotFound`] when the person has no such
+/// credit name.
+pub fn change_credit_name(
+    collection: &Collection,
+    id: PersonId,
+    credit_name_id: i64,
+    name: &str,
+    href: &str,
+    npub: &str,
+) -> Result<(), CollectionError> {
+    let db = collection.db();
+    let Some(identity) = Identity::of(name, href, npub) else {
+        return Err(CollectionError::invalid(
+            "a credit name needs a name or a Nostr key",
+        ));
+    };
+    let key = identity.key();
+    let owner: Option<i64> = db
+        .query_row(
+            "SELECT id FROM person_credit_names WHERE identity = ?1 AND id <> ?2",
+            params![key, credit_name_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if owner.is_some() {
+        return Err(conflict("a different credit name has these values"));
+    }
+    let old_npub: Option<String> = db
+        .query_row(
+            "SELECT npub FROM person_credit_names WHERE id = ?1 AND person_id = ?2",
+            params![credit_name_id, id.0],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let changed = db.execute(
+        "UPDATE person_credit_names SET identity = ?1, name = ?2, href = ?3, npub = ?4
+         WHERE id = ?5 AND person_id = ?6",
+        params![
+            key,
+            name.trim(),
+            href.trim(),
+            npub.trim(),
+            credit_name_id,
+            id.0
+        ],
+    )?;
+    check_removed(changed, "credit name", credit_name_id)?;
+    if let Some(old) = old_npub.filter(|old| !old.is_empty() && old != npub.trim()) {
+        db.execute(
+            "DELETE FROM person_keys WHERE person_id = ?1 AND npub = ?2",
+            params![id.0, old],
+        )?;
+    }
+    Ok(())
+}
+
 /// Remove a credit name of a person.
 ///
 /// # Errors
@@ -948,6 +1012,40 @@ pub fn remove_credit_name(
     check_removed(changed, "credit name", credit_name_id)
 }
 
+/// The trimmed URL of a support link.
+fn web_url(url: &str) -> Result<&str, CollectionError> {
+    let url = url.trim();
+    let lower = url.to_lowercase();
+    if lower.starts_with("https://") || lower.starts_with("http://") {
+        Ok(url)
+    } else {
+        Err(CollectionError::invalid(
+            "a support link starts with https:// or http://",
+        ))
+    }
+}
+
+/// Change a support link of a person (ADR 0146 item 6). No feed changes.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] for a URL that does not start with
+/// `https://` or `http://`, and [`CollectionErrorKind::NotFound`] when the
+/// person has no such link.
+pub fn change_support_link(
+    collection: &Collection,
+    id: PersonId,
+    link_id: i64,
+    label: &str,
+    url: &str,
+) -> Result<(), CollectionError> {
+    let changed = collection.db().execute(
+        "UPDATE person_support_links SET label = ?1, url = ?2 WHERE id = ?3 AND person_id = ?4",
+        params![label.trim(), web_url(url)?, link_id, id.0],
+    )?;
+    check_removed(changed, "support link", link_id)
+}
+
 /// Add a support link to a person.
 ///
 /// # Errors
@@ -962,13 +1060,7 @@ pub fn add_support_link(
 ) -> Result<i64, CollectionError> {
     let db = collection.db();
     check_person(db, id)?;
-    let url = url.trim();
-    let lower = url.to_lowercase();
-    if !(lower.starts_with("https://") || lower.starts_with("http://")) {
-        return Err(CollectionError::invalid(
-            "a support link starts with https:// or http://",
-        ));
-    }
+    let url = web_url(url)?;
     let position: i64 = db.query_row(
         "SELECT COALESCE(MAX(position) + 1, 0) FROM person_support_links WHERE person_id = ?1",
         [id.0],
@@ -3406,6 +3498,51 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn a_change_of_a_credit_name_replaces_its_values_and_its_old_key() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let bob = add_person(&collection, &fields("Bob")).unwrap();
+        add_key(&collection, ann, "npub1old").unwrap();
+        let row = add_credit_name(&collection, ann, "Ann", "", "npub1old").unwrap();
+        add_credit_name(&collection, bob, "Bob", "", "").unwrap();
+
+        change_credit_name(
+            &collection,
+            ann,
+            row,
+            "Anna",
+            "https://a.example",
+            "npub1new",
+        )
+        .unwrap();
+        let p = person(&collection, ann).unwrap();
+        assert_eq!(p.credit_names.len(), 1);
+        assert_eq!(p.credit_names[0].name, "Anna", "ADR 0146 item 6");
+        assert_eq!(p.credit_names[0].href, "https://a.example");
+        assert_eq!(p.credit_names[0].npub, "npub1new");
+        assert!(p.keys.is_empty(), "ADR 0146 item 6: the old key goes");
+
+        let same = change_credit_name(&collection, ann, row, "Bob", "", "");
+        assert_eq!(same.unwrap_err().kind(), CollectionErrorKind::Conflict);
+        let other = change_credit_name(&collection, bob, row, "Cy", "", "");
+        assert_eq!(other.unwrap_err().kind(), CollectionErrorKind::NotFound);
+    }
+
+    #[test]
+    fn a_change_of_a_support_link_keeps_its_row_and_checks_its_address() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let row = add_support_link(&collection, ann, "Tip", "https://a.example").unwrap();
+        change_support_link(&collection, ann, row, "Tips", "https://b.example").unwrap();
+        let p = person(&collection, ann).unwrap();
+        assert_eq!(p.support_links[0].id, row);
+        assert_eq!(p.support_links[0].label, "Tips", "ADR 0146 item 6");
+        assert_eq!(p.support_links[0].url, "https://b.example");
+        let bad = change_support_link(&collection, ann, row, "Tips", "ftp://b.example");
+        assert_eq!(bad.unwrap_err().kind(), CollectionErrorKind::Invalid);
     }
 
     #[test]

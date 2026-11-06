@@ -6622,6 +6622,45 @@ async fn the_playlist_tracks_route_gives_the_tracks_of_the_collection() {
 }
 
 #[tokio::test]
+async fn a_credit_name_with_no_key_can_be_added_and_changed() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/v1/people",
+        Some(json!({ "name": "Ann" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let person = body["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{person}/credit-names"),
+        Some(json!({ "name": "Ann", "href": "", "npub": null })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "the form sends a null key: {body}"
+    );
+    let row = body["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/people/{person}/credit-names/{row}"),
+        Some(json!({ "name": "Anna", "href": "https://a.example", "npub": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "ADR 0146 item 6: {body}");
+    assert_eq!(body["id"], row);
+    let (_, body) = call(&app, "GET", &format!("/api/v1/people/{person}"), None).await;
+    assert_eq!(body["credit_names"][0]["name"], "Anna");
+}
+
+#[tokio::test]
 async fn a_route_of_musicindex_names_the_provider_of_a_shared_node() {
     let server = web_feeds();
     server.set(

@@ -237,3 +237,9 @@ Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md))
 ### 34. A Value That Is Already There Lost Its Content
 
 Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md)). A row that a list had already showed only a text in the place of its line. A Nostr result in the feeds could have no picture. Each row now keeps its content, in gray, with a tag.
+
+### 35. A Credit Name Has No Edit
+
+Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md) item 6). Only a wallet of a person had "Edit" (ADR 0141). A credit name and a support link had only "Remove".
+
+The drive of this correction also found that "Add a Credit Name" with no Nostr key gave an error, because the form sends a null key and the route refused it. The route now takes it.

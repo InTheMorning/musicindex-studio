@@ -18,7 +18,7 @@ import {
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
-  defaultFirst, walletValues, walletSelected, walletEdit, walletEditNote, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
+  defaultFirst, walletValues, walletSelected, walletEdit, walletEditNote, creditNameEdit, supportLinkEdit, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
@@ -71,7 +71,7 @@ function KeyText({ row }) {
 }
 
 // A row of the fold "Credited as": each value has an icon and a label (ADR 0140).
-function CreditRow({ row, removeLabel, onRemove }) {
+function CreditRow({ row, removeLabel, onRemove, onEdit }) {
   return html`<div class="link-row static key-line more-row credit-row">
     <${PersonArt} person=${{ img: row.picture, name: row.title }} />
     <div class="text"><span class="label">${row.title}</span>
@@ -81,7 +81,9 @@ function CreditRow({ row, removeLabel, onRemove }) {
           ${a.sub.map((line) => html`<span class=${line.startsWith('npub') ? 'attribute-sub mono key-text' : 'attribute-sub'} key=${line}>${line}</span>`)}
           ${a.id === 'nostr' && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}</dd></div>`)}</dl>
       ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</div>
-    <div class="actions more-actions"><button class="button destructive" type="button" aria-label=${removeLabel} onClick=${onRemove}>Remove</button></div></div>`;
+    <div class="actions more-actions">
+      ${onEdit && html`<button class="button action" type="button" aria-label=${`Edit ${row.title}`} onClick=${onEdit}>Edit</button>`}
+      <button class="button destructive" type="button" aria-label=${removeLabel} onClick=${onRemove}>Remove</button></div></div>`;
 }
 
 // A Nostr key with its profile, a copy button and an optional action.
@@ -350,7 +352,7 @@ const LINK_FINDS = {
 function LinkSheet({ kind, personId, edit = null, onClose, onAdded }) {
   const ref = useSheet(kind !== null);
   return html`<dialog ref=${ref} class=${kind === 'wallets' ? 'sheet' : 'sheet small'} aria-labelledby="link-title" onClose=${onClose}>
-    ${kind && html`<${LinkForm} key=${edit ? `edit-${edit.walletId}-${edit.start.address}` : kind} kind=${kind} personId=${personId} edit=${edit} onCancel=${() => ref.current.close()}
+    ${kind && html`<${LinkForm} key=${edit ? `edit-${edit.walletId ?? edit.linkId}-${edit.start.address ?? ''}` : kind} kind=${kind} personId=${personId} edit=${edit} onCancel=${() => ref.current.close()}
       onAdded=${() => { ref.current.close(); onAdded(); }} />`}
   </dialog>`;
 }
@@ -376,7 +378,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
     e.preventDefault();
     if (!linkReady(kind, values)) return;
     run(async () => {
-      await api(edit ? `/people/${personId}/${kind}/${edit.walletId}` : `/people/${personId}/${kind}`,
+      await api(edit ? `/people/${personId}/${kind}/${edit.walletId ?? edit.linkId}` : `/people/${personId}/${kind}`,
         { method: edit ? 'PUT' : 'POST', body: linkBody(kind, values) });
       onAdded();
     });
@@ -388,12 +390,12 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
         value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}
     ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" summary=${keySummary(values.name, values.npub)} value=${values.npub}
       onOpen=${() => setKeyOpen(true)} />`}</div>
-    ${edit && walletEditNote(edit.others) && html`<p class="hint" role="status">${walletEditNote(edit.others)}</p>`}`;
+    ${edit && (edit.note || walletEditNote(edit.others)) && html`<p class="hint" role="status">${edit.note || walletEditNote(edit.others)}</p>`}`;
   const payees = addWalletSections(recipients || []).filter((section) => section.id === 'payees')
     .flatMap((section) => section.rows).map((row) => html`<${ListRow} key=${JSON.stringify(row.body)} title=${row.title} lines=${row.lines} count=${row.count}
       chevron=${false} selected=${walletSelected(values, row.body)} onClick=${() => setValues((current) => ({ ...current, ...walletValues(row.body) }))} />`);
   return html`<header>
-      <h2 id="link-title">${edit ? 'Edit a Wallet' : form.title}</h2>
+      <h2 id="link-title">${edit ? form.editTitle : form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
@@ -403,7 +405,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       onPick=${(found) => setValues((current) => ({ ...current, ...(kind === 'wallets' ? walletValues(found) : found) }))} onClose=${() => setFinding(false)} />
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}
-    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${edit ? (busy ? 'Saving…' : 'Save the Wallet') : (busy ? 'Adding…' : form.button)}</button></footer>`;
+    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${edit ? (busy ? 'Saving…' : form.editButton) : (busy ? 'Adding…' : form.button)}</button></footer>`;
 }
 
 // The sheet of one operation of a person (ADR 0099 items 7 to 12). The
@@ -641,7 +643,8 @@ export function PersonPage({ id, feeds, go }) {
   const [suggestions, setSuggestions] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [linking, setLinking] = useState(null);
-  // The wallet of the sheet "Edit a Wallet", from `walletEdit` (ADR 0141).
+  // The value of an edit sheet, from `walletEdit`, `creditNameEdit` or
+  // `supportLinkEdit` (ADR 0141, ADR 0146).
   const [editing, setEditing] = useState(null);
   const [more, setMore] = useState([]);
   const [merging, setMerging] = useState(false);
@@ -845,6 +848,7 @@ export function PersonPage({ id, feeds, go }) {
           <span class="summary">${creditFoldSummary(person).line}</span></span></summary>
         <p class="hint">${CREDIT_FOLD_HINT}</p>
         ${creditNameRows(person, profiles).map((row) => html`<${CreditRow} key=${row.key} row=${row} removeLabel=${`Remove ${row.title}`}
+          onEdit=${() => withLeave(() => setEditing(creditNameEdit(person.credit_names.find((c) => c.id === row.creditId))))}
           onRemove=${() => withLeave(() => act(async () => {
             await api(`/people/${id}/credit-names/${row.creditId}`, { method: 'DELETE' });
             if (row.keyId !== null) await api(`/people/${id}/keys/${row.keyId}`, { method: 'DELETE' });
@@ -856,9 +860,11 @@ export function PersonPage({ id, feeds, go }) {
       <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => withLeave(() => setLinking('credit-names'))} />
         <${AddRow} title="Add a Nostr Key" onClick=${() => withLeave(() => setLinking('keys'))} /></div></section>`,
     support: () => html`<section class="page-section"><h2>Support links</h2>
-      <div class="group">${person.support_links.map((l) => html`<div class="link-row static" key=${l.id}><span class="text">
+      <div class="group">${person.support_links.map((l) => html`<div class="link-row static more-row" key=${l.id}><span class="text">
           <span class="label">${l.label || 'Support link'}</span><span class="summary address-text">${l.url}</span></span>
-          ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div>`)}
+          <div class="actions more-actions"><button class="button action" type="button" aria-label=${`Edit the support link ${l.label || l.url}`}
+            onClick=${() => withLeave(() => setEditing(supportLinkEdit(l)))}>Edit</button>
+          ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div></div>`)}
         <${AddRow} title="Add a Support Link" onClick=${() => withLeave(() => setLinking('support-links'))} /></div></section>`,
     member: () => {
       const rows = linkRows(shown, saved, feeds, person.linked_credits);
@@ -889,7 +895,7 @@ export function PersonPage({ id, feeds, go }) {
   </section>
   <${OperationSheet} kind=${sheet} person=${person} groups=${groups} rows=${feedRows(person.places, feeds)} feeds=${feeds}
     go=${go} onClose=${() => setSheet(null)} />
-  <${LinkSheet} kind=${editing ? 'wallets' : null} personId=${person.id} edit=${editing} onClose=${() => setEditing(null)}
+  <${LinkSheet} kind=${editing ? editing.kind || 'wallets' : null} personId=${person.id} edit=${editing} onClose=${() => setEditing(null)}
     onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />
   <${LinkSheet} kind=${linking === 'keys' ? null : linking} personId=${person.id} onClose=${() => setLinking(null)}
     onAdded=${() => { reload(); loadSuggestions(); loadMore(); }} />

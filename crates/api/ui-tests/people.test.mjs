@@ -1515,6 +1515,16 @@ test('a row of the copy sheet names a shared node and its account, and the foote
   assert.equal(trackHeading('Song', 'Album'), 'Recipients of Song', WHY);
 });
 
+test('an edit sheet starts from the saved values', async () => {
+  const { creditNameEdit, supportLinkEdit, LINK_FORMS } = await import('../ui/people.js');
+  const WHY = 'ADR 0146 item 6';
+  const credit = creditNameEdit({ id: 4, name: 'Ann', href: '', npub: '' });
+  assert.equal(credit.linkId, 4, WHY);
+  assert.deepEqual(credit.start, { name: 'Ann', href: '', npub: null }, WHY);
+  assert.deepEqual(supportLinkEdit({ id: 5, label: 'Tip', url: 'https://x' }).start, { label: 'Tip', url: 'https://x' }, WHY);
+  for (const form of Object.values(LINK_FORMS)) assert.ok(form.editTitle && form.editButton, WHY);
+});
+
 test('a Nostr result takes a missing name and picture from the person that holds the key', async () => {
   const { withPersonValues } = await import('../ui/people.js');
   const WHY = 'ADR 0146 item 5';

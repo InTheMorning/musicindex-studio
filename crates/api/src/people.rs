@@ -244,8 +244,9 @@ struct CreditNameBody {
     name: String,
     #[serde(default)]
     href: String,
+    /// The form sends `null` for a credit name with no key.
     #[serde(default)]
-    npub: String,
+    npub: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -299,7 +300,13 @@ pub(crate) async fn add_link(
             "credit-names" => {
                 let body: CreditNameBody =
                     serde_json::from_value(body).map_err(|e| bad_body(&e))?;
-                people::add_credit_name(c, id, &body.name, &body.href, &body.npub)
+                people::add_credit_name(
+                    c,
+                    id,
+                    &body.name,
+                    &body.href,
+                    body.npub.as_deref().unwrap_or_default(),
+                )
             }
             "support-links" => {
                 let body: SupportLinkBody =
@@ -324,17 +331,34 @@ pub(crate) async fn change_link(
     Json(body): Json<Value>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        if kind != "wallets" {
-            return Err(unknown_kind(&kind));
+        let id = PersonId(id);
+        let c = &w.collection;
+        let new_id = match kind.as_str() {
+            "wallets" => {
+                let body: WalletBody = serde_json::from_value(body).map_err(|e| bad_body(&e))?;
+                people::change_wallet(c, id, link_id, &body.key, &body.recipient_type)
+            }
+            "credit-names" => {
+                let body: CreditNameBody =
+                    serde_json::from_value(body).map_err(|e| bad_body(&e))?;
+                people::change_credit_name(
+                    c,
+                    id,
+                    link_id,
+                    &body.name,
+                    &body.href,
+                    body.npub.as_deref().unwrap_or_default(),
+                )
+                .map(|()| link_id)
+            }
+            "support-links" => {
+                let body: SupportLinkBody =
+                    serde_json::from_value(body).map_err(|e| bad_body(&e))?;
+                people::change_support_link(c, id, link_id, &body.label, &body.url)
+                    .map(|()| link_id)
+            }
+            _ => return Err(unknown_kind(&kind)),
         }
-        let body: WalletBody = serde_json::from_value(body).map_err(|e| bad_body(&e))?;
-        let new_id = people::change_wallet(
-            &w.collection,
-            PersonId(id),
-            link_id,
-            &body.key,
-            &body.recipient_type,
-        )
         .map_err(person_error)?;
         Ok(Json(json!({ "id": new_id })))
     })

@@ -656,6 +656,8 @@ export const LINK_FORMS = {
   wallets: {
     title: 'Add a Wallet',
     button: 'Add the Wallet',
+    editTitle: 'Edit a Wallet',
+    editButton: 'Save the Wallet',
     fields: [
       { id: 'recipient_type', label: 'Type', select: [['lnaddress', 'LNURL Address'], ['node', 'Node Address']], start: 'lnaddress' },
       { id: 'address', label: 'Address', required: true },
@@ -666,6 +668,8 @@ export const LINK_FORMS = {
   'credit-names': {
     title: 'Add a Credit Name',
     button: 'Add the Credit Name',
+    editTitle: 'Edit a Credit Name',
+    editButton: 'Save the Credit Name',
     fields: [
       { id: 'name', label: 'Name', required: true },
       { id: 'href', label: 'Information address' },
@@ -676,6 +680,8 @@ export const LINK_FORMS = {
   'support-links': {
     title: 'Add a Support Link',
     button: 'Add the Link',
+    editTitle: 'Edit a Support Link',
+    editButton: 'Save the Link',
     fields: [
       { id: 'label', label: 'Label' },
       { id: 'url', label: 'Address', required: true },
@@ -717,6 +723,17 @@ export function walletSelected(values, body) {
   const given = walletValues(body);
   return ['address', 'custom_key', 'custom_value'].every((id) => String(values[id] ?? '').trim() === String(given[id]).trim());
 }
+
+// The start of the sheet "Edit a Credit Name" (ADR 0146 item 6).
+export const creditNameEdit = (credit) => ({
+  kind: 'credit-names', linkId: credit.id, note: 'This changes the credits that Studio counts as this person. It changes no feed.',
+  start: { name: credit.name ?? '', href: credit.href ?? '', npub: credit.npub || null },
+});
+
+// The start of the sheet "Edit a Support Link" (ADR 0146 item 6).
+export const supportLinkEdit = (link) => ({
+  kind: 'support-links', linkId: link.id, note: 'This changes no feed.', start: { label: link.label ?? '', url: link.url ?? '' },
+});
 
 // The start of the sheet "Edit a Wallet" for one address of a wallet (ADR 0141
 // item 6). `others` lists each other address that the wallet holds, because

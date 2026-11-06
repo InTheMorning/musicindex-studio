@@ -76,9 +76,11 @@ export function playerNotice(source) {
 // block it, so the text names that cause. A file that Studio holds loads
 // from Studio, so the setting has no effect on it.
 export const PLAYER_ERROR = 'Studio cannot play this file.';
-// The text below the player from a press of Play until the audio starts. A
-// slow start is not an error (human test of 0.1.0-rc.18).
+// The text in the place of the time, until the audio starts. A slow start is
+// not an error (human test of 0.1.0-rc.18).
 export const PLAYER_STARTING = 'Starting…';
+// A shorter start shows no starting state, so a quick start does not flicker.
+export const PLAYER_STARTING_DELAY_MS = 400;
 
 // The part of the position bar that is done, from 0 to 1. `styles.css` draws
 // the fill and the cursor from this one value, so that they agree.

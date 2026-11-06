@@ -36,7 +36,7 @@ import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
-import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, playWasReplaced, playerProgress } from './media.js';
+import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
@@ -372,6 +372,7 @@ function AudioPlayer({ id, url, pick }) {
   const [length, setLength] = useState(NaN);
   const [error, setError] = useState(null);
   const [starting, setStarting] = useState(false);
+  const [slowStart, setSlowStart] = useState(false);
   const heldFiles = useHeldFiles(url);
   const source = mediaSource(url, heldFiles);
   const usable = canPlay(source);
@@ -408,6 +409,11 @@ function AudioPlayer({ id, url, pick }) {
     if (!reading || !usable) return;
     load().catch(() => pick.metadataDone(null));
   }, [url, pick.metadataFor, usable]);
+  useEffect(() => {
+    if (!starting) { setSlowStart(false); return undefined; }
+    const timer = setTimeout(() => setSlowStart(true), PLAYER_STARTING_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [starting]);
   const toggle = async () => {
     const element = audio.current;
     if (!element.paused) { element.pause(); setStarting(false); return; }
@@ -451,14 +457,15 @@ function AudioPlayer({ id, url, pick }) {
       <div class="player">
         <button id=${`${id}-play`} class="button icon-button" type="button" disabled=${!usable}
           aria-busy=${starting ? 'true' : undefined}
-          aria-label=${starting ? PLAYER_STARTING : playing ? 'Pause' : 'Play'} onClick=${toggle}><${Icon} name=${starting ? 'ellipsis' : playing ? 'pause' : 'play'} /></button>
+          aria-label=${starting ? PLAYER_STARTING : playing ? 'Pause' : 'Play'} onClick=${toggle}><${Icon} name=${slowStart ? 'ellipsis' : starting || playing ? 'pause' : 'play'} /></button>
         <input class="player-bar" type="range" min="0" max=${known ? length : 0} step="any" value=${position}
           style=${{ '--progress': playerProgress(position, length) }}
           aria-label="Position" disabled=${!known}
           onInput=${(e) => { audio.current.currentTime = Number(e.currentTarget.value); setPosition(Number(e.currentTarget.value)); }} />
-        <span class="player-time">${clockText(position)} / ${clockText(length)}</span>
+        ${slowStart
+          ? html`<span class="player-time" role="status">${PLAYER_STARTING}</span>`
+          : html`<span class="player-time">${clockText(position)} / ${clockText(length)}</span>`}
       </div>
-      ${starting && !error && html`<span class="hint" role="status">${PLAYER_STARTING}</span>`}
       ${error && html`<span class="field-error" role="alert">${error}</span>`}
       ${notice && html`<span class="hint" id=${`${id}-notice`} role="status">${notice}</span>`}
       <audio ref=${audio} preload="none" onLoadedMetadata=${onLoadedMetadata} onDurationChange=${(e) => setLength(e.currentTarget.duration)}

@@ -189,3 +189,7 @@ Corrected ([ADR 0139](../adr/0139-the-default-address-is-on-its-row.md)). The se
 Corrected for the next candidate. "Correct 1 Feed" opened the review page with each feed row closed, and "Write 1 Feed" was in the toolbar. The user could thus write without a diff on the page. A check with test data showed that the write did not occur before the select of "Write". The review now opens the diff of the first changed feed. With many feeds, the other rows stay closed.
 
 The same test showed one line for each role in a row of "Check your feeds". The rows now give one line for all the roles. The page title now agrees with the row that opens it.
+
+### 23. A Credit Name Row Does Not Tell What It Does
+
+Corrected ([ADR 0140](../adr/0140-a-credit-name-shows-where-it-is-used.md)). A row "Credit name" showed the values of a match, with no words for what the match does, and the same Nostr key showed in a second row. The rows are now in a fold, and each row gives its feeds and roles.

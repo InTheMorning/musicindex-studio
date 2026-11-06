@@ -141,6 +141,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0137: The people list fills Nostr keys and open entries](adr/0137-the-people-list-fills-nostr-keys-and-open-entries.md)
 - [ADR 0138: The names of a wallet address and the correction of a wrong key](adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md)
 - [ADR 0139: The default address is on its row](adr/0139-the-default-address-is-on-its-row.md)
+- [ADR 0140: A credit name shows where it is used](adr/0140-a-credit-name-shows-where-it-is-used.md)
 
 ## Plans
 

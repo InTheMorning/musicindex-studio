@@ -17,6 +17,7 @@ import {
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
+  creditNameRows, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
@@ -800,13 +801,25 @@ export function PersonPage({ id, feeds, go }) {
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => withLeave(() => setLinking('wallets'))} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
       <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources} />
-      ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<div class="group">
-        ${person.credit_names.map((c) => html`<div class="link-row static" key=${`c${c.id}`}><span class="text"><span class="label">Credit name</span>
-          ${c.name && html`<span class="summary">${c.name}</span>`}${c.href && html`<span class="summary">${c.href}</span>`}${c.npub && html`<span class="summary mono">${shortKey(c.npub)}</span>`}</span>
-          ${c.npub && html`<${CopyButton} text=${c.npub} label="the Nostr key" />`}
-          ${removeButton('credit-names', c.id, `Remove the credit name ${c.name}`)}</div>`)}
-        ${person.keys.map((k) => html`<${KeyRowView} key=${`k${k.id}`} npub=${k.npub} profiles=${profiles} name=${person.name}
-          note=${keyEvidenceText(k.evidence)} action=${removeButton('keys', k.id, `Remove the Nostr key ${shortKey(k.npub)}`)} />`)}</div>`}
+      ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<details class="disclosure group credit-fold">
+        <summary class="link-row"><span class="text"><span class="label">${creditFoldSummary(person).title}</span>
+          <span class="summary">${creditFoldSummary(person).line}</span></span></summary>
+        <p class="hint">${CREDIT_FOLD_HINT}</p>
+        ${creditNameRows(person, profiles).map((row) => html`<div class="link-row static key-line more-row" key=${row.key}>
+          <${PersonArt} person=${{ img: row.picture, name: row.title }} /><${KeyText} row=${row} />
+          ${row.npub && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}
+          <div class="actions more-actions"><button class="button" type="button" aria-label=${`Remove ${row.title}`}
+            onClick=${() => withLeave(() => act(async () => {
+              await api(`/people/${id}/credit-names/${row.creditId}`, { method: 'DELETE' });
+              if (row.keyId !== null) await api(`/people/${id}/keys/${row.keyId}`, { method: 'DELETE' });
+            }))}>Remove</button></div></div>`)}
+        ${keysWithNoCreditName(person).map((k) => {
+          const row = keyRow(k.npub, profiles, person.name);
+          return html`<div class="link-row static key-line more-row" key=${`k${k.id}`}>
+            <${PersonArt} person=${{ img: row.picture, name: row.title }} /><${KeyText} row=${{ ...row, lines: [...row.lines, keyEvidenceText(k.evidence)] }} />
+            <${CopyButton} text=${k.npub} label="the Nostr key" />
+            <div class="actions more-actions">${removeButton('keys', k.id, `Remove the Nostr key ${shortKey(k.npub)}`)}</div></div>`;
+        })}</details>`}
       ${shown.keys.length > 0 && html`<div class="group">${shown.keys.map((npub) => html`<div class="link-row static" key=${`p${npub}`}>
         <span class="text"><span class="label">Nostr key</span><span class="summary mono">${shortKey(npub)}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
       <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => withLeave(() => setLinking('credit-names'))} />

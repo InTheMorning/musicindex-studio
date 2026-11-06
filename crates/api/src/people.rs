@@ -89,6 +89,8 @@ fn person_json(
         value["pays"] = json!(uses.pays);
         value["credited"] = json!(uses.credited);
         value["places"] = json!(uses.places);
+        // ADR 0140 item 3: where each credit name is in the feeds.
+        value["credit_name_uses"] = json!(people::credit_name_uses(collection, person)?);
         // ADR 0132 item 4: the links with a credit of the person.
         value["linked_credits"] = json!(people::linked_credits(collection, person)?);
         // ADR 0111 item 12: the number of feeds that need a correction.

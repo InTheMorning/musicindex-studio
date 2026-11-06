@@ -40,7 +40,7 @@ A control with a change has a mark at its start edge.
 - **More from your feeds** lists items that can belong to this person. Select **Add** for an item. A row can warn that the name of a Nostr profile is not the name of this person. Select **Correct the Feeds** to open **Check your feeds** and replace that key. Select **Add Anyway** when the key is correct, for example for a band or a label.
 - **Payment** shows the wallets. The default address has the tag **Default**. To change it, select **Make Default** on a different address, then select **Save**. Select **Add a Wallet** to add one. Select **Remove Wallet** below a wallet to remove it from the person.
 - An LNURL address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, remove the key in **Credits**.
-- **Credits** shows the credit names and the Nostr keys.
+- **Credits** has the fold **Credited as**. Open it to see each credit name, its feeds and its roles, and the Nostr keys. **Remove** on a row with a credit name and a key removes both from the person. It changes no feed.
 - **Add a Nostr Key** opens the sheet **Find a Nostr profile**. Type a name, an `npub` key or a NIP-05 address in the field. Then select **Search**, and select a result to add the key.
 - The row **Nostr key** of **Add a Credit Name** opens the same sheet.
 - **Artists and labels** lists each artist or label that this person is part of. Each link stays in Studio. Use the menu **Add an artist or label** to add a link, and **Remove** to remove one. **Save** keeps the changes.

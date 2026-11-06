@@ -1182,7 +1182,7 @@ test('creditOffers ignores the rows of other persons', () => {
 });
 
 test('the texts of the credit sheets and of the links (ADR 0132 items 2 and 10)', () => {
-  assert.equal(LINK_HINT, 'Links this person to an artist or label. Each link stays in Studio. After Save, you can also add a credit to each new feed.');
+  assert.equal(LINK_HINT, 'Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. The link itself stays in Studio.');
   assert.equal(creditAddTitle('Sam', 'Band'), 'Add Sam to the Credits of Band?');
   assert.equal(creditRemoveTitle('Sam', 'Band'), 'Remove Sam from the Credits of Band?');
   assert.equal(creditAddNote('Sam', 'Band'), 'Sam is part of Band in Studio. The credits of the feed can also show it, so that apps and musicindex.org can find Sam.');
@@ -1427,4 +1427,27 @@ test('one row is the default address, with the parts of its key', async () => {
   assert.equal(isDefaultAddress(key, keyValue(key)), true);
   assert.equal(isDefaultAddress({ address: '03a' }, keyValue(key)), false);
   assert.equal(isDefaultAddress(key, ''), false);
+});
+
+test('a credit name row shows where it is used and joins its key', async () => {
+  const { creditNameRows, keysWithNoCreditName, creditFoldSummary } = await import('../ui/people.js');
+  const npub = 'npub109pabcdefghijklmnopqrstuvwxyz5aaj';
+  const person = {
+    name: 'HeyCitizen',
+    credit_names: [{ id: 1, name: 'HeyCitizen', href: 'https://musicindex.org', npub }, { id: 2, name: 'H. Citizen', href: '', npub: '' }],
+    credit_name_uses: [{ id: 1, feeds: 3, roles: ['composer', 'guitarist'] }, { id: 2, feeds: 0, roles: [] }],
+    keys: [{ id: 9, npub }, { id: 10, npub: 'npub1other' }],
+  };
+  const profiles = new Map([[npub, { npub, name: 'Sir HeyCitizen' }]]);
+  const [first, second] = creditNameRows(person, profiles);
+  assert.equal(first.title, 'HeyCitizen');
+  assert.equal(first.keyId, 9);
+  assert.deepEqual(first.lines.slice(0, 4), ['In 3 feeds', 'As composer, guitarist', 'https://musicindex.org', 'Nostr: Sir HeyCitizen']);
+  assert.deepEqual(second.lines, ['Not in a feed yet']);
+  assert.equal(second.keyId, null);
+  assert.deepEqual(keysWithNoCreditName(person).map((k) => k.id), [10]);
+  assert.deepEqual(creditFoldSummary(person), { title: 'Credited as HeyCitizen', line: '2 credit names · 2 Nostr keys' });
+  assert.deepEqual(creditFoldSummary({ name: 'Ann', credit_names: [], keys: [{ id: 1, npub: 'a' }] }), { title: 'Credited as Ann', line: '1 Nostr key' });
+  assert.equal(creditFoldSummary({ name: 'Ann Lee', credit_names: [{ id: 1, name: 'A. Lee' }, { id: 2, name: 'ann lee' }] }).title, 'Credited as ann lee');
+  assert.equal(creditFoldSummary({ name: 'Ann Lee', credit_names: [{ id: 1, name: 'A. Lee' }] }).title, 'Credited as A. Lee');
 });

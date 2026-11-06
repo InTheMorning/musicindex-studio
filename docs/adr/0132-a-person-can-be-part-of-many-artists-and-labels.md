@@ -23,7 +23,7 @@ On 2026-11-05 the operator asked what "Member of" does, and if its name and its 
 ### The List
 
 1. A person has zero or more links to publisher feeds. The table `person_members` does not change.
-2. The section `member` of the page of a person has the heading "Artists and labels". Its hint is "Links this person to an artist or label. Each link stays in Studio. After Save, you can also add a credit to each new feed."
+2. The section `member` of the page of a person has the heading "Artists and labels". Its hint is "Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. The link itself stays in Studio."
 3. The section has one group with one row for each link, A to Z. A section with no link has the row "This person is not part of an artist or label yet."
 4. Each row shows the type dot, the feed title, the first role and the condition of the link: "In the credits of this feed", "Only in Studio" or "Not saved yet". A row has the normal button "Remove".
 5. A second group has the select menu "Add an artist or label", with the placeholder "Select…". A selection adds a row and returns the menu to the placeholder.

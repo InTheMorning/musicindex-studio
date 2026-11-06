@@ -1994,6 +1994,7 @@ button.outline-feed {
 .key-line .text, .key-row .text { min-width: 0; }
 .key-line .summary, .key-row .summary { white-space: normal; }
 .more-actions { flex: none; }
+.credit-fold > .hint { margin: 0; padding: 4px 16px 8px; }
 /* The tag of the default address (ADR 0139 item 2). It has the radius of a badge (musicindex ADR 0024). */
 .default-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: var(--accent-tint); color: var(--accent); font-size: var(--text-footnote); font-weight: 600; vertical-align: 1px; }
 .default-tag .icon { display: block; width: 12px; height: 12px; stroke-width: 3; }

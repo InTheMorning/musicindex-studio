@@ -469,6 +469,44 @@ export const addressOptions = (groups) => groups.flatMap((g) => g.members.map((m
 export const isDefaultAddress = (key, value) => keyValue(key) === value;
 export const DEFAULT_HINT = '"Pick from your people" adds the default address of this person.';
 
+// The rows of the fold "Credited as" (ADR 0140). A credit name with a key of
+// the person is one row with that key. `keyId` is the ID of that key, for the
+// removal of the row. A key with no credit name has its own row.
+export function creditNameRows(person, profiles = null) {
+  const uses = new Map((person.credit_name_uses || []).map((u) => [u.id, u]));
+  return (person.credit_names || []).map((c) => {
+    const use = uses.get(c.id) || { feeds: 0, roles: [] };
+    const key = c.npub ? keyRow(c.npub, profiles, person.name) : null;
+    const found = (person.keys || []).find((k) => c.npub && k.npub === c.npub);
+    const lines = [
+      use.feeds > 0 ? `In ${feedCount(use.feeds)}` : 'Not in a feed yet',
+      ...(use.roles.length > 0 ? [`As ${use.roles.join(', ')}`] : []),
+      ...(c.href ? [c.href] : []),
+      ...(key && !key.mono ? [`Nostr: ${key.title}`] : []),
+      ...(key ? [key.short] : []),
+    ];
+    return {
+      key: `c${c.id}`, title: c.name || (key ? key.title : 'Credit name'), lines, short: key ? key.short : null, mono: false,
+      picture: key ? key.picture : null, warning: key ? key.warning : null, npub: c.npub || null, creditId: c.id, keyId: found ? found.id : null,
+    };
+  });
+}
+
+// The keys of a person that are not in a credit name.
+export const keysWithNoCreditName = (person) => (person.keys || []).filter((k) => !(person.credit_names || []).some((c) => c.npub === k.npub));
+
+// The summary line of the fold "Credited as" (ADR 0140 item 1).
+export function creditFoldSummary(person) {
+  const names = person.credit_names || [];
+  const keys = person.keys || [];
+  const first = names.find((c) => lowerName(c.name) === lowerName(person.name)) || names.find((c) => c.name);
+  const parts = [];
+  if (names.length > 0) parts.push(names.length === 1 ? '1 credit name' : `${names.length} credit names`);
+  if (keys.length > 0) parts.push(keys.length === 1 ? '1 Nostr key' : `${keys.length} Nostr keys`);
+  return { title: `Credited as ${first ? first.name : person.name}`, line: parts.join(' · ') };
+}
+export const CREDIT_FOLD_HINT = 'Credits in your feeds with these values are credits of this person.';
+
 // The text of the count of feeds of an address.
 export const usedText = (count) => (count > 0 ? feedCount(count) : 'Not used');
 
@@ -749,7 +787,7 @@ export function profileLine(person, titles, feeds = []) {
 }
 
 // The hint of the section "Artists and labels" (ADR 0132 item 2).
-export const LINK_HINT = 'Links this person to an artist or label. Each link stays in Studio. After Save, you can also add a credit to each new feed.';
+export const LINK_HINT = 'Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. The link itself stays in Studio.';
 
 // The row of the section with no link (ADR 0132 item 3).
 export const LINK_EMPTY = 'This person is not part of an artist or label yet.';

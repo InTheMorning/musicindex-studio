@@ -1936,6 +1936,52 @@ pub fn feed_members(
     Ok(list)
 }
 
+/// Where a credit name of a person is in the feeds (ADR 0140 item 3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CreditNameUse {
+    /// The ID of the credit name.
+    pub id: i64,
+    /// The number of feeds with a credit of this identity.
+    pub feeds: usize,
+    /// Each role of those credits, in sequence, with no empty role.
+    pub roles: Vec<String>,
+}
+
+/// The use of each credit name of `person`, in the sequence of the credit
+/// names. The function reads only the credit index.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when the collection cannot be read.
+pub fn credit_name_uses(
+    collection: &Collection,
+    person: &Person,
+) -> Result<Vec<CreditNameUse>, CollectionError> {
+    let mut found: HashMap<String, (HashSet<i64>, BTreeSet<String>)> = HashMap::new();
+    for row in collection.feed_credits()? {
+        let Some(identity) = Identity::of(&row.name, &row.href, &row.npub) else {
+            continue;
+        };
+        let (feeds, roles) = found.entry(identity.key()).or_default();
+        feeds.insert(row.feed_id.0);
+        if !row.role.is_empty() {
+            roles.insert(row.role);
+        }
+    }
+    Ok(person
+        .credit_names
+        .iter()
+        .map(|credit| {
+            let (feeds, roles) = found.get(&credit.identity).cloned().unwrap_or_default();
+            CreditNameUse {
+                id: credit.id,
+                feeds: feeds.len(),
+                roles: roles.into_iter().collect(),
+            }
+        })
+        .collect())
+}
+
 /// The publisher feeds of `person` that have a credit of the person (ADR 0132
 /// item 4). The test is the test of [`feed_members`].
 ///
@@ -3268,6 +3314,34 @@ mod tests {
         assert_eq!(
             names,
             [("Ann".into(), 2), ("ANN".into(), 3), ("bob".into(), 1)]
+        );
+    }
+
+    #[test]
+    fn a_credit_name_gives_its_feeds_and_its_roles() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "composer", "", "npub1ann");
+        credit(&collection, 1, "Ann", "guitarist", "", "npub1ann");
+        credit(&collection, 2, "Annie", "", "", "npub1ann");
+        credit(&collection, 3, "Ann", "mixer", "", "");
+        let id = add_person(&collection, &fields("Ann")).unwrap();
+        let keyed = add_credit_name(&collection, id, "Ann", "", "npub1ann").unwrap();
+        let unused = add_credit_name(&collection, id, "Nobody", "", "").unwrap();
+        let uses = credit_name_uses(&collection, &person(&collection, id).unwrap()).unwrap();
+        assert_eq!(
+            uses,
+            vec![
+                CreditNameUse {
+                    id: unused,
+                    feeds: 0,
+                    roles: vec![]
+                },
+                CreditNameUse {
+                    id: keyed,
+                    feeds: 2,
+                    roles: vec!["composer".into(), "guitarist".into()]
+                },
+            ]
         );
     }
 

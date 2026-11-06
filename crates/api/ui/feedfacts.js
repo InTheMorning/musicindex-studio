@@ -20,3 +20,14 @@ export function spaceNotice(count) {
     : { text: `${count} addresses have a space. Apps can fail on them.`, action: `Correct All ${count}` };
 }
 
+// The tag `itunes:new-feed-url` of the feed file, for the Feed facts and the
+// Files page (ADR 0021 item 4). The core compares the tag with the public
+// address, and `address_differences` gives the result.
+export function newFeedAddress(feed) {
+  if (!feed.new_feed_url) return null;
+  const elsewhere = (feed.address_differences || []).some((d) => d.source === 'new_feed_url');
+  return {
+    url: feed.new_feed_url,
+    note: !elsewhere && feed.public_url ? 'This is the address of this feed.' : null,
+  };
+}

@@ -37,6 +37,8 @@ Each difference is one row. Select a button to decide:
 - **Default file host of the release files**. New files go to this file host.
 - **File host of the feed XML**. If you select a different file host, the feed file moves when you write. The address from before gets a redirect or a pointer file with the new address. The page tells you which.
 
+A feed file can name a new feed address in the tag `itunes:new-feed-url`. This page and **Feed facts** show that address. If it is a different address, the top of each page of the feed also shows a notice. An app or an index can follow the tag to that address.
+
 To undo a move before you write, use **Undo** in the review sheet. See [Review and write your changes](review-and-write.md).
 
 ## Library files

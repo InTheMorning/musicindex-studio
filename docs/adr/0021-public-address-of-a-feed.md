@@ -24,7 +24,7 @@ Subsequent phases need a correct address for each feed. Phase 5 compares the loc
    3. The public address of the folder connector, with the file path added.
 2. The collection records which source gave the address.
 3. When two sources give different addresses, Studio keeps the address of the first source. The collection records the difference. The UI shows it on the feed and on the host card.
-4. When a feed has `itunes:new-feed-url`, Studio records it as a difference. Studio does not use it as the address without a user action.
+4. When a feed has `itunes:new-feed-url`, Studio records it as a difference. Studio does not use it as the address without a user action. The collection gives the value of the tag, and the core compares it with the public address. The Feed facts and the Files page show the tag when the feed has it. The operator added these rules on 2026-11-05.
 5. Studio does not change a feed file because of a difference. The user decides.
 
 ### The Public Address Of A Folder

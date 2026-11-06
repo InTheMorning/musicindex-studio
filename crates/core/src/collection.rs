@@ -830,6 +830,9 @@ pub struct FeedRow {
     /// Each address of a different source that is different from the public
     /// address (ADR 0021 items 3 and 4).
     pub address_differences: Vec<Address>,
+    /// The value of `itunes:new-feed-url` in the file that Studio last read or
+    /// wrote, also when it names the public address (ADR 0021 item 4).
+    pub new_feed_url: Option<String>,
     /// The connector that writes the feed. `None` means read-only.
     pub connector_id: Option<ConnectorId>,
     /// The path of the feed file in the connector.
@@ -1606,7 +1609,7 @@ impl Collection {
                     format!("feed {} does not exist", id.0),
                 )
             })?;
-        row.address_differences = address::differences(&addresses(&self.db, id)?);
+        fill_addresses(&self.db, &mut row)?;
         Ok(row)
     }
 
@@ -1663,7 +1666,7 @@ impl Collection {
             .query_map([], feed_row)?
             .collect::<Result<_, _>>()?;
         for row in &mut rows {
-            row.address_differences = address::differences(&addresses(&self.db, row.id)?);
+            fill_addresses(&self.db, row)?;
         }
         Ok(rows)
     }
@@ -4046,6 +4049,17 @@ fn addresses(db: &Connection, id: FeedId) -> Result<Vec<Address>, CollectionErro
     Ok(found)
 }
 
+/// Give a row the values that come from the address sources of its feed.
+fn fill_addresses(db: &Connection, row: &mut FeedRow) -> Result<(), CollectionError> {
+    let all = addresses(db, row.id)?;
+    row.address_differences = address::differences(&all);
+    row.new_feed_url = all
+        .into_iter()
+        .find(|a| a.source == AddressSource::NewFeedUrl)
+        .map(|a| a.url);
+    Ok(())
+}
+
 /// Set the public address of a feed from its sources (ADR 0021 item 1).
 fn choose_address(db: &Connection, id: FeedId) -> Result<(), CollectionError> {
     let all = addresses(db, id)?;
@@ -4096,6 +4110,7 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
             .as_deref()
             .and_then(AddressSource::parse),
         address_differences: Vec::new(),
+        new_feed_url: None,
         folder: r.get(9)?,
         files_connector_id: r.get::<_, Option<i64>>(10)?.map(ConnectorId),
         publisher_roles: r
@@ -4246,6 +4261,10 @@ mod tests {
         assert!(differences.contains(&(AddressSource::SelfLink, "https://old.example/a.xml")));
         assert!(differences.contains(&(AddressSource::NewFeedUrl, "https://next.example/a.xml")));
         assert_eq!(differences.len(), 2);
+        assert_eq!(
+            row.new_feed_url.as_deref(),
+            Some("https://next.example/a.xml")
+        );
 
         collection
             .set_address(id, AddressSource::Read, None)

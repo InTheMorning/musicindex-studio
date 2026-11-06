@@ -15,7 +15,7 @@ import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, tog
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
-import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE } from './feedfacts.js';
+import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -2091,6 +2091,7 @@ function FeedFacts({ feed, onRemoved }) {
       onRemoved();
     });
   };
+  const tag = newFeedAddress(feed);
   // "Remove from Collection" is a row of its own below the facts, so that it
   // shows with the facts closed.
   return html`<details class="disclosure">
@@ -2098,6 +2099,8 @@ function FeedFacts({ feed, onRemoved }) {
     <div class="form">
       <dl class="facts">
         <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
+        ${tag && html`<dt>New feed address</dt><dd class="mono">${tag.url}</dd>`}
+        ${tag && tag.note && html`<dd class="facts-note">${tag.note}</dd>`}
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
         ${feed.placeholder_guid && html`<dd class="facts-note">${HOST_STEP.placeholderGuid}</dd>`}
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in File hosts.'}</dd>
@@ -3948,6 +3951,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const mode = assetMode();
   const missing = mode.holdAssets ? 0 : missingCount(data.files);
   const feedHost = data.feed_move ? data.feed_move.connector_id : feed.connector_id;
+  const tag = newFeedAddress(feed);
 
   return html`${!mode.holdAssets && html`<div class="notice" role="status"><strong>${SERVER_NOTICE.strong}</strong> ${SERVER_NOTICE.text}</div>`}
     ${missing > 0 && html`<div class="notice error" role="alert"><strong>${missingNotice(missing).strong}</strong> ${missingNotice(missing).text}</div>`}
@@ -3987,6 +3991,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
           </select>
           ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write${moveInfo && moveInfo.url ? html`, at <span class="mono">${moveInfo.url}</span>` : ''}.
             The address from before${moveInfo && moveInfo.from_url ? html`, <span class="mono">${moveInfo.from_url}</span>,` : ''} gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}
+          ${tag && html`<p class="hint">The feed file names the new feed address <span class="mono">${tag.url}</span>.</p>`}
         </div>
       </div>
     </section>

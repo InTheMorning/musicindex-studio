@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { versionLabel, hasSpace, spaceNotice } from '../ui/feedfacts.js';
+import { versionLabel, hasSpace, spaceNotice, newFeedAddress } from '../ui/feedfacts.js';
 
 test('a version label has no quote mark and no weak prefix', () => {
   assert.equal(versionLabel('"6ae0bb73-3c71da"'), '6ae0bb73-3c71da');
@@ -17,3 +17,18 @@ test('the notice counts the addresses with a space (ADR 0023 item 9)', () => {
   assert.match(spaceNotice(3).text, /^3 addresses have a space/);
 });
 
+test('the tag shows when the feed has it, with the comparison of the core (ADR 0021 item 4)', () => {
+  const url = 'https://b.example/a.xml';
+  assert.equal(newFeedAddress({ new_feed_url: null, address_differences: [] }), null);
+  const other = newFeedAddress({
+    new_feed_url: url,
+    public_url: 'https://a.example/a.xml',
+    address_differences: [{ source: 'new_feed_url', url }],
+  });
+  assert.equal(other.url, url);
+  assert.equal(other.note, null);
+  const own = newFeedAddress({ new_feed_url: url, public_url: url, address_differences: [] });
+  assert.equal(own.note, 'This is the address of this feed.');
+  const noAddress = newFeedAddress({ new_feed_url: url, public_url: null, address_differences: [] });
+  assert.equal(noAddress.note, null);
+});

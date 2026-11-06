@@ -69,17 +69,13 @@ function KeyText({ row }) {
     ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</span>`;
 }
 
-// The mark of Nostr, from `icons/custom/nostr.svg` of musicindex-assets.
-const NostrMark = () => html`<svg class="icon" aria-hidden="true" viewBox="0 0 18 18"><rect width="18" height="18" rx="4" fill="var(--badge-nostr)" />
-  <path d="M10.8 2.5l-5 7.5h3.4l-1 5.5 5-7.5h-3.4z" fill="#ffffff" /></svg>`;
-
 // A row of the fold "Credited as": each value has an icon and a label (ADR 0140).
 function CreditRow({ row, removeLabel, onRemove }) {
   return html`<div class="link-row static key-line more-row credit-row">
     <${PersonArt} person=${{ img: row.picture, name: row.title }} />
     <div class="text"><span class="label">${row.title}</span>
       <dl class="attributes">${row.attributes.map((a) => html`<div key=${a.id} class="attribute">
-        <dt>${a.icon === 'nostr' ? html`<${NostrMark} />` : html`<${Icon} name=${a.icon} />`}${a.label}</dt>
+        <dt><${Icon} name=${a.icon} />${a.label}</dt>
         <dd><span class=${a.mono ? 'mono key-text' : ''}>${a.value}</span>
           ${a.sub.map((line) => html`<span class=${line.startsWith('npub') ? 'attribute-sub mono key-text' : 'attribute-sub'} key=${line}>${line}</span>`)}
           ${a.id === 'nostr' && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}</dd></div>`)}</dl>

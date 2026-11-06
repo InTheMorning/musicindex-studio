@@ -485,7 +485,7 @@ const webText = (address) => String(address).replace(/^https?:\/\//, '').replace
 // with no profile. `sub` holds the other lines.
 function nostrAttribute(row, notes = []) {
   const named = !row.mono;
-  return { id: 'nostr', icon: 'nostr', label: 'Nostr', value: named ? row.title : row.short, mono: !named,
+  return { id: 'nostr', icon: 'zap', label: 'Nostr', value: named ? row.title : row.short, mono: !named,
     sub: [...(named ? [row.short] : []), ...row.lines.filter((line) => line !== row.short), ...notes] };
 }
 

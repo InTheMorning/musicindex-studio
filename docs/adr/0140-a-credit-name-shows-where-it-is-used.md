@@ -22,7 +22,7 @@ A credit name is a match: a credit in a feed with that identity is a credit of t
 5. "Remove" on one row removes the credit name and its key from the person. A removal changes no feed.
 6. "Add a Credit Name" and "Add a Nostr Key" stay outside the fold.
 7. When a credit name has the usual role of the person, "Roles" shows that role first and in brackets. Else the sequence does not change, because the row shows only the roles of the feeds.
-8. "Nostr" uses the mark of `icons/custom/nostr.svg` of `../musicindex-assets`, which musicindex.org also shows. The other icons are the Lucide icons `disc`, `tag` and `globe`.
+8. The icons are the Lucide icons `disc`, `tag`, `globe` and `zap`, all in the muted text color. No icon of a row has its own color, so no value stands out.
 
 ## Alternatives Considered
 

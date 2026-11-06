@@ -1846,6 +1846,7 @@ button.outline-feed {
 .player-bar:disabled { opacity: .5; }
 .announce-choice { display: grid; gap: 4px; }
 .announce-choice .hint { margin: 0; }
+.section > .announce-choice { padding: 0 4px; }
 .player-time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* A drop target (ADR 0125). During a file drag, each target has a light
    outline, and the target below the pointer has the strong state. */

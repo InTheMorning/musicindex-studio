@@ -152,7 +152,7 @@ export const KEY_WORDS = {
   values: 'Payments', web_master: 'Webmaster', last_build_date: 'Build date', publisher: 'Artist or label',
   // Keys of the entries that the list above does not name.
   npub: 'Nostr key', role: 'Role', group: 'Group', href: 'Information address', img: 'Picture',
-  address: 'Address', split: 'Split', fee: 'Fee', type: 'Type', purpose: 'Purpose', text: 'Text',
+  address: 'Address', feed_url: 'Address', split: 'Split', fee: 'Fee', type: 'Type', purpose: 'Purpose', text: 'Text',
 };
 
 export const keyWord = (key) => KEY_WORDS[key] || key;

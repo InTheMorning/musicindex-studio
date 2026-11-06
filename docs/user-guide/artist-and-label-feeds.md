@@ -79,3 +79,10 @@ Use **Move Up**, **Move Down** and **Remove** to change the list.
 Select **Remove** on the row.
 If the other feed is in your collection, Studio changes both drafts.
 If it is not, Studio only changes the open feed.
+
+## An address with a space
+
+A web address must not have a space, and some apps fail on it. A feed from a different tool can have such an address.
+
+The list **Releases** names each address with a space. Select **Correct All** to change each space to `%20` in the draft. Examine the change in Review, then write it. Studio makes this change only when you select the button.
+

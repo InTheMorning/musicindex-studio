@@ -342,6 +342,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             post(routes::use_public_address),
         )
         .route("/feeds/{id}/draft/remove-tag", post(routes::remove_tag))
+        .route(
+            "/feeds/{id}/draft/encode-link-spaces",
+            post(routes::encode_link_spaces),
+        )
         .route("/feeds/{id}/live-items", post(routes::add_live_item))
         .route(
             "/feeds/{id}/live-items/{guid}/status",

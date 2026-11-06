@@ -414,6 +414,35 @@ fn a_merge_with_a_field_that_both_sides_changed_needs_a_choice() {
 }
 
 #[test]
+fn a_correction_encodes_only_the_addresses_of_releases_and_only_on_request() {
+    let spaced = FEED.replace(
+        "</channel>",
+        "<podcast:remoteItem feedGuid=\"g1\" feedUrl=\"https://a.example/b c/d e.xml\" medium=\"music\"/><podcast:remoteItem feedGuid=\"g2\" feedUrl=\"https://a.example/p q.xml\" medium=\"publisher\"/></channel>",
+    );
+    let s = setup_with(&spaced);
+    let row = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    assert_eq!(
+        row.draft_xml,
+        spaced.as_bytes(),
+        "ADR 0023 item 9: Studio makes no change without the button."
+    );
+    let current = pipeline::draft_model(&s.collection, s.feed).unwrap().1;
+    let row = pipeline::encode_link_spaces(&s.collection, s.feed, &current).unwrap();
+    let text = String::from_utf8(row.draft_xml).unwrap();
+    assert!(
+        text.contains("https://a.example/b%20c/d%20e.xml"),
+        "ADR 0023 item 9: each space of a release address is encoded.\n{text}"
+    );
+    assert!(
+        text.contains("https://a.example/p q.xml"),
+        "A link that the notice does not count does not change.\n{text}"
+    );
+    let again = pipeline::draft_model(&s.collection, s.feed).unwrap().1;
+    let error = pipeline::encode_link_spaces(&s.collection, s.feed, &again).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::InvalidOperation);
+}
+
+#[test]
 fn a_rollback_is_a_draft_from_a_snapshot_with_its_own_diff() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();

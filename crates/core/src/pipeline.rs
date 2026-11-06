@@ -3648,6 +3648,58 @@ pub fn check_links(
     Ok(link_inputs_for(collection, hosts, id)?.report(reader))
 }
 
+/// Encode each space in the address of each release of a feed as `%20` (ADR
+/// 0023 item 9). The draft changes through the model, so the diff shows only
+/// this change. The function writes no file.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::StaleRevision`] when `sent_revision` is not the
+/// revision of the draft, and [`PipelineErrorKind::InvalidOperation`] when no
+/// such address has a space. The draft then does not change.
+pub fn encode_link_spaces(
+    collection: &Collection,
+    id: FeedId,
+    sent_revision: &str,
+) -> Result<DraftRow, PipelineError> {
+    let draft = current_draft(collection, id)?;
+    if revision(&draft) != sent_revision {
+        return Err(PipelineError::new(
+            PipelineErrorKind::StaleRevision,
+            "the draft changed after this model was read; read the draft again",
+        ));
+    }
+    let is_spaced = |item: &crate::feed::RemoteItem| {
+        matches!(item.medium.as_deref(), Some("music" | "musicL"))
+            && item
+                .feed_url
+                .as_deref()
+                .is_some_and(|url| url.contains(' '))
+    };
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    if !feed.remote_items.iter().any(|entry| is_spaced(entry)) {
+        return Err(PipelineError::new(
+            PipelineErrorKind::InvalidOperation,
+            "no address of a release has a space",
+        ));
+    }
+    let before_xml = draft.draft_xml.clone();
+    let changed = changed_draft(draft, |feed| {
+        for entry in &mut feed.remote_items {
+            if is_spaced(entry) {
+                entry.value.feed_url = entry
+                    .value
+                    .feed_url
+                    .as_ref()
+                    .map(|url| url.replace(' ', "%20"));
+            }
+        }
+    })?;
+    let changed = dated_like_base(changed, &before_xml)?;
+    collection.save_draft(id, &changed)?;
+    Ok(changed)
+}
+
 /// Apply a repair of ADR 0126 item 20 to the draft of a feed. "Use the
 /// Public Address" sets the self link to the URL of the draft. "Remove the
 /// Tag" removes `itunes:new-feed-url`. The draft changes through the model,

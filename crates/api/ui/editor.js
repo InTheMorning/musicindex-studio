@@ -15,7 +15,7 @@ import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, tog
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
-import { versionLabel, LOCK_HELP } from './feedfacts.js';
+import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -3316,6 +3316,14 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     .map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }))
     .filter((row) => row.entry.medium === 'music' || row.entry.medium === 'musicL');
   const linkedIds = new Set(rows.filter((row) => row.match).map((row) => row.match.id));
+  const spaced = rows.filter((row) => hasSpace(row.entry.feed_url)).length;
+  // The core corrects each address in the draft, and Review shows the change
+  // (ADR 0023 item 9).
+  const correctSpaces = () => linkAction.run(async () => {
+    if (!await draft.flush()) return;
+    const current = await api(`/feeds/${feed.id}/draft`);
+    draft.show(await api(`/feeds/${feed.id}/draft/encode-link-spaces`, { method: 'POST', body: { revision: current.revision } }));
+  });
   // A release is an album or a playlist (ADR 0086 item 1).
   const candidates = feeds.filter((f) => f.connector_id && ['music', 'musicL'].includes(mediumOf(f)) && !linkedIds.has(f.id));
   const roles = feed.publisher_roles || [];
@@ -3415,6 +3423,10 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     releases: () => html`<section class="page-section"><h2>Releases</h2>
       <div class="group">
         ${rows.length === 0 && html`<p class="hint">No releases yet.</p>`}
+        ${spaced > 0 && html`<div class="release-row">
+          <span class="sub">${spaceNotice(spaced).text}</span>
+          <div class="actions"><button class="button" type="button" disabled=${linkAction.busy} onClick=${correctSpaces}>${spaceNotice(spaced).action}</button></div>
+        </div>`}
         ${rows.map((row, position) => html`<div class="release-row" key=${row.entry._cid}>
           <div class="order-line">
             <${PositionSelect} id=${`release-position-${position}`} index=${position} count=${rows.length}
@@ -3422,6 +3434,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
             <span class="title">${row.entry.title || row.entry.feed_url}</span>
           </div>
           <span class="sub">${row.match ? 'In the collection' : 'Not in the collection'}</span>
+          ${hasSpace(row.entry.feed_url) && html`<span class="sub">${ROW_SPACE_NOTE}</span>`}
           <div class="actions">
             <button class="button destructive" type="button" disabled=${linkAction.busy}
               aria-label=${`Remove ${row.entry.title || 'this release'}`}

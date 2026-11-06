@@ -2571,6 +2571,22 @@ pub(crate) async fn remove_tag(
     repair_draft(shared, id, body, move_link::Repair::RemoveTag).await
 }
 
+/// Encode each space in the addresses of the releases of a feed (ADR 0023
+/// item 9).
+pub(crate) async fn encode_link_spaces(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SentRepair>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        ensure_draft(w, id)?;
+        pipeline::encode_link_spaces(&w.collection, id, &body.revision)?;
+        draft_json(w, id)
+    })
+    .await
+}
+
 async fn repair_draft(
     shared: Shared,
     id: i64,

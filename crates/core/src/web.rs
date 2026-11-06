@@ -4,6 +4,7 @@
 //! server shell uses the policy `Public`, so that a client refuses each
 //! address in a private network, also after a redirect (ADR 0057).
 
+use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write as _;
 use std::io::{Read, Write as _};
@@ -174,7 +175,8 @@ impl Web {
                 format!("{url} is not an http or https address"),
             ));
         }
-        let mut request = self.agent.get(url.trim());
+        let sent = sent_address(url);
+        let mut request = self.agent.get(sent.as_ref());
         for (key, value) in query {
             request = request.query(*key, *value);
         }
@@ -187,7 +189,13 @@ impl Web {
                 message: format!("{url} answered with status {status}"),
             });
         }
+        // With no redirect, the file has the address as its source gives it.
         let final_url = response.get_uri().to_string();
+        let final_url = if final_url == sent {
+            url.trim().to_owned()
+        } else {
+            final_url
+        };
         let bytes = response
             .body_mut()
             .with_config()
@@ -221,7 +229,7 @@ impl Web {
         if !(lower.starts_with("http://") || lower.starts_with("https://")) {
             return None;
         }
-        let response = self.probe.head(url.trim()).call().ok()?;
+        let response = self.probe.head(sent_address(url).as_ref()).call().ok()?;
         let age = header(&response, "age")
             .and_then(|value| value.trim().parse::<u32>().ok())
             .map_or(0, i64::from);
@@ -263,7 +271,7 @@ impl Web {
         }
         let mut response = self
             .agent
-            .get(url.trim())
+            .get(sent_address(url).as_ref())
             .call()
             .map_err(|e| network_error(url, &e))?;
         let status = response.status().as_u16();
@@ -340,7 +348,7 @@ impl Web {
         }
         let response = self
             .agent
-            .head(url.trim())
+            .head(sent_address(url).as_ref())
             .call()
             .map_err(|e| network_error(url, &e))?;
         let status = response.status().as_u16();
@@ -360,7 +368,7 @@ impl Web {
         if facts.length.is_none() {
             let ranged = self
                 .agent
-                .get(url.trim())
+                .get(sent_address(url).as_ref())
                 .header("Range", "bytes=0-0")
                 .call()
                 .map_err(|e| network_error(url, &e))?;
@@ -505,7 +513,7 @@ impl Web {
         url: &str,
         have: u64,
     ) -> Result<ureq::http::Response<ureq::Body>, WebError> {
-        let mut request = self.transfer.get(url.trim());
+        let mut request = self.transfer.get(sent_address(url).as_ref());
         if have > 0 {
             request = request.header("Range", format!("bytes={have}-"));
         }
@@ -536,6 +544,18 @@ fn media_type(value: &str) -> Option<String> {
     (!essence.is_empty()).then(|| essence.to_ascii_lowercase())
 }
 
+/// The address of a request (ADR 0023 item 8). A space is not valid in a URL,
+/// and feeds have addresses with a space. The request encodes each space. The
+/// feed and the collection keep the text of the source.
+fn sent_address(url: &str) -> Cow<'_, str> {
+    let url = url.trim();
+    if url.contains(' ') {
+        Cow::Owned(url.replace(' ', "%20"))
+    } else {
+        Cow::Borrowed(url)
+    }
+}
+
 /// Encode a text as one segment of a URL path. The text can contain `/`,
 /// for example the GUID of an item that is an address.
 pub(crate) fn path_segment(text: &str) -> String {
@@ -564,7 +584,7 @@ pub fn url_path(path: &str) -> String {
 /// The host name of an address, in lowercase, without a port.
 #[must_use]
 pub fn host_of(url: &str) -> Option<String> {
-    let uri: ureq::http::Uri = url.trim().parse().ok()?;
+    let uri: ureq::http::Uri = sent_address(url).parse().ok()?;
     uri.host().map(str::to_ascii_lowercase)
 }
 
@@ -596,6 +616,28 @@ mod tests {
         assert_eq!(
             web.get("file:///etc/passwd", 1000).unwrap_err().kind(),
             WebErrorKind::InvalidAddress
+        );
+    }
+
+    #[test]
+    fn an_address_with_a_space_reads_and_keeps_its_text() {
+        let server = TestServer::start(vec![("/a%20b/c%20d.xml", 200, b"<rss/>".to_vec())]);
+        let web = Web::new();
+        let spaced = server.url("/a b/c d.xml");
+        let file = web.get(&spaced, 1000).unwrap_or_else(|error| {
+            panic!("ADR 0023 item 8: a read encodes each space for the request. Fix: use sent_address in each request of web.rs. {error}")
+        });
+        assert_eq!(file.bytes, b"<rss/>");
+        assert_eq!(
+            file.final_url, spaced,
+            "ADR 0023 item 8: the collection keeps the text of the source."
+        );
+        let encoded = server.url("/a%20b/c%20d.xml");
+        assert_eq!(web.get(&encoded, 1000).unwrap().final_url, encoded);
+        assert!(web.media_facts(&spaced).is_ok());
+        assert_eq!(
+            host_of("https://Host.example/a b.xml").as_deref(),
+            Some("host.example")
         );
     }
 

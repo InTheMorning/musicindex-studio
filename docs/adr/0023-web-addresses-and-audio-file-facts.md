@@ -31,6 +31,8 @@ Studio does not host files ([ADR 0009](0009-studio-connects-to-hosts-and-moves-f
 5. When the user adds a track, Studio asks the host of the audio file for its size and its media type. Studio sends a `HEAD` request and reads `Content-Length` and `Content-Type`. When the response has no length, Studio sends a `GET` with `Range: bytes=0-0` and reads the total size from `Content-Range`. Studio follows redirects and does not read the full file.
 6. The add form shows the size and the type that Studio found. The user can change them. When the host does not give them, the user types them. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 14 shows the found facts in a closed row "Properties".
 7. The add form adds a track only with an address, a size in bytes and a media type.
+8. A request encodes each space of its address as `%20`, so Studio can read a feed or a file with such an address. The request changes no text: the feed and the collection keep the address of the source. Item 2 still gives a space as not correct in an address field. The operator added this item on 2026-11-05.
+9. A list of the releases of a feed names each address with a space. One button corrects each of them to `%20` in the draft, through the core, and the user reviews the change. Studio makes no such change without that button. A release row matches a feed by its GUID or by its exact address. The operator selected this form on 2026-11-05.
 
 ## Evidence
 

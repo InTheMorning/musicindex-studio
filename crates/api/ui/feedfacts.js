@@ -8,3 +8,15 @@ export const LOCK_HELP = 'This tells other podcast platforms not to import this 
 export function versionLabel(version) {
   return String(version).replace(/^W\//, '').replaceAll('"', '').slice(0, 19);
 }
+
+// An address with a space (ADR 0023 item 9). The core makes the correction.
+export const hasSpace = (url) => typeof url === 'string' && url.includes(' ');
+export const ROW_SPACE_NOTE = 'This address has a space.';
+
+// The notice at the top of a list of releases, for `count` such addresses.
+export function spaceNotice(count) {
+  return count === 1
+    ? { text: '1 address has a space. Apps can fail on it.', action: 'Correct the Address' }
+    : { text: `${count} addresses have a space. Apps can fail on them.`, action: `Correct All ${count}` };
+}
+

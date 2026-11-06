@@ -1218,6 +1218,7 @@ select option { background: var(--level-3); color: var(--text); }
 .order-row { display: flex; align-items: center; padding-inline-start: 16px; }
 .order-row > .link-row { flex: 1; min-width: 0; padding-inline-start: 12px; }
 .order-line { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.order-line .title { min-width: 0; overflow-wrap: anywhere; }
 select.position {
   flex: none;
   min-width: 4.5em;

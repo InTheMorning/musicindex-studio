@@ -153,6 +153,7 @@ Situational rules:
 - No server image comes from a commit that did not pass CI. The VPS publishes the port of the container only on a loopback address ([ADR 0066](docs/adr/0066-the-server-ships-as-a-container-image.md)).
 - Studio writes a Nostr key only as the channel `podcast:txt` with `purpose="npub"` or as the `npub` attribute of `podcast:person`. It sets no key without a selection or an entry by the user ([ADR 0074](docs/adr/0074-nostr-keys-for-artists-labels-and-contributors.md)).
 - Each comparison of a feed address with a file address uses the plain address, with no OP3 prefix ([ADR 0076](docs/adr/0076-an-op3-switch-on-feed-settings.md)).
+- A request encodes each space of its address, and the source keeps its text. The list of releases names each address with a space, and only its button corrects them, in the draft ([ADR 0023](docs/adr/0023-web-addresses-and-audio-file-facts.md) items 8 and 9).
 - A position menu sets the sequence of the album tracks, the playlist tracks and the releases of a publisher feed. A move changes no track number in the UI ([ADR 0081](docs/adr/0081-a-position-menu-sets-the-sequence-of-a-list.md)).
 - The track page shows `podcast:season` as "Disc", in a collapsed entry with the Experimental badge of musicindex ADR 0034 ([ADR 0080](docs/adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md)).
 - A copy of an album keeps no feed GUID and no item GUID of its source ([ADR 0077](docs/adr/0077-a-new-album-can-start-from-an-album.md)).

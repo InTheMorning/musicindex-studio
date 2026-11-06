@@ -53,7 +53,7 @@ The export changes nothing. Your account stays on this server until you remove i
 4. Select **Export Account**.
 5. Keep the file that your browser downloads.
 
-The file holds your feeds, drafts and people with no encryption. Keep the file safe.
+A person who has this file can read your feeds, drafts, versions and People list. Your passwords and keys stay locked in your vault. Keep this file private.
 Your vault stays encrypted in the file.
 
 If your vault opens only with passkeys, the sheet says that the vault cannot open on a different server.

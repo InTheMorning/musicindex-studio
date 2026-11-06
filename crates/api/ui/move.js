@@ -47,8 +47,8 @@ function vaultText(methods) {
 }
 
 export const EXPORT_NOTICE = {
-  strong: 'The file holds your feeds, drafts and people with no encryption.',
-  text: 'Your vault stays encrypted in the file. Keep the file in a safe place.',
+  strong: 'A person who has this file can read your feeds, drafts, versions and People list.',
+  text: 'Your passwords and keys stay locked in your vault. Keep this file private.',
 };
 
 export const EXPORT_WARNING = {
@@ -115,7 +115,7 @@ export function exportView(facts, { server, includeAssets = true }) {
 // The text of the sheet after the download starts.
 export const EXPORT_DONE = {
   strong: 'The download started.',
-  text: 'Keep the file in a safe place. It holds your feeds, drafts and people with no encryption.',
+  text: 'A person who has this file can read your feeds, drafts, versions and People list. Keep this file private.',
 };
 
 // The text above the recovery key in the export sheet.

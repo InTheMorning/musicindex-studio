@@ -116,7 +116,7 @@ See [Manage the files of a release](release-files.md).
 ## Move Studio to a different computer
 
 Studio can make one file with your feeds, drafts, versions, people and vault.
-The file holds your feeds, drafts and people with no encryption. Keep the file safe.
+A person who has this file can read your feeds, drafts, versions and People list. Your passwords and keys stay locked in your vault. Keep this file private.
 
 1. Select **Settings** and find **Move Studio**.
 2. Select **Export Studio**.

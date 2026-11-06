@@ -451,7 +451,7 @@ function AudioPlayer({ id, url, pick }) {
       <div class="player">
         <button id=${`${id}-play`} class="button icon-button" type="button" disabled=${!usable}
           aria-busy=${starting ? 'true' : undefined}
-          aria-label=${starting ? PLAYER_STARTING : playing ? 'Pause' : 'Play'} onClick=${toggle}>${starting ? '…' : playing ? '❚❚' : '▶'}</button>
+          aria-label=${starting ? PLAYER_STARTING : playing ? 'Pause' : 'Play'} onClick=${toggle}><${Icon} name=${starting ? 'ellipsis' : playing ? 'pause' : 'play'} /></button>
         <input class="player-bar" type="range" min="0" max=${known ? length : 0} step="any" value=${position}
           style=${{ '--progress': playerProgress(position, length) }}
           aria-label="Position" disabled=${!known}

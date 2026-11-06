@@ -1805,6 +1805,7 @@ button.outline-feed {
 /* The audio player of a track (ADR 0062 item 26): a play button, a position
    bar and the time. The sizes and the colors are tokens. */
 .player { display: flex; align-items: center; gap: 8px 12px; min-width: 0; }
+.player .icon { display: block; width: 14px; height: 14px; fill: currentColor; }
 /* The bar draws its fill and its cursor from one value. The native bar of
    WebKitGTK showed them at different positions. */
 .player-bar {

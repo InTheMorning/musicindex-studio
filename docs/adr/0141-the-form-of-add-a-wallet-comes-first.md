@@ -16,6 +16,7 @@ The sheet "Add a Wallet" showed a long list of payees above its form, so the for
 2. A select of a payee fills the form, with its type, address, custom key and account. It adds nothing and does not close the sheet.
 3. "Add the Wallet" adds the values of the form.
 4. A payee row has no chevron, because it opens no page.
+5. The payee row that the form holds stays selected, with the accent tint and outline. A change of the address, the custom key or the account ends the selection.
 
 ## How This Decision Is Checked
 

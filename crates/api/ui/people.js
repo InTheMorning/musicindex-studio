@@ -709,6 +709,13 @@ export const walletValues = (body) => ({
   address: body.address ?? '', custom_key: body.custom_key ?? '', custom_value: body.custom_value ?? '',
 });
 
+// True when the form "Add a Wallet" holds the values of this payee row, so the
+// row stays selected. A change of a field ends the selection (ADR 0141 item 5).
+export function walletSelected(values, body) {
+  const given = walletValues(body);
+  return ['address', 'custom_key', 'custom_value'].every((id) => String(values[id] ?? '').trim() === String(given[id]).trim());
+}
+
 export const linkReady = (kind, values) => linkFields(kind, values).every((f) => !f.required || String(values[f.id] ?? '').trim() !== '');
 
 // ---- The pending changes of the page of a person (ADR 0116 items 1 to 5) ----

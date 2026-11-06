@@ -1477,3 +1477,11 @@ test('the default address and its wallet are first', async () => {
   assert.deepEqual(order(keyValue({ address: 'd' })), [[2, ['d', 'c']], [1, ['a', 'b']]]);
   assert.deepEqual(order(''), [[1, ['a', 'b']], [2, ['c', 'd']]]);
 });
+
+test('a payee row stays selected while the form holds its values', async () => {
+  const { walletSelected, walletValues } = await import('../ui/people.js');
+  const body = { address: '03a', custom_key: '696969', custom_value: '2', recipient_type: 'node' };
+  assert.equal(walletSelected(walletValues(body), body), true);
+  assert.equal(walletSelected({ ...walletValues(body), custom_value: '3' }, body), false);
+  assert.equal(walletSelected({ recipient_type: 'lnaddress', address: '' }, body), false);
+});

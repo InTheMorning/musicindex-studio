@@ -17,7 +17,7 @@ import {
   filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
-  defaultFirst, walletValues, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
+  defaultFirst, walletValues, walletSelected, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
@@ -94,11 +94,11 @@ function KeyRowView({ npub, profiles, name, action, note }) {
 // One row of a list: a button with the lines of its model. A line is text, or
 // `{ text, error }`. An error line shows in the error color, with the warning
 // icon.
-function ListRow({ title, lines, count, lead, onClick, disabled = false, chevron = true }) {
+function ListRow({ title, lines, count, lead, onClick, disabled = false, chevron = true, selected = false }) {
   const line = (l, i) => (typeof l === 'string'
     ? html`<span class="summary" key=${i}>${l}</span>`
     : html`<span class=${l.error ? 'summary check-error' : 'summary'} key=${i}>${l.error && html`<${Icon} name="alert" />`}${l.text}</span>`);
-  return html`<button class="link-row" type="button" disabled=${disabled} onClick=${onClick}>${lead}
+  return html`<button class="link-row" type="button" disabled=${disabled} aria-current=${selected ? 'true' : undefined} onClick=${onClick}>${lead}
     <span class="text"><span class="label">${title}</span>${lines.map(line)}</span>
     ${count && html`<span class="count">${count}</span>`}${chevron && html`<span class="go">›</span>`}</button>`;
 }
@@ -383,7 +383,7 @@ function LinkForm({ kind, personId, onCancel, onAdded }) {
       ${sections.map((section) => (section.id === 'payees'
     ? html`<section class="page-section" key=${section.id}><h2>${section.title}</h2><div class="group">${section.rows.map((row) =>
       html`<${ListRow} key=${JSON.stringify(row.body)} title=${row.title} lines=${row.lines} count=${row.count}
-        chevron=${false} onClick=${() => setValues((current) => ({ ...current, ...walletValues(row.body) }))} />`)}</div></section>`
+        chevron=${false} selected=${walletSelected(values, row.body)} onClick=${() => setValues((current) => ({ ...current, ...walletValues(row.body) }))} />`)}</div></section>`
     : html`<section class=${kind === 'wallets' ? 'page-section pinned-form' : 'page-section'} key=${section.id}>${section.title && html`<h2>${section.title}</h2>`}${fields}</section>`))}
       <${ErrorNotice} error=${error} />
     </form>

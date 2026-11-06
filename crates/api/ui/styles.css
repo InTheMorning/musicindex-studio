@@ -1994,6 +1994,7 @@ button.outline-feed {
 .key-line .text, .key-row .text { min-width: 0; }
 .key-line .summary, .key-row .summary { white-space: normal; }
 .more-actions { flex: none; }
+.link-row[aria-current="true"], .link-row[aria-current="true"]:hover { border-radius: 10px; background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent); }
 /* The form of "Add a Wallet" stays in view above the list of payees (ADR 0141 item 1). */
 .pinned-form { position: sticky; top: -16px; z-index: 1; margin-top: -16px; padding: 16px 0 12px; background: var(--level-2); }
 @media (max-width: 760px) { .pinned-form { position: static; margin-top: 0; padding: 0; } }

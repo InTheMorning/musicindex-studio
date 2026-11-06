@@ -268,9 +268,9 @@ function AddPersonForm({ go, onCancel }) {
 // ---- The page of a person (ADR 0099 items 4 to 12) ----
 
 // One address row of a wallet: its line, its feeds and an optional note.
-function AddressRow({ member, count, note, mark, pending, action }) {
+function AddressRow({ member, count, note, tag, mark, pending, action }) {
   const { label, address, account } = memberLine(member, true);
-  return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`}><span class="text"><span class="label">${label}</span>
+  return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`}><span class="text"><span class="label">${label}${tag}</span>
       ${address && html`<span class="summary mono address-text">${address}</span>`}
       ${account && html`<span class="summary">Account ${account}</span>`}
       ${note && html`<span class="summary">${note}</span>`}</span>
@@ -779,10 +779,9 @@ export function PersonPage({ id, feeds, go }) {
         const isDefault = isDefaultAddress(m.key, shown.default_address);
         return html`<${AddressRow} key=${JSON.stringify(m.key)} member=${m.member} count=${usedText(m.count)}
           pending=${isDefault && isPending(saved, shown, 'default_address')}
-          mark=${isDefault
-            ? html`<span class="default-mark">Default</span>`
-            : html`<button class="button" type="button" aria-label=${`Make Default: ${m.member.address}`}
-                onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`} />`;
+          tag=${isDefault && html` <span class="default-tag"><${Icon} name="check" />Default</span>`}
+          mark=${!isDefault && html`<button class="button" type="button" aria-label=${`Make Default: ${m.member.address}`}
+            onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`} />`;
       })}
         <div class="actions"><button class="button" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>

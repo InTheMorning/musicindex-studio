@@ -1994,7 +1994,9 @@ button.outline-feed {
 .key-line .text, .key-row .text { min-width: 0; }
 .key-line .summary, .key-row .summary { white-space: normal; }
 .more-actions { flex: none; }
-.default-mark { flex: none; color: var(--muted); font-size: var(--text-callout); font-weight: 600; }
+/* The tag of the default address (ADR 0139 item 2). It has the radius of a badge (musicindex ADR 0024). */
+.default-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: var(--accent-tint); color: var(--accent); font-size: var(--text-footnote); font-weight: 600; vertical-align: 1px; }
+.default-tag .icon { display: block; width: 12px; height: 12px; stroke-width: 3; }
 /* At narrow width the buttons of a row go on their own line, so that the text keeps its width. */
 @media (max-width: 760px) {
   .more-row { flex-wrap: wrap; }

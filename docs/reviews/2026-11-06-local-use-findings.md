@@ -164,13 +164,17 @@ Corrected (ADR 0149 items 8 to 10). "Copy This Collection…" keeps the file hos
 
 ### 18. The Player Gives No Feedback At The Start, And Its Cursor Is Offset
 
-Partly corrected for the next candidate. In the desktop app, a song took a long time to start, and the user saw no change during the wait. The fill of the position bar and its cursor were at different positions.
+The feedback and the position bar are corrected for the next candidate. The long wait did not reproduce. In the desktop app, a song took a long time to start, and the user saw no change during the wait. The fill of the position bar and its cursor were at different positions.
 
-The bar now draws both from one value, and a check in WebKitGTK showed that they agree. The play button now keeps its mark for the first 400 ms of a start, then shows a waiting animation, and it becomes Pause only when the audio starts. So a quick start goes from Play directly to Pause. The page paints before playback starts. The sandbox has no sound device, so no check measured the wait, and the wait itself is not corrected.
+The bar now draws both from one value, and a check in WebKitGTK showed that they agree. The play button now keeps its mark for the first 400 ms of a start, then shows a waiting animation, and it becomes Pause only when the audio starts. So a quick start goes from Play directly to Pause. The page paints before playback starts.
 
 This run used the plain binary, not an AppImage. It uses the system GStreamer with all its plugins, so the shorter plugin list of ADR 0124 item 26 does not apply.
 
-A measurement on 2026-11-06 used `gst-launch-1.0` with this system GStreamer, a public MP3 address and a fake audio sink. With a new plugin registry, the first buffer took 12.89 s. With the registry from that run, three runs took 0.74 s to 0.77 s. The registry file has the date 2026-11-05, so the wait of this finding is probably not a scan of the plugins. This measurement did not use WebKit or a sound device, so the cause of the wait is not known. The next step is one timed Play in the app, with `GST_DEBUG=2`.
+A measurement on 2026-11-06 used `gst-launch-1.0` with this system GStreamer, a public MP3 address and a fake audio sink. With a new plugin registry, the first buffer took 12.89 s. With the registry from that run, three runs took 0.74 s to 0.77 s. This measurement did not use WebKit or a sound device.
+
+One timed Play on 2026-11-07 used the plain binary and `GST_DEBUG=2`, on the computer of the operator. The operator gave a wait of about 1 to 2 s. The log has no event for the click or for the first sound, so it does not measure the wait. The log has no error. The decoder had its stream 1.305 s after GStreamer started in the app process, and a plugin scan ran in that run. This log does not prove the cause of this wait.
+
+The earlier long wait did not reproduce, and its cause is not known. No change corrected it. This is one run of one song, and it did not use an AppImage. Examine this finding again if a later Play takes 5 s or more.
 
 ### 19. A Node Key Shows As A Lightning Address
 

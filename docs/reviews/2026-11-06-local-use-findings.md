@@ -166,7 +166,7 @@ Corrected (ADR 0149 items 8 to 10). "Copy This Collection…" keeps the file hos
 
 The feedback and the position bar are corrected for the next candidate. The long wait did not reproduce. In the desktop app, a song took a long time to start, and the user saw no change during the wait. The fill of the position bar and its cursor were at different positions.
 
-The bar now draws both from one value, and a check in WebKitGTK showed that they agree. The play button now keeps its mark for the first 400 ms of a start, then shows a waiting animation, and it becomes Pause only when the audio starts. So a quick start goes from Play directly to Pause. The page paints before playback starts.
+The bar now draws both from one value, and a check in WebKitGTK showed that they agree. The play button now keeps its mark for the first 400 ms of a start, then shows a waiting animation, and it becomes Pause only when the audio starts. So a quick start goes from Play directly to Pause. The page paints before playback starts. On 2026-11-07 the operator confirmed the change of the button in the app.
 
 This run used the plain binary, not an AppImage. It uses the system GStreamer with all its plugins, so the shorter plugin list of ADR 0124 item 26 does not apply.
 

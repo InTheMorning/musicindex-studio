@@ -1854,8 +1854,8 @@ async fn search_gives_feed_hits_from_musicindex() {
     let app = app_with_index(&server.url(""));
     let (status, body) = call(&app, "GET", "/api/v1/search?q=album%20b", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body[0]["feed_guid"], "b-1");
-    assert_eq!(body[0]["artist"], "Ann");
+    assert_eq!(body["feeds"][0]["feed_guid"], "b-1");
+    assert_eq!(body["feeds"][0]["artist"], "Ann");
     let (_, body) = call(
         &app,
         "POST",
@@ -14524,8 +14524,8 @@ async fn search_with_the_lock_held(path: &'static str, requests: usize) -> Value
 #[tokio::test]
 async fn the_feed_search_completes_while_the_workspace_lock_is_held() {
     let body = search_with_the_lock_held("/search?q=ann", 1).await;
-    assert_eq!(body[0]["feed_guid"], "b-1");
-    assert_eq!(body[0]["artist"], "Ann");
+    assert_eq!(body["feeds"][0]["feed_guid"], "b-1");
+    assert_eq!(body["feeds"][0]["artist"], "Ann");
 }
 
 #[tokio::test]
@@ -14533,4 +14533,201 @@ async fn the_picker_search_completes_while_the_workspace_lock_is_held() {
     let body = search_with_the_lock_held("/musicindex/search?q=ann", 2).await;
     assert_eq!(body["feeds"][0]["feed_guid"], "b-1");
     assert_eq!(body["rows"], json!([]));
+}
+
+/// A local index that records the request line of each search and gives one
+/// answer to each request.
+fn recording_index(body: &'static [u8]) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = std::sync::Arc::clone(&seen);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let mut request = Vec::new();
+            let mut part = [0_u8; 1024];
+            while !request.windows(4).any(|end| end == b"\r\n\r\n") {
+                match stream.read(&mut part) {
+                    Ok(count) if count > 0 => request.extend_from_slice(&part[..count]),
+                    _ => break,
+                }
+            }
+            let text = String::from_utf8_lossy(&request);
+            log.lock()
+                .unwrap()
+                .push(text.lines().next().unwrap_or_default().to_owned());
+            let head = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(body);
+        }
+    });
+    (url, seen)
+}
+
+const ONE_FEED: &[u8] =
+    br#"{"data":[{"entity_type":"feed","entity_id":"b-1","title":"Album B","release_artist":"Ann"}]}"#;
+
+/// The app of a search test, with the path of the search of one person.
+async fn search_app(
+    body: &'static [u8],
+) -> (App, std::sync::Arc<std::sync::Mutex<Vec<String>>>, String) {
+    let (url, seen) = recording_index(body);
+    let app = app_with_index(&url);
+    let (_, person) = call(
+        &app,
+        "POST",
+        "/api/v1/people",
+        Some(json!({ "name": "Ann" })),
+    )
+    .await;
+    let path = format!("/api/v1/people/{}/musicindex", person["id"]);
+    (app, seen, path)
+}
+
+#[tokio::test]
+async fn a_kind_field_gives_the_kind_parameters_at_the_index() {
+    let (app, seen, person) = search_app(ONE_FEED).await;
+    for path in ["/api/v1/search", "/api/v1/musicindex/search"] {
+        seen.lock().unwrap().clear();
+        let (status, body) = call(&app, "GET", &format!("{path}?q=kind%3Asingle"), None).await;
+        assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        assert_eq!(body["feeds"][0]["feed_guid"], "b-1", "{path}");
+        let lines = seen.lock().unwrap().clone();
+        assert_eq!(
+            lines.len(),
+            1,
+            "ADR 0151: {path} sends one request: {lines:?}"
+        );
+        let line = &lines[0];
+        assert!(
+            line.contains("type=feed")
+                && line.contains("kind=unknown")
+                && line.contains("tracks=1"),
+            "musicindex ADR 0049 R-QUERY-6: {path}: {line}"
+        );
+        assert!(
+            !line.contains("q=kind"),
+            "R-QUERY-1: field syntax in q: {line}"
+        );
+        assert!(!line.contains("sort="), "ADR 0151 item 8: {line}");
+    }
+    // A publisher row takes no kind, so the search of a person sends nothing.
+    seen.lock().unwrap().clear();
+    let (status, body) = call(&app, "GET", &format!("{person}?q=kind%3Asingle"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["rows"], json!([]));
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_word_with_a_field_sends_only_the_word_to_the_artist_and_label_search() {
+    let (app, seen, person) = search_app(ONE_FEED).await;
+    let (status, body) = call(&app, "GET", &format!("{person}?q=ann%20artist%3Abob"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let lines = seen.lock().unwrap().clone();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].contains("q=ann&")
+            && lines[0].contains("artist=bob")
+            && lines[0].contains("type=publisher"),
+        "ADR 0151: {}",
+        lines[0]
+    );
+}
+
+#[tokio::test]
+async fn a_field_error_gives_its_message_at_each_route_and_sends_nothing() {
+    let (app, seen, person) = search_app(ONE_FEED).await;
+    for path in [
+        "/api/v1/search",
+        "/api/v1/musicindex/search",
+        person.as_str(),
+    ] {
+        let (status, body) = call(&app, "GET", &format!("{path}?q=kind%3Anope"), None).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{path}: {body}");
+        assert_eq!(
+            body["error"]["code"], "query_field",
+            "ADR 0151 item 5: {path}"
+        );
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("kind:"),
+            "{path}: {body}"
+        );
+    }
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_library_field_gives_the_note_and_no_rows_at_each_route() {
+    let (app, seen, person) = search_app(ONE_FEED).await;
+    for path in [
+        "/api/v1/search",
+        "/api/v1/musicindex/search",
+        person.as_str(),
+    ] {
+        let (status, body) = call(&app, "GET", &format!("{path}?q=ann%20is%3Aready"), None).await;
+        assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        assert_eq!(
+            body["note"]["code"], "library_only",
+            "R-QUERY-2: {path}: {body}"
+        );
+        assert_eq!(body.get("feeds").or(body.get("rows")).unwrap(), &json!([]));
+    }
+    assert!(
+        seen.lock().unwrap().is_empty(),
+        "R-QUERY-2: no Index request"
+    );
+}
+
+#[tokio::test]
+async fn an_answer_that_cannot_decode_gives_an_error_at_each_route() {
+    let (app, _seen, person) = search_app(b"not json").await;
+    for path in [
+        "/api/v1/search",
+        "/api/v1/musicindex/search",
+        person.as_str(),
+    ] {
+        let (status, body) = call(&app, "GET", &format!("{path}?q=ann"), None).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_GATEWAY,
+            "ADR 0151 item 7: {path}: {body}"
+        );
+        assert_eq!(body["error"]["code"], "index_answer", "{path}");
+    }
+}
+
+#[tokio::test]
+async fn a_plain_start_text_gives_no_field_at_each_route() {
+    let (app, seen, person) = search_app(ONE_FEED).await;
+    for path in [
+        "/api/v1/search",
+        "/api/v1/musicindex/search",
+        person.as_str(),
+    ] {
+        seen.lock().unwrap().clear();
+        let (status, body) =
+            call(&app, "GET", &format!("{path}?q=In%3AFlux&plain=true"), None).await;
+        assert_eq!(status, StatusCode::OK, "ADR 0151 item 3: {path}: {body}");
+        let lines = seen.lock().unwrap().clone();
+        assert!(!lines.is_empty(), "{path}");
+        assert!(
+            lines.iter().all(|line| line.contains("q=In%3AFlux")),
+            "{path}: {lines:?}"
+        );
+        let (status, _) = call(&app, "GET", &format!("{path}?q=In%3AFlux"), None).await;
+        assert_eq!(
+            status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "the edited text reads: {path}"
+        );
+    }
 }

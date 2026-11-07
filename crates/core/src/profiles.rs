@@ -343,7 +343,7 @@ type IndexKey = (PublicKey, String);
 /// The keys of the first feeds of a musicindex search, with a name that
 /// contains `text` (ADR 0074 item 9). Each feed gives a key one time.
 fn musicindex_keys(index: &MusicIndex, text: &str) -> Option<Vec<IndexKey>> {
-    let hits = index.search(text).ok()?;
+    let hits = index.search_words(text).ok()?;
     let guids: Vec<String> = hits
         .into_iter()
         .take(MUSICINDEX_FEEDS)

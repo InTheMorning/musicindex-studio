@@ -32,6 +32,7 @@ import {
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
+  lookupAddress,
 } from './people.js';
 
 // The merges of this page load: the ID of each merged person, to the ID of
@@ -534,26 +535,32 @@ function FindSheet({ open, personId, name, query, onQuery, onClose, onPick }) {
 export function useLookup(query, path) {
   const [rows, setRows] = useState(null);
   const [feeds, setFeeds] = useState([]);
+  const [note, setNote] = useState(null);
   const [error, setError] = useState(null);
   const first = useRef(true);
+  // A start text is plain words until the person edits the field (ADR 0151
+  // item 3).
+  const startText = useRef(query);
+  const edited = useRef(false);
+  if (query !== startText.current) edited.current = true;
   useEffect(() => {
     const text = query.trim();
     const wait = first.current ? 0 : 300;
     first.current = false;
-    if (text === '') { setRows([]); setFeeds([]); setError(null); return undefined; }
+    if (text === '') { setRows([]); setFeeds([]); setNote(null); setError(null); return undefined; }
     let live = true;
-    const load = () => api(`${path}?q=${encodeURIComponent(text)}`).then(
-      (result) => { if (live) { setRows(result.rows || []); setFeeds(result.feeds || []); setError(null); } },
-      (e) => { if (live) { setRows([]); setFeeds([]); setError(e); } },
+    const load = () => api(lookupAddress(path, text, !edited.current)).then(
+      (result) => { if (live) { setRows(result.rows || []); setFeeds(result.feeds || []); setNote(result.note || null); setError(null); } },
+      (e) => { if (live) { setRows([]); setFeeds([]); setNote(null); setError(e); } },
     );
     const timer = setTimeout(load, wait);
     return () => { live = false; clearTimeout(timer); };
   }, [query]);
-  return { rows, feeds, error };
+  return { rows, feeds, note, error };
 }
 
 function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
-  const { rows, error } = useLookup(query, `/people/${personId}/musicindex`);
+  const { rows, note, error } = useLookup(query, `/people/${personId}/musicindex`);
   return html`<header><h2 id="find-title">${`Find on musicindex: ${name}`}</h2></header>
     <div class="body">
       <div class="group rows"><${Field} id="find-query" label="Name" type="search" value=${query}
@@ -561,7 +568,8 @@ function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
       <p class="hint">${FIND_HINT}</p>
       <${ErrorNotice} error=${error} />
       ${rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
-      ${rows !== null && rows.length === 0 && !error && html`<p class="empty">${FIND_EMPTY}</p>`}
+      ${note && html`<p class="hint" role="status">${note.message}</p>`}
+      ${rows !== null && rows.length === 0 && !error && !note && html`<p class="empty">${FIND_EMPTY}</p>`}
       ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
         <h2>${group.heading}</h2><p class="hint">${group.note}</p>
         <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row)} />`)}</div>

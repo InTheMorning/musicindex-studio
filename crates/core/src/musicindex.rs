@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::feed::Recipient;
 use crate::web::{Web, WebError, WebErrorKind, path_segment};
+pub use musicindex_search::plan::IndexSearchRequest;
+use musicindex_search::plan::{IndexEntity, IndexSearchPlan, IndexSkip};
+use musicindex_search::query::{SearchQuery, TermKind};
+use musicindex_search::request::index_filter_pairs;
 
 /// The public musicindex API.
 pub const DEFAULT_API: &str = "https://api.musicindex.org";
@@ -141,6 +145,91 @@ struct ContributorData {
 #[derive(Deserialize)]
 struct Envelope<T> {
     data: T,
+}
+
+/// The rows of a search answer. An answer that cannot decode is an error, not
+/// an empty list (ADR 0151 item 7).
+fn decode_search<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, WebError> {
+    serde_json::from_slice::<Envelope<T>>(bytes)
+        .map(|envelope| envelope.data)
+        .map_err(|e| {
+            WebError::decode(format!(
+                "musicindex gave an answer that Studio cannot read: {e}"
+            ))
+        })
+}
+
+/// A note in the place of the rows of a search (musicindex ADR 0049 R-QUERY-2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchNote {
+    /// The cause: `library_only`, `conflict`, `exclusions_only` or `not_supported`.
+    pub code: &'static str,
+    /// The text that the UI shows.
+    pub message: String,
+}
+
+/// What one search text does (ADR 0151).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SearchPlan {
+    /// Send this request.
+    Send(IndexSearchRequest),
+    /// Send nothing, and give no rows. A note can give the cause.
+    Skip(Option<SearchNote>),
+    /// Send nothing. The text has a field that is not correct, and this is the
+    /// message.
+    FieldError(String),
+}
+
+/// The plan of a search text. The crate reads the text, and this function
+/// holds no rule of the text (musicindex ADR 0049 R-QUERY-4). With `plain`, the
+/// text is a start text, and it never gives a field or an exclusion (ADR 0151
+/// item 3).
+#[must_use]
+pub fn plan_search(text: &str, plain: bool) -> SearchPlan {
+    let query = SearchQuery::parse(text);
+    if plain {
+        let only_words = query
+            .terms()
+            .iter()
+            .all(|term| !term.excluded && matches!(term.kind, TermKind::Word(_)));
+        if !only_words {
+            return SearchPlan::Send(IndexSearchRequest::words(text.trim()));
+        }
+    }
+    let errors: Vec<String> = query
+        .field_errors()
+        .iter()
+        .map(|(_, error)| error.message())
+        .collect();
+    if !errors.is_empty() {
+        return SearchPlan::FieldError(errors.join(". "));
+    }
+    match IndexSearchPlan::for_query(&query) {
+        IndexSearchPlan::Send(request) => SearchPlan::Send(request),
+        IndexSearchPlan::Skip(skip) => SearchPlan::Skip(skip_note(&skip)),
+    }
+}
+
+/// The note of a search that sends no request. A text with nothing to search
+/// has no note.
+fn skip_note(skip: &IndexSkip) -> Option<SearchNote> {
+    let (code, message) = match skip {
+        IndexSkip::NoIndexPart => return None,
+        IndexSkip::LibraryOnly => (
+            "library_only",
+            "This search uses a Library field. Studio searches only musicindex, so this search shows no rows.".to_owned(),
+        ),
+        IndexSkip::Conflict => (
+            "conflict",
+            "This search asks for the Library only and for musicindex only. Remove one of the fields.".to_owned(),
+        ),
+        IndexSkip::ExclusionsOnly => (
+            "exclusions_only",
+            "This search only excludes rows. Add a word or a field.".to_owned(),
+        ),
+        IndexSkip::Unsupported(terms) => ("not_supported", format!("{}.", terms.note_title())),
+    };
+    Some(SearchNote { code, message })
 }
 
 #[derive(Deserialize)]
@@ -550,21 +639,41 @@ impl MusicIndex {
             .collect())
     }
 
-    /// Search musicindex for feeds by name.
+    /// Send one `GET /v1/search`. The crate gives `q` and each filter, and no
+    /// sort goes with them, so the rows keep the sequence of relevance
+    /// (ADR 0151 item 8).
+    fn send_search(
+        &self,
+        request: &IndexSearchRequest,
+        fixed: &[(&str, &str)],
+    ) -> Result<Vec<u8>, WebError> {
+        let url = format!("{}/v1/search", self.base);
+        let filters = index_filter_pairs(&request.filters);
+        let mut query: Vec<(&str, &str)> = Vec::new();
+        if let Some(q) = &request.q {
+            query.push(("q", q));
+        }
+        query.extend_from_slice(fixed);
+        query.extend(filters.iter().map(|(name, value)| (*name, value.as_str())));
+        Ok(self
+            .web
+            .get_with_query(&url, &query, MAX_RESPONSE_BYTES)?
+            .bytes)
+    }
+
+    /// Search musicindex for feeds, with the request of a query text. A
+    /// request that a feed cannot take gives no rows and sends nothing
+    /// (ADR 0151).
     ///
     /// # Errors
     ///
-    /// Gives a [`WebError`] when the request fails.
-    pub fn search(&self, query: &str) -> Result<Vec<SearchHit>, WebError> {
-        let url = format!("{}/v1/search", self.base);
-        let file = self.web.get_with_query(
-            &url,
-            &[("q", query), ("type", "feed"), ("limit", "25")],
-            MAX_RESPONSE_BYTES,
-        )?;
-        let items = serde_json::from_slice::<Envelope<Vec<SearchItem>>>(&file.bytes)
-            .map(|e| e.data)
-            .unwrap_or_default();
+    /// Gives a [`WebError`] when the request fails or its answer cannot decode.
+    pub fn search(&self, request: &IndexSearchRequest) -> Result<Vec<SearchHit>, WebError> {
+        let Some(request) = request.for_entity(IndexEntity::Feed) else {
+            return Ok(Vec::new());
+        };
+        let bytes = self.send_search(&request, &[("type", "feed"), ("limit", "25")])?;
+        let items: Vec<SearchItem> = decode_search(&bytes)?;
         Ok(items
             .into_iter()
             .filter(|i| i.entity_type == "feed")
@@ -577,27 +686,42 @@ impl MusicIndex {
             .collect())
     }
 
-    /// Search musicindex for publisher feeds by name, with their link facts
-    /// (ADR 0117 item 1). The search sends at most 25 rows.
+    /// Search musicindex for feeds by a text that is only words, with no field
+    /// (ADR 0151 item 3).
     ///
     /// # Errors
     ///
-    /// Gives a [`WebError`] when the request fails.
-    pub fn search_publishers(&self, query: &str) -> Result<Vec<PublisherHit>, WebError> {
-        let url = format!("{}/v1/search", self.base);
-        let file = self.web.get_with_query(
-            &url,
+    /// Gives a [`WebError`] when the request fails or its answer cannot decode.
+    pub fn search_words(&self, text: &str) -> Result<Vec<SearchHit>, WebError> {
+        match plan_search(text, true) {
+            SearchPlan::Send(request) => self.search(&request),
+            SearchPlan::Skip(_) | SearchPlan::FieldError(_) => Ok(Vec::new()),
+        }
+    }
+
+    /// Search musicindex for publisher feeds, with their link facts (ADR 0117
+    /// item 1). The search sends at most 25 rows. A request that a publisher
+    /// row cannot take gives no rows and sends nothing (ADR 0151).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails or its answer cannot decode.
+    pub fn search_publishers(
+        &self,
+        request: &IndexSearchRequest,
+    ) -> Result<Vec<PublisherHit>, WebError> {
+        let Some(request) = request.for_entity(IndexEntity::Publisher) else {
+            return Ok(Vec::new());
+        };
+        let bytes = self.send_search(
+            &request,
             &[
-                ("q", query),
                 ("type", "publisher"),
                 ("include", "link_facts"),
                 ("limit", "25"),
             ],
-            MAX_RESPONSE_BYTES,
         )?;
-        let rows = serde_json::from_slice::<Envelope<Vec<PublisherRowData>>>(&file.bytes)
-            .map(|e| e.data)
-            .unwrap_or_default();
+        let rows: Vec<PublisherRowData> = decode_search(&bytes)?;
         Ok(rows
             .into_iter()
             .filter(|row| row.entity_type == "publisher")
@@ -672,7 +796,7 @@ mod tests {
                 .unwrap(),
             None
         );
-        let hits = index.search("ann").unwrap();
+        let hits = index.search(&IndexSearchRequest::words("ann")).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].feed_guid, "g1");
         assert_eq!(hits[0].artist.as_deref(), Some("Ann"));
@@ -751,7 +875,9 @@ mod tests {
                 .to_vec(),
         )]);
         let index = MusicIndex::new(Web::new(), &server.url(""));
-        let hits = index.search_publishers("ann").unwrap();
+        let hits = index
+            .search_publishers(&IndexSearchRequest::words("ann"))
+            .unwrap();
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].feed_guid, "c0ffee-01");
         assert_eq!(hits[0].two_way_link_count, Some(3));
@@ -822,6 +948,64 @@ mod tests {
                 .publisher_values("00000000-0000-0000-0000-000000000000")
                 .unwrap(),
             None
+        );
+    }
+
+    fn sent_q(text: &str, plain: bool) -> Option<String> {
+        match plan_search(text, plain) {
+            SearchPlan::Send(request) => request.q,
+            other => panic!("{text} must send a request, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn adr_0151_a_start_text_never_gives_a_field() {
+        assert_eq!(sent_q("In:Flux", true).as_deref(), Some("In:Flux"));
+        assert_eq!(sent_q("kind:nope", true).as_deref(), Some("kind:nope"));
+        assert_eq!(sent_q("Ann Smith", true).as_deref(), Some("Ann Smith"));
+        assert_eq!(sent_q("Ann -Smith", true).as_deref(), Some("Ann -Smith"));
+        assert_eq!(plan_search("", true), SearchPlan::Skip(None));
+    }
+
+    #[test]
+    fn adr_0151_a_typed_text_reads_its_fields() {
+        assert!(matches!(
+            plan_search("kind:nope", false),
+            SearchPlan::FieldError(message) if message.starts_with("kind:")
+        ));
+        assert!(matches!(
+            plan_search("in:flux", false),
+            SearchPlan::FieldError(_)
+        ));
+        assert_eq!(sent_q("\"in:flux\"", false).as_deref(), Some("\"in:flux\""));
+        assert_eq!(plan_search("kind:ep", false), SearchPlan::Skip(None));
+    }
+
+    #[test]
+    fn adr_0151_each_skip_with_a_cause_gives_its_note() {
+        let code = |text: &str| match plan_search(text, false) {
+            SearchPlan::Skip(Some(note)) => note.code,
+            other => panic!("{text} must give a note, got {other:?}"),
+        };
+        assert_eq!(code("ann is:ready"), "library_only");
+        assert_eq!(code("in:index is:ready"), "conflict");
+        assert_eq!(code("-remix"), "exclusions_only");
+        assert_eq!(code("ann -kind:single"), "not_supported");
+    }
+
+    #[test]
+    fn adr_0151_a_search_answer_that_cannot_decode_is_an_error() {
+        let server = crate::testing::TestServer::start(Vec::new());
+        server.set("/v1/search", 200, b"not json".to_vec());
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let words = IndexSearchRequest::words("ann");
+        assert_eq!(
+            index.search(&words).unwrap_err().kind(),
+            WebErrorKind::Decode
+        );
+        assert_eq!(
+            index.search_publishers(&words).unwrap_err().kind(),
+            WebErrorKind::Decode
         );
     }
 }

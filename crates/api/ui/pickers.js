@@ -63,11 +63,12 @@ export function PickFillRow({ title, line, lead, after, taken, selected, onSelec
 // then the other feeds. `onPick` gets the row, and for a row of the other feeds
 // it gets `true` as its second argument.
 export function SearchResults({ query, search, disabled, onPick }) {
-  const { rows, feeds, error } = search;
+  const { rows, feeds, note, error } = search;
   const searching = query.trim() !== '';
   return html`<${ErrorNotice} error=${error} />
     ${searching && rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
-    ${searching && rows !== null && rows.length === 0 && feeds.length === 0 && !error && html`<p class="empty">${FIND_ONE_EMPTY}</p>`}
+    ${note && html`<p class="hint" role="status">${note.message}</p>`}
+    ${searching && rows !== null && rows.length === 0 && feeds.length === 0 && !error && !note && html`<p class="empty">${FIND_ONE_EMPTY}</p>`}
     ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
       <h2>${group.heading}</h2><p class="hint">${group.note}</p>
       <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row, false)} />`)}</div>

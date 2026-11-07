@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
+  lookupAddress,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
@@ -1543,4 +1544,9 @@ test('a Nostr result takes a missing name and picture from the person that holds
   assert.deepEqual(withPersonValues({ npub: 'npub1a', name: 'Own', picture: 'https://own' }, people), { npub: 'npub1a', name: 'Own', picture: 'https://own' }, WHY);
   assert.deepEqual(withPersonValues({ npub: 'npub1b', name: null, picture: null }, people), { npub: 'npub1b', name: null, picture: null }, WHY);
   assert.deepEqual(withPersonValues({ npub: 'npub1b', name: null, picture: null }, null), { npub: 'npub1b', name: null, picture: null }, WHY);
+});
+
+test('lookupAddress marks only a start text as plain (ADR 0151 item 3)', () => {
+  assert.equal(lookupAddress('/musicindex/search', 'In:Flux', true), '/musicindex/search?q=In%3AFlux&plain=true');
+  assert.equal(lookupAddress('/musicindex/search', 'kind:single', false), '/musicindex/search?q=kind%3Asingle');
 });

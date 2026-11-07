@@ -25,6 +25,7 @@ use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::profiles;
 
 use crate::error::ApiError;
+use crate::routes::search_request;
 use crate::routes::{
     ApiResult, Shared, blocking, blocking_unlocked, change_set_json, ensure_draft, files_feed,
     now_seconds,
@@ -592,6 +593,9 @@ pub(crate) async fn add_profile_address(
 pub(crate) struct MusicIndexQuery {
     #[serde(default)]
     q: String,
+    /// True for a start text that the person did not edit (ADR 0151 item 3).
+    #[serde(default)]
+    plain: bool,
 }
 
 /// Search the artist and label feeds of musicindex for a name, in three
@@ -607,9 +611,13 @@ pub(crate) async fn search_musicindex(
         Ok(w.index.clone())
     })
     .await?;
+    let request = match search_request(&query.q, query.plain)? {
+        Ok(request) => request,
+        Err(note) => return Ok(Json(json!({ "rows": [], "note": note }))),
+    };
     blocking_unlocked(move || {
-        let rows = lookup::search(&index, &query.q)?;
-        Ok(Json(json!({ "rows": rows })))
+        let rows = lookup::search(&index, &request)?;
+        Ok(Json(json!({ "rows": rows, "note": null })))
     })
     .await
 }
@@ -628,11 +636,15 @@ pub(crate) async fn search_index(
     State(shared): State<Shared>,
     Query(query): Query<MusicIndexQuery>,
 ) -> ApiResult {
+    let request = match search_request(&query.q, query.plain)? {
+        Ok(request) => request,
+        Err(note) => return Ok(Json(json!({ "rows": [], "feeds": [], "note": note }))),
+    };
     let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
     blocking_unlocked(move || {
-        let rows = lookup::search(&index, &query.q)?;
-        let feeds = index.search(&query.q)?;
-        Ok(Json(json!({ "rows": rows, "feeds": feeds })))
+        let rows = lookup::search(&index, &request)?;
+        let feeds = index.search(&request)?;
+        Ok(Json(json!({ "rows": rows, "feeds": feeds, "note": null })))
     })
     .await
 }

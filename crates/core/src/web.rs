@@ -36,6 +36,8 @@ pub enum WebErrorKind {
     /// The policy refused the address of the host or of a redirect
     /// (ADR 0057).
     NotPublic,
+    /// The answer of the server cannot decode (ADR 0151 item 7).
+    Decode,
 }
 
 /// An error from [`Web`].
@@ -53,6 +55,11 @@ impl WebError {
             status: None,
             message: message.into(),
         }
+    }
+
+    /// An answer that cannot decode (ADR 0151 item 7).
+    pub(crate) fn decode(message: impl Into<String>) -> Self {
+        Self::new(WebErrorKind::Decode, message)
     }
 
     /// The kind of the error.

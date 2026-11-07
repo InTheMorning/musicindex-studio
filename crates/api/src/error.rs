@@ -298,6 +298,10 @@ impl From<AddressError> for ApiError {
 
 impl From<studio_core::web::WebError> for ApiError {
     fn from(error: studio_core::web::WebError) -> Self {
+        // ADR 0151 item 7: an answer that cannot decode is an error.
+        if error.kind() == studio_core::web::WebErrorKind::Decode {
+            return Self::new(StatusCode::BAD_GATEWAY, "index_answer", error.to_string());
+        }
         let code = match error.kind() {
             studio_core::web::WebErrorKind::InvalidAddress => Some("invalid_address"),
             // ADR 0025, ADR 0032 item 13: the core read a file that is not

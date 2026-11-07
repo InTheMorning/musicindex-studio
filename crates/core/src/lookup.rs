@@ -18,7 +18,7 @@ use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError};
 use crate::feed::Recipient;
 use crate::keysend::{self, Lookup, LookupResult};
-use crate::musicindex::{MusicIndex, PublisherHit, PublisherValues};
+use crate::musicindex::{IndexSearchRequest, MusicIndex, PublisherHit, PublisherValues};
 use crate::people::{self, PersonId};
 use crate::web::{Web, WebError, host_of};
 
@@ -300,8 +300,15 @@ fn apply_detail(row: &mut LookupRow, values: &PublisherValues) {
 /// # Errors
 ///
 /// Gives a [`WebError`] when the search request fails.
-pub fn search(index: &MusicIndex, query: &str) -> Result<Vec<LookupRow>, WebError> {
-    let mut rows: Vec<LookupRow> = index.search_publishers(query)?.iter().map(row_of).collect();
+pub fn search(
+    index: &MusicIndex,
+    request: &IndexSearchRequest,
+) -> Result<Vec<LookupRow>, WebError> {
+    let mut rows: Vec<LookupRow> = index
+        .search_publishers(request)?
+        .iter()
+        .map(row_of)
+        .collect();
     rows.sort_by_key(|row| row.level);
     for row in rows.iter_mut().take(DETAIL_LIMIT) {
         if let Ok(Some(values)) = index.publisher_values(&row.feed_guid) {
@@ -667,7 +674,7 @@ mod tests {
             );
         }
         let index = MusicIndex::new(Web::new(), &server.url(""));
-        let rows = search(&index, "row").unwrap();
+        let rows = search(&index, &IndexSearchRequest::words("row")).unwrap();
         assert_eq!(rows.len(), 12);
         // The role rows come first, in the sequence of the search.
         let guids: Vec<&str> = rows.iter().map(|r| r.feed_guid.as_str()).collect();

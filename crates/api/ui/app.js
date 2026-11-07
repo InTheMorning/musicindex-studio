@@ -462,6 +462,8 @@ function title(error) {
     case 'not_found': return 'Studio did not find the file.';
     case 'invalid_feed': return 'That file is not a feed that Studio can read.';
     case 'offline': return 'No connection to Studio.';
+    case 'query_field': return 'Studio cannot read this search.';
+    case 'index_answer': return 'musicindex gave a bad answer.';
     default: return 'Something went wrong.';
   }
 }
@@ -1556,6 +1558,7 @@ function FindFeeds({ onFound }) {
   const [addresses, setAddresses] = useState('');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState(null);
+  const [note, setNote] = useState(null);
   const [guids, setGuids] = useState([]);
   const search = useAction();
   const find = useAction();
@@ -1565,7 +1568,13 @@ function FindFeeds({ onFound }) {
   const runSearch = (event) => {
     event.preventDefault();
     if (!query.trim()) return;
-    search.run(async () => setHits(await api(`/search?q=${encodeURIComponent(query.trim())}`)));
+    setHits(null);
+    setNote(null);
+    search.run(async () => {
+      const found = await api(`/search?q=${encodeURIComponent(query.trim())}`);
+      setHits(found.feeds);
+      setNote(found.note);
+    });
   };
   const toggle = (guid) => setGuids(guids.includes(guid) ? guids.filter((g) => g !== guid) : [...guids, guid]);
   const runFind = () => find.run(async () => onFound(await api('/discover', { method: 'POST', body: { addresses: lines, guids } })));
@@ -1584,7 +1593,8 @@ function FindFeeds({ onFound }) {
           <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
       </div>
       <${ErrorNotice} error=${search.error} />
-      ${hits && hits.length === 0 && html`<p class="empty">musicindex found no feed with that name.</p>`}
+      ${note && html`<p class="hint" role="status">${note.message}</p>`}
+      ${hits && hits.length === 0 && !note && html`<p class="empty">musicindex found no feed with that name.</p>`}
       ${hits && hits.length > 0 && html`<fieldset class="choices"><legend>Select your feeds</legend>
         ${hits.map((h) => html`<label class="choice">
           <input type="checkbox" checked=${guids.includes(h.feed_guid)} onChange=${() => toggle(h.feed_guid)} />

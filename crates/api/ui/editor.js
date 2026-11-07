@@ -2569,6 +2569,7 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
   const [tab, setTab] = useState('index');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState(null);
+  const [note, setNote] = useState(null);
   const [opened, setOpened] = useState(null);
   const [mine, setMine] = useState(null);
   const search = useAction();
@@ -2579,6 +2580,7 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
     setTab('index');
     setQuery('');
     setHits(null);
+    setNote(null);
     setOpened(null);
     setMine(null);
   }, [open]);
@@ -2590,7 +2592,11 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
     if (!query.trim()) return;
     search.run(async () => {
       setOpened(null);
-      setHits(await api(`/search?q=${encodeURIComponent(query.trim())}`));
+      setHits(null);
+      setNote(null);
+      const found = await api(`/search?q=${encodeURIComponent(query.trim())}`);
+      setHits(found.feeds);
+      setNote(found.note);
     });
   };
   const openFeed = (guid) => {
@@ -2629,7 +2635,8 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
         </form>
         <${ErrorNotice} error=${search.error} />
         <${ErrorNotice} error=${load.error} />
-        ${hits && hits.length === 0 && html`<p class="hint">musicindex found no feed with that name.</p>`}
+        ${note && html`<p class="hint" role="status">${note.message}</p>`}
+        ${hits && hits.length === 0 && !note && html`<p class="hint">musicindex found no feed with that name.</p>`}
         ${hits && hits.length > 0 && html`<div class="group">
           ${hits.map((h) => html`<div key=${h.feed_guid}>
             <button class="link-row playlist-feed" type="button" disabled=${load.busy} aria-expanded=${opened && opened.guid === h.feed_guid ? 'true' : 'false'}

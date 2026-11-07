@@ -2974,6 +2974,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "musicindex-search"
+version = "0.1.0"
+source = "git+https://github.com/InTheMorning/musicindex-lib?rev=7cfc4e7b6faa472759a7ae507f89b76a213b9261#7cfc4e7b6faa472759a7ae507f89b76a213b9261"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4716,6 +4724,7 @@ dependencies = [
  "hound",
  "lofty",
  "mp3lame-encoder",
+ "musicindex-search",
  "nostr",
  "quick-xml",
  "rusqlite",

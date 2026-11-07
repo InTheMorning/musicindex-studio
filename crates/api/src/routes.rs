@@ -36,6 +36,7 @@ use studio_core::media;
 use studio_core::migrate;
 use studio_core::move_link;
 use studio_core::moves::{self, IndexAnswer};
+use studio_core::musicindex::{IndexSearchRequest, SearchNote, SearchPlan, plan_search};
 use studio_core::nostr_events::Signing;
 use studio_core::outside;
 use studio_core::people;
@@ -1874,16 +1875,45 @@ pub(crate) async fn discover(
 #[derive(Deserialize)]
 pub(crate) struct Search {
     q: String,
+    /// True for a start text that the person did not edit (ADR 0151 item 3).
+    #[serde(default)]
+    plain: bool,
 }
 
-/// Search musicindex for feeds by name. The request runs with no lock of the
+/// The request of a search text, or the note of a text that sends no request.
+/// A field that is not correct gives 422 `query_field` (ADR 0151 item 5).
+pub(crate) fn search_request(
+    text: &str,
+    plain: bool,
+) -> Result<Result<IndexSearchRequest, Option<SearchNote>>, ApiError> {
+    match plan_search(text, plain) {
+        SearchPlan::Send(request) => Ok(Ok(request)),
+        SearchPlan::Skip(note) => Ok(Err(note)),
+        SearchPlan::FieldError(message) => Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "query_field",
+            message,
+        )),
+    }
+}
+
+/// Search musicindex for feeds with a query text (ADR 0151). The answer is
+/// `{ "feeds": [...], "note": ... }`. The request runs with no lock of the
 /// workspace.
 pub(crate) async fn search(
     State(shared): State<Shared>,
     axum::extract::Query(query): axum::extract::Query<Search>,
 ) -> ApiResult {
+    let request = match search_request(&query.q, query.plain)? {
+        Ok(request) => request,
+        Err(note) => return Ok(Json(json!({ "feeds": [], "note": note }))),
+    };
     let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
-    blocking_unlocked(move || to_json(index.search(&query.q)?)).await
+    blocking_unlocked(move || {
+        let feeds = index.search(&request)?;
+        Ok(Json(json!({ "feeds": feeds, "note": null })))
+    })
+    .await
 }
 
 /// The model of a feed for the profile search: its draft, or else its

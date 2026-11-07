@@ -1770,6 +1770,10 @@ export const mergeBody = (otherId) => ({ other: Number(otherId) });
 
 // ---- Find on musicindex (ADR 0117, task 080b) ----
 
+// The address of a search. `plain` marks a start text that the person did not
+// edit (ADR 0151 item 3).
+export const lookupAddress = (path, text, plain) => `${path}?q=${encodeURIComponent(text)}${plain ? '&plain=true' : ''}`;
+
 // The text of the search sheet (ADR 0117 item 2).
 export const FIND_HINT = 'Studio searches the artist and label feeds on musicindex.org. Select the feed of this person.';
 export const FIND_ONE_HINT = 'Studio searches the feeds on musicindex.org.';

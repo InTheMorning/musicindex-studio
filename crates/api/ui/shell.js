@@ -541,12 +541,22 @@ function letterGroups(rows) {
 const ALL_SORTS = ['newest', 'az'];
 const GROUP_SORTS = ['order', 'newest', 'az'];
 
+// The names of each sort (ADR 0039 item 2a, ADR 0085 item 4). A reversed list
+// names its reversed order (musicindex ADR 0043 R-LIST-7 item 5).
+const SORT_LABELS = { order: 'Feed Order', newest: 'Newest', az: 'A to Z' };
+const REVERSED_SORT_LABELS = { order: 'Feed Order, Reversed', newest: 'Oldest', az: 'Z to A' };
+
+// The name of a sort, in the usual order or in the reversed order.
+export function sortLabel(sort, reversed) {
+  return (reversed ? REVERSED_SORT_LABELS : SORT_LABELS)[sort];
+}
+
 // The Releases list (ADR 0039 items 2 and 2a). `marked` is the ID of the feed
 // that the last Back selection left marked. With no `group` it gives each
 // album and playlist (ADR 0085 item 6). With the ID of a feed with roles as
 // `group`, it gives the releases of that feed, and `head` gives the feed. The
 // group 'none' gives the releases with no link (ADR 0085 items 3 and 4).
-export function releasesList({ feeds, connectors, sort, view, marked, group }) {
+export function releasesList({ feeds, connectors, sort, view, reversed, marked, group }) {
   const list = Array.isArray(feeds) ? feeds : [];
   const owner = group === undefined || group === 'none'
     ? null
@@ -577,6 +587,10 @@ export function releasesList({ feeds, connectors, sort, view, marked, group }) {
   const sorted = sortKey === 'order'
     ? chosen.slice()
     : chosen.slice().sort(sortKey === 'az' ? compareAz : compareNewest);
+  // Studio holds each row of this list, so the whole list reverses
+  // (musicindex ADR 0043 R-LIST-7 item 9). The letters follow the rows.
+  const isReversed = reversed === true;
+  if (isReversed) sorted.reverse();
   const titleOf = (id) => {
     const feed = list.find((f) => f.id === id);
     return feed ? displayTitle(feed) : null;
@@ -607,6 +621,7 @@ export function releasesList({ feeds, connectors, sort, view, marked, group }) {
   return {
     sort: sortKey,
     sorts,
+    reversed: isReversed,
     view: viewKey,
     head,
     rows,
@@ -614,22 +629,25 @@ export function releasesList({ feeds, connectors, sort, view, marked, group }) {
   };
 }
 
-// The sort and the view of the Releases list from a query text, such as
-// "sort=az". A value that is missing or not known gives the default.
+// The sort, the view and the reversed state of the Releases list from a query
+// text, such as "sort=az". A value that is missing or not known gives the
+// default.
 export function listQuery(search) {
   const params = new URLSearchParams(typeof search === 'string' ? search : '');
   return {
     sort: params.get('sort') === 'az' ? 'az' : 'newest',
     view: params.get('view') === 'tiles' ? 'tiles' : 'rows',
+    reversed: params.get('reversed') === '1',
   };
 }
 
-// The query text of a sort and a view. It holds only the values that are not
-// the default. It is empty when both values are the default.
-export function queryText({ sort, view }) {
+// The query text of a sort, a view and a reversed state. It holds only the
+// values that are not the default. It is empty when each value is the default.
+export function queryText({ sort, view, reversed }) {
   const params = new URLSearchParams();
   if (sort === 'az') params.set('sort', 'az');
   if (view === 'tiles') params.set('view', 'tiles');
+  if (reversed === true) params.set('reversed', '1');
   return params.toString();
 }
 

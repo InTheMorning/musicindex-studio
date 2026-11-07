@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pageTabs, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText,
+  leftPanel, releasesList, listQuery, queryText, sortLabel,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
 } from '../ui/shell.js';
@@ -207,10 +207,50 @@ test('a feed with no title sorts by its path', () => {
   assert.deepEqual(list.rows.map((r) => r.title), ['aa.xml', 'zz.xml']);
 });
 
-test('the query gives the sort and the view, with the defaults for unknown values', () => {
-  assert.deepEqual(listQuery('?sort=az&view=tiles'), { sort: 'az', view: 'tiles' });
-  assert.deepEqual(listQuery('sort=other&view=x'), { sort: 'newest', view: 'rows' });
-  assert.deepEqual(listQuery(''), { sort: 'newest', view: 'rows' });
+test('the query gives the sort, the view and the reversed state, with the defaults for unknown values', () => {
+  assert.deepEqual(listQuery('?sort=az&view=tiles&reversed=1'), { sort: 'az', view: 'tiles', reversed: true });
+  assert.deepEqual(listQuery('sort=other&view=x&reversed=x'), { sort: 'newest', view: 'rows', reversed: false });
+  assert.deepEqual(listQuery(''), { sort: 'newest', view: 'rows', reversed: false });
+});
+
+test('the reverse command changes the sequence of the rows and the address (musicindex ADR 0043 R-LIST-7)', () => {
+  const feeds = [
+    { id: 1, title: 'Bravo', medium: 'music', added_at: 1 },
+    { id: 2, title: 'Alpha', medium: 'music', added_at: 3 },
+    { id: 3, title: 'Charlie', medium: 'music', added_at: 2 },
+  ];
+  const ids = (sort, reversed) => releasesList({ feeds, connectors: [], sort, view: 'rows', reversed }).rows.map((r) => r.id);
+  assert.deepEqual(ids('newest', false), [2, 3, 1]);
+  assert.deepEqual(ids('newest', true), [1, 3, 2]);
+  assert.deepEqual(ids('az', false), [2, 1, 3]);
+  assert.deepEqual(ids('az', true), [3, 1, 2]);
+  assert.equal(queryText({ sort: 'newest', view: 'rows', reversed: true }), 'reversed=1');
+  assert.equal(queryText({ sort: 'newest', view: 'rows', reversed: false }), '');
+  assert.deepEqual(listQuery(queryText({ sort: 'az', view: 'tiles', reversed: true })), { sort: 'az', view: 'tiles', reversed: true });
+});
+
+test('a reversed feed group reverses its feed order', () => {
+  const publisher = { id: 9, title: 'Label', medium: 'publisher', roles: ['label'], release_ids: [1, 2] };
+  const feeds = [publisher, { id: 1, title: 'One', medium: 'music' }, { id: 2, title: 'Two', medium: 'music' }];
+  const ids = (reversed) => releasesList({ feeds, connectors: [], sort: 'order', view: 'rows', reversed, group: 9 }).rows.map((r) => r.id);
+  assert.deepEqual(ids(false), [1, 2]);
+  assert.deepEqual(ids(true), [2, 1]);
+});
+
+test('a reversed A to Z list shows its letters from Z to A (musicindex ADR 0043 R-LIST-7 item 7)', () => {
+  const feeds = [{ id: 1, title: 'Alpha', medium: 'music' }, { id: 2, title: 'Zulu', medium: 'music' }];
+  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'rows', reversed: true });
+  assert.deepEqual(list.letters.map((g) => g.letter), ['Z', 'A']);
+  assert.equal(list.reversed, true);
+});
+
+test('each sort has its reversed name (musicindex ADR 0043 R-LIST-7 item 5)', () => {
+  assert.equal(sortLabel('newest', false), 'Newest');
+  assert.equal(sortLabel('newest', true), 'Oldest');
+  assert.equal(sortLabel('az', false), 'A to Z');
+  assert.equal(sortLabel('az', true), 'Z to A');
+  assert.equal(sortLabel('order', false), 'Feed Order');
+  assert.equal(sortLabel('order', true), 'Feed Order, Reversed');
 });
 
 test('the query text holds only the values that are not the default', () => {

@@ -221,8 +221,11 @@ test('each label that a model gives to a button is in title case', () => {
   }
   for (const status of ['pending', 'live']) labels.push([nextAction(status).label, `nextAction(${status})`]);
   for (const source of sources('audio', [])) labels.push([source.label, 'sources of picker.js']);
-  const sortLabels = /const SORT_LABELS = \{([^}]*)\}/.exec(readFileSync(new URL('app.js', uiDir), 'utf8'));
-  for (const [, label] of sortLabels[1].matchAll(/'([^']*)'/g)) labels.push([label, 'SORT_LABELS of app.js']);
+  const shellText = readFileSync(new URL('shell.js', uiDir), 'utf8');
+  for (const name of ['SORT_LABELS', 'REVERSED_SORT_LABELS']) {
+    const sortLabels = new RegExp(`const ${name} = \\{([^}]*)\\}`).exec(shellText);
+    for (const [, label] of sortLabels[1].matchAll(/'([^']*)'/g)) labels.push([label, `${name} of shell.js`]);
+  }
   labels.push([signProgressLabel({ done: 1, total: 2 }), 'signProgressLabel']);
   const problems = labels.filter(([label]) => !isTitleCase(label)).map(([label, where]) => fail(label, where));
   assert.deepEqual(problems, []);

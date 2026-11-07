@@ -1,6 +1,6 @@
 # Studio V1 Task 094: Sort Reverse
 
-Status: Ready.
+Status: Complete, with its screenshot visual check at 1100 px and at 390 px with touch, in the dark and the light theme. No second list in Studio has a sort.
 
 Owner of the rules: musicindex ADR 0043 R-LIST-6 and R-LIST-7.
 

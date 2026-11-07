@@ -1557,6 +1557,7 @@ function operationKindLabel(kind) {
     case 'copy': return 'Copy';
     case 'delete': return 'Delete';
     case 'confirm': return 'Confirm';
+    case 'hold': return 'Keep';
     default: return kind;
   }
 }
@@ -1568,6 +1569,7 @@ const OPERATION_NOTE = {
   copy: 'A spare copy. The feed does not use it.',
   delete: 'Studio deletes it after the feed is written.',
   confirm: 'Studio makes sure that the file host gives this file.',
+  hold: 'The old copy stays. Studio asks you before it deletes this file.',
 };
 
 // One row of a host operation of the diff: its kind, its host, its path
@@ -3558,6 +3560,9 @@ function DownloadControls({ download, busy, onDownload, onStop }) {
   </div>`;
 }
 
+// The text of a pending operation on a file.
+const PENDING_TEXT = { delete: 'Deletion pending', hold: 'Stays after the write' };
+
 // One copy of a library file on a host (ADR 0036 items 12 and 13, ADR
 // 0037). A pending operation takes over the row with "Undo". The copy
 // that the feed uses shows no Reference button and no Delete button: it
@@ -3567,7 +3572,7 @@ function DownloadControls({ download, busy, onDownload, onStop }) {
 function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUndo }) {
   const name = connectorName(connectors, copy.connector_id);
   if (copy.pending) {
-    const text = copy.pending.kind === 'delete' ? 'Deletion pending' : 'Copy pending';
+    const text = PENDING_TEXT[copy.pending.kind] || 'Copy pending';
     return html`<div class="copy-row">
       <span class="title">${name}</span>
       <span class="sub mono">${copy.path}</span>
@@ -3714,7 +3719,7 @@ function AddFileAgain({ file, busy, onAgain }) {
 function OtherFileRow({ file, connectors, busy, onDelete, onUndo }) {
   const base = `${connectorName(connectors, file.connector_id)} · ${fileSize(file.size)}`;
   if (file.pending) {
-    const text = file.pending.kind === 'delete' ? 'Deletion pending' : 'Copy pending';
+    const text = PENDING_TEXT[file.pending.kind] || 'Copy pending';
     return html`<div class="alt-enclosure">
       <span class="title">${file.path}</span>
       <span class="sub">${base} · ${text}</span>

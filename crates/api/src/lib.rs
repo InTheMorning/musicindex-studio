@@ -342,6 +342,14 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/feeds/{id}/feed-host", put(routes::set_feed_host))
         .route("/feeds/{id}/files/{file}/host", put(routes::set_file_host))
         .route("/feeds/{id}/operations", post(routes::add_operation))
+        .route("/feeds/{id}/move", post(routes::move_release))
+        .route(
+            "/feeds/{id}/move/plan",
+            get(routes::release_move_plan_route),
+        )
+        .route("/feeds/{id}/moves", get(routes::waiting_moves_route))
+        .route("/feeds/{id}/moves/delete", post(routes::delete_old_copies))
+        .route("/feeds/{id}/moves/keep", post(routes::keep_old_copies))
         .route(
             "/feeds/{id}/operations/{op}",
             delete(routes::remove_operation),

@@ -33,6 +33,7 @@ pub mod media;
 pub mod merge;
 pub mod migrate;
 pub mod move_link;
+pub mod moves;
 pub mod msp;
 pub mod musicindex;
 pub mod net;

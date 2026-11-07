@@ -3899,10 +3899,15 @@ async fn a_move_operation_gives_a_copy_a_reference_and_a_delete() {
             .any(|op| op["kind"] == "copy" && op["connector_id"] == backup_id),
         "{operations:?}"
     );
+    // ADR 0148 item 7: the old copy stays, so the draft has no deletion.
     assert!(
         operations
             .iter()
-            .any(|op| op["kind"] == "delete" && op["connector_id"] == home_id),
+            .any(|op| op["kind"] == "hold" && op["connector_id"] == home_id),
+        "{operations:?}"
+    );
+    assert!(
+        !operations.iter().any(|op| op["kind"] == "delete"),
         "{operations:?}"
     );
 
@@ -13752,4 +13757,340 @@ async fn the_file_operation_route_gives_the_build_date_in_its_diff() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["build_date"]["set"], true);
     assert!(log.lock_was_free());
+}
+
+/// An app whose reader gives the feed at the two addresses of a move.
+fn move_app() -> App {
+    move_app_with_index("http://127.0.0.1:9")
+}
+
+fn move_app_with_index(index: &str) -> App {
+    let mut reader = studio_core::move_link::ScriptedReader::empty();
+    for url in [
+        "https://backup.example/album.xml",
+        "https://music.example/album.xml",
+    ] {
+        reader = reader.with_feed(url, url, Some("g-1"), Some(url), None);
+    }
+    app_with_reader(index, None, Some(reader))
+}
+
+/// An album with one written track on the file host "Home", and a second
+/// file host "Backup". Gives the feed, the library file, the two file hosts
+/// and the folder of "Backup".
+async fn album_on_home(app: &App) -> (i64, i64, i64, i64, tempfile::TempDir) {
+    let id = set_up(app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(app, id, "tagged.mp3", bytes).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, _) = call(
+        app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    write_the_draft(app, id).await;
+    let (_, connectors) = call(app, "GET", "/api/v1/connectors", None).await;
+    let home = connectors[0]["id"].as_i64().unwrap();
+    let folder = tempfile::tempdir().unwrap();
+    let backup = add_host(app, "Backup", folder.path(), "https://backup.example").await;
+    (
+        id,
+        file["library_file_id"].as_i64().unwrap(),
+        home,
+        backup,
+        folder,
+    )
+}
+
+async fn write_the_draft(app: &App, id: i64) {
+    let (_, diff) = call(app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // The route starts a draft when the feed has none after the write.
+    call(app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+}
+
+async fn move_release(app: &App, id: i64, to: i64, delete_later: bool, wait: u32) -> Value {
+    let (status, diff) = call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/move"),
+        Some(json!({ "connector_id": to, "delete_later": delete_later, "wait_days": wait })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    diff
+}
+
+async fn waiting(app: &App, id: i64) -> Vec<Value> {
+    let (status, body) = call(app, "GET", &format!("/api/v1/feeds/{id}/moves"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["moves"].as_array().unwrap().clone()
+}
+
+/// ADR 0148 items 4 and 7: a write of a move sends the new copy, deletes no
+/// old copy and records it with the waiting time of the request.
+#[tokio::test]
+async fn a_written_move_keeps_the_old_file_and_records_it() {
+    let app = move_app();
+    let (id, _, home, backup, folder) = album_on_home(&app).await;
+    let diff = move_release(&app, id, backup, true, 7).await;
+    let operations = diff["operations"].as_array().unwrap();
+    assert!(
+        operations.iter().any(|op| op["kind"] == "hold"),
+        "{operations:?}"
+    );
+    assert!(
+        !operations.iter().any(|op| op["kind"] == "delete"),
+        "{operations:?}"
+    );
+    assert!(
+        waiting(&app, id).await.is_empty(),
+        "no record before the write"
+    );
+
+    write_the_draft(&app, id).await;
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+    assert!(folder.path().join("album/tagged.mp3").exists());
+    let moves = waiting(&app, id).await;
+    assert_eq!(moves.len(), 1);
+    assert_eq!(moves[0]["connector_id"], home);
+    assert_eq!(moves[0]["to_connector_id"], backup);
+    assert_eq!(moves[0]["wait_days"], 7);
+    assert_eq!(moves[0]["records"].as_array().unwrap().len(), 1);
+    assert_eq!(moves[0]["ready"], false);
+    assert_eq!(moves[0]["index"], "unknown");
+}
+
+/// ADR 0148 item 7: **Move to** on one file has 30 days.
+#[tokio::test]
+async fn move_to_on_one_file_waits_for_30_days() {
+    let app = move_app();
+    let (id, file, home, backup, _folder) = album_on_home(&app).await;
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/operations"),
+        Some(json!({ "op": "move", "file": file, "from": home, "to": backup })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    write_the_draft(&app, id).await;
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+    assert_eq!(waiting(&app, id).await[0]["wait_days"], 30);
+}
+
+/// ADR 0148 item 5: with the check box off, Studio keeps no record.
+#[tokio::test]
+async fn a_move_with_the_box_off_keeps_no_record() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    let diff = move_release(&app, id, backup, false, 30).await;
+    let operations = diff["operations"].as_array().unwrap();
+    assert!(
+        !operations.iter().any(|op| op["kind"] == "hold"),
+        "{operations:?}"
+    );
+    write_the_draft(&app, id).await;
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+    assert_eq!(waiting(&app, id).await, Vec::<Value>::new());
+}
+
+/// ADR 0148 item 6: a waiting time must be one of the choices.
+#[tokio::test]
+async fn a_waiting_time_that_is_not_a_choice_is_refused() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/move"),
+        Some(json!({ "connector_id": backup, "delete_later": true, "wait_days": 3 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// ADR 0148 items 10 and 12: the route adds one deletion for each record.
+/// Only the written diff removes the record and the file.
+#[tokio::test]
+async fn only_a_written_diff_deletes_an_old_copy() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    move_release(&app, id, backup, true, 30).await;
+    write_the_draft(&app, id).await;
+    let moves = waiting(&app, id).await;
+    let records = moves[0]["records"].clone();
+
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/moves/delete"),
+        Some(json!({ "records": records })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let deletions: Vec<_> = diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|op| op["kind"] == "delete")
+        .collect();
+    assert_eq!(deletions.len(), 1, "{diff}");
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+    assert_eq!(waiting(&app, id).await.len(), 1);
+
+    write_the_draft(&app, id).await;
+    assert!(!app.feeds.path().join("album/tagged.mp3").exists());
+    assert_eq!(waiting(&app, id).await, Vec::<Value>::new());
+}
+
+/// ADR 0148 item 11: "Keep the Files" removes the record, and no file changes.
+#[tokio::test]
+async fn keep_the_files_removes_only_the_record() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    move_release(&app, id, backup, true, 30).await;
+    write_the_draft(&app, id).await;
+    let records = waiting(&app, id).await[0]["records"].clone();
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/moves/keep"),
+        Some(json!({ "records": records })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(waiting(&app, id).await, Vec::<Value>::new());
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+}
+
+/// ADR 0148 item 13: a later write of a file to the path of a record removes
+/// that record.
+#[tokio::test]
+async fn a_write_to_the_path_of_a_record_removes_the_record() {
+    let app = move_app();
+    let (id, _, home, backup, _folder) = album_on_home(&app).await;
+    move_release(&app, id, backup, true, 30).await;
+    write_the_draft(&app, id).await;
+    assert_eq!(waiting(&app, id).await[0]["connector_id"], home);
+
+    move_release(&app, id, home, true, 30).await;
+    write_the_draft(&app, id).await;
+    let moves = waiting(&app, id).await;
+    assert_eq!(moves.len(), 1, "{moves:?}");
+    assert_eq!(moves[0]["connector_id"], backup);
+}
+
+/// ADR 0148 items 2 and 3: the plan gives the feed file and the files that
+/// move, and it names the file that is not in the library.
+#[tokio::test]
+async fn the_plan_names_what_moves_and_what_stays() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["image"] = json!("https://other.example/cover.jpg");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={backup}");
+    let (status, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    assert_eq!(plan["feed"]["moves"], true);
+    assert_eq!(plan["audio"]["count"], 1);
+    assert_eq!(plan["on_target"], 0);
+    assert_eq!(plan["nothing_to_move"], false);
+    assert!(
+        plan["stays"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["name"] == "https://other.example/cover.jpg"
+                && s["reason"] == "not_in_library"),
+        "{plan}"
+    );
+
+    // After the move, each file is on the target.
+    move_release(&app, id, backup, true, 30).await;
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["audio"]["count"], 0, "{plan}");
+    assert_eq!(plan["on_target"], 1, "{plan}");
+    assert_eq!(plan["nothing_to_move"], true, "{plan}");
+}
+
+/// ADR 0148 item 15: the files route counts the files that stay behind a
+/// draft feed move.
+#[tokio::test]
+async fn the_files_route_counts_the_files_that_stay_behind_a_feed_move() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    let files_path = format!("/api/v1/feeds/{id}/files");
+    let (_, files) = call(&app, "GET", &files_path, None).await;
+    assert_eq!(files["files_stay"], 0);
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": backup })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, files) = call(&app, "GET", &files_path, None).await;
+    assert_eq!(files["files_stay"], 1);
+    move_release(&app, id, backup, true, 30).await;
+    let (_, files) = call(&app, "GET", &files_path, None).await;
+    assert_eq!(files["files_stay"], 0);
+}
+
+/// ADR 0148 item 9: the route gives the answer of musicindex about the
+/// address of the feed.
+#[tokio::test]
+async fn a_waiting_move_gives_the_answer_of_musicindex() {
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    let answer = |url: &str| {
+        json!({ "data": { "feed_url": url, "title": "Album" } })
+            .to_string()
+            .into_bytes()
+    };
+    server.set(
+        "/v1/feeds/-1",
+        200,
+        answer("https://music.example/album.xml"),
+    );
+    let app = move_app_with_index(&server.url(""));
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    move_release(&app, id, backup, true, 7).await;
+    write_the_draft(&app, id).await;
+    let moves = waiting(&app, id).await;
+    assert_eq!(moves[0]["index"], "different", "{moves:?}");
+    server.set(
+        "/v1/feeds/-1",
+        200,
+        answer("https://backup.example/album.xml"),
+    );
+    assert_eq!(waiting(&app, id).await[0]["index"], "follows");
 }

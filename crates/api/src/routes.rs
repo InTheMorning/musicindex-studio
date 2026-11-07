@@ -35,6 +35,7 @@ use studio_core::live::{self, LiveStatus};
 use studio_core::media;
 use studio_core::migrate;
 use studio_core::move_link;
+use studio_core::moves::{self, IndexAnswer};
 use studio_core::nostr_events::Signing;
 use studio_core::people;
 use studio_core::pipeline;
@@ -3728,6 +3729,7 @@ pub(crate) async fn list_release_files(
             "remote_count": remote_count,
             "remote_bytes": remote_bytes,
             "other_host_files": other,
+            "files_stay": files_that_stay(w, &hosts, &feed_row)?,
             "feed_move": w.collection.draft_feed_move(id)?.map(|m| json!({
                 "connector_id": m.connector_id.0,
                 "path": m.path,
@@ -4058,8 +4060,9 @@ pub(crate) enum FileOperation {
     /// Put a library file on a different host, with no change of the
     /// feed.
     Copy { file: i64, connector_id: i64 },
-    /// Copy a library file to a host, reference the new copy, and delete
-    /// the copy that was on the first host.
+    /// Copy a library file to a host and reference the new copy. The copy
+    /// on the first host stays until the user reviews its deletion (ADR
+    /// 0148 item 7).
     Move { file: i64, from: i64, to: i64 },
     /// Delete a file from a host.
     Delete { connector_id: i64, path: String },
@@ -4127,8 +4130,14 @@ pub(crate) async fn add_operation(
                 let download = check_download(w, &hosts, &file)?;
                 let from_connector = ConnectorId(from);
                 let to_connector = ConnectorId(to);
-                let from_planned =
-                    planned_path_on(&w.collection, &hosts, &feed_row, &file, from_connector)?;
+                let from_path = inventory::copies(&w.collection, &hosts, &file)?
+                    .into_iter()
+                    .find(|copy| copy.connector_id == from_connector)
+                    .map_or(
+                        planned_path_on(&w.collection, &hosts, &feed_row, &file, from_connector)?
+                            .path,
+                        |copy| copy.path,
+                    );
                 let from_url =
                     reference_url(&w.collection, &hosts, &feed_row, &file, from_connector)?;
                 let to_planned =
@@ -4144,12 +4153,12 @@ pub(crate) async fn add_operation(
                 pipeline::edit_draft(&w.collection, id, |feed| {
                     reference_feed(feed, &from_url, &to_url);
                 })?;
-                w.collection.add_draft_operation(
+                w.collection.add_hold_operation(
                     id,
-                    DraftOperationKind::Delete,
-                    None,
                     from_connector,
-                    &from_planned.path,
+                    &from_path,
+                    to_connector,
+                    moves::DEFAULT_WAIT_DAYS,
                 )?;
                 start_download(w, &file, download)?;
             }
@@ -4167,6 +4176,368 @@ pub(crate) async fn add_operation(
             }
         }
         Ok(())
+    })
+    .await
+}
+
+/// One file of a release that a move takes to a different file host.
+struct FileMove {
+    file: LibraryFile,
+    /// The copies on a file host that the feed uses. Each stays until the
+    /// user reviews its deletion.
+    old_copies: Vec<inventory::Copy>,
+    /// Each address in the feed that the new address replaces.
+    old_addresses: Vec<String>,
+    to_path: String,
+    to_url: String,
+    download: bool,
+}
+
+/// The changes of a move of one release (ADR 0148 items 2 and 3).
+struct ReleaseMovePlan {
+    target: ConnectorId,
+    /// The file host of the feed file before the move.
+    feed_from: Option<ConnectorId>,
+    feed_moves: bool,
+    /// The cause when the feed file cannot go to this file host.
+    feed_stays: Option<&'static str>,
+    files: Vec<FileMove>,
+    on_target: u64,
+    /// Each file or address that does not move, with its cause.
+    stays: Vec<(String, &'static str)>,
+}
+
+/// The plan to move a release to `target`. This changes nothing.
+fn release_move_plan(
+    w: &Workspace,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    target: ConnectorId,
+) -> Result<ReleaseMovePlan, ApiError> {
+    let id = feed_row.id;
+    let target_row = w.collection.connector(target)?;
+    let addresses = feed_address_list(files_feed(w, id)?.as_ref());
+    let operations = w.collection.draft_operations(id)?;
+    let mut known_addresses: Vec<String> = Vec::new();
+    let mut files = Vec::new();
+    let mut on_target = 0;
+    let mut stays = Vec::new();
+    for file in w.collection.library_files(id)? {
+        let copies = inventory::copies(&w.collection, hosts, &file)?;
+        let planned = planned_or_none(&w.collection, hosts, feed_row, &file)?;
+        known_addresses.extend(copies.iter().filter_map(|c| c.url.clone()));
+        known_addresses.extend(file.source_url.clone());
+        known_addresses.extend(planned.as_ref().and_then(|p| p.url.clone()));
+        let pending_copy = operations.iter().any(|op| {
+            op.kind == DraftOperationKind::Copy
+                && op.library_file_id == Some(file.id)
+                && op.connector_id == target
+        });
+        let in_use: Vec<inventory::Copy> = copies
+            .into_iter()
+            .filter(|copy| is_in_use(copy.url.as_deref(), &addresses))
+            .collect();
+        if pending_copy || in_use.iter().any(|copy| copy.connector_id == target) {
+            on_target += 1;
+            continue;
+        }
+        let mut old_addresses: Vec<String> =
+            in_use.iter().filter_map(|copy| copy.url.clone()).collect();
+        if let Some(source) = file.source_url.as_deref()
+            && is_in_use(Some(source), &addresses)
+            && !old_addresses.iter().any(|address| address == source)
+        {
+            old_addresses.push(source.to_owned());
+        }
+        if old_addresses.is_empty() {
+            // A new file that the feed uses goes to its planned host at the
+            // write, so a move can take it only after that write.
+            if let Some(planned) = planned.filter(|p| is_in_use(p.url.as_deref(), &addresses)) {
+                if planned.connector_id == target {
+                    on_target += 1;
+                } else {
+                    stays.push((file.path.clone(), "not_written"));
+                }
+            }
+            continue;
+        }
+        let download = check_download(w, hosts, &file)?;
+        let to_path = planned_path_on(&w.collection, hosts, feed_row, &file, target)?.path;
+        let to_url = reference_url(&w.collection, hosts, feed_row, &file, target)?;
+        files.push(FileMove {
+            file,
+            old_copies: in_use,
+            old_addresses,
+            to_path,
+            to_url,
+            download,
+        });
+    }
+    for address in &addresses {
+        if !known_addresses.iter().any(|known| known == address) {
+            stays.push((address.clone(), "not_in_library"));
+        }
+    }
+    let feed_from = w
+        .collection
+        .draft_feed_move(id)?
+        .map(|m| m.connector_id)
+        .or(feed_row.connector_id);
+    let blossom = target_row.kind == "blossom";
+    Ok(ReleaseMovePlan {
+        target,
+        feed_from,
+        feed_moves: !blossom && feed_from != Some(target),
+        feed_stays: (blossom && feed_from != Some(target)).then_some("blossom"),
+        files,
+        on_target,
+        stays,
+    })
+}
+
+/// The count of the files of a draft feed move that stay on a different
+/// file host (ADR 0148 item 15). Zero with no feed move, and when Studio
+/// cannot make the plan.
+fn files_that_stay(w: &Workspace, hosts: &Hosts, feed_row: &FeedRow) -> Result<usize, ApiError> {
+    let Some(feed_move) = w.collection.draft_feed_move(feed_row.id)? else {
+        return Ok(0);
+    };
+    Ok(
+        release_move_plan(w, hosts, feed_row, feed_move.connector_id)
+            .map_or(0, |plan| plan.files.len()),
+    )
+}
+
+fn release_move_json(plan: &ReleaseMovePlan) -> Value {
+    let part = |select: &dyn Fn(&FileMove) -> bool| {
+        let chosen: Vec<&FileMove> = plan.files.iter().filter(|f| select(f)).collect();
+        json!({
+            "count": chosen.len(),
+            "bytes": chosen.iter().map(|f| f.file.size).sum::<u64>(),
+        })
+    };
+    let starts = |f: &FileMove, prefix: &str| f.file.media_type.starts_with(prefix);
+    let mut from: Vec<i64> = plan
+        .files
+        .iter()
+        .flat_map(|f| f.old_copies.iter().map(|copy| copy.connector_id.0))
+        .collect();
+    from.sort_unstable();
+    from.dedup();
+    json!({
+        "connector_id": plan.target.0,
+        "feed": {
+            "moves": plan.feed_moves,
+            "from_connector_id": plan.feed_from.map(|c| c.0),
+            "stays": plan.feed_stays,
+        },
+        "audio": part(&|f| starts(f, "audio/")),
+        "images": part(&|f| starts(f, "image/")),
+        "other": part(&|f| !starts(f, "audio/") && !starts(f, "image/")),
+        "download": part(&|f| f.download),
+        "on_target": plan.on_target,
+        "from_connector_ids": from,
+        "stays": plan.stays.iter().map(|(name, reason)| json!({ "name": name, "reason": reason })).collect::<Vec<_>>(),
+        "nothing_to_move": !plan.feed_moves && plan.files.is_empty(),
+        "wait_choices": moves::WAIT_CHOICES,
+        "default_wait_days": moves::DEFAULT_WAIT_DAYS,
+    })
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MovePlanQuery {
+    connector_id: i64,
+}
+
+/// The plan of "Move This Release…" (ADR 0148 items 1 to 3).
+pub(crate) async fn release_move_plan_route(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Query(query): Query<MovePlanQuery>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let hosts = w.hosts()?;
+        let feed_row = w.collection.feed(FeedId(id))?;
+        let plan = release_move_plan(w, &hosts, &feed_row, ConnectorId(query.connector_id))?;
+        Ok(Json(release_move_json(&plan)))
+    })
+    .await
+}
+
+/// Put the changes of `plan` in the draft of its feed. `wait_days` is `None`
+/// when the old files stay with no record (ADR 0148 items 4, 5 and 7).
+fn apply_release_move(
+    w: &Workspace,
+    hosts: &Hosts,
+    id: FeedId,
+    plan: &ReleaseMovePlan,
+    wait_days: Option<u32>,
+) -> Result<(), ApiError> {
+    ensure_draft(w, id)?;
+    if plan.feed_moves {
+        let library = w.library().ok();
+        pipeline::set_feed_host(&w.collection, hosts, library.as_ref(), id, plan.target)?;
+    }
+    for file_move in &plan.files {
+        w.collection.add_draft_operation(
+            id,
+            DraftOperationKind::Copy,
+            Some(file_move.file.id),
+            plan.target,
+            &file_move.to_path,
+        )?;
+        pipeline::edit_draft(&w.collection, id, |feed| {
+            for from in &file_move.old_addresses {
+                reference_feed(feed, from, &file_move.to_url);
+            }
+        })?;
+        if let Some(wait_days) = wait_days {
+            for copy in &file_move.old_copies {
+                w.collection.add_hold_operation(
+                    id,
+                    copy.connector_id,
+                    &copy.path,
+                    plan.target,
+                    wait_days,
+                )?;
+            }
+        }
+        start_download(w, &file_move.file, file_move.download)?;
+    }
+    Ok(())
+}
+
+/// Refuse a waiting time that the user cannot select (ADR 0148 item 6).
+fn checked_wait(delete_later: bool, wait_days: u32) -> Result<Option<u32>, ApiError> {
+    if !delete_later {
+        return Ok(None);
+    }
+    if moves::WAIT_CHOICES.contains(&wait_days) {
+        return Ok(Some(wait_days));
+    }
+    Err(ApiError::new(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_body",
+        format!("the waiting time {wait_days} is not one of the choices"),
+    ))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MoveRelease {
+    connector_id: i64,
+    /// The check box of ADR 0148 item 5.
+    delete_later: bool,
+    #[serde(default = "default_wait_days")]
+    wait_days: u32,
+}
+
+fn default_wait_days() -> u32 {
+    moves::DEFAULT_WAIT_DAYS
+}
+
+/// "Add to the Draft" of the sheet "Move This Release…". Gives the new diff
+/// summary (ADR 0148 item 4).
+pub(crate) async fn move_release(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<MoveRelease>,
+) -> ApiResult {
+    let feed_id = FeedId(id);
+    diff_after(shared, feed_id, move |w| {
+        let wait_days = checked_wait(body.delete_later, body.wait_days)?;
+        let hosts = w.hosts()?;
+        let feed_row = w.collection.feed(feed_id)?;
+        if feed_row.connector_id.is_some() {
+            writer(w, feed_id)?;
+        }
+        let plan = release_move_plan(w, &hosts, &feed_row, ConnectorId(body.connector_id))?;
+        apply_release_move(w, &hosts, feed_id, &plan, wait_days)?;
+        w.sync_grant_vaults(Some(feed_id));
+        Ok(())
+    })
+    .await
+}
+
+/// The moves of a feed that wait (ADR 0148 items 8 and 9). The route asks
+/// musicindex only when a move waits, with no lock of the workspace.
+pub(crate) async fn waiting_moves_route(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    let (copies, guid, public_url, index) = blocking(shared, move |w| {
+        let row = w.collection.feed(FeedId(id))?;
+        Ok((
+            w.collection.old_copies(FeedId(id))?,
+            row.podcast_guid,
+            row.public_url,
+            w.index.clone(),
+        ))
+    })
+    .await?;
+    if copies.is_empty() {
+        return Ok(Json(json!({ "moves": [] })));
+    }
+    let answer = blocking_unlocked(move || {
+        let index_url = guid.and_then(|guid| index.feed_url(&guid).ok().flatten());
+        Ok(IndexAnswer::compare(
+            index_url.as_deref(),
+            public_url.as_deref(),
+        ))
+    })
+    .await?;
+    let waiting = moves::waiting_moves(&copies, studio_core::collection::now(), answer);
+    Ok(Json(json!({ "moves": waiting })))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct OldCopyRecords {
+    records: Vec<i64>,
+}
+
+/// "Review the Deletion" and "Delete Now…": a deletion in the draft for each
+/// record. The record stays until the write (ADR 0148 items 10 to 12).
+pub(crate) async fn delete_old_copies(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<OldCopyRecords>,
+) -> ApiResult {
+    let feed_id = FeedId(id);
+    diff_after(shared, feed_id, move |w| {
+        writer(w, feed_id)?;
+        ensure_draft(w, feed_id)?;
+        let operations = w.collection.draft_operations(feed_id)?;
+        for copy in w.collection.old_copies(feed_id)? {
+            let already = operations.iter().any(|op| {
+                op.kind == DraftOperationKind::Delete
+                    && op.connector_id == copy.connector_id
+                    && op.path == copy.path
+            });
+            if body.records.contains(&copy.id) && !already {
+                w.collection.add_draft_operation(
+                    feed_id,
+                    DraftOperationKind::Delete,
+                    None,
+                    copy.connector_id,
+                    &copy.path,
+                )?;
+            }
+        }
+        Ok(())
+    })
+    .await
+}
+
+/// "Keep the Files": the records go, and no file changes (ADR 0148 item 11).
+pub(crate) async fn keep_old_copies(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<OldCopyRecords>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        for record in &body.records {
+            w.collection.remove_old_copy(FeedId(id), *record)?;
+        }
+        Ok(Json(json!({ "ok": true })))
     })
     .await
 }

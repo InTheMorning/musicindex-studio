@@ -412,6 +412,9 @@ pub enum OperationKind {
     /// Make sure that the host gives a file that an earlier write put
     /// there (ADR 0043 item 9).
     Confirm,
+    /// Keep the old copy of a moved file on its host. The write records it
+    /// and changes nothing on the host (ADR 0148 item 7).
+    Hold,
 }
 
 impl OperationKind {
@@ -423,6 +426,7 @@ impl OperationKind {
             Self::Copy => "copy",
             Self::Delete => "delete",
             Self::Confirm => "confirm",
+            Self::Hold => "hold",
         }
     }
 }
@@ -2354,7 +2358,7 @@ fn host_changes(
                         sha256,
                     });
             }
-            OperationKind::Confirm => {}
+            OperationKind::Confirm | OperationKind::Hold => {}
         }
     }
     // The feed XML goes to the host of the feed, or to the new host of a
@@ -3120,12 +3124,36 @@ fn host_operations(
     for operation in collection.draft_operations(feed_row.id)? {
         match operation.kind {
             DraftOperationKind::Copy => {
-                if let Some(copy) = copy_operation(collection, hosts, &operation)? {
+                // A file at its planned address on the host of a feed move is
+                // an upload already (ADR 0148 item 4).
+                let uploaded = operations.iter().any(|op: &HostOperation| {
+                    op.kind == OperationKind::Upload
+                        && op.connector_id == operation.connector_id
+                        && op.path == operation.path
+                });
+                if !uploaded && let Some(copy) = copy_operation(collection, hosts, &operation)? {
                     operations.push(copy);
                 }
             }
             DraftOperationKind::Confirm => {
                 operations.push(confirm_operation(collection, hosts, &operation)?);
+            }
+            DraftOperationKind::Hold => {
+                let size = collection
+                    .host_file(operation.connector_id, &operation.path)?
+                    .map_or(0, |file| file.size);
+                operations.push(HostOperation {
+                    kind: OperationKind::Hold,
+                    connector_id: operation.connector_id,
+                    url: hosts
+                        .get(operation.connector_id)?
+                        .public_url(&operation.path),
+                    path: operation.path,
+                    size,
+                    library_file_id: None,
+                    operation_id: Some(operation.id.0),
+                    waiting: false,
+                });
             }
             DraftOperationKind::Delete => {
                 let connector = hosts.get(operation.connector_id)?;
@@ -4287,6 +4315,7 @@ pub fn write_draft_signed(
         &mut deleted_on,
     )?;
     finish_hosts(collection, hosts, &deleted_on)?;
+    record_old_copies(collection, id, &operations)?;
 
     // Step 5: the draft, its host operations, its feed move and its
     // grants go out.
@@ -5519,6 +5548,51 @@ fn confirm_files_on_next_write(
                 operation.connector_id,
                 &operation.path,
             )?;
+        }
+    }
+    Ok(())
+}
+
+/// Record the old copy of each hold of the draft. Then remove each record of
+/// a file that this write put again or deleted (ADR 0148 items 7, 12 and 13).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails.
+fn record_old_copies(
+    collection: &Collection,
+    id: FeedId,
+    operations: &[HostOperation],
+) -> Result<(), PipelineError> {
+    let written_at = crate::collection::now();
+    let draft_operations = collection.draft_operations(id)?;
+    for operation in &draft_operations {
+        if operation.kind == DraftOperationKind::Hold {
+            collection.add_old_copy(
+                id,
+                operation.connector_id,
+                &operation.path,
+                operation.to_connector_id,
+                written_at,
+                operation
+                    .wait_days
+                    .unwrap_or(crate::moves::DEFAULT_WAIT_DAYS),
+            )?;
+        }
+    }
+    // A copy of bytes that the host has already gives no host operation, so
+    // the draft operations also count.
+    for operation in &draft_operations {
+        if matches!(
+            operation.kind,
+            DraftOperationKind::Copy | DraftOperationKind::Confirm
+        ) {
+            collection.remove_old_copies_at(operation.connector_id, &operation.path)?;
+        }
+    }
+    for operation in operations {
+        if operation.kind != OperationKind::Hold {
+            collection.remove_old_copies_at(operation.connector_id, &operation.path)?;
         }
     }
     Ok(())

@@ -1,6 +1,6 @@
 # Studio V1 Task 096: Release Moves
 
-Status: Ready.
+Status: In progress. Packet 096a is complete.
 
 Owner of the rules: [ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md).
 

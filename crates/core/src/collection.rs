@@ -542,6 +542,37 @@ CREATE TABLE placed_feed_files (
     r"
 ALTER TABLE feed_recipients ADD COLUMN places TEXT NOT NULL DEFAULT '[]';
 ",
+    // ADR 0148: a move keeps its old copies. A draft holds the operation
+    // `hold`, and the write records each old copy.
+    r"
+CREATE TABLE draft_operations_new (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('copy', 'delete', 'confirm', 'hold')),
+    library_file_id INTEGER REFERENCES library_files(id) ON DELETE CASCADE,
+    connector_id INTEGER NOT NULL REFERENCES connectors(id),
+    path TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    to_connector_id INTEGER REFERENCES connectors(id) ON DELETE SET NULL,
+    wait_days INTEGER
+);
+INSERT INTO draft_operations_new
+    (id, feed_id, kind, library_file_id, connector_id, path, added_at)
+SELECT id, feed_id, kind, library_file_id, connector_id, path, added_at
+FROM draft_operations;
+DROP TABLE draft_operations;
+ALTER TABLE draft_operations_new RENAME TO draft_operations;
+CREATE TABLE old_copies (
+    id INTEGER PRIMARY KEY,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    to_connector_id INTEGER REFERENCES connectors(id) ON DELETE SET NULL,
+    moved_at INTEGER NOT NULL,
+    wait_days INTEGER NOT NULL,
+    UNIQUE (feed_id, connector_id, path)
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -1003,6 +1034,9 @@ pub enum DraftOperationKind {
     /// Make sure that the host gives a file that an earlier write put
     /// there (ADR 0043 item 9).
     Confirm,
+    /// Keep the old copy of a moved file, and record it at the write
+    /// (ADR 0148 item 7).
+    Hold,
 }
 
 impl DraftOperationKind {
@@ -1013,6 +1047,7 @@ impl DraftOperationKind {
             Self::Copy => "copy",
             Self::Delete => "delete",
             Self::Confirm => "confirm",
+            Self::Hold => "hold",
         }
     }
 
@@ -1023,6 +1058,7 @@ impl DraftOperationKind {
             "copy" => Some(Self::Copy),
             "delete" => Some(Self::Delete),
             "confirm" => Some(Self::Confirm),
+            "hold" => Some(Self::Hold),
             _ => None,
         }
     }
@@ -1048,6 +1084,31 @@ pub struct DraftOperation {
     /// The time that the user started the operation, in seconds after
     /// the Unix epoch.
     pub added_at: i64,
+    /// The new file host of a hold.
+    pub to_connector_id: Option<ConnectorId>,
+    /// The waiting time of a hold, in days.
+    pub wait_days: Option<u32>,
+}
+
+/// The old copy of a moved file, from the write until the user reviews its
+/// deletion or keeps the file (ADR 0148 item 7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OldCopy {
+    /// The ID of the record.
+    pub id: i64,
+    /// The feed of the move.
+    pub feed_id: FeedId,
+    /// The file host that keeps the old copy.
+    pub connector_id: ConnectorId,
+    /// The path of the old copy.
+    pub path: String,
+    /// The file host of the new copy. `None` after the removal of that
+    /// file host.
+    pub to_connector_id: Option<ConnectorId>,
+    /// The time of the write, in seconds after the Unix epoch.
+    pub moved_at: i64,
+    /// The waiting time that the user selected.
+    pub wait_days: u32,
 }
 
 /// A recipient that the collection knows, from a feed that Studio read, or
@@ -1150,7 +1211,9 @@ fn announcement_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Announcement> {
     })
 }
 
-pub(crate) fn now() -> i64 {
+/// The time now, in seconds after the Unix epoch.
+#[must_use]
+pub fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
@@ -3313,6 +3376,122 @@ impl Collection {
         Ok(DraftOperationId(self.db.last_insert_rowid()))
     }
 
+    /// Add the hold of an old copy to a draft (ADR 0148 item 7). A second
+    /// hold of the same copy replaces the first.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_hold_operation(
+        &self,
+        feed: FeedId,
+        connector: ConnectorId,
+        path: &str,
+        to_connector: ConnectorId,
+        wait_days: u32,
+    ) -> Result<DraftOperationId, CollectionError> {
+        self.db.execute(
+            "DELETE FROM draft_operations
+             WHERE feed_id = ?1 AND kind = 'hold' AND connector_id = ?2 AND path = ?3",
+            params![feed.0, connector.0, path],
+        )?;
+        self.db.execute(
+            "INSERT INTO draft_operations
+                 (feed_id, kind, connector_id, path, added_at, to_connector_id, wait_days)
+             VALUES (?1, 'hold', ?2, ?3, ?4, ?5, ?6)",
+            params![feed.0, connector.0, path, now(), to_connector.0, wait_days],
+        )?;
+        Ok(DraftOperationId(self.db.last_insert_rowid()))
+    }
+
+    /// Record the old copy of a write. A record of the same copy gets the
+    /// new values (ADR 0148 item 7).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_old_copy(
+        &self,
+        feed: FeedId,
+        connector: ConnectorId,
+        path: &str,
+        to_connector: Option<ConnectorId>,
+        moved_at: i64,
+        wait_days: u32,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO old_copies (feed_id, connector_id, path, to_connector_id, moved_at, wait_days)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT (feed_id, connector_id, path) DO UPDATE SET
+                 to_connector_id = excluded.to_connector_id,
+                 moved_at = excluded.moved_at,
+                 wait_days = excluded.wait_days",
+            params![
+                feed.0,
+                connector.0,
+                path,
+                to_connector.map(|c| c.0),
+                moved_at,
+                wait_days
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Each recorded old copy of a feed, in the sequence of the records.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn old_copies(&self, feed: FeedId) -> Result<Vec<OldCopy>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT id, feed_id, connector_id, path, to_connector_id, moved_at, wait_days
+             FROM old_copies WHERE feed_id = ?1 ORDER BY id",
+        )?;
+        let rows = statement.query_map([feed.0], |r| {
+            Ok(OldCopy {
+                id: r.get(0)?,
+                feed_id: FeedId(r.get(1)?),
+                connector_id: ConnectorId(r.get(2)?),
+                path: r.get(3)?,
+                to_connector_id: r.get::<_, Option<i64>>(4)?.map(ConnectorId),
+                moved_at: r.get(5)?,
+                wait_days: r.get(6)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Remove one record of an old copy of a feed. The file does not change.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_old_copy(&self, feed: FeedId, record: i64) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM old_copies WHERE feed_id = ?1 AND id = ?2",
+            params![feed.0, record],
+        )?;
+        Ok(())
+    }
+
+    /// Remove each record of an old copy at this path (ADR 0148 item 13).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_old_copies_at(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM old_copies WHERE connector_id = ?1 AND path = ?2",
+            params![connector.0, path],
+        )?;
+        Ok(())
+    }
+
     /// Each host operation of a draft, in the sequence that the user
     /// started them (ADR 0036 item 4 and item 12).
     ///
@@ -3321,7 +3500,8 @@ impl Collection {
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn draft_operations(&self, feed: FeedId) -> Result<Vec<DraftOperation>, CollectionError> {
         let mut statement = self.db.prepare(
-            "SELECT id, feed_id, kind, library_file_id, connector_id, path, added_at
+            "SELECT id, feed_id, kind, library_file_id, connector_id, path, added_at,
+                    to_connector_id, wait_days
              FROM draft_operations WHERE feed_id = ?1 ORDER BY id",
         )?;
         let rows = statement.query_map([feed.0], draft_operation_row)?;
@@ -4182,11 +4362,13 @@ fn draft_operation_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<DraftOperation
         id: DraftOperationId(r.get(0)?),
         feed_id: FeedId(r.get(1)?),
         kind: DraftOperationKind::parse(&kind)
-            .expect("the kind column allows only copy, delete or confirm"),
+            .expect("the kind column allows only copy, delete, confirm or hold"),
         library_file_id: r.get::<_, Option<i64>>(3)?.map(LibraryFileId),
         connector_id: ConnectorId(r.get(4)?),
         path: r.get(5)?,
         added_at: r.get(6)?,
+        to_connector_id: r.get::<_, Option<i64>>(7)?.map(ConnectorId),
+        wait_days: r.get(8)?,
     })
 }
 

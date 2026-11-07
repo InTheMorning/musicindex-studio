@@ -37,7 +37,7 @@ import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keyRowView, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
-import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playWasReplaced, playerProgress } from './media.js';
+import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playerMark, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
 import { planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
@@ -463,13 +463,16 @@ function AudioPlayer({ id, url, pick }) {
     if (reading) pick.metadataDone(null);
   };
   const known = Number.isFinite(length) && length > 0;
+  const mark = playerMark({ starting, slowStart, playing });
   return html`<div class="field">
     <label for=${`${id}-play`}>Player</label>
     <div class="field-body">
       <div class="player">
         <button id=${`${id}-play`} class="button icon-button" type="button" disabled=${!usable}
           aria-busy=${starting ? 'true' : undefined}
-          aria-label=${starting ? PLAYER_STARTING : playing ? 'Pause' : 'Play'} onClick=${toggle}><${Icon} name=${slowStart ? 'ellipsis' : starting || playing ? 'pause' : 'play'} /></button>
+          aria-label=${starting ? PLAYER_STARTING : playing ? 'Pause' : 'Play'} onClick=${toggle}>${mark === 'wait'
+            ? html`<span class="player-wait" aria-hidden="true"></span>`
+            : html`<${Icon} name=${mark} />`}</button>
         <input class="player-bar" type="range" min="0" max=${known ? length : 0} step="any" value=${position}
           style=${{ '--progress': playerProgress(position, length) }}
           aria-label="Position" disabled=${!known}

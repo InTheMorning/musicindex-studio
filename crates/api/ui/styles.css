@@ -1852,6 +1852,11 @@ button.outline-feed {
   background: var(--text);
 }
 .player-bar:disabled { opacity: .5; }
+/* The waiting mark of the play button, with the size of its icon. With Reduce
+   Motion it is a still ring (musicindex ADR 0025). */
+.player-wait { display: block; width: 16px; height: 16px; box-sizing: border-box; border: 2px solid var(--fill); border-top-color: currentColor; border-radius: 50%; animation: player-wait 0.8s linear infinite; }
+@keyframes player-wait { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .player-wait { animation: none; } }
 .announce-choice { display: grid; gap: 4px; }
 .announce-choice .hint { margin: 0; }
 .section > .announce-choice { padding: 0 4px; }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { playerProgress, HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress, playWasReplaced } from '../ui/media.js';
+import { playerMark, playerProgress, HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress, playWasReplaced } from '../ui/media.js';
 
 // ADR 0109 item 5 and the acceptance criteria: the source of an image and of
 // the player. Fix a failure in crates/api/ui/media.js, not in the test.
@@ -80,4 +80,13 @@ test('the position bar gives one value for its fill and its cursor', () => {
   assert.equal(playerProgress(10, 0), 0);
   assert.equal(playerProgress(300, 200), 1);
   assert.equal(playerProgress(-1, 200), 0);
+});
+
+test('the play button shows pause only after the audio starts', () => {
+  const WHY = 'Finding 18 of the local use findings: the button waits until the track starts.';
+  assert.equal(playerMark({ starting: true, slowStart: false, playing: false }), 'play', WHY);
+  assert.equal(playerMark({ starting: true, slowStart: false, playing: true }), 'play', WHY);
+  assert.equal(playerMark({ starting: true, slowStart: true, playing: true }), 'wait', WHY);
+  assert.equal(playerMark({ starting: false, slowStart: false, playing: true }), 'pause', WHY);
+  assert.equal(playerMark({ starting: false, slowStart: false, playing: false }), 'play', WHY);
 });

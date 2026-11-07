@@ -82,6 +82,14 @@ export const PLAYER_STARTING = 'Starting…';
 // A shorter start shows no starting state, so a quick start does not flicker.
 export const PLAYER_STARTING_DELAY_MS = 400;
 
+// The mark of the play button (finding 18 of the local use findings). It is "pause"
+// only after the audio starts. During a start it stays "play", and after the delay
+// it is "wait". A quick start thus goes from "play" directly to "pause".
+export function playerMark({ starting, slowStart, playing }) {
+  if (starting) return slowStart ? 'wait' : 'play';
+  return playing ? 'pause' : 'play';
+}
+
 // The part of the position bar that is done, from 0 to 1. `styles.css` draws
 // the fill and the cursor from this one value, so that they agree.
 export function playerProgress(position, length) {

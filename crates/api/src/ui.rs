@@ -152,6 +152,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/movelink.js"),
     ),
     (
+        "releasemove.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/releasemove.js"),
+    ),
+    (
         "confirms.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/confirms.js"),

@@ -41,6 +41,33 @@ A feed file can name a new feed address in the tag `itunes:new-feed-url`. This p
 
 To undo a move before you write, use **Undo** in the review sheet. See [Review and write your changes](review-and-write.md).
 
+## Move a release
+
+Select **Move This Release…** to move the feed file and all the files of the release in one action.
+
+1. Select the file host. The sheet shows the plan: the feed file, the audio files, the images and the files that do not move.
+2. Select the time that Studio keeps the old files: 7, 30 or 90 days. To keep the old files with no later question, clear **Delete the files … when the move is complete**.
+3. Select **Add to the Draft**. Nothing changes on a file host until you write. Review shows each change.
+
+A file that is not in the library does not move, and the plan names it. A Blossom host cannot keep a feed file, so the feed file stays on its file host.
+
+If you change only **File host of the feed XML**, a notice gives the count of the files that stay. Select **Move the Files Too** to open the same sheet.
+
+### After the write
+
+The old files stay on the file host from before, because an app can still use their addresses. **Moves that wait** shows each move, with these lines:
+
+- **New files**. The new copies passed the check of the write.
+- **musicindex**. Whether musicindex follows the new feed address. Studio cannot examine each other app.
+- **Waiting time**. The days since the write.
+
+When the days are complete and musicindex gives no different address, a notice asks you to delete the old files. Select **Review the Deletion**, examine the review, and write. Studio never deletes these files by itself.
+
+- **Delete Now…** does the same before the end of the waiting time. An app that still uses an old address then gets an error.
+- **Keep the Files** removes the move from the list. The files stay.
+
+The pointer file of the feed always stays.
+
 ## Library files
 
 Each file is one line with its format, its path, "In use" or "Not in use", and the number of copies.
@@ -49,7 +76,7 @@ Select a line to open it.
 - **Copy to** a file host. Studio sends a spare copy when you write.
 - **Reference**. The feed uses the copy on this file host.
 - **Delete**. Studio deletes the copy on that file host when you write.
-- **Move to** a file host. The feed uses the file on that file host. When you write, Studio copies the file there and then deletes the copy on the file host from before. To keep that copy, use **Copy to** and then **Reference**.
+- **Move to** a file host. The feed uses the file on that file host. When you write, Studio copies the file there. The copy on the file host from before stays for 30 days, and then Studio asks you. See [Move a release](#move-a-release).
 - **File host of this file**. Select a file host for this file, or **Use the default file host of the release**.
 - **Undo**. Takes a pending copy or deletion out of the draft.
 

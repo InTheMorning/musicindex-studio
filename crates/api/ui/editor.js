@@ -39,6 +39,7 @@ import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
+import { planRows, stayRows, deleteLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -3791,6 +3792,100 @@ function ChangeRow({ difference, file, busy, onAct }) {
   </div>`;
 }
 
+// The sheet "Move This Release…" (ADR 0148 items 1 to 6). The core gives the
+// plan of each file host. `start` is the first file host of the select.
+function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
+  const ref = useSheet(open);
+  const [target, setTarget] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [deleteLater, setDeleteLater] = useState(true);
+  const [wait, setWait] = useState(30);
+  const { busy, error, run } = useAction();
+  const other = connectors.find((c) => c.id !== feed.connector_id);
+  const chosen = target ?? start ?? (other ? other.id : null);
+  useEffect(() => {
+    if (!open || chosen === null) { setPlan(null); return undefined; }
+    let live = true;
+    setPlan(null);
+    run(async () => {
+      const found = await api(`/feeds/${feed.id}/move/plan?connector_id=${chosen}`);
+      if (live) { setPlan(found); setWait(found.default_wait_days); }
+    });
+    return () => { live = false; };
+  }, [open, chosen, feed.id]);
+  const add = () => run(async () => {
+    await api(`/feeds/${feed.id}/move`, { method: 'POST', body: { connector_id: chosen, delete_later: deleteLater, wait_days: wait } });
+    await onDone();
+    ref.current.close();
+  });
+  const stays = plan ? stayRows(plan) : [];
+  const hasOld = plan && plan.from_connector_ids.length > 0;
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-release-title" onClose=${() => { setTarget(null); onClose(); }}>
+    <header>
+      <h2 id="move-release-title">Move ${feed.title || 'This Release'}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body form">
+      <div class="group move-group">
+        <div class="field"><label for="move-release-host">To this file host</label>
+          <select id="move-release-host" class="button" value=${chosen} disabled=${busy}
+            onChange=${(e) => setTarget(Number(e.target.value))}>
+            ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+          </select></div>
+      </div>
+      <${ErrorNotice} error=${error} />
+      ${plan && html`<section class="page-section"><h2>The plan</h2>
+        <div class="group move-group">
+          ${planRows(plan, connectors).map((row) => html`<div class="link-row static" key=${row.label}>
+            <span class="label">${row.label}</span><span class="summary">${row.value}</span></div>`)}
+          ${stays.map((row) => html`<div class="link-row static" key=${row.name}>
+            <span class="label mono key-text">${row.name}</span><span class="summary">${row.text}</span></div>`)}
+        </div>
+        ${plan.nothing_to_move && html`<p class="hint">Each file of this release is already on this file host.</p>`}
+      </section>`}
+      ${hasOld && html`<div class="group move-group">
+        <div class="move-check"><label class="check"><input type="checkbox" checked=${deleteLater}
+            onChange=${(e) => setDeleteLater(e.target.checked)} /> ${deleteLabel(plan, connectors)}</label>
+          <p class="hint">${deleteLater ? DELETE_NOTE_ON : DELETE_NOTE_OFF}</p></div>
+        <div class="field"><label for="move-release-wait">Keep the old files for</label>
+          <select id="move-release-wait" class="button" value=${wait} disabled=${!deleteLater}
+            onChange=${(e) => setWait(Number(e.target.value))}>
+            ${plan.wait_choices.map((days) => html`<option value=${days}>${waitLabel(days)}</option>`)}
+          </select></div>
+      </div>`}
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="button" disabled=${busy || !plan || plan.nothing_to_move} onClick=${add}>Add to the Draft</button>
+    </footer>
+  </dialog>`;
+}
+
+// One move that waits, or that is ready (ADR 0148 items 8, 10 and 11). The core
+// gives its state.
+function WaitingMoveEntry({ move, connectors, busy, onDelete, onKeep, onDeleteNow }) {
+  if (move.ready) {
+    const notice = readyNotice(move, connectors);
+    return html`<div class="notice download-notice" role="status">
+      <span><strong>${notice.strong}</strong> ${notice.text}</span>
+      <div class="actions">
+        <button class="button action" type="button" disabled=${busy} onClick=${() => onDelete(move)}>Review the Deletion</button>
+        <button class="button" type="button" disabled=${busy} onClick=${() => onKeep(move)}>Keep the Files</button>
+      </div>
+    </div>`;
+  }
+  const view = waitingView(move, connectors);
+  return html`<div class="group">
+      <div class="link-row static"><span class="label">${view.title}</span><span class="summary">${view.summary}</span></div>
+      ${view.rows.map((row) => html`<div class="link-row static" key=${row.label}>
+        <span class="label">${row.label}</span><span class="summary">${row.value}</span></div>`)}
+    </div>
+    <div class="actions">
+      <button class="button destructive" type="button" disabled=${busy} onClick=${() => onDeleteNow(move)}>Delete Now…</button>
+      <button class="button" type="button" disabled=${busy} onClick=${() => onKeep(move)}>Keep the Files</button>
+    </div>`;
+}
+
 // The Files page: the host of the release, each of its library files with
 // their copies, and each other host file of its release folder (ADR 0036
 // items 4, 7, 9 and 11; task 021g, task 022b). `onOpsChanged` tells the
@@ -3804,6 +3899,11 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const [error, setError] = useState(null);
   const { busy, error: opError, run } = useAction();
   const scan = useAction();
+  // The moves that wait (ADR 0148 item 8), and the sheet of a release move.
+  const [moves, setMoves] = useState([]);
+  const [moving, setMoving] = useState(null);
+  const loadMoves = () => api(`/feeds/${feed.id}/moves`).then((r) => setMoves(r.moves), () => setMoves([]));
+  useEffect(() => { loadMoves(); }, [feed.id, reloadKey]);
   // The downloads of this feed, from the downloads route.
   const [downloads, setDownloads] = useState([]);
   const lastActive = useRef(new Set());
@@ -3949,6 +4049,28 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     await load();
   });
 
+  // "Review the Deletion" puts a deletion of each old copy in the draft, and
+  // Review shows them (ADR 0148 items 10 and 12).
+  const deleteOldFiles = (move) => run(async () => {
+    await api(`/feeds/${feed.id}/moves/delete`, { method: 'POST', body: { records: move.records } });
+    onOpsChanged();
+    await load();
+    window.dispatchEvent(new Event(OPEN_REVIEW));
+  });
+  const deleteOldFilesNow = async (move) => {
+    const host = connectorName(connectors, move.connector_id);
+    if (await askConfirm(CONFIRMS.deleteOldFilesNow(move.records.length, host))) deleteOldFiles(move);
+  };
+  const keepOldFiles = (move) => run(async () => {
+    await api(`/feeds/${feed.id}/moves/keep`, { method: 'POST', body: { records: move.records } });
+    await loadMoves();
+  });
+  const afterReleaseMove = async () => {
+    onOpsChanged();
+    await load();
+    await loadDownloads();
+  };
+
   const setFileHost = (path, body) => run(async () => {
     await api(path, { method: 'PUT', body });
     await load();
@@ -3982,7 +4104,15 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const feedHost = data.feed_move ? data.feed_move.connector_id : feed.connector_id;
   const tag = newFeedAddress(feed);
 
+  const partMove = data.feed_move && data.files_stay > 0
+    ? partMoveNotice(data.files_stay, data.feed_move.connector_id, feed.connector_id, connectors) : null;
+
   return html`${!mode.holdAssets && html`<div class="notice" role="status"><strong>${SERVER_NOTICE.strong}</strong> ${SERVER_NOTICE.text}</div>`}
+    ${partMove && html`<div class="notice download-notice" role="status">
+      <span><strong>${partMove.strong}</strong> ${partMove.text}</span>
+      <div class="actions"><button class="button action" type="button" disabled=${busy}
+        onClick=${() => setMoving({ start: data.feed_move.connector_id })}>Move the Files Too</button></div>
+    </div>`}
     ${missing > 0 && html`<div class="notice error" role="alert"><strong>${missingNotice(missing).strong}</strong> ${missingNotice(missing).text}</div>`}
     ${differences.length > 0 && html`<section class="page-section"><h2>Changes in the library folder</h2>
       <div class="group">
@@ -3998,6 +4128,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
           ${scan.busy ? 'Scanning…' : 'Scan the File Hosts'}</button>
         ${mode.holdAssets && html`<button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
           Scan the Library Folder</button>`}
+        ${connectors.length > 1 && html`<button class="button action" type="button" disabled=${busy}
+          onClick=${() => setMoving({ start: null })}>Move This Release…</button>`}
       </div>
       <${ErrorNotice} error=${scan.error} />
       <${ErrorNotice} error=${opError} />
@@ -4024,6 +4156,14 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
         </div>
       </div>
     </section>
+
+    ${moves.length > 0 && html`<section class="page-section"><h2>Moves that wait</h2>
+      ${moves.map((move) => html`<${WaitingMoveEntry} key=${move.records[0]} move=${move} connectors=${connectors} busy=${busy}
+        onDelete=${deleteOldFiles} onDeleteNow=${deleteOldFilesNow} onKeep=${keepOldFiles} />`)}
+    </section>`}
+
+    <${MoveReleaseSheet} open=${moving !== null} feed=${feed} connectors=${connectors} start=${moving && moving.start}
+      onDone=${afterReleaseMove} onClose=${() => setMoving(null)} />
 
     <section class="page-section"><h2>Library files</h2>
       ${mode.holdAssets && data.remote_count > 0 && html`<div class="notice download-notice">

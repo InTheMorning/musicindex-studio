@@ -760,6 +760,10 @@ dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); 
   border-top: 1px solid var(--sep);
 }
 .sheet .group { background: var(--level-3); border-radius: 12px; padding: 4px 16px; }
+/* The groups of the sheet "Move This Release…" hold rows with their own space
+   (ADR 0148 item 1). */
+.sheet .group.move-group { padding: 0; }
+.move-check { display: grid; gap: 4px; padding: 10px 16px; }
 /* A sheet group of rows, such as fields, has no inner space of its own.
    Each row has the inner space of a group row, so that the rows have the
    same distance from the edge as on a page (ADR 0029 items 11 and 12). */

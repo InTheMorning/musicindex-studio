@@ -4,6 +4,10 @@
 const destructive = (title, text, action) => ({ title, text, action, role: 'destructive' });
 
 export const CONFIRMS = {
+  deleteOldFilesNow: (count, host) => destructive(
+    `Delete ${count === 1 ? 'the old file' : `the ${count} old files`} before the move is ready?`,
+    `An app that still uses an old address gets an error. You review each deletion, and ${host} keeps the files until you write.`,
+    'Add the Deletion'),
   removeFeed: (name) => destructive(
     `Remove “${name}” from your collection?`,
     'The feed file on its file host does not change. You can add the feed again later.',

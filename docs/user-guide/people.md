@@ -112,6 +112,8 @@ The section **Change your feeds** has four operations. Each operation shows the 
 
 A payee that no person holds shows in the section **Payees with no person**. Select it to open its page.
 
+On the People page, select the heading of a list to fold it. A long list starts closed, and a search opens the lists that it filters.
+
 1. Select **Add to a Person**.
 2. Select **A new person**, or select a person that you have. For a new person, check the name.
 3. Select **Make the Person** or **Add the Wallet**.

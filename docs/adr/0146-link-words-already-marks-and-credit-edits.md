@@ -6,7 +6,7 @@
 - Accepted: 2026-11-06 by the operator, from screenshots of the local build. The operator gave the words "link to Artist or Label page", and asked that a row that is already there keeps its content with a mark.
 - Technical choices: item 5 is a choice of the planning model.
 - Changes: the words of [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md), "Part of" and "Add an artist or label". [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) item 10, the look of a row that the list has already.
-- Source: [findings of local use, findings 33 to 36](../reviews/2026-11-06-local-use-findings.md)
+- Source: [findings of local use, findings 33 to 37](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context
 
@@ -21,7 +21,7 @@ The section "Artists and labels" did not tell what it does. A row that a list ha
 
 ### A Value That Is Already There
 
-3. A row that is already there shows the same content as each other row. It is gray, and it has a tag with a check mark and its state, for example "Already in this list". It cannot be selected.
+3. A row that is already there shows the same content as each other row. It is gray, and it has a tag in the accent tint with a check mark and its state, for example "Already in this list". It cannot be selected.
 4. This applies to the rows of each sheet of ADR 0145, to the fill of "Find on musicindex" of a person, and to the check of a suggestion.
 5. A result of "Find a Nostr profile" that is in the feeds of the user is also gray, with the tag "In your feeds". It can be selected, because a selection is the only way to use a key that no person holds. When a person holds the key, the row takes a missing name or picture from that person.
 
@@ -34,6 +34,10 @@ The section "Artists and labels" did not tell what it does. A row that a list ha
 
 8. In "Add a Credit" and "Add a Credit Name", a selected feed lists its credits and the credits of its first 25 tracks, each name and role one time, after the row of the feed. One selection fills the form with the name, the role, the group, the picture, the information address and the Nostr key. A feed with no credit has only its own row.
 9. The search still finds a feed, not a person. A search for the name of a contributor finds that person only when the search of musicindex does.
+
+### The People Page
+
+10. On the People page, "Suggestions from your feeds", "People" and "Payees with no person" fold, with a count. "People" starts open. Each other list starts open with fewer than 6 rows. The page keeps the state of a fold during a visit. A search keeps open each list that it filters.
 
 ## Alternatives Considered
 

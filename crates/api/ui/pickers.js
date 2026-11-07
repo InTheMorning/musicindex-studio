@@ -7,10 +7,18 @@ import { api, ErrorNotice, Field, Icon } from './app.js';
 import { LookupRow, PersonArt, useLookup } from './peoplepages.js';
 import { foldStartsOpen, lookupGroups, FIND_ONE_EMPTY, FIND_WAIT, FIND_ONE_HINT } from './people.js';
 
-// A list of a sheet. A long list starts closed, with its count.
-export function PickFold({ title, rows, onClick }) {
-  return html`<details class="disclosure pick-fold" open=${foldStartsOpen(rows.length)} onClick=${onClick}>
+// The folds that the user opened or closed, by `id`, for this visit. A fold keeps
+// its state after the user opens a page from it and comes back.
+const foldStates = new Map();
+
+// A list that folds, with its count. A long list starts closed, unless `startOpen`
+// says different. With `forceOpen`, it stays open, for a search of its rows.
+export function PickFold({ id, title, note, rows, startOpen = foldStartsOpen(rows.length), forceOpen = false, onClick }) {
+  const open = forceOpen || (foldStates.has(id) ? foldStates.get(id) : startOpen);
+  const remember = (e) => { if (id && !forceOpen) foldStates.set(id, e.currentTarget.open); };
+  return html`<details class="disclosure pick-fold" open=${open} onClick=${onClick} onToggle=${remember}>
     <summary><span class="pick-fold-title">${title}</span><span class="pick-fold-count">${rows.length}</span></summary>
+    ${note && html`<p class="note">${note}</p>`}
     <div class="group">${rows}</div>
   </details>`;
 }

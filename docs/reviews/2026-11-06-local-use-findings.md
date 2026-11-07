@@ -247,3 +247,7 @@ The drive of this correction also found that "Add a Credit Name" with no Nostr k
 ### 36. The Credit Picker Takes Only The Author Of A Feed
 
 Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md) item 8). A selected feed filled the whole release artist text as one name. It now lists the credits of the feed and its tracks. The change needs no new search. A search by the name of a contributor waits for the new search of Stophammer.
+
+### 37. The Lists Of The People Page Do Not Fold
+
+Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md) item 10). A long list of suggestions moved the payees far down the page. Each list now folds. The tag of a value that is already there also has the accent tint now.

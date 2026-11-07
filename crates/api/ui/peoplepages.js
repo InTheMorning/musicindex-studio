@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
-import { PickerLayout, FindOneSheet, TakenTag } from './pickers.js';
+import { PickerLayout, FindOneSheet, PickFold, TakenTag } from './pickers.js';
 import { api, assetMode, askConfirm, Bar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
@@ -151,27 +151,29 @@ export function PeoplePage({ feeds, go }) {
       const row = changeRow(set, data.people, payeesWithNoPerson(data.recipients));
       return html`<${ListRow} key=${set.id} title=${row.title} lines=${[row.text]} onClick=${() => go({ name: 'change-set', id: set.id })} />`;
     })}</div></section>`,
-    suggestions: () => html`<section class="page-section"><h2>Suggestions from your feeds</h2>
-      <p class="note">Studio found these names in your feeds. Check each one, then make a person.</p>
-      <div class="group">${data.suggestions.map((suggestion) => {
+    // Each list folds (ADR 0146 item 10). A search opens the lists that it filters.
+    suggestions: () => html`<${PickFold} id="people-suggestions" title="Suggestions from your feeds"
+      note="Studio found these names in your feeds. Check each one, then make a person."
+      rows=${data.suggestions.map((suggestion) => {
         const row = suggestionRow(suggestion);
         return html`<${ListRow} key=${suggestion.identity} title=${row.title} lines=${row.lines} count="Check"
           lead=${html`<${PersonArt} person=${{ name: suggestion.name, img: (suggestion.credits.find((c) => c.img) || {}).img || '' }} />`}
           onClick=${() => setMaking(suggestion)} />`;
-      })}</div></section>`,
-    people: () => html`<section class="page-section"><h2>People</h2>
-      ${data.people.length === 0 && html`<p class="empty">${PEOPLE_EMPTY}</p>`}
-      ${data.people.length > 0 && people.length === 0 && html`<p class="empty">No person matches the search.</p>`}
-      ${people.length > 0 && html`<div class="group">${people.map((person) => {
+      })} />`,
+    people: () => (people.length > 0
+      ? html`<${PickFold} id="people-people" title="People" startOpen=${true} forceOpen=${query.trim() !== ''} rows=${people.map((person) => {
         const row = personRow(person, titles);
         return html`<${ListRow} key=${person.id} title=${row.title} lines=${row.lines} count=${row.count}
           lead=${html`<${PersonArt} person=${person} />`} onClick=${() => go({ name: 'person', id: person.id })} />`;
-      })}</div>`}</section>`,
-    payees: () => html`<section class="page-section"><h2>Payees with no person</h2><div class="group">${payees.map((recipient) => {
+      })} />`
+      : html`<section class="page-section"><h2>People</h2>
+        ${data.people.length === 0 && html`<p class="empty">${PEOPLE_EMPTY}</p>`}
+        ${data.people.length > 0 && html`<p class="empty">No person matches the search.</p>`}</section>`),
+    payees: () => html`<${PickFold} id="people-payees" title="Payees with no person" forceOpen=${query.trim() !== ''} rows=${payees.map((recipient) => {
       const row = recipientRow(recipient);
       return html`<${ListRow} key=${JSON.stringify(recipientKey(recipient))} title=${row.title} lines=${row.lines} count=${row.count}
         onClick=${() => go({ name: 'wallet', recipient })} />`;
-    })}</div></section>`,
+    })} />`,
   };
   return html`<div><${Bar}><span class="bar-title">People</span><//><section class="section">
     <${ErrorNotice} error=${error} />

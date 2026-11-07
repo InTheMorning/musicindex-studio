@@ -35,7 +35,7 @@ A test of a new start, an import or an export needs a different data folder. The
 
 ### A Change Of Collection
 
-14. "Open" restarts the app on the selected collection. A write that runs follows the "Quit" rules of ADR 0124 items 16 to 21. The vault of the new collection starts locked.
+14. "Open" restarts the app on the selected collection. A write that runs follows the "Quit" rules of ADR 0124 items 16 to 21, and the dialog and the tray menu say "Open After Write" and "Open Now". "Cancel" keeps the open collection selected. The vault of the new collection starts locked.
 15. Only the open collection runs. A granted write to a collection that is not open gets an error, and its queued announcements wait until it opens.
 16. The UI has no code for Tauri. A route of the local API tells the shell which collection to open. The plain `studio-desktop` shell opens the selected collection at its next start, and it does not restart.
 

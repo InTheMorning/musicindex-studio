@@ -177,12 +177,18 @@ fn pending_open(app: &AppHandle) -> Option<String> {
     pending.folder.lock().ok()?.clone()
 }
 
-fn clear_pending_open(app: &AppHandle) {
+/// Keep or clear the collection that waits to open, after one quit event.
+fn update_pending_open(app: &AppHandle, event: QuitEvent, action: QuitAction) {
     if let Some(pending) = app.try_state::<PendingOpen>()
         && let Ok(mut folder) = pending.folder.lock()
     {
-        *folder = None;
+        *folder = quit::pending_after(event, action, folder.take());
     }
+}
+
+/// The words of the quit. They name a change of collection while one waits.
+fn quit_words(app: &AppHandle) -> quit::QuitWords {
+    quit::words(pending_open(app).is_some())
 }
 
 /// Start the quit that opens a different collection: the rules of "Quit"
@@ -252,15 +258,10 @@ fn normal_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
 /// The menu of the tray while the app waits for the work (ADR 0124 item 20).
 fn waiting_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let note = MenuItem::with_id(
-        app,
-        "waiting",
-        "Quits after the write…",
-        false,
-        None::<&str>,
-    )?;
+    let words = quit_words(app);
+    let note = MenuItem::with_id(app, "waiting", words.waiting, false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Studio", true, None::<&str>)?;
-    let now = MenuItem::with_id(app, "quit_now", "Quit Now", true, None::<&str>)?;
+    let now = MenuItem::with_id(app, "quit_now", words.now, true, None::<&str>)?;
     Menu::with_items(app, &[&note, &open, &now])
 }
 
@@ -282,13 +283,14 @@ fn set_tray_menu(app: &AppHandle, waiting: bool) {
 /// Show the dialog of the system. Its answer is a quit event.
 fn show_quit_dialog(app: &AppHandle, work: WorkCount) {
     let handle = app.clone();
+    let words = quit_words(app);
     app.dialog()
-        .message(quit::DIALOG_MESSAGE)
+        .message(words.message)
         .title(quit::dialog_title(work))
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::YesNoCancelCustom(
-            quit::QUIT_AFTER_WRITE.to_string(),
-            quit::QUIT_NOW.to_string(),
+            words.after_write.to_string(),
+            words.now.to_string(),
             quit::CANCEL.to_string(),
         ))
         .show_with_result(move |result| {
@@ -356,10 +358,7 @@ fn handle_quit(app: &AppHandle, event: QuitEvent) {
         }
         QuitAction::StopApiAndEnd => stop_api_and_end(app),
         QuitAction::Continue => {
-            // A quit that the user stops also stops a change of collection.
-            if event == QuitEvent::Cancel || event == QuitEvent::OpenStudio {
-                clear_pending_open(app);
-            }
+            update_pending_open(app, event, action);
             if before == QuitState::Waiting && event == QuitEvent::OpenStudio {
                 set_tray_menu(app, false);
             }

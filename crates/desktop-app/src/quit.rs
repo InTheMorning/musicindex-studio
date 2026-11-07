@@ -116,15 +116,71 @@ pub const QUIT_NOW: &str = "Quit Now";
 /// The button that closes the dialog.
 pub const CANCEL: &str = "Cancel";
 
+/// The message of the dialog for a change of collection (ADR 0149 item 14).
+pub const OPEN_DIALOG_MESSAGE: &str =
+    "If you open the collection now, the write stops. You then must do the write again.";
+/// The default button of the dialog for a change of collection.
+pub const OPEN_AFTER_WRITE: &str = "Open After Write";
+/// The destructive button of the dialog for a change of collection.
+pub const OPEN_NOW: &str = "Open Now";
+
+/// The words that change when the quit opens a different collection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QuitWords {
+    /// The message of the dialog.
+    pub message: &'static str,
+    /// The default button of the dialog.
+    pub after_write: &'static str,
+    /// The destructive button of the dialog, and the item of the tray menu.
+    pub now: &'static str,
+    /// The first item of the tray menu during the wait.
+    pub waiting: &'static str,
+}
+
+/// The words of the quit. `opening` is true while a different collection
+/// waits to open (ADR 0149 item 14).
+#[must_use]
+pub fn words(opening: bool) -> QuitWords {
+    if opening {
+        QuitWords {
+            message: OPEN_DIALOG_MESSAGE,
+            after_write: OPEN_AFTER_WRITE,
+            now: OPEN_NOW,
+            waiting: "Opens the collection after the write…",
+        }
+    } else {
+        QuitWords {
+            message: DIALOG_MESSAGE,
+            after_write: QUIT_AFTER_WRITE,
+            now: QUIT_NOW,
+            waiting: "Quits after the write…",
+        }
+    }
+}
+
 /// The event for the label of the button that the user selected. A label
 /// that is not known, and a closed dialog, give "Cancel".
 #[must_use]
 pub fn event_for_label(label: &str) -> QuitEvent {
     match label {
-        QUIT_AFTER_WRITE => QuitEvent::QuitAfterWrite,
-        QUIT_NOW => QuitEvent::QuitNow,
+        QUIT_AFTER_WRITE | OPEN_AFTER_WRITE => QuitEvent::QuitAfterWrite,
+        QUIT_NOW | OPEN_NOW => QuitEvent::QuitNow,
         _ => QuitEvent::Cancel,
     }
+}
+
+/// The collection that waits to open after `event` gave `action`. A quit
+/// that the user stops also stops the change of collection, so the open
+/// collection stays selected (ADR 0149 item 14).
+#[must_use]
+pub fn pending_after(
+    event: QuitEvent,
+    action: QuitAction,
+    pending: Option<String>,
+) -> Option<String> {
+    let stopped = action == QuitAction::Continue
+        && matches!(event, QuitEvent::Cancel | QuitEvent::OpenStudio);
+    if stopped { None } else { pending }
 }
 
 #[cfg(test)]
@@ -253,6 +309,55 @@ mod tests {
             title(1, 1),
             "Studio Is Writing 1 Feed And Receiving 1 Music File"
         );
+    }
+
+    #[test]
+    fn cancel_clears_the_collection_that_waits_to_open() {
+        let pending = || Some("test".to_string());
+        // The user selects "Open" during a write, then "Cancel".
+        let (state, action) = step(BUSY, S::Running, E::Quit);
+        assert_eq!(action, A::ShowDialog);
+        assert_eq!(pending_after(E::Quit, action, pending()), pending());
+        let (state, action) = step(BUSY, state, E::Cancel);
+        assert_eq!(state, S::Running);
+        assert_eq!(pending_after(E::Cancel, action, pending()), None);
+    }
+
+    #[test]
+    fn open_studio_during_the_wait_clears_the_collection_that_waits_to_open() {
+        let pending = || Some("test".to_string());
+        let (_, action) = step(BUSY, S::Waiting, E::OpenStudio);
+        assert_eq!(pending_after(E::OpenStudio, action, pending()), None);
+    }
+
+    #[test]
+    fn the_collection_stays_selected_when_the_quit_goes_on() {
+        let pending = || Some("test".to_string());
+        for (state, event) in [
+            (S::Asking, E::QuitAfterWrite),
+            (S::Asking, E::QuitNow),
+            (S::Waiting, E::NoWork),
+            (S::Waiting, E::QuitNow),
+            // A second "Quit" while the dialog shows changes nothing.
+            (S::Asking, E::Quit),
+        ] {
+            let (_, action) = step(BUSY, state, event);
+            assert_eq!(pending_after(event, action, pending()), pending());
+        }
+    }
+
+    #[test]
+    fn a_change_of_collection_does_not_say_quit() {
+        let open = words(true);
+        for text in [open.message, open.after_write, open.now, open.waiting] {
+            assert!(!text.to_lowercase().contains("quit"), "{text}");
+        }
+        assert_eq!(event_for_label(open.after_write), E::QuitAfterWrite);
+        assert_eq!(event_for_label(open.now), E::QuitNow);
+        let quit = words(false);
+        assert_eq!(quit.message, DIALOG_MESSAGE);
+        assert_eq!(event_for_label(quit.after_write), E::QuitAfterWrite);
+        assert_eq!(event_for_label(quit.now), E::QuitNow);
     }
 
     #[test]

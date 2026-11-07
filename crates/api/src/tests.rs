@@ -14094,3 +14094,134 @@ async fn a_waiting_move_gives_the_answer_of_musicindex() {
     );
     assert_eq!(waiting(&app, id).await[0]["index"], "follows");
 }
+
+/// A second album on "Home", with one more file host "Spare".
+async fn second_feed_on_home(app: &App, home: i64) -> i64 {
+    std::fs::write(
+        app.feeds.path().join("other.xml"),
+        FEED.replace("g-1", "g-2"),
+    )
+    .unwrap();
+    let (status, feed) = call(
+        app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": home, "path": "other.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    feed["id"].as_i64().unwrap()
+}
+
+fn move_all_app() -> App {
+    let mut reader = studio_core::move_link::ScriptedReader::empty();
+    for (url, guid) in [
+        ("https://backup.example/album.xml", "g-1"),
+        ("https://backup.example/other.xml", "g-2"),
+    ] {
+        reader = reader.with_feed(url, url, Some(guid), Some(url), None);
+    }
+    app_with_reader("http://127.0.0.1:9", None, Some(reader))
+}
+
+async fn move_all(app: &App, from: i64, to: i64) -> Value {
+    let (status, set) = call(
+        app,
+        "POST",
+        "/api/v1/change-sets/move",
+        Some(json!({ "from": from, "to": to, "delete_later": true, "wait_days": 7 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    set
+}
+
+/// ADR 0148 items 16 and 17: a change set has one row for each release on
+/// the file host. Each feed writes with its own diff, and the old copies stay.
+#[tokio::test]
+async fn move_all_releases_gives_a_change_set_with_a_row_for_each_release() {
+    let app = move_all_app();
+    let (id, _, home, backup, folder) = album_on_home(&app).await;
+    let other = second_feed_on_home(&app, home).await;
+    let set = move_all(&app, home, backup).await;
+    assert_eq!(set["operation"]["kind"], "move_releases");
+    assert_eq!(set["operation"]["to_name"], "Backup");
+    let feeds = set["feeds"].as_array().unwrap();
+    assert_eq!(feeds.len(), 2, "{feeds:?}");
+    let row = |feed: i64| feeds.iter().find(|f| f["feed_id"] == feed).unwrap();
+    assert_eq!(row(id)["outcome"]["outcome"], "changed");
+    assert_eq!(row(id)["outcome"]["channel"], true);
+    assert_eq!(row(id)["outcome"]["items"], 1);
+    assert_eq!(row(other)["outcome"]["items"], 0);
+
+    write_the_draft(&app, id).await;
+    write_the_draft(&app, other).await;
+    assert!(app.feeds.path().join("album/tagged.mp3").exists());
+    assert!(folder.path().join("album/tagged.mp3").exists());
+    let moves = waiting(&app, id).await;
+    assert_eq!(moves.len(), 1);
+    assert_eq!(moves[0]["wait_days"], 7);
+}
+
+/// ADR 0148 item 18: Discard removes the host operations of the move and
+/// puts back the draft of each feed from before.
+#[tokio::test]
+async fn discard_of_a_move_change_set_removes_its_host_operations() {
+    let app = move_all_app();
+    let (id, _, home, backup, _folder) = album_on_home(&app).await;
+    let other = second_feed_on_home(&app, home).await;
+    let set = move_all(&app, home, backup).await;
+    let set_id = set["id"].as_i64().unwrap();
+    let (status, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/change-sets/{set_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(diff["operations"], json!([]), "{diff}");
+    assert_eq!(diff["feed_move"], Value::Null, "{diff}");
+    let (status, _) = call(&app, "GET", &format!("/api/v1/feeds/{other}/diff"), None).await;
+    assert_ne!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{other}/files"), None).await;
+    assert_eq!(files["feed_move"], Value::Null, "{files}");
+}
+
+/// ADR 0148 item 19: a draft that already moves the feed file stays out, and
+/// its row gives the cause.
+#[tokio::test]
+async fn a_draft_with_a_feed_move_stays_out_of_a_move_of_all_releases() {
+    let app = move_all_app();
+    let (id, _, home, backup, folder) = album_on_home(&app).await;
+    let spare = add_host(&app, "Spare", folder.path(), "https://spare.example").await;
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": spare })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let set = move_all(&app, home, backup).await;
+    let row = &set["feeds"][0];
+    assert_eq!(row["outcome"]["outcome"], "not_changed", "{set}");
+    assert_eq!(row["outcome"]["cause"]["cause"], "has_feed_move", "{set}");
+}
+
+/// ADR 0148 item 16: a file host with no release gives no change set.
+#[tokio::test]
+async fn move_all_releases_needs_a_release_on_the_file_host() {
+    let app = move_all_app();
+    let (_, _, home, backup, _folder) = album_on_home(&app).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets/move",
+        Some(json!({ "from": backup, "to": home, "delete_later": true, "wait_days": 7 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}

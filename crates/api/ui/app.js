@@ -5,7 +5,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
+import { MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -2362,7 +2362,8 @@ function newestManifest(state) {
 // One host, a local folder or an S3 or R2 bucket. "Edit" opens the name field and the public
 // address field, with "Save" and "Cancel" (task 022b, ADR 0037). "Save"
 // calls `PUT /connectors/{id}`.
-function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged }) {
+function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, onChanged, onMoved }) {
+  const [movingAll, setMovingAll] = useState(false);
   const config = JSON.parse(connector.config);
   const written = feeds.filter((f) => f.connector_id === connector.id);
   const disagreeing = feeds.filter((f) => (connector.disagreeing_feeds || []).includes(f.id));
@@ -2437,9 +2438,12 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   });
   const mismatch = accept.error && accept.error.code === 'host_key_mismatch';
   return html`<article class="panel host">
+    <${MoveAllSheet} open=${movingAll} connector=${connector} connectors=${connectors} onMoved=${onMoved} onClose=${() => setMovingAll(false)} />
     <header class="host-head">
       <span class="eyebrow">${isTemporary ? 'Temporary area' : isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : isNsite ? 'nsite site' : isBlossom ? 'Blossom server' : 'Folder on this computer'}</span>
       ${!editing && html`<div class="actions">
+        ${connectors.length > 1 && html`<button class="button action" type="button" disabled=${removeBusy}
+          onClick=${() => setMovingAll(true)}>Move All Releases…</button>`}
         ${!isTemporary && html`<button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>`}
         <button class="button destructive" type="button" disabled=${removeBusy}
           aria-label=${`Remove the file host ${connector.name}`} onClick=${onRemove}>Remove</button>
@@ -2529,7 +2533,7 @@ function HostCard({ connector, feeds, removeBusy, onRemove, onOpen, onChanged })
   </article>`;
 }
 
-function Hosts({ connectors, feeds, onChanged, onOpen }) {
+function Hosts({ connectors, feeds, onChanged, onOpen, onMoved }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -2558,7 +2562,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen }) {
   const showForm = adding || connectors.length === 0;
   // The sections of the page come from `pageSequence('hosts')` (ADR 0071).
   const sections = {
-    cards: () => html`${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} feeds=${feeds} removeBusy=${busy}
+    cards: () => html`${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} connectors=${connectors} onMoved=${onMoved} feeds=${feeds} removeBusy=${busy}
         onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}`,
     add: () => (showForm
       ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first file host' : 'Add a file host'}</h2>
@@ -2796,7 +2800,7 @@ function ChangeSetPage({ id, go, onChanged }) {
       <p class="hint">${set.person_id != null ? changeLine(set, personName) : operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
       <${AnnounceChoice} />
       <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
-        const outcome = outcomeText(feed.outcome);
+        const outcome = outcomeText(feed.outcome, set.operation);
         const blocked = blockedText(feed.blocked);
         const status = statuses[feed.feed_id];
         const cause = [blocked, statusError(status)].filter(Boolean);
@@ -3506,7 +3510,7 @@ function Shell({ vault, onLock }) {
     main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} />`;
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
-      onOpen=${(id) => go({ name: 'feed', id })} />`;
+      onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id }); }} />`;
   } else if (view.name === 'settings') {
     main = html`<${SettingsPage} />`;
   } else if (view.name === 'people') {

@@ -1,6 +1,8 @@
 // The words of a move of a release (ADR 0148).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { outcomeText, operationLine } from '../ui/recipients.js';
+import { changeTitle, changeRow, afterDiscard } from '../ui/people.js';
 import { planRows, stayRows, deleteLabel, waitingView, readyNotice, partMoveNotice } from '../ui/releasemove.js';
 
 const hosts = [{ id: 1, name: 'Old Host' }, { id: 2, name: 'New Host' }];
@@ -63,4 +65,16 @@ test('partMoveNotice names the count of the files that stay (ADR 0148 item 15)',
     strong: 'The feed moves to New Host. 25 files stay on Old Host.',
     text: 'The feed still works while Old Host keeps these files.',
   });
+});
+
+const moveAll = { kind: 'move_releases', from_name: 'Old Host', to_name: 'New Host' };
+
+test('a move change set has its own words (ADR 0148 item 17)', () => {
+  assert.equal(changeTitle(moveAll), 'Move All Releases');
+  assert.match(operationLine(moveAll, ''), /^Move the releases from Old Host to New Host\./);
+  assert.equal(outcomeText({ outcome: 'changed', channel: true, items: 3 }, moveAll).text, 'Moves · Feed file · 3 files');
+  assert.equal(outcomeText({ outcome: 'not_changed', cause: { cause: 'has_feed_move' } }, moveAll).text,
+    'Not changed · The draft already moves the feed file. Write or discard that draft first.');
+  assert.equal(changeRow({ operation: moveAll, feeds: [] }).title, 'Move All Releases · Old Host to New Host');
+  assert.deepEqual(afterDiscard({ operation: moveAll }), { name: 'hosts' });
 });

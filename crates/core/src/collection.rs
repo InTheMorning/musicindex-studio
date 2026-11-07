@@ -3519,6 +3519,24 @@ impl Collection {
         Ok(())
     }
 
+    /// Remove each host operation of a draft that started at or after `time`
+    /// (ADR 0148 item 18).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_operations_since(
+        &self,
+        feed: FeedId,
+        time: i64,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM draft_operations WHERE feed_id = ?1 AND added_at >= ?2",
+            params![feed.0, time],
+        )?;
+        Ok(())
+    }
+
     /// Remove one host operation of a draft (ADR 0036 item 12). The route
     /// that lets the user take back a copy or a deletion before the write
     /// uses this.

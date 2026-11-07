@@ -1,6 +1,6 @@
 # Studio V1 Task 096: Release Moves
 
-Status: In progress. Packets 096a and 096b are complete, with the screenshot visual check of 096b.
+Status: Complete, with its screenshot visual check. Its human test is open.
 
 Owner of the rules: [ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md).
 

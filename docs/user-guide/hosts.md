@@ -131,6 +131,7 @@ The line **Different addresses** shows when the address of a feed does not agree
 - Select **Edit** to change the name and the public address. For an nsite site, you can also change the relays, the Blossom servers and the gateway. Then select **Save**.
 - Select **Check the Connection** on an SFTP card to test the login.
 - Select **Check the Relays** on an nsite card. Studio tells you if each relay has the newest manifest.
+- Select **Move All Releases…** to leave this file host. Select the new file host and the time that Studio keeps the old files. The next page shows the changes of each release, and **Write** sends them. See [Move a release](release-files.md#move-a-release).
 - Select **Remove** to remove the file host. Studio asks you to confirm. The files in the file host do not change.
 
 You cannot remove a file host while feeds use it.

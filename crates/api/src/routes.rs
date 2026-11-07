@@ -4458,6 +4458,102 @@ pub(crate) async fn move_release(
     .await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct MoveAllReleases {
+    from: i64,
+    to: i64,
+    delete_later: bool,
+    #[serde(default = "default_wait_days")]
+    wait_days: u32,
+}
+
+/// The plan of one feed in a move of all releases: only the files and the
+/// feed file on the file host that the releases leave (ADR 0148 item 17).
+fn plan_from_host(
+    w: &Workspace,
+    hosts: &Hosts,
+    feed_row: &FeedRow,
+    from: ConnectorId,
+    to: ConnectorId,
+) -> Result<ReleaseMovePlan, ApiError> {
+    let mut plan = release_move_plan(w, hosts, feed_row, to)?;
+    plan.files
+        .retain(|file| file.old_copies.iter().any(|copy| copy.connector_id == from));
+    for file in &mut plan.files {
+        file.old_copies.retain(|copy| copy.connector_id == from);
+    }
+    plan.feed_moves = plan.feed_moves && plan.feed_from == Some(from);
+    Ok(plan)
+}
+
+/// "Move All Releases…": a change set with one feed row for each release on
+/// the file host. This route writes nothing to a file host (ADR 0148 items
+/// 16 to 19).
+pub(crate) async fn move_all_releases(
+    State(shared): State<Shared>,
+    Json(body): Json<MoveAllReleases>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    blocking(shared, move |w| {
+        let wait_days = checked_wait(body.delete_later, body.wait_days)?;
+        let (from, to) = (ConnectorId(body.from), ConnectorId(body.to));
+        let from_name = w.collection.connector(from)?.name;
+        let to_name = w.collection.connector(to)?.name;
+        let invalid = |message: &str| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_change_set",
+                message,
+            )
+        };
+        if from == to {
+            return Err(invalid("the two file hosts are the same"));
+        }
+        let hosts = w.hosts()?;
+        let workspace: &Workspace = w;
+        let mut feed_ids = Vec::new();
+        for row in workspace.collection.feeds()? {
+            let on_host = row.connector_id == Some(from)
+                || plan_from_host(workspace, &hosts, &row, from, to)
+                    .is_ok_and(|plan| plan.feed_moves || !plan.files.is_empty());
+            if on_host {
+                feed_ids.push(row.id);
+            }
+        }
+        if feed_ids.is_empty() {
+            return Err(invalid("no release is on this file host"));
+        }
+        let operation = RecipientOperation::MoveReleases {
+            from: body.from,
+            from_name,
+            to: body.to,
+            to_name,
+            delete_later: body.delete_later,
+            wait_days: body.wait_days,
+        };
+        let set = change_set::make_move_change_set(
+            &workspace.collection,
+            &mut |id| ensure_draft(workspace, id).map_err(|e| e.coded()),
+            &mut |id| {
+                let row = workspace.collection.feed(id)?;
+                let applied = plan_from_host(workspace, &hosts, &row, from, to).and_then(|plan| {
+                    if plan.feed_moves || !plan.files.is_empty() {
+                        apply_release_move(workspace, &hosts, id, &plan, wait_days)?;
+                    }
+                    Ok((plan.feed_moves, plan.files.len()))
+                });
+                Ok(match applied {
+                    Ok((feed_moves, files)) => change_set::moved(feed_moves, files),
+                    Err(error) => change_set::cannot_move(error.coded()),
+                })
+            },
+            &operation,
+            &feed_ids,
+        )?;
+        Ok((StatusCode::CREATED, Json(change_set_json(w, &set))))
+    })
+    .await
+}
+
 /// The moves of a feed that wait (ADR 0148 items 8 and 9). The route asks
 /// musicindex only when a move waits, with no lock of the workspace.
 pub(crate) async fn waiting_moves_route(

@@ -243,6 +243,8 @@ const CAUSES = {
   bad_percent: 'The percentage must be a number from 1 to 99.',
   no_node_recipient: 'Each value block has the LNURL address already.',
   in_open_change_set: 'The feed has other changes that Studio did not write.',
+  nothing_to_move: 'The feed has nothing to move from this file host.',
+  has_feed_move: 'The draft already moves the feed file. Write or discard that draft first.',
 };
 
 export function causeText(cause) {
@@ -254,7 +256,14 @@ export function causeText(cause) {
 }
 
 // The outcome of a feed in the review: a text and a flag.
-export function outcomeText(outcome) {
+export function outcomeText(outcome, operation) {
+  // A move has the feed file in `channel` and the files in `items` (ADR 0148).
+  if (outcome && outcome.outcome === 'changed' && operation && operation.kind === 'move_releases') {
+    const parts = [];
+    if (outcome.channel) parts.push('Feed file');
+    if (outcome.items > 0) parts.push(plural(outcome.items, 'file', 'files'));
+    return { changed: true, text: `Moves · ${parts.join(' · ')}` };
+  }
   if (outcome && outcome.outcome === 'changed') {
     return { changed: true, text: `Changed · ${placesText(outcome)}` };
   }
@@ -275,6 +284,7 @@ export function blockedText(blocked) {
 export function operationLine(operation, recipientName) {
   const who = recipientName || 'the recipient';
   switch (operation && operation.kind) {
+    case 'move_releases': return `Move the releases from ${operation.from_name} to ${operation.to_name}. The old files stay until you review their deletion.`;
     case 'change_address': return `Change the address of ${who} to ${operation.address}.`;
     case 'rename': return `Rename ${who} to ${operation.name}.`;
     case 'remove': return `Remove ${who}.`;

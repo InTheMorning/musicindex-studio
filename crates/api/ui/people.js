@@ -257,6 +257,7 @@ export const openChanges = (sets) => (sets || []).filter((s) => s.open);
 // and the list "Changes to write" use it (ADR 0099 items 2 and 12).
 export function changeTitle(operation) {
   switch (operation && operation.kind) {
+    case 'move_releases': return 'Move All Releases';
     case 'change_address': return 'Change address';
     case 'rename': return 'Rename';
     case 'remove': return 'Remove';
@@ -281,7 +282,9 @@ export function feedsToWrite(set) {
 // people, and `payees` is the list of wallets, for the name of the subject.
 export function changeRow(set, people = [], payees = []) {
   let who = '';
-  if (set.person_id != null) {
+  if (set.operation && set.operation.kind === 'move_releases') {
+    who = `${set.operation.from_name} to ${set.operation.to_name}`;
+  } else if (set.person_id != null) {
     const person = people.find((p) => p.id === set.person_id);
     who = person ? person.name : 'A person';
   } else {
@@ -295,7 +298,10 @@ export function changeRow(set, people = [], payees = []) {
 
 // The view that opens after Discard: the page of the person of a person
 // change set, else the People page (ADR 0099 item 12).
-export const afterDiscard = (set) => (set && set.person_id != null ? { name: 'person', id: set.person_id } : { name: 'people' });
+export function afterDiscard(set) {
+  if (set && set.operation && set.operation.kind === 'move_releases') return { name: 'hosts' };
+  return set && set.person_id != null ? { name: 'person', id: set.person_id } : { name: 'people' };
+}
 
 // The view in the place of the page of a person that is gone: Back can open
 // the page of a person after a merge or a delete. `merged` maps the ID of a

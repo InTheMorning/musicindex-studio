@@ -764,6 +764,9 @@ dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); 
    (ADR 0148 item 1). */
 .sheet .group.move-group { padding: 0; }
 .move-check { display: grid; gap: 4px; padding: 10px 16px; }
+
+/* A long address of the review breaks in its row. */
+.fieldview .summary { overflow-wrap: anywhere; }
 /* A sheet group of rows, such as fields, has no inner space of its own.
    Each row has the inner space of a group row, so that the rows have the
    same distance from the edge as on a page (ADR 0029 items 11 and 12). */
@@ -925,7 +928,7 @@ textarea:focus { background: var(--fill); }
    below the label, and stay in one row. */
 .host { gap: 10px; }
 .host-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
-.host-head .actions { flex-wrap: nowrap; }
+.host-head .actions .button { white-space: nowrap; }
 .host h2 { font-size: var(--text-title-2); font-weight: 700; letter-spacing: -.02em; }
 
 /* The feeds of a file host start collapsed, with the number of feeds as the

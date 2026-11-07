@@ -59,6 +59,9 @@ export function deleteLabel(plan, connectors) {
   return `Delete the files on ${place} when the move is complete`;
 }
 
+// The label of the check box of "Move All Releases…" (ADR 0148 item 16).
+export const deleteAllLabel = (host) => `Delete the files on ${host} when each move is complete`;
+
 export const DELETE_NOTE_ON = 'Studio asks you first. The feed pointer file always stays.';
 export const DELETE_NOTE_OFF = 'The old files stay, and Studio does not ask again.';
 export const waitLabel = (days) => `${days} days`;

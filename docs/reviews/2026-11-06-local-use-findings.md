@@ -124,7 +124,7 @@ This function also gives finding 12 a solution, and it changes the rule of ADR 0
 
 ### 14. The Journey To Move A Release To A Different File Host
 
-Open. This trace comes from the code and the user guide. No person ran it on a real file host.
+Corrected ([ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md), task 096), except the redirect gap below. The steps below describe the state before that correction. This trace comes from the code and the user guide. No person ran it on a real file host.
 
 1. The user connects the new file host in **File hosts**.
 2. The user opens the release and selects **Files**.
@@ -135,13 +135,13 @@ Open. This trace comes from the code and the user guide. No person ran it on a r
 7. The write sends the files and the feed, reads the destination, writes the pointer file and records the new host. Then it does the deletions.
 8. The hub gets the two addresses after 30 seconds.
 
-The first three small items below have corrections for the next candidate: the user guide states the deletion of **Move to** and the pointer file, the removal message names a move, and the select of the feed XML host leaves out a Blossom host. The core already refuses that move, with no public address. The other work waits for mockups.
+The first three small items below had corrections for the next candidate: the user guide states the deletion of **Move to** and the pointer file, the removal message names a move, and the select of the feed XML host leaves out a Blossom host. The core already refuses that move, with no public address.
 
 The trace found these gaps:
 
-- ADR 0009 item 4 gives a move of some or all files. No action moves all the files of a release, and no action moves all the releases of a file host.
-- A user can move the feed and leave the files on the old file host. Nothing warns about this condition.
-- **Move to** also deletes the file from before, in `crates/api/src/routes.rs`. The user guide tells only about the copy. ADR 0009 has this as an open question.
+- ADR 0009 item 4 gives a move of some or all files. No action moved all the files of a release or all the releases of a file host. ADR 0148 adds both actions.
+- A user could move the feed and leave the files on the old file host, with no warning. ADR 0148 item 15 adds a notice.
+- **Move to** also deleted the file from before. ADR 0148 keeps that file until the user reviews its deletion.
 - No connector gives `can_redirect` true, so each move gives a pointer file. The redirect path has only a test connector, and the UI and the guide offer two results.
 - A removal of a file host with feeds tells the user to remove the feeds from the collection. A move is the correct advice for a user who leaves that file host.
 - The select of the feed XML host lists each connector, also a Blossom host, which cannot keep a feed XML. The result of that selection is not examined.

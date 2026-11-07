@@ -96,6 +96,23 @@ impl Wallet {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecipientOperation {
+    /// Move each release from one file host to a different file host (ADR
+    /// 0148 items 16 to 18). No recipient changes. The caller gives the
+    /// change of each feed through [`make_move_change_set`].
+    MoveReleases {
+        /// The ID of the file host that the releases leave.
+        from: i64,
+        /// The name of that file host, for the review.
+        from_name: String,
+        /// The ID of the new file host.
+        to: i64,
+        /// The name of the new file host, for the review.
+        to_name: String,
+        /// The check box of ADR 0148 item 5.
+        delete_later: bool,
+        /// The waiting time of the old copies.
+        wait_days: u32,
+    },
     /// Replace the address, the custom pair and the type.
     ChangeAddress {
         /// The new `address`.
@@ -403,6 +420,10 @@ pub enum Cause {
     HasSupportLink,
     /// The operation has no selected part.
     NothingSelected,
+    /// The release has nothing to move from this file host (ADR 0148).
+    NothingToMove,
+    /// The draft of the feed already moves the feed file (ADR 0148).
+    HasFeedMove,
 }
 
 /// The result of an operation for one feed.
@@ -631,6 +652,7 @@ fn apply_block(
         },
         // A credit feed has no payee, as Add to all releases with only a credit.
         RecipientOperation::CreditFeed { .. } => BlockResult::Skipped(Cause::NothingSelected),
+        RecipientOperation::MoveReleases { .. } => BlockResult::Skipped(Cause::NothingToMove),
         RecipientOperation::Correct { .. } => correct_in_block(block, wallet, operation),
     }
 }
@@ -1111,6 +1133,10 @@ fn pick_cause(causes: &[Cause], operation: &RecipientOperation) -> Cause {
 ///
 /// When no block changes, the feed does not change.
 pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -> Outcome {
+    // A move changes no recipient. See `make_move_change_set`.
+    if matches!(operation, RecipientOperation::MoveReleases { .. }) {
+        return Outcome::not_changed(Cause::NothingToMove);
+    }
     if let RecipientOperation::Add { percent, .. } = operation
         && !(1..=99).contains(percent)
     {
@@ -1267,6 +1293,72 @@ pub fn make_change_set(
     feeds: &[FeedId],
 ) -> Result<ChangeSet, PipelineError> {
     build_change_set(collection, start, wallet, operation, None, feeds)
+}
+
+/// Make the change set of a move of releases (ADR 0148 items 16 to 19). A
+/// move has no recipient, and `change` puts the move in the draft of one
+/// feed. The argument of `change` is the feed. A feed that does not change
+/// loses a draft that `start` made for it.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection fails or a draft is not a
+/// feed.
+pub fn make_move_change_set(
+    collection: &Collection,
+    start: &mut dyn FnMut(FeedId) -> Result<(), String>,
+    change: &mut dyn FnMut(FeedId) -> Result<Outcome, PipelineError>,
+    operation: &RecipientOperation,
+    feeds: &[FeedId],
+) -> Result<ChangeSet, PipelineError> {
+    let no_recipient = RecipientKey {
+        address: String::new(),
+        custom_key: None,
+        custom_value: None,
+    };
+    record_change_set(
+        collection,
+        &no_recipient,
+        operation,
+        None,
+        feeds,
+        &mut |feed_id, had_draft| {
+            if had_draft && collection.draft_feed_move(feed_id)?.is_some() {
+                return Ok(Outcome::not_changed(Cause::HasFeedMove));
+            }
+            if !had_draft && let Err(reason) = start(feed_id) {
+                remove_new_draft(collection, feed_id)?;
+                return Ok(Outcome::not_changed(Cause::CannotStart(reason)));
+            }
+            let outcome = change(feed_id)?;
+            if !outcome.is_changed() && !had_draft {
+                remove_new_draft(collection, feed_id)?;
+            }
+            Ok(outcome)
+        },
+    )
+}
+
+/// The outcome of a move of one release: `feed_moves` in the place of the
+/// channel and `files` in the place of the items.
+#[must_use]
+pub fn moved(feed_moves: bool, files: usize) -> Outcome {
+    if feed_moves || files > 0 {
+        Outcome::Changed {
+            channel: feed_moves,
+            items: files,
+            live_items: 0,
+            parts: Vec::new(),
+        }
+    } else {
+        Outcome::not_changed(Cause::NothingToMove)
+    }
+}
+
+/// The outcome of a release that Studio cannot change.
+#[must_use]
+pub fn cannot_move(reason: String) -> Outcome {
+    Outcome::not_changed(Cause::CannotStart(reason))
 }
 
 /// Make the change set of a person operation (ADR 0098 item 20). The core
@@ -1675,17 +1767,51 @@ fn build_change_set(
     feeds: &[FeedId],
 ) -> Result<ChangeSet, PipelineError> {
     check_operation(operation)?;
+    let set = record_change_set(
+        collection,
+        &wallet.key,
+        operation,
+        person,
+        feeds,
+        &mut |feed_id, had_draft| {
+            change_feed(collection, start, wallet, operation, feed_id, had_draft)
+        },
+    )?;
+    let changed = set.feeds.iter().any(|feed| feed.outcome.is_changed());
+    // A Rename that changed a feed also renames the people with a wallet of
+    // the change set. Discard does not put the name back (ADR 0098 item 23).
+    if changed && let RecipientOperation::Rename { name } = operation {
+        people::rename_with_wallets(collection, &wallet.members, name)?;
+    }
+    // A Rename of a person that changed a feed sets the name of the person.
+    if changed
+        && let (Some(person), RecipientOperation::RenamePerson { name, .. }) = (person, operation)
+    {
+        set_person_name(collection, person, name)?;
+    }
+    Ok(set)
+}
+
+/// Record a change set, and change the draft of each feed with `change`. The
+/// arguments of `change` are the feed and whether it had a draft.
+fn record_change_set(
+    collection: &Collection,
+    recipient: &RecipientKey,
+    operation: &RecipientOperation,
+    person: Option<PersonId>,
+    feeds: &[FeedId],
+    change: &mut dyn FnMut(FeedId, bool) -> Result<Outcome, PipelineError>,
+) -> Result<ChangeSet, PipelineError> {
     // A closed change set has no more work (ADR 0091 item 19).
     collection.delete_closed_change_sets()?;
     let made_at = now();
     let id = collection.add_change_set(
         &to_json(operation)?,
-        &to_json(&wallet.key)?,
+        &to_json(recipient)?,
         made_at,
         person.map(|p| p.0),
     )?;
     let mut seen = HashSet::new();
-    let mut changed = false;
     let busy: HashSet<FeedId> = change_sets(collection)?
         .iter()
         .flat_map(|set| &set.feeds)
@@ -1713,8 +1839,7 @@ fn build_change_set(
         }
         let before = collection.draft(feed_id)?;
         let had_draft = before.is_some();
-        let outcome = change_feed(collection, start, wallet, operation, feed_id, had_draft)?;
-        changed |= outcome.is_changed();
+        let outcome = change(feed_id, had_draft)?;
         let kept = if outcome.is_changed() { before } else { None };
         collection.add_change_set_feed(
             id,
@@ -1726,17 +1851,6 @@ fn build_change_set(
                 written_at: None,
             },
         )?;
-    }
-    // A Rename that changed a feed also renames the people with a wallet of
-    // the change set. Discard does not put the name back (ADR 0098 item 23).
-    if changed && let RecipientOperation::Rename { name } = operation {
-        people::rename_with_wallets(collection, &wallet.members, name)?;
-    }
-    // A Rename of a person that changed a feed sets the name of the person.
-    if changed
-        && let (Some(person), RecipientOperation::RenamePerson { name, .. }) = (person, operation)
-    {
-        set_person_name(collection, person, name)?;
     }
     change_set(collection, id)
 }
@@ -1930,13 +2044,23 @@ pub fn change_sets(collection: &Collection) -> Result<Vec<ChangeSet>, PipelineEr
 /// Gives a [`PipelineError`] when the collection fails. The change set then
 /// stays.
 pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), PipelineError> {
+    let set = change_set(collection, id)?;
+    let is_move = matches!(set.operation, RecipientOperation::MoveReleases { .. });
     for row in collection.change_set_feed_rows(id)? {
         let outcome: Outcome = from_json(&row.outcome)?;
         if !outcome.is_changed() || row.written_at.is_some() {
             continue;
         }
         match row.before {
-            Some(before) if row.had_draft => collection.save_draft(row.feed_id, &before)?,
+            Some(before) if row.had_draft => {
+                collection.save_draft(row.feed_id, &before)?;
+                // The draft keeps its own host operations, and the move
+                // loses its own (ADR 0148 item 18).
+                if is_move {
+                    collection.remove_draft_operations_since(row.feed_id, set.made_at)?;
+                    collection.remove_draft_feed_move(row.feed_id)?;
+                }
+            }
             _ => remove_new_draft(collection, row.feed_id)?,
         }
     }

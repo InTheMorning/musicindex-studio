@@ -39,7 +39,7 @@ import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
-import { planRows, stayRows, deleteLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice } from './releasemove.js';
+import { planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -3857,6 +3857,57 @@ function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
     <footer>
       <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
       <button class="button primary" type="button" disabled=${busy || !plan || plan.nothing_to_move} onClick=${add}>Add to the Draft</button>
+    </footer>
+  </dialog>`;
+}
+
+// The sheet "Move All Releases…" of a file host (ADR 0148 items 16 to 19). The
+// result is a change set, so the shell opens its review.
+export function MoveAllSheet({ open, connector, connectors, onMoved, onClose }) {
+  const ref = useSheet(open);
+  const others = connectors.filter((c) => c.id !== connector.id);
+  const [target, setTarget] = useState(null);
+  const [deleteLater, setDeleteLater] = useState(true);
+  const [wait, setWait] = useState(30);
+  const { busy, error, run } = useAction();
+  const chosen = target ?? (others[0] ? others[0].id : null);
+  const add = () => run(async () => {
+    const made = await api('/change-sets/move', {
+      method: 'POST',
+      body: { from: connector.id, to: chosen, delete_later: deleteLater, wait_days: wait },
+    });
+    ref.current.close();
+    await onMoved(made.id);
+  });
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby=${`move-all-title-${connector.id}`} onClose=${onClose}>
+    <header>
+      <h2 id=${`move-all-title-${connector.id}`}>Move All Releases from ${connector.name}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body form">
+      <div class="group move-group">
+        <div class="field"><label for=${`move-all-host-${connector.id}`}>To this file host</label>
+          <select id=${`move-all-host-${connector.id}`} class="button" value=${chosen} disabled=${busy}
+            onChange=${(e) => setTarget(Number(e.target.value))}>
+            ${others.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+          </select></div>
+      </div>
+      <div class="group move-group">
+        <div class="move-check"><label class="check"><input type="checkbox" checked=${deleteLater}
+            onChange=${(e) => setDeleteLater(e.target.checked)} /> ${deleteAllLabel(connector.name)}</label>
+          <p class="hint">${deleteLater ? DELETE_NOTE_ON : DELETE_NOTE_OFF}</p></div>
+        <div class="field"><label for=${`move-all-wait-${connector.id}`}>Keep the old files for</label>
+          <select id=${`move-all-wait-${connector.id}`} class="button" value=${wait} disabled=${!deleteLater}
+            onChange=${(e) => setWait(Number(e.target.value))}>
+            ${[7, 30, 90].map((days) => html`<option value=${days}>${waitLabel(days)}</option>`)}
+          </select></div>
+      </div>
+      <p class="hint">The next page shows the changes of each release. Nothing changes on a file host until you write.</p>
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer>
+      <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="button" disabled=${busy || chosen === null} onClick=${add}>Review the Changes</button>
     </footer>
   </dialog>`;
 }

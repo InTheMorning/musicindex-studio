@@ -4,7 +4,7 @@
 - Date: 2026-11-06
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, from a mockup and two questionnaires.
-- Technical choices: items 8, 9, 13 and 19 are choices of the planning model.
+- Technical choices: items 8, 9, 13, 17 (the publisher feed) and 19 are choices of the planning model.
 - Changes: the deletion of a move in [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 12. [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) now also holds a move of releases. This ADR answers the open question of [ADR 0009](0009-studio-connects-to-hosts-and-moves-files.md) about the old copy of a moved file.
 - Source: [findings of local use, finding 14](../reviews/2026-11-06-local-use-findings.md)
 
@@ -43,9 +43,9 @@ Studio can examine the new files, musicindex and the time since the move. It can
 ### Move All Releases
 
 16. The page of a file host has "Move All Releases…". Its sheet has the select of the file host, the waiting time and the check box.
-17. The result is a change set, with one row and one diff for each release on that file host. Each feed writes through `pipeline::write_draft` with the ID of its own diff.
+17. The result is a change set, with one row and one diff for each feed on that file host, also a publisher feed. Only the files on that file host move. Each feed writes through `pipeline::write_draft` with the ID of its own diff.
 18. Discard puts back the draft of each feed from before the change, and removes the host operations of the move.
-19. A release that has an open change set, or that Studio cannot start, stays out of the change set, and its row gives the cause.
+19. A release that has an open change set, or that Studio cannot start, stays out of the change set, and its row gives the cause. A draft that already moves its feed file also stays out, because Discard could not put that move back.
 
 ## Alternatives Considered
 

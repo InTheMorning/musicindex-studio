@@ -174,7 +174,9 @@ A measurement on 2026-11-06 used `gst-launch-1.0` with this system GStreamer, a 
 
 One timed Play on 2026-11-07 used the plain binary and `GST_DEBUG=2`, on the computer of the operator. The operator gave a wait of about 1 to 2 s. The log has no event for the click or for the first sound, so it does not measure the wait. The log has no error. The decoder had its stream 1.305 s after GStreamer started in the app process, and a plugin scan ran in that run. This log does not prove the cause of this wait.
 
-The earlier long wait did not reproduce, and its cause is not known. No change corrected it. This is one run of one song, and it did not use an AppImage. Examine this finding again if a later Play takes 5 s or more.
+One timed Play on 2026-11-07 used the AppImage of `0.1.0-rc.19`, with its own data folder. The operator gave a wait of less than 1 s. In that log, the decoder had its stream 0.779 s after GStreamer started, and no plugin scan shows. The AppImage holds its own libraries, so this comparison does not prove that the scan caused the difference. No timed Play used the AppImage of `0.1.0-rc.20`.
+
+The earlier long wait did not reproduce, and its cause is not known. No change corrected it. Each result is one run of one song. Examine this finding again if a later Play takes 5 s or more.
 
 ### 19. A Node Key Shows As A Lightning Address
 

@@ -14427,3 +14427,110 @@ async fn a_read_and_a_write_give_the_outside_check_a_new_start() {
         "ADR 0150: a write of Studio is not a change."
     );
 }
+
+/// A local index that holds its first answer until the test releases it. The
+/// answer gives one feed, and each later request gets the same answer at once.
+struct HeldIndex {
+    url: String,
+    received: std::sync::mpsc::Receiver<()>,
+    release: std::sync::mpsc::Sender<()>,
+}
+
+fn held_index(requests: usize) -> HeldIndex {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let (received_sender, received) = std::sync::mpsc::channel();
+    let (release, released) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        let body = br#"{"data":[{"entity_type":"feed","entity_id":"b-1","title":"Album B","release_artist":"Ann"}]}"#;
+        for number in 0..requests {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut request = Vec::new();
+            let mut part = [0_u8; 1024];
+            while !request.windows(4).any(|end| end == b"\r\n\r\n") {
+                match stream.read(&mut part) {
+                    Ok(count) if count > 0 => request.extend_from_slice(&part[..count]),
+                    _ => return,
+                }
+            }
+            if number == 0 {
+                let _ = received_sender.send(());
+                let _ = released.recv_timeout(std::time::Duration::from_secs(30));
+            }
+            let head = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(body);
+        }
+    });
+    HeldIndex {
+        url,
+        received,
+        release,
+    }
+}
+
+/// Send one search, take the workspace lock while the index holds its answer,
+/// and give the body of the response that arrives with the lock still held.
+#[expect(
+    clippy::await_holding_lock,
+    reason = "the test holds the lock during the search on purpose"
+)]
+async fn search_with_the_lock_held(path: &'static str, requests: usize) -> Value {
+    use axum::routing::get;
+    let time_limit = std::time::Duration::from_secs(20);
+    let index = held_index(requests);
+    let data = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex(&index.url);
+    let shared = std::sync::Arc::new(std::sync::Mutex::new(workspace));
+    let router = Router::new()
+        .route("/search", get(crate::routes::search))
+        .route("/musicindex/search", get(crate::people::search_index))
+        .with_state(std::sync::Arc::clone(&shared));
+    let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+    let search = tokio::spawn(router.oneshot(request));
+
+    let received = index.received;
+    tokio::task::spawn_blocking(move || received.recv_timeout(time_limit))
+        .await
+        .unwrap()
+        .unwrap_or_else(|e| panic!("{path}: the index got no request: {e}"));
+
+    let held = shared.try_lock().unwrap_or_else(|e| {
+        panic!(
+            "ADR 0033 item 1: {path} holds the workspace lock during its index request ({e}). \
+             Read the index under the lock, then send the request in blocking_unlocked, as nostr_profiles does."
+        )
+    });
+    index.release.send(()).unwrap();
+    let response = tokio::time::timeout(time_limit, search)
+        .await
+        .unwrap_or_else(|_| panic!("ADR 0033 item 1: {path} waits for the workspace lock."))
+        .unwrap()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK, "{path}");
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    drop(held);
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[tokio::test]
+async fn the_feed_search_completes_while_the_workspace_lock_is_held() {
+    let body = search_with_the_lock_held("/search?q=ann", 1).await;
+    assert_eq!(body[0]["feed_guid"], "b-1");
+    assert_eq!(body[0]["artist"], "Ann");
+}
+
+#[tokio::test]
+async fn the_picker_search_completes_while_the_workspace_lock_is_held() {
+    let body = search_with_the_lock_held("/musicindex/search?q=ann", 2).await;
+    assert_eq!(body["feeds"][0]["feed_guid"], "b-1");
+    assert_eq!(body["rows"], json!([]));
+}

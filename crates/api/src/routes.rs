@@ -1876,12 +1876,14 @@ pub(crate) struct Search {
     q: String,
 }
 
-/// Search musicindex for feeds by name.
+/// Search musicindex for feeds by name. The request runs with no lock of the
+/// workspace.
 pub(crate) async fn search(
     State(shared): State<Shared>,
     axum::extract::Query(query): axum::extract::Query<Search>,
 ) -> ApiResult {
-    blocking(shared, move |w| to_json(w.index.search(&query.q)?)).await
+    let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
+    blocking_unlocked(move || to_json(index.search(&query.q)?)).await
 }
 
 /// The model of a feed for the profile search: its draft, or else its

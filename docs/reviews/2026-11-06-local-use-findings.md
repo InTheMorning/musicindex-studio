@@ -168,7 +168,9 @@ Partly corrected for the next candidate. In the desktop app, a song took a long 
 
 The bar now draws both from one value, and a check in WebKitGTK showed that they agree. The button now shows the wait, and the page paints before playback starts. The sandbox has no sound device, so no check measured the wait, and the wait itself is not corrected.
 
-This run used the plain binary, not an AppImage. It uses the system GStreamer with all its plugins, so the shorter plugin list of ADR 0124 item 26 does not apply. The cause of the wait in this run is not measured.
+This run used the plain binary, not an AppImage. It uses the system GStreamer with all its plugins, so the shorter plugin list of ADR 0124 item 26 does not apply.
+
+A measurement on 2026-11-06 used `gst-launch-1.0` with this system GStreamer, a public MP3 address and a fake audio sink. With a new plugin registry, the first buffer took 12.89 s. With the registry from that run, three runs took 0.74 s to 0.77 s. The registry file has the date 2026-11-05, so the wait of this finding is probably not a scan of the plugins. This measurement did not use WebKit or a sound device, so the cause of the wait is not known. The next step is one timed Play in the app, with `GST_DEBUG=2`.
 
 ### 19. A Node Key Shows As A Lightning Address
 

@@ -150,6 +150,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0146: Link words, the mark of a value that is already there, edits of a person and credits of a feed](adr/0146-link-words-already-marks-and-credit-edits.md)
 - [ADR 0147: The Nostr and Artwork rows show a preview](adr/0147-the-nostr-and-artwork-rows-show-a-preview.md)
 - [ADR 0148: A move keeps the old files until the user reviews the deletion](adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md)
+- [ADR 0149: The desktop app has many collections](adr/0149-the-desktop-app-has-many-collections.md)
+- [ADR 0150: Studio shows a change from outside when a page opens](adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md)
 
 ## Plans
 
@@ -382,6 +384,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 094: Sort reverse](tasks/studio-v1-task-094-sort-reverse.md)
 - [Studio v1 task 095: Back and Forward circles](tasks/studio-v1-task-095-back-and-forward-circles.md)
 - [Studio v1 task 096: Release moves](tasks/studio-v1-task-096-release-moves.md)
+- [Studio v1 task 097: Collections](tasks/studio-v1-task-097-collections.md)
+- [Studio v1 task 098: Outside changes](tasks/studio-v1-task-098-outside-changes.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

@@ -31,6 +31,7 @@ use crate::routes::{
     now_seconds,
 };
 use crate::workspace::Workspace;
+use studio_core::musicindex::{plan_publisher_search, plan_search};
 
 /// The core refuses a value of a person with `Invalid`. This route family
 /// names that refusal `invalid_person`. The other errors keep the mapping
@@ -599,8 +600,9 @@ pub(crate) struct MusicIndexQuery {
 }
 
 /// Search the artist and label feeds of musicindex for a name, in three
-/// levels (ADR 0117 items 3 and 4). The answer is `{ "rows": [...] }`. The
-/// request runs with no lock of the workspace.
+/// levels (ADR 0117 items 3 and 4). The answer has the `rows`, a `note`, and
+/// `searched`, which is true when a request ran (ADR 0151 item 9). The request
+/// runs with no lock of the workspace.
 pub(crate) async fn search_musicindex(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -611,13 +613,17 @@ pub(crate) async fn search_musicindex(
         Ok(w.index.clone())
     })
     .await?;
-    let request = match search_request(&query.q, query.plain)? {
+    let request = match search_request(plan_publisher_search(&query.q, query.plain))? {
         Ok(request) => request,
-        Err(note) => return Ok(Json(json!({ "rows": [], "note": note }))),
+        Err(note) => {
+            return Ok(Json(json!({ "rows": [], "note": note, "searched": false })));
+        }
     };
     blocking_unlocked(move || {
         let rows = lookup::search(&index, &request)?;
-        Ok(Json(json!({ "rows": rows, "note": null })))
+        Ok(Json(
+            json!({ "rows": rows, "note": null, "searched": true }),
+        ))
     })
     .await
 }
@@ -636,7 +642,7 @@ pub(crate) async fn search_index(
     State(shared): State<Shared>,
     Query(query): Query<MusicIndexQuery>,
 ) -> ApiResult {
-    let request = match search_request(&query.q, query.plain)? {
+    let request = match search_request(plan_search(&query.q, query.plain))? {
         Ok(request) => request,
         Err(note) => return Ok(Json(json!({ "rows": [], "feeds": [], "note": note }))),
     };

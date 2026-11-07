@@ -4,6 +4,7 @@
 - Date: 2026-11-07
 - Owner: operator
 - Accepted: 2026-11-07 by the operator, with five fields and a plain start text.
+- Item 9 added on 2026-11-07 by the operator, who gave the text of the note.
 - Technical choices: item 6 is a choice of the planning model.
 - Source: musicindex ADR 0049, section "What this record leaves open", item 1. `research_notes/search/shared-query-text.md` in `../musicindex-research` gives the research. `../musicindex-lib/docs/plans/search-move-phase-plan.md` Phase 4 gives the sequence.
 
@@ -33,6 +34,7 @@ A person types the text in each field. Two of them can also start with a stored 
 6. A query with no index request for a different cause gives a note and no rows. The note does not use the error style.
 7. A response from the index that cannot decode gives an error, not an empty list.
 8. A field keeps the relevance sequence of the index, and it sends no sort.
+9. A search that covers only artist and label feeds can get no request from the crate for those feeds. It then sends nothing, and a note names each field that causes this. The text that says no feed has this name shows only when a request ran and gave no rows.
 
 ## Alternatives Considered
 
@@ -44,7 +46,7 @@ A person types the text in each field. Two of them can also start with a stored 
 ## Consequences
 
 - The same text can give a different request before and after an edit, when it is a start text.
-- The search of the page of a person asks only for artist and label feeds. The crate sends no such request for a filter that those feeds cannot take, so that search can give no rows for a valid field.
+- The search of the page of a person shows a note for a valid field that its feeds cannot take.
 
 ## How This Decision Is Checked
 
@@ -54,6 +56,7 @@ Mechanical, in the tests of `studio-api` and `studio-core`:
 - A field error and a Library field each give their result at the route.
 - A plain start text gives no field.
 - A response that cannot decode gives an error.
+- A field with no request for artist and label feeds gives its note, and a request with no rows gives no note.
 
 Visual, by the operator:
 

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
-  lookupAddress,
+  lookupAddress, showFindEmpty,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
@@ -1549,4 +1549,12 @@ test('a Nostr result takes a missing name and picture from the person that holds
 test('lookupAddress marks only a start text as plain (ADR 0151 item 3)', () => {
   assert.equal(lookupAddress('/musicindex/search', 'In:Flux', true), '/musicindex/search?q=In%3AFlux&plain=true');
   assert.equal(lookupAddress('/musicindex/search', 'kind:single', false), '/musicindex/search?q=kind%3Asingle');
+});
+
+test('showFindEmpty needs a request that gave no rows (ADR 0151 item 9)', () => {
+  assert.equal(showFindEmpty({ rows: [], error: null, searched: true }), true);
+  assert.equal(showFindEmpty({ rows: [], error: null, searched: false }), false);
+  assert.equal(showFindEmpty({ rows: [{}], error: null, searched: true }), false);
+  assert.equal(showFindEmpty({ rows: [], error: new Error('x'), searched: true }), false);
+  assert.equal(showFindEmpty({ rows: null, error: null, searched: true }), false);
 });

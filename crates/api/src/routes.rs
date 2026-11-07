@@ -1883,10 +1883,9 @@ pub(crate) struct Search {
 /// The request of a search text, or the note of a text that sends no request.
 /// A field that is not correct gives 422 `query_field` (ADR 0151 item 5).
 pub(crate) fn search_request(
-    text: &str,
-    plain: bool,
+    plan: SearchPlan,
 ) -> Result<Result<IndexSearchRequest, Option<SearchNote>>, ApiError> {
-    match plan_search(text, plain) {
+    match plan {
         SearchPlan::Send(request) => Ok(Ok(request)),
         SearchPlan::Skip(note) => Ok(Err(note)),
         SearchPlan::FieldError(message) => Err(ApiError::new(
@@ -1904,7 +1903,7 @@ pub(crate) async fn search(
     State(shared): State<Shared>,
     axum::extract::Query(query): axum::extract::Query<Search>,
 ) -> ApiResult {
-    let request = match search_request(&query.q, query.plain)? {
+    let request = match search_request(plan_search(&query.q, query.plain))? {
         Ok(request) => request,
         Err(note) => return Ok(Json(json!({ "feeds": [], "note": note }))),
     };

@@ -1779,6 +1779,8 @@ export const FIND_HINT = 'Studio searches the artist and label feeds on musicind
 export const FIND_ONE_HINT = 'Studio searches the feeds on musicindex.org.';
 export const FIND_ONE_EMPTY = 'No feed on musicindex has this name.';
 export const FIND_EMPTY = 'No artist or label feed on musicindex has this name.';
+// FIND_EMPTY shows only when a request ran and gave no rows (ADR 0151 item 9).
+export const showFindEmpty = ({ rows, error, searched }) => searched === true && rows !== null && rows.length === 0 && !error;
 export const FIND_WAIT = 'Searching…';
 export const FILL_NOTE = 'Studio puts the values in the fields. Select Save to keep them. Studio changes no feed.';
 

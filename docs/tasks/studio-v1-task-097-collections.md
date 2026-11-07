@@ -1,6 +1,6 @@
 # Studio V1 Task 097: Collections
 
-Status: Ready, after task 096.
+Status: In progress. Packet 097a is complete.
 
 Owner of the rules: [ADR 0149](../adr/0149-the-desktop-app-has-many-collections.md).
 
@@ -10,7 +10,7 @@ A desktop user makes, copies, imports, opens and deletes collections. A test nee
 
 ## Packets
 
-- 097a: the folders, the move at the first start and the file that lists the collections, in `crates/desktop`.
+- 097a: the folders, the move at the first start and the file that lists the collections, in `crates/core/src/collections.rs` and `crates/desktop`.
 - 097b: the routes on the local API, the copy, the delete and the restart in `crates/desktop-app`.
 - 097c: the Settings section, the sheets and the row in the left panel.
 

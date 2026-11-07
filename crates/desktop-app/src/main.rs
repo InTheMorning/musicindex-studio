@@ -463,8 +463,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 /// Start the API, then open the window and the tray.
 fn setup(app: &AppHandle) -> Result<(), String> {
-    let data_dir =
+    let root =
         data_dir().ok_or("Studio could not start. The system has no application data folder.")?;
+    // The move of an earlier data folder comes first (ADR 0149 items 1 to 3).
+    let data_dir = studio_desktop::prepare_default_folder(&root).map_err(|e| {
+        if e.already_running() {
+            "Studio is already running.".to_string()
+        } else {
+            format!("Studio could not start. {e}")
+        }
+    })?;
     let (sender, receiver) = oneshot::channel::<()>();
     let started = tauri::async_runtime::block_on(async {
         let listener = studio_desktop::bind(None)
@@ -472,6 +480,7 @@ fn setup(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("Studio could not start. {e}"))?;
         let mut options = studio_desktop::StartOptions::new(&data_dir);
         options.has_window = true;
+        options.app_folder = Some(root.clone());
         let shutdown = async {
             let _ = receiver.await;
         };

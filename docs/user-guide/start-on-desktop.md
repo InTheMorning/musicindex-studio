@@ -89,6 +89,8 @@ If you do not use it, Studio uses the data folder of your operating system:
 | macOS | `~/Library/Application Support/musicindex-studio` |
 | Linux | `$XDG_DATA_HOME/musicindex-studio`, or `~/.local/share/musicindex-studio` |
 
+This folder holds each collection in `collections/`. The first start of a version with collections moves your data to `collections/main/`. `--data-dir` opens its folder as one collection, and Studio does not move that folder.
+
 On macOS, an earlier Studio kept its data in `~/.local/share/musicindex-studio`.
 If only that folder has data, Studio continues to use it.
 

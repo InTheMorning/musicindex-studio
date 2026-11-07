@@ -8,7 +8,8 @@
 //! Options:
 //!
 //! - `--data-dir PATH`: the folder of the vault and the collection. The
-//!   default is the local application data folder of the operating system.
+//!   default is the selected collection in the local application data folder
+//!   of the operating system (ADR 0149).
 //! - `--port N`: the port. The default is 42069, else a free port. `0` gives
 //!   a free port.
 //! - `--musicindex URL`: the musicindex API. The default is
@@ -22,7 +23,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use studio_desktop::{DEFAULT_PORT, StartOptions, bind, default_data_dir, harden_process, start};
+use studio_desktop::{
+    DEFAULT_PORT, StartOptions, bind, default_data_dir, harden_process, shell_folder, start,
+};
 
 struct Options {
     data_dir: PathBuf,
@@ -58,8 +61,13 @@ fn options() -> Result<Options, String> {
             other => return Err(format!("unknown option {other}")),
         }
     }
-    let data_dir = data_dir
-        .or_else(default_data_dir)
+    let root = if data_dir.is_some() {
+        None
+    } else {
+        default_data_dir()
+    };
+    let data_dir = shell_folder(data_dir, root)
+        .map_err(|e| e.to_string())?
         .ok_or("give --data-dir, because the system has no application data folder")?;
     Ok(Options {
         data_dir,

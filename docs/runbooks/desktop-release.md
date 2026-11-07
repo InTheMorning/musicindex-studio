@@ -42,6 +42,7 @@ The bundler refuses a pre-release version in the RPM and the MSI. The command `p
 
 The default collection folder uses the native local application data folder.
 On macOS, Studio uses an old `~/.local/share/musicindex-studio` folder when it holds data and the new folder does not.
+The first start of a version with collections moves the data of that folder to `collections/main/` in it (ADR 0149).
 The library default stays in `~/musicindex/studio` under ADR 0036.
 An archive update needs manual replacement of the application folder.
 Keep the data folders during replacement and removal.

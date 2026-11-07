@@ -30,7 +30,9 @@ pub fn default_data_dir() -> Option<PathBuf> {
             .home_dir()
             .join(".local/share/musicindex-studio");
         let has_data = |folder: &Path| {
-            folder.join("collection.sqlite").exists() || folder.join("vault.json").exists()
+            folder.join("collections.json").exists()
+                || folder.join("collection.sqlite").exists()
+                || folder.join("vault.json").exists()
         };
         if has_data(&old_path) && !has_data(&path) {
             return Some(old_path);
@@ -90,6 +92,9 @@ pub struct StartOptions {
     pub hub: Option<String>,
     /// The shell has a window, so the user can choose what a close does.
     pub has_window: bool,
+    /// The folder of the settings of the app, which no collection owns. With
+    /// `None`, the data folder holds them.
+    pub app_folder: Option<PathBuf>,
 }
 
 impl StartOptions {
@@ -101,6 +106,7 @@ impl StartOptions {
             musicindex: None,
             hub: None,
             has_window: false,
+            app_folder: None,
         }
     }
 }
@@ -213,6 +219,38 @@ pub fn lock_data_dir(data_dir: &Path) -> Result<std::fs::File, StartError> {
     }
 }
 
+/// The folder that a shell opens, from the default data folder `root`
+/// (ADR 0149 items 1 to 3). The call holds the lock of `root` while it makes
+/// the list of collections and does the move of an earlier version.
+///
+/// # Errors
+///
+/// Returns an error with [`StartError::already_running`] when an earlier
+/// version holds the lock, and a different error when the move stops. The
+/// next start continues the move. Studio deletes nothing.
+pub fn prepare_default_folder(root: &Path) -> Result<PathBuf, StartError> {
+    let _lock = lock_data_dir(root)?;
+    studio_core::collections::prepare(root).map_err(|e| StartError::new(e.to_string()))
+}
+
+/// The folder that `studio-desktop` opens. `--data-dir` opens that folder as
+/// one collection, with no move (ADR 0149 item 4). With no `--data-dir`, the
+/// shell opens the selected collection of the default data folder (item 16).
+///
+/// # Errors
+///
+/// Returns the errors of [`prepare_default_folder`].
+pub fn shell_folder(
+    given: Option<PathBuf>,
+    root: Option<PathBuf>,
+) -> Result<Option<PathBuf>, StartError> {
+    match (given, root) {
+        (Some(given), _) => Ok(Some(given)),
+        (None, Some(root)) => prepare_default_folder(&root).map(Some),
+        (None, None) => Ok(None),
+    }
+}
+
 /// Open the workspace, make the token and the router, and prepare the serve.
 ///
 /// The caller binds `listener` with [`bind`]. The returned future serves
@@ -258,7 +296,7 @@ where
     let work = workspace.work();
     let dropped = studio_api::DroppedFiles::default();
     let window_close = if options.has_window {
-        studio_api::WindowClose::in_folder(&options.data_dir)
+        studio_api::WindowClose::in_folder(options.app_folder.as_ref().unwrap_or(&options.data_dir))
     } else {
         studio_api::WindowClose::default()
     };
@@ -333,6 +371,43 @@ mod tests {
             bind(Some(port)).await.is_err(),
             "ADR 0124 item 7: bind(Some(n)) must not fall back when n is in use."
         );
+    }
+
+    #[test]
+    fn a_held_lock_stops_the_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("data");
+        let held = lock_data_dir(&root).unwrap();
+        std::fs::write(root.join("vault.json"), "vault").unwrap();
+        let error = prepare_default_folder(&root).unwrap_err();
+        assert!(
+            error.already_running(),
+            "ADR 0149 item 3: an earlier version that runs must stop the move."
+        );
+        assert!(root.join("vault.json").exists());
+        assert!(!root.join("collections").exists());
+        drop(held);
+        let open = prepare_default_folder(&root).unwrap();
+        assert_eq!(open, root.join("collections/main"));
+        assert!(open.join("vault.json").exists());
+    }
+
+    #[test]
+    fn a_given_data_folder_does_not_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let given = dir.path().join("given");
+        std::fs::create_dir_all(&given).unwrap();
+        std::fs::write(given.join("vault.json"), "vault").unwrap();
+        let root = dir.path().join("root");
+        let open = shell_folder(Some(given.clone()), Some(root.clone())).unwrap();
+        assert_eq!(open, Some(given.clone()));
+        assert!(
+            given.join("vault.json").exists() && !given.join("collections").exists(),
+            "ADR 0149 item 4: --data-dir must not move its folder."
+        );
+        assert!(!root.exists());
+        let default = shell_folder(None, Some(root.clone())).unwrap();
+        assert_eq!(default, Some(root.join("collections/main")));
     }
 
     #[test]

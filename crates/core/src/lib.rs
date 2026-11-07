@@ -13,6 +13,7 @@ pub mod assets;
 pub mod change_set;
 pub mod checked_time;
 pub mod collection;
+pub mod collections;
 pub mod connector;
 pub mod datetime;
 mod digest;

@@ -26,7 +26,9 @@ An update does not remove these folders. Keep a backup of your data before an up
 | macOS | `~/Library/Application Support/musicindex-studio` |
 | Linux | `$XDG_DATA_HOME/musicindex-studio`, or `~/.local/share/musicindex-studio` |
 
-To use a different collection folder, start Studio with `--data-dir PATH`.
+This folder holds each collection in `collections/`. The first start of a version with collections moves the current data to `collections/main/`. Before the move, keep a backup.
+
+To use a different folder as one collection, start Studio with `--data-dir PATH`. Studio does not move that folder.
 To see the version, run `./studio-desktop --version`, or `studio-desktop.exe --version` on Windows.
 To stop Studio, close its terminal or press Ctrl+C.
 

@@ -4744,6 +4744,7 @@ dependencies = [
  "directories",
  "rustix",
  "studio-api",
+ "studio-core",
  "tempfile",
  "tokio",
 ]

@@ -149,6 +149,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0145: Each sheet that adds a value has one layout](adr/0145-each-sheet-that-adds-a-value-has-one-layout.md)
 - [ADR 0146: Link words, the mark of a value that is already there, edits of a person and credits of a feed](adr/0146-link-words-already-marks-and-credit-edits.md)
 - [ADR 0147: The Nostr and Artwork rows show a preview](adr/0147-the-nostr-and-artwork-rows-show-a-preview.md)
+- [ADR 0148: A move keeps the old files until the user reviews the deletion](adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md)
 
 ## Plans
 
@@ -378,6 +379,9 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 091: The own address tag](tasks/studio-v1-task-091-own-address-tag.md)
 - [Studio v1 task 092: The build date](tasks/studio-v1-task-092-build-date.md)
 - [Studio v1 task 093: A person can be part of many artists and labels](tasks/studio-v1-task-093-part-of.md)
+- [Studio v1 task 094: Sort reverse](tasks/studio-v1-task-094-sort-reverse.md)
+- [Studio v1 task 095: Back and Forward circles](tasks/studio-v1-task-095-back-and-forward-circles.md)
+- [Studio v1 task 096: Release moves](tasks/studio-v1-task-096-release-moves.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { withPersonKey, shortKey, keySummary, feedKey, withFeedKey, sourceText } from '../ui/nostrkey.js';
+import { withPersonKey, shortKey, keySummary, keyRowView, feedKey, withFeedKey, sourceText } from '../ui/nostrkey.js';
 
 const KEY = 'npub1g2nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxck';
 
@@ -8,6 +8,28 @@ test('shortKey keeps the first 8 and the last 4 characters', () => {
   assert.equal(shortKey(KEY), 'npub1g2n…xxck');
   assert.equal(shortKey(''), '');
   assert.equal(shortKey(null), '');
+});
+
+test('keyRowView gives the short key and no art before a profile answer (ADR 0147)', () => {
+  assert.deepEqual(keyRowView('', KEY, null), { summary: shortKey(KEY), art: null });
+  assert.deepEqual(keyRowView('', KEY, new Map()), { summary: shortKey(KEY), art: null });
+  assert.deepEqual(keyRowView('', null, null), { summary: 'Not set', art: null });
+});
+
+test('keyRowView takes the name and the picture from the profile (ADR 0147)', () => {
+  const profiles = new Map([[KEY, { npub: KEY, name: ' Mara Tide ', picture: 'https://x/p.jpg' }]]);
+  assert.deepEqual(keyRowView('', KEY, profiles), {
+    summary: `Mara Tide · ${shortKey(KEY)}`,
+    art: { name: 'Mara Tide', img: 'https://x/p.jpg' },
+  });
+});
+
+test('keyRowView keeps the name of the feed in the place of the profile name (ADR 0147)', () => {
+  const profiles = new Map([[KEY, { npub: KEY, name: 'mara', picture: null }]]);
+  assert.deepEqual(keyRowView('Mara Tide', KEY, profiles), {
+    summary: `Mara Tide · ${shortKey(KEY)}`,
+    art: { name: 'Mara Tide', img: null },
+  });
 });
 
 test('keySummary gives the name and the short key, or one of them', () => {

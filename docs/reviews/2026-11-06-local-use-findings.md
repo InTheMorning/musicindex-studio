@@ -84,7 +84,7 @@ The hub sends the podping, so one check box loses only the choice of a pubnotify
 
 ### 8. A Preview In The Nostr And Artwork Rows
 
-Open. The rows could be slightly taller and show a small preview. The artwork row can use the image that the feed gives. The Nostr row has only the key, so a picture and a name need a source. Proposal: show them only when Studio has them, with no request to a relay when a page opens.
+Corrected ([ADR 0147](../adr/0147-the-nostr-and-artwork-rows-show-a-preview.md)). The rows now show a small preview. The artwork row uses the image of the page. The operator selected a request to the relays when a page opens, so that the Nostr row shows most profiles.
 
 ### 9. The Text Of Lock Against Import
 

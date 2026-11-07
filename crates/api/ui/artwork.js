@@ -85,3 +85,10 @@ export function artworkSummary(subject, kind) {
   if (count === 0) return first;
   return `${first} · ${count === 1 ? '1 more image' : `${count} more images`}`;
 }
+
+// The address of the preview of the row "Artwork" (ADR 0147 item 2). A track
+// with no image of its own shows the cover of its album.
+export function artworkPreview(subject, kind, album) {
+  if (kind === 'track') return subject.image || coverOf(album) || null;
+  return coverOf(subject) || null;
+}

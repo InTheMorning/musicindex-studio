@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PURPOSES, purposeTokens, withPurpose, nearRatio, imageFacts, artworkSummary } from '../ui/artwork.js';
+import { PURPOSES, purposeTokens, withPurpose, nearRatio, imageFacts, artworkSummary, artworkPreview } from '../ui/artwork.js';
 
 test('nearRatio gives the near ratio of the list', () => {
   assert.equal(nearRatio(1376, 768), '16/9');
@@ -50,6 +50,15 @@ test('imageFacts gives text values with the JSON names', () => {
     width: '1376', height: '768', media_type: 'image/png', aspect_ratio: '16/9',
   });
   assert.deepEqual(imageFacts(0, 0, null), { width: null, height: null, media_type: null, aspect_ratio: null });
+});
+
+test('artworkPreview gives the image of the row (ADR 0147)', () => {
+  const album = { image: 'https://x/c.jpg' };
+  assert.equal(artworkPreview(album, 'feed'), 'https://x/c.jpg');
+  assert.equal(artworkPreview({ image: '' }, 'feed'), null);
+  assert.equal(artworkPreview({ image: 'https://x/t.jpg' }, 'track', album), 'https://x/t.jpg');
+  assert.equal(artworkPreview({ image: null }, 'track', album), 'https://x/c.jpg');
+  assert.equal(artworkPreview({ image: null }, 'track', { image: '' }), null);
 });
 
 test('artworkSummary of a feed', () => {

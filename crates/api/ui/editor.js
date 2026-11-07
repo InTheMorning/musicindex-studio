@@ -34,12 +34,12 @@ import {
 } from './assets.js';
 import { isExplicit } from './explicit.js';
 import { op3Hint, op3Page } from './op3.js';
-import { shortKey, keySummary, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
+import { shortKey, keyRowView, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
-import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary } from './artwork.js';
+import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
@@ -190,7 +190,7 @@ function CreditForm({ persons, feedId, onAdd, onCancel }) {
           onChange=${(role, group) => setValues((current) => ({ ...current, role: role || null, group: group || null }))} />
         <${TextField} id="credit-img" label="Picture address" type="url" value=${values.img} onChange=${change('img')} />
         <${TextField} id="credit-href" label="Information address" type="url" value=${values.href} onChange=${change('href')} />
-        <${NostrKeyRow} label="Nostr" summary=${keySummary(values.name, values.npub)} value=${values.npub} onOpen=${() => setKeyOpen(true)} />
+        <${NostrKeyRow} label="Nostr" name=${values.name} value=${values.npub} onOpen=${() => setKeyOpen(true)} />
       </div>`}
       notice=${html`<${ErrorNotice} error=${loading.error} />`}
       musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }}
@@ -257,7 +257,7 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
         <${PersonPicture} url=${p.img} />
         <${TextField} id=${`${id}-img`} label="Picture address" type="url" address=${`${path}/${i}/img`} bad=${bad} value=${p.img} onChange=${change('img')} />
         <${TextField} id=${`${id}-href`} label="Information address" type="url" address=${`${path}/${i}/href`} bad=${bad} value=${p.href} onChange=${change('href')} />
-        <${NostrRow} label="Nostr" summary=${keySummary(p.name, p.npub)} value=${p.npub} feedId=${feedId}
+        <${NostrRow} label="Nostr" name=${p.name} value=${p.npub} feedId=${feedId}
           bad=${(bad || []).some((b) => b.field === `${path}/${i}/npub`)}
           person=${{ name: p.name, img: p.img }}
           onSet=${(npub, picked) => onChange(setAt(persons, i, withPersonKey(p, npub, picked)))} />
@@ -611,17 +611,20 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
 // The row of a Nostr key. It opens the sheet. `person` gives the name and the
 // picture of a person entry, or it is missing for the key of a feed. `bad` is
 // true when the core found the key not correct.
-export function NostrRow({ label, summary, value, feedId, bad, person, onSet }) {
+export function NostrRow({ label, name, value, feedId, bad, person, onSet }) {
   const [open, setOpen] = useState(false);
-  return html`<${NostrKeyRow} label=${label} summary=${summary} value=${value} bad=${bad} onOpen=${() => setOpen(true)} />
+  return html`<${NostrKeyRow} label=${label} name=${name} value=${value} bad=${bad} onOpen=${() => setOpen(true)} />
     <${NostrSheet} open=${open} value=${value} feedId=${feedId} person=${person} onSet=${onSet} onClose=${() => setOpen(false)} />`;
 }
 
 // The row of a Nostr key, with no sheet. A form puts the row in its group
 // and `NostrSheet` after its end, because the sheet has its own form
-// (ADR 0123).
-export function NostrKeyRow({ label, summary, value, bad, onOpen }) {
+// (ADR 0123). The row asks for the profile of its key (ADR 0147 items 3 and 4).
+export function NostrKeyRow({ label, name, value, bad, onOpen }) {
+  const profiles = useProfiles(value && !bad ? [value] : []);
+  const { summary, art } = keyRowView(name, value, profiles);
   const row = html`<button class="link-row" type="button" onClick=${onOpen}>
+      ${art && !bad && html`<${PersonArt} person=${art} small />`}
       <span class="label">${label}</span>
       <span class=${bad ? 'summary field-error' : 'summary'}>${bad ? 'Not a Nostr key' : summary}</span>
       <span class="go" aria-hidden="true">›</span>
@@ -2268,9 +2271,12 @@ function CoverField({ id, model, update, bad }) {
         <//>`;
 }
 
-// The row "Artwork" of a page. It opens the Artwork sheet (ADR 0070 item 9).
-function ArtworkRow({ summary, onOpen }) {
+// The row "Artwork" of a page. It opens the Artwork sheet (ADR 0070 item 9)
+// and shows the image of the page (ADR 0147 item 2).
+function ArtworkRow({ summary, image, onOpen }) {
+  const { src } = useImage(image || null);
   return html`<button class="link-row" type="button" onClick=${onOpen}>
+      ${src && html`<img class="row-preview" src=${src} alt="" />`}
       <span class="label">Artwork</span><span class="summary">${summary}</span>
       <span class="go" aria-hidden="true">›</span>
     </button>`;
@@ -2284,7 +2290,7 @@ function ArtworkRow({ summary, onOpen }) {
 function FeedKeyRow({ feedId, model, update, bad }) {
   const key = feedKey(model);
   const path = `txts/${(model.txts || []).findIndex((t) => t.purpose === 'npub')}/value`;
-  return html`<${NostrRow} label="Nostr profile" summary=${keySummary('', key)} value=${key} feedId=${feedId}
+  return html`<${NostrRow} label="Nostr profile" value=${key} feedId=${feedId}
     bad=${(bad || []).some((b) => b.field === path)}
     onSet=${(npub) => update((m) => withFeedKey(m, npub))} />`;
 }
@@ -2296,7 +2302,7 @@ function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwo
     author: () => html`<${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
     nostr: () => html`<${FeedKeyRow} feedId=${feedId} model=${model} update=${update} bad=${bad} />`,
     description: () => html`<${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />`,
-    artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
+    artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} image=${artworkPreview(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
     link: () => html`<${TextField} id="ch-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />`,
     listing: () => html`<${ListingField} id="ch-listing" feedId=${feedId} draft=${draft} model=${model} />`,
     explicit: () => html`<${ExplicitField} id="ch-explicit" model=${model} update=${update} />`,
@@ -2932,7 +2938,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
           audio: () => html`<${Enclosure} id=${id} path=${path} bad=${bad} enclosure=${item.enclosure} onChange=${change('enclosure')} pick=${pickAudio}
             duration=${{ value: item.duration_seconds, sourceText: item.duration, onChange: change('duration_seconds') }} />`,
           alternates: () => html`<${AlternateEnclosures} list=${item.alternate_enclosures} onChange=${change('alternate_enclosures')} />`,
-          artwork: () => html`<${ArtworkRow} summary=${artworkSummary(item, 'track')} onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} />`,
+          artwork: () => html`<${ArtworkRow} summary=${artworkSummary(item, 'track')} image=${artworkPreview(item, 'track', model)} onOpen=${() => onArtwork({ kind: 'track', key: trackKey(item) })} />`,
           description: () => html`<${TextArea} id=${`${id}-description`} label="Description" value=${item.description} onChange=${change('description')} />`,
         })}
       </div>
@@ -3404,7 +3410,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
           author: () => html`<${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
           nostr: () => html`<${FeedKeyRow} feedId=${feed.id} model=${model} update=${update} bad=${bad} />`,
           description: () => html`<${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />`,
-          artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
+          artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} image=${artworkPreview(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
           link: () => html`<${TextField} id="pub-link" label="Website" type="url" address="link" bad=${bad} value=${model.link} onChange=${field('link')} />`,
           listing: () => html`<${ListingField} id="pub-listing" feedId=${feed.id} draft=${draft} model=${model} />`,
           explicit: () => html`<${ExplicitField} id="pub-explicit" model=${model} update=${update} />`,

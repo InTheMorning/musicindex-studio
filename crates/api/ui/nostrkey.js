@@ -18,6 +18,18 @@ export function keySummary(name, npub) {
   return label ? `${label} · ${short}` : short;
 }
 
+// The summary line and the picture of a row with a Nostr key (ADR 0147 items
+// 3 to 5). `profiles` is the `profileMap` of `people.js`, or null while the
+// request runs and when it fails. A name of the feed comes before the profile
+// name. `art` is null until a profile gives a name or a picture.
+export function keyRowView(name, npub, profiles) {
+  const profile = (profiles instanceof Map && profiles.get(npub)) || null;
+  const found = String(profile?.name ?? '').trim();
+  const shown = String(name ?? '').trim() || found;
+  const hasArt = npub && (found || profile?.picture);
+  return { summary: keySummary(shown, npub), art: hasArt ? { name: shown, img: profile.picture || null } : null };
+}
+
 // The value of the first channel `podcast:txt` entry with the purpose `npub`,
 // or `null`.
 export function feedKey(model) {

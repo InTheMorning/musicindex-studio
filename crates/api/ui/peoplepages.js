@@ -7,7 +7,7 @@ import { PickerLayout, FindOneSheet, PickFold, TakenTag } from './pickers.js';
 import { api, assetMode, askConfirm, Bar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
-import { shortKey, keySummary } from './nostrkey.js';
+import { shortKey } from './nostrkey.js';
 import {
   recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES,
   CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
@@ -40,9 +40,9 @@ const merged = new Map();
 
 // The round picture of a person. A person with no picture, or a picture that
 // Studio cannot read, shows the initials of the name.
-export function PersonArt({ person, large = false }) {
+export function PersonArt({ person, large = false, small = false }) {
   const { src } = useImage(person.img);
-  return html`<span class=${large ? 'person-art large' : 'person-art'} aria-hidden="true">${src ? html`<img src=${src} alt="" />` : initials(person.name)}</span>`;
+  return html`<span class=${large ? 'person-art large' : small ? 'person-art small' : 'person-art'} aria-hidden="true">${src ? html`<img src=${src} alt="" />` : initials(person.name)}</span>`;
 }
 
 // The profiles of Nostr keys, from `POST /nostr/resolve`. The value is null
@@ -390,7 +390,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
         onChange=${(v) => set(f.id, v)} />`
     : html`<${Field} key=${f.id} id=${`link-${f.id}`} label=${f.label} hint=${f.hint} required=${!!f.required}
         value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}
-    ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" summary=${keySummary(values.name, values.npub)} value=${values.npub}
+    ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" name=${values.name} value=${values.npub}
       onOpen=${() => setKeyOpen(true)} />`}</div>
     ${edit && (edit.note || walletEditNote(edit.others)) && html`<p class="hint" role="status">${edit.note || walletEditNote(edit.others)}</p>`}`;
   const payees = addWalletSections(recipients || []).filter((section) => section.id === 'payees')

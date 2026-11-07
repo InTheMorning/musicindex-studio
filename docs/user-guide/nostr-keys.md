@@ -10,6 +10,8 @@ Studio writes a key only when you select a result or type the key.
 - A person in the credits has the row **Nostr**. The key belongs to that person.
 - The first section of an album, an artist feed, a label feed or a playlist has the row **Nostr profile**. The key belongs to the feed.
 
+When a page opens, a row with a key asks the Nostr relays for the profile of that key. The row then shows the picture and the name. If no relay answers, the row shows only the first and the last characters of the key.
+
 ## Find a key
 
 1. Select the row **Nostr** or **Nostr profile**. The sheet **Find a Nostr profile** opens.

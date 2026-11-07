@@ -1,6 +1,6 @@
 # Studio V1 Task 098: Outside Changes
 
-Status: Ready, after task 097.
+Status: Complete, with its screenshot visual check. Its human test is open.
 
 Owner of the rules: [ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md).
 
@@ -29,7 +29,7 @@ Mechanical, with Rust tests against a local test server:
 - A different musicindex address gives the two addresses. No answer and no entry give nothing.
 - With the setting off, the route sends no request.
 - The check changes no draft and no row of the collection, except its own result.
-- "Keep This Host" hides the result until the bytes change again.
+- "Keep This File Host" hides the result until the bytes change again.
 
 Mechanical, with Node tests: the words of each result come from a model module, and the setting is a check box.
 

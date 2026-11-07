@@ -1763,7 +1763,9 @@ export const ANNOUNCE_RELOAD = 'studio-announce-reload';
 
 // A page sends this window event to open the review sheet, for example after
 // "Go live". `DraftToolbar` listens to it.
-const OPEN_REVIEW = 'studio-open-review';
+export const OPEN_REVIEW = 'studio-open-review';
+// Opens the Review sheet on the merge of the hosted file (ADR 0150 item 4).
+export const OPEN_MERGE = 'studio-open-merge';
 
 // A sheet opens with showModal() when `open` turns true, and closes with
 // close() when `open` turns false. The close event covers the Escape key,
@@ -1805,7 +1807,7 @@ export async function currentSignerChoice(toSign) {
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
 // 2). It is the same content as the former Changes panel.
-function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
+function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, onWritten, onClose, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const { busy, error, run } = useAction();
@@ -1923,6 +1925,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, onWritten, onClose,
     const found = await api(`/feeds/${feedId}/draft/merge`);
     setMerge({ ...found, choices: {} });
   });
+  useEffect(() => { if (mergeRequest > 0) startMerge(); }, [mergeRequest]);
   const applyMerge = () => run(async () => {
     try {
       draft.show(await api(`/feeds/${feedId}/draft/merge`, { method: 'POST', body: { version: merge.version, choices: merge.choices } }));
@@ -2099,17 +2102,23 @@ function toolbarStatus(draft) {
 export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
+  const [mergeRequest, setMergeRequest] = useState(0);
   useEffect(() => {
     const openReview = () => setOpen('review');
     window.addEventListener(OPEN_REVIEW, openReview);
-    return () => window.removeEventListener(OPEN_REVIEW, openReview);
+    const openMerge = () => { setOpen('review'); setMergeRequest((n) => n + 1); };
+    window.addEventListener(OPEN_MERGE, openMerge);
+    return () => {
+      window.removeEventListener(OPEN_REVIEW, openReview);
+      window.removeEventListener(OPEN_MERGE, openMerge);
+    };
   }, []);
   const status = toolbarStatus(draft);
   return html`<div class="draft-toolbar">
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
-    <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'}
+    <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'} mergeRequest=${mergeRequest}
       onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors} onOpenHosts=${onOpenHosts}
       onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} />
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />

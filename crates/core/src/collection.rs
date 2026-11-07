@@ -573,6 +573,17 @@ CREATE TABLE old_copies (
     UNIQUE (feed_id, connector_id, path)
 );
 ",
+    r"
+CREATE TABLE outside_checks (
+    feed_id INTEGER PRIMARY KEY REFERENCES feeds(id) ON DELETE CASCADE,
+    seen_sha TEXT,
+    previous_sha TEXT,
+    kept_sha TEXT,
+    result_sha TEXT,
+    changed INTEGER NOT NULL DEFAULT 0,
+    moved_url TEXT
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -856,6 +867,25 @@ pub fn rel_of(roles: &[PublisherRole]) -> String {
         .map(|role| role.as_str())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// The record of the check for a change from outside (ADR 0150). The module
+/// `outside` owns the rules.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OutsideRow {
+    /// The SHA-256 of the last file that Studio read or wrote.
+    pub seen_sha: Option<String>,
+    /// The SHA-256 of the file before a write. A public address can give it
+    /// for a short time after the write.
+    pub previous_sha: Option<String>,
+    /// The SHA-256 of the file that "Keep This File Host" hides.
+    pub kept_sha: Option<String>,
+    /// The SHA-256 of the file of the current result.
+    pub result_sha: Option<String>,
+    /// True when the last check found a change.
+    pub changed: bool,
+    /// The new address when the last check found a move.
+    pub moved_url: Option<String>,
 }
 
 /// A feed as the collection keeps it.
@@ -3582,6 +3612,55 @@ impl Collection {
             params![id.0, version.as_str(), xml, now()],
         )?;
         Ok(SnapshotId(self.db.last_insert_rowid()))
+    }
+
+    /// The record of the check for a change from outside (ADR 0150).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn outside_check(&self, id: FeedId) -> Result<Option<OutsideRow>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT seen_sha, previous_sha, kept_sha, result_sha, changed, moved_url
+                 FROM outside_checks WHERE feed_id = ?1",
+                [id.0],
+                |r| {
+                    Ok(OutsideRow {
+                        seen_sha: r.get(0)?,
+                        previous_sha: r.get(1)?,
+                        kept_sha: r.get(2)?,
+                        result_sha: r.get(3)?,
+                        changed: r.get(4)?,
+                        moved_url: r.get(5)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Replace the record of the check for a change from outside.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_outside_check(&self, id: FeedId, row: &OutsideRow) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT OR REPLACE INTO outside_checks
+             (feed_id, seen_sha, previous_sha, kept_sha, result_sha, changed, moved_url)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                id.0,
+                row.seen_sha,
+                row.previous_sha,
+                row.kept_sha,
+                row.result_sha,
+                row.changed,
+                row.moved_url
+            ],
+        )?;
+        Ok(())
     }
 
     /// The snapshots of a feed, the newest first.

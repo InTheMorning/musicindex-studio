@@ -37,6 +37,7 @@ use studio_core::migrate;
 use studio_core::move_link;
 use studio_core::moves::{self, IndexAnswer};
 use studio_core::nostr_events::Signing;
+use studio_core::outside;
 use studio_core::people;
 use studio_core::pipeline;
 use studio_core::playlist;
@@ -1630,6 +1631,104 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
         }
         w.record_remote_files(id, &hosted);
         to_json(w.collection.feed(id)?)
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct OutsideQuery {
+    #[serde(default)]
+    index: bool,
+}
+
+/// `GET /feeds/{id}/outside`: read the public address, and compare it with
+/// the last file that Studio knows (ADR 0150). With `index=true`, the route
+/// also asks musicindex. The network part holds no lock of the workspace, and
+/// the check writes nothing to a host.
+pub(crate) async fn outside_check(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Query(query): Query<OutsideQuery>,
+) -> ApiResult {
+    let id = FeedId(id);
+    let start = blocking(Arc::clone(&shared), move |w| {
+        if !outside::is_on(&w.collection)? {
+            return Ok(None);
+        }
+        Ok(Some((
+            w.collection.feed(id)?,
+            w.web.clone(),
+            w.index.clone(),
+        )))
+    })
+    .await?;
+    let Some((row, web, index)) = start else {
+        return Ok(Json(json!({ "enabled": false, "state": null })));
+    };
+    let Some(address) = outside::address_of(&row) else {
+        return Ok(Json(json!({ "enabled": true, "state": null })));
+    };
+    let ask_index = query.index;
+    let (read_row, found) = (row.clone(), address.clone());
+    let (hosted, index_url) = blocking_unlocked(move || {
+        let hosted = outside::read_hosted(&web, &found);
+        let index_url = ask_index
+            .then(|| outside::index_difference(&index, &read_row))
+            .flatten();
+        Ok((hosted, index_url))
+    })
+    .await?;
+    blocking(shared, move |w| {
+        let result = match &hosted {
+            Some(bytes) => outside::apply_read(&w.collection, &row, bytes)?,
+            None => outside::stored_result(&w.collection, id)?,
+        };
+        let (state, new_url) = match result {
+            outside::OutsideResult::Same => (None, None),
+            outside::OutsideResult::Changed => (Some("changed"), None),
+            outside::OutsideResult::Moved { url } => (Some("moved"), Some(url)),
+        };
+        Ok(Json(json!({
+            "enabled": true,
+            "state": state,
+            "new_url": new_url,
+            "index_url": index_url,
+            "own_url": address,
+            "connected": row.connector_id.is_some(),
+        })))
+    })
+    .await
+}
+
+/// `POST /feeds/{id}/outside/keep`: "Keep This File Host" (ADR 0150 item 4).
+pub(crate) async fn outside_keep(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    blocking(shared, move |w| {
+        outside::keep(&w.collection, FeedId(id))?;
+        Ok(Json(json!({})))
+    })
+    .await
+}
+
+/// The check box "Check for outside changes" (ADR 0150 item 10).
+pub(crate) async fn get_outside_setting(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        Ok(Json(json!({ "enabled": outside::is_on(&w.collection)? })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct OutsideSetting {
+    enabled: bool,
+}
+
+pub(crate) async fn put_outside_setting(
+    State(shared): State<Shared>,
+    Json(body): Json<OutsideSetting>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        outside::set_on(&w.collection, body.enabled)?;
+        Ok(Json(json!({ "enabled": body.enabled })))
     })
     .await
 }

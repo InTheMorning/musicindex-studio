@@ -167,3 +167,13 @@ See [Keep a full library on your computer](start-on-desktop.md#keep-a-full-libra
 Select **Delete** to remove a file from a file host. Studio deletes it when you write.
 A file that the feed uses has a disabled **Delete** button. Remove it from the feed first.
 The feed file itself has no **Delete** button.
+
+## A change from outside Studio
+
+When a page opens, Studio reads the public address of each feed that the page shows. It compares the file with the last file that Studio read or wrote.
+
+- **Changed outside Studio** means that the hosted file has different bytes. Select **Read Again** on the feed page. A draft with edits keeps its edits.
+- **Moved outside Studio** means that the hosted file names a new address. A write from Studio can put the feed back on the old file host. **Show the Difference** opens the merge in Review. **Keep This File Host** hides the notice until the hosted file changes again.
+- The feed page also asks musicindex for the address of the feed. If it reads the feed from a different address, a notice gives both addresses. A different collection or a different tool can hold this feed.
+
+The check writes nothing and changes no draft. If a read fails, the page shows nothing new. A feed with no public address has no check. To stop these requests, open **Settings**, then **Outside changes**, and clear **Check for outside changes**.

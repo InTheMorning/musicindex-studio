@@ -328,6 +328,12 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/feeds/{id}/links/{release}", delete(routes::remove_link))
         .route("/feeds/{id}/role", put(routes::set_publisher_role))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
+        .route("/feeds/{id}/outside", get(routes::outside_check))
+        .route("/feeds/{id}/outside/keep", post(routes::outside_keep))
+        .route(
+            "/settings/outside-check",
+            get(routes::get_outside_setting).put(routes::put_outside_setting),
+        )
         .route(
             "/feeds/{id}/files",
             get(routes::list_release_files).delete(routes::delete_pending_file),

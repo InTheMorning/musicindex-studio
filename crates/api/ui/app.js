@@ -5,7 +5,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
+import { OPEN_MERGE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -25,6 +25,7 @@ import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps
 import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, eachLimited } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSheet, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -1940,6 +1941,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
         <h1>${feed.title || 'Untitled feed'}</h1>
         <p class="summary">${feed.public_url || 'This feed has no public address yet.'}</p>
         <p class="hint">${otherFeedText(feed)}</p>
+        <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} />
         <div class="actions">
           <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read Again'}</button>
@@ -2060,6 +2062,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
+      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} />
     </div>
     <${PageTabs} feed=${feed} view=${view} go=${go} />
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
@@ -2610,6 +2613,7 @@ function SettingsPage() {
     account: AccountPanel,
     apps: ConnectedAppsPanel,
     nostr: NostrPanel,
+    outside: OutsidePanel,
     move: MovePanel,
     collections: CollectionsPanel,
     library: LibraryPanel,
@@ -3033,6 +3037,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
   const sortButton = useRef(null);
   const inGroup = group !== undefined;
   const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, view: list.view, marked, group });
+  const outside = useOutsideChecks(releases.rows.map((row) => row.id));
   const head = releases.head;
   const title = head ? head.title : 'Releases';
   const pickSort = (id) => {
@@ -3095,6 +3100,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, chang
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
                   <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
                   ${row.note && html`<span class="sub">${row.note}</span>`}
+                  ${outsideMark(outside[row.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[row.id]).tone}`}>${outsideMark(outside[row.id]).text}</span>`}
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
               </button>
@@ -4337,6 +4343,67 @@ function WindowPanel() {
         </select>
       </div>
     </div>
+    <${ErrorNotice} error=${error} />
+  </article>`;
+}
+
+// The results of the check for a change from outside, for the rows of
+// Releases (ADR 0150 items 1 and 11). No worker runs: the check runs when the
+// page opens, and a failed read shows nothing.
+function useOutsideChecks(ids) {
+  const [checks, setChecks] = useState({});
+  const signature = ids.join(',');
+  useEffect(() => {
+    let live = true;
+    eachLimited(ids, OUTSIDE_LIMIT, async (id) => {
+      const check = await api(`/feeds/${id}/outside`);
+      if (live) setChecks((old) => ({ ...old, [id]: check }));
+    });
+    return () => { live = false; };
+  }, [signature]);
+  return checks;
+}
+
+// The notices of the check on a feed page (ADR 0150 items 2 to 5). Each new
+// read of the feed checks again.
+function OutsideNotices({ feed, busy, refresh }) {
+  const [check, setCheck] = useState(null);
+  const { error, run } = useAction();
+  const load = () => api(`/feeds/${feed.id}/outside?index=true`).then(setCheck, () => {});
+  useEffect(() => { setCheck(null); load(); }, [feed.id, feed.last_version]);
+  const notice = outsideNotice(check);
+  const index = indexNotice(check);
+  const keep = () => run(async () => {
+    await api(`/feeds/${feed.id}/outside/keep`, { method: 'POST' });
+    await load();
+  });
+  return html`${notice && html`<div class=${notice.tone === 'error' ? 'notice error' : 'notice'} role=${notice.tone === 'error' ? 'alert' : 'status'}>
+      <strong>${notice.strong}</strong> ${notice.text}${notice.address && html` <span class="mono">${notice.address}</span>.`}${notice.after && ` ${notice.after}`}
+      <div class="actions">
+        ${notice.again && html`<button class="button action" type="button" disabled=${busy} onClick=${refresh}>Read Again</button>`}
+        ${notice.difference && html`<button class="button action" type="button" onClick=${() => window.dispatchEvent(new Event(OPEN_MERGE))}>Show the Difference</button>`}
+        ${notice.keep && html`<button class="button" type="button" onClick=${keep}>Keep This File Host</button>`}
+      </div>
+      <${ErrorNotice} error=${error} />
+    </div>`}
+    ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}`;
+}
+
+// The check box of the check for a change from outside (ADR 0150 item 10).
+function OutsidePanel() {
+  const [enabled, setEnabled] = useState(null);
+  const { error, run } = useAction();
+  useEffect(() => { api('/settings/outside-check').then((r) => setEnabled(r.enabled), () => {}); }, []);
+  if (enabled === null) return null;
+  const change = (next) => run(async () => {
+    const saved = await api('/settings/outside-check', { method: 'PUT', body: { enabled: next } });
+    setEnabled(saved.enabled);
+  });
+  return html`<article class="panel">
+    <h2>Outside changes</h2>
+    <label class="check"><input type="checkbox" checked=${enabled} onChange=${(e) => change(e.target.checked)} />
+      ${OUTSIDE_SETTING_LABEL}</label>
+    <p class="hint">${OUTSIDE_SETTING_HINT}</p>
     <${ErrorNotice} error=${error} />
   </article>`;
 }

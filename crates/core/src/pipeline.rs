@@ -536,6 +536,7 @@ pub fn refresh(
     })?;
     let feed = Feed::read(&Document::parse_bytes(&file.bytes)?)?;
     collection.record_state(id, &feed, &file.version)?;
+    crate::outside::record_read(collection, id, &file.bytes)?;
     collection.set_address(
         id,
         AddressSource::Folder,
@@ -602,6 +603,7 @@ pub fn refresh_public(
     let read = crate::discover::read_public(web, url)
         .map_err(|message| PipelineError::new(PipelineErrorKind::Network, message))?;
     collection.record_state(id, &read.feed, &read.version)?;
+    crate::outside::record_read(collection, id, &read.bytes)?;
     collection.set_address(id, AddressSource::Read, Some(&read.url))?;
     move_unedited_draft(collection, id, &read.bytes, &read.version)?;
     Ok(read.feed)
@@ -4271,6 +4273,7 @@ pub fn write_draft_signed(
         }
     }
     collection.record_state(id, &feed, &version)?;
+    crate::outside::record_write(collection, id, &draft.draft_xml)?;
     if let Some(folder) = row.folder.as_deref() {
         let file_name = path
             .rsplit_once('/')

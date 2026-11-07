@@ -157,6 +157,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/releasemove.js"),
     ),
     (
+        "outsidecheck.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/outsidecheck.js"),
+    ),
+    (
         "collectionlist.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/collectionlist.js"),

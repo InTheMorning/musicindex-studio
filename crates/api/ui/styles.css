@@ -2060,6 +2060,11 @@ button.outline-feed {
 .suggest-gap { margin-top: 12px; }
 
 
+/* The mark of a change from outside on a row of Releases (ADR 0150 items 2
+   and 3). */
+.releases-text .outside-mark.accent { color: var(--accent); }
+.releases-text .outside-mark.error { color: var(--error); }
+
 /* A row of the section "Collections" (ADR 0149 item 6). At a narrow width,
    the buttons go below the name. */
 .collection-row { flex-wrap: wrap; }

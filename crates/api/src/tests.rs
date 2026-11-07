@@ -14225,3 +14225,205 @@ async fn move_all_releases_needs_a_release_on_the_file_host() {
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+/// An app with a local file host at the address of a test server, and a feed
+/// on it. The test server gives the public address and the musicindex answer.
+async fn outside_app() -> (App, studio_core::testing::TestServer, i64) {
+    let server = studio_core::testing::TestServer::start(vec![]);
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
+    server.set("/album.xml", 200, FEED.as_bytes().to_vec());
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex(&server.url("/index"))
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_keysend(None)
+        .with_address_check(std::sync::Arc::new(PassAll));
+    let app = App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    };
+    let root = app.feeds.path().to_str().unwrap().to_owned();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": server.url("") })),
+    )
+    .await;
+    let (status, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": connector["id"], "path": "album.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    let id = feed["id"].as_i64().unwrap();
+    let (status, body) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    (app, server, id)
+}
+
+#[tokio::test]
+async fn the_outside_check_finds_a_change_and_a_move_and_keeps_a_result_after_a_failed_read() {
+    let (app, server, id) = outside_app().await;
+    let path = format!("/api/v1/feeds/{id}/outside");
+    let (status, same) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{same}");
+    assert_eq!(same["enabled"], json!(true));
+    assert_eq!(same["state"], Value::Null, "ADR 0150 item 2");
+
+    let changed = FEED.replace("</channel>", "<description>new</description></channel>");
+    server.set("/album.xml", 200, changed.into_bytes());
+    let (_, found) = call(&app, "GET", &path, None).await;
+    assert_eq!(found["state"], json!("changed"), "ADR 0150 item 2");
+
+    let moved = FEED
+        .replace(
+            "<rss ",
+            "<rss xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" ",
+        )
+        .replace(
+            "</channel>",
+            "<itunes:new-feed-url>https://other.example/a.xml</itunes:new-feed-url></channel>",
+        );
+    server.set("/album.xml", 200, moved.clone().into_bytes());
+    let (_, found) = call(&app, "GET", &path, None).await;
+    assert_eq!(found["state"], json!("moved"), "ADR 0150 item 3: {found}");
+    assert_eq!(found["new_url"], json!("https://other.example/a.xml"));
+
+    server.set("/album.xml", 500, Vec::new());
+    let (_, kept) = call(&app, "GET", &path, None).await;
+    assert_eq!(kept["state"], json!("moved"), "ADR 0150 item 7");
+
+    server.set("/album.xml", 200, moved.into_bytes());
+    let (status, _) = call(&app, "POST", &format!("{path}/keep"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, hidden) = call(&app, "GET", &path, None).await;
+    assert_eq!(hidden["state"], Value::Null, "ADR 0150 item 4");
+
+    // The check writes nothing and makes no draft (ADR 0150 item 8).
+    assert_eq!(
+        std::fs::read_to_string(app.feeds.path().join("album.xml")).unwrap(),
+        FEED
+    );
+    let (_, list) = call(&app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(list[0]["id"], json!(id));
+}
+
+#[tokio::test]
+async fn the_outside_check_compares_the_address_of_musicindex_only_on_request() {
+    let (app, server, id) = outside_app().await;
+    let path = format!("/api/v1/feeds/{id}/outside");
+    let (_, list) = call(&app, "GET", "/api/v1/feeds", None).await;
+    let own = list[0]["public_url"].as_str().unwrap().to_owned();
+    let answer = |url: &str| {
+        serde_json::to_vec(&json!({ "data": { "feed_url": url, "title": "A" } })).unwrap()
+    };
+    // The client keeps only the hexadecimal digits of the GUID `g-1`.
+    let route = "/index/v1/feeds/-1";
+
+    // No entry gives nothing.
+    server.set(route, 404, Vec::new());
+    let (_, none) = call(&app, "GET", &format!("{path}?index=true"), None).await;
+    assert_eq!(none["index_url"], Value::Null, "ADR 0150 item 5");
+
+    // The same address gives nothing.
+    server.set(route, 200, answer(&own));
+    let (_, same) = call(&app, "GET", &format!("{path}?index=true"), None).await;
+    assert_eq!(same["index_url"], Value::Null, "ADR 0150 item 5: {same}");
+
+    // A different address gives both.
+    server.set(route, 200, answer("https://other.example/a.xml"));
+    let (_, plain) = call(&app, "GET", &path, None).await;
+    assert_eq!(
+        plain["index_url"],
+        Value::Null,
+        "no request without index=true"
+    );
+    let (_, found) = call(&app, "GET", &format!("{path}?index=true"), None).await;
+    assert_eq!(found["index_url"], json!("https://other.example/a.xml"));
+    assert_eq!(found["own_url"], json!(own));
+
+    // No answer gives nothing.
+    server.set(route, 500, Vec::new());
+    let (_, failed) = call(&app, "GET", &format!("{path}?index=true"), None).await;
+    assert_eq!(failed["index_url"], Value::Null, "ADR 0150 item 5");
+}
+
+#[tokio::test]
+async fn the_cleared_check_box_stops_each_request_of_the_outside_check() {
+    let (app, server, id) = outside_app().await;
+    let path = format!("/api/v1/feeds/{id}/outside");
+    let (_, on) = call(&app, "GET", "/api/v1/settings/outside-check", None).await;
+    assert_eq!(on["enabled"], json!(true), "ADR 0150 item 10");
+    call(
+        &app,
+        "PUT",
+        "/api/v1/settings/outside-check",
+        Some(json!({ "enabled": false })),
+    )
+    .await;
+    let changed = FEED.replace("</channel>", "<description>new</description></channel>");
+    server.set("/album.xml", 200, changed.into_bytes());
+    let (_, off) = call(&app, "GET", &path, None).await;
+    assert_eq!(off["enabled"], json!(false));
+    assert_eq!(off["state"], Value::Null);
+    call(
+        &app,
+        "PUT",
+        "/api/v1/settings/outside-check",
+        Some(json!({ "enabled": true })),
+    )
+    .await;
+    let (_, on) = call(&app, "GET", &path, None).await;
+    assert_eq!(on["state"], json!("changed"));
+}
+
+#[tokio::test]
+async fn a_read_and_a_write_give_the_outside_check_a_new_start() {
+    let (app, server, id) = outside_app().await;
+    let path = format!("/api/v1/feeds/{id}/outside");
+    // A new read takes the new bytes.
+    let changed = FEED.replace("</channel>", "<description>new</description></channel>");
+    std::fs::write(app.feeds.path().join("album.xml"), &changed).unwrap();
+    server.set("/album.xml", 200, changed.clone().into_bytes());
+    let (_, found) = call(&app, "GET", &path, None).await;
+    assert_eq!(found["state"], json!("changed"));
+    call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    let (_, read) = call(&app, "GET", &path, None).await;
+    assert_eq!(
+        read["state"],
+        Value::Null,
+        "ADR 0150 item 2: a read ends the result."
+    );
+    // A write of Studio is not a change from outside.
+    call(
+        &app,
+        "POST",
+        "/api/v1/vault",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    set_library_root(&app);
+    rename_through_route(&app, id, "Album 2").await;
+    let (status, body) = write_through_routes(&app, id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, stale) = call(&app, "GET", &path, None).await;
+    assert_eq!(
+        stale["state"],
+        Value::Null,
+        "the file from before the write"
+    );
+    let written = std::fs::read(app.feeds.path().join("album.xml")).unwrap();
+    server.set("/album.xml", 200, written);
+    let (_, new) = call(&app, "GET", &path, None).await;
+    assert_eq!(
+        new["state"],
+        Value::Null,
+        "ADR 0150: a write of Studio is not a change."
+    );
+}

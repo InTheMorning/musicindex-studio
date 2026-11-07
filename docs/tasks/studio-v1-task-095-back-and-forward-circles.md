@@ -1,6 +1,6 @@
 # Studio V1 Task 095: Back And Forward Circles
 
-Status: Ready.
+Status: Complete, with its screenshot visual check at 1280 px in the dark and the light theme.
 
 Owner of the rule: musicindex ADR 0044 R-NAV-4.
 

@@ -1889,9 +1889,9 @@ export function Bar({ back = true, children }) {
     ${back && nav && (nav.coarse
       ? html`<button class="button icon-button back" type="button" aria-label="Back"
           disabled=${!nav.canBack} onClick=${nav.back}><${Chevron} direction="back" /></button>`
-      : html`<button class="button quiet icon-button" type="button" aria-label="Back" title="Back"
+      : html`<button class="button icon-button" type="button" aria-label="Back" title="Back"
           disabled=${!nav.canBack} onClick=${nav.back}><${Chevron} direction="back" /></button>
-        <button class="button quiet icon-button" type="button" aria-label="Forward" title="Forward"
+        <button class="button icon-button" type="button" aria-label="Forward" title="Forward"
           disabled=${!nav.canForward} onClick=${nav.forward}><${Chevron} direction="forward" /></button>`)}
     ${children}
   </div>`;

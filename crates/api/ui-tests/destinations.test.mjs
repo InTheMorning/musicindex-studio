@@ -59,3 +59,12 @@ test('the hosts entry of leftPanel has the label "File hosts"', () => {
   assert.equal(entry && entry.label, 'File hosts',
     'ADR 0092 item 1: the destination "hosts" must have the label "File hosts". Set label in leftPanel of crates/api/ui/shell.js.');
 });
+
+test('Back and Forward are filled circles with a mouse', () => {
+  for (const label of ['Back', 'Forward']) {
+    const button = appText.match(new RegExp(`<button class="([^"]*)" type="button" aria-label="${label}" title="${label}"`));
+    assert.ok(button, `musicindex ADR 0044 R-NAV-4: this test cannot find the button ${label} in app.js.`);
+    assert.deepEqual(button[1].split(' '), ['button', 'icon-button'],
+      `musicindex ADR 0044 R-NAV-4: ${label} needs the neutral fill. Remove the class quiet from the button in Bar of app.js.`);
+  }
+});

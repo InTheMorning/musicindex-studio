@@ -422,6 +422,14 @@ test('Settings is current on the view settings', () => {
   assert.deepEqual(panel.bottom.map((e) => [e.id, e.current]), [['people', false], ['hosts', false], ['settings', true], ['lock', false]]);
 });
 
+test('A change set of a move marks File hosts and is below it (ADR 0148 item 17)', () => {
+  const view = { name: 'change-set', id: 3, area: 'hosts' };
+  const panel = leftPanel({ view, feeds: [], model: null, vaultOpen: true });
+  assert.equal(panel.bottom.find((e) => e.id === 'hosts').current, true);
+  assert.equal(panel.bottom.find((e) => e.id === 'people').current, false);
+  assert.deepEqual(narrowStack(view), [{ name: 'root' }, { name: 'hosts' }, view]);
+});
+
 test('People is current on each view of its area (ADR 0099 item 1)', () => {
   for (const name of ['people', 'person', 'check', 'wallet', 'change-set']) {
     const panel = leftPanel({ view: { name }, feeds: [], model: null, vaultOpen: true });

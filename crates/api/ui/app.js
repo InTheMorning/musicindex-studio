@@ -3510,7 +3510,7 @@ function Shell({ vault, onLock }) {
     main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} />`;
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
-      onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id }); }} />`;
+      onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id, area: 'hosts' }); }} />`;
   } else if (view.name === 'settings') {
     main = html`<${SettingsPage} />`;
   } else if (view.name === 'people') {

@@ -49,13 +49,21 @@ pub fn default_data_dir() -> Option<PathBuf> {
 ///
 /// Returns the error of the operating system when the bind fails.
 pub async fn bind(port: Option<u16>) -> std::io::Result<TcpListener> {
-    let at = |port: u16| SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     match port {
-        Some(port) => TcpListener::bind(at(port)).await,
-        None => match TcpListener::bind(at(DEFAULT_PORT)).await {
-            Ok(listener) => Ok(listener),
-            Err(_) => TcpListener::bind(at(0)).await,
-        },
+        Some(port) => TcpListener::bind(loopback(port)).await,
+        None => bind_first_free(DEFAULT_PORT).await,
+    }
+}
+
+fn loopback(port: u16) -> SocketAddr {
+    SocketAddr::from((Ipv4Addr::LOCALHOST, port))
+}
+
+/// Bind `port`, or a free port when a different program uses it.
+async fn bind_first_free(port: u16) -> std::io::Result<TcpListener> {
+    match TcpListener::bind(loopback(port)).await {
+        Ok(listener) => Ok(listener),
+        Err(_) => TcpListener::bind(loopback(0)).await,
     }
 }
 
@@ -276,36 +284,45 @@ where
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_default_port_is_42069() {
+        assert_eq!(
+            DEFAULT_PORT, 42069,
+            "ADR 0124 item 7: the desktop shells try port 42069 first."
+        );
+    }
+
+    // These two tests use a port of their own, because a Studio of the user
+    // or a parallel test run can hold port 42069 at any time.
     #[tokio::test]
-    async fn the_default_bind_uses_42069_else_a_free_port() {
-        // A different program can hold the port on the test computer.
-        // Then the test checks only the case with a listener on the port.
-        let free = match TcpListener::bind((Ipv4Addr::LOCALHOST, DEFAULT_PORT)).await {
-            Ok(probe) => {
-                drop(probe);
-                true
-            }
-            Err(_) => false,
-        };
-        let mut held = None;
-        if free {
-            let listener = bind(None).await.expect("bind(None) must bind a port");
-            assert_eq!(
-                listener.local_addr().unwrap().port(),
-                DEFAULT_PORT,
-                "ADR 0124 item 7: bind(None) must use port 42069 when it is free."
-            );
-            held = Some(listener);
-        }
-        // Port 42069 now has a listener: ours or a foreign one.
-        let other = bind(None).await.expect("bind(None) must fall back");
-        let port = other.local_addr().unwrap().port();
+    async fn a_held_first_port_gives_a_free_port() {
+        let holder = bind(Some(0)).await.expect("bind(Some(0)) must bind");
+        let held = holder.local_addr().unwrap().port();
+        let other = bind_first_free(held)
+            .await
+            .expect("the bind must fall back");
         assert_ne!(
-            port, DEFAULT_PORT,
+            other.local_addr().unwrap().port(),
+            held,
             "ADR 0124 item 7: bind(None) must use a free port when 42069 is in use."
         );
         assert!(other.local_addr().unwrap().ip().is_loopback());
-        drop(held);
+    }
+
+    #[tokio::test]
+    async fn a_free_first_port_is_used() {
+        // A different program can take a released port. One of the attempts
+        // gets a port that stays free.
+        for _ in 0..5 {
+            let probe = bind(Some(0)).await.expect("bind(Some(0)) must bind");
+            let port = probe.local_addr().unwrap().port();
+            drop(probe);
+            let listener = bind_first_free(port).await.expect("the bind must work");
+            if listener.local_addr().unwrap().port() == port {
+                return;
+            }
+        }
+        panic!("ADR 0124 item 7: bind(None) must use port 42069 when it is free.");
     }
 
     #[tokio::test]

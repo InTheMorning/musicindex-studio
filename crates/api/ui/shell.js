@@ -232,8 +232,11 @@ export function isFeedView(view) {
 }
 
 // The views of the People area. People is current on each of them (ADR 0099
-// item 1).
+// item 1), except a change set of a move, which has the area `hosts` (ADR 0148
+// item 17).
 export const PEOPLE_VIEWS = ['people', 'person', 'check', 'wallet', 'change-set'];
+
+const inHosts = (view) => view.name === 'hosts' || (view.name === 'change-set' && view.area === 'hosts');
 
 // The left panel (ADR 0039 items 1, 5 and 6). With no open feed it gives the
 // destinations. With an open feed, or the outline view, it gives the outline
@@ -247,11 +250,11 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     // wallet and the review of a change set (ADR 0099 items 1 and 12).
     {
       id: 'people', label: 'People', icon: 'users',
-      current: PEOPLE_VIEWS.includes(view.name),
+      current: PEOPLE_VIEWS.includes(view.name) && !inHosts(view),
       // A click on the row opens the list from a page of the area.
       opens: view.name !== 'people',
     },
-    { id: 'hosts', label: 'File hosts', icon: 'hard-drive', current: view.name === 'hosts' },
+    { id: 'hosts', label: 'File hosts', icon: 'hard-drive', current: inHosts(view), opens: view.name !== 'hosts' },
     { id: 'settings', label: 'Settings', icon: 'settings', current: view.name === 'settings' },
   ];
   if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', icon: 'lock', current: false });
@@ -715,7 +718,7 @@ export function narrowStack(view) {
     // The People area (ADR 0099 items 1 and 5).
     case 'person':
     case 'wallet':
-    case 'change-set': return [root, { name: 'people' }, view];
+    case 'change-set': return [root, { name: inHosts(view) ? 'hosts' : 'people' }, view];
     case 'check': return [root, { name: 'people' }, { name: 'person', id: view.id }, view];
     case 'outline': return view.from ? [root, ...levelPages([...view.from.trail, view.from.group]), view] : [root, releases, view];
     case 'feed': return view.from

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, sheetFeeds,
+  changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
@@ -1337,6 +1337,11 @@ test('ADR 0132 item 11: one sheet for each feed, the removals first, each with i
   assert.equal(creditPosition(0, 1), '');
   assert.equal(creditPosition(0, 2), '1 of 2.');
   assert.equal(creditPosition(1, 2), '2 of 2.');
+});
+
+test('changeSetView gives a move the area of File hosts (ADR 0148 item 17)', () => {
+  assert.deepEqual(changeSetView({ id: 4, operation: { kind: 'move_releases' } }), { name: 'change-set', id: 4, area: 'hosts' });
+  assert.deepEqual(changeSetView({ id: 5, operation: { kind: 'rename' } }), { name: 'change-set', id: 5 });
 });
 
 test('ADR 0132 item 12: the view after the last sheet', () => {

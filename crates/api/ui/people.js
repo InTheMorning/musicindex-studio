@@ -296,6 +296,12 @@ export function changeRow(set, people = [], payees = []) {
   return { title: `${changeTitle(set.operation)} · ${who}`, text: `${feedCount(feedsToWrite(set))} to write` };
 }
 
+// The view of a change set. A move belongs to File hosts (ADR 0148 item 17).
+export function changeSetView(set) {
+  const move = set.operation && set.operation.kind === 'move_releases';
+  return move ? { name: 'change-set', id: set.id, area: 'hosts' } : { name: 'change-set', id: set.id };
+}
+
 // The view that opens after Discard: the page of the person of a person
 // change set, else the People page (ADR 0099 item 12).
 export function afterDiscard(set) {

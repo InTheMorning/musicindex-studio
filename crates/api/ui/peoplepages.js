@@ -21,7 +21,7 @@ import {
   defaultFirst, walletValues, walletSelected, walletEdit, walletEditNote, creditNameEdit, supportLinkEdit, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
   usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
-  linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
+  changeSetView, linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
   personChoices, addToTitle, ADD_TO_HINT, addToRows, addItemsBody, MORE_HINT,
   NEW_MEMBER_HINT, NEW_PERSON_HINT, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson,
   checkSheetLabel, checkSheetReady, NEW_PERSON, WALLET_TO_PERSON_HINT, walletToPersonStart, walletToPersonReady,
@@ -149,7 +149,7 @@ export function PeoplePage({ feeds, go }) {
       <button class="button" type="button" disabled=${busy} onClick=${() => run(downloadPeople)}>Export People</button></div>`,
     changes: () => html`<section class="page-section"><h2>Changes to write</h2><div class="group">${data.changes.map((set) => {
       const row = changeRow(set, data.people, payeesWithNoPerson(data.recipients));
-      return html`<${ListRow} key=${set.id} title=${row.title} lines=${[row.text]} onClick=${() => go({ name: 'change-set', id: set.id })} />`;
+      return html`<${ListRow} key=${set.id} title=${row.title} lines=${[row.text]} onClick=${() => go(changeSetView(set))} />`;
     })}</div></section>`,
     // Each list folds (ADR 0146 item 10). A search opens the lists that it filters.
     suggestions: () => html`<${PickFold} id="people-suggestions" title="Suggestions from your feeds"

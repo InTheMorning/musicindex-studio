@@ -591,6 +591,8 @@ textarea.masked { -webkit-text-security: disc; }
   letter-spacing: normal;
   text-transform: none;
 }
+/* The mark of a collection that is not the main one (ADR 0149 item 17). */
+.row.collection-mark { color: var(--accent); }
 .row .row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .count { color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
 /* The art of a publisher feed in the left panel, with the type dot on its
@@ -2057,6 +2059,13 @@ button.outline-feed {
 .suggest-heading { margin: 8px 4px 4px; }
 .suggest-gap { margin-top: 12px; }
 
+
+/* A row of the section "Collections" (ADR 0149 item 6). At a narrow width,
+   the buttons go below the name. */
+.collection-row { flex-wrap: wrap; }
+.collection-row .text { flex: 1; min-width: 160px; display: grid; }
+.collection-row .tag-open { color: var(--accent); font-size: var(--text-callout); }
+.collection-row .actions { margin: 0; }
 
 /* musicindex ADR 0024 R-TYPE-1: with Touch, a field has the Body size of 17 px.
    iOS Safari zooms the page when a field with text under 16 px gets the focus.

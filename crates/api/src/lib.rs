@@ -7,6 +7,7 @@
 mod access;
 mod account;
 mod announcer;
+mod collections;
 mod downloads;
 mod dropped;
 mod error;
@@ -29,6 +30,7 @@ use axum::routing::{delete, get, post, put};
 
 pub use access::Access;
 pub use axum::Router;
+pub use collections::{CollectionsPlace, OnOpen};
 pub use dropped::DroppedFiles;
 pub use error::ApiError;
 pub use import::{
@@ -92,8 +94,8 @@ pub fn ui_router() -> Router {
 
 /// The routes of local mode that need no token: the session route
 /// (ADR 0055 item 20).
-async fn local_session() -> axum::Json<serde_json::Value> {
-    axum::Json(serde_json::json!({ "mode": "local" }))
+fn local_session(collections: bool) -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({ "mode": "local", "collections": collections }))
 }
 
 /// The router of the local API and the UI. It has the UI routes, the
@@ -105,6 +107,7 @@ pub fn local_router(workspace: Workspace, access: Access) -> Router {
         access,
         DroppedFiles::default(),
         WindowClose::default(),
+        None,
     )
 }
 
@@ -115,6 +118,7 @@ pub fn local_router_with_drops(
     access: Access,
     dropped: DroppedFiles,
     window_close: WindowClose,
+    collections: Option<CollectionsPlace>,
 ) -> Router {
     // The desktop public origin is its loopback address (ADR 0110 item 12).
     let workspace = if workspace.public_origin.is_none() {
@@ -122,10 +126,20 @@ pub fn local_router_with_drops(
     } else {
         workspace
     };
+    let has_collections = collections.is_some();
+    let collection_routes = collections.map(|place| {
+        collections::routes(collections::CollectionsState {
+            place,
+            work: workspace.work(),
+        })
+    });
     let (workspace_routes, handle) = workspace_router(workspace);
     handle.spawn_lock_watch();
-    ui_router()
-        .route("/auth/v1/session", get(local_session))
+    let local = ui_router()
+        .route(
+            "/auth/v1/session",
+            get(move || std::future::ready(local_session(has_collections))),
+        )
         .route(
             "/api/v1/dropped-files/{id}",
             get(dropped::serve).with_state(dropped),
@@ -136,8 +150,12 @@ pub fn local_router_with_drops(
                 .put(window_close::put)
                 .with_state(window_close),
         )
-        .merge(workspace_routes)
-        .layer(middleware::from_fn_with_state(access, access::check))
+        .merge(workspace_routes);
+    let routes = match collection_routes {
+        Some(routes) => local.merge(routes),
+        None => local,
+    };
+    routes.layer(middleware::from_fn_with_state(access, access::check))
 }
 
 /// The routes of one workspace: `/api/v1` and `/app/v1`, with the workers

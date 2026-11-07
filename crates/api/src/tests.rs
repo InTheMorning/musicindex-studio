@@ -7181,7 +7181,7 @@ async fn the_session_route_gives_the_local_mode_with_a_loopback_host_and_no_toke
     };
     let (status, value, _) = send(&app, get_session(HOST)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(value, json!({ "mode": "local" }));
+    assert_eq!(value, json!({ "mode": "local", "collections": false }));
     let (status, value, _) = send(&app, get_session("example.com:4100")).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(value["error"]["code"], "host_not_allowed");

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use studio_api::{Access, Workspace, local_router_with_drops};
-pub use studio_api::{DroppedFiles, OnClose, WindowClose, Work};
+pub use studio_api::{CollectionsPlace, DroppedFiles, OnClose, OnOpen, WindowClose, Work};
 use tokio::net::TcpListener;
 
 /// The port that the desktop shells try first (ADR 0124 item 7). A fixed
@@ -95,6 +95,9 @@ pub struct StartOptions {
     /// The folder of the settings of the app, which no collection owns. With
     /// `None`, the data folder holds them.
     pub app_folder: Option<PathBuf>,
+    /// The collections of the app (ADR 0149 item 5). A shell with `None` has
+    /// no collection route.
+    pub collections: Option<CollectionsPlace>,
 }
 
 impl StartOptions {
@@ -107,6 +110,7 @@ impl StartOptions {
             hub: None,
             has_window: false,
             app_folder: None,
+            collections: None,
         }
     }
 }
@@ -300,7 +304,13 @@ where
     } else {
         studio_api::WindowClose::default()
     };
-    let router = local_router_with_drops(workspace, access, dropped.clone(), window_close.clone());
+    let router = local_router_with_drops(
+        workspace,
+        access,
+        dropped.clone(),
+        window_close.clone(),
+        options.collections.clone(),
+    );
     let serve = async move {
         // The lock stays until the serve ends.
         let _lock = lock;

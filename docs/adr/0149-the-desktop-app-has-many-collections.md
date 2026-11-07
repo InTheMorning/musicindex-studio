@@ -4,7 +4,7 @@
 - Date: 2026-11-06
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, from a mockup and a questionnaire.
-- Technical choices: items 3, 4, 10, 12, 13 and 16 are choices of the planning model.
+- Technical choices: items 3, 4, 10, 12, 13, 16, 18 and 19 are choices of the planning model.
 - Changes: [ADR 0107](0107-a-user-can-export-and-import-an-account.md) item 9 on the desktop app. The data folder of [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 - Source: [findings of local use, findings 12, 13 and 17](../reviews/2026-11-06-local-use-findings.md)
 
@@ -42,6 +42,11 @@ A test of a new start, an import or an export needs a different data folder. The
 ### The Mark
 
 17. When the open collection is not "Main collection", the bottom of the left panel has a row "Collection: {name}" in the accent color. The row opens Settings.
+
+### Each Collection And The App
+
+18. A new collection keeps its library in its own folder, so that two collections share no release folder. It starts on the Welcome page, with no library page.
+19. The choice for a close of the window belongs to the app, so it stays in the default data folder.
 
 ## Alternatives Considered
 

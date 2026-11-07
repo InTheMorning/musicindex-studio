@@ -104,13 +104,13 @@ The setting is one select menu. The desktop starts at "Never". The server keeps 
 
 ### 12. The Export Does Not Tell The User How To Import
 
-Text corrected for the next candidate. Finding 13 gives the larger solution. "Move Studio" named an import, but Settings had no import and no text about where it is. In ADR 0107 item 9, the import on the desktop is only on the first page of a collection with no feed. An import thus cannot replace data. The user with data must use a new data folder with `--data-dir`.
+Corrected (ADR 0149 item 11). "Import an Account File…" makes a new collection in the app. The text below gives the fault. "Move Studio" named an import, but Settings had no import and no text about where it is. In ADR 0107 item 9, the import on the desktop is only on the first page of a collection with no feed. An import thus cannot replace data. The user with data must use a new data folder with `--data-dir`.
 
 `crates/desktop-app/src/main.rs` reads no `--data-dir`, so the Tauri app always uses its default folder. A user of the installed app with feeds therefore cannot import without the command-line shell. The text of the first page also says "Moving from a different server?", and the file can come from a desktop.
 
 ### 13. Many Collections In The Desktop App
 
-Open. Requested function: the desktop app can change between collections. One default folder holds each collection as a subfolder. The app can make, overwrite and delete a collection. Tests of a new start, an import and an export now need scattered data folders.
+Corrected ([ADR 0149](../adr/0149-the-desktop-app-has-many-collections.md), task 097). Requested function: the desktop app can change between collections. One default folder holds each collection as a subfolder. The app can make, overwrite and delete a collection. Tests of a new start, an import and an export now need scattered data folders.
 
 This function also gives finding 12 a solution, and it changes the rule of ADR 0107 item 9 that an import cannot replace data. Mockups come before an ADR ([ADR 0124](../adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) owns the current data folder). The record must decide these items:
 
@@ -160,7 +160,7 @@ Corrected for the next candidate (musicindex ADR 0041 R-SCALE-4 item 6). The rin
 
 ### 17. Test Data From Production
 
-Open. A check of the tile dimension needs four real releases. The operator wants an easy way to bring the file host settings from production to a test collection. Finding 13 can cover this.
+Corrected (ADR 0149 items 8 to 10). "Copy This Collection…" keeps the file hosts and the vault. A check of the tile dimension needs four real releases. The operator wants an easy way to bring the file host settings from production to a test collection. Finding 13 can cover this.
 
 ### 18. The Player Gives No Feedback At The Start, And Its Cursor Is Offset
 

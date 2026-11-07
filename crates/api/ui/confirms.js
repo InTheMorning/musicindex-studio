@@ -4,6 +4,10 @@
 const destructive = (title, text, action) => ({ title, text, action, role: 'destructive' });
 
 export const CONFIRMS = {
+  deleteCollection: (name) => destructive(
+    `Delete “${name}”?`,
+    'Studio removes its feeds, drafts, library files and vault from this computer. Nothing changes on a file host. You cannot get them back.',
+    'Delete Collection'),
   deleteOldFilesNow: (count, host) => destructive(
     `Delete ${count === 1 ? 'the old file' : `the ${count} old files`} before the move is ready?`,
     `An app that still uses an old address gets an error. You review each deletion, and ${host} keeps the files until you write.`,

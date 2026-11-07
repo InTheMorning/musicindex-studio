@@ -54,6 +54,13 @@ struct Shutdown(Mutex<Option<oneshot::Sender<()>>>);
 /// The end of the serve of the API, for "Quit After Write".
 struct ApiEnded(Mutex<Option<oneshot::Receiver<()>>>);
 
+/// The collection that opens when the quit ends (ADR 0149 item 14). A
+/// canceled quit clears it, so the open collection stays selected.
+struct PendingOpen {
+    root: PathBuf,
+    folder: Mutex<Option<String>>,
+}
+
 /// The quit: its state, the work count and the generation of the wait.
 struct QuitControl {
     state: Mutex<QuitState>,
@@ -164,11 +171,60 @@ fn signal_shutdown(app: &AppHandle) {
     }
 }
 
-/// Send the shutdown signal, then end the app with no wait (ADR 0124
-/// items 9 and 19).
-fn end_now(app: &AppHandle) {
-    signal_shutdown(app);
+/// The collection that the quit opens, if any.
+fn pending_open(app: &AppHandle) -> Option<String> {
+    let pending = app.try_state::<PendingOpen>()?;
+    pending.folder.lock().ok()?.clone()
+}
+
+fn clear_pending_open(app: &AppHandle) {
+    if let Some(pending) = app.try_state::<PendingOpen>()
+        && let Ok(mut folder) = pending.folder.lock()
+    {
+        *folder = None;
+    }
+}
+
+/// Start the quit that opens a different collection: the rules of "Quit"
+/// apply to a write that runs (ADR 0149 item 14).
+fn open_collection(app: &AppHandle, folder: String) {
+    if let Some(pending) = app.try_state::<PendingOpen>()
+        && let Ok(mut slot) = pending.folder.lock()
+    {
+        *slot = Some(folder);
+    }
+    handle_quit(app, QuitEvent::Quit);
+}
+
+/// End the process: a pending open selects its collection and restarts the
+/// app. If the selection fails, the app ends and the next start opens the
+/// collection from before.
+fn finish(app: &AppHandle) {
+    if let (Some(folder), Some(pending)) = (pending_open(app), app.try_state::<PendingOpen>()) {
+        match studio_core::collections::Collections::new(&pending.root).set_open(&folder) {
+            Ok(()) => {
+                app.request_restart();
+                return;
+            }
+            Err(error) => eprintln!("studio-desktop-app: the collection did not change: {error}"),
+        }
+    }
     app.exit(0);
+}
+
+/// Send the shutdown signal, then end the app with no wait (ADR 0124
+/// items 9 and 19). A restart with no work waits for the end of the API, so
+/// that the new process gets the same port.
+fn end_now(app: &AppHandle) {
+    let idle = app
+        .try_state::<QuitControl>()
+        .is_some_and(|control| control.count().is_idle());
+    if idle && pending_open(app).is_some() {
+        stop_api_and_end(app);
+        return;
+    }
+    signal_shutdown(app);
+    finish(app);
 }
 
 /// Send the shutdown signal, wait for each request that started, then end
@@ -183,7 +239,7 @@ fn stop_api_and_end(app: &AppHandle) {
         if let Some(ended) = ended {
             let _ = ended.await;
         }
-        handle.exit(0);
+        finish(&handle);
     });
 }
 
@@ -300,6 +356,10 @@ fn handle_quit(app: &AppHandle, event: QuitEvent) {
         }
         QuitAction::StopApiAndEnd => stop_api_and_end(app),
         QuitAction::Continue => {
+            // A quit that the user stops also stops a change of collection.
+            if event == QuitEvent::Cancel || event == QuitEvent::OpenStudio {
+                clear_pending_open(app);
+            }
             if before == QuitState::Waiting && event == QuitEvent::OpenStudio {
                 set_tray_menu(app, false);
             }
@@ -473,6 +533,19 @@ fn setup(app: &AppHandle) -> Result<(), String> {
             format!("Studio could not start. {e}")
         }
     })?;
+    app.manage(PendingOpen {
+        root: root.clone(),
+        folder: Mutex::new(None),
+    });
+    let open_folder = data_dir
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let open_handle = app.clone();
+    let on_open: studio_desktop::OnOpen = std::sync::Arc::new(move |folder| {
+        open_collection(&open_handle, folder);
+    });
+    let collections = studio_desktop::CollectionsPlace::new(&root, &open_folder, on_open);
     let (sender, receiver) = oneshot::channel::<()>();
     let started = tauri::async_runtime::block_on(async {
         let listener = studio_desktop::bind(None)
@@ -481,6 +554,7 @@ fn setup(app: &AppHandle) -> Result<(), String> {
         let mut options = studio_desktop::StartOptions::new(&data_dir);
         options.has_window = true;
         options.app_folder = Some(root.clone());
+        options.collections = Some(collections);
         let shutdown = async {
             let _ = receiver.await;
         };

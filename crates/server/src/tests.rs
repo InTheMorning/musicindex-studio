@@ -362,6 +362,18 @@ async fn the_profile_route_sends_no_request_to_a_nip05_domain_in_a_private_netwo
 }
 
 #[tokio::test]
+async fn the_server_has_no_collection_route() {
+    let app = app(Signup::Open);
+    let who = new_user(&app, "collections@example.org", PASS_ONE).await;
+    let reply = api(&app, &who, "GET", "/api/v1/collections", None).await;
+    assert_eq!(
+        reply.status,
+        StatusCode::NOT_FOUND,
+        "ADR 0149 item 5: a server has no collection route."
+    );
+}
+
+#[tokio::test]
 async fn a_new_user_has_a_folder_with_a_library_and_an_open_vault() {
     let app = app(Signup::Invite);
     let who = new_user(&app, "One@Example.org ", PASS_ONE).await;

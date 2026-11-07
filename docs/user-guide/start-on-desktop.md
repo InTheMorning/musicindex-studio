@@ -129,7 +129,7 @@ A person who has this file can read your feeds, drafts, versions and People list
 3. Read the facts. Clear **Include the audio and images** to make a smaller file.
 4. Select **Export Studio**, and keep the file that your browser downloads.
 
-To import a file, start Studio with an empty data folder. Use `--data-dir` with a new folder.
+To import a file in the app, open **Settings**, then **Collections**, and select **Import an Account File…**. Studio makes a new collection and opens it. With `studio-desktop`, use `--data-dir` with a new folder.
 An import is possible only while the collection has no feed. It cannot replace data.
 
 1. Open **Releases**. The page is empty.
@@ -142,7 +142,19 @@ An import is possible only while the collection has no feed. It cannot replace d
 Studio then has your feeds, drafts, versions, people, vault and connected apps.
 The import changes no feed and writes nothing to your file hosts.
 If the data folder has a vault, Studio asks you to unlock it first.
-If the collection has a feed, Studio shows "This Studio has feeds. Import into a new data folder."
+If the collection has a feed, Studio shows "This collection has feeds. Import into a new collection or a new data folder."
+
+## Collections
+
+The desktop app can keep many collections. Open **Settings**, then **Collections**.
+
+- **New Collection…** makes an empty collection, with its own vault and its own passphrase.
+- **Copy This Collection…** makes a copy with the same file hosts and the same passphrase. A write from the copy changes the real feed. Use a copy with care.
+- **Import an Account File…** makes a new collection and opens it. Select **Import an Account** on its first page.
+- **Open** restarts Studio on that collection. If a write runs, Studio asks first, as **Quit** does. The vault of the new collection starts locked.
+- **Delete…** removes the local files of a collection. Nothing changes on a file host. You cannot delete the main collection or the open collection.
+
+Only the open collection runs. A connected app can write only to it, and its queued announcements wait until it opens. When the open collection is not the main collection, the left panel shows its name.
 
 ## Stop Studio
 

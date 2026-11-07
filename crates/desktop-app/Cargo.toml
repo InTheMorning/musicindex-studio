@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 directories.workspace = true
+studio-core.workspace = true
 studio-desktop = { path = "../desktop" }
 tauri = { version = "2", features = ["tray-icon"] }
 # The single instance plugin must be the first plugin (ADR 0124 item 10).

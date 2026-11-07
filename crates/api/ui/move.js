@@ -246,8 +246,8 @@ const IMPORT_ERRORS = {
   invalid_email: 'Give an email address.',
   pubkey_not_in_archive: 'This signer has another key than the file.',
   no_nostr_wrapper: 'The vault in the file has no key for this signer.',
-  collection_not_empty: 'This Studio has feeds. Import into a new data folder.',
-  library_not_empty: 'The library folder of this Studio has files. Import into a new data folder.',
+  collection_not_empty: 'This collection has feeds. Import into a new collection or a new data folder.',
+  library_not_empty: 'The library folder of this collection has files. Import into a new collection or a new data folder.',
   wrong_key: 'The passphrase or the key does not open the vault of the file.',
   invite_required: 'Sign-up needs an invite code that nobody used.',
 };

@@ -109,6 +109,7 @@ mod tests {
             Access::with_token(TOKEN, 42069),
             dropped,
             crate::WindowClose::default(),
+            None,
         )
     }
 

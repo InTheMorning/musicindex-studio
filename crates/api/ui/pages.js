@@ -75,6 +75,8 @@ const PAGES = {
     // The desktop moves its data from here. A server has "Export Account" in
     // the Account panel (ADR 0107 item 3).
     ...(server ? [] : [{ id: 'move', tier: 'setup' }]),
+    // The panel shows only in the desktop app (ADR 0149 item 5).
+    ...(server ? [] : [{ id: 'collections', tier: 'setup' }]),
     // A server with `--hold-assets off` has no downloads into the library, so
     // the section "Files on this server" takes the place of the library
     // limits (ADR 0105 items 14 and 17).

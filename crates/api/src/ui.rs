@@ -157,6 +157,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/releasemove.js"),
     ),
     (
+        "collectionlist.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/collectionlist.js"),
+    ),
+    (
         "confirms.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/confirms.js"),

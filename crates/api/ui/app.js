@@ -25,6 +25,7 @@ import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps
 import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
+import { collectionMark, collectionRow, collectionSheet, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf } from './cover.js';
@@ -87,6 +88,8 @@ let csrfToken = null;
 // False for a server with `--hold-assets off` (ADR 0105). `Studio` sets it
 // from the status route before it shows the shell.
 let holdAssets = true;
+// True in the desktop app, which has many collections (ADR 0149 item 5).
+let hasCollections = false;
 // `App` sets these two functions. `onUnlockNeeded(reason)` gives a promise
 // that is true after an unlock and false when the user closes the unlock
 // sheet. `reason` is a text for the sheet, or null.
@@ -97,6 +100,7 @@ let unlocking = null;
 // Keep the mode and the CSRF token of a session response.
 function applySession(session) {
   serverMode = session.mode === 'server';
+  hasCollections = session.collections === true;
   csrfToken = serverMode && session.signed_in !== false ? session.csrf || null : null;
 }
 
@@ -1831,6 +1835,7 @@ const ICONS = {
   disc: () => html`<circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="2" />`,
   users: () => html`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />`,
   wallet: () => html`<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />`,
+  folder: () => html`<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />`,
   'hard-drive': () => html`<path d="M10 16h.01" /><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M21.946 12.013H2.054" /><path d="M6 16h.01" />`,
   settings: () => html`<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" />`,
   lock: () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />`,
@@ -2606,6 +2611,7 @@ function SettingsPage() {
     apps: ConnectedAppsPanel,
     nostr: NostrPanel,
     move: MovePanel,
+    collections: CollectionsPanel,
     library: LibraryPanel,
     files: FilesOnServerPanel,
   };
@@ -2974,6 +2980,8 @@ function LeftPanelFooter({ panel, go, onLock }) {
       ? html`<button class="row" type="button" onClick=${onLock}><${Icon} name=${item.icon} />Lock Studio</button>`
       : item.id === 'unlock'
       ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}><${Icon} name=${item.icon} />Unlock Studio</button>`
+      : item.id === 'collection'
+      ? html`<button class="row collection-mark" type="button" onClick=${() => go({ name: 'settings' })}><${Icon} name=${item.icon} /><span class="row-label">${item.label}</span></button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
           onClick=${() => { if (item.opens ?? !item.current) go({ name: item.id }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}
   </footer>`;
@@ -3492,9 +3500,10 @@ function Shell({ vault, onLock }) {
   // A different feed closes the Add a track sheet and the import sheet of
   // the feed before it.
   useEffect(() => { setAdding(false); setImporting(false); }, [draftFeedId]);
+  const collection = useCollectionMark();
   const panel = leftPanel({
     view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open',
-    vaultLocked: serverMode && vault === 'locked', narrow,
+    vaultLocked: serverMode && vault === 'locked', narrow, collection,
   });
 
   // A new feed opens its page. The list is loaded before the page opens.
@@ -4329,6 +4338,104 @@ function WindowPanel() {
       </div>
     </div>
     <${ErrorNotice} error=${error} />
+  </article>`;
+}
+
+// The text of the mark of a collection in the left panel (ADR 0149 item 17).
+// A shell with no collections sends no request.
+function useCollectionMark() {
+  const [mark, setMark] = useState(null);
+  useEffect(() => {
+    if (hasCollections) api('/collections').then((r) => setMark(collectionMark(r.collections)), () => {});
+  }, []);
+  return mark;
+}
+
+// The sheet that makes a collection, and then opens it (ADR 0149 items 7 to
+// 11 and 14). `kind` is `new`, `copy` or `import`, or null.
+function CollectionSheet({ kind, openName, onDone, onClose }) {
+  const ref = useSheet(kind !== null);
+  const [size, setSize] = useState(null);
+  const [name, setName] = useState('');
+  const { busy, error, run } = useAction();
+  useEffect(() => {
+    if (kind === null) return;
+    setName(kind === 'copy' ? `${openName} copy` : '');
+    setSize(null);
+    if (kind === 'copy') api('/collections/copy-size').then((r) => setSize(sizeText(r.size)), () => {});
+  }, [kind]);
+  if (kind === null) return html`<dialog ref=${ref} class="sheet small" onClose=${onClose}></dialog>`;
+  const words = collectionSheet(kind, openName, size || '…');
+  const make = (e) => {
+    e.preventDefault();
+    run(async () => {
+      const made = await api(kind === 'copy' ? '/collections/copy' : '/collections', { method: 'POST', body: { name } });
+      onDone(made);
+    });
+  };
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="collection-title" onClose=${onClose}>
+    <header>
+      <h2 id="collection-title">${words.title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <form class="body" id="collection-form" onSubmit=${make}>
+      <div class="group"><${Field} id="collection-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} /></div>
+      ${words.lines.map((line) => html`<p class="hint" key=${line}>${line}</p>`)}
+      ${words.warning && html`<div class="notice error" role="alert"><strong>${words.warning.strong}</strong> ${words.warning.text}</div>`}
+      <${ErrorNotice} error=${error} />
+    </form>
+    <footer><button class="button primary" type="submit" form="collection-form" disabled=${busy || name.trim() === ''}>
+      ${busy ? words.busy : words.primary}</button></footer>
+  </dialog>`;
+}
+
+// The section "Collections" of the Settings page, in the desktop app only
+// (ADR 0149 items 5 and 6). The core keeps the list and applies each rule.
+function CollectionsPanel() {
+  const [list, setList] = useState(null);
+  const [sheet, setSheet] = useState(null);
+  const [opening, setOpening] = useState(false);
+  const { error, run } = useAction();
+  const load = () => api('/collections').then((r) => setList(r.collections));
+  useEffect(() => { if (hasCollections) load().catch(() => {}); }, []);
+  if (!list) return null;
+  const openName = (list.find((c) => c.open) || {}).name || '';
+  // The quit rules can stop a restart, so the text goes after a short time.
+  const open = (folder) => run(async () => {
+    await api(`/collections/${folder}/open`, { method: 'POST' });
+    setOpening(true);
+    setTimeout(() => setOpening(false), 10000);
+  });
+  const remove = (collection) => run(async () => {
+    if (!await askConfirm(CONFIRMS.deleteCollection(collection.name))) return;
+    await api(`/collections/${collection.folder}`, { method: 'DELETE' });
+    await load();
+  });
+  return html`<article class="panel">
+    <h2>Collections</h2>
+    <p class="hint">${COLLECTIONS_HINT}</p>
+    <div class="group">
+      ${list.map((collection) => {
+        const row = collectionRow(collection);
+        return html`<div class="link-row static collection-row" key=${collection.folder}>
+          <span class="text"><span class="label">${row.name}</span><span class="summary">${row.line}</span></span>
+          ${collection.open && html`<span class="tag-open">Open</span>`}
+          ${(row.canOpen || row.canDelete) && html`<div class="actions">
+            ${row.canOpen && html`<button class="button action" type="button" disabled=${opening} onClick=${() => open(collection.folder)}>Open</button>`}
+            ${row.canDelete && html`<button class="button destructive" type="button" disabled=${opening} onClick=${() => remove(collection)}>Delete…</button>`}
+          </div>`}
+        </div>`;
+      })}
+    </div>
+    ${opening && html`<p class="hint" role="status">${OPENING_TEXT}</p>`}
+    <${ErrorNotice} error=${error} />
+    <div class="actions">
+      <button class="button action" type="button" onClick=${() => setSheet('new')}>New Collection…</button>
+      <button class="button action" type="button" onClick=${() => setSheet('copy')}>Copy This Collection…</button>
+      <button class="button action" type="button" onClick=${() => setSheet('import')}>Import an Account File…</button>
+    </div>
+    <${CollectionSheet} kind=${sheet} openName=${openName} onClose=${() => setSheet(null)}
+      onDone=${async (made) => { setSheet(null); await load(); await open(made.folder); }} />
   </article>`;
 }
 

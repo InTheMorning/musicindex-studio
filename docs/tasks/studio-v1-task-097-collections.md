@@ -1,6 +1,6 @@
 # Studio V1 Task 097: Collections
 
-Status: In progress. Packet 097a is complete.
+Status: Complete, with its screenshot visual check and one restart on Xvfb. Its human test is open.
 
 Owner of the rules: [ADR 0149](../adr/0149-the-desktop-app-has-many-collections.md).
 

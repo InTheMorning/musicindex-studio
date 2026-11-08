@@ -2167,6 +2167,14 @@ button.outline-feed {
 .collection-row .tag-open { color: var(--accent); font-size: var(--text-callout); }
 .collection-row .actions { margin: 0; }
 
+/* Under Increase Contrast the left panel has no glow, only the flat sidebar
+   color. At 760 px or less the sticky layer of the panel pages goes too
+   (musicindex ADR 0056 R-SIDE-1 item 4). */
+@media (prefers-contrast: more) {
+  .sidebar { background: var(--sidebar); }
+  .panel-page::before { content: none; }
+}
+
 /* musicindex ADR 0024 R-TYPE-1: with Touch, a field has the Body size of 17 px.
    iOS Safari zooms the page when a field with text under 16 px gets the focus.
    This rule is the last rule of the file, and its selector is as specific as

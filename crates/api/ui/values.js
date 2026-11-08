@@ -5,7 +5,7 @@ import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from '
 import { CONFIRMS } from './confirms.js';
 import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
 import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine, memberText, addRecipientsLabel, trackHeading } from './people.js';
-import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag } from './pickers.js';
+import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useLookup } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
@@ -352,6 +352,10 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
   // After each move between the hits, a feed and a track, the sheet scrolls to
   // its top. The user then sees the page that opened.
   const [moved, setMoved] = useState(0);
+  const fields = useFieldList({ id: 'picker-search', value: query, setValue: (text) => {
+    setQuery(text);
+    if (view !== 'hits') { setView('hits'); setMoved((n) => n + 1); }
+  } });
   const bodyRef = useRef(null);
   useEffect(() => {
     if (moved > 0 && bodyRef.current) bodyRef.current.scrollTop = 0;
@@ -405,7 +409,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     <div class="body" ref=${bodyRef}>
       <section class="page-section pinned-form"><div class="group rows">
         <${Field} id="picker-search" label="Name" type="search" value=${query} placeholder="Artist or feed name"
-          onInput=${(e) => { setQuery(e.target.value); if (view !== 'hits') { setView('hits'); setMoved((n) => n + 1); } }} />
+          ...${fields.input}>${fields.list}<//>
       </div></section>
       <${ErrorNotice} error=${indexLoad.error} />
       ${view === 'hits' && html`<${SearchResults} query=${query} search=${search} disabled=${indexLoad.busy} onPick=${(row) => openFeed(row.feed_guid)} />`}

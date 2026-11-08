@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
-import { PickerLayout, FindOneSheet, PickFold, TakenTag } from './pickers.js';
+import { PickerLayout, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { api, assetMode, askConfirm, Bar, SortMenu, ReverseButton, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
@@ -569,10 +569,11 @@ export function useLookup(query, path) {
 
 function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
   const { rows, note, searched, error } = useLookup(query, `/people/${personId}/musicindex`);
+  const fields = useFieldList({ id: 'find-query', value: query, setValue: onQuery, scope: 'publisher' });
   return html`<header><h2 id="find-title">${`Find on Music Index: ${name}`}</h2></header>
     <div class="body">
       <div class="group rows"><${Field} id="find-query" label="Name" type="search" value=${query}
-        onInput=${(e) => onQuery(e.target.value)} /></div>
+        ...${fields.input}>${fields.list}<//></div>
       <p class="hint">${FIND_HINT}</p>
       <${ErrorNotice} error=${error} />
       ${rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}

@@ -7,7 +7,7 @@ import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady } from './review.js';
 import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
-import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag } from './pickers.js';
+import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
 import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
@@ -2572,6 +2572,7 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
   const [tab, setTab] = useState('index');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState(null);
+  const fields = useFieldList({ id: 'playlist-search', value: query, setValue: setQuery });
   const [note, setNote] = useState(null);
   const [opened, setOpened] = useState(null);
   const [mine, setMine] = useState(null);
@@ -2630,10 +2631,11 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
             <label for="playlist-search">Search Music Index</label>
             <div class="inline">
               <input id="playlist-search" type="search" value=${query} placeholder="Artist or feed name"
-                onInput=${(e) => setQuery(e.target.value)} />
+                ...${fields.input} />
               <button class="button" type="submit" disabled=${search.busy || !query.trim()}>
                 ${search.busy ? 'Searching…' : 'Search'}</button>
             </div>
+            ${fields.list}
           </div>
         </form>
         <${ErrorNotice} error=${search.error} />

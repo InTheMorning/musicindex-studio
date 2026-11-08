@@ -1,6 +1,7 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { pageSequence } from './pages.js';
+import { useFieldList } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
@@ -1559,6 +1560,7 @@ function FindFeeds({ onFound }) {
   const [addresses, setAddresses] = useState('');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState(null);
+  const fields = useFieldList({ id: 'search', value: query, setValue: setQuery });
   const [note, setNote] = useState(null);
   const [guids, setGuids] = useState([]);
   const search = useAction();
@@ -1589,9 +1591,10 @@ function FindFeeds({ onFound }) {
     <form class="form" onSubmit=${runSearch} role="search">
       <div class="field">
         <label for="search">Or search Music Index by name</label>
-        <div class="inline"><input id="search" type="search" value=${query} onInput=${(e) => setQuery(e.target.value)}
+        <div class="inline"><input id="search" type="search" value=${query} ...${fields.input}
           placeholder="Artist or feed name" />
           <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
+        ${fields.list}
       </div>
       <${ErrorNotice} error=${search.error} />
       ${note && html`<p class="hint" role="status">${note.message}</p>`}

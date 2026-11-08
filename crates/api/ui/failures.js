@@ -13,8 +13,8 @@ export const FAIL_TEXT = {
   not_public: (site) => `Studio on a server cannot connect to ${site || 'this address'}, because it is not a public address.`,
   too_large: () => 'The file is too large to be a feed.',
   invalid_address: () => 'The address is not a web address. It must start with https:// or http://.',
-  unknown_guid: () => 'musicindex does not know this feed.',
-  index_unreachable: () => 'Studio could not get the address of this feed from musicindex. Try again later.',
+  unknown_guid: () => 'Music Index does not know this feed.',
+  index_unreachable: () => 'Studio could not get the address of this feed from Music Index. Try again later.',
   bad_backup: () => 'The file is not an MSP 2.0 backup.',
 };
 

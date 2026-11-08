@@ -235,7 +235,7 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
       notice=${html`<${ErrorNotice} error=${loading.error} />
         ${list === null && !loading.error && html`<p class="hint" role="status">Loading your people…</p>`}`}
       musicindex=${recipient
-        ? { title: 'Find on musicindex', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }
+        ? { title: 'Find on Music Index', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }
         : { title: 'Copy from a Feed', summary: 'Select many recipients of a different feed.', onOpen: onCopy }}
       lists=${list === null ? [] : [{ title: 'Your people', rows: list.people.map(pickRow) }, { title: 'Payees with no person', rows: list.payees.map(pickRow) }]} />
     <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>
@@ -399,7 +399,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
 
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="picker-title" onClose=${onClose}>
     <header>
-      <h2 id="picker-title">Copy from a Feed on musicindex</h2>
+      <h2 id="picker-title">Copy from a Feed on Music Index</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body" ref=${bodyRef}>

@@ -194,12 +194,12 @@ function CreditForm({ persons, feedId, onAdd, onCancel }) {
         <${NostrKeyRow} label="Nostr" name=${values.name} value=${values.npub} onOpen=${() => setKeyOpen(true)} />
       </div>`}
       notice=${html`<${ErrorNotice} error=${loading.error} />`}
-      musicindex=${{ title: 'Find on musicindex', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }}
+      musicindex=${{ title: 'Find on Music Index', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }}
       lists=${[{ title: 'Your people', rows }]} />
     <footer><button class="button primary" type="submit" form="credit-form" disabled=${!ready}>Add the Credit</button></footer>
     <${NostrSheet} open=${keyOpen} value=${values.npub} feedId=${feedId} person=${{ name: values.name, img: values.img }}
       onSet=${(npub, picked) => setValues((current) => withPersonKey(current, npub, picked))} onClose=${() => setKeyOpen(false)} />
-    <${FindOneSheet} open=${finding} start=${values.name} choices=${creditChoices} credits=${true} empty="musicindex has no values of this feed."
+    <${FindOneSheet} open=${finding} start=${values.name} choices=${creditChoices} credits=${true} empty="Music Index has no values of this feed."
       onPick=${(found) => setValues((current) => ({ ...current, ...found }))} onClose=${() => setFinding(false)} />`;
 }
 
@@ -234,7 +234,7 @@ function FundingForm({ fundings, onAdd, onCancel }) {
         <${TextField} id="funding-url" label="Address" type="url" value=${values.url} onChange=${change('url')} />
       </div>`}
       notice=${html`<${ErrorNotice} error=${loading.error} />`}
-      musicindex=${{ title: 'Find on musicindex', summary: 'Fill the address from the website of a feed.', onOpen: () => setFinding(true) }}
+      musicindex=${{ title: 'Find on Music Index', summary: 'Fill the address from the website of a feed.', onOpen: () => setFinding(true) }}
       lists=${[{ title: 'Your people', rows }]} />
     <footer><button class="button primary" type="submit" form="funding-form" disabled=${!ready}>Add the Support Link</button></footer>
     <${FindOneSheet} open=${finding} choices=${fundingChoices} empty="This feed has no website."
@@ -638,7 +638,7 @@ export function NostrKeyRow({ label, name, value, bad, onOpen }) {
 
 const FAILED_TEXT = {
   collection: 'Studio could not read your feeds.',
-  musicindex: 'musicindex did not answer.',
+  musicindex: 'Music Index did not answer.',
   relay: 'The search relay did not answer.',
 };
 
@@ -739,9 +739,9 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
           <label class="check"><input type="checkbox" checked=${usePicture} onChange=${(e) => setUsePicture(e.target.checked)} />
             <span>Use the profile picture</span></label>
         </div>`}
-        <section class="page-section"><h2>From musicindex</h2>
+        <section class="page-section"><h2>From Music Index</h2>
           <div class="group"><button class="link-row" type="button" onClick=${() => setFinding(true)}>
-            <span class="text"><span class="label">Find on musicindex</span>
+            <span class="text"><span class="label">Find on Music Index</span>
               <span class="summary">Use the Nostr key of a feed. Few feeds have one.</span></span>
             <span class="go" aria-hidden="true">›</span></button></div></section>
         ${peopleRows.length > 0 && html`<${PickFold} title="Your people" rows=${peopleRows.map((r) => html`<button class="link-row" type="button" key=${r.id} onClick=${() => choose(r.npub, { name: r.name, picture: r.person.img })}>
@@ -2621,13 +2621,13 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
     </header>
     <div class="body">
       <div class="actions playlist-tabs" role="group" aria-label="Where the tracks come from">
-        <button class="button" type="button" aria-pressed=${tab === 'index'} onClick=${() => setTab('index')}>Search musicindex</button>
+        <button class="button" type="button" aria-pressed=${tab === 'index'} onClick=${() => setTab('index')}>Search Music Index</button>
         <button class="button" type="button" aria-pressed=${tab === 'mine'} onClick=${() => setTab('mine')}>My Releases</button>
       </div>
       ${tab === 'index' && html`<section class="page-section">
         <form class="form" onSubmit=${runSearch} role="search">
           <div class="field">
-            <label for="playlist-search">Search musicindex</label>
+            <label for="playlist-search">Search Music Index</label>
             <div class="inline">
               <input id="playlist-search" type="search" value=${query} placeholder="Artist or feed name"
                 onInput=${(e) => setQuery(e.target.value)} />
@@ -2639,7 +2639,7 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
         <${ErrorNotice} error=${search.error} />
         <${ErrorNotice} error=${load.error} />
         ${note && html`<p class="hint" role="status">${note.message}</p>`}
-        ${hits && hits.length === 0 && !note && html`<p class="hint">musicindex found no feed with that name.</p>`}
+        ${hits && hits.length === 0 && !note && html`<p class="hint">Music Index found no feed with that name.</p>`}
         ${hits && hits.length > 0 && html`<div class="group">
           ${hits.map((h) => html`<div key=${h.feed_guid}>
             <button class="link-row playlist-feed" type="button" disabled=${load.busy} aria-expanded=${opened && opened.guid === h.feed_guid ? 'true' : 'false'}

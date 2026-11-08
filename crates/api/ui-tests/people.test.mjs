@@ -1107,9 +1107,9 @@ test('a fill sends no request (ADR 0117 item 15)', () => {
 });
 
 test('the source line of a filled field names the kind of the row (ADR 0117 item 14)', () => {
-  assert.equal(fillSource({ title: 'DuhLaurien', kind: { type: 'role', roles: ['artist'] } }), 'From musicindex: the artist feed DuhLaurien');
-  assert.equal(fillSource({ title: 'Duh Trio', kind: { type: 'inferred_artist' } }), 'From musicindex: the artist feed Duh Trio');
-  assert.equal(fillSource({ title: null, kind: { type: 'no_role' } }), 'From musicindex: the feed Untitled feed');
+  assert.equal(fillSource({ title: 'DuhLaurien', kind: { type: 'role', roles: ['artist'] } }), 'From Music Index: the artist feed DuhLaurien');
+  assert.equal(fillSource({ title: 'Duh Trio', kind: { type: 'inferred_artist' } }), 'From Music Index: the artist feed Duh Trio');
+  assert.equal(fillSource({ title: null, kind: { type: 'no_role' } }), 'From Music Index: the feed Untitled feed');
   assert.equal(musicindexFeedUrl('a b'), 'https://musicindex.org/#feed=a%20b');
 });
 

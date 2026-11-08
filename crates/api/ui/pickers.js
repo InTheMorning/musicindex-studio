@@ -35,7 +35,7 @@ export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists }
   return html`<form class="body" id=${id} onSubmit=${onSubmit}>
     <section class="page-section pinned-form" ref=${form}>${fields}</section>
     ${notice}
-    <section class="page-section"><h2>From musicindex</h2>
+    <section class="page-section"><h2>From Music Index</h2>
       <div class="group"><button class="link-row" type="button" onClick=${musicindex.onOpen}>
         <span class="text"><span class="label">${musicindex.title}</span>
           <span class="summary">${musicindex.summary}</span></span>
@@ -113,7 +113,7 @@ function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
       setProblem(e);
     }
   };
-  return html`<header><h2 id="find-one-title">Find on musicindex</h2></header>
+  return html`<header><h2 id="find-one-title">Find on Music Index</h2></header>
     <div class="body">
       ${options === null && html`<div class="group rows"><${Field} id="find-one-query" label="Name" type="search" value=${query}
         onInput=${(e) => setQuery(e.target.value)} /></div>

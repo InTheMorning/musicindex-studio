@@ -331,13 +331,13 @@ fn resolve(source: &Source, index: &MusicIndex) -> Result<(String, Option<String
                 ..failed(
                     guid,
                     FailKind::UnknownGuid,
-                    "musicindex has no address for this feed GUID".to_owned(),
+                    "Music Index has no address for this feed GUID".to_owned(),
                 )
             }),
             Ok(None) => Err(failed(
                 guid,
                 FailKind::UnknownGuid,
-                "musicindex does not know this feed GUID".to_owned(),
+                "Music Index does not know this feed GUID".to_owned(),
             )),
             Err(e) => Err(failed(guid, FailKind::IndexUnreachable, e.to_string())),
         },

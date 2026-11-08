@@ -58,10 +58,10 @@ If you change only **File host of the feed XML**, a notice gives the count of th
 The old files stay on the file host from before, because an app can still use their addresses. **Moves that wait** shows each move, with these lines:
 
 - **New files**. The new copies passed the check of the write.
-- **musicindex**. Whether musicindex follows the new feed address. Studio cannot examine each other app.
+- **Music Index**. Whether Music Index follows the new feed address. Studio cannot examine each other app.
 - **Waiting time**. The days since the write.
 
-When the days are complete and musicindex gives no different address, a notice asks you to delete the old files. Select **Review the Deletion**, examine the review, and write. Studio never deletes these files by itself.
+When the days are complete and Music Index gives no different address, a notice asks you to delete the old files. Select **Review the Deletion**, examine the review, and write. Studio never deletes these files by itself.
 
 - **Delete Now…** does the same before the end of the waiting time. An app that still uses an old address then gets an error.
 - **Keep the Files** removes the move from the list. The files stay.
@@ -174,6 +174,6 @@ When a page opens, Studio reads the public address of each feed that the page sh
 
 - **Changed outside Studio** means that the hosted file has different bytes. Select **Read Again** on the feed page. A draft with edits keeps its edits.
 - **Moved outside Studio** means that the hosted file names a new address. A write from Studio can put the feed back on the old file host. **Show the Difference** opens the merge in Review. **Keep This File Host** hides the notice until the hosted file changes again.
-- The feed page also asks musicindex for the address of the feed. If it reads the feed from a different address, a notice gives both addresses. A different collection or a different tool can hold this feed.
+- The feed page also asks Music Index for the address of the feed. If it reads the feed from a different address, a notice gives both addresses. A different collection or a different tool can hold this feed.
 
 The check writes nothing and changes no draft. If a read fails, the page shows nothing new. A feed with no public address has no check. To stop these requests, open **Settings**, then **Outside changes**, and clear **Check for outside changes**.

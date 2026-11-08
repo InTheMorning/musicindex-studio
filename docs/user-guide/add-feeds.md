@@ -13,7 +13,7 @@ Select the row **By address or name**. A sheet opens.
 Feeds that you add this way are read-only until you connect the file host that holds them.
 
 1. Type one feed address on each line in **Feed addresses**. An artist feed or a label feed brings all of its releases.
-2. Or type an artist name or a feed name in **Or search musicindex by name** and select **Search**.
+2. Or type an artist name or a feed name in **Or search Music Index by name** and select **Search**.
 3. In the results, select the feeds that are yours.
 4. Select **Find My Feeds**. The button shows the number of addresses and feeds.
 5. Studio lists what it found, grouped by host. Select the feeds to add.

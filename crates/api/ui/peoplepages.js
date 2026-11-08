@@ -347,7 +347,7 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
 // The row of musicindex of each link form (ADR 0145 items 3 and 14).
 const LINK_FINDS = {
   wallets: { choices: recipientChoices, empty: 'This feed has no payment address.', summary: 'Fill the form from a feed.' },
-  'credit-names': { choices: creditChoices, empty: 'musicindex has no values of this feed.', summary: 'Fill the form from a feed.' },
+  'credit-names': { choices: creditChoices, empty: 'Music Index has no values of this feed.', summary: 'Fill the form from a feed.' },
   'support-links': { choices: fundingChoices, empty: 'This feed has no website.', summary: 'Fill the address from the website of a feed.' },
 };
 
@@ -402,7 +402,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
-      musicindex=${{ title: 'Find on musicindex', summary: find.summary, onOpen: () => setFinding(true) }}
+      musicindex=${{ title: 'Find on Music Index', summary: find.summary, onOpen: () => setFinding(true) }}
       lists=${[{ title: 'Payees with no person', rows: payees }]} />
     <${FindOneSheet} open=${finding} start=${values.name} choices=${find.choices} credits=${kind === 'credit-names'} empty=${find.empty}
       onPick=${(found) => setValues((current) => ({ ...current, ...(kind === 'wallets' ? walletValues(found) : found) }))} onClose=${() => setFinding(false)} />
@@ -519,7 +519,7 @@ function usePerson(id) {
   return { data, error, run, reload: () => read().catch(() => {}) };
 }
 
-// The sheet "Find on musicindex: {name}" (ADR 0117 items 2 to 4). It is open
+// The sheet "Find on Music Index: {name}" (ADR 0117 items 2 to 4). It is open
 // while `query` is not null. Its search runs when it opens, and 300 ms after
 // each change of the text.
 function FindSheet({ open, personId, name, query, onQuery, onClose, onPick }) {
@@ -562,7 +562,7 @@ export function useLookup(query, path) {
 
 function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
   const { rows, note, searched, error } = useLookup(query, `/people/${personId}/musicindex`);
-  return html`<header><h2 id="find-title">${`Find on musicindex: ${name}`}</h2></header>
+  return html`<header><h2 id="find-title">${`Find on Music Index: ${name}`}</h2></header>
     <div class="body">
       <div class="group rows"><${Field} id="find-query" label="Name" type="search" value=${query}
         onInput=${(e) => onQuery(e.target.value)} /></div>
@@ -592,7 +592,7 @@ export function LookupRow({ row, onClick }) {
     <span class="go">›</span></button>`;
 }
 
-// The sheet "From musicindex: {title}" (ADR 0117 items 8 to 14). It is open
+// The sheet "From Music Index: {title}" (ADR 0117 items 8 to 14). It is open
 // while `row` is not null.
 function ValuesSheet({ personId, row, shown, onBack, onClose, onFill }) {
   const ref = useSheet(row !== null);
@@ -619,7 +619,7 @@ function ValuesForm({ personId, row, shown, onBack, onFill }) {
   const toggle = (id) => setChecked((current) => (current.includes(id) ? current.filter((c) => c !== id) : [...current, id]));
   const kind = lookupKind(row);
   const title = row.title || 'Untitled feed';
-  return html`<header><h2 id="values-title">${`From musicindex: ${title}`}</h2></header>
+  return html`<header><h2 id="values-title">${`From Music Index: ${title}`}</h2></header>
     <div class="body">
       <div class="group"><div class="link-row static"><${PersonArt} person=${{ img: row.image_url, name: title }} />
         <span class="text"><span class="label">${title}</span>
@@ -811,7 +811,7 @@ export function PersonPage({ id, feeds, go }) {
         ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span> · ${keyEvidenceText(k.evidence)}</span>
           <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
       </div></header>
-      <div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>Find on musicindex</button></div><//>`,
+      <div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>Find on Music Index</button></div><//>`,
     check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count}
       onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
     more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>

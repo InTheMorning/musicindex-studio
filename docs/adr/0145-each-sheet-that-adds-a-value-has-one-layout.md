@@ -17,19 +17,19 @@ The API of musicindex has few values for these sheets. `../musicindex/api.json` 
 
 ## Decision
 
-1. "Add a Recipient", "Add a Wallet", "Add a Credit" and "Add a Support Link" have one layout: the form, then a row under the heading "From musicindex", then the lists of values. `PickerLayout` of `crates/api/ui/pickers.js` gives it.
+1. "Add a Recipient", "Add a Wallet", "Add a Credit" and "Add a Support Link" have one layout: the form, then a row under the heading "From Music Index", then the lists of values. `PickerLayout` of `crates/api/ui/pickers.js` gives it.
 2. A list folds, and it shows its count. A list with 6 rows or more starts closed.
-3. "Find on musicindex" and "Copy from a Feed" use one search: the artist and label feeds first, then the other feeds. `SearchResults` of `crates/api/ui/pickers.js` shows them. In "Find on musicindex", one selection fills the form, and the user then adds the values of the form. Two routes with no person give the search and the values of a feed: `GET /musicindex/search` and `GET /musicindex/values/{guid}`.
+3. "Find on Music Index" and "Copy from a Feed" use one search: the artist and label feeds first, then the other feeds. `SearchResults` of `crates/api/ui/pickers.js` shows them. In "Find on Music Index", one selection fills the form, and the user then adds the values of the form. Two routes with no person give the search and the values of a feed: `GET /musicindex/search` and `GET /musicindex/values/{guid}`.
 4. A feed with many payment addresses asks for one address. A feed with no value for the sheet gives a text, and the form does not change.
 5. In "Add a Credit", an artist or label feed fills the name, the picture address, the information address and the Nostr key. Each other feed fills only the name of its artist and its picture, because its title is not the name of a person. In "Add a Support Link", a feed fills the address from its website.
-6. In "Add a Recipient", the row is "Copy from a Feed", which selects many recipients and adds many rows. In "Change the Address", it is "Find on musicindex".
+6. In "Add a Recipient", the row is "Copy from a Feed", which selects many recipients and adds many rows. In "Change the Address", it is "Find on Music Index".
 7. A selection of a row of a list fills the form. It adds nothing and does not close the sheet. At 760 px or less, the sheet scrolls to the form.
 8. The credits and the support links have one row each: "Add a credit" and "Add a support link". An open credit has no "Fill from a Person".
 
 ### The Other Sheets
 
 14. On the page of a person, "Add a Credit Name" and "Add a Support Link" have this layout too.
-15. The sheet "Find a Nostr profile" keeps its own search, and it has the row "Find on musicindex" under the same heading. A selection uses the Nostr key of the feed, and a feed with no key gives a text. Its list "Your people" folds.
+15. The sheet "Find a Nostr profile" keeps its own search, and it has the row "Find on Music Index" under the same heading. A selection uses the Nostr key of the feed, and a feed with no key gives a text. Its list "Your people" folds.
 
 ### The Sheet "Copy From A Feed"
 
@@ -45,14 +45,14 @@ The API of musicindex has few values for these sheets. `../musicindex/api.json` 
 - Check boxes in "Add a Wallet", which add many wallets. Not chosen by the operator: no form shows the values before the add.
 - No row in "Add a Support Link", because musicindex has no support link. Not chosen: the planning model recommended the row so that the sheets stay the same, and the operator agreed.
 
-- A search of only artist and label feeds in "Find on musicindex". Built first, then not chosen by the operator: a wallet is often only on an album, and the sheets gave different results for one text.
+- A search of only artist and label feeds in "Find on Music Index". Built first, then not chosen by the operator: a wallet is often only on an album, and the sheets gave different results for one text.
 
 ## Consequences
 
 - A new credit or support link starts from a sheet and not from an empty open row.
 - A selection replaces each value that it gives, also a typed value. The user sees the result in the form before the add.
 - One search sends more requests to musicindex, because it searches two kinds of feed.
-- The sheet "Find on musicindex" on the page of a person (ADR 0117) keeps its own search of artist and label feeds, because it fills the fields of one person from that person's feed.
+- The sheet "Find on Music Index" on the page of a person (ADR 0117) keeps its own search of artist and label feeds, because it fills the fields of one person from that person's feed.
 - "Add to People" appears only in the sheet of a recipient, because the other sheets do not hold a payee.
 
 ## How This Decision Is Checked

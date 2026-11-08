@@ -7,7 +7,7 @@
 export const OUTSIDE_LIMIT = 4;
 
 export const OUTSIDE_SETTING_LABEL = 'Check for outside changes';
-export const OUTSIDE_SETTING_HINT = 'When a page opens, Studio reads the public address of the feed, and a feed page also asks musicindex. The file hosts and musicindex can see these requests. Studio writes nothing because of this check.';
+export const OUTSIDE_SETTING_HINT = 'When a page opens, Studio reads the public address of the feed, and a feed page also asks Music Index. The file hosts and Music Index can see these requests. Studio writes nothing because of this check.';
 
 // The mark on a tile or a row of Releases, or null (ADR 0150 items 2, 3 and 5).
 // A different address at musicindex has no mark on the tile.
@@ -50,7 +50,7 @@ export function outsideNotice(check) {
 export function indexNotice(check) {
   if (!check || !check.index_url) return null;
   return {
-    strong: 'musicindex reads this feed from a different address.',
+    strong: 'Music Index reads this feed from a different address.',
     index: check.index_url,
     own: check.own_url,
     after: 'A different collection or a different tool can hold this feed.',

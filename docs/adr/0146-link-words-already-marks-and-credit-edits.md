@@ -22,7 +22,7 @@ The section "Artists and labels" did not tell what it does. A row that a list ha
 ### A Value That Is Already There
 
 3. A row that is already there shows the same content as each other row. It is gray, and it has a tag in the accent tint with a check mark and its state, for example "Already in this list". It cannot be selected.
-4. This applies to the rows of each sheet of ADR 0145, to the fill of "Find on musicindex" of a person, and to the check of a suggestion.
+4. This applies to the rows of each sheet of ADR 0145, to the fill of "Find on Music Index" of a person, and to the check of a suggestion.
 5. A result of "Find a Nostr profile" that is in the feeds of the user is also gray, with the tag "In your feeds". It can be selected, because a selection is the only way to use a key that no person holds. When a person holds the key, the row takes a missing name or picture from that person.
 
 ### Edit

@@ -14,7 +14,7 @@ export function addChoices({ hasHost }) {
     { id: 'playlist', title: 'Playlist', text: 'Tracks from other feeds' },
   ];
   const have = [
-    { id: 'find', title: 'By address or name', text: 'Search musicindex, or give a feed address' },
+    { id: 'find', title: 'By address or name', text: 'Search Music Index, or give a feed address' },
     { id: 'folder', title: 'From a file host folder', text: 'A feed file on a connected file host' },
     { id: 'msp', title: 'From MSP 2.0 backups', text: 'The .json files that MSP 2.0 saved' },
   ];

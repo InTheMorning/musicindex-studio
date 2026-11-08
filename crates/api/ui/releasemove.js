@@ -83,7 +83,7 @@ export function waitingView(move, connectors) {
     summary: `Waiting. ${files} ${move.records.length === 1 ? 'stays' : 'stay'} on ${from} until the checks pass.`,
     rows: [
       { label: 'New files', value: `✓ ${allFiles} on ${to}` },
-      { label: 'musicindex', value: INDEX_TEXT[move.index] },
+      { label: 'Music Index', value: INDEX_TEXT[move.index] },
       { label: 'Waiting time', value: `${move.days_passed} of ${move.wait_days} days` },
     ],
   };

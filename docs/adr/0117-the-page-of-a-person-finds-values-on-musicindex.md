@@ -29,7 +29,7 @@
 
 ### The Search
 
-1. The head of the page of a person has "Find on musicindex" (action), below the name and the role line.
+1. The head of the page of a person has "Find on Music Index" (action), below the name and the role line.
 2. The button opens the sheet "Find on musicindex: {name}". The search field starts with the name of the person. The core sends the search when the sheet opens and when the user changes the text. It sends no request when the page opens.
 3. The core searches `/v1/search?type=publisher&include=link_facts` of the musicindex API of the shell (`--musicindex`). The request sends only the search text.
 4. The core puts each row in one of three levels. The sheet shows the levels in this sequence, each with its heading and its note. A level with no row does not show. In a level, the rows keep the sequence of the search.
@@ -102,4 +102,4 @@ Mechanical:
 
 Visual: screens 2 to 5 of the mockups, at 1100 px and at 390 px with touch, in the two themes. `$edges()`, `$overflow()` and `$fieldText()` are empty.
 
-Human: the operator opens a collaborator, selects "Find on musicindex", selects the artist feed, fills the picture and the website, and selects Save.
+Human: the operator opens a collaborator, selects "Find on Music Index", selects the artist feed, fills the picture and the website, and selects Save.

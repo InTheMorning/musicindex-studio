@@ -99,7 +99,7 @@ You can also use these options.
 | Option | What it does |
 | --- | --- |
 | `--port N` | Sets the port. The default is 42069. When a different program uses it, Studio uses a free port. |
-| `--musicindex URL` | Uses a different musicindex address. The default is `https://api.musicindex.org`. |
+| `--musicindex URL` | Uses a different Music Index address. The default is `https://api.musicindex.org`. |
 | `--podcastindex-hub URL` | Sets the hub that gets the announcements after a write. |
 | `--version` | Prints the version of Studio and stops. |
 | `--help` | Prints the options and stops. |

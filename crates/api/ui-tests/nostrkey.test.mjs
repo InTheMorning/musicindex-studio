@@ -60,8 +60,8 @@ test('withFeedKey sets, adds and removes the entry', () => {
 
 test('sourceText names each source', () => {
   assert.equal(sourceText({ kind: 'collection' }), 'In your feeds');
-  assert.equal(sourceText({ kind: 'music_index', feeds: 1 }), 'In 1 musicindex feed');
-  assert.equal(sourceText({ kind: 'music_index', feeds: 3 }), 'In 3 musicindex feeds');
+  assert.equal(sourceText({ kind: 'music_index', feeds: 1 }), 'In 1 Music Index feed');
+  assert.equal(sourceText({ kind: 'music_index', feeds: 3 }), 'In 3 Music Index feeds');
   assert.equal(sourceText({ kind: 'relay' }), 'Nostr search');
 });
 

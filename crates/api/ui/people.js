@@ -1777,8 +1777,8 @@ export const lookupAddress = (path, text, plain) => `${path}?q=${encodeURICompon
 // The text of the search sheet (ADR 0117 item 2).
 export const FIND_HINT = 'Studio searches the artist and label feeds on musicindex.org. Select the feed of this person.';
 export const FIND_ONE_HINT = 'Studio searches the feeds on musicindex.org.';
-export const FIND_ONE_EMPTY = 'No feed on musicindex has this name.';
-export const FIND_EMPTY = 'No artist or label feed on musicindex has this name.';
+export const FIND_ONE_EMPTY = 'No feed on Music Index has this name.';
+export const FIND_EMPTY = 'No artist or label feed on Music Index has this name.';
 // FIND_EMPTY shows only when a request ran and gave no rows (ADR 0151 item 9).
 export const showFindEmpty = ({ rows, error, searched }) => searched === true && rows !== null && rows.length === 0 && !error;
 export const FIND_WAIT = 'Searching…';
@@ -1931,7 +1931,7 @@ export function fillSource(row) {
   const kind = row.kind || {};
   const word = kind.type === 'role' ? ((kind.roles || [])[0] || '').toLowerCase() : (kind.type === 'inferred_artist' ? 'artist' : '');
   const title = row.title || 'Untitled feed';
-  return word ? `From musicindex: the ${word} feed ${title}` : `From musicindex: the feed ${title}`;
+  return word ? `From Music Index: the ${word} feed ${title}` : `From Music Index: the feed ${title}`;
 }
 
 // The link of a feed on musicindex.org (ADR 0117 item 8).

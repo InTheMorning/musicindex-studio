@@ -21,7 +21,7 @@ const VERB_PAIRS = {
 // A name keeps its form. Each entry is the exact form of a word.
 export const NAMES = [
   'nsite', 'MSP', '2.0', 'Amber', 'R2', 'S3', 'SFTP', 'npub', 'nsec', 'Blossom', 'Nostr',
-  'musicindex', 'OP3', 'Studio', 'MP3', 'FLAC', 'RSS', 'URL', 'ID', 'NIP-46',
+  'OP3', 'Studio', 'MP3', 'FLAC', 'RSS', 'URL', 'ID', 'NIP-46',
 ];
 
 const NAME_FORMS = new Map(NAMES.map((name) => [name.toLowerCase(), name]));

@@ -53,7 +53,7 @@ export function withFeedKey(model, npub) {
 export function sourceText(source) {
   if (source.kind === 'collection') return 'In your feeds';
   if (source.kind === 'music_index') {
-    return source.feeds === 1 ? 'In 1 musicindex feed' : `In ${source.feeds} musicindex feeds`;
+    return source.feeds === 1 ? 'In 1 Music Index feed' : `In ${source.feeds} Music Index feeds`;
   }
   return 'Nostr search';
 }

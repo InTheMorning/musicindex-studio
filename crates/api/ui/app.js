@@ -463,7 +463,7 @@ function title(error) {
     case 'invalid_feed': return 'That file is not a feed that Studio can read.';
     case 'offline': return 'No connection to Studio.';
     case 'query_field': return 'Studio cannot read this search.';
-    case 'index_answer': return 'musicindex gave a bad answer.';
+    case 'index_answer': return 'Music Index gave a bad answer.';
     default: return 'Something went wrong.';
   }
 }
@@ -1587,14 +1587,14 @@ function FindFeeds({ onFound }) {
     </div>
     <form class="form" onSubmit=${runSearch} role="search">
       <div class="field">
-        <label for="search">Or search musicindex by name</label>
+        <label for="search">Or search Music Index by name</label>
         <div class="inline"><input id="search" type="search" value=${query} onInput=${(e) => setQuery(e.target.value)}
           placeholder="Artist or feed name" />
           <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
       </div>
       <${ErrorNotice} error=${search.error} />
       ${note && html`<p class="hint" role="status">${note.message}</p>`}
-      ${hits && hits.length === 0 && !note && html`<p class="empty">musicindex found no feed with that name.</p>`}
+      ${hits && hits.length === 0 && !note && html`<p class="empty">Music Index found no feed with that name.</p>`}
       ${hits && hits.length > 0 && html`<fieldset class="choices"><legend>Select your feeds</legend>
         ${hits.map((h) => html`<label class="choice">
           <input type="checkbox" checked=${guids.includes(h.feed_guid)} onChange=${() => toggle(h.feed_guid)} />
@@ -2231,7 +2231,7 @@ function NostrPanel() {
     <h2>Nostr</h2>
     <form class="form" onSubmit=${submit}>
       <${Field} id="nostr-relay" label="Nostr search relay" type="text" placeholder="wss://search.nos.today"
-        hint="Studio sends the text of a name search to this relay. Leave the field empty to search only your feeds and musicindex."
+        hint="Studio sends the text of a name search to this relay. Leave the field empty to search only your feeds and Music Index."
         value=${relay} onInput=${(e) => setRelay(e.target.value)} />
       <${ErrorNotice} error=${error} />
       <div class="actions"><button class="button primary" type="submit" disabled=${busy || relay.trim() === saved}>

@@ -34,7 +34,7 @@ A playlist has these tabs:
 1. Open **Tracks**.
 2. Select **Add a Track**. The sheet "Add tracks" opens.
 3. Select where the tracks come from:
-   - **Search musicindex**. Type a name, select **Search**, then open a feed to see its tracks.
+   - **Search Music Index**. Type a name, select **Search**, then open a feed to see its tracks.
    - **My Releases**. Studio lists the tracks in your collection, grouped by feed.
 4. Select **Add** on the line of a track. A track that is in the playlist shows "In the playlist".
 5. Select **Done**.

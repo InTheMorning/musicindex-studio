@@ -19,7 +19,7 @@ When a page opens, a row with a key asks the Nostr relays for the profile of tha
 3. To find a different key, type an `npub` key, a NIP-05 address or a name in the field. Then select **Search**.
 4. Select a result. Studio sets the key and closes the sheet.
 
-To use the key of a feed, select **Find on musicindex**, then select the feed. Few feeds have a key. If the feed has none, the sheet tells you.
+To use the key of a feed, select **Find on Music Index**, then select the feed. Few feeds have a key. If the feed has none, the sheet tells you.
 
 On the page of a person, the sheet does not show **Your people**.
 
@@ -34,7 +34,7 @@ Each result shows these facts:
 
 - The picture, the name and the NIP-05 address. A check mark after the address means that the domain of the address confirms the key.
 - The first and the last characters of the key.
-- The sources. **In your feeds** means that a feed of yours has the key. **In 3 musicindex feeds** means that three feeds in musicindex have the key. **Nostr search** means that the search relay gave the result.
+- The sources. **In your feeds** means that a feed of yours has the key. **In 3 Music Index feeds** means that three feeds in Music Index have the key. **Nostr search** means that the search relay gave the result.
 - **Confirmed at** and a domain. The domain of the NIP-05 address is also the domain of the website of the feed.
 
 If a source does not answer, the sheet shows a hint. The results of the other sources stay.
@@ -51,4 +51,4 @@ If a key is not correct, the row shows "Not a Nostr key". Select the row and ent
 
 Studio sends the text of a name search to a Nostr search relay.
 To change the relay, go to **Settings** and open **Nostr**. Change the field **Nostr search relay**.
-If the field is empty, Studio searches only your feeds and musicindex.
+If the field is empty, Studio searches only your feeds and Music Index.

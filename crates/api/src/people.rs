@@ -671,7 +671,7 @@ pub(crate) async fn index_values(
             ApiError::new(
                 StatusCode::NOT_FOUND,
                 "not_in_index",
-                format!("musicindex has no feed {guid}"),
+                format!("Music Index has no feed {guid}"),
             )
         })?;
         let mut body = json!(values);
@@ -704,7 +704,7 @@ pub(crate) async fn musicindex_values(
             ApiError::new(
                 StatusCode::NOT_FOUND,
                 "not_in_index",
-                format!("musicindex has no feed {guid}"),
+                format!("Music Index has no feed {guid}"),
             )
         })
     })

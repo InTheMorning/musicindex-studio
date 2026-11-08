@@ -44,8 +44,8 @@ A control with a change has a mark at its start edge.
 - **Add a Nostr Key** opens the sheet **Find a Nostr profile**. Type a name, an `npub` key or a NIP-05 address in the field. Then select **Search**, and select a result to add the key.
 - The row **Nostr key** of **Add a Credit Name** opens the same sheet.
 - **Edit** on a credit name or a support link opens the same sheet with the saved values. **Save** changes no feed.
-- **Add a Wallet**, **Add a Credit Name**, **Add a Support Link** and **Find a Nostr profile** each have **Find on musicindex**. Select a feed, and Studio fills the form with its values. You then add the values.
-- Each search of musicindex reads fields, such as `artist:ann` or `kind:single`. A field that is not correct shows a message. A field that only v4vmm can apply, such as `is:ready`, shows a note and no rows. A sheet that opens with a name searches that name as plain words until you edit the field. **Find on musicindex** on the page of a person searches only artist and label feeds, so a field such as `kind:` shows a note there.
+- **Add a Wallet**, **Add a Credit Name**, **Add a Support Link** and **Find a Nostr profile** each have **Find on Music Index**. Select a feed, and Studio fills the form with its values. You then add the values.
+- Each search of Music Index reads fields, such as `artist:ann` or `kind:single`. A field that is not correct shows a message. A field that only v4vmm can apply, such as `is:ready`, shows a note and no rows. A sheet that opens with a name searches that name as plain words until you edit the field. **Find on Music Index** on the page of a person searches only artist and label feeds, so a field such as `kind:` shows a note there.
 - **Linked artist and label pages** lists each artist or label page that this person links to. Each link stays in Studio. Use the menu **Link to an artist or label page** to add a link, and **Remove** to remove one. **Save** keeps the changes.
   - After **Save**, one sheet opens for each new link. It asks to add this person to the credits of that feed, with a role for that feed. Select **Review in 1 Feed** to make a change set. Studio writes the feed only after you review it.
   - Select **Not Now** to keep the link in Studio only. No feed changes.
@@ -54,9 +54,9 @@ A control with a change has a mark at its start edge.
 - **Merge with a Person** moves the items of a different person to this person.
 - **Delete Person** deletes the person. No feed changes.
 
-## Find on musicindex
+## Find on Music Index
 
-Select **Find on musicindex** on the page of a person. Studio searches the artist and label feeds on musicindex.org for the name that you type. The search changes no feed. It adds nothing to your collection.
+Select **Find on Music Index** on the page of a person. Studio searches the artist and label feeds on musicindex.org for the name that you type. The search changes no feed. It adds nothing to your collection.
 
 The feeds are in three levels:
 

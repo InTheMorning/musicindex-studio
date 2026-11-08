@@ -65,7 +65,7 @@ The operator selected each decision of this ADR from a questionnaire on 2026-10-
 18. Each person entry gets the row "Nostr". Its summary is the profile name and a short key, for example "Matt Finlay · npub1g2n…ck". With no key, the summary is "Not set".
 19. The first section of the album page, the publisher page and the playlist page gets the row "Nostr profile". The row is after the field of the artist or the author.
 20. Each of the two rows opens the sheet "Find a Nostr profile". The sheet has one field, "npub, NIP-05 address or name", and the button "Search".
-21. Each result is one row. The row shows the picture, the display name, the NIP-05 address with its check result, a short key and its sources: "In your feeds", "In 3 musicindex feeds" or "Nostr search".
+21. Each result is one row. The row shows the picture, the display name, the NIP-05 address with its check result, a short key and its sources: "In your feeds", "In 3 Music Index feeds" or "Nostr search".
 22. A result with `domain_match` shows "Confirmed at" and the domain.
 23. The user selects a result. Studio sets the key. In a person entry with no name or no picture, two check boxes offer the profile name and the profile picture as start values.
 24. When the session has a Nostr key, the sheet shows the button "Use my key".

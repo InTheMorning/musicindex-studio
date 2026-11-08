@@ -10,7 +10,7 @@
 ## Context
 
 - On 2026-11-03 the operator could not find a Nostr key by name on the page of a person. The editor has the sheet "Find a Nostr profile" (ADR 0074), with a search by name and the profile of each result. The page of a person had a plain text field for the same key, in "Add a Nostr Key" and in "Add a Credit Name".
-- The text of "Find on musicindex" (ADR 0117 item 9) tells the user to use "Add a Nostr Key" to search the Nostr profiles. That sheet had no search.
+- The text of "Find on Music Index" (ADR 0117 item 9) tells the user to use "Add a Nostr Key" to search the Nostr profiles. That sheet had no search.
 - Two inputs for one type of value give two behaviors. A fix or a feature in one does not go to the other.
 
 ## Decision

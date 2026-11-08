@@ -6426,7 +6426,7 @@ fn index_not_found(entity: &str, guid: &str) -> ApiError {
     ApiError::new(
         StatusCode::NOT_FOUND,
         "not_found",
-        format!("musicindex has no {entity} {guid}"),
+        format!("Music Index has no {entity} {guid}"),
     )
 }
 
@@ -6500,7 +6500,7 @@ pub(crate) async fn index_feed_tracks(
             return Err(ApiError::new(
                 StatusCode::NOT_FOUND,
                 "not_in_index",
-                format!("musicindex has no feed {guid}"),
+                format!("Music Index has no feed {guid}"),
             ));
         };
         let feed_url = w.index.feed_url(&guid)?;

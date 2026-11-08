@@ -18,9 +18,9 @@ Studio has these search fields that send a request to musicindex on 2026-11-07:
 |---|---|---|---|
 | The search of each sheet that adds a value | `FindOneForm` of `crates/api/ui/pickers.js` | `/musicindex/search` | A form value in four sheets |
 | The search of the recipient picker | `PickerSheet` of `crates/api/ui/values.js` | `/musicindex/search` | None |
-| "Or search musicindex by name" of the first run | `FindFeeds` of `crates/api/ui/app.js` | `/search` | None |
-| "Search musicindex" of the playlist sheet | `crates/api/ui/editor.js` | `/search` | None |
-| "Find on musicindex" of the page of a person | `FindForm` of `crates/api/ui/peoplepages.js` | `/people/{id}/musicindex` | The stored name |
+| "Or search Music Index by name" of the first run | `FindFeeds` of `crates/api/ui/app.js` | `/search` | None |
+| "Search Music Index" of the playlist sheet | `crates/api/ui/editor.js` | `/search` | None |
+| "Find on Music Index" of the page of a person | `FindForm` of `crates/api/ui/peoplepages.js` | `/people/{id}/musicindex` | The stored name |
 
 A person types the text in each field. Two of them can also start with a stored name or a form value, and that text can look like a field. musicindex ADR 0049 gives `in:flux` as an error.
 

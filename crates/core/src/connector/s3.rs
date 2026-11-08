@@ -740,7 +740,7 @@ fn agent(policy: &NetPolicy) -> ureq::Agent {
         .timeout_recv_response(Some(Duration::from_secs(120)))
         .http_status_as_error(false)
         .max_redirects(0)
-        .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
+        .user_agent(net::USER_AGENT)
         .build();
     net::agent(config, policy)
 }

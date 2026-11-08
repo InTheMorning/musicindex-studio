@@ -15,6 +15,11 @@ use std::time::{Duration, Instant};
 use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
 use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
 
+/// The `User-Agent` of each HTTP request and each WebSocket handshake.
+///
+/// Some hosts refuse a request that has no `User-Agent`.
+pub const USER_AGENT: &str = concat!("musicindex-studio/", env!("CARGO_PKG_VERSION"));
+
 /// The addresses that [`NetPolicy::Public`] permits in addition to each
 /// global address.
 ///

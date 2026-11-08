@@ -12,6 +12,9 @@ use std::time::{Duration, Instant};
 
 use nostr::prelude::{Event, EventId, Filter, Kind, MatchEventOptions, PublicKey};
 use serde_json::{Value, json};
+use tungstenite::client::IntoClientRequest;
+use tungstenite::http::HeaderValue;
+use tungstenite::http::header::USER_AGENT;
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Error as WsError, Message, WebSocket};
 
@@ -140,8 +143,12 @@ fn connect(url: &str, timeout: Duration, policy: &NetPolicy) -> Result<Connectio
         .try_clone()
         .map_err(|_| unavailable("Studio cannot use the connection to the relay"))?;
     set_timeouts(&control, deadline)?;
-    let (socket, _) = tungstenite::client_tls(url, stream)
-        .map_err(|_| unavailable("the WebSocket handshake with the relay failed"))?;
+    let failed = || unavailable("the WebSocket handshake with the relay failed");
+    let mut request = url.into_client_request().map_err(|_| failed())?;
+    request
+        .headers_mut()
+        .insert(USER_AGENT, HeaderValue::from_static(net::USER_AGENT));
+    let (socket, _) = tungstenite::client_tls(request, stream).map_err(|_| failed())?;
     Ok(Connection {
         socket,
         control,
@@ -755,6 +762,40 @@ mod tests {
         relay.insert(event(&b, 100, "site", "other"));
         let events = fetch(&relay.url(), &filter(&a), SHORT, &NetPolicy::Open).expect("events");
         assert_eq!(events, vec![mine]);
+    }
+
+    #[test]
+    #[expect(
+        clippy::result_large_err,
+        reason = "tungstenite fixes the error type of the handshake callback"
+    )]
+    fn the_handshake_sends_the_user_agent_of_studio() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
+        let port = listener.local_addr().expect("an address").port();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("a client");
+            let mut agent = None;
+            let mut socket = tungstenite::accept_hdr(
+                stream,
+                |request: &tungstenite::handshake::server::Request, response| {
+                    agent = request
+                        .headers()
+                        .get(USER_AGENT)
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_owned);
+                    Ok(response)
+                },
+            )
+            .expect("a handshake");
+            while socket.read().is_ok() {}
+            agent
+        });
+        let connection = connect(&format!("ws://127.0.0.1:{port}"), SHORT, &NetPolicy::Open)
+            .expect("a connection");
+        drop(connection);
+        let agent = server.join().expect("the server thread");
+        assert_eq!(agent.as_deref(), Some(net::USER_AGENT));
+        assert!(net::USER_AGENT.starts_with("musicindex-studio/"));
     }
 
     #[test]

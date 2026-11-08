@@ -128,7 +128,7 @@ impl Web {
             .timeout_global(Some(Duration::from_secs(20)))
             .http_status_as_error(false)
             .max_redirects(5)
-            .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
+            .user_agent(net::USER_AGENT)
             .build();
         let transfer = ureq::Agent::config_builder()
             .proxy(net::proxy(policy))
@@ -136,7 +136,7 @@ impl Web {
             .timeout_recv_response(Some(Duration::from_secs(20)))
             .http_status_as_error(false)
             .max_redirects(5)
-            .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
+            .user_agent(net::USER_AGENT)
             .build();
         let probe = ureq::Agent::config_builder()
             .proxy(net::proxy(policy))
@@ -144,7 +144,7 @@ impl Web {
             .http_status_as_error(false)
             .max_redirects(0)
             .max_redirects_will_error(false)
-            .user_agent(concat!("musicindex-studio/", env!("CARGO_PKG_VERSION")))
+            .user_agent(net::USER_AGENT)
             .build();
         Self {
             agent: net::agent(config, policy),

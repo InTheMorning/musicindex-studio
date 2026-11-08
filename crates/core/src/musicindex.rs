@@ -277,11 +277,11 @@ fn skip_note(skip: &IndexSkip) -> Option<SearchNote> {
         IndexSkip::NoIndexPart => return None,
         IndexSkip::LibraryOnly => (
             "library_only",
-            "This search uses a Library field. Studio searches only musicindex, so this search shows no rows.".to_owned(),
+            "This search uses a Library field. Studio searches only Music Index, so this search shows no rows.".to_owned(),
         ),
         IndexSkip::Conflict => (
             "conflict",
-            "This search asks for the Library only and for musicindex only. Remove one of the fields.".to_owned(),
+            "This search asks for the Library only and for Music Index only. Remove one of the fields.".to_owned(),
         ),
         IndexSkip::ExclusionsOnly => (
             "exclusions_only",

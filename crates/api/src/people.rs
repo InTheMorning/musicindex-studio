@@ -31,7 +31,9 @@ use crate::routes::{
     now_seconds,
 };
 use crate::workspace::Workspace;
-use studio_core::musicindex::{IndexEntity, field_list, plan_publisher_search, plan_search};
+use studio_core::musicindex::{
+    IndexEntity, field_list, name_insert, plan_publisher_search, plan_search,
+};
 
 /// The core refuses a value of a person with `Invalid`. This route family
 /// names that refusal `invalid_person`. The other errors keep the mapping
@@ -695,14 +697,20 @@ pub(crate) struct ArtistNamesQuery {
 }
 
 /// The artist names that start with a typed text, for the name rows of the
-/// field list. The request runs with no lock of the workspace.
+/// field list, as `{ "names": [{ "name", "insert" }] }`. The request runs with
+/// no lock of the workspace.
 pub(crate) async fn artist_names(
     State(shared): State<Shared>,
     Query(query): Query<ArtistNamesQuery>,
 ) -> ApiResult {
     let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
     blocking_unlocked(move || {
-        let names = index.artist_names(&query.from)?;
+        // Each name gives the text that puts it into the field.
+        let names: Vec<Value> = index
+            .artist_names(&query.from)?
+            .into_iter()
+            .map(|name| json!({ "insert": name_insert(&name), "name": name }))
+            .collect();
         Ok(Json(json!({ "names": names })))
     })
     .await

@@ -1495,6 +1495,26 @@ button.outline-feed {
    window and stays in the margins of the page (ADR 0072 item 2). */
 .releases-tools { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; flex-wrap: wrap; min-width: 0; }
 .releases-tools .view-button[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent); }
+/* The field list of a search field (ADR 0154). It is in the flow under the
+   field, so a sheet does not cut it. A selected row changes the fill only. */
+.field-list { display: grid; gap: 4px; }
+.field-list ul { list-style: none; max-height: 280px; overflow-y: auto; }
+.field-list li {
+  display: grid;
+  gap: 2px;
+  min-height: var(--target);
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  align-content: center;
+}
+.field-list li + li { border-top: 1px solid var(--sep); }
+.field-list li[aria-selected="true"], .field-list li:hover { background: var(--fill-soft); }
+.field-list .label { font-weight: 600; }
+.field-list .summary { color: var(--muted); font-size: var(--text-callout); }
+/* The error of the field under the cursor is one row of the list (R-QUERY-7
+   item 2). The search gives its own error, so this row is not red. */
+.field-list-note { padding: 6px 10px; color: var(--muted); font-size: var(--text-callout); }
 /* The sort control of the People list is at the right end of its row
    (musicindex ADR 0053 R-LIST-11). */
 .people-order { margin-left: auto; }

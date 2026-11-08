@@ -313,6 +313,13 @@ pub struct FieldList {
     pub error: Option<String>,
 }
 
+/// The text that puts `name` into the value of a name field: the name, with
+/// quotes when it needs them. The crate gives the quotes (musicindex ADR 0049).
+#[must_use]
+pub fn name_insert(name: &str) -> String {
+    quote_field_value(name)
+}
+
 /// The byte offset of the UTF-16 offset `units` in `text`. An offset after
 /// the end gives the end. An offset inside a surrogate pair gives the start of
 /// that character.
@@ -1337,6 +1344,12 @@ mod tests {
                 FieldRow::Field { .. } => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn a_name_with_a_space_gets_quotes() {
+        assert_eq!(name_insert("Bjork"), "Bjork");
+        assert_eq!(name_insert("The Ben"), "\"The Ben\"");
     }
 
     #[test]

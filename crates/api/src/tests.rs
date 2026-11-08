@@ -14847,7 +14847,13 @@ async fn the_artist_names_route_gives_the_names_that_start_with_the_text() {
     let app = app_with_index(&url);
     let (status, body) = call(&app, "GET", "/api/v1/musicindex/artist-names?from=BJ", None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body, json!({ "names": ["Bjork", "Bjorn"] }));
+    assert_eq!(
+        body,
+        json!({ "names": [
+            { "name": "Bjork", "insert": "Bjork" },
+            { "name": "Bjorn", "insert": "Bjorn" },
+        ] })
+    );
     assert!(seen.lock().unwrap()[0].contains("/v1/artist-names?from=BJ&limit=20"));
     let before = seen.lock().unwrap().len();
     let (_, body) = call(&app, "GET", "/api/v1/musicindex/artist-names?from=", None).await;

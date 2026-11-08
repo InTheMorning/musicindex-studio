@@ -1,11 +1,119 @@
 // The one layout of the sheets that add a value (ADR 0145): the form, the row
 // of musicindex under its heading, then the lists that fill the form.
 
-import { html, useState, useRef } from './vendor/htm-preact-standalone.module.js';
+import { html, useState, useRef, useEffect } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
 import { api, ErrorNotice, Field, Icon } from './app.js';
 import { LookupRow, PersonArt, useLookup } from './peoplepages.js';
 import { foldStartsOpen, lookupGroups, FIND_ONE_EMPTY, FIND_WAIT, FIND_ONE_HINT } from './people.js';
+import { listRows, namePrefix, applyRow, listKey, NAME_PAUSE } from './fieldlist.js';
+
+// The field list of a search field (ADR 0154, musicindex ADR 0052 R-QUERY-7).
+// `id` is the ID of the input, `value` its text and `setValue` sets the text.
+// `scope` is 'publisher' for a search of artist and label feeds only. The hook
+// gives `input`, the properties of the input, and `list`, the list to show
+// under it. The list opens on a click or a typed key, not on the focus alone.
+export function useFieldList({ id, value, setValue, scope = null }) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [cursor, setCursor] = useState(null);
+  const [answer, setAnswer] = useState(null);
+  const [names, setNames] = useState([]);
+  const text = String(value ?? '');
+  const at = cursor === null ? text.length : Math.min(cursor, text.length);
+  // An Escape with no list lets a search field clear its text. That clear is
+  // not a typed key, so it does not open the list.
+  const escaped = useRef(false);
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    const scopePart = scope ? `&scope=${scope}` : '';
+    api(`/musicindex/fields?q=${encodeURIComponent(text)}&cursor=${at}${scopePart}`).then(
+      (result) => { if (live) setAnswer(result); },
+      () => { if (live) setAnswer(null); },
+    );
+    return () => { live = false; };
+  }, [open, text, at, scope]);
+  // The names come after the pause of the search (R-QUERY-7 item 2).
+  const prefix = open ? namePrefix(answer) : null;
+  useEffect(() => {
+    setNames([]);
+    if (prefix === null) return undefined;
+    let live = true;
+    const timer = setTimeout(() => api(`/musicindex/artist-names?from=${encodeURIComponent(prefix)}`).then(
+      (result) => { if (live) setNames(result.names || []); },
+      () => {},
+    ), NAME_PAUSE);
+    return () => { live = false; clearTimeout(timer); };
+  }, [prefix]);
+  const rows = open ? listRows(answer, names) : [];
+  const error = open && answer ? answer.error : null;
+  const shows = rows.length > 0 || Boolean(error);
+  const readCursor = (e) => setCursor(e.target.selectionStart);
+  const put = (row) => {
+    const next = applyRow(text, answer && answer.edit, row.insert);
+    if (!next) return;
+    setValue(next.text);
+    setSelected(null);
+    setCursor(next.cursor);
+    requestAnimationFrame(() => {
+      const field = document.getElementById(id);
+      if (field) { field.focus(); field.setSelectionRange(next.cursor, next.cursor); }
+    });
+  };
+  const listId = `${id}-list`;
+  const input = {
+    role: 'combobox',
+    autocomplete: 'off',
+    'aria-autocomplete': 'list',
+    'aria-expanded': shows ? 'true' : 'false',
+    'aria-controls': listId,
+    'aria-activedescendant': shows && selected !== null ? `${listId}-${selected}` : undefined,
+    onInput: (e) => {
+      setValue(e.target.value);
+      if (!escaped.current) setOpen(true);
+      escaped.current = false;
+      setSelected(null);
+      readCursor(e);
+    },
+    onClick: (e) => { setOpen(true); setSelected(null); readCursor(e); },
+    onKeyUp: (e) => {
+      // A move of the cursor clears the selection (ADR 0154 item 8).
+      if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { setSelected(null); readCursor(e); }
+    },
+    onKeyDown: (e) => {
+      // Escape closes a list with rows or with an error row, and nothing else.
+      // With no list, Escape keeps its action: a search field clears its text,
+      // and then the sheet closes.
+      escaped.current = e.key === 'Escape' && !shows;
+      if (e.key === 'Escape') {
+        if (!shows) { setOpen(false); return; }
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+        setSelected(null);
+        return;
+      }
+      const next = listKey({ open: shows && rows.length > 0, selected }, e.key, rows.length);
+      if (next.act === 'pass') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (next.act === 'insert') put(rows[selected]);
+      setSelected(next.selected);
+    },
+    onBlur: () => { setOpen(false); setSelected(null); },
+  };
+  // A row takes no focus, so the field keeps the focus and the cursor.
+  const list = shows && html`<div class="field-list" onMouseDown=${(e) => e.preventDefault()}>
+    ${error && html`<p class="field-list-note">${error}</p>`}
+    ${rows.length > 0 && html`<ul id=${listId} role="listbox" aria-label="Search fields">
+      ${rows.map((row, i) => html`<li id=${`${listId}-${i}`} key=${`${row.label}-${i}`} role="option"
+        aria-selected=${i === selected ? 'true' : 'false'} onClick=${() => put(row)}>
+        <span class="label">${row.label}</span>${row.line && html`<span class="summary">${row.line}</span>`}</li>`)}
+    </ul>`}
+  </div>`;
+  return { input, list };
+}
 
 // The folds that the user opened or closed, by `id`, for this visit. A fold keeps
 // its state after the user opens a page from it and comes back.
@@ -99,6 +207,7 @@ export function FindOneSheet({ open, start, choices, empty, credits = false, onP
 function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
   const [query, setQuery] = useState(start || '');
   const search = useLookup(query, '/musicindex/search');
+  const fields = useFieldList({ id: 'find-one-query', value: query, setValue: setQuery });
   const [options, setOptions] = useState(null);
   const [problem, setProblem] = useState(null);
   const [none, setNone] = useState(false);
@@ -117,7 +226,7 @@ function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
   return html`<header><h2 id="find-one-title">Find on Music Index</h2></header>
     <div class="body">
       ${options === null && html`<div class="group rows"><${Field} id="find-one-query" label="Name" type="search" value=${query}
-        onInput=${(e) => setQuery(e.target.value)} /></div>
+        ...${fields.input}>${fields.list}<//></div>
       <p class="hint">${FIND_ONE_HINT}</p>`}
       <${ErrorNotice} error=${problem} />
       ${none && html`<p class="hint" role="status">${empty}</p>`}

@@ -1,5 +1,6 @@
 //! Payment blocks: `podcast:value` and `podcast:valueTimeSplit`.
 
+use super::CreditPlace;
 use super::elements::{Recipient, RemoteItem};
 use super::sync::{Children, Entry, KeyError, Modeled, Names, adopt_list, read_list};
 use crate::xml::{Element, Ns};
@@ -49,6 +50,20 @@ impl Modeled for ValueBlock {
             draft.map(|d| d.time_splits.as_slice()),
         )
     }
+}
+
+/// The place of a recipient: the place of its value block, and the split of
+/// the recipient in that block (ADR 0156 item 4).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RecipientPlace {
+    /// The place of the value block. Its fields are next to `percent` in
+    /// JSON.
+    #[serde(flatten)]
+    pub place: CreditPlace,
+    /// The split of the recipient in percent. `None` when the share is not
+    /// a number. A place from before ADR 0156 has none.
+    #[serde(default)]
+    pub percent: Option<f64>,
 }
 
 /// `podcast:valueTimeSplit`: different recipients for a period of playback.

@@ -185,6 +185,7 @@ test('the result line leaves out a count of 0 and names one part', () => {
 
 import {
   initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, changeTitle, feedsToWrite,
+  whereEntries, whereSummary, whereLine,
   changeRow, afterDiscard, afterMissing, memberChoices, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
 } from '../ui/people.js';
 
@@ -345,7 +346,8 @@ test('the evidence of a key and the row Check your feeds have their texts', () =
   assert.equal(keyEvidenceText('user'), 'Added by you');
   assert.equal(keyEvidenceText('nostr'), 'Found in a Nostr profile');
   const lines = (n) => checkRow({ ...MK, needs_correction: n }).lines;
-  assert.deepEqual(lines(0), [{ text: 'Each feed is correct', error: false }, { text: 'Pays in 2 feeds · Credited in 2 feeds', error: false }]);
+  // ADR 0156 item 6: the row gives only the state of the check.
+  assert.deepEqual(lines(0), [{ text: 'Each feed is correct', error: false }]);
   assert.deepEqual(lines(1)[0], { text: '1 feed needs a correction', error: true });
   assert.deepEqual(lines(2)[0], { text: '2 feeds need a correction', error: true });
   const row = checkRow(MK);
@@ -788,7 +790,8 @@ test('the rows of More from your feeds give the item, its feeds and its cause', 
   const named = moreRows(items, null, new Map([['npub1k', { npub: 'npub1k', name: 'City Radio' }]]), 'Hey')[0];
   assert.equal(named.title, 'City Radio');
   assert.equal(named.warning, 'The profile name is not "Hey". Check this key.');
-  assert.equal(moreRows([{ ...items[0], npub: '' }])[0].title, 'vocals');
+  // ADR 0156 item 7: a credit in two releases has the title "2 releases".
+  assert.equal(moreRows([{ ...items[0], npub: '' }])[0].title, '2 releases');
   assert.ok(rows[0].lines.includes('One, Two'));
   assert.ok(rows[0].lines.includes(causeText('same_npub')));
   assert.equal(rows[1].title, 'LNURL address a@x.example');
@@ -1597,4 +1600,45 @@ test('showFindEmpty needs a request that gave no rows (ADR 0151 item 9)', () => 
   assert.equal(showFindEmpty({ rows: [{}], error: null, searched: true }), false);
   assert.equal(showFindEmpty({ rows: [], error: new Error('x'), searched: true }), false);
   assert.equal(showFindEmpty({ rows: null, error: null, searched: true }), false);
+});
+
+// ADR 0156 items 2 and 3: the summary line and the lines of a feed of the
+// section "Where this person is".
+test('where this person is: the summary in words and one line for each place', () => {
+  const places = [
+    { kind: 'channel', pays: true, percent: 15, roles: ['host'] },
+    { kind: 'item', guid: 'a', title: "It's Christmastime Again!", number: 1, pays: true, percent: 15, roles: [] },
+    { kind: 'item', guid: 'b', title: 'Night Song', number: 2, pays: true, percent: 10, roles: ['vocalist'] },
+    { kind: 'item', guid: 'c', title: 'Low Tide', number: 3, pays: false, percent: null, roles: ['vocalist'] },
+  ];
+  assert.equal(whereSummary(places, 'album'), 'Paid on the album and 2 tracks · Credited as host and vocalist on the album and 2 tracks');
+  assert.equal(whereSummary([places[3]], 'album'), 'Credited as vocalist on 1 track');
+  assert.deepEqual(whereLine(places[0], 'album'), { label: 'Album', detail: '15.0 % split · Host' });
+  assert.deepEqual(whereLine(places[1], 'album'), { label: "1 It's Christmastime Again!", detail: '15.0 % split' });
+  assert.deepEqual(whereLine(places[3], 'album'), { label: '3 Low Tide', detail: 'Vocalist' });
+  assert.deepEqual(whereLine({ kind: 'item', title: '', pays: true, percent: null, roles: [] }, 'album'), { label: 'Untitled track', detail: 'Paid' });
+  const feeds = [{ id: 7, title: 'The Heycitizen Experience', medium: 'music' }];
+  const [entry] = whereEntries([{ feed_id: 7, places }], feeds);
+  assert.equal(entry.title, 'The Heycitizen Experience');
+  assert.equal(entry.lines.length, 4);
+  assert.equal(whereEntries([{ feed_id: 9, places: [] }], feeds)[0].title, 'Feed 9');
+});
+
+// ADR 0156 item 7: a credit row names its release, then each role with its tracks.
+test('a credit of More from your feeds names the release and each role with its tracks', () => {
+  const item = {
+    kind: 'credit', name: 'MaryKateUltra', href: '', npub: '', roles: ['host', 'vocalist'], feeds: [7], cause: 'same_name',
+    feed_places: [{ feed_id: 7, roles: [
+      { role: 'host', places: [{ kind: 'channel' }] },
+      { role: 'vocalist', places: [{ kind: 'item', title: 'Night Song', number: 3 }, { kind: 'item', title: 'Low Tide', number: 5 }] },
+    ] }],
+  };
+  const feeds = [{ id: 7, title: 'The Heycitizen Experience', medium: 'music' }];
+  const [row] = moreRows([item], new Map([[7, 'The Heycitizen Experience']]), null, 'Mary', feeds);
+  assert.equal(row.title, 'The Heycitizen Experience');
+  assert.deepEqual(row.lines, ['Host · the album', 'Vocalist · track 3 "Night Song", track 5 "Low Tide"', 'Credited as "MaryKateUltra"', causeText('same_name')]);
+  const two = moreRows([{ ...item, feeds: [7, 8], feed_places: [...item.feed_places, { feed_id: 8, roles: [{ role: 'host', places: [{ kind: 'channel' }] }] }] }],
+    new Map([[7, 'One'], [8, 'Two']]), null, 'Mary', feeds)[0];
+  assert.equal(two.title, '2 releases');
+  assert.ok(two.lines.includes('Two: Host · the album'));
 });

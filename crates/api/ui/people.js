@@ -6,7 +6,7 @@
 import { shortKey } from './nostrkey.js';
 import { titleCase } from './casing.js';
 import { feedKind, isPublisher, isReadOnly, roleWord, compareNames, letterGroups } from './shell.js';
-import { placesText, recipientTitle } from './recipients.js';
+import { placesText, recipientTitle, percentText } from './recipients.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const feedCount = (n) => plural(n, 'feed', 'feeds');
@@ -604,12 +604,69 @@ export function checkRow(person) {
   const bad = person.needs_correction || 0;
   return {
     title: 'Check your feeds',
+    // The row gives only the state of the check. The section "Where this
+    // person is" lists the feeds (ADR 0156 item 6).
     lines: [
       bad > 0 ? { text: `${bad === 1 ? '1 feed needs' : `${bad} feeds need`} a correction`, error: true } : { text: 'Each feed is correct', error: false },
-      { text: `Pays in ${feedCount(pays)} · Credited in ${feedCount(credited)}`, error: false },
     ],
     count: feedCount(feedsOf(person)),
   };
+}
+
+// ---- The section "Where this person is" (ADR 0156) ----
+
+// The places of a list in words: "the album", "12 tracks", or both.
+function whereText(places, word) {
+  const channel = places.some((p) => p.kind === 'channel');
+  const items = places.filter((p) => p.kind !== 'channel').length;
+  return joinList([channel && `the ${word}`, items > 0 && plural(items, 'track', 'tracks')].filter(Boolean));
+}
+
+// The summary line of a feed: where it pays and where it credits the person,
+// for example "Paid on the album and 12 tracks · Credited as vocalist on 2
+// tracks" (ADR 0156 item 2).
+export function whereSummary(places, word) {
+  const list = places || [];
+  const paid = list.filter((p) => p.pays);
+  const credited = list.filter((p) => (p.roles || []).length > 0);
+  const roles = [...new Set(credited.flatMap((p) => p.roles))];
+  const parts = [
+    paid.length > 0 && `Paid on ${whereText(paid, word)}`,
+    credited.length > 0 && `Credited as ${joinList(roles)} on ${whereText(credited, word)}`,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : 'In this feed';
+}
+
+// The name of a place: the type of the feed for the channel, or the number
+// and the title of the track.
+function placeName(place, word) {
+  if (place.kind === 'channel') return capital(word);
+  const title = (place.title || '').trim() || 'Untitled track';
+  return place.number ? `${place.number} ${title}` : title;
+}
+
+// The line of one place: its name, the split of the person and the roles of
+// the person there (ADR 0156 item 3).
+export function whereLine(place, word) {
+  const split = place.pays ? (place.percent === null || place.percent === undefined ? 'Paid' : `${percentText(place.percent)} split`) : null;
+  return { label: placeName(place, word), detail: [split, ...(place.roles || []).map(capital)].filter(Boolean).join(' · ') };
+}
+
+// The entries of the section: one for each feed in `places` of
+// `GET /people/{id}`. `feeds` is the feed list of the shell.
+export function whereEntries(places, feeds) {
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
+  return (places || []).map((fp) => {
+    const feed = byId.get(fp.feed_id);
+    const word = releaseWord(feed);
+    const list = fp.places || [];
+    return {
+      id: fp.feed_id,
+      title: feed ? feed.title || 'Untitled feed' : `Feed ${fp.feed_id}`,
+      summary: whereSummary(list, word),
+      lines: list.map((place) => whereLine(place, word)),
+    };
+  });
 }
 
 // The rows of the feeds of a person: the type, then the places (ADR 0099
@@ -1730,20 +1787,52 @@ export const causeText = (cause) => CAUSES[cause] || '';
 // `key` is the stable key of the row, and `body` is the body of the Add. A
 // credit with a Nostr key shows the profile of the key (ADR 0103 item 17),
 // with the warning of item 18 for the name `name` of the person.
-export function moreRows(items, titles = null, profiles = null, name = '') {
+// The places of a role in words: "the album", or "track 3 "Night Song"". More
+// than three places give the first two and "and N more" (ADR 0120 item 2).
+function rolePlaceText(places, word) {
+  const names = (places || []).map((p) => (p.kind === 'channel'
+    ? `the ${word}`
+    : `${p.number ? `track ${p.number} ` : ''}"${(p.title || '').trim() || 'Untitled track'}"`));
+  if (names.length <= 3) return names.join(', ');
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
+}
+
+// The title and the role lines of a credit of "More from your feeds" (ADR 0156
+// item 7). One release is the title. Many releases give the title "N
+// releases", and each line starts with its release.
+function creditWhere(item, titles, feeds) {
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
+  const feedIds = item.feeds || [];
+  const many = feedIds.length > 1;
+  const title = feedIds.length === 1 ? titleOf(titles, feedIds[0]) : `${feedIds.length} releases`;
+  const lines = [];
+  for (const fp of item.feed_places || []) {
+    const word = releaseWord(byId.get(fp.feed_id));
+    for (const role of fp.roles || []) {
+      const text = `${capital(role.role)} · ${rolePlaceText(role.places, word)}`;
+      lines.push(many ? `${titleOf(titles, fp.feed_id)}: ${text}` : text);
+    }
+  }
+  // A credit with no role, or an index with no places, names its releases.
+  if (lines.length === 0 && many) lines.push(feedIds.map((id) => titleOf(titles, id)).join(', '));
+  return { title: feedIds.length === 0 ? feedCount(0) : title, lines };
+}
+
+export function moreRows(items, titles = null, profiles = null, name = '', feedList = null) {
   return (items || []).map((item) => {
     const feeds = (item.feeds || []).map((id) => titleOf(titles, id)).join(', ');
     if (item.kind === 'credit') {
       const roles = (item.roles || []).length > 0 ? item.roles.join(', ') : 'Credit';
       const key = `c\u0000${item.name}\u0000${item.href}\u0000${item.npub}`;
-      const nameLine = item.name ? [`The name in that credit is "${item.name}"`] : [];
+      const nameLine = item.name ? [`Credited as "${item.name}"`] : [];
+      const where = creditWhere(item, titles, feedList);
       if (item.npub) {
         const row = keyRow(item.npub, profiles, name);
-        const lines = [...row.lines, `Nostr key in the credit ${roles}`, ...nameLine, feeds || feedCount(0), causeText(item.cause)];
+        const lines = [...row.lines, `Nostr key in the credit ${roles}`, ...where.lines, ...nameLine, causeText(item.cause)];
         return { ...row, key, lines, npub: item.npub, body: moreItemBody(item) };
       }
-      const lines = [...nameLine, feeds || feedCount(0), causeText(item.cause)];
-      return { key, title: roles, lines, npub: null, body: moreItemBody(item) };
+      const lines = [...where.lines, ...nameLine, causeText(item.cause)];
+      return { key, title: where.title, lines, npub: null, body: moreItemBody(item) };
     }
     const lines = [...(item.name ? [`The name in that feed is "${item.name}"`] : []), feeds || feedCount(0), causeText(item.cause)];
     return { key: `p${keyParts(item.key)}`, title: addressText(item.key, item.recipient_type), lines, npub: null, body: moreItemBody(item) };

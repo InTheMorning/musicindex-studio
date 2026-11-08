@@ -16,7 +16,7 @@ use serde_json::Value;
 use crate::address::{self, Address, AddressSource};
 use crate::announce::{Announcement, AnnouncementState};
 use crate::connector::{KeptBlob, Stamp, Version};
-use crate::feed::{CreditPlace, Feed, Person, Recipient};
+use crate::feed::{CreditPlace, Feed, Person, Recipient, RecipientPlace};
 use crate::keysend::{Lookup, LookupStatus};
 use crate::library::Library;
 use crate::xml::Document;
@@ -584,6 +584,10 @@ CREATE TABLE outside_checks (
     moved_url TEXT
 );
 ",
+    // ADR 0156 item 5: a place keeps the number of its track, and a payment
+    // place keeps its split. SQL cannot read a feed, so the migration has no
+    // statement. The refill after the migrations writes the new places.
+    "SELECT 1;",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -630,11 +634,18 @@ const APP_KEYS_MIGRATION: usize = 24;
 /// The index in `MIGRATIONS` of the migration that adds the places of each
 /// credit (ADR 0120 item 1). A run that applies it refills the credit index
 /// from the library copies (ADR 0120 item 4).
+#[cfg(test)]
 const CREDIT_PLACES_MIGRATION: usize = 27;
 
 /// The index in `MIGRATIONS` of the migration that adds the places of each
 /// recipient (ADR 0143). A run that applies it refills the payment index.
+#[cfg(test)]
 const RECIPIENT_PLACES_MIGRATION: usize = 29;
+
+/// The index in `MIGRATIONS` of the migration that adds the number and the
+/// split to each place (ADR 0156 item 5). A run that applies it refills the
+/// credit index and the payment index from the library copies.
+const PLACE_NUMBERS_MIGRATION: usize = 32;
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1328,12 +1339,13 @@ impl Collection {
                 self.remove_all_grant_wrappers();
             }
         }
-        // The refill writes the places of each credit. Those places exist
-        // from CREDIT_PLACES_MIGRATION on, so the refill runs after the last
-        // migration of this run, and only when this run applied that
-        // migration (ADR 0120 item 4).
-        if current <= RECIPIENT_PLACES_MIGRATION {
-            self.refill_credits(current <= CREDIT_PLACES_MIGRATION)?;
+        // The refill writes the places of each credit and of each recipient.
+        // It runs after the last migration of this run, and only when this
+        // run applied PLACE_NUMBERS_MIGRATION. That migration is after the
+        // two migrations that add the places (ADR 0120 item 4, ADR 0143
+        // item 4, ADR 0156 item 5).
+        if current <= PLACE_NUMBERS_MIGRATION {
+            self.refill_credits()?;
         }
         Ok(())
     }
@@ -1434,7 +1446,7 @@ impl Collection {
     /// Replace the `feed_credits` rows of each feed that has a library copy
     /// (ADR 0098 item 10, ADR 0120 item 4). A feed with no library copy, or
     /// with a copy that does not parse, keeps its rows as they are.
-    fn refill_credits(&mut self, credits: bool) -> Result<(), CollectionError> {
+    fn refill_credits(&mut self) -> Result<(), CollectionError> {
         let Some(root) = self.library_root()?.filter(|root| root.is_dir()) else {
             return Ok(());
         };
@@ -1449,9 +1461,7 @@ impl Collection {
         let tx = self.db.transaction()?;
         for row in rows {
             if let Some(feed) = library_copy(&library, &row) {
-                if credits {
-                    put_credits(&tx, row.id, feed.credit_places())?;
-                }
+                put_credits(&tx, row.id, feed.credit_places())?;
                 put_recipients(&tx, row.id, feed.recipient_places())?;
             }
         }
@@ -4147,7 +4157,7 @@ fn put_address(
 fn put_recipients(
     db: &Connection,
     id: FeedId,
-    recipients: Vec<(CreditPlace, &Recipient)>,
+    recipients: Vec<(RecipientPlace, &Recipient)>,
 ) -> Result<(), CollectionError> {
     db.execute("DELETE FROM feed_recipients WHERE feed_id = ?1", [id.0])?;
     let seen_at = now();
@@ -4168,9 +4178,7 @@ fn put_recipients(
             Some(row) => {
                 row.name.clone_from(&recipient.name);
                 row.recipient_type.clone_from(&recipient.recipient_type);
-                if !row.places.contains(&place) {
-                    row.places.push(place);
-                }
+                add_place(&mut row.places, place);
             }
             None => rows.push(RecipientRow {
                 address,
@@ -4329,7 +4337,22 @@ struct RecipientRow {
     custom_value: String,
     name: Option<String>,
     recipient_type: Option<String>,
-    places: Vec<CreditPlace>,
+    places: Vec<RecipientPlace>,
+}
+
+/// Add `place` to `places`. A place that is there already gets the sum of
+/// the two splits, as the many addresses of a person in one place do
+/// (ADR 0156 item 4).
+fn add_place(places: &mut Vec<RecipientPlace>, place: RecipientPlace) {
+    match places.iter_mut().find(|p| p.place == place.place) {
+        Some(found) => {
+            found.percent = match (found.percent, place.percent) {
+                (Some(a), Some(b)) => Some(a + b),
+                (a, b) => a.or(b),
+            };
+        }
+        None => places.push(place),
+    }
 }
 
 /// The address of each source of a feed.
@@ -4973,16 +4996,17 @@ mod tests {
             .unwrap();
         let rows = collection.feed_credits().unwrap();
         assert_eq!(rows.len(), 1, "ADR 0120 item 3: equal keys give one row");
-        let item = |guid: &str, title: &str| CreditPlace::Item {
+        let item = |guid: &str, title: &str, number: Option<u32>| CreditPlace::Item {
             guid: guid.into(),
             title: title.into(),
+            number,
         };
         assert_eq!(
             rows[0].places,
             [
                 CreditPlace::Channel,
-                item("t1", "Track 1"),
-                item("t2", "Track 2"),
+                item("t1", "Track 1", Some(1)),
+                item("t2", "Track 2", Some(2)),
             ],
             "ADR 0120 item 2: each place is one time, in the sequence of the feed"
         );
@@ -5004,14 +5028,16 @@ mod tests {
             .db
             .query_row("SELECT places FROM feed_recipients", [], |r| r.get(0))
             .unwrap();
-        let places: Vec<CreditPlace> = serde_json::from_str(&places).unwrap();
+        let places: Vec<RecipientPlace> = serde_json::from_str(&places).unwrap();
+        let places: Vec<CreditPlace> = places.into_iter().map(|p| p.place).collect();
         assert_eq!(
             places,
             [
                 CreditPlace::Channel,
                 CreditPlace::Item {
                     guid: "t1".into(),
-                    title: "Track 1".into()
+                    title: "Track 1".into(),
+                    number: Some(1),
                 }
             ],
             "ADR 0143: each place is one time, in the sequence of the feed"
@@ -5092,6 +5118,7 @@ mod tests {
                 CreditPlace::Item {
                     guid: "t1".into(),
                     title: "Track".into(),
+                    number: Some(1),
                 },
             ]
         );

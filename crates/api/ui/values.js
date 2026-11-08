@@ -3,13 +3,12 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
+import { percentText, lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
 import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine, memberText, addRecipientsLabel, trackHeading } from './people.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useLookup } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
 
-const percentText = (p) => (p === null ? '—' : `${p.toFixed(p < 1 && p > 0 ? 2 : 1)} %`);
 
 // ---- Share bars ----
 // One hue: the accent. A meter shows one recipient against 100 %, on a pale

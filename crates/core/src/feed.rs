@@ -27,7 +27,7 @@ pub use keys::BadKey;
 pub use links::{BadAddress, is_web_address};
 use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
 pub use sync::{Entry, KeyError};
-pub use value::{ValueBlock, ValueTimeSplit};
+pub use value::{RecipientPlace, ValueBlock, ValueTimeSplit};
 
 use crate::xml::{Document, Element, Node, Ns};
 
@@ -385,14 +385,16 @@ impl Feed {
 
     /// Each recipient of [`Feed::recipients`], with its place (ADR 0143).
     #[must_use]
-    pub fn recipient_places(&self) -> Vec<(CreditPlace, &Recipient)> {
+    pub fn recipient_places(&self) -> Vec<(RecipientPlace, &Recipient)> {
         let mut found = Vec::new();
         push_placed_recipients(&mut found, &CreditPlace::Channel, &self.values);
-        for item in &self.items {
-            push_placed_recipients(&mut found, &item_place(item), &item.values);
+        for (index, item) in self.items.iter().enumerate() {
+            push_placed_recipients(&mut found, &item_place(item, index + 1), &item.values);
         }
-        for live in &self.live_items {
-            push_placed_recipients(&mut found, &item_place(&live.item), &live.item.values);
+        let offset = self.items.len();
+        for (index, live) in self.live_items.iter().enumerate() {
+            let place = item_place(&live.item, offset + index + 1);
+            push_placed_recipients(&mut found, &place, &live.item.values);
         }
         found
     }
@@ -409,11 +411,17 @@ impl Feed {
             .persons
             .iter()
             .map(|entry| (CreditPlace::Channel, &entry.value));
-        let items = self.items.iter().flat_map(|item| item_credits(item));
+        let items = self
+            .items
+            .iter()
+            .enumerate()
+            .flat_map(|(index, item)| item_credits(item, index + 1));
+        let offset = self.items.len();
         let live = self
             .live_items
             .iter()
-            .flat_map(|live| item_credits(&live.item));
+            .enumerate()
+            .flat_map(move |(index, live)| item_credits(&live.item, offset + index + 1));
         channel
             .chain(items)
             .chain(live)
@@ -437,32 +445,107 @@ pub enum CreditPlace {
         guid: String,
         /// The text of `title`, or empty text.
         title: String,
+        /// The 1-based number of the item in the items of the feed. A live
+        /// item has the number after the last item, in the sequence of the
+        /// live items, so each number is one time in a feed. A place from
+        /// before ADR 0156 has no number.
+        #[serde(default)]
+        number: Option<u32>,
     },
 }
 
-/// The credits of one item or live item, each with the place of the item.
-fn item_place(item: &Item) -> CreditPlace {
+/// The place of an item or live item, with its 1-based `number`.
+fn item_place(item: &Item, number: usize) -> CreditPlace {
     CreditPlace::Item {
         guid: item.guid.clone().unwrap_or_default(),
         title: item.title.clone().unwrap_or_default(),
+        number: u32::try_from(number).ok(),
     }
 }
 
-/// Add each recipient of `values` with its place (ADR 0143).
+/// The number of shares of a recipient, as `shares` of `recipients.js`: a
+/// split of empty text is no number, and a split of only spaces is 0.
+fn share(recipient: &Recipient) -> Option<f64> {
+    let text = recipient.split.as_deref()?;
+    if text.is_empty() {
+        return None;
+    }
+    let n = if text.trim().is_empty() {
+        0.0
+    } else {
+        text.trim().parse::<f64>().ok()?
+    };
+    (n.is_finite() && n >= 0.0).then_some(n)
+}
+
+fn is_fee(recipient: &Recipient) -> bool {
+    recipient
+        .fee
+        .as_deref()
+        .is_some_and(|fee| fee.eq_ignore_ascii_case("true"))
+}
+
+/// The split of each recipient of one value block in percent. This is the
+/// rule of `percentages` in `recipients.js` and of the share bar (ADR 0133).
+///
+/// A fee recipient keeps its share as its percent. Each other recipient
+/// gets its part of the rest, which is 100 less the shares of the fees.
+/// A share that is not a number gives `None`.
+fn percentages(recipients: &[&Recipient]) -> Vec<Option<f64>> {
+    let fees: f64 = recipients
+        .iter()
+        .filter(|r| is_fee(r))
+        .map(|r| share(r).unwrap_or(0.0))
+        .sum();
+    let total: f64 = recipients
+        .iter()
+        .filter(|r| !is_fee(r))
+        .map(|r| share(r).unwrap_or(0.0))
+        .sum();
+    let rest = (100.0 - fees).max(0.0);
+    recipients
+        .iter()
+        .map(|r| {
+            let n = share(r)?;
+            if is_fee(r) {
+                Some(n)
+            } else if total > 0.0 {
+                Some(n / total * rest)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Add each recipient of `values` with its place and its split (ADR 0143,
+/// ADR 0156 item 4). The split counts each recipient of the block, also a
+/// recipient with no address, as the editor does.
 fn push_placed_recipients<'a>(
-    found: &mut Vec<(CreditPlace, &'a Recipient)>,
+    found: &mut Vec<(RecipientPlace, &'a Recipient)>,
     place: &CreditPlace,
     values: &'a [Entry<ValueBlock>],
 ) {
     for value in values {
+        let all: Vec<&Recipient> = value.recipients.iter().map(|e| &e.value).collect();
+        let percent = percentages(&all);
         let mut list = Vec::new();
         push_recipients(&mut list, &value.recipients);
-        found.extend(list.into_iter().map(|recipient| (place.clone(), recipient)));
+        for recipient in list {
+            let at = all.iter().position(|r| std::ptr::eq(*r, recipient));
+            found.push((
+                RecipientPlace {
+                    place: place.clone(),
+                    percent: at.and_then(|i| percent[i]),
+                },
+                recipient,
+            ));
+        }
     }
 }
 
-fn item_credits(item: &Item) -> Vec<(CreditPlace, &Person)> {
-    let place = item_place(item);
+fn item_credits(item: &Item, number: usize) -> Vec<(CreditPlace, &Person)> {
+    let place = item_place(item, number);
     item.persons
         .iter()
         .map(|entry| (place.clone(), &entry.value))
@@ -902,5 +985,81 @@ mod tests {
             .map(|(_, p)| p.name.as_str())
             .collect();
         assert_eq!(names, ["Channel", "", "Live"]);
+    }
+
+    fn block(recipients: &[(&str, Option<&str>, Option<&str>)]) -> Entry<ValueBlock> {
+        Entry::new(ValueBlock {
+            recipients: recipients
+                .iter()
+                .map(|(address, split, fee)| {
+                    Entry::new(Recipient {
+                        address: Some((*address).to_owned()),
+                        split: split.map(str::to_owned),
+                        fee: fee.map(str::to_owned),
+                        ..Recipient::default()
+                    })
+                })
+                .collect(),
+            ..ValueBlock::default()
+        })
+    }
+
+    #[test]
+    fn each_item_place_has_its_one_based_number_and_the_channel_has_none() {
+        let item = |title: &str| {
+            Entry::new(Item {
+                title: Some(title.to_owned()),
+                values: vec![block(&[("a", Some("1"), None)])],
+                ..Item::default()
+            })
+        };
+        let feed = Feed {
+            values: vec![block(&[("a", Some("1"), None)])],
+            items: vec![item("One"), item("Two")],
+            live_items: vec![Entry::new(LiveItem {
+                item: Item {
+                    title: Some("Live".to_owned()),
+                    values: vec![block(&[("a", Some("1"), None)])],
+                    ..Item::default()
+                },
+                ..LiveItem::default()
+            })],
+            ..Feed::default()
+        };
+        let numbers: Vec<_> = feed
+            .recipient_places()
+            .into_iter()
+            .map(|(p, _)| match p.place {
+                CreditPlace::Channel => None,
+                CreditPlace::Item { number, .. } => number,
+            })
+            .collect();
+        // ADR 0156: a live item has the number after the last item.
+        assert_eq!(numbers, [None, Some(1), Some(2), Some(3)]);
+    }
+
+    #[test]
+    fn the_percent_of_a_recipient_follows_the_share_bar() {
+        let feed = Feed {
+            values: vec![block(&[
+                ("plain-a", Some("3"), None),
+                ("plain-b", Some("1"), None),
+                ("fee", Some("20"), Some("true")),
+                ("bad", Some("x"), None),
+                ("none", None, None),
+            ])],
+            ..Feed::default()
+        };
+        let percent: Vec<_> = feed
+            .recipient_places()
+            .into_iter()
+            .map(|(p, _)| p.percent)
+            .collect();
+        // ADR 0133: a fee keeps its share. The others share the rest.
+        assert_eq!(
+            percent,
+            [Some(60.0), Some(20.0), Some(20.0), None, None],
+            "ADR 0156 item 4"
+        );
     }
 }

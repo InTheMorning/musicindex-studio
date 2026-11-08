@@ -15,7 +15,7 @@ import {
 } from './recipients.js';
 import {
   peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonBody, initials,
-  filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, changeRow, memberChoices,
+  filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, whereEntries, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
   defaultFirst, walletValues, walletSelected, walletEdit, walletEditNote, creditNameEdit, supportLinkEdit, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
@@ -800,6 +800,8 @@ export function PersonPage({ id, feeds, go }) {
   const groups = walletGroups(person, recipients);
   const profile = profileLine(person, titles, feeds);
   const check = checkRow(person);
+  const where = whereEntries(person.places, feeds);
+  const feedOf = (feedId) => (feeds || []).find((f) => f.id === feedId);
   const remove = (kind, linkId) => withLeave(() => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' })));
   const removeButton = (kind, linkId, label) => html`<button class="button destructive" type="button" aria-label=${label}
     onClick=${() => remove(kind, linkId)}>Remove</button>`;
@@ -819,11 +821,19 @@ export function PersonPage({ id, feeds, go }) {
           <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
       </div></header>
       <div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>Find on Music Index</button></div><//>`,
+    // One entry for each feed, and one open at a time (ADR 0156, ADR 0028).
+    where: () => where.length > 0 && html`<section class="page-section"><h2>Where this person is</h2>
+      <div class="group">${where.map((entry) => html`<details class="disclosure where-entry" name="person-where" key=${entry.id}>
+        <summary><span class="text"><span class="label">${entry.title}</span><span class="summary">${entry.summary}</span></span></summary>
+        <ul class="where-lines">${entry.lines.map((line, i) => html`<li key=${i}><span class="where-place">${line.label}</span>
+          ${line.detail && html`<span class="where-detail">${line.detail}</span>`}</li>`)}</ul>
+        ${feedOf(entry.id) && html`<div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'feed', id: entry.id })}>${openLabel(feedOf(entry.id))}</button></div>`}
+      </details>`)}</div></section>`,
     check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count}
       onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
     more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>
       <p class="hint">${MORE_HINT}</p>
-      <div class="group">${moreRows(more, titles, profiles, person.name).map((row) => html`<div class="link-row static key-line more-row" key=${row.key}>
+      <div class="group">${moreRows(more, titles, profiles, person.name, feeds).map((row) => html`<div class="link-row static key-line more-row" key=${row.key}>
           ${row.npub && html`<${PersonArt} person=${{ img: row.picture, name: row.title }} />`}<${KeyText} row=${row} />
           ${row.npub && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}
           <div class="actions more-actions">

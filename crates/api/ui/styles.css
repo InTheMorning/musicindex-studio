@@ -1518,6 +1518,21 @@ button.outline-feed {
 /* The sort control of the People list is at the right end of its row
    (musicindex ADR 0053 R-LIST-11). */
 .people-order { margin-left: auto; }
+/* The section "Where this person is" (ADR 0156). An entry has a summary line,
+   and an open entry has one line for each place, with its split and roles.
+   A group has no inner space, so the entry has the 16 px of a row. */
+.where-entry { padding: 4px 16px; }
+.where-entry[open] { padding-bottom: 12px; }
+.disclosure.where-entry > .actions { padding: 0; margin: 0; }
+.disclosure.where-entry > summary { flex-wrap: nowrap; }
+.where-entry summary .text { display: grid; gap: 2px; min-width: 0; }
+.where-entry summary .label { font-weight: 600; }
+.where-entry summary .summary { color: var(--muted); font-size: var(--text-callout); }
+.where-lines { list-style: none; display: grid; margin: 4px 0 8px; }
+.where-lines li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 0; }
+.where-lines li + li { border-top: 1px solid var(--sep); }
+.where-place { min-width: 0; overflow-wrap: anywhere; }
+.where-detail { color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
 .sort { position: relative; }
 .sort-menu {
   position: absolute;

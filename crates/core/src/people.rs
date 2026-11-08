@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, CreditRow, FeedId, now};
-use crate::feed::{CreditPlace, Recipient};
+use crate::feed::{CreditPlace, Recipient, RecipientPlace};
 use crate::keysend::{self, Lookup, LookupResult};
 use crate::net::NetPolicy;
 use crate::profiles;
@@ -1488,6 +1488,30 @@ struct CreditAgg {
     img: String,
     roles: BTreeSet<String>,
     feeds: BTreeSet<i64>,
+    /// The places of each role, by feed.
+    places: BTreeMap<i64, BTreeMap<String, Vec<CreditPlace>>>,
+}
+
+impl CreditAgg {
+    /// Add the role, the places and the feed of one credit row.
+    fn add(&mut self, row: CreditRow) {
+        self.feeds.insert(row.feed_id.0);
+        if row.role.is_empty() {
+            return;
+        }
+        self.roles.insert(row.role.clone());
+        let list = self
+            .places
+            .entry(row.feed_id.0)
+            .or_default()
+            .entry(row.role)
+            .or_default();
+        for place in row.places {
+            if !list.contains(&place) {
+                list.push(place);
+            }
+        }
+    }
 }
 
 struct Group {
@@ -1764,7 +1788,7 @@ fn plan_groups(groups: &[Group]) -> Vec<(Option<String>, String, bool)> {
 }
 
 /// The feeds that use a person (ADR 0099 item 6).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct PersonUses {
     /// Each feed whose recipients have a member of a wallet of the person.
     pub pays: Vec<FeedId>,
@@ -1777,7 +1801,7 @@ pub struct PersonUses {
 }
 
 /// The places of a person in one feed (ADR 0099 item 5).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct FeedPlaces {
     /// The feed.
     pub feed_id: FeedId,
@@ -1788,9 +1812,33 @@ pub struct FeedPlaces {
     /// Z. A credit with no role gives empty text.
     pub roles: Vec<String>,
     /// The places of each address of `pays`, in the same sequence (ADR 0143).
-    pub pay_places: Vec<Vec<CreditPlace>>,
+    /// Each entry has the fields of the place and `percent`, the split of
+    /// that address in that place (ADR 0156 item 4).
+    pub pay_places: Vec<Vec<RecipientPlace>>,
     /// Each place of the credits of `roles` (ADR 0143).
     pub role_places: Vec<CreditPlace>,
+    /// The places of `pay_places` and `role_places` in one list, each place
+    /// one time. The channel is first, then the items by number (ADR 0156
+    /// item 3).
+    pub places: Vec<PersonPlace>,
+}
+
+/// One place of a person in a feed, with the split and the roles of the
+/// person in that place (ADR 0156 items 3 and 4).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PersonPlace {
+    /// The place. Its fields (`kind`, `guid`, `title` and `number`) are next
+    /// to the other fields in JSON.
+    #[serde(flatten)]
+    pub place: CreditPlace,
+    /// True when an address of the person is in a value block of the place.
+    pub pays: bool,
+    /// The sum of the splits of the addresses of the person in the place, in
+    /// percent. `None` when no address has a split that is a number.
+    pub percent: Option<f64>,
+    /// The roles of the credits of the person in the place, A to Z. A credit
+    /// with no role gives no entry.
+    pub roles: Vec<String>,
 }
 
 impl FeedPlaces {
@@ -1801,7 +1849,58 @@ impl FeedPlaces {
             roles: Vec::new(),
             pay_places: Vec::new(),
             role_places: Vec::new(),
+            places: Vec::new(),
         }
+    }
+
+    /// Make `places` from `pay_places` and the credits of the person. Each
+    /// pair in `credits` is a place and the role of a credit there.
+    fn merge_places(&mut self, credits: &[(CreditPlace, String)]) {
+        let mut merged: Vec<PersonPlace> = Vec::new();
+        let mut find = |place: &CreditPlace| -> usize {
+            merged
+                .iter()
+                .position(|p| &p.place == place)
+                .unwrap_or_else(|| {
+                    merged.push(PersonPlace {
+                        place: place.clone(),
+                        pays: false,
+                        percent: None,
+                        roles: Vec::new(),
+                    });
+                    merged.len() - 1
+                })
+        };
+        let mut pay_updates = Vec::new();
+        for place in self.pay_places.iter().flatten() {
+            pay_updates.push((find(&place.place), place.percent));
+        }
+        let mut role_updates = Vec::new();
+        for (place, role) in credits {
+            role_updates.push((find(place), role.clone()));
+        }
+        for (index, percent) in pay_updates {
+            let entry = &mut merged[index];
+            entry.pays = true;
+            entry.percent = match (entry.percent, percent) {
+                (Some(a), Some(b)) => Some(a + b),
+                (a, b) => a.or(b),
+            };
+        }
+        for (index, role) in role_updates {
+            let entry = &mut merged[index];
+            if !role.is_empty() && !entry.roles.contains(&role) {
+                entry.roles.push(role);
+            }
+        }
+        for entry in &mut merged {
+            entry.roles.sort();
+        }
+        merged.sort_by_key(|p| match &p.place {
+            CreditPlace::Channel => (0, 0, String::new()),
+            CreditPlace::Item { number, guid, .. } => (1, number.unwrap_or(u32::MAX), guid.clone()),
+        });
+        self.places = merged;
     }
 }
 
@@ -1867,6 +1966,7 @@ pub fn uses<S: BuildHasher>(
         .collect();
     let npubs: HashSet<&str> = person.keys.iter().map(|k| k.npub.as_str()).collect();
     let mut credited = BTreeSet::new();
+    let mut credit_places: BTreeMap<i64, Vec<(CreditPlace, String)>> = BTreeMap::new();
     for row in collection.feed_credits()? {
         let named = Identity::of(&row.name, &row.href, &row.npub)
             .is_some_and(|i| identities.contains(i.key().as_str()));
@@ -1878,15 +1978,21 @@ pub fn uses<S: BuildHasher>(
                 .or_insert_with(|| FeedPlaces::new(row.feed_id));
             place.roles.push(row.role.trim().to_owned());
             for found in row.places {
+                credit_places
+                    .entry(row.feed_id.0)
+                    .or_default()
+                    .push((found.clone(), row.role.trim().to_owned()));
                 if !place.role_places.contains(&found) {
                     place.role_places.push(found);
                 }
             }
         }
     }
-    for place in places.values_mut() {
+    for (feed, place) in &mut places {
         place.roles.sort();
         place.roles.dedup();
+        let credits = credit_places.remove(feed).unwrap_or_default();
+        place.merge_places(&credits);
     }
     Ok(PersonUses {
         pays: feed_ids(&pays),
@@ -2637,6 +2743,9 @@ pub enum MoreItem {
         roles: Vec<String>,
         /// The feeds that have the credit, by ID.
         feeds: Vec<FeedId>,
+        /// For each feed of `feeds`, the places of each role of the credit
+        /// (ADR 0156 item 7).
+        feed_places: Vec<FeedRoles>,
         /// The cause of the match.
         cause: MoreCause,
     },
@@ -2653,6 +2762,39 @@ pub enum MoreItem {
         /// The cause of the match.
         cause: MoreCause,
     },
+}
+
+/// The places of the roles of a credit in one feed (ADR 0156 item 7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FeedRoles {
+    /// The feed.
+    pub feed_id: FeedId,
+    /// Each role that is not empty, A to Z, with its places.
+    pub roles: Vec<RolePlaces>,
+}
+
+/// One role of a credit and the places where the credit has it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RolePlaces {
+    /// The raw role text.
+    pub role: String,
+    /// The places of the role, in the sequence of the feed.
+    pub places: Vec<CreditPlace>,
+}
+
+/// The places of the roles of a credit, by feed, as the list of the
+/// answer (ADR 0156 item 7).
+fn feed_roles(places: BTreeMap<i64, BTreeMap<String, Vec<CreditPlace>>>) -> Vec<FeedRoles> {
+    places
+        .into_iter()
+        .map(|(feed, roles)| FeedRoles {
+            feed_id: FeedId(feed),
+            roles: roles
+                .into_iter()
+                .map(|(role, places)| RolePlaces { role, places })
+                .collect(),
+        })
+        .collect()
 }
 
 type KeyParts = (String, String, String);
@@ -2755,11 +2897,10 @@ pub fn more_items<S: BuildHasher>(
         {
             continue;
         }
-        let credit = found.entry((row.name, row.href, row.npub)).or_default();
-        if !row.role.is_empty() {
-            credit.roles.insert(row.role);
-        }
-        credit.feeds.insert(row.feed_id.0);
+        found
+            .entry((row.name.clone(), row.href.clone(), row.npub.clone()))
+            .or_default()
+            .add(row);
     }
     let mut list = Vec::new();
     for ((name, href, npub), agg) in found {
@@ -2777,6 +2918,7 @@ pub fn more_items<S: BuildHasher>(
             npub: npub.trim().to_owned(),
             roles: agg.roles.into_iter().collect(),
             feeds: feed_ids(&agg.feeds),
+            feed_places: feed_roles(agg.places),
             cause,
         });
     }
@@ -4159,6 +4301,7 @@ mod tests {
                     CreditPlace::Item {
                         guid: "t1".into(),
                         title: "Neon Diner".into(),
+                        number: Some(1),
                     },
                 ],
             }],
@@ -5317,5 +5460,152 @@ mod tests {
                 .kind(),
             CollectionErrorKind::NotFound
         );
+    }
+
+    fn record(collection: &mut Collection, body: &str) -> FeedId {
+        let feed_id = collection.add_feed(None, None).unwrap();
+        let doc = Document::parse(&format!(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>{body}</channel></rss>"
+        ))
+        .unwrap();
+        collection
+            .record_state(feed_id, &Feed::read(&doc).unwrap(), &Version::new("v1"))
+            .unwrap();
+        feed_id
+    }
+
+    #[test]
+    fn the_places_of_a_person_merge_splits_and_roles_in_feed_order() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let value = |a: &str, b: &str| {
+            format!(
+                "<podcast:value type=\"lightning\" method=\"keysend\">\
+                 <podcast:valueRecipient address=\"{a}\" type=\"node\" split=\"1\"/>\
+                 <podcast:valueRecipient address=\"{b}\" type=\"node\" split=\"3\"/>\
+                 </podcast:value>"
+            )
+        };
+        let feed_id = record(
+            &mut collection,
+            &format!(
+                "<item><guid>t2</guid><title>Two</title>{}\
+                 <podcast:person role=\"Vocals\">Ann</podcast:person></item>\
+                 <item><guid>t1</guid><title>One</title>{}</item>\
+                 <podcast:person role=\"Mixer\">Ann</podcast:person>\
+                 {}",
+                value("ann-a", "other"),
+                value("ann-a", "ann-b"),
+                value("ann-b", "other")
+            ),
+        );
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_credit_name(&collection, ann, "Ann", "", "").unwrap();
+        add_wallet(&collection, ann, &key("ann-a"), "node", LinkEvidence::User).unwrap();
+        add_wallet(&collection, ann, &key("ann-b"), "node", LinkEvidence::User).unwrap();
+        let p = person(&collection, ann).unwrap();
+        let found = uses(&collection, &p, &HashMap::new()).unwrap();
+        let places = &found
+            .places
+            .iter()
+            .find(|f| f.feed_id == feed_id)
+            .unwrap()
+            .places;
+        let summary: Vec<_> = places
+            .iter()
+            .map(|p| {
+                let number = match &p.place {
+                    CreditPlace::Channel => None,
+                    CreditPlace::Item { number, .. } => *number,
+                };
+                (number, p.pays, p.percent, p.roles.clone())
+            })
+            .collect();
+        assert_eq!(
+            summary,
+            [
+                // The channel: ann-b has 1 of 4 shares, and has the role Mixer.
+                (None, true, Some(25.0), vec!["Mixer".to_owned()]),
+                // Item 1 is first in the file: only ann-a is there, and Ann
+                // has the role Vocals.
+                (Some(1), true, Some(25.0), vec!["Vocals".to_owned()]),
+                // Item 2: ann-a (1 of 4) and ann-b (3 of 4) are in one place.
+                (Some(2), true, Some(100.0), Vec::new()),
+            ],
+            "ADR 0156 items 3 and 4"
+        );
+        let json = serde_json::to_value(&found.places[0]).unwrap();
+        assert_eq!(json["places"][1]["number"], 1);
+        assert_eq!(json["places"][1]["title"], "Two");
+        assert!(json["pay_places"][0][0]["percent"].is_number());
+        assert!(json["pay_places"][0][0]["kind"].is_string());
+    }
+
+    #[test]
+    fn a_credit_with_no_pay_gives_a_place_with_no_percent() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        record(
+            &mut collection,
+            "<item><guid>t1</guid><title>One</title>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person></item>",
+        );
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_credit_name(&collection, ann, "Ann", "", "").unwrap();
+        let p = person(&collection, ann).unwrap();
+        let found = uses(&collection, &p, &HashMap::new()).unwrap();
+        let place = &found.places[0].places[0];
+        assert!(!place.pays);
+        assert_eq!(place.percent, None);
+        assert_eq!(place.roles, ["Mixer"]);
+    }
+
+    #[test]
+    fn a_more_credit_gives_the_places_of_each_role() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed_id = record(
+            &mut collection,
+            "<podcast:person role=\"Mixer\">Ann</podcast:person>\
+             <item><guid>t1</guid><title>One</title>\
+             <podcast:person role=\"Vocals\">Ann</podcast:person></item>\
+             <item><guid>t2</guid><title>Two</title>\
+             <podcast:person role=\"Vocals\">Ann</podcast:person>\
+             <podcast:person role=\"Mixer\">Ann</podcast:person></item>",
+        );
+        let id = add_person(&collection, &fields("Ann")).unwrap();
+        let items = more(&collection, id);
+        let MoreItem::Credit {
+            feed_places, feeds, ..
+        } = &items[0]
+        else {
+            panic!("the first item is a credit");
+        };
+        assert_eq!(feeds, &[feed_id]);
+        assert_eq!(feed_places.len(), 1);
+        assert_eq!(feed_places[0].feed_id, feed_id);
+        let roles: Vec<_> = feed_places[0]
+            .roles
+            .iter()
+            .map(|r| (r.role.as_str(), r.places.len()))
+            .collect();
+        // ADR 0156 item 7: A to Z, each role with its places.
+        assert_eq!(roles, [("Mixer", 2), ("Vocals", 2)]);
+        let json = serde_json::to_value(&items[0]).unwrap();
+        assert_eq!(json["feed_places"][0]["roles"][1]["places"][0]["number"], 1);
+    }
+
+    #[test]
+    fn a_place_from_before_has_no_number_and_no_percent() {
+        let item: CreditPlace =
+            serde_json::from_str(r#"{"kind":"item","guid":"g","title":"T"}"#).unwrap();
+        assert_eq!(
+            item,
+            CreditPlace::Item {
+                guid: "g".into(),
+                title: "T".into(),
+                number: None
+            }
+        );
+        let pay: RecipientPlace = serde_json::from_str(r#"{"kind":"channel"}"#).unwrap();
+        assert_eq!(pay.place, CreditPlace::Channel);
+        assert_eq!(pay.percent, None);
     }
 }

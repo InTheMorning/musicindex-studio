@@ -55,6 +55,8 @@ const PAGES = {
   ],
   person: () => [
     { id: 'profile', tier: 'identity' },
+    // Where the feeds pay and credit the person (ADR 0156 item 1).
+    { id: 'where', tier: 'identity' },
     { id: 'check', tier: 'identity' },
     { id: 'more', tier: 'content' },
     { id: 'payment', tier: 'content' },

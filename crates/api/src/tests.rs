@@ -10687,6 +10687,59 @@ async fn a_suggestion_makes_a_person_that_the_feeds_use() {
 }
 
 #[tokio::test]
+async fn a_person_gives_the_places_with_the_number_and_the_split() {
+    let (app, connector) = publisher_app().await;
+    let value = "<podcast:value type=\"lightning\" method=\"keysend\">\
+         <podcast:valueRecipient name=\"Ann\" type=\"lnaddress\" address=\"ann@example.com\" split=\"1\"/>\
+         <podcast:valueRecipient name=\"Bob\" type=\"lnaddress\" address=\"bob@example.com\" split=\"3\"/>\
+         </podcast:value>";
+    let feed = add_paid_feed(
+        &app,
+        connector,
+        "places.xml",
+        &format!(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
+             <title>One</title><podcast:guid>g-places</podcast:guid>\
+             <podcast:medium>music</podcast:medium>{value}\
+             <item><guid>t1</guid><title>First</title></item>\
+             <item><guid>t2</guid><title>Second</title>{value}</item></channel></rss>"
+        ),
+    )
+    .await;
+    let id = new_person(&app, "Ann").await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/wallets"),
+        Some(json!({ "address": "ann@example.com", "recipient_type": "lnaddress" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let (status, person) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{person}");
+    let entry = person["places"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["feed_id"] == json!(feed))
+        .unwrap();
+    // ADR 0156 items 3 and 4: one list, the channel first, then the items.
+    assert_eq!(
+        entry["places"],
+        json!([
+            { "kind": "channel", "pays": true, "percent": 25.0, "roles": [] },
+            {
+                "kind": "item", "guid": "t2", "title": "Second", "number": 2,
+                "pays": true, "percent": 25.0, "roles": []
+            },
+        ]),
+        "{person}"
+    );
+    // The old fields stay.
+    assert_eq!(entry["pay_places"][0][1]["number"], 2, "{person}");
+}
+
+#[tokio::test]
 async fn items_are_added_to_a_person_and_a_conflict_gives_409() {
     let app = app();
     let ann = new_person(&app, "Ann").await;

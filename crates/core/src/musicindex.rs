@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::feed::Recipient;
 use crate::web::{Web, WebError, WebErrorKind, path_segment};
+use musicindex_search::field_list::Library;
+use musicindex_search::note::{SearchNote as CrateNote, scope_note, search_note};
 pub use musicindex_search::plan::IndexSearchRequest;
-use musicindex_search::plan::{IndexEntity, IndexFilters, IndexSearchPlan, IndexSkip};
-use musicindex_search::query::{FieldValueState, SearchQuery, TermKind};
+use musicindex_search::plan::{IndexEntity, IndexSearchPlan, IndexSkip};
+use musicindex_search::query::{SearchQuery, TermKind};
 use musicindex_search::request::index_filter_pairs;
 
 /// The public musicindex API.
@@ -162,8 +164,8 @@ fn decode_search<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, WebE
 /// A note in the place of the rows of a search (musicindex ADR 0049 R-QUERY-2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SearchNote {
-    /// The cause: `library_only`, `conflict`, `exclusions_only`, `not_supported`
-    /// or `not_for_publishers`.
+    /// The cause: `library_only`, `conflict`, `exclusions_only`, `not_supported`,
+    /// `no_index_part`, `needs_a_word` or `not_for_publishers`.
     pub code: &'static str,
     /// The text that the UI shows.
     pub message: String,
@@ -187,6 +189,27 @@ pub enum SearchPlan {
 /// item 3).
 #[must_use]
 pub fn plan_search(text: &str, plain: bool) -> SearchPlan {
+    plan_for(text, plain, None)
+}
+
+/// The plan of a search text for a search of artist and label feeds only.
+/// When the crate gives no request for these feeds, the search sends nothing,
+/// and the note of the crate names each field that causes this (ADR 0151 item
+/// 9).
+#[must_use]
+pub fn plan_publisher_search(text: &str, plain: bool) -> SearchPlan {
+    plan_for(text, plain, Some(IndexEntity::Publisher))
+}
+
+/// The plan of `text`. The words of each note come from the crate (musicindex
+/// ADR 0052 R-QUERY-8). Studio has no Library in the sense of musicindex ADR
+/// 0049. A `scope` gives the note of the crate when that entity gets no
+/// request, after the general note.
+fn plan_for(text: &str, plain: bool, scope: Option<IndexEntity>) -> SearchPlan {
+    // A text with nothing to search has no note.
+    if text.trim().is_empty() {
+        return SearchPlan::Skip(None);
+    }
     let query = SearchQuery::parse(text);
     if plain {
         let only_words = query
@@ -197,99 +220,45 @@ pub fn plan_search(text: &str, plain: bool) -> SearchPlan {
             return SearchPlan::Send(IndexSearchRequest::words(text.trim()));
         }
     }
-    let errors: Vec<String> = query
-        .field_errors()
-        .iter()
-        .map(|(_, error)| error.message())
-        .collect();
-    if !errors.is_empty() {
-        return SearchPlan::FieldError(errors.join(". "));
+    // The first field error in text order (musicindex ADR 0052 R-QUERY-8).
+    if let Some((_, error)) = query.field_errors().first() {
+        return SearchPlan::FieldError(error.message());
     }
-    match IndexSearchPlan::for_query(&query) {
+    let index_plan = IndexSearchPlan::for_query(&query);
+    if let Some(note) = search_note(&query, &index_plan, Library::Absent) {
+        return SearchPlan::Skip(Some(SearchNote::from_crate(note_code(&index_plan), &note)));
+    }
+    if let Some(entity) = scope
+        && let Some(note) = scope_note(&query, &index_plan, entity)
+    {
+        return SearchPlan::Skip(Some(SearchNote::from_crate("not_for_publishers", &note)));
+    }
+    match index_plan {
         IndexSearchPlan::Send(request) => SearchPlan::Send(request),
-        IndexSearchPlan::Skip(skip) => SearchPlan::Skip(skip_note(&skip)),
+        IndexSearchPlan::Skip(_) => SearchPlan::Skip(None),
     }
 }
 
-/// The plan of a search text for a search of artist and label feeds only.
-/// When the crate gives no request for these feeds, the search sends nothing,
-/// and a note names each field that causes this (ADR 0151 item 9).
-#[must_use]
-pub fn plan_publisher_search(text: &str, plain: bool) -> SearchPlan {
-    let general = plan_search(text, plain);
-    let takes_request = match &general {
-        SearchPlan::Send(request) => request.for_entity(IndexEntity::Publisher).is_some(),
-        SearchPlan::Skip(None) => false,
-        SearchPlan::Skip(Some(_)) | SearchPlan::FieldError(_) => true,
-    };
-    if takes_request {
-        return general;
+/// The code of the note of `plan`, for the API. The UI shows only the words.
+fn note_code(plan: &IndexSearchPlan) -> &'static str {
+    match plan {
+        IndexSearchPlan::Send(_) => "needs_a_word",
+        IndexSearchPlan::Skip(IndexSkip::LibraryOnly) => "library_only",
+        IndexSearchPlan::Skip(IndexSkip::Conflict) => "conflict",
+        IndexSearchPlan::Skip(IndexSkip::Unsupported(_)) => "not_supported",
+        IndexSearchPlan::Skip(IndexSkip::ExclusionsOnly) => "exclusions_only",
+        IndexSearchPlan::Skip(IndexSkip::NoIndexPart) => "no_index_part",
     }
-    SearchPlan::Skip(publisher_note(text))
 }
 
-/// The note that names each field of `text` that gives no request for artist
-/// and label feeds. Each term goes alone to the crate, so this function holds
-/// no list of fields.
-fn publisher_note(text: &str) -> Option<SearchNote> {
-    let query = SearchQuery::parse(text);
-    let mut tokens: Vec<&'static str> = Vec::new();
-    for term in query.terms() {
-        let TermKind::Field(field) = &term.kind else {
-            continue;
-        };
-        if term.excluded || !matches!(field.value, FieldValueState::Valid(_)) {
-            continue;
-        }
-        let alone = SearchQuery::parse(&text[term.span.clone()]);
-        let no_request = match IndexSearchPlan::for_query(&alone) {
-            IndexSearchPlan::Send(request) => request.for_entity(IndexEntity::Publisher).is_none(),
-            // A text such as `kind:ep` has filters that send no request.
-            IndexSearchPlan::Skip(IndexSkip::NoIndexPart) => {
-                IndexFilters::from_query(&alone).is_none()
-            }
-            IndexSearchPlan::Skip(_) => false,
-        };
-        let token = field.name.info().token;
-        if no_request && !tokens.contains(&token) {
-            tokens.push(token);
+impl SearchNote {
+    /// The note of the crate, as one text: the title, then the text.
+    fn from_crate(code: &'static str, note: &CrateNote) -> Self {
+        Self {
+            code,
+            message: format!("{}. {}", note.title, note.text),
         }
     }
-    let (final_token, others) = tokens.split_last()?;
-    let message = if others.is_empty() {
-        format!("{final_token} does not apply to artist and label feeds")
-    } else {
-        format!(
-            "{} and {final_token} do not apply to artist and label feeds",
-            others.join(", ")
-        )
-    };
-    Some(SearchNote {
-        code: "not_for_publishers",
-        message,
-    })
-}
-
-/// The note of a search that sends no request. A text with nothing to search
-/// has no note.
-fn skip_note(skip: &IndexSkip) -> Option<SearchNote> {
-    let (code, message) = match skip {
-        IndexSkip::NoIndexPart => return None,
-        IndexSkip::LibraryOnly => (
-            "library_only",
-            "This search uses a Library field. Studio searches only Music Index, so this search shows no rows.".to_owned(),
-        ),
-        IndexSkip::Conflict => (
-            "conflict",
-            "This search asks for the Library only and for Music Index only. Remove one of the fields.".to_owned(),
-        ),
-        IndexSkip::ExclusionsOnly => (
-            "exclusions_only",
-            "This search only excludes rows. Add a word or a field.".to_owned(),
-        ),
-        IndexSkip::Unsupported(terms) => ("not_supported", format!("{}.", terms.note_title())),
-    };
-    Some(SearchNote { code, message })
 }
 
 #[derive(Deserialize)]
@@ -1038,7 +1007,24 @@ mod tests {
             SearchPlan::FieldError(_)
         ));
         assert_eq!(sent_q("\"in:flux\"", false).as_deref(), Some("\"in:flux\""));
-        assert_eq!(plan_search("kind:ep", false), SearchPlan::Skip(None));
+        // The `kind:` values of a text such as `kind:ep` send no request, and
+        // the crate gives the note (musicindex ADR 0052 R-QUERY-8).
+        assert_eq!(
+            plan_search("kind:ep", false),
+            SearchPlan::Skip(Some(SearchNote {
+                code: "no_index_part",
+                message: "No results. Music Index has no rows for these fields.".to_owned(),
+            }))
+        );
+    }
+
+    #[test]
+    fn adr_0151_a_field_error_gives_only_the_first_message() {
+        let SearchPlan::FieldError(message) = plan_search("kind:nope after:soon", false) else {
+            panic!("a field error");
+        };
+        assert!(message.starts_with("kind:"), "{message}");
+        assert!(!message.contains("after:"), "{message}");
     }
 
     #[test]
@@ -1051,6 +1037,19 @@ mod tests {
         assert_eq!(code("in:index is:ready"), "conflict");
         assert_eq!(code("-remix"), "exclusions_only");
         assert_eq!(code("ann -kind:single"), "not_supported");
+        assert_eq!(code("in:index"), "no_index_part");
+        let message = |text: &str| match plan_search(text, false) {
+            SearchPlan::Skip(Some(note)) => note.message,
+            other => panic!("{text} must give a note, got {other:?}"),
+        };
+        assert_eq!(
+            message("ann is:ready"),
+            "This search uses a Library field. Remove is:, playlist:, has: or in:library to search Music Index."
+        );
+        assert_eq!(
+            message("ann -kind:single"),
+            "Music Index cannot exclude kind: yet. Remove the - from the field."
+        );
     }
 
     #[test]
@@ -1061,7 +1060,6 @@ mod tests {
         };
         for (text, token) in [
             ("kind:single", "kind:"),
-            ("able kind:ep", "kind:"),
             ("able after:2026-01", "after:"),
             ("able before:2026-01", "before:"),
             ("able duration:>5m", "duration:"),
@@ -1069,13 +1067,21 @@ mod tests {
         ] {
             assert_eq!(
                 note(text),
-                format!("{token} does not apply to artist and label feeds"),
+                format!(
+                    "{token} does not apply to artists and labels. Remove the field to search artists and labels."
+                ),
                 "{text}"
             );
         }
         assert_eq!(
-            note("able kind:single after:2026-01 release:x kind:album"),
-            "kind:, after: and release: do not apply to artist and label feeds"
+            note("able kind:single after:2026-01 release:x after:2026-02"),
+            "kind:, after: and release: do not apply to artists and labels. Remove the fields to search artists and labels."
+        );
+        // The general note of the crate comes first (musicindex ADR 0052
+        // R-QUERY-8).
+        assert_eq!(
+            note("able kind:ep"),
+            "No results. Music Index has no rows for these fields."
         );
     }
 
@@ -1093,14 +1099,14 @@ mod tests {
             plan_publisher_search("kind:nope", false),
             SearchPlan::FieldError(_)
         ));
-        assert_eq!(
+        assert!(matches!(
             plan_publisher_search("in:index", false),
-            SearchPlan::Skip(None)
-        );
-        assert_eq!(
+            SearchPlan::Skip(Some(note)) if note.code == "no_index_part"
+        ));
+        assert!(matches!(
             plan_publisher_search(r"artist:\", false),
-            SearchPlan::Skip(None)
-        );
+            SearchPlan::Skip(Some(note)) if note.code == "no_index_part"
+        ));
         assert!(matches!(
             plan_publisher_search("able is:ready", false),
             SearchPlan::Skip(Some(note)) if note.code == "library_only"

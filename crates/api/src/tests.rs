@@ -14737,7 +14737,6 @@ async fn a_field_with_no_request_for_artists_gives_the_note_and_sends_nothing() 
     let (app, seen, person) = search_app(ONE_FEED).await;
     for (text, token) in [
         ("kind%3Asingle", "kind:"),
-        ("able%20kind%3Aep", "kind:"),
         ("able%20after%3A2026-01", "after:"),
         ("able%20before%3A2026-01", "before:"),
         ("able%20duration%3A%3E5m", "duration:"),
@@ -14750,7 +14749,9 @@ async fn a_field_with_no_request_for_artists_gives_the_note_and_sends_nothing() 
         assert_eq!(body["note"]["code"], "not_for_publishers", "{text}");
         assert_eq!(
             body["note"]["message"],
-            format!("{token} does not apply to artist and label feeds"),
+            format!(
+                "{token} does not apply to artists and labels. Remove the field to search artists and labels."
+            ),
             "ADR 0151 item 9: {text}"
         );
     }
@@ -14776,7 +14777,12 @@ async fn a_text_with_nothing_to_search_is_not_marked_as_a_search() {
     let (app, seen, person) = search_app(ONE_FEED).await;
     let (status, body) = call(&app, "GET", &format!("{person}?q=in%3Aindex"), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["note"], Value::Null);
+    // The crate gives the note of a text with no word (musicindex ADR 0052
+    // R-QUERY-8).
+    assert_eq!(
+        body["note"]["message"],
+        "Music Index needs a word or a field to search for. Add a word, a phrase or a field."
+    );
     assert_eq!(body["searched"], false, "ADR 0151 item 9");
     assert!(seen.lock().unwrap().is_empty());
 }

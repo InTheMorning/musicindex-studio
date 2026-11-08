@@ -462,7 +462,8 @@ function title(error) {
     case 'not_found': return 'Studio did not find the file.';
     case 'invalid_feed': return 'That file is not a feed that Studio can read.';
     case 'offline': return 'No connection to Studio.';
-    case 'query_field': return 'Studio cannot read this search.';
+    // The title of the crate for a field error (musicindex ADR 0052 R-QUERY-8).
+    case 'query_field': return 'This search cannot run.';
     case 'index_answer': return 'Music Index gave a bad answer.';
     default: return 'Something went wrong.';
   }

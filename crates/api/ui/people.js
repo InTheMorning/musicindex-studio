@@ -5,8 +5,8 @@
 
 import { shortKey } from './nostrkey.js';
 import { titleCase } from './casing.js';
-import { feedKind, isPublisher, isReadOnly, roleWord } from './shell.js';
-import { placesText } from './recipients.js';
+import { feedKind, isPublisher, isReadOnly, roleWord, compareNames, letterGroups } from './shell.js';
+import { placesText, recipientTitle } from './recipients.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const feedCount = (n) => plural(n, 'feed', 'feeds');
@@ -247,8 +247,37 @@ export function payeeMatches(payee, query) {
 export const filterPeople = (people, query) => (people || []).filter((p) => personMatches(p, query));
 export const filterPayees = (payees, query) => (payees || []).filter((p) => payeeMatches(p, query));
 
-// The wallets of `GET /recipients` that have no person (ADR 0099 item 2).
-export const payeesWithNoPerson = (recipients) => (recipients || []).filter((r) => r.saved_id === null || r.saved_id === undefined);
+// The wallets of `GET /recipients` that have no person (ADR 0099 item 2), by
+// name. A wallet with no name comes after the names, by the address that its
+// row shows (musicindex ADR 0053 R-LIST-12).
+export function payeesWithNoPerson(recipients) {
+  const named = (r) => (r.name && r.name.trim() !== '' ? 0 : 1);
+  return (recipients || []).filter((r) => r.saved_id === null || r.saved_id === undefined)
+    .sort((a, b) => named(a) - named(b) || compareNames(recipientTitle(a), recipientTitle(b)));
+}
+
+// The sorts of the People list. The first sort is the default (musicindex
+// ADR 0053 R-LIST-9, ADR 0153).
+const PEOPLE_SORTS = ['az', 'newest'];
+
+// The People list in the order of `sort`, reversed when `reversed` is true
+// (musicindex ADR 0043 R-LIST-7). "A to Z" gives the letter groups of its
+// rows, and the letters follow the rows. "Newest" gives the person that the
+// user added last first.
+export function peopleOrder(people, { sort, reversed } = {}) {
+  const sortKey = PEOPLE_SORTS.includes(sort) ? sort : PEOPLE_SORTS[0];
+  const sorted = sortKey === 'az'
+    ? (people || []).slice().sort((a, b) => compareNames(a.name, b.name) || a.id - b.id)
+    : (people || []).slice().sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0) || b.id - a.id);
+  if (reversed === true) sorted.reverse();
+  return {
+    sort: sortKey,
+    sorts: PEOPLE_SORTS,
+    reversed: reversed === true,
+    people: sorted,
+    letters: sortKey === 'az' ? letterGroups(sorted.map((p) => ({ id: p.id, title: p.name }))) : null,
+  };
+}
 
 // The change sets of `GET /change-sets` that are not closed.
 export const openChanges = (sets) => (sets || []).filter((s) => s.open);
@@ -319,7 +348,7 @@ export const afterMissing = (id, merged) => (merged.has(String(id)) ? { name: 'p
 // example "HeyCitizen · Artist" (ADR 0111 item 3).
 export function memberChoices(feeds) {
   return (feeds || []).filter((f) => f.medium === 'publisher')
-    .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }))
+    .sort((a, b) => compareNames(a.title, b.title))
     .map((f) => {
       const title = f.title || 'Untitled feed';
       return [String(f.id), (f.publisher_roles || []).length > 0 ? `${title} · ${firstRole(f)}` : title];
@@ -905,7 +934,7 @@ export function linkRows(values, saved, feeds, linkedCredits = []) {
       dot: feed ? feedKind(feed).dot : 'feed',
       line: [role, state].filter((text) => text).join(' · '),
     };
-  }).sort((x, y) => x.title.localeCompare(y.title, undefined, { sensitivity: 'base' }));
+  }).sort((x, y) => compareNames(x.title, y.title));
 }
 
 // The offers of a credit after a Save that changes the links (ADR 0118 items 3
@@ -1565,7 +1594,7 @@ export function personChoices(people, exceptId = null) {
   return (people || [])
     .filter((p) => p.id !== exceptId)
     .slice()
-    .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }))
+    .sort((a, b) => compareNames(a.name, b.name))
     .map((p) => [String(p.id), p.name]);
 }
 

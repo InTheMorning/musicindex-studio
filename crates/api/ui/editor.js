@@ -12,7 +12,7 @@ import { PersonArt, useProfiles } from './peoplepages.js';
 import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
 import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
@@ -4248,7 +4248,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       </div>`}
       ${data.files.length === 0 && html`<p class="hint">No files yet.</p>`}
       ${data.files.length > 0 && html`<div class="group">
-        ${data.files.map((file) => html`<${FileEntry} key=${file.id} feedId=${feed.id} file=${file} defaultHost=${defaultHost}
+        ${byName(data.files, (file) => file.path).map((file) => html`<${FileEntry} key=${file.id} feedId=${feed.id} file=${file} defaultHost=${defaultHost}
           connectors=${connectors} busy=${busy} onOperation=${addOperation} onUndo=${undoOperation}
           download=${downloads.find((d) => d.file_id === file.id)}
           onDownload=${(fileId) => startDownloads({ files: [fileId] })} onStop=${stopDownload}
@@ -4259,7 +4259,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 
     ${data.other_host_files.length > 0 && html`<section class="page-section"><h2>Other files on the file hosts</h2>
       <div class="group">
-        ${data.other_host_files.map((extra) => html`<${OtherFileRow}
+        ${byName(data.other_host_files, (extra) => extra.path).map((extra) => html`<${OtherFileRow}
           key=${`${extra.connector_id}-${extra.path}`} file=${extra} connectors=${connectors} busy=${busy}
           onDelete=${(connectorId, path) => addOperation({ op: 'delete', connector_id: connectorId, path })}
           onUndo=${undoOperation} />`)}

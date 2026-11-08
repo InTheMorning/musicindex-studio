@@ -1,7 +1,7 @@
 // The model of the Add feeds page and of the form that makes a feed (ADR 0073
 // items 1 to 10, ADR 0042). The functions have no Preact and no browser
 // state. `app.js` shows the rows and the form.
-import { feedKind } from './shell.js';
+import { feedKind, compareNames } from './shell.js';
 
 // The rows of the Add feeds page, in two groups. With no connected host, the
 // group "Make a new feed" has no rows and the flag `connect`. The row
@@ -69,6 +69,6 @@ export function startChoices(feeds) {
   const albums = (feeds || [])
     .filter((feed) => feedKind(feed).label === 'Album')
     .map((feed) => [String(feed.id), feed.title || feed.path || 'Untitled feed']);
-  albums.sort((a, b) => a[1].localeCompare(b[1]));
+  albums.sort((a, b) => compareNames(a[1], b[1]));
   return [['', 'Empty album'], ...albums];
 }

@@ -1495,6 +1495,9 @@ button.outline-feed {
    window and stays in the margins of the page (ADR 0072 item 2). */
 .releases-tools { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; flex-wrap: wrap; min-width: 0; }
 .releases-tools .view-button[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent); }
+/* The sort control of the People list is at the right end of its row
+   (musicindex ADR 0053 R-LIST-11). */
+.people-order { margin-left: auto; }
 .sort { position: relative; }
 .sort-menu {
   position: absolute;

@@ -515,17 +515,32 @@ function compareNewest(a, b) {
   return (b.added_at ?? 0) - (a.added_at ?? 0) || Number(b.id) - Number(a.id);
 }
 
+// The order of two names in the language of the reader. A number in a name
+// counts as a number, so "2.mp3" comes before "15.mp3" (musicindex ADR 0053
+// R-LIST-12 item 1).
+const NAMES = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+export function compareNames(a, b) {
+  return NAMES.compare(String(a ?? ''), String(b ?? ''));
+}
+
+// A copy of `list` in the name order of `compareNames`. `nameOf` gives the
+// name of an entry.
+export function byName(list, nameOf) {
+  return (list || []).slice().sort((a, b) => compareNames(nameOf(a), nameOf(b)));
+}
+
 // A to Z. A title with a letter from A to Z comes before a title with any
 // other first character, so that "#" comes after Z.
 function compareAz(a, b) {
   const bucket = (feed) => (letterOf(displayTitle(feed)) === '#' ? 1 : 0);
   return bucket(a) - bucket(b)
-    || displayTitle(a).localeCompare(displayTitle(b), 'en', { sensitivity: 'base' })
+    || compareNames(displayTitle(a), displayTitle(b))
     || Number(a.id) - Number(b.id);
 }
 
 // The first letter of each group of rows, in sequence (ADR 0039 item 2a).
-function letterGroups(rows) {
+// Each row has a `title` and an `id`.
+export function letterGroups(rows) {
   const groups = [];
   for (const row of rows) {
     const letter = letterOf(row.title);

@@ -184,7 +184,7 @@ test('the result line leaves out a count of 0 and names one part', () => {
 });
 
 import {
-  initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeTitle, feedsToWrite,
+  initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, changeTitle, feedsToWrite,
   changeRow, afterDiscard, afterMissing, memberChoices, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
 } from '../ui/people.js';
 
@@ -205,6 +205,46 @@ test('the lists of payees and of open change sets', () => {
   assert.deepEqual(payeesWithNoPerson([{ saved_id: null, name: 'a' }, { saved_id: 3, name: 'b' }]).map((r) => r.name), ['a']);
   assert.deepEqual(openChanges([{ id: 1, open: true }, { id: 2, open: false }]).map((s) => s.id), [1]);
   assert.equal(initials('mary kate ultra'), 'MK');
+});
+
+// musicindex ADR 0053 R-LIST-12: a list of names sorts by name, with numbers
+// as numbers, and never by an address.
+test('the payees with no person sort by name, then by the address that a row shows', () => {
+  const payees = [
+    { saved_id: null, name: '', address: 'aaa@x.example' },
+    { saved_id: null, name: 'Track 15', address: '02bb' },
+    { saved_id: null, name: 'zoe', address: '01aa' },
+    { saved_id: null, name: 'Track 2', address: '03cc' },
+    { saved_id: null, name: 'Anna', address: 'zzz@x.example' },
+    { saved_id: null, name: null, address: '00ff' },
+  ];
+  assert.deepEqual(payeesWithNoPerson(payees).map((r) => r.name || r.address),
+    ['Anna', 'Track 2', 'Track 15', 'zoe', '00ff', 'aaa@x.example']);
+});
+
+// musicindex ADR 0053 R-LIST-9 and ADR 0043 R-LIST-7, ADR 0153: People has
+// "A to Z", the default, and "Newest", and each one reverses.
+test('the People list sorts A to Z or Newest, and reverses', () => {
+  const people = [
+    { id: 1, name: 'zoe', created_at: 300 },
+    { id: 2, name: 'Anna 10', created_at: 100 },
+    { id: 3, name: 'anna 9', created_at: 200 },
+    { id: 4, name: '4 Hero', created_at: 200 },
+  ];
+  const az = peopleOrder(people, {});
+  assert.equal(az.sort, 'az');
+  assert.deepEqual(az.sorts, ['az', 'newest']);
+  assert.deepEqual(az.people.map((p) => p.id), [4, 3, 2, 1]);
+  assert.deepEqual(az.letters, [{ letter: '#', firstId: 4 }, { letter: 'A', firstId: 3 }, { letter: 'Z', firstId: 1 }]);
+  const za = peopleOrder(people, { sort: 'az', reversed: true });
+  assert.equal(za.reversed, true);
+  assert.deepEqual(za.people.map((p) => p.id), [1, 2, 3, 4]);
+  assert.deepEqual(za.letters.map((g) => g.letter), ['Z', 'A', '#']);
+  const newest = peopleOrder(people, { sort: 'newest' });
+  assert.deepEqual(newest.people.map((p) => p.id), [1, 4, 3, 2]);
+  assert.equal(newest.letters, null);
+  assert.deepEqual(peopleOrder(people, { sort: 'newest', reversed: true }).people.map((p) => p.id), [2, 3, 4, 1]);
+  assert.equal(peopleOrder(people, { sort: 'unknown' }).sort, 'az');
 });
 
 test('a change row gives the operation, the subject and the feeds to write', () => {

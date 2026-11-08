@@ -154,6 +154,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0150: Studio shows a change from outside when a page opens](adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md)
 - [ADR 0151: The search fields read the shared query text](adr/0151-the-search-fields-read-the-shared-query-text.md)
 - [ADR 0152: Text names the product "Music Index"](adr/0152-text-names-the-product-music-index.md)
+- [ADR 0153: The People list has a sort, and names sort with numbers](adr/0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md)
 
 ## Plans
 

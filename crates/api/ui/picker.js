@@ -2,6 +2,8 @@
 // Preact and no browser state. `editor.js` shows the sheet and does the
 // requests.
 
+import { compareNames } from './shell.js';
+
 // The kind of each file field of ADR 0062 item 1. A cover is the cover of an
 // album, of a publisher feed or of a playlist. `recording` is the audio file
 // of a live show.
@@ -97,8 +99,8 @@ export function hostTree(files) {
     node.files.push({ ...file, name: baseName(file.path) });
   }
   const order = (node) => {
-    node.folders.sort((a, b) => a.name.localeCompare(b.name));
-    node.files.sort((a, b) => a.name.localeCompare(b.name));
+    node.folders.sort((a, b) => compareNames(a.name, b.name));
+    node.files.sort((a, b) => compareNames(a.name, b.name));
     node.folders.forEach(order);
   };
   order(root);

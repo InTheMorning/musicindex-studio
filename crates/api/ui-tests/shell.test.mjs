@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pageTabs, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, sortLabel,
+  leftPanel, releasesList, listQuery, queryText, sortLabel, compareNames, byName,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
 } from '../ui/shell.js';
@@ -684,3 +684,15 @@ test('each head and row with art and a type word gives its dot', () => {
   for (const row of list.rows) assert.ok(row.dot, message);
 });
 
+
+// musicindex ADR 0053 R-LIST-12: a number in a name counts as a number, and
+// the case of a letter does not change the order.
+test('a name order reads numbers as numbers', () => {
+  assert.deepEqual(byName([{ p: '15.mp3' }, { p: '2.mp3' }, { p: '1.mp3' }, { p: 'cover.jpg' }], (f) => f.p).map((f) => f.p),
+    ['1.mp3', '2.mp3', '15.mp3', 'cover.jpg']);
+  assert.equal(compareNames('anna', 'Anna'), 0);
+  assert.ok(compareNames('Track 9', 'Track 10') < 0);
+  const titled = (id, title) => ({ ...album, id, title, path: `p${id}` });
+  const list = releasesList({ feeds: [titled(1, 'Volume 10'), titled(2, 'Volume 9')], connectors: [], sort: 'az', view: 'rows' });
+  assert.deepEqual(list.rows.map((r) => r.title), ['Volume 9', 'Volume 10']);
+});

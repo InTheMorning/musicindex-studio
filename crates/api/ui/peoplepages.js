@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
 import { PickerLayout, FindOneSheet, PickFold, TakenTag } from './pickers.js';
-import { api, assetMode, askConfirm, Bar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { api, assetMode, askConfirm, Bar, SortMenu, ReverseButton, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
@@ -15,7 +15,7 @@ import {
 } from './recipients.js';
 import {
   peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonBody, initials,
-  filterPeople, filterPayees, payeesWithNoPerson, openChanges, changeRow, memberChoices,
+  filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
   defaultFirst, walletValues, walletSelected, walletEdit, walletEditNote, creditNameEdit, supportLinkEdit, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
@@ -98,11 +98,11 @@ function KeyRowView({ npub, profiles, name, action, note }) {
 // One row of a list: a button with the lines of its model. A line is text, or
 // `{ text, error }`. An error line shows in the error color, with the warning
 // icon.
-function ListRow({ title, lines, count, lead, onClick, disabled = false, chevron = true, selected = false }) {
+function ListRow({ id, title, lines, count, lead, onClick, disabled = false, chevron = true, selected = false }) {
   const line = (l, i) => (typeof l === 'string'
     ? html`<span class="summary" key=${i}>${l}</span>`
     : html`<span class=${l.error ? 'summary check-error' : 'summary'} key=${i}>${l.error && html`<${Icon} name="alert" />`}${l.text}</span>`);
-  return html`<button class="link-row" type="button" disabled=${disabled} aria-current=${selected ? 'true' : undefined} onClick=${onClick}>${lead}
+  return html`<button id=${id} class="link-row" type="button" disabled=${disabled} aria-current=${selected ? 'true' : undefined} onClick=${onClick}>${lead}
     <span class="text"><span class="label">${title}</span>${lines.map(line)}</span>
     ${count && html`<span class="count">${count}</span>`}${chevron && html`<span class="go">›</span>`}</button>`;
 }
@@ -121,8 +121,9 @@ async function downloadPeople() {
   URL.revokeObjectURL(url);
 }
 
-// The People page (ADR 0099 item 2).
-export function PeoplePage({ feeds, go }) {
+// The People page (ADR 0099 item 2). `sort` and `reversed` give the order of
+// the People list (ADR 0153).
+export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   const [data, setData] = useState(null);
   const [query, setQuery] = useState('');
   const [making, setMaking] = useState(null);
@@ -137,7 +138,8 @@ export function PeoplePage({ feeds, go }) {
   useEffect(() => { load(); }, []);
 
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
-  const people = data ? filterPeople(data.people, query) : [];
+  const order = peopleOrder(data ? filterPeople(data.people, query) : [], { sort, reversed });
+  const people = order.people;
   const payees = data ? filterPayees(payeesWithNoPerson(data.recipients), query) : [];
   const sections = data ? peopleSections({ people, suggestions: data.suggestions, changes: data.changes, payees, server: assetMode().server }) : [];
   const sectionViews = {
@@ -147,7 +149,11 @@ export function PeoplePage({ feeds, go }) {
         value=${query} onInput=${(e) => setQuery(e.target.value)} /></div></div>`,
     actions: () => html`<div class="actions">
       <button class="button action" type="button" onClick=${() => setAdding(true)}>Add a Person</button>
-      <button class="button" type="button" disabled=${busy} onClick=${() => run(downloadPeople)}>Export People</button></div>`,
+      <button class="button" type="button" disabled=${busy} onClick=${() => run(downloadPeople)}>Export People</button>
+      ${people.length > 0 && html`<div class="releases-tools people-order">
+        <${SortMenu} sorts=${order.sorts} sort=${order.sort} reversed=${order.reversed} onSort=${(id) => onOrder({ sort: id })} />
+        <${ReverseButton} reversed=${order.reversed} onReverse=${(value) => onOrder({ reversed: value })} />
+      </div>`}</div>`,
     changes: () => html`<section class="page-section"><h2>Changes to write</h2><div class="group">${data.changes.map((set) => {
       const row = changeRow(set, data.people, payeesWithNoPerson(data.recipients));
       return html`<${ListRow} key=${set.id} title=${row.title} lines=${[row.text]} onClick=${() => go(changeSetView(set))} />`;
@@ -162,9 +168,10 @@ export function PeoplePage({ feeds, go }) {
           onClick=${() => setMaking(suggestion)} />`;
       })} />`,
     people: () => (people.length > 0
-      ? html`<${PickFold} id="people-people" title="People" startOpen=${true} forceOpen=${query.trim() !== ''} rows=${people.map((person) => {
+      ? html`<${PickFold} id="people-people" title="People" startOpen=${true} forceOpen=${query.trim() !== ''}
+        lead=${order.letters && html`<${LetterBar} letters=${order.letters} idOf=${(id) => `person-${id}`} />`} rows=${people.map((person) => {
         const row = personRow(person, titles);
-        return html`<${ListRow} key=${person.id} title=${row.title} lines=${row.lines} count=${row.count}
+        return html`<${ListRow} key=${person.id} id=${`person-${person.id}`} title=${row.title} lines=${row.lines} count=${row.count}
           lead=${html`<${PersonArt} person=${person} />`} onClick=${() => go({ name: 'person', id: person.id })} />`;
       })} />`
       : html`<section class="page-section"><h2>People</h2>

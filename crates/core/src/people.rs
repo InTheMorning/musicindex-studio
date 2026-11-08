@@ -206,6 +206,9 @@ pub struct Person {
     pub support_links: Vec<SupportLink>,
     /// The publisher feeds of which the person is a member.
     pub members: Vec<FeedId>,
+    /// The time when the user added the person, in seconds since 1970. The
+    /// sort "Newest" of the People list uses it (ADR 0153).
+    pub created_at: i64,
 }
 
 /// The fields of a person that the user edits.
@@ -435,7 +438,8 @@ fn wallets_of(db: &Connection, id: PersonId) -> Result<Vec<PersonWallet>, Collec
 fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError> {
     let mut person = db
         .query_row(
-            "SELECT name, usual_role, img, href, default_address, default_custom_key, default_custom_value, usual_group
+            "SELECT name, usual_role, img, href, default_address, default_custom_key, default_custom_value, usual_group,
+                    created_at
              FROM people WHERE id = ?1",
             [id.0],
             |r| {
@@ -459,6 +463,7 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
                     credit_names: Vec::new(),
                     support_links: Vec::new(),
                     members: Vec::new(),
+                    created_at: r.get(8)?,
                 })
             },
         )
@@ -3470,6 +3475,22 @@ mod tests {
             names,
             [("Ann".into(), 2), ("ANN".into(), 3), ("bob".into(), 1)]
         );
+    }
+
+    #[test]
+    fn a_person_gives_the_time_when_the_user_added_it() {
+        let collection = Collection::open_in_memory().unwrap();
+        let before = now();
+        let id = add_person(&collection, &fields("Ann")).unwrap();
+        collection
+            .db()
+            .execute("UPDATE people SET created_at = 1234 WHERE id = ?1", [id.0])
+            .unwrap();
+        let added = add_person(&collection, &fields("Bob")).unwrap();
+        let list = people(&collection).unwrap();
+        assert_eq!(list[0].created_at, 1234);
+        let bob = list.iter().find(|p| p.id == added).unwrap();
+        assert!(bob.created_at >= before);
     }
 
     #[test]

@@ -26,6 +26,9 @@
   color-scheme: dark;
   --bg:       #0b0b0d;
   --sidebar:  #141417;
+  /* The glow at the top of the left panel (musicindex ADR 0056 R-SIDE-1). */
+  --sidebar-glow-top: rgba(45, 123, 255, .09);
+  --sidebar-glow-length: 320px;
   --surface:  #1c1c1f;
   --surface2: #26262a;
   --fill:     rgba(118, 118, 128, .24);
@@ -116,6 +119,7 @@
   color-scheme: light;
   --bg:       #ffffff;
   --sidebar:  #f5f5f7;
+  --sidebar-glow-top: rgba(10, 91, 214, .09);
   --surface:  #ffffff;
   --surface2: #ececef;
   --fill:     rgba(120, 120, 128, .14);
@@ -524,7 +528,9 @@ textarea.masked { -webkit-text-security: disc; }
   flex-direction: column;
   gap: 8px;
   padding: 14px 12px;
-  background: var(--sidebar);
+  /* The glow is on the box, which does not scroll. Only .sidebar-scroll scrolls, so
+     the glow stays at the top (musicindex ADR 0056 R-SIDE-1). */
+  background: linear-gradient(180deg, var(--sidebar-glow-top), transparent var(--sidebar-glow-length)), var(--sidebar);
   border-right: 1px solid var(--sep);
   overflow: hidden;
 }
@@ -853,6 +859,22 @@ dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); 
      the color of the panel. The bar keeps its own color (ADR 0039 items 11
      and 11a). */
   .panel-page { min-height: 100%; background: var(--sidebar); }
+  /* The root page and the outline page are the left panel at this width, so they have
+     the glow. .main scrolls, so a sticky layer keeps the glow at the top. The layer
+     takes no space and no click, and it is below the content of the page, which
+     has its own stacking context (musicindex ADR 0056 R-SIDE-1). */
+  .panel-page { isolation: isolate; }
+  .panel-page::before {
+    content: "";
+    display: block;
+    position: sticky;
+    top: 0;
+    height: var(--sidebar-glow-length);
+    margin-bottom: calc(-1 * var(--sidebar-glow-length));
+    background: linear-gradient(180deg, var(--sidebar-glow-top), transparent);
+    pointer-events: none;
+    z-index: -1;
+  }
   .stack-page { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px 24px; min-height: calc(var(--window-height) - var(--bar-h)); }
   .stack-page header { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; }
   .stack-page footer { margin-top: auto; display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--sep); }

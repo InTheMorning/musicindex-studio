@@ -259,8 +259,13 @@ pub enum FieldRow {
         values: Vec<&'static str>,
         /// A short text that names the correct values.
         values_text: &'static str,
-        /// One correct example of the field, with its token.
+        /// One example of the field, with its token. For a text field it is
+        /// the token and the quoted placeholder, which runs no search
+        /// (musicindex ADR 0058 R-QUERY-11).
         example: &'static str,
+        /// The placeholder text of a text field, which the UI selects after
+        /// the example goes into the field. `None` when the example runs.
+        placeholder: Option<&'static str>,
         /// What the field matches.
         description: &'static str,
         /// The text that replaces the edit range: the token.
@@ -370,6 +375,7 @@ pub fn field_list(text: &str, cursor_utf16: usize, scope: Option<IndexEntity>) -
                 values: info.name.fixed_values().iter().map(|v| v.word).collect(),
                 values_text: info.values_text,
                 example: info.example,
+                placeholder: info.placeholder,
                 description: info.description,
                 insert: info.token.to_owned(),
             }),
@@ -1362,6 +1368,31 @@ mod tests {
         };
         assert!(values.contains(&"single"));
         assert_eq!(insert, "kind:");
+    }
+
+    #[test]
+    fn a_text_field_row_gives_its_placeholder_and_inserts_only_its_token() {
+        let list = field_list("art", 3, None);
+        assert_eq!(tokens(&list), vec!["artist:"]);
+        let FieldRow::Field {
+            example,
+            placeholder,
+            insert,
+            ..
+        } = &list.rows[0]
+        else {
+            panic!("a field row");
+        };
+        assert_eq!(
+            (*example, *placeholder, insert.as_str()),
+            ("artist:\"artist name\"", Some("artist name"), "artist:"),
+            "musicindex ADR 0058 R-QUERY-11: a text field row must give its placeholder, \
+             and the row must put only the token into the field."
+        );
+        let FieldRow::Field { placeholder, .. } = &field_list("ki", 2, None).rows[0] else {
+            panic!("a field row");
+        };
+        assert_eq!(*placeholder, None, "kind: has an example that runs.");
     }
 
     #[test]

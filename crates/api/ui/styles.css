@@ -1564,6 +1564,9 @@ button.outline-feed {
 .field-list li[aria-selected="true"], .field-list li:hover { background: var(--fill-soft); }
 .field-list .label { font-weight: 600; }
 .field-list .summary { color: var(--muted); font-size: var(--text-callout); }
+/* The example of a text field has the color of the placeholder of a search
+   field (musicindex ADR 0058 R-QUERY-11 item 2). */
+.field-list .field-placeholder, input[type="search"]::placeholder { color: var(--muted); }
 /* The error of the field under the cursor is one row of the list (R-QUERY-7
    item 2). The search gives its own error, so this row is not red. */
 .field-list-note { padding: 6px 10px; color: var(--muted); font-size: var(--text-callout); }

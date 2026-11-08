@@ -161,6 +161,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0157: The page tabs are a segmented control](adr/0157-the-page-tabs-are-a-segmented-control.md)
 - [ADR 0158: A hidden suggestion can come back](adr/0158-a-hidden-suggestion-can-come-back.md)
 - [ADR 0159: A person can link to a page on Music Index](adr/0159-a-person-can-link-to-a-page-on-music-index.md)
+- [ADR 0160: The field list shows the placeholder of a text field](adr/0160-the-field-list-shows-the-placeholder-of-a-text-field.md)
 
 ## Plans
 

@@ -24,12 +24,17 @@ export function namePrefix(answer) {
 
 // The rows that the list shows: the rows of the core, then the name rows of
 // `GET /musicindex/artist-names`. Each row has a label, a line and the text
-// that it puts into the field.
+// that it puts into the field. The row of a text field also has `placeholder`:
+// its example, which the list shows in the placeholder style after the line
+// (musicindex ADR 0058 R-QUERY-11 item 2). The row still puts only the token
+// into the field, as on the site.
 export function listRows(answer, names = []) {
   if (!answer) return [];
-  const rows = (answer.rows || []).map((row) => (row.row === 'field'
-    ? { label: row.token, line: [row.values_text, row.example].filter(Boolean).join(' · '), insert: row.insert }
-    : { label: row.value, line: row.description || '', insert: row.insert }));
+  const rows = (answer.rows || []).map((row) => {
+    if (row.row !== 'field') return { label: row.value, line: row.description || '', insert: row.insert };
+    if (row.placeholder) return { label: row.token, line: row.values_text || '', placeholder: row.example, insert: row.insert };
+    return { label: row.token, line: [row.values_text, row.example].filter(Boolean).join(' · '), insert: row.insert };
+  });
   const named = namePrefix(answer) === null ? [] : (names || [])
     .map((name) => ({ label: name.name, line: NAME_SOURCE, insert: name.insert }));
   return [...rows, ...named];

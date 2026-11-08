@@ -2976,9 +2976,11 @@ dependencies = [
 [[package]]
 name = "musicindex-search"
 version = "0.1.0"
-source = "git+https://github.com/InTheMorning/musicindex-lib?rev=634e4cc1937d66ebcad4790d18fc11d951978557#634e4cc1937d66ebcad4790d18fc11d951978557"
+source = "git+https://github.com/InTheMorning/musicindex-lib?rev=e84bab570ef53fb6daad3fc59681ec64abe5417f#e84bab570ef53fb6daad3fc59681ec64abe5417f"
 dependencies = [
  "chrono",
+ "serde_json",
+ "unicode-normalization",
 ]
 
 [[package]]

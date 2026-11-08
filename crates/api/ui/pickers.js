@@ -109,7 +109,7 @@ export function useFieldList({ id, value, setValue, scope = null }) {
     ${rows.length > 0 && html`<ul id=${listId} role="listbox" aria-label="Search fields">
       ${rows.map((row, i) => html`<li id=${`${listId}-${i}`} key=${`${row.label}-${i}`} role="option"
         aria-selected=${i === selected ? 'true' : 'false'} onClick=${() => put(row)}>
-        <span class="label">${row.label}</span>${row.line && html`<span class="summary">${row.line}</span>`}</li>`)}
+        <span class="label">${row.label}</span>${(row.line || row.placeholder) && html`<span class="summary">${row.line}${row.line && row.placeholder && ' · '}${row.placeholder && html`<span class="field-placeholder">${row.placeholder}</span>`}</span>`}</li>`)}
     </ul>`}
   </div>`;
   return { input, list };

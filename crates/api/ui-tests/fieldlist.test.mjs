@@ -57,3 +57,9 @@ test('the keys of the list', () => {
     assert.equal(listKey({ open: true, selected: null }, key, 0).act, 'pass', key);
   }
 });
+
+test('a text field shows its example as a placeholder, and puts in only its token (musicindex ADR 0058 R-QUERY-11)', () => {
+  const answer = { rows: [{ row: 'field', token: 'artist:', values: [], values_text: 'A name', example: 'artist:"artist name"', placeholder: 'artist name', description: 'The artist', insert: 'artist:' }],
+    edit: { start: 0, end: 0 }, names: null, error: null };
+  assert.deepEqual(listRows(answer), [{ label: 'artist:', line: 'A name', placeholder: 'artist:"artist name"', insert: 'artist:' }]);
+});

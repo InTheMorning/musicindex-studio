@@ -18,6 +18,8 @@ use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, CreditRow, FeedId, now};
 use crate::feed::{CreditPlace, Recipient, RecipientPlace};
 use crate::keysend::{self, Lookup, LookupResult};
+use crate::lookup::{is_channel_route, save_key_of};
+use crate::musicindex::PublisherValues;
 use crate::net::NetPolicy;
 use crate::profiles;
 use crate::web::Web;
@@ -206,9 +208,24 @@ pub struct Person {
     pub support_links: Vec<SupportLink>,
     /// The publisher feeds of which the person is a member.
     pub members: Vec<FeedId>,
+    /// The read-only links to artist and label pages on Music Index, A to Z
+    /// by title (ADR 0159 item 2). A page holds a public feed GUID and a
+    /// title. It holds no secret (ADR 0108 item 2).
+    pub pages: Vec<PersonPage>,
     /// The time when the user added the person, in seconds since 1970. The
     /// sort "Newest" of the People list uses it (ADR 0153).
     pub created_at: i64,
+}
+
+/// A read-only link of a person to an artist or label page on Music Index
+/// that is not in the collection (ADR 0159 item 2). Studio writes nothing to
+/// that feed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersonPage {
+    /// The feed GUID of the page. It is public.
+    pub feed_guid: String,
+    /// The title of the page, from the time of the link.
+    pub title: String,
 }
 
 /// The fields of a person that the user edits.
@@ -463,6 +480,7 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
                     credit_names: Vec::new(),
                     support_links: Vec::new(),
                     members: Vec::new(),
+                    pages: Vec::new(),
                     created_at: r.get(8)?,
                 })
             },
@@ -522,6 +540,19 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
         db.prepare("SELECT feed_id FROM person_members WHERE person_id = ?1 ORDER BY feed_id")?;
     person.members = statement
         .query_map([id.0], |r| Ok(FeedId(r.get(0)?)))?
+        .collect::<Result<_, _>>()?;
+
+    let mut statement = db.prepare(
+        "SELECT feed_guid, title FROM person_pages WHERE person_id = ?1
+         ORDER BY title COLLATE NOCASE, feed_guid",
+    )?;
+    person.pages = statement
+        .query_map([id.0], |r| {
+            Ok(PersonPage {
+                feed_guid: r.get(0)?,
+                title: r.get(1)?,
+            })
+        })?
         .collect::<Result<_, _>>()?;
     Ok(person)
 }
@@ -1209,6 +1240,9 @@ pub struct PersonSave {
     /// The complete list of links to publisher feeds (ADR 0132 item 9). An
     /// empty list removes each link.
     pub members: Option<Vec<FeedId>>,
+    /// The complete list of read-only links to pages on Music Index
+    /// (ADR 0159 item 6). An empty list removes each link.
+    pub pages: Option<Vec<PersonPage>>,
     /// Each wallet to link to the person (ADR 0117 item 7).
     pub wallets: Vec<WalletAdd>,
     /// Each Nostr key to link to the person (ADR 0117 item 7).
@@ -1250,7 +1284,8 @@ where
 /// feed that is not a publisher feed, or a wallet or key that is not valid,
 /// [`CollectionErrorKind::Conflict`] for a wallet or a key of a different
 /// person, and [`CollectionErrorKind::NotFound`] for an unknown person or
-/// feed.
+/// feed, and [`CollectionErrorKind::Invalid`] for an empty page GUID or the
+/// GUID of a feed of the collection (ADR 0159 item 5).
 pub fn save_person(
     collection: &Collection,
     id: PersonId,
@@ -1267,6 +1302,9 @@ pub fn save_person(
         for feed in members {
             insert_member(&tx, id, *feed)?;
         }
+    }
+    if let Some(pages) = &save.pages {
+        replace_pages(&tx, id, pages)?;
     }
     for wallet in &save.wallets {
         insert_wallet(
@@ -1285,6 +1323,47 @@ pub fn save_person(
         write_default_address(&tx, id, key.as_ref(), &lookups)?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+/// Replace the read-only links of a person with `pages`. A GUID is trimmed.
+/// The first title of a GUID stays.
+fn replace_pages(
+    db: &Connection,
+    id: PersonId,
+    pages: &[PersonPage],
+) -> Result<(), CollectionError> {
+    let mut clean: Vec<PersonPage> = Vec::new();
+    for page in pages {
+        let guid = page.feed_guid.trim();
+        if guid.is_empty() {
+            return Err(CollectionError::invalid("a page needs a feed GUID"));
+        }
+        let in_collection: bool = db.query_row(
+            "SELECT EXISTS (SELECT 1 FROM feeds WHERE lower(podcast_guid) = lower(?1))",
+            [guid],
+            |r| r.get(0),
+        )?;
+        if in_collection {
+            return Err(CollectionError::invalid(format!(
+                "the feed {guid} is in the collection, so link it as a page of the collection"
+            )));
+        }
+        if !clean.iter().any(|p| p.feed_guid == guid) {
+            clean.push(PersonPage {
+                feed_guid: guid.to_owned(),
+                title: page.title.trim().to_owned(),
+            });
+        }
+    }
+    db.execute("DELETE FROM person_pages WHERE person_id = ?1", [id.0])?;
+    for page in &clean {
+        db.execute(
+            "INSERT INTO person_pages (person_id, feed_guid, title, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![id.0, page.feed_guid, page.title, now()],
+        )?;
+    }
     Ok(())
 }
 
@@ -3030,6 +3109,11 @@ pub fn merge_people(
         "UPDATE OR IGNORE person_members SET person_id = ?1 WHERE person_id = ?2",
         params![keep.0, other.0],
     )?;
+    // A page that `keep` has already stays in `other` and goes with it.
+    tx.execute(
+        "UPDATE OR IGNORE person_pages SET person_id = ?1 WHERE person_id = ?2",
+        params![keep.0, other.0],
+    )?;
     tx.execute(
         "UPDATE change_sets SET person_id = ?1 WHERE person_id = ?2",
         params![keep.0, other.0],
@@ -3041,6 +3125,92 @@ pub fn merge_people(
     tx.execute("DELETE FROM people WHERE id = ?1", [other.0])?;
     tx.commit()?;
     Ok(())
+}
+
+// ---- The suggestions of a read-only page (ADR 0159 items 7 to 10) ----
+
+/// A wallet of a page that the person does not have.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PageWallet {
+    /// The key in the form of the wallet sheet.
+    pub key: RecipientKey,
+    /// `node` or `lnaddress`.
+    pub recipient_type: String,
+    /// The name of the recipient, when the route gives one.
+    pub name: Option<String>,
+}
+
+/// The values of one read-only page that differ from the person.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PageSuggestion {
+    /// The feed GUID of the page.
+    pub feed_guid: String,
+    /// The title of the link.
+    pub title: String,
+    /// True when Music Index answered and does not know the feed.
+    pub missing: bool,
+    /// The image address, when it is new.
+    pub picture: Option<String>,
+    /// The website address, when it is new.
+    pub website: Option<String>,
+    /// The Nostr key, when it is new.
+    pub npub: Option<String>,
+    /// Each wallet that the person does not have.
+    pub wallets: Vec<PageWallet>,
+}
+
+/// Compare one read-only page with a person (ADR 0159 items 8 and 9).
+/// `values` is `None` when Music Index does not know the feed. The function
+/// makes no request and reads no collection. A route is a wallet of the
+/// person when one of its addresses is in a wallet of the person, as the
+/// check of the default address compares it, with `lookups`.
+#[must_use]
+pub fn page_suggestions<S: BuildHasher>(
+    person: &Person,
+    page: &PersonPage,
+    values: Option<&PublisherValues>,
+    lookups: &HashMap<String, Lookup, S>,
+) -> PageSuggestion {
+    let mut suggestion = PageSuggestion {
+        feed_guid: page.feed_guid.clone(),
+        title: page.title.clone(),
+        missing: values.is_none(),
+        picture: None,
+        website: None,
+        npub: None,
+        wallets: Vec::new(),
+    };
+    let Some(values) = values else {
+        return suggestion;
+    };
+    let new_text = |value: &Option<String>, have: &str| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty() && *v != have.trim())
+            .map(str::to_owned)
+    };
+    suggestion.picture = new_text(&values.image_url, &person.img);
+    suggestion.website = new_text(&values.website, &person.href);
+    suggestion.npub = values
+        .npub
+        .as_deref()
+        .map(|n| n.trim().to_lowercase())
+        .filter(|n| !n.is_empty() && !person.keys.iter().any(|k| k.npub.to_lowercase() == *n));
+    for route in values.routes.iter().filter(|r| is_channel_route(r)) {
+        let Some(key) = save_key_of(route) else {
+            continue;
+        };
+        if is_member(person, &key, lookups) || suggestion.wallets.iter().any(|w| w.key == key) {
+            continue;
+        }
+        suggestion.wallets.push(PageWallet {
+            key,
+            recipient_type: route.recipient_type.clone().unwrap_or_default(),
+            name: route.name.clone(),
+        });
+    }
+    suggestion
 }
 
 // ---- The Lightning address of a profile (ADR 0098 items 17 to 19) ----
@@ -4549,6 +4719,177 @@ mod tests {
         assert_eq!(saved.name, "Ann B");
         assert_eq!(saved.default_address, Some(key));
         assert_eq!(saved.members, [publisher]);
+    }
+
+    fn page(guid: &str, title: &str) -> PersonPage {
+        PersonPage {
+            feed_guid: guid.to_owned(),
+            title: title.to_owned(),
+        }
+    }
+
+    fn values() -> PublisherValues {
+        PublisherValues {
+            title: Some("Ann Bell Music".to_owned()),
+            feed_url: None,
+            image_url: Some("https://img.example/a.png".to_owned()),
+            website: Some("https://ann.example".to_owned()),
+            npub: Some("npub1ann".to_owned()),
+            routes: vec![Recipient {
+                name: Some("Ann".to_owned()),
+                address: Some("Ann@Example.com".to_owned()),
+                recipient_type: Some("lnaddress".to_owned()),
+                ..Recipient::default()
+            }],
+        }
+    }
+
+    #[test]
+    fn a_save_keeps_the_pages_a_to_z_and_one_row_for_a_guid() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let save = PersonSave {
+            pages: Some(vec![
+                page(" g-2 ", "Zed"),
+                page("g-1", " Ann Bell Music "),
+                page("g-2", "Other"),
+            ]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        assert_eq!(
+            person(&collection, ann).unwrap().pages,
+            [page("g-1", "Ann Bell Music"), page("g-2", "Zed")],
+            "ADR 0159 item 3: the pages must load A to Z with one row for each GUID."
+        );
+        save_person(&collection, ann, &PersonSave::default()).unwrap();
+        assert_eq!(person(&collection, ann).unwrap().pages.len(), 2);
+        let save = PersonSave {
+            pages: Some(Vec::new()),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        assert_eq!(person(&collection, ann).unwrap().pages.len(), 0);
+    }
+
+    #[test]
+    fn a_save_refuses_an_empty_guid_and_the_guid_of_a_feed_of_the_collection() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let (_, publisher) = publisher_and_album(&mut collection);
+        let doc = Document::parse(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>A</title>\
+             <podcast:guid>AAAA-1111</podcast:guid>\
+             <podcast:medium>publisher</podcast:medium></channel></rss>",
+        )
+        .unwrap();
+        collection
+            .record_state(publisher, &Feed::read(&doc).unwrap(), &Version::new("v2"))
+            .unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let first = PersonSave {
+            pages: Some(vec![page("g-1", "Kept")]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &first).unwrap();
+        for bad in ["  ", "aaaa-1111"] {
+            let save = PersonSave {
+                fields: Some(fields("Ann B")),
+                pages: Some(vec![page("g-9", "New"), page(bad, "Bad")]),
+                ..PersonSave::default()
+            };
+            let error = save_person(&collection, ann, &save).unwrap_err();
+            assert_eq!(error.kind(), CollectionErrorKind::Invalid, "{bad}");
+            let saved = person(&collection, ann).unwrap();
+            assert_eq!(
+                saved.name, "Ann",
+                "ADR 0159 item 5: a refusal changes nothing."
+            );
+            assert_eq!(saved.pages, [page("g-1", "Kept")]);
+        }
+    }
+
+    #[test]
+    fn a_merge_moves_the_pages_and_a_delete_removes_them() {
+        let collection = Collection::open_in_memory().unwrap();
+        let keep = add_person(&collection, &fields("Ann")).unwrap();
+        let other = add_person(&collection, &fields("Ann B")).unwrap();
+        let third = add_person(&collection, &fields("Cy")).unwrap();
+        for (id, pages) in [
+            (keep, vec![page("g-1", "One")]),
+            (other, vec![page("g-1", "One"), page("g-2", "Two")]),
+            (third, vec![page("g-3", "Three")]),
+        ] {
+            let save = PersonSave {
+                pages: Some(pages),
+                ..PersonSave::default()
+            };
+            save_person(&collection, id, &save).unwrap();
+        }
+        merge_people(&collection, keep, other).unwrap();
+        assert_eq!(
+            person(&collection, keep).unwrap().pages,
+            [page("g-1", "One"), page("g-2", "Two")]
+        );
+        remove_person(&collection, third).unwrap();
+        let rows: i64 = collection
+            .db()
+            .query_row(
+                "SELECT COUNT(*) FROM person_pages WHERE person_id = ?1",
+                [third.0],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(rows, 0, "ADR 0159 item 3: a delete must remove the pages.");
+    }
+
+    #[test]
+    fn page_suggestions_give_only_the_values_that_differ() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let lookups = lookup_map(&collection).unwrap();
+        let link = page("g-1", "Ann Bell Music");
+        let mut p = person(&collection, ann).unwrap();
+
+        let all = page_suggestions(&p, &link, Some(&values()), &lookups);
+        assert!(!all.missing);
+        assert_eq!(all.picture.as_deref(), Some("https://img.example/a.png"));
+        assert_eq!(all.website.as_deref(), Some("https://ann.example"));
+        assert_eq!(all.npub.as_deref(), Some("npub1ann"));
+        assert_eq!(all.wallets.len(), 1);
+        assert_eq!(all.wallets[0].key.address, "ann@example.com");
+        assert_eq!(all.wallets[0].recipient_type, "lnaddress");
+        assert_eq!(all.wallets[0].name.as_deref(), Some("Ann"));
+
+        // The person has each value now: the page agrees.
+        add_wallet(
+            &collection,
+            ann,
+            &all.wallets[0].key,
+            "lnaddress",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        add_key(&collection, ann, "npub1ann").unwrap();
+        p = person(&collection, ann).unwrap();
+        p.img = "https://img.example/a.png".to_owned();
+        p.href = "https://ann.example".to_owned();
+        let same = page_suggestions(&p, &link, Some(&values()), &lookups);
+        assert_eq!(
+            same,
+            PageSuggestion {
+                feed_guid: "g-1".to_owned(),
+                title: "Ann Bell Music".to_owned(),
+                missing: false,
+                picture: None,
+                website: None,
+                npub: None,
+                wallets: Vec::new(),
+            },
+            "ADR 0159 item 8: a page that agrees must give no suggestion."
+        );
+
+        let gone = page_suggestions(&p, &link, None, &lookups);
+        assert!(gone.missing && gone.picture.is_none() && gone.wallets.is_empty());
     }
 
     #[test]

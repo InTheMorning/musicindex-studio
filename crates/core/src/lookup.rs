@@ -256,7 +256,7 @@ fn web_value(text: Option<String>) -> Option<String> {
 
 /// True for a payment route that a person can use: a `node` or a
 /// `lnaddress` route.
-fn is_channel_route(recipient: &Recipient) -> bool {
+pub(crate) fn is_channel_route(recipient: &Recipient) -> bool {
     matches!(
         recipient.recipient_type.as_deref(),
         Some("node" | "lnaddress")
@@ -402,7 +402,7 @@ fn wallet_lookup(result: &LookupResult) -> WalletLookup {
 /// The key that a save links for a route. A Lightning address is linked as
 /// the address, as the wallet sheet links it. The keysend lookup that the
 /// save stores joins it to its node (ADR 0095).
-fn save_key_of(recipient: &Recipient) -> Option<RecipientKey> {
+pub(crate) fn save_key_of(recipient: &Recipient) -> Option<RecipientKey> {
     let address = recipient.address.as_deref()?.trim();
     if address.is_empty() {
         return None;

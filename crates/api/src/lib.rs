@@ -260,6 +260,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         )
         .route("/people/{id}/check", get(people::check_person))
         .route(
+            "/people/{id}/page-suggestions",
+            get(people::page_suggestions),
+        )
+        .route(
             "/people/{id}/default-address",
             put(people::set_default_address),
         )

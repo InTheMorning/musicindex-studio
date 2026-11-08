@@ -869,6 +869,8 @@ export function savedValues(person) {
     href: person.href ?? '',
     default_address: person.default_address ? keyValue(person.default_address) : '',
     members: (person.members || []).map(String),
+    // The read-only links to pages on Music Index (ADR 0159 item 2).
+    pages: (person.pages || []).map((p) => ({ feed_guid: p.feed_guid, title: p.title })),
     // The wallets and the Nostr keys that a fill adds (ADR 0117 item 14).
     wallets: [],
     keys: [],
@@ -877,7 +879,7 @@ export function savedValues(person) {
 
 // The controls of the page, in their sequence. The usual role and its group
 // are one control. The field controls are sent in the `fields` of a save.
-const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'members', 'wallets', 'keys'];
+const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'members', 'pages', 'wallets', 'keys'];
 const FIELD_CONTROLS = ['name', 'usual_role', 'img', 'href'];
 // The list controls. Each added item is one pending change.
 const LIST_NAMES = { wallets: 'wallet', keys: 'npub' };
@@ -890,11 +892,19 @@ const changedLinks = (saved, values) => [
   ...saved.members.filter((id) => !values.members.includes(id)),
 ];
 
+// The read-only pages that one list has and the other does not (ADR 0159).
+const guidsOf = (list) => (list || []).map((p) => p.feed_guid);
+const changedPages = (saved, values) => [
+  ...guidsOf(values.pages).filter((guid) => !guidsOf(saved.pages).includes(guid)),
+  ...guidsOf(saved.pages).filter((guid) => !guidsOf(values.pages).includes(guid)),
+];
+
 // Whether one control has a value that differs from the saved value. A list
 // control compares its lengths.
 export function isPending(saved, values, control) {
   if (control === 'usual_role') return values.usual_role !== saved.usual_role || values.usual_group !== saved.usual_group;
   if (control === 'members') return changedLinks(saved, values).length > 0;
+  if (control === 'pages') return changedPages(saved, values).length > 0;
   if (control in LIST_NAMES) return listLength(values[control]) !== listLength(saved[control]);
   return values[control] !== saved[control];
 }
@@ -904,6 +914,7 @@ export function isPending(saved, values, control) {
 // (ADR 0132 item 8).
 export const pendingKeys = (saved, values) => CONTROLS.flatMap((control) => {
   if (control === 'members') return changedLinks(saved, values).map(() => 'member');
+  if (control === 'pages') return changedPages(saved, values).map(() => 'page');
   if (control in LIST_NAMES) {
     const added = listLength(values[control]) - listLength(saved[control]);
     return Array.from({ length: Math.max(0, added) }, () => LIST_NAMES[control]);
@@ -925,6 +936,7 @@ export function saveBody(saved, values) {
   }
   if (keys.includes('default_address')) body.default_address = values.default_address === '' ? null : keyFromValue(values.default_address);
   if (keys.includes('member')) body.members = values.members.map(Number);
+  if (keys.includes('page')) body.pages = values.pages;
   if (keys.includes('wallet')) {
     body.wallets = values.wallets.slice(listLength(saved.wallets)).map((w) => ({ key: w.key, recipient_type: w.recipient_type }));
   }
@@ -940,6 +952,7 @@ const LEAVE_NAMES = {
   href: 'the information address',
   default_address: 'the default address',
   member: 'the artists and labels',
+  page: 'the artists and labels',
   wallet: 'a wallet',
   npub: 'a Nostr key',
 };
@@ -972,7 +985,7 @@ export function profileLine(person, titles, feeds = []) {
 }
 
 // The hint of the links of a person (ADR 0132 item 2, ADR 0146 item 1).
-export const LINK_HINT = 'Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. The link itself stays in Studio.';
+export const LINK_HINT = 'Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. A read-only link shows the changes of a page on Music Index here. The links stay in Studio.';
 
 // The row of the section with no link (ADR 0132 item 3).
 export const LINK_EMPTY = 'This person is not linked to an artist or label page yet.';
@@ -984,9 +997,9 @@ export const linkChoices = (feeds, linked = []) => memberChoices((feeds || []).f
 
 // The rows of the links of the page, A to Z (ADR 0132 items 3 and 4).
 // `linkedCredits` is the list of the core: the links with a credit of the person.
-export function linkRows(values, saved, feeds, linkedCredits = []) {
+export function linkRows(values, saved, feeds, linkedCredits = [], suggestions = []) {
   const byId = new Map((feeds || []).map((f) => [String(f.id), f]));
-  return values.members.map((id) => {
+  const rows = values.members.map((id) => {
     const feed = byId.get(id);
     const role = feed && (feed.publisher_roles || []).length > 0 ? firstRole(feed) : '';
     const state = !saved.members.includes(id) ? 'Not saved yet'
@@ -997,7 +1010,66 @@ export function linkRows(values, saved, feeds, linkedCredits = []) {
       dot: feed ? feedKind(feed).dot : 'feed',
       line: [role, state].filter((text) => text).join(' · '),
     };
-  }).sort((x, y) => compareNames(x.title, y.title));
+  });
+  // A read-only link shows "Read only" (ADR 0159 item 5), and a page that
+  // Music Index does not know now has the note of item 10.
+  const missing = new Set((suggestions || []).filter((s) => s.missing).map((s) => s.feed_guid));
+  const pages = (values.pages || []).map((p) => ({
+    id: `page:${p.feed_guid}`,
+    page: p.feed_guid,
+    title: p.title || 'Untitled feed',
+    dot: 'feed',
+    line: [READ_ONLY_LINK, !guidsOf(saved.pages).includes(p.feed_guid) ? 'Not saved yet' : '',
+      missing.has(p.feed_guid) ? PAGE_MISSING : ''].filter((text) => text).join(' · '),
+  }));
+  return [...rows, ...pages].sort((x, y) => compareNames(x.title, y.title));
+}
+
+// The words of a read-only link and of a page that Music Index does not know
+// now (ADR 0159 items 5 and 10).
+export const READ_ONLY_LINK = 'Read only';
+export const PAGE_MISSING = 'Music Index does not know this page now';
+
+// The hint of the sheet "Link to an Artist or Label Page" (ADR 0159 item 4).
+export const PAGE_LINK_HINT = 'Select a page of your feeds, or a page on Music Index. A page that is not in your feeds is a read-only link: Studio shows its changes on this person and writes nothing to it.';
+
+// The change that a selection in the sheet makes (ADR 0159 items 5 and 6). A
+// result with the GUID of a feed of the collection is a link of ADR 0132, as
+// `{ members }`. Each other result is a read-only link, as `{ pages }`. A
+// result that the values already hold gives null.
+export function pickLink(row, feeds, values) {
+  const guid = String(row.feed_guid || '').toLowerCase();
+  const feed = (feeds || []).find((f) => f.podcast_guid && f.podcast_guid.toLowerCase() === guid);
+  if (feed) {
+    const id = String(feed.id);
+    return values.members.includes(id) ? null : { members: [...values.members, id] };
+  }
+  if (guidsOf(values.pages).some((g) => g.toLowerCase() === guid)) return null;
+  return { pages: [...(values.pages || []), { feed_guid: row.feed_guid, title: row.title || '' }] };
+}
+
+// The suggestions of the read-only pages at the fields of the page (ADR 0159
+// items 8 and 9). `suggestions` is the list of `GET /people/{id}/page-suggestions`.
+// The core compares each page with the saved person. This function removes a
+// value that the pending values already hold, so that a "Use" takes the row
+// away. It gives `{ img, href, keys, wallets }`, each a list of
+// `{ value, line, guid }`. A wallet row also has its `key` and `recipient_type`.
+export function pageSuggestions(suggestions, values) {
+  const out = { img: [], href: [], keys: [], wallets: [] };
+  const shown = new Set(guidsOf(values.pages));
+  const pendingWallets = (values.wallets || []).map((w) => String(w.key.address).toLowerCase());
+  for (const s of suggestions || []) {
+    if (s.missing || !shown.has(s.feed_guid)) continue;
+    const title = s.title || 'Untitled feed';
+    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture on "${title}"`, guid: s.feed_guid });
+    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website on "${title}"`, guid: s.feed_guid });
+    if (s.npub && !(values.keys || []).includes(s.npub)) out.keys.push({ value: s.npub, line: `New Nostr key on "${title}"`, guid: s.feed_guid });
+    for (const w of s.wallets || []) {
+      if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
+      out.wallets.push({ value: w.key.address, line: `New wallet on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type });
+    }
+  }
+  return out;
 }
 
 // The offers of a credit after a Save that changes the links (ADR 0118 items 3

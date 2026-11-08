@@ -160,6 +160,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0156: The page of a person lists where the person is](adr/0156-the-page-of-a-person-lists-where-the-person-is.md)
 - [ADR 0157: The page tabs are a segmented control](adr/0157-the-page-tabs-are-a-segmented-control.md)
 - [ADR 0158: A hidden suggestion can come back](adr/0158-a-hidden-suggestion-can-come-back.md)
+- [ADR 0159: A person can link to a page on Music Index](adr/0159-a-person-can-link-to-a-page-on-music-index.md)
 
 ## Plans
 

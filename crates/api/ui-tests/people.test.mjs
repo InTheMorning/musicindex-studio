@@ -358,7 +358,7 @@ test('the evidence of a key and the row Check your feeds have their texts', () =
 test('the saved values and the pending changes of a person (ADR 0116 items 1 to 3)', () => {
   const saved = savedValues(MK);
   assert.deepEqual(saved, {
-    name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), members: ['3'],
+    name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), members: ['3'], pages: [],
     wallets: [], keys: [],
   });
   assert.deepEqual(pendingKeys(saved, saved), []);
@@ -1216,7 +1216,7 @@ test('creditOffers ignores the rows of other persons', () => {
 });
 
 test('the texts of the credit sheets and of the links (ADR 0132 items 2 and 10)', () => {
-  assert.equal(LINK_HINT, 'Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. The link itself stays in Studio.');
+  assert.equal(LINK_HINT, 'Add the details of this person to your artist or label page. After Save, you can add a credit to each new feed. A read-only link shows the changes of a page on Music Index here. The links stay in Studio.');
   assert.equal(creditAddTitle('Sam', 'Band'), 'Add Sam to the Credits of Band?');
   assert.equal(creditRemoveTitle('Sam', 'Band'), 'Remove Sam from the Credits of Band?');
   assert.equal(creditAddNote('Sam', 'Band'), 'Sam is part of Band in Studio. The credits of the feed can also show it, so that apps and musicindex.org can find Sam.');
@@ -1674,4 +1674,60 @@ test('a credit row of a suggestion sheet names its release, then each role with 
   assert.deepEqual(row.lines, ['Producer · the album', 'Vocalist · track 2 "Track 2"']);
   const other = creditItemRow({ ...item, name: 'A. Bell', same_name: false }, new Map([[7, 'Test Album']]), feeds);
   assert.equal(other.lines.at(-1), 'Credited as "A. Bell"');
+});
+
+import { pickLink, pageSuggestions, READ_ONLY_LINK, PAGE_MISSING } from '../ui/people.js';
+
+const PAGE = { feed_guid: 'g-ann', title: 'Ann Bell Music' };
+const PAGE_FEEDS = [{ id: 3, title: 'Our Label', podcast_guid: 'AAAA-1111', publisher_roles: ['label'] }];
+
+test('a read-only page is a pending change, and Save sends the list (ADR 0159 items 3 and 6)', () => {
+  const saved = savedValues({ ...MK, pages: [PAGE] });
+  assert.deepEqual(saved.pages, [PAGE]);
+  assert.equal(saveBody(saved, saved), null);
+  const added = { ...saved, pages: [PAGE, { feed_guid: 'g-2', title: 'Zed' }] };
+  assert.deepEqual(pendingKeys(saved, added), ['page']);
+  assert.deepEqual(saveBody(saved, added), { pages: added.pages });
+  assert.deepEqual(saveBody(saved, { ...saved, pages: [] }), { pages: [] });
+  assert.match(leaveText('Ann', ['page']), /the artists and labels/);
+});
+
+test('a result of the collection is a link, and each other result is a read-only page (ADR 0159 item 5)', () => {
+  const values = savedValues(MK);
+  assert.equal(pickLink({ feed_guid: 'aaaa-1111', title: 'Our Label' }, PAGE_FEEDS, values), null, 'MK already links feed 3.');
+  const own = savedValues({ ...MK, members: [] });
+  assert.deepEqual(pickLink({ feed_guid: 'aaaa-1111' }, PAGE_FEEDS, own), { members: ['3'] });
+  assert.equal(pickLink({ feed_guid: 'AAAA-1111' }, PAGE_FEEDS, { ...own, members: ['3'] }), null, 'A linked feed gives no change.');
+  assert.deepEqual(pickLink({ feed_guid: 'g-ann', title: 'Ann Bell Music' }, PAGE_FEEDS, own), { pages: [PAGE] });
+  assert.equal(pickLink({ feed_guid: 'G-ANN' }, PAGE_FEEDS, { ...own, pages: [PAGE] }), null);
+});
+
+test('a read-only row says "Read only", and a page that Music Index does not know has a note (ADR 0159 items 5 and 10)', () => {
+  const saved = savedValues({ ...MK, members: [], pages: [PAGE] });
+  const values = { ...saved, pages: [...saved.pages, { feed_guid: 'g-2', title: 'Zed' }] };
+  const rows = linkRows(values, saved, PAGE_FEEDS, [], [{ feed_guid: 'g-ann', missing: true }]);
+  assert.deepEqual(rows.map((r) => [r.title, r.line]), [
+    ['Ann Bell Music', `${READ_ONLY_LINK} · ${PAGE_MISSING}`],
+    ['Zed', `${READ_ONLY_LINK} · Not saved yet`],
+  ]);
+  assert.equal(rows[0].page, 'g-ann');
+});
+
+test('a page that differs gives suggestions, and a page that agrees gives none (ADR 0159 items 8 and 9)', () => {
+  const values = savedValues({ ...MK, pages: [PAGE] });
+  const differs = [{ ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
+    wallets: [{ key: { address: 'ann@x.example', custom_key: null, custom_value: null }, recipient_type: 'lnaddress', name: 'Ann' }] }];
+  const out = pageSuggestions(differs, values);
+  assert.deepEqual(out.img.map((r) => [r.value, r.line]), [['https://img.example/a.png', 'New picture on "Ann Bell Music"']]);
+  assert.deepEqual(out.href.map((r) => r.line), ['New website on "Ann Bell Music"']);
+  assert.deepEqual(out.keys.map((r) => r.value), ['npub1ann']);
+  assert.deepEqual(out.wallets.map((r) => [r.value, r.recipient_type]), [['ann@x.example', 'lnaddress']]);
+  // "Use" makes a pending value, and the row goes.
+  const used = { ...values, img: 'https://img.example/a.png', href: 'https://ann.example', keys: ['npub1ann'],
+    wallets: [{ key: { address: 'Ann@x.example' }, recipient_type: 'lnaddress' }] };
+  assert.deepEqual(pageSuggestions(differs, used), { img: [], href: [], keys: [], wallets: [] });
+  const agrees = [{ ...PAGE, missing: false, picture: null, website: null, npub: null, wallets: [] }];
+  assert.deepEqual(pageSuggestions(agrees, values), { img: [], href: [], keys: [], wallets: [] });
+  assert.deepEqual(pageSuggestions([{ ...differs[0], missing: true }], values).img, [], 'A missing page gives no suggestion.');
+  assert.deepEqual(pageSuggestions(differs, { ...values, pages: [] }).img, [], 'A removed page gives no suggestion.');
 });

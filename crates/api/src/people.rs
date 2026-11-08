@@ -142,6 +142,38 @@ pub(crate) async fn get_person(State(shared): State<Shared>, Path(id): Path<i64>
     .await
 }
 
+/// The suggestions of the read-only pages of a person (ADR 0159 items 7 to
+/// 10). The answer is `{ "pages": [...] }`. The reads of the person run under
+/// the workspace. The requests to Music Index run with no lock of the
+/// workspace. A page whose request fails has no entry, and the answer is
+/// still 200.
+pub(crate) async fn page_suggestions(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    let (person, known, index) = blocking(shared, move |w| {
+        let person = people::person(&w.collection, PersonId(id))?;
+        Ok((person, lookups(&w.collection)?, w.index.clone()))
+    })
+    .await?;
+    blocking_unlocked(move || {
+        let mut pages = Vec::new();
+        for page in &person.pages {
+            // ADR 0159 item 10: no answer gives no entry and no error.
+            if let Ok(values) = index.publisher_values(&page.feed_guid) {
+                pages.push(people::page_suggestions(
+                    &person,
+                    page,
+                    values.as_ref(),
+                    &known,
+                ));
+            }
+        }
+        Ok(Json(json!({ "pages": pages })))
+    })
+    .await
+}
+
 /// The check of the feeds of one person (ADR 0111 items 9 to 13). The route
 /// reads the collection and makes no request.
 pub(crate) async fn check_person(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {

@@ -588,6 +588,18 @@ CREATE TABLE outside_checks (
     // place keeps its split. SQL cannot read a feed, so the migration has no
     // statement. The refill after the migrations writes the new places.
     "SELECT 1;",
+    // ADR 0159 item 3: a read-only link of a person to an artist or label
+    // page on Music Index. The row holds a public feed GUID and a title. It
+    // holds no secret.
+    r"
+CREATE TABLE person_pages (
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    feed_guid TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (person_id, feed_guid)
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside

@@ -6723,6 +6723,76 @@ async fn the_one_search_gives_artists_labels_and_other_feeds() {
 }
 
 #[tokio::test]
+async fn the_page_suggestions_give_the_differences_of_each_read_only_page() {
+    let server = web_feeds();
+    server.set(
+        "/v1/feeds/c0ffee-11",
+        200,
+        br#"{"data":{"title":"Ann Bell Music","image_url":"https://img.example/a.png",
+            "source_links":[{"link_type":"website","url":"https://ann.example"}],
+            "source_ids":[],"payment_routes":[{"recipient_name":"Ann","route_type":"lnaddress","address":"ann@x.example","split":100,"fee":false}]}}"#
+            .to_vec(),
+    );
+    server.set(
+        "/v1/feeds/c0ffee-12",
+        500,
+        br#"{"error":"broken"}"#.to_vec(),
+    );
+    let app = app_with_index(&server.url(""));
+    let (_, person) = call(
+        &app,
+        "POST",
+        "/api/v1/people",
+        Some(json!({ "name": "Ann" })),
+    )
+    .await;
+    let id = person["id"].as_i64().unwrap();
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/save"),
+        Some(json!({ "pages": [
+            { "feed_guid": "c0ffee-11", "title": "Ann Bell Music" },
+            { "feed_guid": "c0ffee-13", "title": "Old" },
+            { "feed_guid": "c0ffee-12", "title": "Broken" }
+        ] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, body) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(
+        body["pages"],
+        json!([
+            { "feed_guid": "c0ffee-11", "title": "Ann Bell Music" },
+            { "feed_guid": "c0ffee-12", "title": "Broken" },
+            { "feed_guid": "c0ffee-13", "title": "Old" }
+        ]),
+        "ADR 0159 item 6: the save must keep the pages."
+    );
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/people/{id}/page-suggestions"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "ADR 0159 item 10: {body}");
+    let pages = body["pages"].as_array().unwrap();
+    assert_eq!(pages.len(), 2, "a failed request gives no entry: {body}");
+    assert_eq!(pages[0]["feed_guid"], "c0ffee-11");
+    assert_eq!(pages[0]["missing"], false);
+    assert_eq!(pages[0]["picture"], "https://img.example/a.png");
+    assert_eq!(pages[0]["website"], "https://ann.example");
+    assert_eq!(pages[0]["npub"], Value::Null);
+    assert_eq!(pages[0]["wallets"][0]["key"]["address"], "ann@x.example");
+    assert_eq!(pages[0]["wallets"][0]["recipient_type"], "lnaddress");
+    assert_eq!(pages[1]["feed_guid"], "c0ffee-13");
+    assert_eq!(pages[1]["missing"], true, "ADR 0159 item 10: {body}");
+    let (status, _) = call(&app, "GET", "/api/v1/people/999/page-suggestions", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn the_musicindex_tracks_route_gives_the_address_and_the_tracks() {
     let server = web_feeds();
     server.set(
@@ -10986,6 +11056,7 @@ async fn each_people_route_needs_the_token() {
         ("POST", "/api/v1/people/1/changes"),
         ("POST", "/api/v1/people/1/changes/preview"),
         ("GET", "/api/v1/people/1/check"),
+        ("GET", "/api/v1/people/1/page-suggestions"),
         ("GET", "/api/v1/people/1/detail-suggestions"),
         ("POST", "/api/v1/people/1/profile-addresses/dismiss"),
         ("POST", "/api/v1/people/1/items"),

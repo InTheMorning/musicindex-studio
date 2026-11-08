@@ -28,7 +28,7 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, PAGE_LINK_HINT, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
@@ -326,7 +326,7 @@ const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="b
 // information address. The values are pending changes of the page (ADR 0116
 // item 1). `update` changes them, and the page saves them. A pending control
 // has a mark. "Use" of a suggestion changes the value only (ADR 0113 item 8).
-function PersonFields({ values, saved, update, detail, profiles, titles, feeds, sources = {} }) {
+function PersonFields({ values, saved, update, detail, profiles, titles, feeds, sources = {}, pageRows = { img: [], href: [] } }) {
   // A filled field shows the line of its source until Save or Discard (ADR 0117 item 14).
   const field = (id, label, key) => html`<${Field} id=${id} label=${label} value=${values[key]} hint=${sources[key]}
     class=${isPending(saved, values, key) ? 'pending' : undefined}
@@ -355,8 +355,10 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
       pending=${isPending(saved, values, 'usual_role')}
       onChange=${(role, group) => update({ usual_role: role, usual_group: group })} />
     ${field('person-img', 'Picture address', 'img')}</div>
+    ${pageRows.img.length > 0 && html`<div class="group suggest-gap">${pageRows.img}</div>`}
     ${suggestions('img')}
     <div class="group rows suggest-gap">${field('person-href', 'Information address', 'href')}</div>
+    ${pageRows.href.length > 0 && html`<div class="group suggest-gap">${pageRows.href}</div>`}
     ${suggestions('href')}`;
 }
 
@@ -380,6 +382,8 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
   const form = LINK_FORMS[kind];
   const find = LINK_FINDS[kind];
   const [values, setValues] = useState(() => (edit ? edit.start : linkStart(kind)));
+  // An edit with `add` only gives the start values of a new link (ADR 0159 item 9).
+  const editing = edit && !edit.add;
   // The payees with no person of the sheet "Add a Wallet" (ADR 0141). `null`
   // while the list loads.
   const [recipients, setRecipients] = useState(kind === 'wallets' ? null : []);
@@ -397,8 +401,8 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
     e.preventDefault();
     if (!linkReady(kind, values)) return;
     run(async () => {
-      await api(edit ? `/people/${personId}/${kind}/${edit.walletId ?? edit.linkId}` : `/people/${personId}/${kind}`,
-        { method: edit ? 'PUT' : 'POST', body: linkBody(kind, values) });
+      await api(editing ? `/people/${personId}/${kind}/${edit.walletId ?? edit.linkId}` : `/people/${personId}/${kind}`,
+        { method: editing ? 'PUT' : 'POST', body: linkBody(kind, values) });
       onAdded();
     });
   };
@@ -409,12 +413,12 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
         value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}
     ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" name=${values.name} value=${values.npub}
       onOpen=${() => setKeyOpen(true)} />`}</div>
-    ${edit && (edit.note || walletEditNote(edit.others)) && html`<p class="hint" role="status">${edit.note || walletEditNote(edit.others)}</p>`}`;
+    ${editing && (edit.note || walletEditNote(edit.others)) && html`<p class="hint" role="status">${edit.note || walletEditNote(edit.others)}</p>`}`;
   const payees = addWalletSections(recipients || []).filter((section) => section.id === 'payees')
     .flatMap((section) => section.rows).map((row) => html`<${ListRow} key=${JSON.stringify(row.body)} title=${row.title} lines=${row.lines} count=${row.count}
       chevron=${false} selected=${walletSelected(values, row.body)} onClick=${() => setValues((current) => ({ ...current, ...walletValues(row.body) }))} />`);
   return html`<header>
-      <h2 id="link-title">${edit ? form.editTitle : form.title}</h2>
+      <h2 id="link-title">${editing ? form.editTitle : form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
@@ -424,7 +428,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       onPick=${(found) => setValues((current) => ({ ...current, ...(kind === 'wallets' ? walletValues(found) : found) }))} onClose=${() => setFinding(false)} />
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}
-    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${edit ? (busy ? 'Saving…' : form.editButton) : (busy ? 'Adding…' : form.button)}</button></footer>`;
+    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${editing ? (busy ? 'Saving…' : form.editButton) : (busy ? 'Adding…' : form.button)}</button></footer>`;
 }
 
 // The sheet of one operation of a person (ADR 0099 items 7 to 12). The
@@ -596,6 +600,49 @@ function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
     <footer><button class="button" type="button" onClick=${onCancel}>Cancel</button></footer>`;
 }
 
+// The sheet "Link to an Artist or Label Page" (ADR 0159 item 4). It is open
+// while `open` is true. A selection gives the patch of `pickLink`, and the
+// page keeps it as a pending change (item 6).
+function PageLinkSheet({ open, personId, name, feeds, values, onPick, onClose }) {
+  const ref = useSheet(open);
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="page-link-title" onClose=${onClose}>
+    ${open && html`<${PageLinkForm} personId=${personId} name=${name} feeds=${feeds} values=${values}
+      onCancel=${() => ref.current.close()} onPick=${(patch) => { onPick(patch); ref.current.close(); }} />`}
+  </dialog>`;
+}
+
+function PageLinkForm({ personId, name, feeds, values, onCancel, onPick }) {
+  const [query, setQuery] = useState(name);
+  const { rows, note, searched, error } = useLookup(query, `/people/${personId}/musicindex`);
+  const fields = useFieldList({ id: 'page-link-query', value: query, setValue: setQuery, scope: 'publisher' });
+  // A result that the person has already keeps its content and has a tag (ADR 0146 item 3).
+  const resultRow = (row) => {
+    const patch = pickLink(row, feeds, values);
+    if (patch) return html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(patch)} />`;
+    return html`<div class="link-row static pick-taken" key=${row.feed_guid}><${PersonArt} person=${{ img: row.image_url, name: row.title || '' }} />
+      <span class="text"><span class="pick-name"><span class="label">${row.title || 'Untitled feed'}</span><${TakenTag} /></span></span></div>`;
+  };
+  const own = linkChoices(feeds, values.members).map(([id, label]) => html`<button class="link-row" type="button" key=${id}
+    onClick=${() => onPick({ members: [...values.members, id] })}><span class="text"><span class="label">${label}</span></span>
+    <span class="go" aria-hidden="true">›</span></button>`);
+  return html`<header><h2 id="page-link-title">Link to an Artist or Label Page</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button></header>
+    <div class="body">
+      <div class="group rows"><${Field} id="page-link-query" label="Name" type="search" value=${query}
+        ...${fields.input}>${fields.list}<//></div>
+      <p class="hint">${PAGE_LINK_HINT}</p>
+      <${ErrorNotice} error=${error} />
+      ${rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
+      ${note && html`<p class="hint" role="status">${note.message}</p>`}
+      ${showFindEmpty({ rows, error, searched }) && html`<p class="empty">${FIND_EMPTY}</p>`}
+      ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
+        <h2>${group.heading}</h2><p class="hint">${group.note}</p>
+        <div class="group">${group.rows.map(resultRow)}</div></section>`)}
+      ${own.length > 0 && html`<${PickFold} id="page-link-own" title="Your artist and label pages" rows=${own} />`}
+    </div>
+    <footer><button class="button" type="button" onClick=${onCancel}>Cancel</button></footer>`;
+}
+
 // A row of a search: the picture, the title, the type line with its dot, and
 // the line of the values (ADR 0117 items 4 and 7).
 export function LookupRow({ row, onClick }) {
@@ -680,6 +727,8 @@ export function PersonPage({ id, feeds, go }) {
   // row that the values sheet shows (ADR 0117 items 2 and 8).
   const [finding, setFinding] = useState(null);
   const [picked, setPicked] = useState(null);
+  // The sheet "Link to an Artist or Label Page" (ADR 0159 item 4).
+  const [pageLinking, setPageLinking] = useState(false);
   // The credit offers of the last Save that changed the links (ADR 0132 items
   // 11 and 12). The first offer has its sheet open. `made` holds the ID of each
   // change set of these sheets.
@@ -703,6 +752,15 @@ export function PersonPage({ id, feeds, go }) {
     if (!data) return undefined;
     let live = true;
     api(`/people/${id}/detail-suggestions`).then((r) => { if (live) setDetail(r); }, () => { if (live) setDetail(null); });
+    return () => { live = false; };
+  }, [data]);
+  // The suggestions of the read-only pages (ADR 0159 items 7 to 10). They load
+  // when the page opens and after each save, and Studio keeps no result.
+  const [pageNotes, setPageNotes] = useState([]);
+  useEffect(() => {
+    if (!data || (data.person.pages || []).length === 0) { setPageNotes([]); return undefined; }
+    let live = true;
+    api(`/people/${id}/page-suggestions`).then((r) => { if (live) setPageNotes(r.pages || []); }, () => { if (live) setPageNotes([]); });
     return () => { live = false; };
   }, [data]);
   const known = data ? data.person : null;
@@ -811,6 +869,12 @@ export function PersonPage({ id, feeds, go }) {
   const profile = profileLine(person, titles, feeds);
   const check = checkRow(person);
   const where = whereEntries(person.places, feeds);
+  const fromPages = pageSuggestions(pageNotes, shown);
+  // One row of a page suggestion, with "Use" (ADR 0159 item 8).
+  const pageRow = (row, onUse, art = false) => html`<div class="link-row static" key=${`${row.guid}-${row.value}`}>
+    ${art && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
+    <span class="text"><span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
+    <button class="button action" type="button" aria-label=${`Use ${row.value}`} onClick=${onUse}>Use</button></div>`;
   const feedOf = (feedId) => (feeds || []).find((f) => f.id === feedId);
   const remove = (kind, linkId) => withLeave(() => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' })));
   const removeButton = (kind, linkId, label) => html`<button class="button destructive" type="button" aria-label=${label}
@@ -878,9 +942,12 @@ export function PersonPage({ id, feeds, go }) {
           await api(`/people/${id}/profile-addresses/dismiss`, { method: 'POST', body: { address: s.address } });
           await loadSuggestions();
         })}>Dismiss</button></div></div>`)}
+      ${fromPages.wallets.length > 0 && html`<div class="group">${fromPages.wallets.map((row) => pageRow(row,
+        () => withLeave(() => setEditing({ add: true, start: walletValues({ ...row.key, recipient_type: row.recipient_type }), others: [] }))))}</div>`}
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => withLeave(() => setLinking('wallets'))} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
-      <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources} />
+      <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources}
+        pageRows=${{ img: fromPages.img.map((row) => pageRow(row, () => update({ img: row.value }), true)), href: fromPages.href.map((row) => pageRow(row, () => update({ href: row.value }))) }} />
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<details class="disclosure group credit-fold">
         <summary class="link-row"><span class="text"><span class="label">${creditFoldSummary(person).title}</span>
           <span class="summary">${creditFoldSummary(person).line}</span></span></summary>
@@ -895,6 +962,7 @@ export function PersonPage({ id, feeds, go }) {
           removeLabel=${`Remove the Nostr key ${shortKey(row.npub)}`} onRemove=${() => remove('keys', row.keyId)} />`)}</details>`}
       ${shown.keys.length > 0 && html`<div class="group">${shown.keys.map((npub) => html`<div class="link-row static" key=${`p${npub}`}>
         <span class="text"><span class="label">Nostr key</span><span class="summary mono">${shortKey(npub)}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
+      ${fromPages.keys.length > 0 && html`<div class="group">${fromPages.keys.map((row) => pageRow(row, () => update({ keys: [...shown.keys, row.value] })))}</div>`}
       <div class="group"><${AddRow} title="Add a Credit Name" onClick=${() => withLeave(() => setLinking('credit-names'))} />
         <${AddRow} title="Add a Nostr Key" onClick=${() => withLeave(() => setLinking('keys'))} /></div></section>`,
     support: () => html`<section class="page-section"><h2>Support links</h2>
@@ -905,16 +973,15 @@ export function PersonPage({ id, feeds, go }) {
           ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div></div>`)}
         <${AddRow} title="Add a Support Link" onClick=${() => withLeave(() => setLinking('support-links'))} /></div></section>`,
     member: () => {
-      const rows = linkRows(shown, saved, feeds, person.linked_credits);
+      const rows = linkRows(shown, saved, feeds, person.linked_credits, pageNotes);
       return html`<section class="page-section"><h2>Linked artist and label pages</h2><p class="hint">${LINK_HINT}</p>
       <div class="group">${rows.length === 0
         ? html`<div class="link-row static"><span class="text"><span class="summary">${LINK_EMPTY}</span></span></div>`
         : rows.map((row) => html`<div class="link-row static" key=${row.id}><span class=${`dot ${row.dot}`} aria-hidden="true"></span>
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
           <button class="button destructive" type="button" aria-label=${`Remove the link to ${row.title}`}
-            onClick=${() => update({ members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
-      <div class="group rows"><${ChoiceSelect} id="person-link-add" label="Link to an artist or label page" value="" placeholder="Select…"
-        options=${linkChoices(feeds, shown.members)} onChange=${(value) => { if (value) update({ members: [...shown.members, value] }); }} /></div></section>`;
+            onClick=${() => update(row.page ? { pages: shown.pages.filter((p) => p.feed_guid !== row.page) } : { members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
+      <div class="group"><${AddRow} title="Link to an Artist or Label Page" onClick=${() => setPageLinking(true)} /></div></section>`;
     },
     change: () => html`<section class="page-section"><h2>Change your feeds</h2>
       <p class="hint">${CHANGE_NOTE}</p>
@@ -941,6 +1008,8 @@ export function PersonPage({ id, feeds, go }) {
     onClose=${() => setLinking(null)} />
   <${MergeSheet} open=${merging} person=${person} onClose=${() => setMerging(false)}
     onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} />
+  <${PageLinkSheet} open=${pageLinking} personId=${person.id} name=${person.name} feeds=${feeds} values=${shown}
+    onPick=${update} onClose=${() => setPageLinking(false)} />
   <${FindSheet} open=${finding !== null && picked === null} personId=${person.id} name=${person.name} query=${finding || ''}
     onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} />
   <${ValuesSheet} personId=${person.id} row=${picked} shown=${shown}

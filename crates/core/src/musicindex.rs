@@ -5,11 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::feed::Recipient;
 use crate::web::{Web, WebError, WebErrorKind, path_segment};
-use musicindex_search::field_list::Library;
+use musicindex_search::field_list::{FieldListRow, Library, field_list_rows};
 use musicindex_search::note::{SearchNote as CrateNote, scope_note, search_note};
+pub use musicindex_search::plan::IndexEntity;
 pub use musicindex_search::plan::IndexSearchRequest;
-use musicindex_search::plan::{IndexEntity, IndexSearchPlan, IndexSkip};
-use musicindex_search::query::{SearchQuery, TermKind};
+use musicindex_search::plan::{IndexSearchPlan, IndexSkip};
+use musicindex_search::query::{QueryFieldName, SearchQuery, TermKind, quote_field_value};
 use musicindex_search::request::index_filter_pairs;
 
 /// The public musicindex API.
@@ -144,6 +145,12 @@ struct ContributorData {
     npub: Option<String>,
 }
 
+/// One row of `GET /v1/artist-names`.
+#[derive(Deserialize)]
+struct ArtistNameRow {
+    name: String,
+}
+
 #[derive(Deserialize)]
 struct Envelope<T> {
     data: T,
@@ -236,6 +243,151 @@ fn plan_for(text: &str, plain: bool, scope: Option<IndexEntity>) -> SearchPlan {
     match index_plan {
         IndexSearchPlan::Send(request) => SearchPlan::Send(request),
         IndexSearchPlan::Skip(_) => SearchPlan::Skip(None),
+    }
+}
+
+/// One row of the field list for the UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "row", rename_all = "snake_case")]
+pub enum FieldRow {
+    /// A field of the query text.
+    Field {
+        /// The field name with its colon, for example `kind:`.
+        token: &'static str,
+        /// The names of the fixed values. The list is empty when the field
+        /// has none.
+        values: Vec<&'static str>,
+        /// A short text that names the correct values.
+        values_text: &'static str,
+        /// One correct example of the field, with its token.
+        example: &'static str,
+        /// What the field matches.
+        description: &'static str,
+        /// The text that replaces the edit range: the token.
+        insert: String,
+    },
+    /// One fixed value of a field.
+    Value {
+        /// The token of the field, for example `kind:`.
+        field: &'static str,
+        /// The value word.
+        value: &'static str,
+        /// What the value means.
+        description: &'static str,
+        /// The text that replaces the edit range: the value, with quotes when
+        /// it needs them.
+        insert: String,
+    },
+}
+
+/// A range of the query text, in UTF-16 code units of the browser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Utf16Range {
+    /// The first code unit of the range.
+    pub start: usize,
+    /// The code unit after the range.
+    pub end: usize,
+}
+
+/// The field and the typed prefix of the names that the UI can ask for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NameQuery {
+    /// The token of the field: `artist:`, `release:` or `playlist:`.
+    pub field: &'static str,
+    /// The typed text of the value. The crate has read its quotes.
+    pub prefix: String,
+}
+
+/// The field list for one query text and one cursor (musicindex ADR 0052
+/// R-QUERY-7). The core gives each range, and the UI has no parser (ADR 0151).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FieldList {
+    /// The rows, in the order of the crate.
+    pub rows: Vec<FieldRow>,
+    /// The range that a row replaces, or `None` when the cursor is in a phrase
+    /// or in a word that is not a field.
+    pub edit: Option<Utf16Range>,
+    /// The name rows that the UI can ask for after `rows`.
+    pub names: Option<NameQuery>,
+    /// The message of the field under the cursor, when its value is not correct.
+    pub error: Option<String>,
+}
+
+/// The byte offset of the UTF-16 offset `units` in `text`. An offset after
+/// the end gives the end. An offset inside a surrogate pair gives the start of
+/// that character.
+fn utf16_to_byte(text: &str, units: usize) -> usize {
+    let mut seen = 0;
+    for (byte, ch) in text.char_indices() {
+        let next = seen + ch.len_utf16();
+        if next > units {
+            return byte;
+        }
+        seen = next;
+    }
+    text.len()
+}
+
+/// The UTF-16 offset of the byte offset `byte` in `text`. The offset is on a
+/// character boundary.
+fn byte_to_utf16(text: &str, byte: usize) -> usize {
+    text[..byte].chars().map(char::len_utf16).sum()
+}
+
+/// `true` when a search with a word and the example of `field` sends a request
+/// for artist and label feeds. The crate decides this.
+fn field_applies_to_publishers(field: QueryFieldName) -> bool {
+    let text = format!("able {}", field.info().example);
+    match IndexSearchPlan::for_query(&SearchQuery::parse(&text)) {
+        IndexSearchPlan::Send(request) => request.for_entity(IndexEntity::Publisher).is_some(),
+        IndexSearchPlan::Skip(_) => false,
+    }
+}
+
+/// The rows of the field list for `text` and the cursor `cursor_utf16`, in
+/// UTF-16 code units. Studio has no Library, so no row is for a Library field.
+/// With the scope `Publisher`, each field that gives no request for artist and
+/// label feeds has no row, and its value rows and its names are gone too.
+#[must_use]
+pub fn field_list(text: &str, cursor_utf16: usize, scope: Option<IndexEntity>) -> FieldList {
+    let answer = field_list_rows(text, utf16_to_byte(text, cursor_utf16), Library::Absent);
+    let keep = |field: QueryFieldName| {
+        scope != Some(IndexEntity::Publisher) || field_applies_to_publishers(field)
+    };
+    let rows = answer
+        .rows
+        .iter()
+        .filter_map(|row| match *row {
+            FieldListRow::Field(info) => keep(info.name).then(|| FieldRow::Field {
+                token: info.token,
+                values: info.name.fixed_values().iter().map(|v| v.word).collect(),
+                values_text: info.values_text,
+                example: info.example,
+                description: info.description,
+                insert: info.token.to_owned(),
+            }),
+            FieldListRow::Value { field, value } => keep(field).then(|| FieldRow::Value {
+                field: field.info().token,
+                value: value.word,
+                description: value.description,
+                insert: quote_field_value(value.word),
+            }),
+        })
+        .collect();
+    FieldList {
+        rows,
+        edit: answer.edit.map(|range| Utf16Range {
+            start: byte_to_utf16(text, range.start),
+            end: byte_to_utf16(text, range.end),
+        }),
+        names: answer
+            .names
+            .filter(|names| keep(names.field))
+            .map(|names| NameQuery {
+                field: names.field.info().token,
+                prefix: names.prefix,
+            }),
+        error: answer.error,
     }
 }
 
@@ -767,6 +919,44 @@ impl MusicIndex {
             .collect())
     }
 
+    /// The artist names that start with `prefix`, for the name rows of the
+    /// field list. The route starts at the first sort key at or after the
+    /// prefix and does not filter, so this keeps only the names that start with
+    /// the prefix, with no case difference. It gives at most 8 different names,
+    /// in the order of the answer. An empty prefix gives no name and sends
+    /// nothing.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails or its answer cannot decode.
+    pub fn artist_names(&self, prefix: &str) -> Result<Vec<String>, WebError> {
+        const MOST: usize = 8;
+        if prefix.is_empty() {
+            return Ok(Vec::new());
+        }
+        let url = format!("{}/v1/artist-names", self.base);
+        let bytes = self
+            .web
+            .get_with_query(
+                &url,
+                &[("from", prefix), ("limit", "20")],
+                MAX_RESPONSE_BYTES,
+            )?
+            .bytes;
+        let rows: Vec<ArtistNameRow> = decode_search(&bytes)?;
+        let wanted = prefix.to_lowercase();
+        let mut names: Vec<String> = Vec::new();
+        for row in rows {
+            if row.name.to_lowercase().starts_with(&wanted) && !names.contains(&row.name) {
+                names.push(row.name);
+                if names.len() == MOST {
+                    break;
+                }
+            }
+        }
+        Ok(names)
+    }
+
     /// The values of a publisher feed for a person: its picture, its
     /// website, its Nostr key and its payment routes (ADR 0117 item 2). Gives
     /// `None` when musicindex does not know the feed.
@@ -1127,5 +1317,158 @@ mod tests {
             index.search_publishers(&words).unwrap_err().kind(),
             WebErrorKind::Decode
         );
+    }
+
+    fn tokens(list: &FieldList) -> Vec<&'static str> {
+        list.rows
+            .iter()
+            .filter_map(|row| match row {
+                FieldRow::Field { token, .. } => Some(*token),
+                FieldRow::Value { .. } => None,
+            })
+            .collect()
+    }
+
+    fn value_words(list: &FieldList) -> Vec<&'static str> {
+        list.rows
+            .iter()
+            .filter_map(|row| match row {
+                FieldRow::Value { value, .. } => Some(*value),
+                FieldRow::Field { .. } => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_field_start_gives_the_field_row_and_its_edit_range() {
+        let list = field_list("ki", 2, None);
+        assert_eq!(tokens(&list), vec!["kind:"]);
+        assert_eq!(list.edit, Some(Utf16Range { start: 0, end: 2 }));
+        let FieldRow::Field { values, insert, .. } = &list.rows[0] else {
+            panic!("a field row");
+        };
+        assert!(values.contains(&"single"));
+        assert_eq!(insert, "kind:");
+    }
+
+    #[test]
+    fn a_value_start_gives_the_value_rows() {
+        let list = field_list("kind:s", 6, None);
+        assert_eq!(value_words(&list), vec!["single"]);
+        assert_eq!(list.edit, Some(Utf16Range { start: 5, end: 6 }));
+        assert_eq!(list.error, None);
+    }
+
+    #[test]
+    fn the_edit_range_is_in_utf16_code_units() {
+        let text = "Bj\u{f6}rk \u{1f3b5} ki";
+        let end = text.encode_utf16().count();
+        assert!(end < text.len());
+        let list = field_list(text, end, None);
+        assert_eq!(tokens(&list), vec!["kind:"]);
+        assert_eq!(
+            list.edit,
+            Some(Utf16Range {
+                start: end - 2,
+                end
+            })
+        );
+    }
+
+    #[test]
+    fn a_cursor_inside_a_surrogate_pair_moves_back_and_a_far_cursor_clamps() {
+        // The note is 2 code units and starts at offset 2.
+        let text = "a \u{1f3b5}";
+        let inside = field_list(text, 3, None);
+        let before = field_list(text, 2, None);
+        assert_eq!(inside, before);
+        let far = field_list("ki", 99, None);
+        assert_eq!(tokens(&far), vec!["kind:"]);
+        assert_eq!(far.edit, Some(Utf16Range { start: 0, end: 2 }));
+    }
+
+    #[test]
+    fn a_library_field_gives_no_row() {
+        for text in ["is", "in", "has", "playlist"] {
+            let list = field_list(text, text.len(), None);
+            assert!(
+                !tokens(&list)
+                    .iter()
+                    .any(|t| ["is:", "in:", "has:", "playlist:"].contains(t)),
+                "{text}"
+            );
+        }
+        assert_eq!(field_list("is:", 3, None).rows.len(), 0);
+    }
+
+    #[test]
+    fn a_wrong_value_under_the_cursor_gives_its_error() {
+        let list = field_list("kind:nope", 7, None);
+        assert!(list.error.as_deref().unwrap().starts_with("kind:"));
+        assert_eq!(list.rows.len(), 0);
+        assert_eq!(field_list("kind:single", 3, None).error, None);
+    }
+
+    #[test]
+    fn the_publisher_scope_leaves_out_the_fields_that_give_no_request() {
+        let publisher = Some(IndexEntity::Publisher);
+        let all = tokens(&field_list("", 0, None));
+        let some = tokens(&field_list("", 0, publisher));
+        for token in ["kind:", "after:", "release:"] {
+            assert!(all.contains(&token), "{token} shows with no scope");
+            assert!(!some.contains(&token), "{token} has no publisher row");
+        }
+        assert!(some.contains(&"artist:"));
+        assert_eq!(field_list("kind:", 5, publisher).rows.len(), 0);
+        assert!(field_list("kind:", 5, None).rows.len() > 1);
+        assert_eq!(field_list("release:ab", 10, publisher).names, None);
+    }
+
+    #[test]
+    fn an_artist_field_gives_the_names_request() {
+        let names = field_list("artist:bj", 9, None).names.unwrap();
+        assert_eq!(names.field, "artist:");
+        assert_eq!(names.prefix, "bj");
+        let quoted = field_list("artist:\"bj \"", 12, None).names.unwrap();
+        assert_eq!(quoted.prefix, "bj ");
+        assert_eq!(
+            field_list("artist:bj", 9, Some(IndexEntity::Publisher))
+                .names
+                .unwrap()
+                .prefix,
+            "bj"
+        );
+        assert_eq!(field_list("kind:s", 6, None).names, None);
+    }
+
+    #[test]
+    fn artist_names_keep_the_prefix_matches_once_and_at_most_eight() {
+        let rows: Vec<String> = ["Bj\u{f6}rk", "BJ\u{d6}RK", "Bjork", "Bjork", "Bjorn", "Bjy"]
+            .into_iter()
+            .chain(["B1", "B2", "B3", "B4", "B5", "B6"])
+            .map(|name| format!(r#"{{"name":"{name}","sort_name":"x"}}"#))
+            .collect();
+        let body = format!(r#"{{"data":[{}]}}"#, rows.join(","));
+        let server = TestServer::start(vec![("/v1/artist-names", 200, body.into_bytes())]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        assert_eq!(
+            index.artist_names("bj").unwrap(),
+            vec!["Bj\u{f6}rk", "BJ\u{d6}RK", "Bjork", "Bjorn", "Bjy"]
+        );
+        let many: Vec<String> = (0..12)
+            .map(|n| format!(r#"{{"name":"Ab{n}","sort_name":"x"}}"#))
+            .collect();
+        server.set(
+            "/v1/artist-names",
+            200,
+            format!(r#"{{"data":[{}]}}"#, many.join(",")).into_bytes(),
+        );
+        assert_eq!(index.artist_names("AB").unwrap().len(), 8);
+    }
+
+    #[test]
+    fn an_empty_prefix_sends_no_name_request() {
+        let index = MusicIndex::new(Web::new(), "http://127.0.0.1:9");
+        assert_eq!(index.artist_names("").unwrap(), Vec::<String>::new());
     }
 }

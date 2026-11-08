@@ -31,7 +31,7 @@ use crate::routes::{
     now_seconds,
 };
 use crate::workspace::Workspace;
-use studio_core::musicindex::{plan_publisher_search, plan_search};
+use studio_core::musicindex::{IndexEntity, field_list, plan_publisher_search, plan_search};
 
 /// The core refuses a value of a person with `Invalid`. This route family
 /// names that refusal `invalid_person`. The other errors keep the mapping
@@ -651,6 +651,59 @@ pub(crate) async fn search_index(
         let rows = lookup::search(&index, &request)?;
         let feeds = index.search(&request)?;
         Ok(Json(json!({ "rows": rows, "feeds": feeds, "note": null })))
+    })
+    .await
+}
+
+/// The query of the field list.
+#[derive(Deserialize)]
+pub(crate) struct FieldsQuery {
+    #[serde(default)]
+    q: String,
+    /// The cursor in UTF-16 code units. A missing cursor is the text end.
+    cursor: Option<usize>,
+    /// `publisher` leaves out the fields that give no request for artist and
+    /// label feeds.
+    scope: Option<String>,
+}
+
+/// The rows of the field list for a text and a cursor (musicindex ADR 0052
+/// R-QUERY-7). The core gives each edit range. The route sends no request.
+pub(crate) async fn field_rows(Query(query): Query<FieldsQuery>) -> ApiResult {
+    let cursor = query
+        .cursor
+        .unwrap_or_else(|| query.q.encode_utf16().count());
+    let scope = match query.scope.as_deref() {
+        None | Some("") => None,
+        Some("publisher") => Some(IndexEntity::Publisher),
+        Some(other) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "bad_scope",
+                format!("The scope {other} is not known. Use publisher or leave it out."),
+            ));
+        }
+    };
+    Ok(Json(json!(field_list(&query.q, cursor, scope))))
+}
+
+/// The query of the artist names.
+#[derive(Deserialize)]
+pub(crate) struct ArtistNamesQuery {
+    #[serde(default)]
+    from: String,
+}
+
+/// The artist names that start with a typed text, for the name rows of the
+/// field list. The request runs with no lock of the workspace.
+pub(crate) async fn artist_names(
+    State(shared): State<Shared>,
+    Query(query): Query<ArtistNamesQuery>,
+) -> ApiResult {
+    let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
+    blocking_unlocked(move || {
+        let names = index.artist_names(&query.from)?;
+        Ok(Json(json!({ "names": names })))
     })
     .await
 }

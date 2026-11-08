@@ -305,6 +305,8 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             delete(routes::remove_saved_recipient),
         )
         .route("/musicindex/search", get(people::search_index))
+        .route("/musicindex/fields", get(people::field_rows))
+        .route("/musicindex/artist-names", get(people::artist_names))
         .route("/musicindex/values/{guid}", get(people::index_values))
         .route(
             "/musicindex/feeds/{guid}/recipients",

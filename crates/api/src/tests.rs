@@ -14786,3 +14786,71 @@ async fn a_text_with_nothing_to_search_is_not_marked_as_a_search() {
     assert_eq!(body["searched"], false, "ADR 0151 item 9");
     assert!(seen.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn the_fields_route_gives_the_rows_and_the_edit_range_and_sends_nothing() {
+    let (url, seen) = recording_index(ONE_FEED);
+    let app = app_with_index(&url);
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/fields?q=kind%3As", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["rows"][0]["row"], "value");
+    assert_eq!(body["rows"][0]["value"], "single");
+    assert_eq!(body["rows"][0]["insert"], "single");
+    assert_eq!(body["edit"], json!({ "start": 5, "end": 6 }));
+    let (_, body) = call(
+        &app,
+        "GET",
+        "/api/v1/musicindex/fields?q=Bj%C3%B6rk%20%F0%9F%8E%B5%20ki&cursor=11",
+        None,
+    )
+    .await;
+    assert_eq!(body["rows"][0]["token"], "kind:");
+    assert_eq!(body["edit"], json!({ "start": 9, "end": 11 }));
+    let (_, body) = call(&app, "GET", "/api/v1/musicindex/fields?q=ki", None).await;
+    assert_eq!(body["rows"][0]["token"], "kind:");
+    let (_, body) = call(
+        &app,
+        "GET",
+        "/api/v1/musicindex/fields?q=ki&scope=publisher",
+        None,
+    )
+    .await;
+    assert_eq!(body["rows"], json!([]));
+    let (status, _) = call(&app, "GET", "/api/v1/musicindex/fields?q=ki&scope=x", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_field_and_name_routes_need_the_access_token() {
+    let app = app();
+    for uri in [
+        "/api/v1/musicindex/fields?q=ki",
+        "/api/v1/musicindex/artist-names?from=bj",
+    ] {
+        let request = Request::builder()
+            .uri(uri)
+            .header(header::HOST, HOST)
+            .body(Body::empty())
+            .unwrap();
+        let (status, body, _) = send(&app, request).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri}");
+        assert_eq!(body["error"]["code"], "token_required");
+    }
+}
+
+#[tokio::test]
+async fn the_artist_names_route_gives_the_names_that_start_with_the_text() {
+    let (url, seen) = recording_index(
+        br#"{"data":[{"name":"Bjork","sort_name":"bjork"},{"name":"Bjorn","sort_name":"bjorn"},{"name":"Cher","sort_name":"cher"}]}"#,
+    );
+    let app = app_with_index(&url);
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/artist-names?from=BJ", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body, json!({ "names": ["Bjork", "Bjorn"] }));
+    assert!(seen.lock().unwrap()[0].contains("/v1/artist-names?from=BJ&limit=20"));
+    let before = seen.lock().unwrap().len();
+    let (_, body) = call(&app, "GET", "/api/v1/musicindex/artist-names?from=", None).await;
+    assert_eq!(body, json!({ "names": [] }));
+    assert_eq!(seen.lock().unwrap().len(), before);
+}

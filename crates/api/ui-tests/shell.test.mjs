@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pageTabs, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, sortLabel, compareNames, byName,
+  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
 } from '../ui/shell.js';
@@ -695,4 +695,14 @@ test('a name order reads numbers as numbers', () => {
   const titled = (id, title) => ({ ...album, id, title, path: `p${id}` });
   const list = releasesList({ feeds: [titled(1, 'Volume 10'), titled(2, 'Volume 9')], connectors: [], sort: 'az', view: 'rows' });
   assert.deepEqual(list.rows.map((r) => r.title), ['Volume 9', 'Volume 10']);
+});
+
+// musicindex ADR 0054 R-LIST-13 item 2, ADR 0155: each sort has two entries
+// in words, and the reversed entry follows its usual entry.
+test('the sort menu names both directions of each sort', () => {
+  const labels = (sorts) => sortEntries(sorts).map((e) => e.label);
+  assert.deepEqual(labels(['newest', 'az']), ['Newest', 'Oldest', 'A to Z', 'Z to A']);
+  assert.deepEqual(labels(['order', 'newest', 'az']),
+    ['Feed Order', 'Feed Order, Reversed', 'Newest', 'Oldest', 'A to Z', 'Z to A']);
+  assert.deepEqual(sortEntries(['az'])[1], { sort: 'az', reversed: true, label: 'Z to A' });
 });

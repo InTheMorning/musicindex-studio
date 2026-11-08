@@ -43,7 +43,7 @@ import {
 } from './move.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, sortLabel, mosaicCells, otherFeedText, feedCover,
+  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, navAtWidth, pageTabs } from './shell.js';
 import {
@@ -3043,14 +3043,15 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
 // `group`, the page shows the releases of one destination below Releases,
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
 // The sort menu of a list (musicindex ADR 0027 R-LIST-1, ADR 0043 R-LIST-6).
-// `sorts` gives the IDs of the sorts, and the trigger and the entries name the
-// reversed order when `reversed` is true (R-LIST-7 item 5).
+// Each sort has two entries: its usual direction, then its reversed direction
+// (musicindex ADR 0054 R-LIST-13, ADR 0155). `onSort` gets the sort and the
+// direction of the entry.
 export function SortMenu({ sorts, sort, reversed, onSort }) {
   const [open, setOpen] = useState(false);
   const button = useRef(null);
-  const pick = (id) => {
+  const pick = (entry) => {
     setOpen(false);
-    onSort(id);
+    onSort(entry.sort, entry.reversed);
     if (button.current) button.current.focus();
   };
   // Escape closes the menu and keeps the focus on its button.
@@ -3066,21 +3067,13 @@ export function SortMenu({ sorts, sort, reversed, onSort }) {
       aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
       ${sortLabel(sort, reversed)} ⌄</button>
     ${open && html`<ul class="sort-menu" role="menu" aria-label="Sort">
-      ${sorts.map((id) => html`<li><button type="button" role="menuitemradio" aria-checked=${sort === id ? 'true' : 'false'}
-        onClick=${() => pick(id)}><span class="sort-mark" aria-hidden="true">${sort === id ? '✓' : ''}</span>${sortLabel(id, reversed)}</button></li>`)}
+      ${sortEntries(sorts).map((entry) => {
+        const current = entry.sort === sort && entry.reversed === reversed;
+        return html`<li><button type="button" role="menuitemradio" aria-checked=${current ? 'true' : 'false'}
+          onClick=${() => pick(entry)}><span class="sort-mark" aria-hidden="true">${current ? '✓' : ''}</span>${entry.label}</button></li>`;
+      })}
     </ul>`}
   </div>`;
-}
-
-// The reverse icon (musicindex ADR 0043 R-LIST-7).
-export function ReverseButton({ reversed, onReverse }) {
-  return html`<button class="button quiet icon-button view-button" type="button" aria-label="Reverse the Order" title="Reverse the Order"
-    aria-pressed=${reversed ? 'true' : 'false'} onClick=${() => onReverse(!reversed)}>
-    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      ${reversed
-        ? html`<path d="m3 8 4-4 4 4" /><path d="M7 4v16" /><path d="M11 12h4" /><path d="M11 16h7" /><path d="M11 20h10" />`
-        : html`<path d="m3 16 4 4 4-4" /><path d="M7 20V4" /><path d="M11 4h10" /><path d="M11 8h7" /><path d="M11 12h4" />`}
-    </svg></button>`;
 }
 
 // The letter bar of "A to Z" (musicindex ADR 0027 R-LIST-1 item 2). A letter
@@ -3095,23 +3088,18 @@ export function LetterBar({ letters, idOf }) {
   </nav>`;
 }
 
-function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onGroupReverse, onOpen, onAddFeed, onAddedFeed }) {
+function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed }) {
   const inGroup = group !== undefined;
   const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, reversed: inGroup ? groupReversed : list.reversed, view: list.view, marked, group });
   const outside = useOutsideChecks(releases.rows.map((row) => row.id));
   const head = releases.head;
   const title = head ? head.title : 'Releases';
-  const pickSort = (id) => {
-    if (inGroup) onGroupSort(id);
-    else onQuery({ sort: id });
+  // A feed group keeps its own sort and direction (ADR 0085 item 8).
+  const pickSort = (id, reversed) => {
+    if (inGroup) onGroupSort(id, reversed);
+    else onQuery({ sort: id, reversed });
   };
   const hasRows = releases.rows.length > 0;
-  // The reverse icon (musicindex ADR 0043 R-LIST-7). A feed group keeps its
-  // own state, as it does for its sort.
-  const reverse = () => {
-    if (inGroup) onGroupReverse(!releases.reversed);
-    else onQuery({ reversed: !releases.reversed });
-  };
   const viewButton = (name, label, icon) => html`<button class="button quiet icon-button view-button" type="button"
     aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
     onClick=${() => onQuery({ view: name })}>${icon}</button>`;
@@ -3126,7 +3114,6 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
           ${hasRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
           ${hasRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${hasRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
-          ${hasRows && html`<${ReverseButton} reversed=${releases.reversed} onReverse=${reverse} />`}
           ${!inGroup && html`<button class="button action" type="button" onClick=${onAddFeed}>＋ Add a Feed</button>`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the Feed</button>`}
         </div>`}
@@ -3603,8 +3590,7 @@ function Shell({ vault, onLock }) {
       ? { group: view.group, trail: view.trail || [] } : undefined;
     main = html`<${ReleasesPage} feeds=${feeds} connectors=${connectors} marked=${view.marked} list=${list}
       group=${view.name === 'releases' ? view.group : undefined} groupSort=${view.sort} groupReversed=${view.reversed === true}
-      onGroupSort=${(sort) => go({ ...view, sort }, { replace: true })}
-      onGroupReverse=${(reversed) => go({ ...view, reversed }, { replace: true })}
+      onGroupSort=${(sort, reversed) => go({ ...view, sort, reversed }, { replace: true })}
       changedFeeds=${changedFeeds} onQuery=${changeList}
       onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${() => go({ name: 'add-feed' })} onAddedFeed=${addedFeed} />`;
   }

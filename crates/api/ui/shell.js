@@ -566,6 +566,12 @@ export function sortLabel(sort, reversed) {
   return (reversed ? REVERSED_SORT_LABELS : SORT_LABELS)[sort];
 }
 
+// The entries of a sort menu: each sort, then its reversed direction, as
+// words (musicindex ADR 0054 R-LIST-13 item 2, ADR 0155).
+export function sortEntries(sorts) {
+  return sorts.flatMap((sort) => [false, true].map((reversed) => ({ sort, reversed, label: sortLabel(sort, reversed) })));
+}
+
 // The Releases list (ADR 0039 items 2 and 2a). `marked` is the ID of the feed
 // that the last Back selection left marked. With no `group` it gives each
 // album and playlist (ADR 0085 item 6). With the ID of a feed with roles as

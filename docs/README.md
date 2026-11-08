@@ -156,6 +156,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0152: Text names the product "Music Index"](adr/0152-text-names-the-product-music-index.md)
 - [ADR 0153: The People list has a sort, and names sort with numbers](adr/0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md)
 - [ADR 0154: The search fields have a field list](adr/0154-the-search-fields-have-a-field-list.md)
+- [ADR 0155: The sort menu names both directions](adr/0155-the-sort-menu-names-both-directions.md)
 
 ## Plans
 

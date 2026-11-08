@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
 import { PickerLayout, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
-import { api, assetMode, askConfirm, Bar, SortMenu, ReverseButton, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
@@ -151,8 +151,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
       <button class="button action" type="button" onClick=${() => setAdding(true)}>Add a Person</button>
       <button class="button" type="button" disabled=${busy} onClick=${() => run(downloadPeople)}>Export People</button>
       ${people.length > 0 && html`<div class="releases-tools people-order">
-        <${SortMenu} sorts=${order.sorts} sort=${order.sort} reversed=${order.reversed} onSort=${(id) => onOrder({ sort: id })} />
-        <${ReverseButton} reversed=${order.reversed} onReverse=${(value) => onOrder({ reversed: value })} />
+        <${SortMenu} sorts=${order.sorts} sort=${order.sort} reversed=${order.reversed} onSort=${(id, reversed) => onOrder({ sort: id, reversed })} />
       </div>`}</div>`,
     changes: () => html`<section class="page-section"><h2>Changes to write</h2><div class="group">${data.changes.map((set) => {
       const row = changeRow(set, data.people, payeesWithNoPerson(data.recipients));

@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-07 by the operator, through the orchestrator session, with musicindex ADR 0053.
 - Uses: musicindex ADR 0053 R-LIST-8 to R-LIST-12, musicindex ADR 0027 R-LIST-1 and musicindex ADR 0043 R-LIST-6 and R-LIST-7.
+- Changed by: [ADR 0155](0155-the-sort-menu-names-both-directions.md). The sort menu names both directions, and the list has no reverse icon.
 
 ## Context
 

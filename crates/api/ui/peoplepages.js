@@ -619,8 +619,12 @@ function PageLinkForm({ personId, name, feeds, values, onCancel, onPick }) {
   const resultRow = (row) => {
     const patch = pickLink(row, feeds, values);
     if (patch) return html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(patch)} />`;
+    const kind = lookupKind(row);
+    const detail = hasLine(row);
     return html`<div class="link-row static pick-taken" key=${row.feed_guid}><${PersonArt} person=${{ img: row.image_url, name: row.title || '' }} />
-      <span class="text"><span class="pick-name"><span class="label">${row.title || 'Untitled feed'}</span><${TakenTag} /></span></span></div>`;
+      <span class="text"><span class="pick-name"><span class="label">${row.title || 'Untitled feed'}</span><${TakenTag} /></span>
+        <span class="summary"><span class=${`dot ${kind.dot}`} aria-hidden="true"></span>${kind.text}</span>
+        ${detail && html`<span class="summary">${detail}</span>`}</span></div>`;
   };
   const own = linkChoices(feeds, values.members).map(([id, label]) => html`<button class="link-row" type="button" key=${id}
     onClick=${() => onPick({ members: [...values.members, id] })}><span class="text"><span class="label">${label}</span></span>

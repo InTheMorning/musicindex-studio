@@ -159,6 +159,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0155: The sort menu names both directions](adr/0155-the-sort-menu-names-both-directions.md)
 - [ADR 0156: The page of a person lists where the person is](adr/0156-the-page-of-a-person-lists-where-the-person-is.md)
 - [ADR 0157: The page tabs are a segmented control](adr/0157-the-page-tabs-are-a-segmented-control.md)
+- [ADR 0158: A hidden suggestion can come back](adr/0158-a-hidden-suggestion-can-come-back.md)
 
 ## Plans
 

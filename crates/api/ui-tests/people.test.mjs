@@ -1642,3 +1642,36 @@ test('a credit of More from your feeds names the release and each role with its 
   assert.equal(two.title, '2 releases');
   assert.ok(two.lines.includes('Two: Host · the album'));
 });
+
+// ADR 0158 item 2: the fold of hidden suggestions is last, and only when one
+// is hidden.
+test('the hidden suggestions come at the end of the People page', () => {
+  const base = { people: [{ id: 1 }], suggestions: [], changes: [], payees: [] };
+  assert.equal(peopleSections(base).includes('hidden'), false);
+  assert.equal(peopleSections({ ...base, hidden: [{ identity: 'name:ann' }] }).at(-1), 'hidden');
+});
+
+// ADR 0158 item 1: the button names what it does.
+test('the suggestion sheet has "Hide This Suggestion" and no "Not This Person"', () => {
+  const source = readFileSync(new URL('../ui/peoplepages.js', import.meta.url), 'utf8');
+  assert.equal(source.includes('Not This Person'), false, 'ADR 0158 item 1: rename the button in crates/api/ui/peoplepages.js.');
+  assert.ok(source.includes('Hide This Suggestion'));
+});
+
+// ADR 0158 item 5: a credit row of the suggestion sheets has the form of
+// ADR 0156 item 7.
+test('a credit row of a suggestion sheet names its release, then each role with its tracks', () => {
+  const item = {
+    name: 'Ann Bell', roles: ['producer', 'vocalist'], feeds: [7], same_name: true,
+    feed_places: [{ feed_id: 7, roles: [
+      { role: 'producer', places: [{ kind: 'channel' }] },
+      { role: 'vocalist', places: [{ kind: 'item', title: 'Track 2', number: 2 }] },
+    ] }],
+  };
+  const feeds = [{ id: 7, title: 'Test Album', medium: 'music' }];
+  const row = creditItemRow(item, new Map([[7, 'Test Album']]), feeds);
+  assert.equal(row.title, 'Test Album');
+  assert.deepEqual(row.lines, ['Producer · the album', 'Vocalist · track 2 "Track 2"']);
+  const other = creditItemRow({ ...item, name: 'A. Bell', same_name: false }, new Map([[7, 'Test Album']]), feeds);
+  assert.equal(other.lines.at(-1), 'Credited as "A. Bell"');
+});

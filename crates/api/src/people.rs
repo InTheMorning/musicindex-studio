@@ -400,6 +400,16 @@ pub(crate) async fn list_suggestions(State(shared): State<Shared>) -> ApiResult 
     .await
 }
 
+/// The suggestions that the user hid (ADR 0158 item 2).
+pub(crate) async fn hidden_suggestions(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        let lookups = lookups(&w.collection)?;
+        let list = people::hidden_suggestions(&w.collection, &lookups)?;
+        Ok(Json(json!(list)))
+    })
+    .await
+}
+
 /// Make a person from the items that the user selected.
 pub(crate) async fn make_person(
     State(shared): State<Shared>,
@@ -475,6 +485,24 @@ pub(crate) async fn dismiss_suggestion(
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
         people::dismiss(&w.collection, &body.identity, &body.items).map_err(person_error)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
+/// The body of "Show Again".
+#[derive(Deserialize)]
+pub(crate) struct ShowAgainBody {
+    identity: String,
+}
+
+/// Remove the dismissal of a suggestion (ADR 0158 item 3).
+pub(crate) async fn show_suggestion(
+    State(shared): State<Shared>,
+    Json(body): Json<ShowAgainBody>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        people::show_again(&w.collection, &body.identity).map_err(person_error)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await

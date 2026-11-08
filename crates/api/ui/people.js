@@ -20,7 +20,7 @@ export const PEOPLE_SERVER_NOTE = 'The operator of this server can read the peop
 // The IDs of the sections of the People page, in the sequence of ADR 0099
 // item 2. A section with no data is left out, but `people` always shows,
 // because it gives the empty text. With no person, the suggestions come first.
-export function peopleSections({ people = [], suggestions = [], changes = [], payees = [], server = false } = {}) {
+export function peopleSections({ people = [], suggestions = [], changes = [], payees = [], hidden = [], server = false } = {}) {
   // On a server, the page starts with the line of ADR 0108 item 3.
   const ids = [...(server ? ['note'] : []), 'search', 'actions'];
   if (changes.length > 0) ids.push('changes');
@@ -29,6 +29,8 @@ export function peopleSections({ people = [], suggestions = [], changes = [], pa
   ids.push('people');
   if (hasSuggestions && people.length > 0) ids.push('suggestions');
   if (payees.length > 0) ids.push('payees');
+  // The hidden suggestions are last, and only when one is hidden (ADR 0158 item 2).
+  if (hidden.length > 0) ids.push('hidden');
   return ids;
 }
 
@@ -411,12 +413,16 @@ export function profileAddressNote(npub, profiles) {
 }
 
 // The row of a credit in the sheet "Check: {name}".
-export function creditItemRow(item, titles) {
-  const feeds = (item.feeds || []).map((id) => titleOf(titles, id));
-  const lines = [];
-  if (feeds.length > 0) lines.push(feeds.join(', '));
-  if (item.same_name === false) lines.push(`The name in that credit is "${item.name}"`);
-  return { title: (item.roles || []).length > 0 ? item.roles.join(', ') : 'Credit', lines };
+// The release is the title, then one line for each role with its places, as a
+// credit row of "More from your feeds" has (ADR 0158 item 5, ADR 0156 item 7).
+// `feeds` is the feed list of the shell.
+export function creditItemRow(item, titles, feeds = null) {
+  const where = creditWhere(item, titles, feeds);
+  const lines = [...where.lines];
+  // A credit with no places in the index names its roles.
+  if (lines.length === 0 && (item.roles || []).length > 0) lines.push(item.roles.map(capital).join(', '));
+  if (item.same_name === false) lines.push(`Credited as "${item.name}"`);
+  return { title: where.title, lines };
 }
 
 // The row of a payment address in the sheet "Check: {name}".
@@ -1686,7 +1692,7 @@ export function hasItem(person, group, item) {
 // The rows of the sheet "Add to a Person". Each row has its group and
 // its index in the state, `already` with the name of the person, and
 // `checked`. A row that the person has already has no check box.
-export function addToRows(state, person, titles = null, profiles = null) {
+export function addToRows(state, person, titles = null, profiles = null, feeds = null) {
   const status = (group, r, i, row) => {
     const already = hasItem(person, group, r.item);
     const flag = already ? `Already in ${person.name}` : 'New';
@@ -1694,7 +1700,7 @@ export function addToRows(state, person, titles = null, profiles = null) {
     return { group, index: i, already, checked: !already && r.checked, ...row, lines: person ? [...row.lines, flag] : row.lines };
   };
   return [
-    ['credits', 'Credits', (item) => creditItemRow(item, titles)],
+    ['credits', 'Credits', (item) => creditItemRow(item, titles, feeds)],
     ['recipients', 'Payment addresses', payeeItemRow],
     ['keys', 'Nostr key', (npub) => keyItemRow(npub, profiles, state.name)],
   ].map(([group, title, rowOf]) => ({

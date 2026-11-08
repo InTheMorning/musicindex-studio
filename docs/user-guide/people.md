@@ -25,7 +25,9 @@ Studio reads your feeds and finds names that can be one person. Each name shows 
 4. Select **Make the Person**, or **Add 1 Item** or **Add N Items**.
 
 If you have a person with the same name, the menu starts on that person.
-Studio then adds the selected items to it. Select **Not This Person** to hide the suggestion.
+Studio then adds the selected items to it.
+
+Select **Hide This Suggestion** to hide a suggestion. Studio changes no person and no feed. The fold **Hidden suggestions** at the end of the People page lists each hidden suggestion. Select **Show Again** to put a suggestion back in the list.
 
 ## The page of a person
 

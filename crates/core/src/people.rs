@@ -1401,6 +1401,9 @@ pub struct SuggestedCredit {
     pub feeds: Vec<FeedId>,
     /// False when the normal name is not the normal name of the suggestion.
     pub same_name: bool,
+    /// For each feed, the places of each role of the credit (ADR 0158 item 5,
+    /// ADR 0156 item 7).
+    pub feed_places: Vec<FeedRoles>,
 }
 
 /// A distinct recipient key of a suggestion.
@@ -1548,15 +1551,13 @@ impl Group {
         }
         let credit = self
             .credits
-            .entry((row.name, row.href, row.npub))
+            .entry((row.name.clone(), row.href.clone(), row.npub.clone()))
             .or_default();
         if credit.img.is_empty() {
-            credit.img = row.img;
+            credit.img.clone_from(&row.img);
         }
-        if !row.role.is_empty() {
-            credit.roles.insert(row.role);
-        }
-        credit.feeds.insert(row.feed_id.0);
+        // The roles, the feeds and the places of each role (ADR 0158 item 5).
+        credit.add(row);
     }
 }
 
@@ -2430,6 +2431,28 @@ pub fn suggestions<S: BuildHasher>(
     collection: &Collection,
     lookups: &HashMap<String, Lookup, S>,
 ) -> Result<Vec<Suggestion>, CollectionError> {
+    suggestion_list(collection, lookups, false)
+}
+
+/// The suggestions that the user hid and that have no new item (ADR 0158
+/// item 2). A suggestion with a new item is in [`suggestions`] again.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn hidden_suggestions<S: BuildHasher>(
+    collection: &Collection,
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<Vec<Suggestion>, CollectionError> {
+    suggestion_list(collection, lookups, true)
+}
+
+/// The suggestions that are hidden when `hidden` is true, else the others.
+fn suggestion_list<S: BuildHasher>(
+    collection: &Collection,
+    lookups: &HashMap<String, Lookup, S>,
+    hidden: bool,
+) -> Result<Vec<Suggestion>, CollectionError> {
     let db = collection.db();
     let known_identities: HashSet<String> =
         strings(db, "SELECT identity FROM person_credit_names")?
@@ -2480,6 +2503,7 @@ pub fn suggestions<S: BuildHasher>(
                 img: agg.img,
                 roles: agg.roles.into_iter().collect(),
                 feeds: feed_ids(&agg.feeds),
+                feed_places: feed_roles(agg.places),
             });
         }
         let payee_feeds: BTreeSet<i64> = joined
@@ -2492,9 +2516,10 @@ pub fn suggestions<S: BuildHasher>(
             .map(|c| credit_item_key(&c.name, &c.href, &c.npub))
             .chain(joined.iter().map(|r| recipient_item_key(&r.key)))
             .collect();
-        if let Some(items) = dismissed.get(&identity_key)
-            && item_keys.iter().all(|k| items.contains(k))
-        {
+        let is_hidden = dismissed
+            .get(&identity_key)
+            .is_some_and(|items| item_keys.iter().all(|k| items.contains(k)));
+        if is_hidden != hidden {
             continue;
         }
 
@@ -2553,6 +2578,20 @@ pub fn dismiss(
         "INSERT OR REPLACE INTO person_dismissals (identity, items, dismissed_at)
          VALUES (?1, ?2, ?3)",
         params![identity, items, now()],
+    )?;
+    Ok(())
+}
+
+/// Remove the dismissal of a suggestion, so that it shows again (ADR 0158
+/// item 3). An identity with no dismissal changes nothing.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn show_again(collection: &Collection, identity: &str) -> Result<(), CollectionError> {
+    collection.db().execute(
+        "DELETE FROM person_dismissals WHERE identity = ?1",
+        [identity],
     )?;
     Ok(())
 }
@@ -4704,6 +4743,59 @@ mod tests {
         // A second dismissal replaces the first.
         dismiss(&collection, &after[0].identity, &after[0].item_keys).unwrap();
         assert_eq!(suggest(&collection), Vec::new());
+    }
+
+    #[test]
+    fn a_suggested_credit_gives_the_roles_of_each_feed() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "vocalist", "", "");
+        credit(&collection, 1, "Ann", "producer", "", "");
+        credit(&collection, 2, "Ann", "vocalist", "", "");
+        let list = suggest(&collection);
+        let places = &list[0].credits[0].feed_places;
+        let roles = |i: usize| {
+            places[i]
+                .roles
+                .iter()
+                .map(|r| r.role.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            places.iter().map(|f| f.feed_id).collect::<Vec<_>>(),
+            [FeedId(1), FeedId(2)]
+        );
+        assert_eq!(roles(0), ["producer", "vocalist"]);
+        assert_eq!(roles(1), ["vocalist"]);
+    }
+
+    #[test]
+    fn a_hidden_suggestion_is_in_the_hidden_list_and_shows_again() {
+        let collection = Collection::open_in_memory().unwrap();
+        credit(&collection, 1, "Ann", "", "", "");
+        credit(&collection, 1, "Bob", "", "", "");
+        let list = suggest(&collection);
+        let ann = list.iter().find(|s| s.name == "Ann").unwrap().clone();
+        dismiss(&collection, &ann.identity, &ann.item_keys).unwrap();
+        let hidden = hidden_suggestions(&collection, &HashMap::new()).unwrap();
+        assert_eq!(
+            hidden.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+            ["Ann"]
+        );
+        // ADR 0158 item 3: "Show Again" puts the suggestion back.
+        show_again(&collection, &ann.identity).unwrap();
+        assert_eq!(
+            hidden_suggestions(&collection, &HashMap::new()).unwrap(),
+            Vec::new()
+        );
+        assert_eq!(suggest(&collection).len(), 2);
+        // ADR 0158 item 4: a new item brings it back, with no hidden row.
+        dismiss(&collection, &ann.identity, &ann.item_keys).unwrap();
+        payee(&collection, 2, "node-1", "ann");
+        assert_eq!(
+            hidden_suggestions(&collection, &HashMap::new()).unwrap(),
+            Vec::new()
+        );
+        assert_eq!(counts(&collection), (0, 0));
     }
 
     #[test]

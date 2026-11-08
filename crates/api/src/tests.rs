@@ -10947,6 +10947,22 @@ async fn a_dismissed_suggestion_leaves_the_list() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (_, list) = call(&app, "GET", "/api/v1/people/suggestions", None).await;
     assert_eq!(list, json!([]));
+    // ADR 0158 items 2 and 3: the hidden list has it, and "Show Again"
+    // puts it back.
+    let (_, hidden) = call(&app, "GET", "/api/v1/people/suggestions/hidden", None).await;
+    assert_eq!(hidden[0]["identity"], suggestion["identity"]);
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/people/suggestions/show",
+        Some(json!({ "identity": suggestion["identity"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, hidden) = call(&app, "GET", "/api/v1/people/suggestions/hidden", None).await;
+    assert_eq!(hidden, json!([]));
+    let (_, list) = call(&app, "GET", "/api/v1/people/suggestions", None).await;
+    assert_eq!(list[0]["identity"], suggestion["identity"]);
 }
 
 #[tokio::test]

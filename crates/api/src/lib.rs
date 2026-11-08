@@ -242,6 +242,11 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             post(people::dismiss_suggestion),
         )
         .route(
+            "/people/suggestions/hidden",
+            get(people::hidden_suggestions),
+        )
+        .route("/people/suggestions/show", post(people::show_suggestion))
+        .route(
             "/people/{id}",
             get(people::get_person)
                 .patch(people::change_person)

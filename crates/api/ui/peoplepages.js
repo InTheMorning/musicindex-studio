@@ -130,10 +130,10 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   const [adding, setAdding] = useState(false);
   const { busy, error, run } = useAction();
   const load = () => run(async () => {
-    const [people, suggestions, sets, recipients] = await Promise.all([
-      api('/people'), api('/people/suggestions'), api('/change-sets'), api('/recipients'),
+    const [people, suggestions, sets, recipients, hidden] = await Promise.all([
+      api('/people'), api('/people/suggestions'), api('/change-sets'), api('/recipients'), api('/people/suggestions/hidden'),
     ]);
-    setData({ people, suggestions, changes: openChanges(sets), recipients });
+    setData({ people, suggestions, changes: openChanges(sets), recipients, hidden });
   });
   useEffect(() => { load(); }, []);
 
@@ -141,7 +141,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   const order = peopleOrder(data ? filterPeople(data.people, query) : [], { sort, reversed });
   const people = order.people;
   const payees = data ? filterPayees(payeesWithNoPerson(data.recipients), query) : [];
-  const sections = data ? peopleSections({ people, suggestions: data.suggestions, changes: data.changes, payees, server: assetMode().server }) : [];
+  const sections = data ? peopleSections({ people, suggestions: data.suggestions, changes: data.changes, payees, hidden: data.hidden, server: assetMode().server }) : [];
   const sectionViews = {
     note: () => html`<p class="hint">${PEOPLE_SERVER_NOTE}</p>`,
     search: () => html`<div class="field search-field"><div class="field-body">
@@ -176,6 +176,16 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
       : html`<section class="page-section"><h2>People</h2>
         ${data.people.length === 0 && html`<p class="empty">${PEOPLE_EMPTY}</p>`}
         ${data.people.length > 0 && html`<p class="empty">No person matches the search.</p>`}</section>`),
+    // "Show Again" removes the dismissal, and the suggestion comes back (ADR 0158 item 3).
+    hidden: () => html`<${PickFold} id="people-hidden" title="Hidden suggestions" startOpen=${false} rows=${data.hidden.map((suggestion) => {
+      const row = suggestionRow(suggestion);
+      return html`<div class="link-row static" key=${suggestion.identity}>
+        <span class="text"><span class="label">${row.title}</span>${row.lines.map((l, i) => html`<span class="summary" key=${i}>${l}</span>`)}</span>
+        <button class="button" type="button" disabled=${busy} onClick=${() => run(async () => {
+          await api('/people/suggestions/show', { method: 'POST', body: { identity: suggestion.identity } });
+          await load();
+        })}>Show Again</button></div>`;
+    })} />`,
     payees: () => html`<${PickFold} id="people-payees" title="Payees with no person" forceOpen=${query.trim() !== ''} rows=${payees.map((recipient) => {
       const row = recipientRow(recipient);
       return html`<${ListRow} key=${JSON.stringify(recipientKey(recipient))} title=${row.title} lines=${row.lines} count=${row.count}
@@ -211,7 +221,7 @@ function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, 
   useEffect(() => { if (profiles) setState((current) => withProfiles(current, profiles)); }, [profiles]);
   const { busy, error, run } = useAction();
   const person = checkSheetPerson(state, people);
-  const groups = addToRows(state, person, titles, profiles);
+  const groups = addToRows(state, person, titles, profiles, feeds);
   const submit = () => run(async () => {
     if (person) {
       await api(`/people/${person.id}/items`, { method: 'POST', body: addItemsBody(state, person) });
@@ -258,7 +268,7 @@ function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, 
       <${ErrorNotice} error=${error} />
     </div>
     <footer>
-      <button class="button" type="button" disabled=${busy} onClick=${dismiss}>Not This Person</button>
+      <button class="button" type="button" disabled=${busy} onClick=${dismiss}>Hide This Suggestion</button>
       <button class="button primary" type="button" disabled=${busy || !checkSheetReady(state, person)} onClick=${submit}>${busy ? (person ? 'Adding the Items…' : 'Making the Person…') : checkSheetLabel(state, person)}</button>
     </footer>`;
 }

@@ -566,6 +566,22 @@ export function sortLabel(sort, reversed) {
   return (reversed ? REVERSED_SORT_LABELS : SORT_LABELS)[sort];
 }
 
+// The index of the segment that gets the focus after a key in a segmented
+// control (musicindex ADR 0051 R-SEG-1 item 7, ADR 0157). Left and Right move
+// one segment and wrap, as on musicindex.org. Home and End go to the first
+// and the last segment. Each other key gives null. A key moves only the focus:
+// Enter or Space selects the segment, as on musicindex.org.
+export function segmentKey(index, count, key) {
+  if (count === 0) return null;
+  switch (key) {
+    case 'ArrowRight': return (index + 1) % count;
+    case 'ArrowLeft': return (index - 1 + count) % count;
+    case 'Home': return 0;
+    case 'End': return count - 1;
+    default: return null;
+  }
+}
+
 // The entries of a sort menu: each sort, then its reversed direction, as
 // words (musicindex ADR 0054 R-LIST-13 item 2, ADR 0155).
 export function sortEntries(sorts) {

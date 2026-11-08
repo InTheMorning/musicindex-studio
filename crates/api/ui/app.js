@@ -45,7 +45,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, navAtWidth, pageTabs } from './shell.js';
+  isFeedView, openFeedView, navAtWidth, pageTabs, segmentKey } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -1980,6 +1980,19 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
 // The names of the pages that are not the album page or a track.
 const PAGE_NAMES = { lives: 'Live shows', credits: 'Credits', settings: 'Settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
 
+// The keys of a segmented control (musicindex ADR 0051 R-SEG-1 item 7, ADR
+// 0157). The selected segment is the one Tab stop of the row, and the arrow
+// keys, Home and End move the focus between the segments.
+export function onSegmentKey(event) {
+  const segments = [...event.currentTarget.querySelectorAll('.segment')];
+  const index = segments.indexOf(document.activeElement);
+  if (index < 0) return;
+  const next = segmentKey(index, segments.length, event.key);
+  if (next === null) return;
+  event.preventDefault();
+  segments[next].focus();
+}
+
 // The tabs of the page of a feed (ADR 0135). At a narrow width they are one
 // select menu, so that no tab starts outside the window.
 function PageTabs({ feed, view, go }) {
@@ -1993,8 +2006,8 @@ function PageTabs({ feed, view, go }) {
       ${tabs.map((tab) => html`<option key=${tab.page} value=${tab.page}>${tab.label}</option>`)}
     </select>`;
   }
-  return html`<nav class="page-tabs" aria-label="Pages of this feed">
-    ${tabs.map((tab) => html`<button key=${tab.page} class="button" type="button"
+  return html`<nav class="page-tabs segmented" aria-label="Pages of this feed" onKeyDown=${onSegmentKey}>
+    ${tabs.map((tab) => html`<button key=${tab.page} class="segment" type="button" tabIndex=${tab.current ? 0 : -1}
       aria-current=${tab.current ? 'page' : undefined} onClick=${() => open(tab.page)}>${tab.label}</button>`)}
   </nav>`;
 }

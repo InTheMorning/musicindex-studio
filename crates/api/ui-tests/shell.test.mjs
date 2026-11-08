@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pageTabs, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName,
+  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
 } from '../ui/shell.js';
@@ -705,4 +705,15 @@ test('the sort menu names both directions of each sort', () => {
   assert.deepEqual(labels(['order', 'newest', 'az']),
     ['Feed Order', 'Feed Order, Reversed', 'Newest', 'Oldest', 'A to Z', 'Z to A']);
   assert.deepEqual(sortEntries(['az'])[1], { sort: 'az', reversed: true, label: 'Z to A' });
+});
+
+// musicindex ADR 0051 R-SEG-1 item 7, ADR 0157: the keys of a segmented control.
+test('the arrow keys, Home and End move the focus between the segments', () => {
+  assert.equal(segmentKey(0, 6, 'ArrowRight'), 1);
+  assert.equal(segmentKey(5, 6, 'ArrowRight'), 0, 'Right wraps to the first segment');
+  assert.equal(segmentKey(0, 6, 'ArrowLeft'), 5, 'Left wraps to the last segment');
+  assert.equal(segmentKey(3, 6, 'Home'), 0);
+  assert.equal(segmentKey(3, 6, 'End'), 5);
+  assert.equal(segmentKey(3, 6, 'Enter'), null, 'Enter selects through the click of the button');
+  assert.equal(segmentKey(0, 0, 'ArrowRight'), null);
 });

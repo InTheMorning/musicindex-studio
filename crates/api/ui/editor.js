@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady } from './review.js';
-import { dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
+import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
@@ -974,8 +974,8 @@ function FilePicker({ pick }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <div class="actions picker-tabs" role="group" aria-label="Where the file comes from">
-        ${list.map((s) => html`<button class="button" type="button" key=${s.id} aria-pressed=${source === s.id}
+      <div class="segmented picker-tabs" role="group" aria-label="Where the file comes from" onKeyDown=${onSegmentKey}>
+        ${list.map((s) => html`<button class="segment" type="button" key=${s.id} aria-pressed=${source === s.id} tabIndex=${source === s.id ? 0 : -1}
           onClick=${() => setSource(s.id)}>${s.label}</button>`)}
       </div>
       ${source === 'release' && html`<${PickerList} path=${path} kind=${pick.kind} byName onSelect=${(file) => pick.choose(file, 'release')} />`}
@@ -2621,9 +2621,9 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
-      <div class="actions playlist-tabs" role="group" aria-label="Where the tracks come from">
-        <button class="button" type="button" aria-pressed=${tab === 'index'} onClick=${() => setTab('index')}>Search Music Index</button>
-        <button class="button" type="button" aria-pressed=${tab === 'mine'} onClick=${() => setTab('mine')}>My Releases</button>
+      <div class="segmented playlist-tabs" role="group" aria-label="Where the tracks come from" onKeyDown=${onSegmentKey}>
+        <button class="segment" type="button" aria-pressed=${tab === 'index'} tabIndex=${tab === 'index' ? 0 : -1} onClick=${() => setTab('index')}>Search Music Index</button>
+        <button class="segment" type="button" aria-pressed=${tab === 'mine'} tabIndex=${tab === 'mine' ? 0 : -1} onClick=${() => setTab('mine')}>My Releases</button>
       </div>
       ${tab === 'index' && html`<section class="page-section">
         <form class="form" onSubmit=${runSearch} role="search">

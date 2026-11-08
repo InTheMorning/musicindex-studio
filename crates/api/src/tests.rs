@@ -11219,7 +11219,7 @@ async fn the_musicindex_lookup_gives_the_levels_and_the_states_of_a_feed() {
         rows[0]["kind"],
         json!({"type": "role", "roles": ["artist"]})
     );
-    assert_eq!(rows[0]["albums"], 2);
+    assert_eq!(rows[0]["releases"], 2);
     assert_eq!(rows[0]["host"], "feed.example");
     assert_eq!(rows[0]["has"]["wallet"], true);
     assert_eq!(rows[1]["feed_guid"], "c0ffee-02");

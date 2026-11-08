@@ -1016,17 +1016,17 @@ test('the key of Correct the Feeds is never a key with the warning by default (A
 // ---- Task 080b: Find on musicindex (ADR 0117) ----
 
 const ROW = (kind, extra = {}) => ({
-  feed_guid: 'g1', title: 'DuhLaurien', image_url: null, level: 'role', kind, albums: 3, host: 'wavlake.com',
+  feed_guid: 'g1', title: 'DuhLaurien', image_url: null, level: 'role', kind, releases: 3, host: 'wavlake.com',
   has: { picture: true, website: true, wallet: true, npub: false }, ...extra,
 });
 
 test('the dot and the type line of each kind of row (ADR 0117 item 4)', () => {
-  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['artist'] })), { dot: 'artist', text: 'Artist · 3 albums' });
-  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['label'] }, { albums: 1 })), { dot: 'label', text: 'Label · 1 release' });
-  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['label'] }, { albums: 2 })), { dot: 'label', text: 'Label · 2 releases' });
-  assert.deepEqual(lookupKind(ROW({ type: 'inferred_artist' }, { albums: 1 })), { dot: 'artist hollow', text: 'Inferred artist · 1 album' });
-  assert.deepEqual(lookupKind(ROW({ type: 'no_role' }, { level: 'two_way', albums: 2 })), { dot: 'feed hollow', text: 'Feed · two-way links, no role' });
-  assert.deepEqual(lookupKind(ROW({ type: 'unverified' }, { level: 'name_only', albums: null })), { dot: 'feed hollow', text: 'Unverified link' });
+  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['artist'] })), { dot: 'artist', text: 'Artist · 3 releases' });
+  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['label'] }, { releases: 1 })), { dot: 'label', text: 'Label · 1 release' });
+  assert.deepEqual(lookupKind(ROW({ type: 'role', roles: ['label'] }, { releases: 2 })), { dot: 'label', text: 'Label · 2 releases' });
+  assert.deepEqual(lookupKind(ROW({ type: 'inferred_artist' }, { releases: 1 })), { dot: 'artist hollow', text: 'Inferred artist · 1 release' });
+  assert.deepEqual(lookupKind(ROW({ type: 'no_role' }, { level: 'two_way', releases: 2 })), { dot: 'feed hollow', text: 'Feed · two-way links, no role' });
+  assert.deepEqual(lookupKind(ROW({ type: 'unverified' }, { level: 'name_only', releases: null })), { dot: 'feed hollow', text: 'Unverified link' });
 });
 
 test('the groups of a search keep the three levels in sequence and leave out an empty level (ADR 0117 item 4)', () => {

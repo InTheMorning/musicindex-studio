@@ -4,6 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screens 2 to 5 of the mockups in `.studio-dev/mockup-lookup/site/`.
+- Changed on 2026-11-08: the count of a row and the notes of levels 1 to 3 say "release", not "album". A count holds the releases of all types (musicindex ADR 0023 R-SCOPE-1 item 2 and R-WORD-9 item 5). The kinds of R-WORD-9 items 1 to 4 wait for the track counts of each release.
 - Uses: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for the pending changes. [ADR 0098](0098-the-people-module.md) items 5 and 6 for the fields and the links of a person. [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) for the keysend lookup. [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) for the Nostr keys. [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the requests. [ADR 0109](0109-images-and-audio-load-from-their-hosts.md) for the pictures. musicindex ADR 0010, ADR 0032 R-DOT-1 and ADR 0033 R-WORD-3 for the dots and the words.
 
 ## Context
@@ -36,15 +37,15 @@
 
 | Level | Heading | Condition | Type line |
 | --- | --- | --- | --- |
-| 1 | "Verified role" | `agreed_roles` is not empty | The filled dot and the word of the role: "Artist · N albums", or "Label · N releases" (musicindex ADR 0033 R-WORD-3) |
-| 2 | "Verified two-way links" | `two_way_link_count` is more than 0, and `agreed_roles` is empty | "Inferred artist · N albums" with a hollow artist dot, when the name matches (item 5). If not, "Feed · two-way links, no role" with a hollow feed dot |
+| 1 | "Verified role" | `agreed_roles` is not empty | The filled dot and the word of the role: "Artist · N releases", or "Label · N releases" (musicindex ADR 0033 R-WORD-3) |
+| 2 | "Verified two-way links" | `two_way_link_count` is more than 0, and `agreed_roles` is empty | "Inferred artist · N releases" with a hollow artist dot, when the name matches (item 5). If not, "Feed · two-way links, no role" with a hollow feed dot |
 | 3 | "Name only" | `two_way_link_count` is 0 | "Unverified link" with a hollow feed dot |
 
 5. The name matches when a value of `confirmed_release_artists` is equal to the title of the feed, or contains it as whole words. The release artist of the row is also a name of the feed, unless its source is `placeholder`. Each name is compared in lowercase, with `&` as "and", and with each run of other characters as one space. This is the `creditMatch` rule of musicindex.org.
 6. The notes are:
-    - Level 1: "The feed and its albums link to each other, and both give the role."
-    - Level 2: "The feed and its albums link to each other, but they give no role."
-    - Level 3: "Only the name matches. No album links back to this feed."
+    - Level 1: "The feed and its releases link to each other, and both give the role."
+    - Level 2: "The feed and its releases link to each other, but they give no role."
+    - Level 3: "Only the name matches. No release links back to this feed."
 7. Each row shows the picture of the feed, its title, the type line and a line with the host of the feed and the values that it has. Examples are "wavlake.com · a picture, a website and a Lightning address". The core reads the detail of each row for a maximum of 10 rows. A row with no detail shows only its type line.
 
 ### The Values

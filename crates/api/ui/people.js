@@ -1982,9 +1982,9 @@ export const FILL_NOTE = 'Studio puts the values in the fields. Select Save to k
 
 // The levels of the search sheet, in sequence (ADR 0117 items 4 and 6).
 export const LOOKUP_LEVELS = [
-  { level: 'role', heading: 'Verified role', note: 'The feed and its albums link to each other, and both give the role.' },
-  { level: 'two_way', heading: 'Verified two-way links', note: 'The feed and its albums link to each other, but they give no role.' },
-  { level: 'name_only', heading: 'Name only', note: 'Only the name matches. No album links back to this feed.' },
+  { level: 'role', heading: 'Verified role', note: 'The feed and its releases link to each other, and both give the role.' },
+  { level: 'two_way', heading: 'Verified two-way links', note: 'The feed and its releases link to each other, but they give no role.' },
+  { level: 'name_only', heading: 'Name only', note: 'Only the name matches. No release links back to this feed.' },
 ];
 
 // The rows of a search in their levels. A level with no row is left out. In
@@ -1993,19 +1993,20 @@ export const lookupGroups = (rows) => LOOKUP_LEVELS
   .map((group) => ({ ...group, rows: (rows || []).filter((row) => row.level === group.level) }))
   .filter((group) => group.rows.length > 0);
 
-// The dot class and the type line of a row (ADR 0117 item 4). The dot of a
+// The dot class and the type line of a row (ADR 0117 item 4). The count holds
+// releases of each kind, so it says "release" (musicindex ADR 0023 R-WORD-9
+// item 5). The row gives no track count of each release. The dot of a
 // role is filled. The dots of the other kinds are hollow.
 export function lookupKind(row) {
   const kind = row.kind || {};
   switch (kind.type) {
     case 'role': {
       const roles = kind.roles || [];
-      const [one, many] = roles[0] === 'label' ? ['release', 'releases'] : ['album', 'albums'];
-      const count = row.albums == null ? '' : ` · ${plural(row.albums, one, many)}`;
+      const count = row.releases == null ? '' : ` · ${plural(row.releases, 'release', 'releases')}`;
       return { dot: roles[0] || 'feed', text: `${roles.map(roleWord).join(' · ')}${count}` };
     }
     case 'inferred_artist': {
-      const count = row.albums == null ? '' : ` · ${plural(row.albums, 'album', 'albums')}`;
+      const count = row.releases == null ? '' : ` · ${plural(row.releases, 'release', 'releases')}`;
       return { dot: 'artist hollow', text: `Inferred artist${count}` };
     }
     case 'no_role': return { dot: 'feed hollow', text: 'Feed · two-way links, no role' };

@@ -84,8 +84,9 @@ pub struct LookupRow {
     pub level: Level,
     /// The kind of the row.
     pub kind: Kind,
-    /// The number of two-way links. Missing for an unverified row.
-    pub albums: Option<i64>,
+    /// The number of two-way links, which is a count of releases of each
+    /// kind. Missing for an unverified row.
+    pub releases: Option<i64>,
     /// The host of the feed address. Missing when the detail is not read.
     pub host: Option<String>,
     /// The values of the feed. Each value is false when the detail is not
@@ -266,7 +267,7 @@ pub(crate) fn is_channel_route(recipient: &Recipient) -> bool {
 /// The row of a search hit, without its detail.
 fn row_of(hit: &PublisherHit) -> LookupRow {
     let (level, kind) = classify(hit);
-    let albums = match kind {
+    let releases = match kind {
         Kind::Unverified => None,
         _ => hit.two_way_link_count,
     };
@@ -276,7 +277,7 @@ fn row_of(hit: &PublisherHit) -> LookupRow {
         image_url: web_value(hit.image_url.clone()),
         level,
         kind,
-        albums,
+        releases,
         host: None,
         has: Has::default(),
     }

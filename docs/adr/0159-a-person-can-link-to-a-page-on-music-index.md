@@ -4,6 +4,7 @@
 - Date: 2026-11-08
 - Owner: operator
 - Accepted: 2026-11-08 by the operator, from the mockups of the questionnaire.
+- Amended: 2026-11-08 by the operator, through the orchestrator session. Item 12 adds the pages to the export of the people.
 - Uses: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md), [ADR 0123](0123-one-type-of-value-has-one-picker.md), [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md), [ADR 0154](0154-the-search-fields-have-a-field-list.md), [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0147](0147-the-nostr-and-artwork-rows-show-a-preview.md).
 - Changes: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md) items 5 and 6, the select menu of a link. [ADR 0108](0108-people-data-at-rest-stays-plain.md) item 6, which this record examines.
 
@@ -36,11 +37,15 @@ A person could link only to an artist or label feed of the collection. A collabo
 
 11. ADR 0108 item 6 asks for this examination, because a read-only link keeps data that the feeds of the user do not give. The result: the People data stays plain at rest. The new data is a public feed GUID and its title, and it holds no secret (ADR 0108 item 2). The text of ADR 0108 item 3 stays.
 
+### The Export
+
+12. The export of the people (ADR 0098 item 24) gives each read-only link of a person with its feed GUID, its title and the time of the link. A save keeps the time of each link that stays. The account archive of ADR 0107 holds the pages because it holds the collection.
+
 ## How This Decision Is Checked
 
 Mechanical:
 
-- `studio-core`: a read-only link saves and loads with its GUID and title. A link to a feed of the collection stays a link of ADR 0132.
+- `studio-core`: a read-only link saves and loads with its GUID and title. A link to a feed of the collection stays a link of ADR 0132. The export gives each page, and a save keeps the time of its link.
 - `crates/api/ui-tests/`: the model gives the suggestions of a page that differs, and none for a page that agrees.
 
 Visual, by the agent, at 1280 px and at 390 px with touch:

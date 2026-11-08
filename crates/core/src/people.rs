@@ -1356,12 +1356,18 @@ fn replace_pages(
             });
         }
     }
+    // A page that stays keeps the time of its link (ADR 0159 item 12).
+    let linked: HashMap<String, i64> = db
+        .prepare("SELECT feed_guid, created_at FROM person_pages WHERE person_id = ?1")?
+        .query_map([id.0], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
     db.execute("DELETE FROM person_pages WHERE person_id = ?1", [id.0])?;
     for page in &clean {
+        let at = linked.get(&page.feed_guid).copied().unwrap_or_else(now);
         db.execute(
             "INSERT INTO person_pages (person_id, feed_guid, title, created_at)
              VALUES (?1, ?2, ?3, ?4)",
-            params![id.0, page.feed_guid, page.title, now()],
+            params![id.0, page.feed_guid, page.title, at],
         )?;
     }
     Ok(())
@@ -3606,6 +3612,17 @@ pub struct ExportMembership {
     pub podcast_guid: Option<String>,
 }
 
+/// A read-only link of a person to a page on Music Index (ADR 0159 item 12).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExportPage {
+    /// The feed GUID of the page.
+    pub feed_guid: String,
+    /// The title of the page, from the time of the link.
+    pub title: String,
+    /// The Unix time of the link.
+    pub linked_at: i64,
+}
+
 /// A Lightning address that a stored lookup gives for a wallet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExportAddress {
@@ -3654,6 +3671,8 @@ pub struct ExportPerson {
     pub support_links: Vec<SupportLink>,
     /// The publisher feeds of the person, with their titles.
     pub memberships: Vec<ExportMembership>,
+    /// The read-only links to pages on Music Index (ADR 0159 item 12).
+    pub pages: Vec<ExportPage>,
 }
 
 /// The export of the people (ADR 0098 items 24 and 25).
@@ -3711,6 +3730,20 @@ pub fn export<S: BuildHasher>(
                 podcast_guid: row.podcast_guid,
             });
         }
+        let pages = collection
+            .db()
+            .prepare(
+                "SELECT feed_guid, title, created_at FROM person_pages WHERE person_id = ?1
+                 ORDER BY title COLLATE NOCASE, feed_guid",
+            )?
+            .query_map([person.id.0], |r| {
+                Ok(ExportPage {
+                    feed_guid: r.get(0)?,
+                    title: r.get(1)?,
+                    linked_at: r.get(2)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
         list.push(ExportPerson {
             id: person.id,
             default_address: default_address(&person, lookups),
@@ -3724,6 +3757,7 @@ pub fn export<S: BuildHasher>(
             credit_names: person.credit_names,
             support_links: person.support_links,
             memberships,
+            pages,
         });
     }
     Ok(PeopleExport {
@@ -4770,6 +4804,41 @@ mod tests {
         };
         save_person(&collection, ann, &save).unwrap();
         assert_eq!(person(&collection, ann).unwrap().pages.len(), 0);
+    }
+
+    #[test]
+    fn the_export_gives_each_page_and_a_save_keeps_the_time_of_its_link() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let save = PersonSave {
+            pages: Some(vec![page("g-1", "Ann Bell Music")]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        collection
+            .db()
+            .execute("UPDATE person_pages SET created_at = 5", [])
+            .unwrap();
+        let save = PersonSave {
+            pages: Some(vec![page("g-1", "Ann Bell Music"), page("g-2", "Zed")]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        let exported = export(&collection, &HashMap::<String, Lookup>::new()).unwrap();
+        let pages = &exported.people[0].pages;
+        assert_eq!(
+            pages
+                .iter()
+                .map(|p| (p.feed_guid.as_str(), p.title.as_str()))
+                .collect::<Vec<_>>(),
+            [("g-1", "Ann Bell Music"), ("g-2", "Zed")],
+            "ADR 0159 item 12: the export must give each read-only page of a person."
+        );
+        assert_eq!(
+            pages[0].linked_at, 5,
+            "ADR 0159 item 12: a page that stays must keep the time of its link."
+        );
+        assert!(pages[1].linked_at > 5);
     }
 
     #[test]

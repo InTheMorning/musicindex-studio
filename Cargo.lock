@@ -4666,7 +4666,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "studio-api"
-version = "0.1.0-rc.19"
+version = "0.1.0-rc.20"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -4692,7 +4692,7 @@ dependencies = [
 
 [[package]]
 name = "studio-app-client"
-version = "0.1.0-rc.19"
+version = "0.1.0-rc.20"
 dependencies = [
  "arboard",
  "base64 0.23.1",
@@ -4710,7 +4710,7 @@ dependencies = [
 
 [[package]]
 name = "studio-core"
-version = "0.1.0-rc.19"
+version = "0.1.0-rc.20"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -4748,7 +4748,7 @@ dependencies = [
 
 [[package]]
 name = "studio-desktop"
-version = "0.1.0-rc.19"
+version = "0.1.0-rc.20"
 dependencies = [
  "directories",
  "rustix",
@@ -4760,7 +4760,7 @@ dependencies = [
 
 [[package]]
 name = "studio-desktop-app"
-version = "0.1.0-rc.19"
+version = "0.1.0-rc.20"
 dependencies = [
  "directories",
  "serde_json",
@@ -4780,7 +4780,7 @@ dependencies = [
 
 [[package]]
 name = "studio-server"
-version = "0.1.0-rc.19"
+version = "0.1.0-rc.20"
 dependencies = [
  "axum",
  "base64 0.23.1",

@@ -2976,7 +2976,7 @@ dependencies = [
 [[package]]
 name = "musicindex-search"
 version = "0.1.0"
-source = "git+https://github.com/InTheMorning/musicindex-lib?rev=7cfc4e7b6faa472759a7ae507f89b76a213b9261#7cfc4e7b6faa472759a7ae507f89b76a213b9261"
+source = "git+https://github.com/InTheMorning/musicindex-lib?rev=11d99e593847fb3d61b175032ce3e9fbad690022#11d99e593847fb3d61b175032ce3e9fbad690022"
 dependencies = [
  "chrono",
 ]

@@ -181,6 +181,24 @@ Look at these items, and expect these results:
 3. Type `artist:` and two letters. The list shows artist names from Music Index.
 4. Enter with no selected row runs the search, and the results show.
 
+## Check G: The Stream Check Of A Live Show
+
+Owner: ADR 0162. The agent screenshots used a local test server. This check needs real stream servers on the internet.
+
+```sh
+cd "$STUDIO_REPO"
+cargo run -p studio-desktop -- --data-dir "$PWD/.studio-dev/stream-check"
+# Open the printed address in your browser. Add a release, then a live show.
+```
+
+Look at these items, and expect these results:
+
+1. Enter the address of a real HLS stream that is live. The **Stream type** menu shows HLS. Select **Check**. The line shows "Live", the type and the time.
+2. Enter the address of a real Icecast mount, for example one that ends in `/live`. Select **Check**. The line shows "Live" and `audio/mpeg`, and the menu shows MP3.
+3. Stop the stream, or use an address that is down. Select **Check**. The line shows the cause in orange.
+4. With the stopped stream, select **Go Live**. Studio shows "Go Live refused." and the cause. The draft does not change.
+5. Do items 1 to 4 on the server too. A stream address in a private network gives a refusal on the server.
+
 ## What Only The Operator Can Supply
 
 | Necessary item | Why | Supply |
@@ -190,6 +208,7 @@ Look at these items, and expect these results:
 | A real Linux desktop with sound and a tray | The sandbox has no sound device, no `/etc/os-release` and no tray. A local AppImage stops there. | Checks A and B |
 | Two real file hosts with secrets | A real move uses the vault and the hosts of the operator. | Check D |
 | The network to outside picture hosts and relays | The sandbox of the agents stops these requests. | Check E |
+| A real HLS stream and a real Icecast stream | The sandbox of the agents stops requests to outside stream servers. | Check G |
 | Empty data for the first visit | The check data has feeds, so the Welcome page does not show. | Check F gives an empty folder. An agent can do this check. |
 | A computer with an NVIDIA card | Only a computer with that card can show the restart of the app. | Check A, item 8 |
 | A macOS or Windows computer | Only a tester with those systems can examine their installers. | None. These tests are blocked. |

@@ -2,3 +2,7 @@
 
 # Local development and manual check data. It holds a real vault and collection.
 /.studio-dev/
+
+# Local agent and editor settings.
+/.claude/
+/.idea/

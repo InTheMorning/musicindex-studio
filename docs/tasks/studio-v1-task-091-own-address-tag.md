@@ -54,6 +54,15 @@ Visual, by the planning model: the visual criterion of ADR 0128. `$edges()` give
 
 Human, by the operator: the human criterion of ADR 0128. Stophammer release 0.18.1 holds ADR 0083, and the live node runs `v0.19.0-rc.7`.
 
+Agent check, 2026-11-08: a scratch copy of Stophammer at `398d10f` parsed the bytes that Studio writes. It sent them to `POST /ingest/feed`. The live node runs that revision. The parser was `stophammer-parser` at `77a4ed8`.
+
+- A move from A to B gave B. The return gave A, with no wait.
+- A second move in the first hour stayed at A, with the refusal of ADR 0083. After the wait, it gave B.
+- A return with the tag removed stayed at B, with the refusal of ADR 0083.
+- A crawl of A before the B pointer got a refusal. The next crawl of A gave A. The crawler follows the tag of the B pointer to A.
+
+The screenshot check of the warning did not run again at `c02910d`, because the sandbox of that session stops Chromium.
+
 ## Stop And Ask When
 
 - The status or the rule of ADR 0083 changed.

@@ -4,6 +4,7 @@
 - Date: 2026-10-26
 - Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The live shows are on the tab Live Shows, not in the outline.
 - Owner: operator
+- Changed by: [ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md). Item 4: Studio refuses a live item with no stream or with a stream type that does not agree with the stream address. A live item with no content link gets a warning, not a refusal. The mechanical check of the content link refusal is gone.
 - Amended: 2026-10-26 by operator decision. [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) items 12 and 16 supersede item 16 for a locked vault and item 9 for the server. A granted write uses a grant vault.
 - Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). Items 13 and 15: a granted write also sets `lastBuildDate`, and the check ignores that element.
 - Changed by: [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md). Item 9: an app pairs with a pairing text from Studio, and signs each request with its own key, with no token. Item 12: a grant names one app, and fixes the live value origin of that app.
@@ -85,7 +86,7 @@ On 2026-10-26 the operator selected the decisions below.
 Mechanical:
 
 - A test adds a live item, writes it, then does "Go live" and "End the show" through the draft. The written feed has each status in sequence and the same `guid`.
-- A test refuses a write of a live item with no `contentLink`, before any change on a host.
+- A test refuses a write of a live item with no stream, before any change on a host ([ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md) replaces the check of `contentLink`).
 - A test confirms that `/app/v1/` refuses the UI access token, and that `/api/` refuses an app token.
 - A test client with an app token sets the status to `live`, sets the `podcast:liveValue`, and sets the status to `ended`. The hosted file has each change, and the grant ends after the last one.
 - Tests refuse a granted change that is not covered, and a change after the end of the grant. A test refuses a change while the feed has a draft with changes.

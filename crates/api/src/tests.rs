@@ -6904,7 +6904,45 @@ async fn a_live_item_goes_live_and_ends_through_three_writes() {
     assert_eq!(entry["status"], "pending");
     let guid = entry["item"]["guid"].as_str().unwrap().to_owned();
 
-    // A show with no content link does not pass the write.
+    // The draft answer gives the problems of the show (ADR 0161 item 6). A
+    // show with no stream does not pass the write.
+    let problems = draft["live_problems"].as_array().unwrap();
+    assert!(
+        problems.iter().any(|p| p["field"] == "stream"
+            && p["level"] == "refusal"
+            && p["guid"] == guid.as_str()),
+        "ADR 0161 item 6: the draft answer must give the stream refusal in live_problems. Add it in draft_json: {draft}"
+    );
+    assert!(
+        problems
+            .iter()
+            .any(|p| p["field"] == "contentLink" && p["level"] == "warning")
+    );
+
+    // With a stream and no content link, the answer gives only a warning.
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["item"]["enclosure"] = json!({
+        "url": "https://example.com/live.mp3",
+        "length": "0",
+        "media_type": "audio/mpeg",
+    });
+    let (status, draft) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    let levels: Vec<_> = draft["live_problems"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["level"].clone())
+        .collect();
+    assert_eq!(levels, [json!("warning")], "{draft}");
+
+    // A content link removes the warning.
     let mut model = draft["model"].clone();
     model["live_items"][0]["content_links"] =
         json!([{ "href": "https://example.com/show", "label": "Watch" }]);
@@ -6916,6 +6954,7 @@ async fn a_live_item_goes_live_and_ends_through_three_writes() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(draft["live_problems"], json!([]));
     write_once(&app, id).await;
     assert!(live(&app).contains("status=\"pending\""));
 

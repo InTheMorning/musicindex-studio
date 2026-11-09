@@ -34,7 +34,7 @@ Studio opens the page of the show. The tab **Live Shows** lists the show with it
 
 | Section | What it holds |
 | --- | --- |
-| Status | The status: "Planned", "Live now" or "Ended". It also lists problems that stop a write. |
+| Status | The status: "Planned", "Live now" or "Ended". It also lists the problems of the show. A problem in red stops a write. A warning in orange does not stop it. |
 | Grant | The grant of the show. See [Connected apps and show grants](connected-apps.md). |
 | Show | **Title**, **Description**, **Start time**, **End time** and **Image address**. Select **Choose…** to pick an image file. |
 | Stream | **Stream address** and **Stream type**, for example `application/x-mpegURL`. It shows until the show ends. |
@@ -44,9 +44,16 @@ Studio opens the page of the show. The tab **Live Shows** lists the show with it
 | Value routes | Recipients for this show. |
 | More | **Identity** shows the show GUID. |
 
-A show needs a start time and one content link.
-Studio does not write the show without them.
-The status section tells you what is missing: "This show has no start time." or "This show has no content link."
+A show needs a start time and a stream.
+The stream needs a **Stream address** and a **Stream type**.
+Apps play the stream, so Studio does not write the show without it.
+When the stream address ends in a known extension, the stream type must agree with it.
+For example, an address that ends in `.m3u8` needs `application/x-mpegURL`, and an address that ends in `.mp3` needs `audio/mpeg`.
+
+The status section tells you what is missing, for example "This show has no start time." or "This show has no stream address."
+
+A content link is recommended. It gives a page for a person, for example a web player or a chat room.
+When the show has no content link, the status section shows the warning "This show has no content link.", and Studio writes the show.
 
 ## Go live and end the show
 

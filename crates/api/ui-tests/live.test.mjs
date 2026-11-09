@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary, liveProblems,
+  liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary,
   grantLimit, grantActive, grantSummary, grantWriteText,
   hostUsesSigner, grantBoxState,
 } from '../ui/live.js';
@@ -37,20 +37,6 @@ test('the next action follows the status', () => {
 test('the summary line gives the status and the start time', () => {
   assert.equal(showSummary(live, '10/26/2026, 8:00 PM'), 'Planned · starts 10/26/2026, 8:00 PM');
   assert.equal(showSummary({ ...live, status: 'live' }, ''), 'Live now');
-});
-
-test('the problems have the texts of the core', () => {
-  assert.deepEqual(liveProblems(live), []);
-  assert.deepEqual(liveProblems({ ...live, content_links: [] }), ['This show has no content link.']);
-  assert.deepEqual(
-    liveProblems({ ...live, start: ' ', status: 'soon', content_links: [] }),
-    [
-      'This show has no start time.',
-      'This show has no content link.',
-      'This show has a status that is not pending, live or ended.',
-    ],
-  );
-  assert.deepEqual(liveProblems({ ...live, start: null }), ['This show has no start time.']);
 });
 
 test('only an ended show can have a recording', () => {

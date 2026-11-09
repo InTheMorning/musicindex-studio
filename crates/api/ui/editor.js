@@ -13,7 +13,7 @@ import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrCh
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
-import { isLiveItem, liveKey, liveDot, liveProblems, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
+import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress } from './feedfacts.js';
@@ -3165,7 +3165,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
   };
   const links = live.content_links;
   const next = nextAction(live.status);
-  const problems = liveProblems(live);
+  const problems = (draft.liveProblems || []).filter((p) => p.guid === live.item.guid);
   const start = timeText(live.start);
   // The grant of this show and its granted writes. The list loads when the
   // page opens and after each write.
@@ -3213,7 +3213,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     <section class="page-section"><h2>Status</h2>
       <div class="group">
         <p class="live-line">${statusLabel(live.status)}</p>
-        ${problems.map((text) => html`<p class="live-line field-error" key=${text}>${text}</p>`)}
+        ${problems.map((p) => html`<p class=${`live-line ${p.level === 'refusal' ? 'field-error' : 'field-warning'}`} key=${p.field + p.text}>${p.text}</p>`)}
         <${ErrorNotice} error=${action.error} />
         ${next && html`<div class="actions"><button class="button primary" type="button"
           disabled=${action.busy || !live.item.guid} onClick=${() => changeStatus(next.status)}>${next.label}</button></div>`}

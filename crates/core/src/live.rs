@@ -52,13 +52,26 @@ impl std::fmt::Display for LiveError {
 
 impl std::error::Error for LiveError {}
 
+/// How serious a problem of a live item is (ADR 0161 item 5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LiveProblemLevel {
+    /// The write stops.
+    Refusal,
+    /// The write continues.
+    Warning,
+}
+
 /// A reason why a live item is not correct.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct LiveProblem {
     /// The `guid` of the live item. It is empty when the item has none.
     pub guid: String,
-    /// The field with the problem: `start`, `end`, `contentLink` or `status`.
+    /// The field with the problem: `start`, `end`, `stream`, `contentLink`
+    /// or `status`.
     pub field: String,
+    /// Whether the problem stops the write.
+    pub level: LiveProblemLevel,
     /// The text for the user.
     pub text: String,
 }
@@ -223,39 +236,118 @@ pub fn check_live_values(feed: &Feed) -> Result<(), LiveError> {
     Ok(())
 }
 
+/// The stream types that each extension of a stream address accepts (ADR 0161
+/// item 3).
+const STREAM_TYPES: &[(&str, &[&str])] = &[
+    (
+        "m3u8",
+        &[
+            "application/x-mpegurl",
+            "application/vnd.apple.mpegurl",
+            "audio/mpegurl",
+            "audio/x-mpegurl",
+        ],
+    ),
+    ("mp3", &["audio/mpeg", "audio/mp3"]),
+    ("aac", &["audio/aac", "audio/aacp"]),
+    ("m4a", &["audio/mp4", "audio/x-m4a"]),
+    ("ogg", &["audio/ogg", "application/ogg"]),
+    ("opus", &["audio/ogg", "audio/opus"]),
+    ("mpd", &["application/dash+xml"]),
+];
+
+/// The extension of the last path part of an address, in lowercase. The
+/// query and the fragment do not count. An address with no path has none.
+fn address_extension(url: &str) -> Option<String> {
+    let url = url.split(['?', '#']).next().unwrap_or(url);
+    let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let (_, path) = after_scheme.split_once('/')?;
+    let part = path.rsplit('/').next().unwrap_or(path);
+    let (_, ext) = part.rsplit_once('.')?;
+    Some(ext.to_ascii_lowercase())
+}
+
+/// Whether a stream type agrees with the extension of the stream address.
+/// The case and the parameters of the type do not count.
+fn stream_type_agrees(ext: &str, media_type: &str) -> bool {
+    let Some((_, accepted)) = STREAM_TYPES.iter().find(|(e, _)| *e == ext) else {
+        return true;
+    };
+    let base = media_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    accepted.contains(&base.as_str())
+}
+
 /// Give the problems of the live items of a feed.
 #[must_use]
 pub fn problems(feed: &Feed) -> Vec<LiveProblem> {
+    use LiveProblemLevel::{Refusal, Warning};
     let mut found = Vec::new();
     for Entry { value: live, .. } in &feed.live_items {
         let guid = live.item.guid.clone().unwrap_or_default();
-        let mut add = |field: &str, text: &str| {
+        let mut add = |level: LiveProblemLevel, field: &str, text: &str| {
             found.push(LiveProblem {
                 guid: guid.clone(),
                 field: field.to_owned(),
+                level,
                 text: text.to_owned(),
             });
         };
         // A blank start is the same as no start, because the editor can
         // send an empty text.
         if live.start.as_deref().is_none_or(|s| s.trim().is_empty()) {
-            add("start", "This show has no start time.");
+            add(Refusal, "start", "This show has no start time.");
         }
         if let Some(start) = live.start.as_deref().filter(|s| !s.trim().is_empty())
             && parse_time(start).is_none()
         {
-            add("start", "The start time is not a time with a zone.");
+            add(
+                Refusal,
+                "start",
+                "The start time is not a time with a zone.",
+            );
         }
         if let Some(end) = live.end.as_deref().filter(|s| !s.trim().is_empty())
             && parse_time(end).is_none()
         {
-            add("end", "The end time is not a time with a zone.");
+            add(Refusal, "end", "The end time is not a time with a zone.");
+        }
+        let enclosure = live.item.enclosure.as_ref();
+        let url = enclosure
+            .and_then(|e| e.url.as_deref())
+            .map(str::trim)
+            .filter(|u| !u.is_empty());
+        let media_type = enclosure
+            .and_then(|e| e.media_type.as_deref())
+            .map(str::trim)
+            .filter(|t| !t.is_empty());
+        match (url, media_type) {
+            (None, _) => add(Refusal, "stream", "This show has no stream address."),
+            (Some(_), None) => add(Refusal, "stream", "This show has no stream type."),
+            (Some(url), Some(ty)) => {
+                if let Some(ext) = address_extension(url)
+                    && !stream_type_agrees(&ext, ty)
+                {
+                    add(
+                        Refusal,
+                        "stream",
+                        &format!(
+                            "The stream type {ty} does not agree with the stream address, which ends in .{ext}."
+                        ),
+                    );
+                }
+            }
         }
         if live.content_links.is_empty() {
-            add("contentLink", "This show has no content link.");
+            add(Warning, "contentLink", "This show has no content link.");
         }
         if live.status.as_deref().and_then(LiveStatus::parse).is_none() {
             add(
+                Refusal,
                 "status",
                 "This show has a status that is not pending, live or ended.",
             );
@@ -267,6 +359,29 @@ pub fn problems(feed: &Feed) -> Vec<LiveProblem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::feed::Enclosure;
+
+    fn stream(url: &str, media_type: &str) -> Enclosure {
+        Enclosure {
+            url: Some(url.to_owned()),
+            media_type: Some(media_type.to_owned()),
+            ..Default::default()
+        }
+    }
+
+    /// A feed with one live item that has a stream and a content link.
+    fn feed_with_stream(url: &str, media_type: &str) -> Feed {
+        let mut live = new_live_item("Show", "2026-11-01T10:00:00Z");
+        live.item.enclosure = Some(stream(url, media_type));
+        live.content_links
+            .push(Entry::new(crate::feed::ContentLink {
+                href: Some("https://example.com/show".to_owned()),
+                ..Default::default()
+            }));
+        let mut feed = Feed::default();
+        feed.live_items.push(Entry::new(live));
+        feed
+    }
 
     #[test]
     fn a_live_value_has_a_limit_and_no_control_character() {
@@ -356,6 +471,7 @@ mod tests {
     fn a_blank_start_is_a_problem() {
         let mut feed = Feed::default();
         let mut live = new_live_item("Show", " ");
+        live.item.enclosure = Some(stream("https://example.com/live.mp3", "audio/mpeg"));
         live.content_links
             .push(Entry::new(crate::feed::ContentLink {
                 href: Some("https://example.com/show".to_owned()),
@@ -371,6 +487,7 @@ mod tests {
         let mut feed = Feed::default();
         let mut live = new_live_item("Show", start);
         live.end = end.map(str::to_owned);
+        live.item.enclosure = Some(stream("https://example.com/live.mp3", "audio/mpeg"));
         live.content_links
             .push(Entry::new(crate::feed::ContentLink {
                 href: Some("https://example.com/show".to_owned()),
@@ -428,14 +545,142 @@ mod tests {
     }
 
     #[test]
-    fn a_new_live_item_has_no_content_link() {
+    fn a_live_item_with_no_content_link_gets_a_warning() {
+        let mut feed = feed_with_stream("https://example.com/live.mp3", "audio/mpeg");
+        feed.live_items[0].value.content_links.clear();
+        let found = problems(&feed);
+        assert_eq!(
+            found.len(),
+            1,
+            "ADR 0161 item 4: no content link is the only problem. Fix problems."
+        );
+        assert_eq!(found[0].field, "contentLink");
+        assert_eq!(found[0].level, LiveProblemLevel::Warning);
+        assert_eq!(found[0].text, "This show has no content link.");
+    }
+
+    #[test]
+    fn a_new_live_item_has_no_stream_and_no_content_link() {
         let mut feed = Feed::default();
         feed.live_items
             .push(Entry::new(new_live_item("Show", "2026-11-01T10:00:00Z")));
         let found = problems(&feed);
+        let fields: Vec<_> = found.iter().map(|p| (p.field.as_str(), p.level)).collect();
+        assert_eq!(
+            fields,
+            [
+                ("stream", LiveProblemLevel::Refusal),
+                ("contentLink", LiveProblemLevel::Warning)
+            ]
+        );
+        assert_eq!(found[0].text, "This show has no stream address.");
+    }
+
+    #[test]
+    fn a_live_item_with_no_usable_stream_gets_a_refusal() {
+        let no_type = |url: &str| {
+            let mut feed = feed_with_stream(url, "audio/mpeg");
+            feed.live_items[0]
+                .value
+                .item
+                .enclosure
+                .as_mut()
+                .unwrap()
+                .media_type = None;
+            feed
+        };
+        let mut no_enclosure = feed_with_stream("https://example.com/live.mp3", "audio/mpeg");
+        no_enclosure.live_items[0].value.item.enclosure = None;
+        let mut no_url = feed_with_stream("x", "audio/mpeg");
+        no_url.live_items[0]
+            .value
+            .item
+            .enclosure
+            .as_mut()
+            .unwrap()
+            .url = None;
+        let cases = [
+            (
+                "no enclosure",
+                no_enclosure,
+                "This show has no stream address.",
+            ),
+            ("no url", no_url, "This show has no stream address."),
+            (
+                "blank url",
+                feed_with_stream("  ", "audio/mpeg"),
+                "This show has no stream address.",
+            ),
+            (
+                "no type",
+                no_type("https://example.com/live.mp3"),
+                "This show has no stream type.",
+            ),
+            (
+                "blank type",
+                feed_with_stream("https://example.com/live.mp3", " "),
+                "This show has no stream type.",
+            ),
+            (
+                "type that disagrees",
+                feed_with_stream("https://example.com/live.m3u8", "audio/mpeg"),
+                "The stream type audio/mpeg does not agree with the stream address, which ends in .m3u8.",
+            ),
+        ];
+        for (name, feed, text) in cases {
+            let found = problems(&feed);
+            assert_eq!(
+                found.len(),
+                1,
+                "ADR 0161 items 1 to 3: a show with {name} must give one refusal. Fix problems."
+            );
+            assert_eq!(found[0].field, "stream", "{name}");
+            assert_eq!(found[0].level, LiveProblemLevel::Refusal, "{name}");
+            assert_eq!(found[0].text, text, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_stream_type_that_agrees_or_has_no_known_extension_gives_no_problem() {
+        let cases = [
+            (
+                "https://example.com/pc20/livestream?format=.mp3",
+                "audio/mpeg",
+            ),
+            ("https://example.com/pc20/livestream#.m3u8", "audio/mpeg"),
+            ("https://stream.example.com/live", "audio/mpeg"),
+            ("https://stream.example.com", "audio/mpeg"),
+            ("https://stream.example.com/live.pls", "audio/x-scpls"),
+            ("https://example.com/a.b/live", "audio/aac"),
+            (
+                "https://example.com/live.M3U8",
+                "application/vnd.apple.mpegurl; charset=x",
+            ),
+            ("https://example.com/live.m3u8?token=1", " Audio/X-MpegURL "),
+            ("https://example.com/live.mp3", "audio/mp3"),
+            ("https://example.com/live.opus", "audio/opus"),
+            ("https://example.com/live.mpd", "application/dash+xml"),
+        ];
+        for (url, media_type) in cases {
+            assert_eq!(
+                problems(&feed_with_stream(url, media_type)),
+                Vec::new(),
+                "ADR 0161 item 3: {url} with {media_type} must give no problem. Fix address_extension or stream_type_agrees."
+            );
+        }
+    }
+
+    #[test]
+    fn a_stream_type_message_gives_the_type_as_written_and_the_extension_in_lowercase() {
+        let found = problems(&feed_with_stream(
+            "https://example.com/live.MP3?x=1",
+            "Audio/AAC; q=1",
+        ));
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].field, "contentLink");
-        assert_eq!(found[0].text, "This show has no content link.");
+        assert_eq!(
+            found[0].text,
+            "The stream type Audio/AAC; q=1 does not agree with the stream address, which ends in .mp3."
+        );
     }
 
     #[test]
@@ -443,6 +688,7 @@ mod tests {
         let mut live = new_live_item("Show", "x");
         live.start = None;
         live.status = Some("soon".into());
+        live.item.enclosure = Some(stream("https://example.com/live.mp3", "audio/mpeg"));
         live.content_links
             .push(Entry::new(crate::feed::ContentLink::default()));
         let mut feed = Feed::default();

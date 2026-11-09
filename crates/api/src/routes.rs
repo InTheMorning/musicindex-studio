@@ -2534,7 +2534,8 @@ pub(crate) async fn set_publisher_role(
 }
 
 /// The draft as the UI edits it: the model, its revision, `changed`,
-/// `bad_addresses`, `bad_keys` and `hidden` (ADR 0065 item 9, ADR 0074). The value of `changed` is
+/// `bad_addresses`, `bad_keys`, `hidden` and `live_problems` (ADR 0065 item 9,
+/// ADR 0074, ADR 0161 item 6). The value of `changed` is
 /// true when the draft is different from the live file. Each bad address
 /// stops a write (ADR 0023).
 ///
@@ -2550,6 +2551,7 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let bad_addresses = model.bad_addresses();
     let bad_keys = model.bad_keys();
     let hidden = model.hidden();
+    let live_problems = live::problems(&model);
     let op3_tracks = json!({
         "prefixed": model
             .items
@@ -2581,6 +2583,7 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
         "bad_addresses": bad_addresses,
         "bad_keys": bad_keys,
         "hidden": hidden,
+        "live_problems": live_problems,
         "has_host": has_host,
     })))
 }

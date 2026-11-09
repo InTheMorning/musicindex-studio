@@ -61,8 +61,9 @@ pub enum PipelineErrorKind {
     /// A key field of the draft is not a Nostr key, and the hosted feed
     /// does not have the same text in a key field (ADR 0074 item 5).
     BadKey,
-    /// A live item has no start, no content link, or a status that is not
-    /// `pending`, `live` or `ended` (ADR 0054 item 4).
+    /// A live item has no start, no stream, a stream type that is blank or
+    /// does not agree with the stream address, or a bad status (ADR 0054
+    /// item 4, ADR 0161).
     BadLiveItem,
     /// A live value has a long address or protocol, or a control character
     /// (task 072d).
@@ -4110,11 +4111,14 @@ pub fn write_draft_signed(
             ));
         }
     }
-    // ADR 0054 item 4: a live item with a problem stops the write before
-    // any change on a host.
-    let live_problems = crate::live::problems(&feed);
-    if !live_problems.is_empty() {
-        let texts: Vec<String> = live_problems
+    // ADR 0054 item 4, ADR 0161 item 5: a live item with a refusal stops
+    // the write before any change on a host. A warning does not stop it.
+    let live_refusals: Vec<_> = crate::live::problems(&feed)
+        .into_iter()
+        .filter(|p| p.level == crate::live::LiveProblemLevel::Refusal)
+        .collect();
+    if !live_refusals.is_empty() {
+        let texts: Vec<String> = live_refusals
             .iter()
             .map(|p| format!("{} ({})", p.text, p.guid))
             .collect();

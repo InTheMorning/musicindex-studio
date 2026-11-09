@@ -177,15 +177,17 @@ fn corpus_feed(name: &str) -> (Document, Feed) {
     (doc, feed)
 }
 
-/// ADR 0054 item 4: one corpus feed has a live item with no content link.
+/// ADR 0161: no corpus live item gets a refusal. One corpus feed has a live
+/// item with no content link, and it gets a warning.
 #[test]
-fn only_the_pixel_palace_live_item_has_a_problem() {
+fn no_corpus_live_item_gets_a_refusal_and_pixel_palace_gets_a_warning() {
     for (name, bytes) in corpus() {
         let feed = Feed::read(&Document::parse_bytes(&bytes).unwrap()).unwrap();
         let found = studio_core::live::problems(&feed);
         if name == "behindthesch3m3s-music-pixel-palace.xml" {
             assert_eq!(found.len(), 1, "{name}: {found:?}");
             assert_eq!(found[0].text, "This show has no content link.");
+            assert_eq!(found[0].level, studio_core::live::LiveProblemLevel::Warning);
         } else {
             assert!(found.is_empty(), "{name}: {found:?}");
         }

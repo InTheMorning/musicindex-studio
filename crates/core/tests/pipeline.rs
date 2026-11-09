@@ -3226,15 +3226,16 @@ fn a_write_that_stops_with_conflict_queues_nothing() {
 }
 
 #[test]
-fn a_live_item_with_no_content_link_does_not_write() {
+fn a_live_item_with_no_stream_does_not_write() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
     pipeline::edit_draft(&s.collection, s.feed, |f| {
-        f.live_items
-            .push(Entry::new(studio_core::live::new_live_item(
-                "Show",
-                "2026-11-01T10:00:00Z",
-            )));
+        let mut show = studio_core::live::new_live_item("Show", "2026-11-01T10:00:00Z");
+        show.content_links.push(Entry::new(ContentLink {
+            href: Some("https://example.com/show".into()),
+            label: "Watch".into(),
+        }));
+        f.live_items.push(Entry::new(show));
     })
     .unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
@@ -3249,9 +3250,43 @@ fn a_live_item_with_no_content_link_does_not_write() {
     )
     .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::BadLiveItem);
-    assert!(error.to_string().contains("This show has no content link."));
+    assert!(
+        error
+            .to_string()
+            .contains("This show has no stream address.")
+    );
     assert_eq!(live(&s), FEED);
     assert_eq!(s.collection.snapshots(s.feed).unwrap(), Vec::new());
+}
+
+#[test]
+fn a_live_item_with_a_stream_and_no_content_link_writes() {
+    let mut s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| {
+        let mut show = studio_core::live::new_live_item("Show", "2026-11-01T10:00:00Z");
+        show.item.enclosure = Some(Enclosure {
+            url: Some("https://example.com/live.mp3".into()),
+            media_type: Some("audio/mpeg".into()),
+            ..Default::default()
+        });
+        f.live_items.push(Entry::new(show));
+    })
+    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_or_else(|e| {
+        panic!("ADR 0161 item 4: a live item with a stream and no content link must write: {e}")
+    });
+    assert_ne!(live(&s), FEED);
 }
 
 // ---- Show grants (task 033e, ADR 0054 items 11 to 17) ----
@@ -3290,6 +3325,11 @@ fn draft_with_show(s: &Setup) -> String {
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
     let mut show = studio_core::live::new_live_item("Show", SHOW_START);
     show.end = Some(SHOW_END.into());
+    show.item.enclosure = Some(Enclosure {
+        url: Some("https://example.com/live.mp3".into()),
+        media_type: Some("audio/mpeg".into()),
+        ..Default::default()
+    });
     show.content_links.push(Entry::new(ContentLink {
         href: Some("https://example.com/show".into()),
         label: "Watch".into(),

@@ -225,6 +225,11 @@ async fn granted_show(app: &App, id: i64, app_id: i64, live_xml: &dyn Fn() -> St
     let mut model = draft["model"].clone();
     model["live_items"][0]["content_links"] =
         json!([{ "href": "https://example.com/show", "label": "Watch" }]);
+    model["live_items"][0]["item"]["enclosure"] = json!({
+        "url": "https://example.com/live.mp3",
+        "length": "0",
+        "media_type": "audio/mpeg",
+    });
     let (status, _) = call(
         app,
         "PUT",
@@ -705,6 +710,11 @@ async fn the_approval_of_a_grant_fails_when_its_app_is_not_active() {
     let mut model = draft["model"].clone();
     model["live_items"][0]["content_links"] =
         json!([{ "href": "https://example.com/show", "label": "Watch" }]);
+    model["live_items"][0]["item"]["enclosure"] = json!({
+        "url": "https://example.com/live.mp3",
+        "length": "0",
+        "media_type": "audio/mpeg",
+    });
     call(
         &live.app,
         "PUT",

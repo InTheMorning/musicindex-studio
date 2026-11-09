@@ -237,6 +237,11 @@ async fn granted_show(
     let mut model = draft.json["model"].clone();
     model["live_items"][0]["content_links"] =
         json!([{ "href": "https://example.com/show", "label": "Watch" }]);
+    model["live_items"][0]["item"]["enclosure"] = json!({
+        "url": "https://example.com/live.mp3",
+        "length": "0",
+        "media_type": "audio/mpeg",
+    });
     let saved = lapi(
         live,
         who,

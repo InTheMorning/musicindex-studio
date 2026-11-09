@@ -64,18 +64,6 @@ export function showSummary(live, timeText) {
   return timeText ? `${label} · starts ${timeText}` : label;
 }
 
-// The problems that stop a write (ADR 0054 item 4). The texts are the texts
-// of `live::problems` in the core.
-export function liveProblems(live) {
-  const found = [];
-  if (!live.start || !live.start.trim()) found.push('This show has no start time.');
-  if (!live.content_links || live.content_links.length === 0) found.push('This show has no content link.');
-  if (!['pending', 'live', 'ended'].includes(live.status)) {
-    found.push('This show has a status that is not pending, live or ended.');
-  }
-  return found;
-}
-
 // ---- Show grants (ADR 0054 items 11 to 17) ----
 
 const DAY = 24 * 60 * 60;

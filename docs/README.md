@@ -454,6 +454,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [studio-server](runbooks/studio-server.md)
 - [Start Music Index Studio](runbooks/install-desktop.md)
 - [Desktop release drafts](runbooks/desktop-release.md)
+- [Operator human checks](runbooks/operator-human-checks.md)
 
 ## Release notes
 

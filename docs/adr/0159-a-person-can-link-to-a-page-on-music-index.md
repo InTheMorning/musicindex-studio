@@ -55,3 +55,5 @@ Visual, by the agent, at 1280 px and at 390 px with touch:
 - A suggestion on the page of a person.
 
 Human: the operator links a person to the page of a collaborator. After the collaborator changes a picture, the operator opens the person again.
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)). The human test is open.

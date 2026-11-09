@@ -31,3 +31,5 @@ Mechanical:
 - `crates/api/ui-tests/pages.test.mjs`: the sequence of the sections of the page of a person.
 
 Visual, by the agent: the page of a person with an open entry, at 1280 px and at 390 px with touch. The agent examines the dark and the light theme.
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

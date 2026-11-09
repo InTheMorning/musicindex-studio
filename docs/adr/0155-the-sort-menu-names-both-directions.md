@@ -24,3 +24,5 @@ Releases, the page of an artist or a label, "Not linked", "Other feeds" and the 
 Mechanical: `crates/api/ui-tests/shell.test.mjs` examines the entries of the menu and their sequence. The tests of ADR 0153 and task 094 examine the reversed order of the rows and of the letters.
 
 Visual, by the agent: the menu of Releases and of the People list at 1280 px and at 390 px with touch. No list shows a reverse icon.
+
+Visual result: passed on 2026-11-08 after a correction of the Releases menu at 390 px ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

@@ -22,3 +22,5 @@ Studio gave the product name as "musicindex" in its buttons, sheets, notes and e
 Mechanical: the title case test of `crates/api/ui-tests/casing.test.mjs` refuses the lower-case word in a button label, because the list of fixed names no longer holds it.
 
 Visual: the planning model looks at the changed buttons, headings and notes at 1280 px, and at 390 px with touch.
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

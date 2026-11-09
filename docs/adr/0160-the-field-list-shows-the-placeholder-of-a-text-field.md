@@ -27,3 +27,5 @@ Mechanical:
 - `crates/api/ui-tests/fieldlist.test.mjs`: the model gives the example of a text field as its placeholder. The text to put in is the token.
 
 Visual, by the agent: the field list with a text field row, in the light and the dark theme. The agent examines it at 1280 px and at 390 px with touch.
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

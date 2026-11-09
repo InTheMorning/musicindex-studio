@@ -28,3 +28,5 @@ Mechanical:
 - `crates/api/ui-tests/`: the UI text has no "Not This Person". The title case test examines "Hide This Suggestion" and "Show Again". The fold is the last section, and a credit row of a sheet has the form of item 5.
 
 Visual, by the agent: the fold with one hidden suggestion, and the list after "Show Again", at 1280 px and at 390 px with touch.
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

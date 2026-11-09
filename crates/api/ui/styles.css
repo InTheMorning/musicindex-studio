@@ -1547,6 +1547,9 @@ button.outline-feed {
    window and stays in the margins of the page (ADR 0072 item 2). */
 .releases-tools { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; flex-wrap: wrap; min-width: 0; }
 .releases-tools .view-button[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent); }
+/* The sort is the first tool. At 390 px the tools wrap below the heading and
+   the sort is at the left edge, so its menu opens to the right. */
+.releases-tools .sort-menu { right: auto; left: 0; }
 /* The field list of a search field (ADR 0154). It is in the flow under the
    field, so a sheet does not cut it. A selected row changes the fill only. */
 .field-list { display: grid; gap: 4px; }

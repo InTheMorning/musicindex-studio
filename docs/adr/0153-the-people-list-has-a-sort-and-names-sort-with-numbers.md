@@ -38,3 +38,5 @@ Mechanical:
 - `studio-core` test `a_person_gives_the_time_when_the_user_added_it`.
 
 Visual: the People list at 1280 px in "A to Z", "Newest" and "Oldest", and at 390 px with touch. The Files page shows "2.mp3" before "15.mp3".
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

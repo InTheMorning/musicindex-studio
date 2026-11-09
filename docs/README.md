@@ -447,6 +447,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Human test findings of 0.1.0-rc.17](reviews/2026-11-05-rc17-human-test-findings.md)
 - [Human test findings of 0.1.0-rc.18](reviews/2026-11-05-rc18-human-test-findings.md)
 - [Findings of local use on 2026-11-06](reviews/2026-11-06-local-use-findings.md)
+- [Visual checks of 2026-11-08](reviews/2026-11-08-visual-checks.md)
 
 ## Runbooks
 

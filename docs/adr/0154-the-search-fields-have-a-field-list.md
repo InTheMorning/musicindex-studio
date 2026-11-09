@@ -36,3 +36,5 @@ Visual, by the agent at 1280 px and at 390 px with touch:
 - Each of the five fields with its list open.
 - A field with a start name and no list.
 - The error row of a field.
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

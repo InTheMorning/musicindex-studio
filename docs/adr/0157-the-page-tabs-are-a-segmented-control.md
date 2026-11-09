@@ -29,3 +29,5 @@ Visual, by the agent:
 - The album page at 1280 px and at 800 px, in the dark and the light theme.
 - The keyboard focus on a tab.
 - One image of the tabs adjacent to the scope control of musicindex.org.
+
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).

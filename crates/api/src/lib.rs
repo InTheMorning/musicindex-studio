@@ -230,6 +230,8 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/images", get(routes::get_image))
         .route("/media/held", get(routes::held_files))
         .route("/media/facts", post(routes::media_facts))
+        .route("/stream/check", post(routes::check_stream))
+        .route("/stream/type", post(routes::suggest_stream_type))
         .route("/media/tickets", post(media::make_ticket))
         .route("/search", get(routes::search))
         .route("/people", get(people::list_people).post(people::add_person))

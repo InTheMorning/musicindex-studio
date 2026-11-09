@@ -240,6 +240,7 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::GrantNotActive => (StatusCode::CONFLICT, "grant_ended"),
             PipelineErrorKind::DraftOpen => (StatusCode::CONFLICT, "draft_open"),
             PipelineErrorKind::BadStatus => (StatusCode::CONFLICT, "bad_status"),
+            PipelineErrorKind::StreamNotLive => (StatusCode::CONFLICT, "stream_not_live"),
             PipelineErrorKind::AppNotActive => (StatusCode::CONFLICT, "app_not_active"),
             PipelineErrorKind::NotCovered => (StatusCode::UNPROCESSABLE_ENTITY, "not_covered"),
             PipelineErrorKind::InvalidOperation => {

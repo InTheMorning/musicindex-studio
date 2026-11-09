@@ -2584,6 +2584,7 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
         "bad_keys": bad_keys,
         "hidden": hidden,
         "live_problems": live_problems,
+        "stream_types": live::STREAM_TYPE_MENU,
         "has_host": has_host,
     })))
 }
@@ -2792,14 +2793,57 @@ pub(crate) async fn set_live_status(
     Path((id, guid)): Path<(i64, String)>,
     Json(body): Json<SentLiveStatus>,
 ) -> ApiResult {
+    let bad = |message: String| ApiError::new(StatusCode::CONFLICT, "bad_status", message);
+    let next = LiveStatus::parse(&body.status)
+        .filter(|s| *s != LiveStatus::Pending)
+        .ok_or_else(|| bad("the status is live or ended".to_owned()))?;
+    // ADR 0162 item 6: a change to `live` checks the stream before it
+    // changes the draft. The request to the stream server runs with no lock
+    // of the workspace. A change of the draft meanwhile makes the revision
+    // stale, and the write below then refuses.
+    let mut checked_revision = None;
+    if next == LiveStatus::Live {
+        let guid_read = guid.clone();
+        let (streams, url, revision) = blocking(shared.clone(), move |w| {
+            let id = FeedId(id);
+            ensure_draft(w, id)?;
+            let (model, revision) = pipeline::draft_model(&w.collection, id)?;
+            let url = model
+                .live_items
+                .iter()
+                .find(|e| e.value.item.guid.as_deref() == Some(guid_read.as_str()))
+                .map(|e| {
+                    e.value
+                        .item
+                        .enclosure
+                        .as_ref()
+                        .and_then(|enclosure| enclosure.url.clone())
+                        .unwrap_or_default()
+                });
+            Ok((w.stream_checker(), url, revision))
+        })
+        .await?;
+        if let Some(url) = url {
+            let status = blocking_unlocked(move || Ok(streams.check_stream(&url))).await?;
+            if let Some(text) = status.refusal() {
+                return Err(ApiError::new(StatusCode::CONFLICT, "stream_not_live", text));
+            }
+            checked_revision = Some(revision);
+        }
+    }
     blocking(shared, move |w| {
         let id = FeedId(id);
-        let bad = |message: String| ApiError::new(StatusCode::CONFLICT, "bad_status", message);
-        let next = LiveStatus::parse(&body.status)
-            .filter(|s| *s != LiveStatus::Pending)
-            .ok_or_else(|| bad("the status is live or ended".to_owned()))?;
         ensure_draft(w, id)?;
         let (mut model, revision) = pipeline::draft_model(&w.collection, id)?;
+        // A draft that changed during the check of the stream is a stale
+        // draft, as for each other change of the draft.
+        if checked_revision.is_some_and(|checked| checked != revision) {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "stale_revision",
+                "the draft changed during the check of the stream: try again",
+            ));
+        }
         let Some(entry) = model
             .live_items
             .iter_mut()
@@ -2816,6 +2860,40 @@ pub(crate) async fn set_live_status(
         draft_json(w, id)
     })
     .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct StreamAddress {
+    url: String,
+}
+
+/// Check the stream at an address, for the button Check Stream (ADR 0162
+/// items 1 and 2). The check writes nothing and holds no lock. The answer
+/// gives `live`, `server_type`, `cause` and `fill_type`.
+pub(crate) async fn check_stream(
+    State(shared): State<Shared>,
+    Json(body): Json<StreamAddress>,
+) -> ApiResult {
+    let streams = blocking(shared, |w| Ok(w.stream_checker())).await?;
+    let status =
+        blocking_unlocked(move || Ok(streams.check_stream(&media::plain_address(&body.url))))
+            .await?;
+    // The page fills the menu type for a known name of the same type.
+    let fill_type = status.server_type.as_deref().map(live::filled_stream_type);
+    Ok(Json(json!({
+        "live": status.live,
+        "server_type": status.server_type,
+        "cause": status.cause,
+        "fill_type": fill_type,
+    })))
+}
+
+/// The stream type that the core suggests for the extension of an address
+/// (ADR 0162 item 5). The answer gives `media_type`, or null.
+pub(crate) async fn suggest_stream_type(Json(body): Json<StreamAddress>) -> ApiResult {
+    Ok(Json(json!({
+        "media_type": live::suggested_stream_type(&body.url),
+    })))
 }
 
 #[derive(Deserialize)]
@@ -7262,11 +7340,13 @@ fn granted_write(
         Some(check) => check.0.as_ref(),
         None => &w.web,
     };
+    let streams = w.stream_checker();
     let version = pipeline::write_granted(
         &mut w.collection,
         &hosts,
         &library,
         addresses,
+        streams.as_ref(),
         show.feed_id,
         &show.item_guid,
         change,

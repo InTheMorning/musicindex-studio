@@ -37,7 +37,7 @@ Studio opens the page of the show. The tab **Live Shows** lists the show with it
 | Status | The status: "Planned", "Live now" or "Ended". It also lists the problems of the show. A problem in red stops a write. A warning in orange does not stop it. |
 | Grant | The grant of the show. See [Connected apps and show grants](connected-apps.md). |
 | Show | **Title**, **Description**, **Start time**, **End time** and **Image address**. Select **Choose…** to pick an image file. |
-| Stream | **Stream address** and **Stream type**, for example `application/x-mpegURL`. It shows until the show ends. |
+| Stream | **Stream address**, **Stream type** and **Check Stream**. It shows until the show ends. |
 | Recording | After the show ends. See below. |
 | Content links | **Add a content link**. Each link has **Link address** and **Link text**. |
 | Live value | **Live value address** and **Live value protocol**. Select **Remove the Live Value** to remove it. |
@@ -50,6 +50,26 @@ Apps play the stream, so Studio does not write the show without it.
 When the stream address ends in a known extension, the stream type must agree with it.
 For example, an address that ends in `.m3u8` needs `application/x-mpegURL`, and an address that ends in `.mp3` needs `audio/mpeg`.
 
+**Stream type** is a menu: HLS, MP3, AAC, M4A, Ogg, DASH and **Other…**.
+Select **Other…** to type a different type.
+A type that is not in the menu shows as **Other…** with its text.
+Studio fills the type from the extension of the address, until you select a type yourself.
+A type that is in the draft when you open the page counts as selected.
+
+## Check the stream
+
+1. Enter the **Stream address**.
+2. Select **Check** adjacent to **Check Stream**.
+3. Read the line below the button.
+
+Studio reads the stream for at most 8 seconds. It writes nothing.
+When the stream is live, the line shows "Live", the type that the stream server sends, and the time of the check.
+The check also fills the type, until you select one yourself.
+
+When the stream is not live, the line shows the cause in orange.
+A recording is not live. For example, an HLS playlist with an end marker, a DASH file that is not dynamic, or an audio file with a known length.
+A server on the internet cannot read a stream in a private network.
+
 The status section tells you what is missing, for example "This show has no start time." or "This show has no stream address."
 
 A content link is recommended. It gives a page for a person, for example a web player or a chat room.
@@ -59,8 +79,14 @@ When the show has no content link, the status section shows the warning "This sh
 
 1. Open the page of the show.
 2. Select **Go Live**.
-3. Studio changes the draft and opens the review sheet.
+3. Studio checks the stream. Then it changes the draft and opens the review sheet.
 4. Select **Write to the File Host**.
+
+When the stream is not live, Studio refuses **Go Live** and the draft does not change.
+The status section shows "Studio cannot go live, because the stream is not live", and the cause.
+Start the stream and select **Go Live** again.
+A connected app that starts the show through a grant gets the same check and the same refusal.
+**End the Show** has no check. A write of the feed does not check the stream.
 
 When the show is over, select **End the Show** and write in the same way.
 Neither button changes the file host until you write.

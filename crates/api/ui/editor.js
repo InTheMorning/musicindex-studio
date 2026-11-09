@@ -13,7 +13,7 @@ import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrCh
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
-import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner } from './live.js';
+import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress } from './feedfacts.js';
@@ -3097,7 +3097,7 @@ function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
 // show needs one link before Studio writes it (ADR 0054 item 4).
 function ContentLinks({ id, links, onChange }) {
   const blank = { href: null, label: '' };
-  return html`${links.length === 0 && html`<p class="hint">A show needs one content link. Studio does not write the show without it.</p>`}
+  return html`${links.length === 0 && html`<p class="hint">A content link is recommended. It gives a page for a person, for example a web player.</p>`}
     ${links.map((link, i) => {
       const change = (name) => (value) => onChange(setAt(links, i, set(link, name, value)));
       const rowId = `${id}-link-${link._cid}`;
@@ -3154,10 +3154,64 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     (duration) => editLive((l) => set(l, 'item', set(l.item, 'duration_seconds', duration))),
   );
   const stream = live.item.enclosure || { url: null, length: null, media_type: null };
-  const streamField = (name) => (text) => {
-    const next = set(stream, name, text);
-    itemField('enclosure')(next.url === null && next.length === null && next.media_type === null ? null : next);
+  // A change of the stream. `make(current)` gives the fields to change. It
+  // works on the current model, so that two changes in a row, such as the
+  // address and the type, do not lose one another.
+  const editStream = (make) => editLive((l) => {
+    const current = l.item.enclosure || { url: null, length: null, media_type: null };
+    const next = { ...current, ...make(current) };
+    const empty = next.url === null && next.length === null && next.media_type === null;
+    return set(l, 'item', set(l.item, 'enclosure', empty ? null : next));
+  });
+  // Whether the user selected a type while this page is open. A type that is
+  // not blank at page load counts as selected (ADR 0162 item 5). The page
+  // keeps the flag only here.
+  const selectedType = useRef(typeIsSelected(stream.media_type));
+  const [otherPicked, setOtherPicked] = useState(false);
+  const streamUrl = useRef(stream.url);
+  streamUrl.current = stream.url;
+  const [check, setCheck] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState(null);
+  const fillType = (candidate) => editStream((current) => ({ media_type: filledType(current.media_type, selectedType.current, candidate) }));
+  // The core gives the type for the extension of the address (ADR 0162
+  // item 5). The page has no table of extensions.
+  const changeAddress = (text) => {
+    streamUrl.current = text;
+    setCheck(null);
+    setCheckError(null);
+    editStream(() => ({ url: text }));
+    if (selectedType.current || !text) return;
+    api('/stream/type', { method: 'POST', body: { url: text } }).then((answer) => {
+      if (streamUrl.current === text) fillType(answer.media_type);
+    }, () => {});
   };
+  const pickType = (choice) => {
+    selectedType.current = true;
+    setOtherPicked(choice === OTHER_TYPE);
+    if (choice !== OTHER_TYPE) editStream(() => ({ media_type: choice || null }));
+  };
+  const typeText = (text) => {
+    selectedType.current = true;
+    editStream(() => ({ media_type: optional(text) }));
+  };
+  const runCheck = async () => {
+    const url = streamUrl.current;
+    setChecking(true);
+    setCheckError(null);
+    try {
+      const result = await api('/stream/check', { method: 'POST', body: { url } });
+      if (streamUrl.current !== url) return;
+      setCheck({ result, at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+      fillType(result.fill_type);
+    } catch (e) {
+      if (streamUrl.current === url) setCheckError(e);
+    } finally {
+      setChecking(false);
+    }
+  };
+  const typeMenu = typeMenuState(stream.media_type, draft.streamTypes || [], otherPicked);
+  const checkResult = check && checkLine(check.result, check.at);
   const value = live.live_value || { uri: null, protocol: null };
   const valueField = (name) => (text) => {
     const next = set(value, name, text);
@@ -3248,8 +3302,29 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     ${!canRecord(live) && html`<section class="page-section"><h2>Stream</h2>
       <div class="group">
         <${TextField} id=${`${id}-stream-url`} label="Stream address" type="url" address=${`live_items/${liveIndex}/item/enclosure/url`} bad=${bad}
-          value=${stream.url} onChange=${streamField('url')} />
-        <${TextField} id=${`${id}-stream-type`} label="Stream type" hint="For example application/x-mpegURL." value=${stream.media_type} onChange=${streamField('media_type')} />
+          value=${stream.url} onChange=${changeAddress} />
+        <div class="field">
+          <label for=${`${id}-stream-type-menu`}>Stream type</label>
+          <div class="field-body">
+            <select id=${`${id}-stream-type-menu`} value=${typeMenu.value} onChange=${(e) => pickType(e.target.value)}>
+              <option value="">Choose a type</option>
+              ${(draft.streamTypes || []).map((option) => html`<option key=${option.media_type} value=${option.media_type}>${option.label}</option>`)}
+              <option value=${OTHER_TYPE}>Other…</option>
+            </select>
+            ${typeMenu.showText && html`<input id=${`${id}-stream-type`} type="text" aria-label="Other stream type"
+              value=${typeMenu.text} onInput=${(e) => typeText(e.target.value)} />
+              <span class="hint">For example application/x-mpegURL.</span>`}
+          </div>
+        </div>
+        <div class="field">
+          <label for=${`${id}-stream-check`}>Check Stream</label>
+          <div class="field-body">
+            <div class="actions"><button id=${`${id}-stream-check`} class="button" type="button"
+              disabled=${checking || !stream.url} onClick=${runCheck}>${checking ? 'Checking…' : 'Check'}</button></div>
+            ${checkResult && html`<span class=${checkResult.warning ? 'field-warning' : 'hint'} role="status">${checkResult.text}</span>`}
+            ${checkError && html`<span class="field-warning" role="status">${checkError.message}</span>`}
+          </div>
+        </div>
       </div>
     </section>`}
 

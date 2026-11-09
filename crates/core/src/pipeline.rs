@@ -125,6 +125,9 @@ pub enum PipelineErrorKind {
     /// The status of the live item cannot change to the requested status
     /// (ADR 0054 item 5).
     BadStatus,
+    /// The stream of a live item is not live, so a change to `live` is
+    /// refused (ADR 0162 items 6 and 7).
+    StreamNotLive,
     /// A show grant of the draft names an app that is not active now, so
     /// the write would drop the grant with no message (ADR 0110 item 19).
     AppNotActive,
@@ -4425,6 +4428,7 @@ pub fn write_granted(
     hosts: &Hosts,
     library: &Library,
     addresses: &dyn AddressCheck,
+    streams: &dyn crate::stream::StreamCheck,
     feed_id: FeedId,
     item_guid: &str,
     change: &GrantChange,
@@ -4432,7 +4436,7 @@ pub fn write_granted(
     checked: Option<CheckedTime>,
     now: u64,
 ) -> Result<Version, PipelineError> {
-    let apply = |feed: &mut Feed| apply_grant_change(feed, item_guid, change);
+    let apply = |feed: &mut Feed| apply_grant_change(feed, item_guid, change, streams);
     let written_at = i64::try_from(now).unwrap_or(i64::MAX);
     // ADR 0110 item 26: the live value check is in the core. It runs
     // before the host read, with the origin that the grant keeps.
@@ -4532,6 +4536,7 @@ fn apply_grant_change(
     feed: &mut Feed,
     item_guid: &str,
     change: &GrantChange,
+    streams: &dyn crate::stream::StreamCheck,
 ) -> Result<(), PipelineError> {
     let live_item = feed
         .live_items
@@ -4548,7 +4553,21 @@ fn apply_grant_change(
         PipelineError::new(PipelineErrorKind::BadStatus, error.to_string())
     };
     match change {
-        GrantChange::GoLive => live::set_status(live_item, LiveStatus::Live).map_err(bad_status),
+        GrantChange::GoLive => {
+            live::set_status(live_item, LiveStatus::Live).map_err(bad_status)?;
+            // ADR 0162 item 7: a granted change to `live` gets the check of
+            // the stream, and the same refusal as the change of the user.
+            let url = live_item
+                .item
+                .enclosure
+                .as_ref()
+                .and_then(|e| e.url.as_deref())
+                .unwrap_or_default();
+            match streams.check_stream(url).refusal() {
+                Some(text) => Err(PipelineError::new(PipelineErrorKind::StreamNotLive, text)),
+                None => Ok(()),
+            }
+        }
         GrantChange::End => live::set_status(live_item, LiveStatus::Ended).map_err(bad_status),
         GrantChange::SetLiveValue { uri, protocol } => {
             live::check_live_value(uri, protocol).map_err(|e| {
@@ -4574,6 +4593,7 @@ fn refusal_of(kind: PipelineErrorKind) -> Option<grant::Refusal> {
         PipelineErrorKind::DraftOpen => Some(grant::Refusal::DraftWithChanges),
         PipelineErrorKind::GrantNotActive => Some(grant::Refusal::GrantEnded),
         PipelineErrorKind::InvalidLiveValue => Some(grant::Refusal::LiveValueRefused),
+        PipelineErrorKind::StreamNotLive => Some(grant::Refusal::StreamNotLive),
         _ => None,
     }
 }

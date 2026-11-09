@@ -84,6 +84,9 @@ pub enum Refusal {
     /// The grant vault does not open: the key is wrong, or the vault is
     /// not there.
     VaultNotOpen,
+    /// The stream of the show is not live, so the change to `live` is
+    /// refused (ADR 0162 item 7).
+    StreamNotLive,
 }
 
 impl Refusal {
@@ -95,6 +98,7 @@ impl Refusal {
             Self::GrantEnded => "grant_ended",
             Self::LiveValueRefused => "live_value_invalid",
             Self::VaultNotOpen => "vault_not_open",
+            Self::StreamNotLive => "stream_not_live",
         }
     }
 }

@@ -256,6 +256,88 @@ const STREAM_TYPES: &[(&str, &[&str])] = &[
     ("mpd", &["application/dash+xml"]),
 ];
 
+/// One entry of the stream type menu (ADR 0162 item 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct StreamTypeOption {
+    /// The text of the menu entry.
+    pub label: &'static str,
+    /// The stream type that the entry sets.
+    pub media_type: &'static str,
+}
+
+/// The stream types of the menu. The UI adds the entry **Other...** itself
+/// (ADR 0162 item 4).
+pub const STREAM_TYPE_MENU: &[StreamTypeOption] = &[
+    StreamTypeOption {
+        label: "HLS",
+        media_type: "application/x-mpegURL",
+    },
+    StreamTypeOption {
+        label: "MP3",
+        media_type: "audio/mpeg",
+    },
+    StreamTypeOption {
+        label: "AAC",
+        media_type: "audio/aac",
+    },
+    StreamTypeOption {
+        label: "M4A",
+        media_type: "audio/mp4",
+    },
+    StreamTypeOption {
+        label: "Ogg",
+        media_type: "audio/ogg",
+    },
+    StreamTypeOption {
+        label: "DASH",
+        media_type: "application/dash+xml",
+    },
+];
+
+/// The stream type that Studio suggests for each extension (ADR 0162
+/// item 5). Each type is the first type of the extension in
+/// [`STREAM_TYPES`], and it agrees with the table of ADR 0161 item 3.
+const SUGGESTED_TYPES: &[(&str, &str)] = &[
+    ("m3u8", "application/x-mpegURL"),
+    ("mp3", "audio/mpeg"),
+    ("aac", "audio/aac"),
+    ("m4a", "audio/mp4"),
+    ("ogg", "audio/ogg"),
+    ("opus", "audio/ogg"),
+    ("mpd", "application/dash+xml"),
+];
+
+/// The stream type for the extension of a stream address, or `None` when
+/// the extension is not in the table of ADR 0161 item 3 (ADR 0162 item 5).
+#[must_use]
+pub fn suggested_stream_type(url: &str) -> Option<&'static str> {
+    let ext = address_extension(url.trim())?;
+    SUGGESTED_TYPES
+        .iter()
+        .find(|(e, _)| *e == ext)
+        .map(|(_, media_type)| *media_type)
+}
+
+/// The type that a stream check fills: the menu type of ADR 0162 item 4
+/// when the type of the stream server is a name of the same type in the
+/// table of ADR 0161 item 3, or else the type of the server as it is.
+/// For example `application/vnd.apple.mpegurl` gives `application/x-mpegURL`.
+#[must_use]
+pub fn filled_stream_type(server_type: &str) -> String {
+    let base = server_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    STREAM_TYPES
+        .iter()
+        .filter(|(ext, _)| *ext != "opus")
+        .find(|(_, accepted)| accepted.contains(&base.as_str()))
+        .and_then(|(ext, _)| SUGGESTED_TYPES.iter().find(|(e, _)| e == ext))
+        .map_or_else(|| server_type.trim().to_owned(), |(_, t)| (*t).to_owned())
+}
+
 /// The extension of the last path part of an address, in lowercase. The
 /// query and the fragment do not count. An address with no path has none.
 fn address_extension(url: &str) -> Option<String> {
@@ -695,5 +777,41 @@ mod tests {
         feed.live_items.push(Entry::new(live));
         let fields: Vec<_> = problems(&feed).into_iter().map(|p| p.field).collect();
         assert_eq!(fields, ["start", "status"]);
+    }
+
+    #[test]
+    fn the_suggested_type_follows_the_extension_and_agrees_with_the_table() {
+        for (url, want) in [
+            ("https://a.example/live.m3u8", "application/x-mpegURL"),
+            ("https://a.example/live.MP3?x=1", "audio/mpeg"),
+            ("https://a.example/a.aac", "audio/aac"),
+            ("https://a.example/a.m4a#t", "audio/mp4"),
+            ("https://a.example/a.ogg", "audio/ogg"),
+            ("https://a.example/a.opus", "audio/ogg"),
+            ("https://a.example/a.mpd", "application/dash+xml"),
+        ] {
+            assert_eq!(suggested_stream_type(url), Some(want), "{url}");
+            let ext = address_extension(url).unwrap();
+            assert!(stream_type_agrees(&ext, want), "{url}");
+        }
+        assert_eq!(suggested_stream_type("https://a.example/live"), None);
+        assert_eq!(suggested_stream_type("https://a.example/a.wav"), None);
+        assert_eq!(suggested_stream_type("https://a.example/a?x=.mp3"), None);
+        assert_eq!(suggested_stream_type(""), None);
+    }
+
+    #[test]
+    fn each_menu_type_is_a_type_that_the_table_accepts_for_its_extension() {
+        assert_eq!(STREAM_TYPE_MENU.len(), 6);
+        assert_eq!(
+            filled_stream_type("application/vnd.apple.mpegurl"),
+            "application/x-mpegURL"
+        );
+        assert_eq!(filled_stream_type("audio/x-m4a"), "audio/mp4");
+        assert_eq!(filled_stream_type("audio/opus"), "audio/opus");
+        assert_eq!(filled_stream_type("audio/x-custom"), "audio/x-custom");
+        for (ext, suggested) in SUGGESTED_TYPES {
+            assert!(stream_type_agrees(ext, suggested));
+        }
     }
 }

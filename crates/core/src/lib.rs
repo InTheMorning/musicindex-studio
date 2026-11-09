@@ -50,6 +50,7 @@ pub mod remote;
 pub mod review;
 pub mod roles;
 pub mod signed_request;
+pub mod stream;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod vault;

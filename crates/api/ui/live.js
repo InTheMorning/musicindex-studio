@@ -134,6 +134,7 @@ const REFUSED_TEXT = {
 // The cause of a refused granted write (ADR 0110 item 43). The core gives
 // the cause name.
 const CAUSE_TEXT = {
+  stream_not_live: 'the stream was not live',
   draft_with_changes: 'the feed had a draft with changes',
   grant_ended: 'the grant had ended',
   live_value_invalid: 'Studio refused the live value',
@@ -177,4 +178,51 @@ export function grantBoxState(feedHostSigner) {
     };
   }
   return { disabled: false, note: null };
+}
+
+// ---- The stream type and the stream check (ADR 0162) ----
+
+// The value of the "Other…" entry of the stream type menu. It is not a type.
+export const OTHER_TYPE = '__other__';
+
+// A type counts as selected by the user when it is not blank at page load
+// (ADR 0162 item 5).
+export function typeIsSelected(mediaType) {
+  return Boolean(mediaType && mediaType.trim());
+}
+
+const sameType = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+// What the stream type menu shows. `menu` is the list that the core gives:
+// `{ label, media_type }`. A blank type shows no choice. A type that is not
+// in the menu shows as "Other…", and the text field shows its text. After
+// the user picks "Other…" (`otherPicked`), the text field also shows when
+// the text is blank. `value` is the value of the select.
+export function typeMenuState(mediaType, menu, otherPicked = false) {
+  const text = mediaType || '';
+  if (!text.trim() && !otherPicked) return { value: '', showText: false, text };
+  const entry = menu.find((option) => sameType(option.media_type, text));
+  if (entry && !otherPicked) return { value: entry.media_type, showText: false, text };
+  return { value: OTHER_TYPE, showText: true, text };
+}
+
+// The type after an address change or a check. The page fills the type only
+// until the user selects one (ADR 0162 item 5). A candidate that is not
+// there (an address with no known extension, a check with no type) leaves
+// the type as it is.
+export function filledType(current, selected, candidate) {
+  if (selected || !candidate) return current;
+  return candidate;
+}
+
+// The result line of a stream check (ADR 0162 item 1). `result` is the
+// answer of the core: `{ live, server_type, cause }`. `checkedAt` is the
+// time of the check as text, such as "14:05". The warning line uses the
+// cause that the core gives.
+export function checkLine(result, checkedAt) {
+  if (!result) return null;
+  if (result.live) {
+    return { warning: false, text: `Live · ${result.server_type || 'type not given'} · checked ${checkedAt}` };
+  }
+  return { warning: true, text: result.cause || 'The stream is not live.' };
 }

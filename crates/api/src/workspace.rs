@@ -23,6 +23,7 @@ use studio_core::nip46::RemoteSigner;
 use studio_core::nostr_events::{LOOKUP_RELAYS, Signing};
 use studio_core::pipeline::AddressCheck;
 use studio_core::remote;
+use studio_core::stream::StreamCheck;
 use studio_core::vault::{OpenVault, VaultFile};
 use studio_core::web::Web;
 use studio_core::xml::Document;
@@ -538,6 +539,17 @@ impl std::fmt::Debug for AddressChecker {
     }
 }
 
+/// A replacement for the stream check of a change to `live` (ADR 0162).
+/// Only a test sets it, so that no test sends a request to the network.
+#[derive(Clone)]
+pub(crate) struct StreamChecker(pub(crate) Arc<dyn StreamCheck + Send + Sync>);
+
+impl std::fmt::Debug for StreamChecker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StreamChecker")
+    }
+}
+
 /// The reader of the public feeds that stage 1 of a write follows (ADR 0126
 /// item 7). The real reader uses the policy `Public` in both shells. Only a
 /// test replaces it, so that no test sends a request to the network.
@@ -737,6 +749,9 @@ pub struct Workspace {
     /// The address check of the write. `None` means that the write uses
     /// `web`.
     pub(crate) address_check: Option<AddressChecker>,
+    /// The stream check of a change to `live`. `None` means that the check
+    /// uses `web` (ADR 0162).
+    pub(crate) stream_check: Option<StreamChecker>,
     /// The reader of the public feeds of stage 1 (ADR 0126 item 7).
     pub(crate) link_reader: LinkReader,
     /// The differences between the servers and the computer clock, and the
@@ -915,6 +930,7 @@ impl Workspace {
             hub_web: Web::with_policy(&NetPolicy::Open),
             net_policy: NetPolicy::Open,
             address_check: None,
+            stream_check: None,
             link_reader: default_link_reader(),
             time_keeper: Arc::new(Mutex::new(TimeKeeper::new())),
             server_time: default_server_time(),
@@ -1283,6 +1299,24 @@ impl Workspace {
     pub fn with_address_check(mut self, check: Arc<dyn AddressCheck + Send + Sync>) -> Self {
         self.address_check = Some(AddressChecker(check));
         self
+    }
+
+    /// Use a different stream check for a change to `live`, such as a test
+    /// double (ADR 0162).
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn with_stream_check(mut self, check: Arc<dyn StreamCheck + Send + Sync>) -> Self {
+        self.stream_check = Some(StreamChecker(check));
+        self
+    }
+
+    /// The stream check that a request runs with no lock of the workspace:
+    /// the test double, or a copy of the client `web` (ADR 0162).
+    pub(crate) fn stream_checker(&self) -> Arc<dyn StreamCheck + Send + Sync> {
+        match &self.stream_check {
+            Some(check) => Arc::clone(&check.0),
+            None => Arc::new(self.web.clone()),
+        }
     }
 
     /// Use a different source of server time, such as a test double (ADR

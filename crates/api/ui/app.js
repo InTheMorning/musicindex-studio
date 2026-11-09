@@ -466,6 +466,7 @@ function title(error) {
     // The title of the crate for a field error (musicindex ADR 0052 R-QUERY-8).
     case 'query_field': return 'This search cannot run.';
     case 'index_answer': return 'Music Index gave a bad answer.';
+    case 'stream_not_live': return 'Go Live refused.';
     default: return 'Something went wrong.';
   }
 }

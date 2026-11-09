@@ -5,6 +5,7 @@ import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary,
   grantLimit, grantActive, grantSummary, grantWriteText,
   hostUsesSigner, grantBoxState,
+  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine,
 } from '../ui/live.js';
 
 const link = { href: 'https://example.com/show', label: 'Watch' };
@@ -133,4 +134,57 @@ test('an nsite or Blossom host uses My signer unless its key is in the vault', (
   assert.equal(hostUsesSigner(row('s3', {})), false);
   assert.equal(hostUsesSigner({ kind: 'nsite', config: 'not json' }), false);
   assert.equal(hostUsesSigner(undefined), false);
+});
+
+// ---- The stream type and the stream check (ADR 0162) ----
+
+const MENU = [
+  { label: 'HLS', media_type: 'application/x-mpegURL' },
+  { label: 'MP3', media_type: 'audio/mpeg' },
+  { label: 'DASH', media_type: 'application/dash+xml' },
+];
+
+test('a type that is not blank at page load counts as selected', () => {
+  assert.equal(typeIsSelected('audio/mpeg'), true);
+  assert.equal(typeIsSelected(''), false);
+  assert.equal(typeIsSelected('  '), false);
+  assert.equal(typeIsSelected(null), false);
+});
+
+test('the page fills the type until the user selects one', () => {
+  // Not selected: the suggestion of each new address replaces the type.
+  let type = null;
+  type = filledType(type, false, 'application/x-mpegURL');
+  assert.equal(type, 'application/x-mpegURL');
+  type = filledType(type, false, 'audio/mpeg');
+  assert.equal(type, 'audio/mpeg');
+  // An address with no known extension gives no suggestion: the type stays.
+  assert.equal(filledType(type, false, null), 'audio/mpeg');
+  // The type that a check gives fills too.
+  assert.equal(filledType(type, false, 'audio/aac'), 'audio/aac');
+  // Selected: nothing replaces the type.
+  assert.equal(filledType('audio/ogg', true, 'application/x-mpegURL'), 'audio/ogg');
+  assert.equal(filledType(null, true, 'audio/mpeg'), null);
+});
+
+test('the menu shows a menu type, and a type that is not in it shows as Other with its text', () => {
+  assert.deepEqual(typeMenuState('audio/mpeg', MENU), { value: 'audio/mpeg', showText: false, text: 'audio/mpeg' });
+  assert.equal(typeMenuState('application/x-mpegurl', MENU).value, 'application/x-mpegURL');
+  assert.deepEqual(typeMenuState('audio/flac', MENU), { value: OTHER_TYPE, showText: true, text: 'audio/flac' });
+  assert.deepEqual(typeMenuState(null, MENU), { value: '', showText: false, text: '' });
+  // After the user picks Other, the text field shows, also with no text.
+  assert.deepEqual(typeMenuState(null, MENU, true), { value: OTHER_TYPE, showText: true, text: '' });
+  assert.equal(typeMenuState('audio/mpeg', MENU, true).value, OTHER_TYPE);
+});
+
+test('the result line of a check gives the type and the time, or the cause', () => {
+  assert.deepEqual(
+    checkLine({ live: true, server_type: 'audio/mpeg', cause: null }, '14:05'),
+    { warning: false, text: 'Live · audio/mpeg · checked 14:05' },
+  );
+  assert.deepEqual(
+    checkLine({ live: false, server_type: null, cause: 'The stream server answered with status 404.' }, '14:05'),
+    { warning: true, text: 'The stream server answered with status 404.' },
+  );
+  assert.equal(checkLine(null, '14:05'), null);
 });

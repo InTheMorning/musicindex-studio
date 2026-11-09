@@ -130,6 +130,9 @@ export function useDraft(feedId) {
   // The problems of the live items, as the core gives them (ADR 0161 item
   // 6). The UI keeps no copy of the rule.
   const [liveProblems, setLiveProblems] = useState([]);
+  // The stream type menu, as the core gives it (ADR 0162 item 4). The UI
+  // keeps no copy of the types.
+  const [streamTypes, setStreamTypes] = useState([]);
   // Whether the feed has a host, or a host choice (ADR 0067 item 6).
   const [hasHost, setHasHost] = useState(true);
   // Each address field that is not correct, by its model path (ADR 0023).
@@ -159,6 +162,7 @@ export function useDraft(feedId) {
     setOp3Tracks(draft.op3_tracks || null);
     setGrantBlocked(draft.grant_blocked_by_draft || null);
     setLiveProblems(draft.live_problems || []);
+    setStreamTypes(draft.stream_types || []);
     setHasHost(draft.has_host !== false);
     setBad(badFields(draft));
     setStatus('saved');
@@ -223,6 +227,7 @@ export function useDraft(feedId) {
     setOp3Tracks(saved.op3_tracks || null);
     setGrantBlocked(saved.grant_blocked_by_draft || null);
     setLiveProblems(saved.live_problems || []);
+    if (saved.stream_types) setStreamTypes(saved.stream_types);
     if (saved.has_host !== undefined) setHasHost(saved.has_host);
     setBad(badFields(saved));
   };
@@ -262,5 +267,5 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush]);
 
-  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, hasHost, bad, status, error, edits, update, flush, load, show };
+  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, bad, status, error, edits, update, flush, load, show };
 }

@@ -393,6 +393,34 @@ impl Web {
     }
 }
 
+impl Web {
+    /// Send a `GET` for the stream check, with a time limit for the whole
+    /// request, and give the response with any status (ADR 0162 item 2).
+    pub(crate) fn open_stream(
+        &self,
+        url: &str,
+        limit: Duration,
+    ) -> Result<ureq::http::Response<ureq::Body>, WebError> {
+        let lower = url.trim().to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(WebError::new(
+                WebErrorKind::InvalidAddress,
+                format!("{url} is not an http or https address"),
+            ));
+        }
+        self.agent
+            .get(sent_address(url).as_ref())
+            .config()
+            .timeout_global(Some(limit))
+            .build()
+            .call()
+            .map_err(|e| match e {
+                ureq::Error::Timeout(_) => WebError::new(WebErrorKind::Network, "timeout"),
+                other => network_error(url, &other),
+            })
+    }
+}
+
 /// The size of a block that [`Web::get_to_file`] reads.
 const BLOCK_BYTES: usize = 64 * 1024;
 

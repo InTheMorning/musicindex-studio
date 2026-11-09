@@ -224,7 +224,9 @@ fn open_user(
         })?;
     #[cfg(test)]
     if pass_all {
-        workspace = workspace.with_address_check(Arc::new(PassAll));
+        workspace = workspace
+            .with_address_check(Arc::new(PassAll))
+            .with_stream_check(Arc::new(StreamLive));
     }
     // No test sends a request to the network (ADR 0045), also not the reads
     // of stage 1 of a write (ADR 0126).
@@ -315,6 +317,22 @@ pub fn rebuild_app_index_of(
         (Vec::new(), Vec::new())
     };
     accounts.replace_app_index(id, &keys, &codes)
+}
+
+/// A stream check that finds a live stream. A test uses it, so that no test
+/// sends a request to the network (ADR 0162).
+#[cfg(test)]
+struct StreamLive;
+
+#[cfg(test)]
+impl studio_core::stream::StreamCheck for StreamLive {
+    fn check_stream(&self, _url: &str) -> studio_core::stream::StreamStatus {
+        studio_core::stream::StreamStatus {
+            live: true,
+            server_type: Some("audio/mpeg".to_owned()),
+            cause: None,
+        }
+    }
 }
 
 /// An address check that passes each address. A test uses it, so that no

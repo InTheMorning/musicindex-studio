@@ -45,6 +45,32 @@ const FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 /// the network.
 struct PassAll;
 
+/// A stream check that finds a live stream, so that no test uses the network.
+struct StreamLive;
+
+impl studio_core::stream::StreamCheck for StreamLive {
+    fn check_stream(&self, _url: &str) -> studio_core::stream::StreamStatus {
+        studio_core::stream::StreamStatus {
+            live: true,
+            server_type: Some("audio/mpeg".to_owned()),
+            cause: None,
+        }
+    }
+}
+
+/// A stream check that finds a stream that is not live.
+struct StreamDown;
+
+impl studio_core::stream::StreamCheck for StreamDown {
+    fn check_stream(&self, _url: &str) -> studio_core::stream::StreamStatus {
+        studio_core::stream::StreamStatus {
+            live: false,
+            server_type: None,
+            cause: Some("The stream server answered with status 404.".to_owned()),
+        }
+    }
+}
+
 impl AddressCheck for PassAll {
     fn check(&self, _url: &str) -> Result<(), String> {
         Ok(())
@@ -3382,6 +3408,7 @@ fn granted(
         &s.hosts,
         &s.library,
         &PassAll,
+        &StreamLive,
         s.feed,
         guid,
         change,
@@ -3389,6 +3416,66 @@ fn granted(
         None,
         now,
     )
+}
+
+#[test]
+fn a_granted_go_live_with_a_stream_that_is_not_live_is_refused_and_recorded() {
+    // ADR 0162 item 7: the granted change to `live` gets the check of the
+    // stream, and the hosted file does not change.
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = live(&s);
+    let error = pipeline::write_granted(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &StreamDown,
+        s.feed,
+        &guid,
+        &GrantChange::GoLive,
+        "Show tool",
+        None,
+        during_show(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::StreamNotLive);
+    assert_eq!(
+        error.to_string(),
+        "Studio cannot go live, because the stream is not live: The stream server answered with status 404."
+    );
+    assert_eq!(live(&s), before);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
+    let hosted = hosted_feed(&s);
+    let active = grant::active(&s.collection, s.feed, &guid, &hosted, during_show())
+        .unwrap()
+        .unwrap();
+    let writes = grant::writes(&s.collection, active.id).unwrap();
+    assert_eq!(
+        writes.last().unwrap().cause.as_deref(),
+        Some("stream_not_live")
+    );
+
+    // The same show goes live when the stream is live.
+    granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap();
+    assert!(live(&s).contains("status=\"live\""));
+
+    // The change to `ended` has no check.
+    pipeline::write_granted(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &StreamDown,
+        s.feed,
+        &guid,
+        &GrantChange::End,
+        "Show tool",
+        None,
+        during_show(),
+    )
+    .unwrap();
+    assert!(live(&s).contains("status=\"ended\""));
 }
 
 #[test]
@@ -3837,6 +3924,7 @@ fn a_bad_status_change_and_a_locked_vault_leave_no_draft() {
         &locked,
         &s.library,
         &PassAll,
+        &StreamLive,
         s.feed,
         &guid,
         &GrantChange::GoLive,
@@ -4677,6 +4765,7 @@ fn a_granted_write_of_a_feed_with_no_connector_stays_refused() {
         &s.hosts,
         &s.library,
         &PassAll,
+        &StreamLive,
         s.feed,
         "live-1",
         &GrantChange::GoLive,
@@ -5834,6 +5923,7 @@ fn granted_at(
         &s.hosts,
         &s.library,
         &PassAll,
+        &StreamLive,
         s.feed,
         guid,
         change,

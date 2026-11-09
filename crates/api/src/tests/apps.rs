@@ -37,6 +37,7 @@ fn workspace_for(data: &std::path::Path, origin: &str, offset: &Arc<AtomicI64>) 
         .with_musicindex("http://127.0.0.1:9")
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_address_check(Arc::new(PassAll))
+        .with_stream_check(Arc::new(StubStream))
         .with_public_origin(origin)
         .with_wall_clock(WallClock::new(move || {
             u64::try_from(real_now() + offset.load(Ordering::SeqCst)).unwrap_or(0)

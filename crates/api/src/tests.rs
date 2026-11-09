@@ -36,6 +36,28 @@ impl studio_core::pipeline::AddressCheck for PassAll {
     }
 }
 
+/// A stream check with no network. A stream address that contains `down`
+/// is not live, and each other address is live (ADR 0162).
+struct StubStream;
+
+impl studio_core::stream::StreamCheck for StubStream {
+    fn check_stream(&self, url: &str) -> studio_core::stream::StreamStatus {
+        if url.contains("down") {
+            studio_core::stream::StreamStatus {
+                live: false,
+                server_type: None,
+                cause: Some("The stream server answered with status 404.".to_owned()),
+            }
+        } else {
+            studio_core::stream::StreamStatus {
+                live: true,
+                server_type: Some("audio/mpeg".to_owned()),
+                cause: None,
+            }
+        }
+    }
+}
+
 /// The lookup relay of a test that does not read a key list. Port 9
 /// answers nothing. No test uses the default lookup relays.
 const UNUSED_RELAY: &str = "ws://127.0.0.1:9";
@@ -75,7 +97,8 @@ fn app_with_reader(
         .with_musicindex(index)
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(keysend)
-        .with_address_check(std::sync::Arc::new(PassAll));
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream));
     if let Some(reader) = reader {
         workspace = workspace.with_feed_reader(std::sync::Arc::new(reader));
     }
@@ -97,6 +120,7 @@ fn app_with_rules(storage_limit: u64) -> App {
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
         .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
         .with_server_rules(crate::ServerRules {
             storage_limit,
             folder: data.path().to_path_buf(),
@@ -4830,7 +4854,8 @@ async fn a_download_row_from_before_a_restart_is_in_the_queue_again() {
     let workspace = Workspace::open(data.path())
         .unwrap()
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
-        .with_address_check(std::sync::Arc::new(PassAll));
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream));
     workspace.resume_downloads();
     let app = App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
@@ -5659,7 +5684,8 @@ fn app_with_lookup(relays: Vec<String>) -> App {
     let workspace = Workspace::open(data.path())
         .unwrap()
         .with_lookup_relays(relays)
-        .with_address_check(std::sync::Arc::new(PassAll));
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream));
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
         data,
@@ -6313,6 +6339,7 @@ fn announce_app(
         .with_musicindex("http://127.0.0.1:9")
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
         .with_hub(&hub.url())
         .with_announce_timing(timing);
     let announcer = std::sync::Arc::clone(&workspace.announcer);
@@ -6977,6 +7004,155 @@ async fn a_live_item_goes_live_and_ends_through_three_writes() {
     }
 }
 
+/// A draft with one pending live show whose stream address is `url`.
+async fn draft_with_stream(app: &App, url: &str) -> (String, String, Value) {
+    let id = set_up(app).await;
+    let base = format!("/api/v1/feeds/{id}");
+    let (_, draft) = call(
+        app,
+        "POST",
+        &format!("{base}/live-items"),
+        Some(json!({ "title": "Show", "start": "2026-11-01T10:00:00Z" })),
+    )
+    .await;
+    let guid = draft["model"]["live_items"][0]["item"]["guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["item"]["enclosure"] =
+        json!({ "url": url, "length": "0", "media_type": "audio/mpeg" });
+    let (status, draft) = call(
+        app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    (base, guid, draft)
+}
+
+#[tokio::test]
+async fn go_live_with_a_stream_that_is_not_live_is_refused_and_the_draft_stays() {
+    // ADR 0162 items 6 and 8.
+    let app = app();
+    let (base, guid, draft) = draft_with_stream(&app, "https://example.com/down.mp3").await;
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("{base}/live-items/{guid}/status"),
+        Some(json!({ "status": "live" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{error}");
+    assert_eq!(error["error"]["code"], "stream_not_live");
+    assert_eq!(
+        error["error"]["message"],
+        "Studio cannot go live, because the stream is not live: The stream server answered with status 404."
+    );
+    let (_, after) = call(&app, "GET", &format!("{base}/draft"), None).await;
+    assert_eq!(after["model"], draft["model"]);
+    assert_eq!(after["revision"], draft["revision"]);
+    assert_eq!(after["model"]["live_items"][0]["status"], "pending");
+
+    // The stream starts: the same change passes.
+    let mut model = after["model"].clone();
+    model["live_items"][0]["item"]["enclosure"]["url"] = json!("https://example.com/up.mp3");
+    let (_, after) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": after["revision"], "model": model })),
+    )
+    .await;
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/live-items/{guid}/status"),
+        Some(json!({ "status": "live" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft} {after}");
+    assert_eq!(draft["model"]["live_items"][0]["status"], "live");
+
+    // A change to `ended` has no check, also when the stream is down.
+    let mut model = draft["model"].clone();
+    model["live_items"][0]["item"]["enclosure"]["url"] = json!("https://example.com/down.mp3");
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &format!("{base}/draft"),
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/live-items/{guid}/status"),
+        Some(json!({ "status": "ended" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(draft["model"]["live_items"][0]["status"], "ended");
+}
+
+#[tokio::test]
+async fn the_stream_routes_give_the_check_the_menu_and_the_suggested_type() {
+    let app = app();
+    let (_, _, draft) = draft_with_stream(&app, "https://example.com/up.mp3").await;
+    // ADR 0162 item 4: the core gives the menu.
+    let menu = draft["stream_types"].as_array().unwrap();
+    assert_eq!(menu.len(), 6, "{draft}");
+    assert_eq!(menu[0]["label"], "HLS");
+    assert_eq!(menu[0]["media_type"], "application/x-mpegURL");
+
+    let (status, result) = call(
+        &app,
+        "POST",
+        "/api/v1/stream/check",
+        Some(json!({ "url": "https://example.com/up.mp3" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(
+        result,
+        json!({ "live": true, "server_type": "audio/mpeg", "cause": null, "fill_type": "audio/mpeg" })
+    );
+    let (_, result) = call(
+        &app,
+        "POST",
+        "/api/v1/stream/check",
+        Some(json!({ "url": "https://example.com/down.mp3" })),
+    )
+    .await;
+    assert_eq!(result["live"], false);
+    assert_eq!(
+        result["cause"],
+        "The stream server answered with status 404."
+    );
+
+    for (url, want) in [
+        (
+            "https://a.example/live.m3u8",
+            json!("application/x-mpegURL"),
+        ),
+        ("https://a.example/live", Value::Null),
+        ("", Value::Null),
+    ] {
+        let (status, result) = call(
+            &app,
+            "POST",
+            "/api/v1/stream/type",
+            Some(json!({ "url": url })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{result}");
+        assert_eq!(result["media_type"], want, "{url}");
+    }
+}
+
 /// The recording of an ended show: the file goes through the upload route
 /// with `replace=true`, the draft puts its enclosure on the live item in
 /// place of the stream, and the write puts the file on the host (task 033c).
@@ -7360,6 +7536,7 @@ fn public_app() -> App {
         .with_musicindex("http://127.0.0.1:9")
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
         .with_net_policy(studio_core::net::NetPolicy::public());
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
@@ -9023,7 +9200,8 @@ fn nostr_app(index: &str, lookup: Vec<String>, public: bool) -> App {
         .with_musicindex(index)
         .with_lookup_relays(lookup)
         .with_plain_nip05()
-        .with_address_check(std::sync::Arc::new(PassAll));
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream));
     if public {
         workspace = workspace.with_net_policy(studio_core::net::NetPolicy::public());
     }
@@ -11129,7 +11307,8 @@ fn profile_address_app(relay: &studio_core::testing::relay::TestRelay) -> App {
         .with_musicindex("http://127.0.0.1:9")
         .with_lookup_relays(vec![relay.url()])
         .with_keysend(Some("http"))
-        .with_address_check(std::sync::Arc::new(PassAll));
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream));
     App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
         data,
@@ -11939,6 +12118,7 @@ fn app_assets(
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
         .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
         .with_server_rules(crate::ServerRules {
             storage_limit: 1 << 30,
             folder: data.path().to_path_buf(),
@@ -13054,6 +13234,7 @@ fn server_app_with_handle() -> (App, crate::WorkspaceHandle) {
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
         .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
         .with_server_rules(crate::ServerRules {
             storage_limit: 1 << 30,
             folder: data.path().to_path_buf(),
@@ -13308,6 +13489,7 @@ async fn app_with_link_reader(reader: studio_core::move_link::ScriptedReader) ->
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
         .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
         .with_feed_reader(std::sync::Arc::new(reader));
     let app = App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
@@ -13435,7 +13617,8 @@ async fn app_with_lock_probe(
         .with_musicindex("http://127.0.0.1:9")
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
-        .with_address_check(std::sync::Arc::new(PassAll));
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream));
     let (router, handle) = crate::workspace_router(workspace);
     let free = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let probe = LockProbe {
@@ -13781,6 +13964,7 @@ async fn app_with_time_probe(answer: Option<i64>) -> (App, i64, TimeLog) {
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
         .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
         .with_wall_clock(crate::WallClock::new(|| {
             u64::try_from(BUILD_T0).unwrap_or(0)
         }));
@@ -14418,7 +14602,8 @@ async fn outside_app() -> (App, studio_core::testing::TestServer, i64) {
         .with_musicindex(&server.url("/index"))
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
-        .with_address_check(std::sync::Arc::new(PassAll));
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream));
     let app = App {
         router: local_router(workspace, Access::with_token(TOKEN, 4100)),
         data,

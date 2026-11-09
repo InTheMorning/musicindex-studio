@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md).
 
-Status: Complete, with its screenshot visual check. The human test waits for a release of Stophammer that holds ADR 0083.
+Status: Complete, with its screenshot visual check. The human test is open.
 
 ## Goal
 
@@ -52,7 +52,7 @@ Mechanical: the mechanical criteria of ADR 0128, and the four commit checks.
 
 Visual, by the planning model: the visual criterion of ADR 0128. `$edges()` gives no result. At 390 px, `$fieldText()` and `$overflow()` give no result.
 
-Human, by the operator: the human criterion of ADR 0128. This gate stays open until a release of Stophammer holds ADR 0083.
+Human, by the operator: the human criterion of ADR 0128. Stophammer release 0.18.1 holds ADR 0083, and the live node runs `v0.19.0-rc.7`.
 
 ## Stop And Ask When
 

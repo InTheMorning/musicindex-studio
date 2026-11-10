@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-08 by the operator, from the mockups of the questionnaire.
 - Amended: 2026-11-08 by the operator, through the orchestrator session. Item 12 adds the pages to the export of the people.
+- Amended: 2026-11-10 by the operator, through the questionnaire, after the human check of rc.21 step 11. The page of Matt Finlay gave the wallets of Podcast Index and of a different person as suggestions. Items 13 to 15 select the wallets. The test of a match in item 13 is a choice of the planning model.
 - Changed by: [ADR 0163](0163-one-sheet-finds-and-links-a-page-on-music-index.md). Items 4 and 5: "Link to an Artist or Label Page" opens the sheet of **Find on Music Index**, and a result makes the link in the sheet "From Music Index".
 - Uses: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md), [ADR 0123](0123-one-type-of-value-has-one-picker.md), [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md), [ADR 0154](0154-the-search-fields-have-a-field-list.md), [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0147](0147-the-nostr-and-artwork-rows-show-a-preview.md).
 - Changes: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md) items 5 and 6, the select menu of a link. [ADR 0108](0108-people-data-at-rest-stays-plain.md) item 6, which this record examines.
@@ -41,6 +42,17 @@ A person could link only to an artist or label feed of the collection. A collabo
 ### The Export
 
 12. The export of the people (ADR 0098 item 24) gives each read-only link of a person with its feed GUID, its title and the time of the link. A save keeps the time of each link that stays. The account archive of ADR 0107 holds the pages because it holds the collection.
+
+### The Wallets Of A Page
+
+13. A wallet of a page matches when the name of its recipient is the same as one of these names:
+    - the name of the person
+    - a credit name of the person
+    - the title of the page
+
+    The test ignores case, spaces and punctuation.
+14. The suggestions show each wallet that matches, with the name of its recipient and the title of the page.
+15. The other wallets of the page are in a closed fold, "N other recipients on TITLE". Each row of the fold shows the name of its recipient, and has **Use**.
 
 ## How This Decision Is Checked
 

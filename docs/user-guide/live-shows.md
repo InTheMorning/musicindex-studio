@@ -65,6 +65,7 @@ A type that is in the draft when you open the page counts as selected.
 Studio reads the stream for at most 8 seconds. It writes nothing.
 When the stream is live, the line shows "Live", the type that the stream server sends, and the time of the check.
 The check also fills the type, until you select one yourself.
+When you selected a type, and the stream server sends a different type, the line also shows a warning in orange. Select **Use** and the name of the type to use the type of the server.
 
 When the stream is not live, the line shows the cause in orange.
 A recording is not live. For example, an HLS playlist with an end marker, a DASH file that is not dynamic, or an audio file with a known length.

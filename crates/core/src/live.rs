@@ -338,6 +338,36 @@ pub fn filled_stream_type(server_type: &str) -> String {
         .map_or_else(|| server_type.trim().to_owned(), |(_, t)| (*t).to_owned())
 }
 
+/// The name of a stream type for a person: the label of its menu entry
+/// (ADR 0162 item 4), or the type as it is when no menu entry has it.
+#[must_use]
+pub fn stream_type_label(media_type: &str) -> String {
+    let filled = filled_stream_type(media_type);
+    STREAM_TYPE_MENU
+        .iter()
+        .find(|o| o.media_type.eq_ignore_ascii_case(&filled))
+        .map_or(filled, |o| o.label.to_owned())
+}
+
+/// The warning of a stream check when the type that the stream server
+/// sends does not agree with the stream type of the show (ADR 0162 item
+/// 9). Two names of one type in the table of ADR 0161 item 3 agree. A
+/// blank stream type gives no warning, because the check fills it.
+#[must_use]
+pub fn stream_type_warning(server_type: &str, media_type: Option<&str>) -> Option<String> {
+    let current = media_type.map(str::trim).filter(|t| !t.is_empty())?;
+    let server = server_type.trim();
+    if server.is_empty()
+        || filled_stream_type(server).eq_ignore_ascii_case(&filled_stream_type(current))
+    {
+        return None;
+    }
+    Some(format!(
+        "The stream server sends {server}, but the stream type is {}.",
+        stream_type_label(current)
+    ))
+}
+
 /// The extension of the last path part of an address, in lowercase. The
 /// query and the fragment do not count. An address with no path has none.
 fn address_extension(url: &str) -> Option<String> {
@@ -810,6 +840,22 @@ mod tests {
         assert_eq!(filled_stream_type("audio/x-m4a"), "audio/mp4");
         assert_eq!(filled_stream_type("audio/opus"), "audio/opus");
         assert_eq!(filled_stream_type("audio/x-custom"), "audio/x-custom");
+        assert_eq!(stream_type_label("audio/mp3"), "MP3");
+        assert_eq!(stream_type_label("audio/x-custom"), "audio/x-custom");
+        assert_eq!(
+            stream_type_warning("audio/mpeg", Some("application/x-mpegURL")).as_deref(),
+            Some("The stream server sends audio/mpeg, but the stream type is HLS.")
+        );
+        assert_eq!(stream_type_warning("audio/mpeg", Some("audio/mp3")), None);
+        assert_eq!(
+            stream_type_warning(
+                "application/vnd.apple.mpegurl",
+                Some("application/x-mpegURL")
+            ),
+            None
+        );
+        assert_eq!(stream_type_warning("audio/mpeg", Some(" ")), None);
+        assert_eq!(stream_type_warning("audio/mpeg", None), None);
         for (ext, suggested) in SUGGESTED_TYPES {
             assert!(stream_type_agrees(ext, suggested));
         }

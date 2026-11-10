@@ -226,3 +226,12 @@ export function checkLine(result, checkedAt) {
   }
   return { warning: true, text: result.cause || 'The stream is not live.' };
 }
+
+// The type warning of a stream check (ADR 0162 item 9). The core gives the
+// text when the type of the stream server does not agree with the stream
+// type. A type that the user did not select gets the type of the server,
+// so it gets no warning.
+export function checkTypeWarning(result, selected) {
+  if (!selected || !result || !result.type_warning || !result.fill_type) return null;
+  return { text: result.type_warning, fillType: result.fill_type, fillLabel: result.fill_label || result.fill_type };
+}

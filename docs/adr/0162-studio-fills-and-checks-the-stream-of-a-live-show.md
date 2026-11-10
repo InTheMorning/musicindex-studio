@@ -4,6 +4,7 @@
 - Date: 2026-11-09
 - Owner: operator
 - Accepted: 2026-11-09 by the operator. The operator selected the drawings of items 1, 4 and 5. The agent recommended item 7, and the operator did not select an option for it.
+- Item 9 accepted: 2026-11-10 by the operator, after the human check found an Icecast stream with the type HLS. The operator selected the drawing with the warning and the **Use** button.
 - Uses: [ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), [ADR 0057](0057-the-private-network-guard-of-the-server.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context
@@ -34,6 +35,9 @@ The operator accepted ADR 0161 on 2026-11-09, and asked for three changes:
 6. **Go Live** refuses when the stream is not live. The core checks the stream before it changes the status to `live`, and the draft does not change. The text is "Studio cannot go live, because the stream is not live: REASON". A change to `pending` or `ended` has no check.
 7. A granted change to `live` from a connected app gets the same check, and the same refusal.
 8. The check of item 2 is not a feed rule of ADR 0161. A write of a feed does not check the stream, because a stream can be offline before the show.
+9. The user can select a stream type that does not agree with the type that the stream server sends. Then the result line also shows a warning. The text is "The stream server sends SERVER TYPE, but the stream type is LABEL." A button **Use LABEL** sets the type of the server.
+
+   Two names of one type in the table of ADR 0161 item 3 agree. The core gives the warning. The warning does not stop **Go Live** or a write. A change of the type removes the warning.
 
 ## Consequences
 
@@ -58,9 +62,12 @@ Mechanical:
 - `studio-core`: the type of each extension of ADR 0161 item 3, and no type for an address with no extension in the table.
 - `studio-core` or `studio-api`: a change to `live` with a stream that is not live gives the refusal of item 6. The draft does not change. A granted change to `live` gives the same refusal (item 7). A change to `ended` has no check.
 - `crates/api/ui-tests`: the model of the Stream section fills the type until the user selects one. It shows a type that is not in the menu as **Other…**.
+- `studio-core` and `crates/api/src/tests.rs`: a server type that does not agree with the stream type gives the warning of item 9. Two names of one type give no warning. `crates/api/ui-tests`: the page shows the warning only for a type that the user selected.
 
 Visual, by the agent: the Stream section with the menu, and **Other…** with its text field. Also a live result, a warning result and the Go Live refusal. The agent examines it in the light and the dark theme, at 1280 px and at 390 px with touch.
 
 Visual result: passed on 2026-11-09. 24 screenshots in `.studio-dev/v-1162/out/`, and the 1280 px walk again in `.studio-dev/v-1162/out2/` after the menu type fill. They show the autofill to HLS, a live result, the warning for a recording, **Other…** with its text field, and the Go Live refusal. The streams came from a local test server. `$edges()` and `$overflow()` gave no result.
+
+Visual result of item 9: passed on 2026-11-10. Screenshots in `.studio-dev/v-1162/out3/` show the warning and **Use MP3** in both themes, at 1280 px and at 390 px with touch. After **Use MP3**, the menu shows MP3 and the warning goes. `$edges()` and `$overflow()` gave no result.
 
 Human, by the operator: **Check Stream** and **Go Live** with a real HLS stream and a real Icecast stream. The operator does this on the desktop and on the server.

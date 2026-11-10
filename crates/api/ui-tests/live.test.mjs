@@ -5,7 +5,7 @@ import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary,
   grantLimit, grantActive, grantSummary, grantWriteText,
   hostUsesSigner, grantBoxState,
-  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine,
+  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning,
 } from '../ui/live.js';
 
 const link = { href: 'https://example.com/show', label: 'Watch' };
@@ -187,4 +187,17 @@ test('the result line of a check gives the type and the time, or the cause', () 
     { warning: true, text: 'The stream server answered with status 404.' },
   );
   assert.equal(checkLine(null, '14:05'), null);
+});
+
+test('a stream check warns about a selected type that does not agree (ADR 0162 item 9)', () => {
+  const result = {
+    live: true, server_type: 'audio/mpeg', fill_type: 'audio/mpeg', fill_label: 'MP3',
+    type_warning: 'The stream server sends audio/mpeg, but the stream type is HLS.',
+  };
+  assert.deepEqual(checkTypeWarning(result, true), {
+    text: 'The stream server sends audio/mpeg, but the stream type is HLS.',
+    fillType: 'audio/mpeg', fillLabel: 'MP3',
+  });
+  assert.equal(checkTypeWarning(result, false), null);
+  assert.equal(checkTypeWarning({ ...result, type_warning: null }, true), null);
 });

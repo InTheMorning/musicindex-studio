@@ -2865,11 +2865,15 @@ pub(crate) async fn set_live_status(
 #[derive(Deserialize)]
 pub(crate) struct StreamAddress {
     url: String,
+    /// The stream type of the show, for the warning of ADR 0162 item 9.
+    #[serde(default)]
+    media_type: Option<String>,
 }
 
 /// Check the stream at an address, for the button Check Stream (ADR 0162
 /// items 1 and 2). The check writes nothing and holds no lock. The answer
-/// gives `live`, `server_type`, `cause` and `fill_type`.
+/// gives `live`, `server_type`, `cause`, `fill_type`, `fill_label` and
+/// `type_warning`.
 pub(crate) async fn check_stream(
     State(shared): State<Shared>,
     Json(body): Json<StreamAddress>,
@@ -2880,11 +2884,18 @@ pub(crate) async fn check_stream(
             .await?;
     // The page fills the menu type for a known name of the same type.
     let fill_type = status.server_type.as_deref().map(live::filled_stream_type);
+    let fill_label = fill_type.as_deref().map(live::stream_type_label);
+    let type_warning = status
+        .server_type
+        .as_deref()
+        .and_then(|server| live::stream_type_warning(server, body.media_type.as_deref()));
     Ok(Json(json!({
         "live": status.live,
         "server_type": status.server_type,
         "cause": status.cause,
         "fill_type": fill_type,
+        "fill_label": fill_label,
+        "type_warning": type_warning,
     })))
 }
 

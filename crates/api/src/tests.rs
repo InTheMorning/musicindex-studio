@@ -7118,7 +7118,26 @@ async fn the_stream_routes_give_the_check_the_menu_and_the_suggested_type() {
     assert_eq!(status, StatusCode::OK, "{result}");
     assert_eq!(
         result,
-        json!({ "live": true, "server_type": "audio/mpeg", "cause": null, "fill_type": "audio/mpeg" })
+        json!({
+            "live": true,
+            "server_type": "audio/mpeg",
+            "cause": null,
+            "fill_type": "audio/mpeg",
+            "fill_label": "MP3",
+            "type_warning": null,
+        })
+    );
+    // ADR 0162 item 9: a type that does not agree gives a warning.
+    let (_, result) = call(
+        &app,
+        "POST",
+        "/api/v1/stream/check",
+        Some(json!({ "url": "https://example.com/up", "media_type": "application/x-mpegURL" })),
+    )
+    .await;
+    assert_eq!(
+        result["type_warning"],
+        "The stream server sends audio/mpeg, but the stream type is HLS."
     );
     let (_, result) = call(
         &app,

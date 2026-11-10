@@ -199,6 +199,14 @@ Look at these items, and expect these results:
 4. With the stopped stream, select **Go Live**. Studio shows "Go Live refused." and the cause. The draft does not change.
 5. Do items 1 to 4 on the server too. A stream address in a private network gives a refusal on the server.
 
+Result on 2026-11-10, on the desktop with local main at `55b4c77`:
+
+- The autofill to HLS passed.
+- Item 2 passed with `https://ice1.somafm.com/groovesalad-128-mp3`. The menu kept HLS, and this caused ADR 0162 item 9.
+- Items 3 and 4 passed with the Akamai test address, because its variant playlist answers 404.
+- Item 1 is open: the operator needs an HLS stream that is live. Item 5 is open: it needs a deploy.
+- Repeat item 2 with a build that has ADR 0162 item 9. Select HLS, then **Check**. The warning and **Use MP3** show.
+
 ## What Only The Operator Can Supply
 
 | Necessary item | Why | Supply |

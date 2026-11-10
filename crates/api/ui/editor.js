@@ -13,7 +13,7 @@ import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrCh
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
-import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine } from './live.js';
+import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress } from './feedfacts.js';
@@ -3186,13 +3186,18 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
       if (streamUrl.current === text) fillType(answer.media_type);
     }, () => {});
   };
+  // A change of the type ends the warning of the last check (ADR 0162
+  // item 9). The warning compared the type before the change.
+  const endTypeWarning = () => setCheck((c) => c && { ...c, typeWarning: null });
   const pickType = (choice) => {
     selectedType.current = true;
+    endTypeWarning();
     setOtherPicked(choice === OTHER_TYPE);
     if (choice !== OTHER_TYPE) editStream(() => ({ media_type: choice || null }));
   };
   const typeText = (text) => {
     selectedType.current = true;
+    endTypeWarning();
     editStream(() => ({ media_type: optional(text) }));
   };
   const runCheck = async () => {
@@ -3200,9 +3205,13 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     setChecking(true);
     setCheckError(null);
     try {
-      const result = await api('/stream/check', { method: 'POST', body: { url } });
+      const result = await api('/stream/check', { method: 'POST', body: { url, media_type: stream.media_type } });
       if (streamUrl.current !== url) return;
-      setCheck({ result, at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+      setCheck({
+        result,
+        at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        typeWarning: checkTypeWarning(result, selectedType.current),
+      });
       fillType(result.fill_type);
     } catch (e) {
       if (streamUrl.current === url) setCheckError(e);
@@ -3322,6 +3331,8 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
             <div class="actions"><button id=${`${id}-stream-check`} class="button" type="button"
               disabled=${checking || !stream.url} onClick=${runCheck}>${checking ? 'Checking…' : 'Check'}</button></div>
             ${checkResult && html`<span class=${checkResult.warning ? 'field-warning' : 'hint'} role="status">${checkResult.text}</span>`}
+            ${check && check.typeWarning && html`<span class="field-warning" role="status">${check.typeWarning.text}</span>
+              <div class="actions"><button class="button" type="button" onClick=${() => pickType(check.typeWarning.fillType)}>Use ${check.typeWarning.fillLabel}</button></div>`}
             ${checkError && html`<span class="field-warning" role="status">${checkError.message}</span>`}
           </div>
         </div>

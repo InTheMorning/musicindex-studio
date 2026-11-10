@@ -37,7 +37,7 @@ The operator accepted ADR 0161 on 2026-11-09, and asked for three changes:
 7. A granted change to `live` from a connected app gets the same check, and the same refusal.
 8. The check of item 2 is not a feed rule of ADR 0161. A write of a feed does not check the stream, because a stream can be offline before the show.
 9. The user can select a stream type that does not agree with the type that the stream server sends. Then the result line also shows a warning. The text is "The stream server sends SERVER TYPE, but the stream type is LABEL." A button **Use LABEL** sets the type of the server.
-10. The result line of item 1 and the warning of item 9 name the type of the server with the label of the **Stream type** menu, for example "MP3". A type with no menu entry keeps the name that the server sends.
+10. The result line of item 1 and the warning of item 9 use the label of the **Stream type** menu for the type of the server. An example is "MP3". A type with no menu entry keeps the name that the server sends.
 
    Two names of one type in the table of ADR 0161 item 3 agree. The core gives the warning. The warning does not stop **Go Live** or a write. A change of the type removes the warning.
 

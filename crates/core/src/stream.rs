@@ -229,8 +229,14 @@ impl Web {
                 return StreamStatus::not_live(server_type, "The main playlist has no variant.");
             };
             let inner = self.judge(&resolve(url, variant), deadline, time, bytes, depth + 1);
+            // The cause names the variant, so that the user does not think
+            // that the main playlist failed.
+            let cause = inner.cause.map(|cause| {
+                format!("The main playlist answers, but its first variant {variant} is not live. {cause}")
+            });
             return StreamStatus {
                 server_type,
+                cause,
                 ..inner
             };
         }

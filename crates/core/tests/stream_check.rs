@@ -139,7 +139,9 @@ fn a_main_playlist_is_judged_by_its_first_variant() {
     let routes = vec![("/main.m3u8", Answer::File(200, HLS_TYPE, main))];
     let status = check(routes, "/main.m3u8");
     assert!(!status.live);
-    assert!(status.cause.unwrap().contains("404"));
+    let cause = status.cause.unwrap();
+    assert!(cause.contains("404"), "{cause}");
+    assert!(cause.contains("first variant low/v.m3u8"), "{cause}");
 }
 
 #[test]

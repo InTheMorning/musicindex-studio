@@ -121,6 +121,18 @@ impl Feed {
         for (i, item) in self.items.iter().enumerate() {
             checker.item(&format!("items/{i}/"), item);
         }
+        // A live item has the same address fields as an item, and its
+        // content links (ADR 0023 item 1, ADR 0054 item 3).
+        for (i, live) in self.live_items.iter().enumerate() {
+            let path = format!("live_items/{i}/");
+            checker.item(&format!("{path}item/"), &live.value.item);
+            for (j, link) in live.value.content_links.iter().enumerate() {
+                checker.field(
+                    &format!("{path}content_links/{j}/href"),
+                    link.value.href.as_ref(),
+                );
+            }
+        }
         checker.found
     }
 }
@@ -175,5 +187,23 @@ mod tests {
         };
         let fields: Vec<_> = feed.bad_addresses().into_iter().map(|b| b.field).collect();
         assert_eq!(fields, ["link", "license/url", "items/1/enclosure/url"]);
+    }
+
+    #[test]
+    fn a_live_item_address_with_a_space_is_a_bad_address() {
+        let mut live = crate::live::new_live_item("Show", "2026-11-01T10:00:00Z");
+        live.item.enclosure = Some(super::super::Enclosure {
+            url: Some("   https://music.example/live.m3u8".to_owned()),
+            ..Default::default()
+        });
+        live.content_links
+            .push(Entry::new(super::super::ContentLink {
+                href: Some("https://music.example/show".to_owned()),
+                ..Default::default()
+            }));
+        let mut feed = Feed::default();
+        feed.live_items.push(Entry::new(live));
+        let fields: Vec<String> = feed.bad_addresses().into_iter().map(|b| b.field).collect();
+        assert_eq!(fields, ["live_items/0/item/enclosure/url"]);
     }
 }

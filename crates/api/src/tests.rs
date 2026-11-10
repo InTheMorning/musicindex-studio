@@ -2210,8 +2210,10 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     assert_eq!(status, StatusCode::OK);
     // The route starts a draft when the feed has none after the write.
     let draft_path = format!("/api/v1/feeds/{id}/draft");
-    let _ = call(&app, "GET", &draft_path, None).await;
+    let (_, opened) = call(&app, "GET", &draft_path, None).await;
     assert_eq!(listed(&app, id).await["draft_state"], "unchanged");
+    // Each draft answer gives the state of the list (ADR 0165 item 9).
+    assert_eq!(opened["draft_state"], "unchanged");
 
     // A feed in the DeMu form gives the address of its RSS image (ADR 0060).
     let (_, draft) = call(&app, "GET", &draft_path, None).await;
@@ -2250,7 +2252,7 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     let (_, draft) = call(&app, "GET", &draft_path, None).await;
     let mut model = draft["model"].clone();
     model["image"] = json!("https://music.example/cover.jpg");
-    let (status, _) = call(
+    let (status, saved) = call(
         &app,
         "PUT",
         &draft_path,
@@ -2258,6 +2260,7 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(saved["draft_state"], "changed");
     let row = listed(&app, id).await;
     assert_eq!(row["draft_state"], "changed");
     assert_eq!(row["image"], "https://music.example/cover.jpg");

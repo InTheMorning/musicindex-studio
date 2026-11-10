@@ -2551,8 +2551,11 @@ pub(crate) async fn set_publisher_role(
 ///
 /// This route needs no host and no library: it only shows the draft.
 fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
-    let has_host = w.collection.feed(id)?.connector_id.is_some()
-        || w.collection.draft_feed_move(id)?.is_some();
+    let row = w.collection.feed(id)?;
+    let has_host = row.connector_id.is_some() || w.collection.draft_feed_move(id)?.is_some();
+    // The state of the feed list, so that the UI updates the row of this
+    // feed with no read of the list (ADR 0165 item 9).
+    let draft_state = draft_state(w, &row)?;
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
     let changed = pipeline::draft_changed(&w.collection, id)?;
     let bad_addresses = model.bad_addresses();
@@ -2593,6 +2596,7 @@ fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
         "live_problems": live_problems,
         "stream_types": live::STREAM_TYPE_MENU,
         "has_host": has_host,
+        "draft_state": draft_state,
     })))
 }
 

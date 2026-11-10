@@ -3385,6 +3385,10 @@ export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onClo
 // starts again at Releases.
 const NAV_KEY = 'studio-nav';
 
+// The shortest time between two loads of the feed list on a focus of the
+// window (ADR 0165 item 10).
+const FOCUS_RELOAD_MS = 30000;
+
 function readNav() {
   try {
     const saved = JSON.parse(sessionStorage.getItem(NAV_KEY));
@@ -3592,6 +3596,23 @@ function Shell({ vault, onLock }) {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // The list loads again when the window gets the focus again, so that a
+  // change from a different window shows. At most one load runs in each
+  // FOCUS_RELOAD_MS (ADR 0165 item 10).
+  const loadedAt = useRef(0);
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - loadedAt.current < FOCUS_RELOAD_MS) return;
+      loadedAt.current = Date.now();
+      load();
+    };
+    window.addEventListener('focus', again);
+    document.addEventListener('visibilitychange', again);
+    return () => {
+      window.removeEventListener('focus', again);
+      document.removeEventListener('visibilitychange', again);
+    };
+  }, [load]);
 
   // The differences between the library folder and the records (ADR 0038
   // items 13 to 15). One scan runs after the feeds load. The Files page
@@ -3621,6 +3642,15 @@ function Shell({ vault, onLock }) {
   // A feed with no connector, or a feed that is not an album, needs no draft.
   const draftFeedId = selected && isEditable(selected) ? selected.id : null;
   const draft = useDraft(draftFeedId);
+  // Each draft answer gives the state of its feed. The row of that feed in
+  // the list takes it, with no new read of the list (ADR 0165 item 9).
+  useEffect(() => {
+    const given = draft.draftState;
+    if (!given || given.id !== draftFeedId) return;
+    setFeeds((list) => (list && list.some((f) => f.id === given.id && f.draft_state !== given.state)
+      ? list.map((f) => (f.id === given.id ? { ...f, draft_state: given.state } : f))
+      : list));
+  }, [draftFeedId, draft.draftState]);
   // A different feed closes the Add a track sheet and the import sheet of
   // the feed before it.
   useEffect(() => { setAdding(false); setImporting(false); }, [draftFeedId]);

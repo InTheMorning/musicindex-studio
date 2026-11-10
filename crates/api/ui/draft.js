@@ -135,6 +135,11 @@ export function useDraft(feedId) {
   const [streamTypes, setStreamTypes] = useState([]);
   // Whether the feed has a host, or a host choice (ADR 0067 item 6).
   const [hasHost, setHasHost] = useState(true);
+  // The state of the feed list for this feed, as the core gives it with
+  // each draft (ADR 0165 item 9), with the feed ID. The shell puts it in
+  // the feed list. The ID stops a state of the feed before from going to
+  // a different feed.
+  const [draftState, setDraftState] = useState(null);
   // Each address field that is not correct, by its model path (ADR 0023).
   const [bad, setBad] = useState([]);
   const [status, setStatus] = useState(feedId === null ? 'idle' : 'loading');
@@ -164,6 +169,7 @@ export function useDraft(feedId) {
     setLiveProblems(draft.live_problems || []);
     setStreamTypes(draft.stream_types || []);
     setHasHost(draft.has_host !== false);
+    setDraftState(draft.draft_state ? { id: feedId, state: draft.draft_state } : null);
     setBad(badFields(draft));
     setStatus('saved');
     setError(null);
@@ -199,6 +205,7 @@ export function useDraft(feedId) {
     setOp3Tracks(null);
     setGrantBlocked(null);
     setLiveProblems([]);
+    setDraftState(null);
     setBad([]);
     setError(null);
     setEdits(0);
@@ -229,6 +236,7 @@ export function useDraft(feedId) {
     setLiveProblems(saved.live_problems || []);
     if (saved.stream_types) setStreamTypes(saved.stream_types);
     if (saved.has_host !== undefined) setHasHost(saved.has_host);
+    if (saved.draft_state) setDraftState({ id: feedId, state: saved.draft_state });
     setBad(badFields(saved));
   };
 
@@ -267,5 +275,5 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush]);
 
-  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, bad, status, error, edits, update, flush, load, show };
+  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show };
 }

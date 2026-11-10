@@ -4,7 +4,8 @@
 - Date: 2026-11-10
 - Owner: operator
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator selected "Exceptions only" and a mark that covers the feed and its releases. The operator selected the mockup with the pencil, the dashed circle and the red cloud. The operator also selected a startup check of the artist and label pages.
-- Technical choices: items 6 and 7 are choices of the planning model.
+- Amended: 2026-11-10 by the operator. Items 9 and 10 make the pencil current after each save.
+- Technical choices: items 6, 7 and the time of item 10 are choices of the planning model.
 - Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 1.
 - Uses: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) for the check. [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the rows of the left panel. musicindex ADR 0032 R-DOT-1 keeps the dot for the type only.
 
@@ -34,6 +35,11 @@ v4vmm shows the download state of a row as one icon in one column, with a toolti
 6. One store in the shell keeps the results. The left panel and the tiles of Releases read the same results.
 7. The response of `GET /feeds/{id}/outside` gives `read`. It is true when the read of the hosted file succeeded in this request.
 
+### The Pencil Stays Current
+
+9. Each draft answer of the core gives `draft_state`, with the same value as the feed list. The UI puts this value in the row of that feed in the list. Thus the pencil shows or goes after each save, with no new read of the list. The core stays the source of the state (ADR 0065).
+10. The feed list loads again when the window gets the focus again. Thus a change from a different window shows. At most one load runs in 30 seconds.
+
 ### Not In This Decision
 
 8. A subsequent ADR decides the button "Check Everything" of the Releases page, the check of the media files and the report of the results. That ADR needs a mockup of the report first.
@@ -61,6 +67,7 @@ Mechanical:
     - no mark for a set of feeds that are up to date
 - The set of a publisher row holds the feed and each ID of `release_ids`.
 - The route gives `read: true` after a correct read. It gives `read: false` when the read does not succeed or the feed has no public address.
+- Each draft answer gives `draft_state`: "unchanged" after the open of a written feed, and "changed" after a save that changes it.
 - The Node tests and the Rust tests pass.
 
 Visual, from agent screenshots at 1280 px in the dark and the light theme, and at 390 px:
@@ -68,3 +75,4 @@ Visual, from agent screenshots at 1280 px in the dark and the light theme, and a
 - The marks show between the name and the count, as in the mockup.
 - An up-to-date row has no mark.
 - A tooltip shows on each mark.
+- After an edit of a feed with no draft, the pencil shows on its row with no reload of the list.

@@ -4,7 +4,7 @@
 - Date: 2026-11-10
 - Owner: operator
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator compared the mockups in `.studio-dev/settings-mockup/`, and selected the segmented control, four groups, one Save bar and a preview of the UI scale.
-- Technical choices: items 5, 9, 13 and 14 are choices of the planning model.
+- Technical choices: items 5, 9, 12, 13 and 14 are choices of the planning model.
 - Applies: musicindex ADR 0059 R-SET-1 to R-SET-5.
 - Changes: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 10.
 - Uses: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 for the narrow tabs. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) items 8 and 10 for the leave question. [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2 for the pencil.

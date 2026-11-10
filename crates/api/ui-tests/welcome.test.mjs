@@ -81,6 +81,7 @@ test('nextStep gives album for an artist with no release, label for a label with
 });
 
 test('nextStep gives null for an artist with a release, and for a feed that is not a publisher feed', () => {
+  assert.equal(nextStep({ id: 1, medium: 'publisher', publisher_roles: ['artist'], release_ids: [7], child_ids: [] }), null);
   assert.equal(nextStep({ id: 1, medium: 'publisher', publisher_roles: ['artist'], child_ids: [7] }), null);
   assert.equal(nextStep({ id: 3, medium: 'music', publisher_roles: [], child_ids: [] }), null);
   assert.equal(nextStep(null), null);

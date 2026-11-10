@@ -112,10 +112,11 @@ export function welcomeBody(path, name, connectorId) {
 
 // The next step of the page of a publisher feed (ADR 0119 item 8). It is
 // `album` for an artist with no release, `label` for a label with no
-// release, and `null` for any other feed.
+// release, and `null` for any other feed. `release_ids` holds the releases
+// of the feed, and `child_ids` the publisher feeds below it (ADR 0088).
 export function nextStep(feed) {
   if (!feed || !isPublisher(feed)) return null;
-  if ((feed.child_ids || []).length > 0) return null;
+  if ((feed.release_ids || []).length > 0 || (feed.child_ids || []).length > 0) return null;
   const role = (feed.publisher_roles || [])[0];
   if (role === 'artist') return 'album';
   if (role === 'label') return 'label';

@@ -170,7 +170,13 @@ The feed file itself has no **Delete** button.
 
 ## A change from outside Studio
 
-When a page opens, Studio reads the public address of each feed that the page shows. It compares the file with the last file that Studio read or wrote.
+When Studio starts and each time **Releases** opens, Studio reads the public address of each feed. A feed page also reads its feed when it opens. Studio compares the file with the last file that Studio read or wrote.
+
+A row of the left panel shows one mark for its feed and its releases. A row with no mark is up to date. Hold the pointer on a mark to see its name.
+
+- A red cloud with "!": a feed changed or moved outside Studio.
+- A blue pencil: a feed has changes that are not written.
+- A gray dashed circle: Studio did not read a feed correctly. The check is in progress, or it is off in **Settings**.
 
 - **Changed outside Studio** means that the hosted file has different bytes. Select **Read Again** on the feed page. A draft with edits keeps its edits.
 - **Moved outside Studio** means that the hosted file names a new address. A write from Studio can put the feed back on the old file host. **Show the Difference** opens the merge in Review. **Keep This File Host** hides the notice until the hosted file changes again.

@@ -603,6 +603,14 @@ textarea.masked { -webkit-text-security: disc; }
 .row.collection-mark { color: var(--accent); }
 .row .row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .count { color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
+/* The state mark of a row, between the name and the count (ADR 0165 items 1
+   and 2). The icon has a fixed size, so the count does not move. The color
+   rules name the icon, because a row sets the color of its icon. */
+.row .state-mark { display: inline-flex; flex: none; align-items: center; }
+.row .state-mark .icon { width: 16px; height: 16px; }
+.row .state-mark.error .icon { color: var(--error); }
+.row .state-mark.accent .icon { color: var(--accent); }
+.row .state-mark.muted .icon { color: var(--muted); }
 /* The art of a publisher feed in the left panel, with the type dot on its
    bottom right corner (musicindex ADR 0038 R-DOT-3). The dot has a 2 px
    ring in the color of the surface behind the art, so the ring extends

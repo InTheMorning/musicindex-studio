@@ -454,7 +454,7 @@ export function groupDestinations(feeds, view) {
 
 // The feeds that are not a publisher feed and not a release (ADR 0090
 // item 2).
-function otherFeeds(feeds) {
+export function otherFeeds(feeds) {
   return feeds.filter((feed) => !isPublisher(feed) && !isRelease(feed));
 }
 
@@ -476,7 +476,7 @@ function relatedLevels(feeds, owner) {
 }
 
 // The releases with no artist or label in the collection (ADR 0085 item 3).
-function unlinkedReleases(feeds) {
+export function unlinkedReleases(feeds) {
   return feeds.filter((feed) => isRelease(feed) && (feed.publisher_ids || []).length === 0);
 }
 

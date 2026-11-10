@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, from a mockup and a questionnaire. The operator selected a check box for the setting.
 - Technical choices: items 4, 6, 11, 12 and 13 are choices of the planning model.
+- Changed by: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 5: the check runs for each feed after the feed list loads and at each open of Releases.
 - Source: [open items after `0.1.0-rc.19`, the request to detect a feed move, and the feed that two collections hold](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

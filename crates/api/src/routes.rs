@@ -1664,10 +1664,14 @@ pub(crate) async fn outside_check(
     })
     .await?;
     let Some((row, web, index)) = start else {
-        return Ok(Json(json!({ "enabled": false, "state": null })));
+        return Ok(Json(
+            json!({ "enabled": false, "state": null, "read": false }),
+        ));
     };
     let Some(address) = outside::address_of(&row) else {
-        return Ok(Json(json!({ "enabled": true, "state": null })));
+        return Ok(Json(
+            json!({ "enabled": true, "state": null, "read": false }),
+        ));
     };
     let ask_index = query.index;
     let (read_row, found) = (row.clone(), address.clone());
@@ -1680,6 +1684,8 @@ pub(crate) async fn outside_check(
     })
     .await?;
     blocking(shared, move |w| {
+        // True only when this request read the hosted file (ADR 0165 item 7).
+        let read = hosted.is_some();
         let result = match &hosted {
             Some(bytes) => outside::apply_read(&w.collection, &row, bytes)?,
             None => outside::stored_result(&w.collection, id)?,
@@ -1692,6 +1698,7 @@ pub(crate) async fn outside_check(
         Ok(Json(json!({
             "enabled": true,
             "state": state,
+            "read": read,
             "new_url": new_url,
             "index_url": index_url,
             "own_url": address,

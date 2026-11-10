@@ -1,3 +1,5 @@
+import { unlinkedReleases, otherFeeds } from './shell.js';
+
 // The check for a change from outside Studio (ADR 0150). This module has no
 // Preact and no browser state. The core makes the comparison and gives the
 // result, and these functions give only the words.
@@ -69,4 +71,52 @@ export async function eachLimited(items, limit, work) {
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runner));
+}
+
+// The feeds that a row of the left panel covers (ADR 0165 item 3). A number
+// is a publisher feed: the feed and each release of it. 'none' is "Not
+// linked" and 'other' is "Other feeds". A feed that is not in the list is
+// left out.
+export function panelSet(feeds, group) {
+  const list = Array.isArray(feeds) ? feeds : [];
+  if (group === 'none') return unlinkedReleases(list);
+  if (group === 'other') return otherFeeds(list);
+  const byId = new Map(list.map((feed) => [feed.id, feed]));
+  const owner = byId.get(group);
+  if (!owner) return [];
+  return [owner, ...(owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean)];
+}
+
+// The marks of the left panel, from the most urgent (ADR 0165 item 2).
+const STATE_MARKS = {
+  outside: { icon: 'cloud-alert', tone: 'error' },
+  pending: { icon: 'pencil', tone: 'accent', text: 'Changes not written' },
+  unchecked: { icon: 'circle-dashed', tone: 'muted', text: 'Not checked' },
+};
+
+// A feed is not checked when it has no result, or the read did not succeed
+// (ADR 0165 item 2).
+function isUnchecked(results, feed) {
+  const check = results && results[feed.id];
+  return !check || check.read !== true;
+}
+
+// The mark of a set of feeds, or null when each feed is up to date (ADR 0165
+// items 2 and 3). `results` maps a feed ID to the answer of the check. The
+// answer has `text`, `icon` and `tone`. A set with a moved feed says "Moved".
+export function stateMark(feeds, results) {
+  const list = Array.isArray(feeds) ? feeds : [];
+  const states = list.map((feed) => results && results[feed.id] && results[feed.id].state);
+  if (states.some((state) => state === 'moved' || state === 'changed')) {
+    const moved = states.includes('moved');
+    return {
+      kind: 'outside',
+      ...STATE_MARKS.outside,
+      text: moved ? 'Moved outside Studio' : 'Changed outside Studio',
+    };
+  }
+  const draft = (feed) => feed.draft_state === 'new' || feed.draft_state === 'changed';
+  if (list.some(draft)) return { kind: 'pending', ...STATE_MARKS.pending };
+  if (list.some((feed) => isUnchecked(results, feed))) return { kind: 'unchecked', ...STATE_MARKS.unchecked };
+  return null;
 }

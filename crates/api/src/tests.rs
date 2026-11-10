@@ -14658,6 +14658,7 @@ async fn the_outside_check_finds_a_change_and_a_move_and_keeps_a_result_after_a_
     assert_eq!(status, StatusCode::OK, "{same}");
     assert_eq!(same["enabled"], json!(true));
     assert_eq!(same["state"], Value::Null, "ADR 0150 item 2");
+    assert_eq!(same["read"], json!(true), "ADR 0165 item 7");
 
     let changed = FEED.replace("</channel>", "<description>new</description></channel>");
     server.set("/album.xml", 200, changed.into_bytes());
@@ -14681,6 +14682,7 @@ async fn the_outside_check_finds_a_change_and_a_move_and_keeps_a_result_after_a_
     server.set("/album.xml", 500, Vec::new());
     let (_, kept) = call(&app, "GET", &path, None).await;
     assert_eq!(kept["state"], json!("moved"), "ADR 0150 item 7");
+    assert_eq!(kept["read"], json!(false), "ADR 0165 item 7");
 
     server.set("/album.xml", 200, moved.into_bytes());
     let (status, _) = call(&app, "POST", &format!("{path}/keep"), None).await;
@@ -14755,6 +14757,7 @@ async fn the_cleared_check_box_stops_each_request_of_the_outside_check() {
     let (_, off) = call(&app, "GET", &path, None).await;
     assert_eq!(off["enabled"], json!(false));
     assert_eq!(off["state"], Value::Null);
+    assert_eq!(off["read"], json!(false), "ADR 0165 item 7");
     call(
         &app,
         "PUT",

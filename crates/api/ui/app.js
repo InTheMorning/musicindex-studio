@@ -26,7 +26,7 @@ import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps
 import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, eachLimited } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSheet, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -1864,12 +1864,33 @@ const ICONS = {
   globe: () => html`<circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" />`,
   play: () => html`<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />`,
   pause: () => html`<rect x="14" y="3" width="5" height="18" rx="1" /><rect x="5" y="3" width="5" height="18" rx="1" />`,
+  pencil: () => html`<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /><path d="m15 5 4 4" />`,
+  'circle-dashed': () => html`<path d="M10.1 2.182a10 10 0 0 1 3.8 0" /><path d="M13.9 21.818a10 10 0 0 1-3.8 0" /><path d="M17.609 3.721a10 10 0 0 1 2.69 2.7" /><path d="M2.182 13.9a10 10 0 0 1 0-3.8" /><path d="M20.279 17.609a10 10 0 0 1-2.7 2.69" /><path d="M21.818 10.1a10 10 0 0 1 0 3.8" /><path d="M3.721 6.391a10 10 0 0 1 2.7-2.69" /><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7" />`,
+  'cloud-alert': () => html`<path d="M12 12v4" /><path d="M12 20h.01" /><path d="M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708" />`,
   alert: () => html`<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" />`,
 };
 
 export function Icon({ name }) {
   return html`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]?.()}</svg>`;
+}
+
+// The results of the check for a change from outside, with the feeds. The
+// shell gives them to the left panel (ADR 0165 item 6).
+const OutsideContext = createContext({ feeds: [], results: {} });
+
+// The state mark of a row of the left panel, for the feeds that `ids` covers
+// (ADR 0165 items 1 to 4). `set` is a list of feeds. It gives nothing for a
+// set that is up to date. The text is a tooltip and an accessible name.
+function useStateMark(set) {
+  const { results } = useContext(OutsideContext);
+  return stateMark(set, results);
+}
+
+function StateMark({ mark }) {
+  if (!mark) return null;
+  return html`<span class=${`state-mark ${mark.tone}`} role="img" title=${mark.text} aria-label=${mark.text}>
+    <${Icon} name=${mark.icon} /></span>`;
 }
 
 // The public address of a feed in the header of its page. The link opens
@@ -2898,6 +2919,25 @@ function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onI
 // The current row of a list gets aria-current.
 const currentAttr = (item) => (item.current ? 'page' : undefined);
 
+// One destination row. A row below Releases shows the state mark of the
+// feeds that it covers, between the name and the count (ADR 0165 items 1 to 4).
+function DestinationRow({ item, open }) {
+  const { feeds } = useContext(OutsideContext);
+  const mark = useStateMark(item.group === undefined ? [] : panelSet(feeds, item.group));
+  const releases = item.group === undefined ? '' : `${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`;
+  return html`<button class="row" type="button" aria-current=${currentAttr(item)}
+    aria-label=${item.group === undefined ? undefined : (mark ? `${releases}, ${mark.text}` : releases)}
+    onClick=${() => open(item)}>
+    ${item.icon && html`<${Icon} name=${item.icon} />`}
+    ${item.group !== undefined && (item.art
+      ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
+      : html`<span class="art-space" aria-hidden="true"></span>`)}
+    <span class="row-label">${item.label}</span>
+    <${StateMark} mark=${mark} />
+    ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.count}</span>`}
+  </button>`;
+}
+
 // The destination rows: Releases, then each artist, label or other feed with
 // roles, then "Not linked" (ADR 0072 item 1, ADR 0085 items 1 and 3). A row
 // opens its destination when `opens` is true. A row below Releases shows the
@@ -2907,20 +2947,27 @@ function destinationRows(top, go) {
     if (!item.opens) return;
     go(item.group === undefined ? { name: item.id } : { name: 'releases', group: item.group });
   };
-  const row = (item) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
-    aria-label=${item.group === undefined ? undefined : `${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`}
-    onClick=${() => open(item)}>
-    ${item.icon && html`<${Icon} name=${item.icon} />`}
-    ${item.group !== undefined && (item.art
-      ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
-      : html`<span class="art-space" aria-hidden="true"></span>`)}
-    <span class="row-label">${item.label}</span>
-    ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.count}</span>`}
-  </button>`;
+  const row = (item) => html`<${DestinationRow} item=${item} open=${open} />`;
   const groups = top.filter((item) => item.group !== undefined);
   return html`${top.filter((item) => item.group === undefined).map(row)}
     ${groups.length > 0 && html`<div class="destination-group">${groups.map((item) => html`
       ${item.heading && html`<h2 class="panel-heading">${item.heading}</h2>`}${row(item)}`)}</div>`}`;
+}
+
+// A section row or a release row of a level. A section row covers its feed
+// and its releases. A release row covers its feed only (ADR 0165 item 3).
+// `count` is given for a section row, which shows art and a number.
+function LevelRow({ item, set, label, count, onOpen }) {
+  const mark = useStateMark(set);
+  const section = count !== undefined;
+  const base = section ? `${label}, ${count} ${count === 1 ? 'release' : 'releases'}` : label;
+  return html`<button class="row" type="button" aria-label=${mark ? `${base}, ${mark.text}` : (section ? base : undefined)}
+    onClick=${onOpen}>
+    ${section && html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`}
+    <span class="row-label">${label}</span>
+    <${StateMark} mark=${mark} />
+    ${section && html`<span class="count" aria-hidden="true">${count}</span>`}
+  </button>`;
 }
 
 // One level of the hierarchy (ADR 0088 item 5): "‹" to the level above when
@@ -2929,6 +2976,7 @@ function destinationRows(top, go) {
 // a release opens its outline at narrow width.
 function Level({ panel, go, back }) {
   const narrow = useNarrow();
+  const { feeds } = useContext(OutsideContext);
   const head = panel.head;
   return html`${back && html`<button class="row" type="button" onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
     <button class="outline-feed" type="button" aria-label=${`${head.title}, ${head.typeLabel}`}
@@ -2938,15 +2986,13 @@ function Level({ panel, go, back }) {
     </button>
     ${panel.sections.map((section) => html`<div class="destination-group">
       <h2 class="panel-heading">${section.heading}</h2>
-      ${section.items.map((item) => html`<button class="row" type="button"
-        aria-label=${`${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`} onClick=${() => go(item.view)}>
-        <${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} /><span class="row-label">${item.label}</span>
-        <span class="count" aria-hidden="true">${item.count}</span></button>`)}
+      ${section.items.map((item) => html`<${LevelRow} item=${item} set=${panelSet(feeds, item.id)} label=${item.label} count=${item.count}
+        onOpen=${() => go(item.view)} />`)}
     </div>`)}
     ${panel.releases.length > 0 && html`<div class="destination-group">
       <h2 class="panel-heading">Releases</h2>
-      ${panel.releases.map((item) => html`<button class="row" type="button" onClick=${() => go(openFeedView(item.id, narrow, item.from))}>
-        <span class="row-label">${item.title}</span></button>`)}
+      ${panel.releases.map((item) => html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
+        onOpen=${() => go(openFeedView(item.id, narrow, item.from))} />`)}
     </div>`}`;
 }
 
@@ -3112,7 +3158,7 @@ export function LetterBar({ letters, idOf }) {
 function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed }) {
   const inGroup = group !== undefined;
   const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, reversed: inGroup ? groupReversed : list.reversed, view: list.view, marked, group });
-  const outside = useOutsideChecks(releases.rows.map((row) => row.id));
+  const { results: outside } = useContext(OutsideContext);
   const head = releases.head;
   const title = head ? head.title : 'Releases';
   // The add action of the group of a publisher feed (ADR 0164 item 6). A new
@@ -3579,6 +3625,12 @@ function Shell({ vault, onLock }) {
   // the feed before it.
   useEffect(() => { setAdding(false); setImporting(false); }, [draftFeedId]);
   const collection = useCollectionMark();
+  // The Releases page checks again each time it opens (ADR 0165 item 5).
+  const releasesOpened = useRef({ shown: false, count: 0 });
+  if (view.name === 'releases' && !releasesOpened.current.shown) releasesOpened.current.count += 1;
+  releasesOpened.current.shown = view.name === 'releases';
+  const results = useOutsideChecks(feeds, releasesOpened.current.count);
+  const outsideValue = { feeds: feeds || [], results };
   const panel = leftPanel({
     view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open',
     vaultLocked: serverMode && vault === 'locked', narrow, collection,
@@ -3639,7 +3691,7 @@ function Shell({ vault, onLock }) {
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onLock: lock };
-  return html`<${NavContext.Provider} value=${navValue}><div class="shell">
+  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
     </nav>`}
@@ -3654,7 +3706,7 @@ function Shell({ vault, onLock }) {
       </div>`}
       ${main}
     </main>
-  </div><//>`;
+  </div><//><//>`;
 }
 
 // ---- Sign-in and sign-up on a server (ADR 0055, ADR 0056) ----
@@ -4422,21 +4474,24 @@ function WindowPanel() {
   </article>`;
 }
 
-// The results of the check for a change from outside, for the rows of
-// Releases (ADR 0150 items 1 and 11). No worker runs: the check runs when the
-// page opens, and a failed read shows nothing.
-function useOutsideChecks(ids) {
-  const [checks, setChecks] = useState({});
-  const signature = ids.join(',');
+// The one store of the results of the check for a change from outside (ADR
+// 0165 items 5 and 6). It checks each feed after the list loads, and again
+// each time the Releases page opens (`key` changes). At most 4 reads run at
+// one time (ADR 0150 item 11). No worker runs. A failed request keeps the
+// result before it.
+function useOutsideChecks(feeds, key) {
+  const [results, setResults] = useState({});
+  const signature = feeds === null ? null : feeds.map((feed) => feed.id).join(',');
   useEffect(() => {
+    if (signature === null || signature === '') return undefined;
     let live = true;
-    eachLimited(ids, OUTSIDE_LIMIT, async (id) => {
+    eachLimited(signature.split(',').map(Number), OUTSIDE_LIMIT, async (id) => {
       const check = await api(`/feeds/${id}/outside`);
-      if (live) setChecks((old) => ({ ...old, [id]: check }));
+      if (live) setResults((old) => ({ ...old, [id]: check }));
     });
     return () => { live = false; };
-  }, [signature]);
-  return checks;
+  }, [signature, key]);
+  return results;
 }
 
 // The notices of the check on a feed page (ADR 0150 items 2 to 5). Each new

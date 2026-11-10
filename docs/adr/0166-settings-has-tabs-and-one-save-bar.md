@@ -5,7 +5,8 @@
 - Owner: operator
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator compared the mockups in `.studio-dev/settings-mockup/`, and selected the segmented control, four groups, one Save bar and a preview of the UI scale.
 - Technical choices: items 5, 9, 12, 13 and 14 are choices of the planning model.
-- Applies: musicindex ADR 0059 R-SET-1 to R-SET-5.
+- Applies: musicindex ADR 0059 R-SET-1 to R-SET-5, at musicindex `83142d2`.
+- Amended: 2026-11-10. Items 17 and 18 apply musicindex ADR 0059 R-SET-3 item 6.
 - Changes: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 10.
 - Uses: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 for the narrow tabs. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) items 8 and 10 for the leave question. [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2 for the pencil.
 
@@ -50,6 +51,13 @@ musicindex ADR 0059 gives the shared layout of Settings for Studio and v4vmm. Th
 15. Connected apps, Collections, Move Studio and each operation of Account keep their buttons and their sheets. They run immediately, and Save and Discard do not include them (musicindex ADR 0059 R-SET-5).
 16. **Open** of a different collection restarts the app. With a pending change, Studio asks the leave question first.
 
+### A Draft That Cannot Be Saved
+
+17. Studio knows before Save that it cannot save the draft in these conditions (musicindex ADR 0059 R-SET-3 item 6):
+    - A library limit is not a number greater than 0.
+    - The Nostr search relay is not empty, and does not start with `wss://` or `ws://`. The route refuses this value with `invalid_relay`.
+18. In each condition of item 17, Save is off. The page bar gives the cause, and the row of the field shows the cause. Discard stays on.
+
 ## Consequences
 
 - The Settings page has no long scroll on the desktop.
@@ -62,6 +70,7 @@ Mechanical:
 
 - A Node test of `pages.js` examines the tabs on the desktop and on a server: the labels, the sequence, the sections of each tab, and the tier order in each tab.
 - A Node test of the draft model examines the state texts, Discard, and a refusal that keeps one setting pending.
+- A Node test of the draft model examines each condition of item 17: Save is off, and the model gives the cause.
 - A browser drive changes the UI scale and the lock time, goes to a different tab, selects Discard, then does the same with Save.
 
 Visual, for the operator: the shots of the agent cover the layout in the light and the dark theme. They cover the desktop width and 390 px. The operator examines the select menu of the tabs on the iPhone.

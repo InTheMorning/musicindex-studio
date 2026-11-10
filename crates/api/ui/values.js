@@ -400,7 +400,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
     onAdd(withCids(fresh([...combined.values()])));
   };
 
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="picker-title" onClose=${onClose}>
+  return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="picker-title" onClose=${onClose}>
     <header>
       <h2 id="picker-title">Copy from a Feed on Music Index</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>

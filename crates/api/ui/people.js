@@ -1030,9 +1030,6 @@ export function linkRows(values, saved, feeds, linkedCredits = [], suggestions =
 export const READ_ONLY_LINK = 'Read only';
 export const PAGE_MISSING = 'Music Index does not know this page now';
 
-// The hint of the sheet "Link to an Artist or Label Page" (ADR 0159 item 4).
-export const PAGE_LINK_HINT = 'Select a page of your feeds, or a page on Music Index. A page that is not in your feeds is a read-only link: Studio shows its changes on this person and writes nothing to it.';
-
 // The change that a selection in the sheet makes (ADR 0159 items 5 and 6). A
 // result with the GUID of a feed of the collection is a link of ADR 0132, as
 // `{ members }`. Each other result is a read-only link, as `{ pages }`. A
@@ -1970,15 +1967,16 @@ export const mergeBody = (otherId) => ({ other: Number(otherId) });
 // edit (ADR 0151 item 3).
 export const lookupAddress = (path, text, plain) => `${path}?q=${encodeURIComponent(text)}${plain ? '&plain=true' : ''}`;
 
-// The text of the search sheet (ADR 0117 item 2).
-export const FIND_HINT = 'Studio searches the artist and label feeds on musicindex.org. Select the feed of this person.';
+// The text of the search sheet (ADR 0117 item 2, ADR 0163 item 2).
+export const FIND_HINT = 'Studio searches the artist and label feeds on musicindex.org. Select a page to link it and to fill the fields.';
 export const FIND_ONE_HINT = 'Studio searches the feeds on musicindex.org.';
 export const FIND_ONE_EMPTY = 'No feed on Music Index has this name.';
 export const FIND_EMPTY = 'No artist or label feed on Music Index has this name.';
 // FIND_EMPTY shows only when a request ran and gave no rows (ADR 0151 item 9).
 export const showFindEmpty = ({ rows, error, searched }) => searched === true && rows !== null && rows.length === 0 && !error;
 export const FIND_WAIT = 'Searching…';
-export const FILL_NOTE = 'Studio puts the values in the fields. Select Save to keep them. Studio changes no feed.';
+// The note of the sheet "From Music Index" (ADR 0163 item 10).
+export const FILL_NOTE = 'Studio puts the values in the fields and the page in the links. Select Save to keep them. Studio changes no feed.';
 
 // The levels of the search sheet, in sequence (ADR 0117 items 4 and 6).
 export const LOOKUP_LEVELS = [
@@ -2102,6 +2100,34 @@ export function fillRows(values, pending) {
 
 // The text of the Fill button, for the number of selected rows (ADR 0117 item 13).
 export const fillLabel = (count) => `Fill ${plural(count, 'Field', 'Fields')}`;
+
+// The words of the primary button of the sheet "From Music Index" (ADR 0163
+// item 9). `link` is true when the box "Link this page" is selected. Nothing
+// selected gives null: the button is not available.
+export const linkFillLabel = (link, count) => {
+  if (link) return count > 0 ? `Link and Fill ${plural(count, 'Field', 'Fields')}` : 'Link';
+  return count > 0 ? fillLabel(count) : null;
+};
+
+// The words of the row "Link this page" (ADR 0163 items 6 and 7).
+export const LINK_READ_ONLY_LINE = 'Read only. Subsequent changes of this page show on this person.';
+export const LINK_OWN_LINE = 'Your page. The details of this person go to this page.';
+export const ALREADY_LINKED = 'Already linked';
+
+// The row "Link this page" of the sheet "From Music Index" (ADR 0163 items
+// 5 to 7). A page that the person has gives no check box. Other pages start
+// selected.
+export function linkRow(row, feeds, values) {
+  const guid = String(row.feed_guid || '').toLowerCase();
+  const own = (feeds || []).some((f) => f.podcast_guid && f.podcast_guid.toLowerCase() === guid);
+  const already = pickLink(row, feeds, values) === null;
+  return {
+    selectable: !already,
+    selected: !already,
+    line: own ? LINK_OWN_LINE : LINK_READ_ONLY_LINE,
+    already,
+  };
+}
 
 // The rows that a fill adds to the pending values (ADR 0117 item 14). `checked`
 // gives the IDs of the checked rows. A picture or an information address

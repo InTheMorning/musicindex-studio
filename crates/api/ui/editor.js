@@ -2615,7 +2615,7 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
     if (!group) { group = { key: t.feed_guid, title, tracks: [] }; groups.push(group); }
     group.tracks.push({ feed_guid: t.feed_guid, item_guid: t.item_guid, feed_url: t.feed_url, title: t.title });
   }
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="playlist-picker-title" onClose=${onClose}>
+  return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="playlist-picker-title" onClose=${onClose}>
     <header>
       <h2 id="playlist-picker-title">Add tracks</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
@@ -2625,7 +2625,7 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
         <button class="segment" type="button" aria-pressed=${tab === 'index'} tabIndex=${tab === 'index' ? 0 : -1} onClick=${() => setTab('index')}>Search Music Index</button>
         <button class="segment" type="button" aria-pressed=${tab === 'mine'} tabIndex=${tab === 'mine' ? 0 : -1} onClick=${() => setTab('mine')}>My Releases</button>
       </div>
-      ${tab === 'index' && html`<section class="page-section">
+      ${tab === 'index' && html`<section class="page-section pinned-form">
         <form class="form" onSubmit=${runSearch} role="search">
           <div class="field">
             <label for="playlist-search">Search Music Index</label>
@@ -2637,7 +2637,8 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
             </div>
             ${fields.list}
           </div>
-        </form>
+        </form></section>
+      <section class="page-section">
         <${ErrorNotice} error=${search.error} />
         <${ErrorNotice} error=${load.error} />
         ${note && html`<p class="hint" role="status">${note.message}</p>`}

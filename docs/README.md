@@ -164,6 +164,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0160: The field list shows the placeholder of a text field](adr/0160-the-field-list-shows-the-placeholder-of-a-text-field.md)
 - [ADR 0161: A live item needs a stream, and a content link is recommended](adr/0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md)
 - [ADR 0162: Studio fills and checks the stream of a live show](adr/0162-studio-fills-and-checks-the-stream-of-a-live-show.md)
+- [ADR 0163: One sheet finds and links a page on Music Index](adr/0163-one-sheet-finds-and-links-a-page-on-music-index.md)
 
 ## Plans
 

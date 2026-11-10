@@ -28,9 +28,9 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, PAGE_LINK_HINT, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
-  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
+  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, linkRow, linkFillLabel, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
   lookupAddress, showFindEmpty,
 } from './people.js';
@@ -539,14 +539,14 @@ function usePerson(id) {
   return { data, error, run, reload: () => read().catch(() => {}) };
 }
 
-// The sheet "Find on Music Index: {name}" (ADR 0117 items 2 to 4). It is open
-// while `query` is not null. Its search runs when it opens, and 300 ms after
-// each change of the text.
-function FindSheet({ open, personId, name, query, onQuery, onClose, onPick }) {
+// The sheet "Find on Music Index: {name}" (ADR 0117 items 2 to 4, ADR 0163
+// items 1 to 4). It is open while `query` is not null. Its search runs when it
+// opens, and 300 ms after each change of the text.
+function FindSheet({ open, personId, name, feeds, values, query, onQuery, onClose, onPick, onLink }) {
   const ref = useSheet(open);
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="find-title" onClose=${onClose}>
-    ${open && html`<${FindForm} personId=${personId} name=${name} query=${query} onQuery=${onQuery}
-      onCancel=${() => ref.current.close()} onPick=${onPick} />`}
+  return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="find-title" onClose=${onClose}>
+    ${open && html`<${FindForm} personId=${personId} name=${name} feeds=${feeds} values=${values} query=${query} onQuery=${onQuery}
+      onCancel=${() => ref.current.close()} onPick=${onPick} onLink=${(patch) => { onLink(patch); ref.current.close(); }} />`}
   </dialog>`;
 }
 
@@ -580,14 +580,19 @@ export function useLookup(query, path) {
   return { rows, feeds, note, searched, error };
 }
 
-function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
+function FindForm({ personId, name, feeds, values, query, onQuery, onCancel, onPick, onLink }) {
   const { rows, note, searched, error } = useLookup(query, `/people/${personId}/musicindex`);
   const fields = useFieldList({ id: 'find-query', value: query, setValue: onQuery, scope: 'publisher' });
-  return html`<header><h2 id="find-title">${`Find on Music Index: ${name}`}</h2></header>
+  // A row of the fold makes the link of ADR 0159 item 1 (ADR 0163 item 3).
+  const own = linkChoices(feeds, values.members).map(([id, label]) => html`<button class="link-row" type="button" key=${id}
+    onClick=${() => onLink({ members: [...values.members, id] })}><span class="text"><span class="label">${label}</span></span>
+    <span class="go" aria-hidden="true">›</span></button>`);
+  return html`<header><h2 id="find-title">${`Find on Music Index: ${name}`}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button></header>
     <div class="body">
-      <div class="group rows"><${Field} id="find-query" label="Name" type="search" value=${query}
+      <section class="page-section pinned-form"><div class="group rows"><${Field} id="find-query" label="Name" type="search" value=${query}
         ...${fields.input}>${fields.list}<//></div>
-      <p class="hint">${FIND_HINT}</p>
+      <p class="hint">${FIND_HINT}</p></section>
       <${ErrorNotice} error=${error} />
       ${rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
       ${note && html`<p class="hint" role="status">${note.message}</p>`}
@@ -596,53 +601,7 @@ function FindForm({ personId, name, query, onQuery, onCancel, onPick }) {
         <h2>${group.heading}</h2><p class="hint">${group.note}</p>
         <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row)} />`)}</div>
       </section>`)}
-    </div>
-    <footer><button class="button" type="button" onClick=${onCancel}>Cancel</button></footer>`;
-}
-
-// The sheet "Link to an Artist or Label Page" (ADR 0159 item 4). It is open
-// while `open` is true. A selection gives the patch of `pickLink`, and the
-// page keeps it as a pending change (item 6).
-function PageLinkSheet({ open, personId, name, feeds, values, onPick, onClose }) {
-  const ref = useSheet(open);
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="page-link-title" onClose=${onClose}>
-    ${open && html`<${PageLinkForm} personId=${personId} name=${name} feeds=${feeds} values=${values}
-      onCancel=${() => ref.current.close()} onPick=${(patch) => { onPick(patch); ref.current.close(); }} />`}
-  </dialog>`;
-}
-
-function PageLinkForm({ personId, name, feeds, values, onCancel, onPick }) {
-  const [query, setQuery] = useState(name);
-  const { rows, note, searched, error } = useLookup(query, `/people/${personId}/musicindex`);
-  const fields = useFieldList({ id: 'page-link-query', value: query, setValue: setQuery, scope: 'publisher' });
-  // A result that the person has already keeps its content and has a tag (ADR 0146 item 3).
-  const resultRow = (row) => {
-    const patch = pickLink(row, feeds, values);
-    if (patch) return html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(patch)} />`;
-    const kind = lookupKind(row);
-    const detail = hasLine(row);
-    return html`<div class="link-row static pick-taken" key=${row.feed_guid}><${PersonArt} person=${{ img: row.image_url, name: row.title || '' }} />
-      <span class="text"><span class="pick-name"><span class="label">${row.title || 'Untitled feed'}</span><${TakenTag} /></span>
-        <span class="summary"><span class=${`dot ${kind.dot}`} aria-hidden="true"></span>${kind.text}</span>
-        ${detail && html`<span class="summary">${detail}</span>`}</span></div>`;
-  };
-  const own = linkChoices(feeds, values.members).map(([id, label]) => html`<button class="link-row" type="button" key=${id}
-    onClick=${() => onPick({ members: [...values.members, id] })}><span class="text"><span class="label">${label}</span></span>
-    <span class="go" aria-hidden="true">›</span></button>`);
-  return html`<header><h2 id="page-link-title">Link to an Artist or Label Page</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button></header>
-    <div class="body">
-      <div class="group rows"><${Field} id="page-link-query" label="Name" type="search" value=${query}
-        ...${fields.input}>${fields.list}<//></div>
-      <p class="hint">${PAGE_LINK_HINT}</p>
-      <${ErrorNotice} error=${error} />
-      ${rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
-      ${note && html`<p class="hint" role="status">${note.message}</p>`}
-      ${showFindEmpty({ rows, error, searched }) && html`<p class="empty">${FIND_EMPTY}</p>`}
-      ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
-        <h2>${group.heading}</h2><p class="hint">${group.note}</p>
-        <div class="group">${group.rows.map(resultRow)}</div></section>`)}
-      ${own.length > 0 && html`<${PickFold} id="page-link-own" title="Your artist and label pages" rows=${own} />`}
+      ${own.length > 0 && html`<${PickFold} id="find-own" title="Your artist and label pages" rows=${own} />`}
     </div>
     <footer><button class="button" type="button" onClick=${onCancel}>Cancel</button></footer>`;
 }
@@ -662,15 +621,16 @@ export function LookupRow({ row, onClick }) {
 
 // The sheet "From Music Index: {title}" (ADR 0117 items 8 to 14). It is open
 // while `row` is not null.
-function ValuesSheet({ personId, row, shown, onBack, onClose, onFill }) {
+function ValuesSheet({ personId, row, feeds, shown, onBack, onClose, onFill }) {
   const ref = useSheet(row !== null);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="values-title" onClose=${onClose}>
-    ${row && html`<${ValuesForm} key=${row.feed_guid} personId=${personId} row=${row} shown=${shown} onBack=${onBack} onFill=${onFill} />`}
+    ${row && html`<${ValuesForm} key=${row.feed_guid} personId=${personId} row=${row} feeds=${feeds} shown=${shown} onBack=${onBack} onFill=${onFill} />`}
   </dialog>`;
 }
 
-function ValuesForm({ personId, row, shown, onBack, onFill }) {
+function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
   const [values, setValues] = useState(null);
+  const [link, setLink] = useState(true);
   const [checked, setChecked] = useState([]);
   const [error, setError] = useState(null);
   useEffect(() => {
@@ -684,6 +644,13 @@ function ValuesForm({ personId, row, shown, onBack, onFill }) {
   }, [row.feed_guid]);
   const rows = values ? fillRows(values, shown) : [];
   const count = rows.filter((r) => r.selectable && checked.includes(r.id)).length;
+  // The box "Link this page" (ADR 0163 items 5 to 7).
+  const linking = linkRow(row, feeds, shown);
+  const linkOn = linking.selectable && link;
+  const label = linkFillLabel(linkOn, count);
+  // The link and the fill go to the page in one patch, so that both stay
+  // pending until Save (ADR 0163 item 11).
+  const apply = () => onFill({ ...fillPatch(rows, checked, shown), ...(linkOn ? pickLink(row, feeds, shown) : {}) }, fillSource(row));
   const toggle = (id) => setChecked((current) => (current.includes(id) ? current.filter((c) => c !== id) : [...current, id]));
   const kind = lookupKind(row);
   const title = row.title || 'Untitled feed';
@@ -694,13 +661,18 @@ function ValuesForm({ personId, row, shown, onBack, onFill }) {
           <span class="summary"><span class=${`dot ${kind.dot}`} aria-hidden="true"></span>${kind.text}</span>
           <span class="summary"><a href=${musicindexFeedUrl(row.feed_guid)} target="_blank" rel="noopener">Open on musicindex.org</a></span></span></div></div>
       <${ErrorNotice} error=${error} />
-      ${values && html`<section class="page-section"><h2>Fill</h2>
+      ${values && html`<section class="page-section"><h2>Link</h2>
+        <div class="group rows">${linking.already
+          ? html`<div class="link-row static pick-taken"><span class="text"><span class="pick-name"><span class="label">Link this page</span><${TakenTag} text=${ALREADY_LINKED} /></span></span></div>`
+          : html`<label class="link-row use-row"><input type="checkbox" checked=${link} onChange=${() => setLink(!link)} />
+            <span class="text"><span class="label">Link this page</span><span class="summary">${linking.line}</span></span></label>`}</div></section>
+      <section class="page-section"><h2>Fill</h2>
         <div class="group rows">${rows.map((r) => html`<${FillRow} key=${r.id} row=${r} checked=${checked.includes(r.id)}
           onToggle=${() => toggle(r.id)} />`)}</div>
         <p class="hint">${FILL_NOTE}</p></section>`}
     </div>
     <footer><button class="button" type="button" onClick=${onBack}>Back</button>
-      <button class="button primary" type="button" disabled=${count === 0} onClick=${() => onFill(fillPatch(rows, checked, shown), fillSource(row))}>${fillLabel(count)}</button></footer>`;
+      <button class="button primary" type="button" disabled=${label === null} onClick=${apply}>${label || 'Fill'}</button></footer>`;
 }
 
 // A row of the Fill section. A row that cannot be selected has no check box.
@@ -731,8 +703,6 @@ export function PersonPage({ id, feeds, go }) {
   // row that the values sheet shows (ADR 0117 items 2 and 8).
   const [finding, setFinding] = useState(null);
   const [picked, setPicked] = useState(null);
-  // The sheet "Link to an Artist or Label Page" (ADR 0159 item 4).
-  const [pageLinking, setPageLinking] = useState(false);
   // The credit offers of the last Save that changed the links (ADR 0132 items
   // 11 and 12). The first offer has its sheet open. `made` holds the ID of each
   // change set of these sheets.
@@ -985,7 +955,7 @@ export function PersonPage({ id, feeds, go }) {
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
           <button class="button destructive" type="button" aria-label=${`Remove the link to ${row.title}`}
             onClick=${() => update(row.page ? { pages: shown.pages.filter((p) => p.feed_guid !== row.page) } : { members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
-      <div class="group"><${AddRow} title="Link to an Artist or Label Page" onClick=${() => setPageLinking(true)} /></div></section>`;
+      <div class="group"><${AddRow} title="Link to an Artist or Label Page" onClick=${() => setFinding(person.name)} /></div></section>`;
     },
     change: () => html`<section class="page-section"><h2>Change your feeds</h2>
       <p class="hint">${CHANGE_NOTE}</p>
@@ -1012,11 +982,9 @@ export function PersonPage({ id, feeds, go }) {
     onClose=${() => setLinking(null)} />
   <${MergeSheet} open=${merging} person=${person} onClose=${() => setMerging(false)}
     onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} />
-  <${PageLinkSheet} open=${pageLinking} personId=${person.id} name=${person.name} feeds=${feeds} values=${shown}
-    onPick=${update} onClose=${() => setPageLinking(false)} />
-  <${FindSheet} open=${finding !== null && picked === null} personId=${person.id} name=${person.name} query=${finding || ''}
-    onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} />
-  <${ValuesSheet} personId=${person.id} row=${picked} shown=${shown}
+  <${FindSheet} open=${finding !== null && picked === null} personId=${person.id} name=${person.name} feeds=${feeds} values=${shown} query=${finding || ''}
+    onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} onLink=${update} />
+  <${ValuesSheet} personId=${person.id} row=${picked} feeds=${feeds} shown=${shown}
     onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} />
   ${offers.length > 0 && html`<${CreditSheet} key=${`${offers[0].kind}${offers[0].feedId}`} offer=${offers[0]} person=${person}
     feeds=${feeds} position=${creditPosition(offerTotal - offers.length, offerTotal)}

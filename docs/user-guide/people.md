@@ -48,7 +48,7 @@ A control with a change has a mark at its start edge.
 - **Edit** on a credit name or a support link opens the same sheet with the saved values. **Save** changes no feed.
 - **Add a Wallet**, **Add a Credit Name**, **Add a Support Link** and **Find a Nostr profile** each have **Find on Music Index**. Select a feed, and Studio fills the form with its values. You then add the values.
 - Each search of Music Index reads fields, such as `artist:ann` or `kind:single`. A field that is not correct shows a message. A field that only v4vmm can apply, such as `is:ready`, shows a note and no rows. A sheet that opens with a name searches that name as plain words until you edit the field. **Find on Music Index** on the page of a person searches only artist and label feeds, so a field such as `kind:` shows a note there.
-- **Linked artist and label pages** lists each artist or label page that this person links to. Each link stays in Studio. Select **Link to an Artist or Label Page** to add a link. The sheet searches Music Index, and its fold lists the artist and label pages of your feeds. A page that is not in your feeds is a read-only link, with the line "Read only". When you open the person, Studio reads each read-only page. A new picture, website, Nostr key or wallet of that page shows at its field with **Use**. Select **Remove** to remove a link. **Save** keeps the changes.
+- **Linked artist and label pages** lists each artist or label page that this person links to. Each link stays in Studio. Select **Link to an Artist or Label Page** to add a link. It opens the sheet of **Find on Music Index**. Its fold lists the artist and label pages of your feeds. A page that is not in your feeds is a read-only link, with the line "Read only". When you open the person, Studio reads each read-only page. A new picture, website, Nostr key or wallet of that page shows at its field with **Use**. Select **Remove** to remove a link. **Save** keeps the changes.
   - After **Save**, one sheet opens for each new link. It asks to add this person to the credits of that feed, with a role for that feed. Select **Review in 1 Feed** to make a change set. Studio writes the feed only after you review it.
   - Select **Not Now** to keep the link in Studio only. No feed changes.
   - When you remove a link, a sheet asks to remove the credit.
@@ -58,7 +58,7 @@ A control with a change has a mark at its start edge.
 
 ## Find on Music Index
 
-Select **Find on Music Index** on the page of a person. Studio searches the artist and label feeds on musicindex.org for the name that you type. The search changes no feed. It adds nothing to your collection.
+Select **Find on Music Index** on the page of a person, or **Link to an Artist or Label Page**. The two buttons open the same sheet. The search field stays at the top of the sheet. Studio searches the artist and label feeds on musicindex.org for the name that you type. The search changes no feed. It adds nothing to your collection.
 
 The feeds are in three levels:
 
@@ -66,7 +66,12 @@ The feeds are in three levels:
 - **Verified two-way links**: the feed and its albums link to each other, but they give no role.
 - **Name only**: only the name matches. No album links back to this feed.
 
-Select a feed to see its values. Select the check box of each value that you want. Then select **Fill** with the number of fields. Studio puts each value in its field, and the field shows the feed that gave the value. Select **Save** to keep the values. Select **Discard** to remove them.
+Select a feed to see its values. The sheet has two sections:
+
+- **Link**: the check box **Link this page** starts selected. A page that is not in your feeds becomes a read-only link. A page that the person has shows "Already linked".
+- **Fill**: select the check box of each value that you want.
+
+The button tells what it does: **Link and Fill 2 Fields**, **Link** or **Fill 1 Field**. Select it. Studio puts each value in its field and the page in the links. The field shows the feed that gave the value. Select **Save** to keep the values. Select **Discard** to remove them.
 
 - A picture and an information address start selected when the field is empty.
 - A wallet and a Nostr key start not selected. Make sure that the artist of a wallet is this person.

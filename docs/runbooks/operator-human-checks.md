@@ -163,6 +163,12 @@ Look at these items, and expect these results:
 4. Stop the network. The page stays usable.
 5. Link a person to the page of a collaborator. After the collaborator changes a picture, open the person again. The new picture shows.
 
+Result on 2026-11-10, on the desktop with local main at `55b4c77`:
+
+- Item 1 passed in the sheet **Link to an Artist or Label Page**. Each result row showed its picture.
+- A read-only link to a page on Music Index passed. The row showed "Read only · Not saved yet" (notes of 0.1.0-rc.21, step 10).
+- Items 2 to 5 are open.
+
 ## Check F: The First-Visit Search
 
 Owner: ADR 0119 and ADR 0154. The visual check of 2026-11-08 used data with feeds, so the Welcome page did not show. An agent can also run this check with a screenshot, because it needs no device.

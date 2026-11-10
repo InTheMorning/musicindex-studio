@@ -741,6 +741,9 @@ dialog.sheet[open] {
   box-shadow: 0 30px 80px var(--art-shadow);
   overflow: hidden;
 }
+/* A search sheet has its largest height from the start, so that it does not
+   grow with its results (ADR 0163 item 12). */
+dialog.sheet.search-sheet[open] { height: calc(var(--window-height) - 64px); }
 dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); }
 .sheet header {
   display: flex;
@@ -791,6 +794,7 @@ dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); 
     max-height: calc(var(--window-height) * 0.92);
     border-radius: 18px 18px 0 0;
   }
+  dialog.sheet.search-sheet[open] { height: calc(var(--window-height) * 0.92); }
 }
 
 .hero {
@@ -1552,9 +1556,22 @@ button.outline-feed {
 /* The sort is the first tool. At 390 px the tools wrap below the heading and
    the sort is at the left edge, so its menu opens to the right. */
 .releases-tools .sort-menu { right: auto; left: 0; }
-/* The field list of a search field (ADR 0154). It is in the flow under the
-   field, so a sheet does not cut it. A selected row changes the fill only. */
-.field-list { display: grid; gap: 4px; }
+/* The field list of a search field (ADR 0154). It is a floating layer at the
+   field, as on musicindex.org, so it does not change the height of a sheet.
+   It has fixed position, so a sheet does not cut it. `useListPlace` gives its
+   place and its largest height. A selected row changes the fill only. */
+.field-list {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  background: var(--level-2);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px var(--art-shadow);
+}
 .field-list ul { list-style: none; max-height: 280px; overflow-y: auto; }
 .field-list li {
   display: grid;
@@ -2128,6 +2145,9 @@ button.outline-feed {
 /* The form of a sheet stays in view above its lists (ADR 0141 item 1, ADR 0145). */
 .pinned-form { position: sticky; top: -16px; z-index: 1; margin-top: -16px; padding: 16px 0 12px; background: var(--level-2); }
 @media (max-width: 760px) { .pinned-form { position: static; margin-top: 0; padding: 0; } }
+/* The search field of a search sheet stays at the top at each width (ADR 0163
+   item 13). */
+@media (max-width: 760px) { .search-sheet .pinned-form { position: sticky; margin-top: -16px; padding: 16px 0 12px; } }
 .credit-fold > .hint { margin: 0; padding: 4px 16px 8px; }
 /* A row of the fold "Credited as": an icon, a label and a value for each kind of value (ADR 0140). */
 .credit-row { align-items: flex-start; }

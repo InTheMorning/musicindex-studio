@@ -1731,3 +1731,25 @@ test('a page that differs gives suggestions, and a page that agrees gives none (
   assert.deepEqual(pageSuggestions([{ ...differs[0], missing: true }], values).img, [], 'A missing page gives no suggestion.');
   assert.deepEqual(pageSuggestions(differs, { ...values, pages: [] }).img, [], 'A removed page gives no suggestion.');
 });
+
+import { linkFillLabel, linkRow, LINK_READ_ONLY_LINE, LINK_OWN_LINE } from '../ui/people.js';
+
+test('the primary button of the sheet "From Music Index" says what it does (ADR 0163 item 9)', () => {
+  assert.equal(linkFillLabel(true, 2), 'Link and Fill 2 Fields');
+  assert.equal(linkFillLabel(true, 0), 'Link');
+  assert.equal(linkFillLabel(false, 1), 'Fill 1 Field');
+  assert.equal(linkFillLabel(false, 0), null);
+});
+
+test('the row "Link this page" has three states (ADR 0163 items 5 to 7)', () => {
+  const own = savedValues({ ...MK, members: [] });
+  const outside = linkRow({ feed_guid: 'g-ann' }, PAGE_FEEDS, own);
+  assert.deepEqual(outside, { selectable: true, selected: true, line: LINK_READ_ONLY_LINE, already: false });
+  assert.equal(LINK_READ_ONLY_LINE, 'Read only. Subsequent changes of this page show on this person.');
+  const collection = linkRow({ feed_guid: 'AAAA-1111' }, PAGE_FEEDS, own);
+  assert.deepEqual(collection, { selectable: true, selected: true, line: LINK_OWN_LINE, already: false });
+  assert.equal(LINK_OWN_LINE, 'Your page. The details of this person go to this page.');
+  assert.equal(linkRow({ feed_guid: 'aaaa-1111' }, PAGE_FEEDS, savedValues(MK)).already, true);
+  assert.equal(linkRow({ feed_guid: 'aaaa-1111' }, PAGE_FEEDS, savedValues(MK)).selectable, false);
+  assert.equal(linkRow({ feed_guid: 'g-ann' }, PAGE_FEEDS, { ...own, pages: [PAGE] }).already, true);
+});

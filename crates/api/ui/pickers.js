@@ -1,7 +1,7 @@
 // The one layout of the sheets that add a value (ADR 0145): the form, the row
 // of musicindex under its heading, then the lists that fill the form.
 
-import { html, useState, useRef, useEffect } from './vendor/htm-preact-standalone.module.js';
+import { html, useState, useRef, useEffect, useLayoutEffect } from './vendor/htm-preact-standalone.module.js';
 import { useSheet } from './editor.js';
 import { api, ErrorNotice, Field, Icon } from './app.js';
 import { LookupRow, PersonArt, useLookup } from './peoplepages.js';
@@ -13,6 +13,8 @@ import { listRows, namePrefix, applyRow, listKey, NAME_PAUSE } from './fieldlist
 // `scope` is 'publisher' for a search of artist and label feeds only. The hook
 // gives `input`, the properties of the input, and `list`, the list to show
 // under it. The list opens on a click or a typed key, not on the focus alone.
+// The list is a floating layer at the field, as on musicindex.org. It does not
+// change the height of a sheet, and a sheet does not cut it.
 export function useFieldList({ id, value, setValue, scope = null }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -49,6 +51,7 @@ export function useFieldList({ id, value, setValue, scope = null }) {
   const rows = open ? listRows(answer, names) : [];
   const error = open && answer ? answer.error : null;
   const shows = rows.length > 0 || Boolean(error);
+  const place = useListPlace(id, shows);
   const readCursor = (e) => setCursor(e.target.selectionStart);
   const put = (row) => {
     const next = applyRow(text, answer && answer.edit, row.insert);
@@ -104,7 +107,7 @@ export function useFieldList({ id, value, setValue, scope = null }) {
     onBlur: () => { setOpen(false); setSelected(null); },
   };
   // A row takes no focus, so the field keeps the focus and the cursor.
-  const list = shows && html`<div class="field-list" onMouseDown=${(e) => e.preventDefault()}>
+  const list = shows && html`<div class="field-list" style=${place} onMouseDown=${(e) => e.preventDefault()}>
     ${error && html`<p class="field-list-note">${error}</p>`}
     ${rows.length > 0 && html`<ul id=${listId} role="listbox" aria-label="Search fields">
       ${rows.map((row, i) => html`<li id=${`${listId}-${i}`} key=${`${row.label}-${i}`} role="option"
@@ -113,6 +116,52 @@ export function useFieldList({ id, value, setValue, scope = null }) {
     </ul>`}
   </div>`;
   return { input, list };
+}
+
+// The place of the floating field list of the input `id`, while `shows` is
+// true. The list opens under the field. When the window has less than
+// LIST_ROOM px under the field and more space above it, the list opens above.
+// The place changes after each render, a change of the window, a scroll and a
+// change of the size of the sheet or the page around the field.
+const LIST_ROOM = 200;
+const LIST_GAP = 4;
+const LIST_EDGE = 16;
+function listPlace(id) {
+  const field = document.getElementById(id);
+  if (!field) return null;
+  const box = field.getBoundingClientRect();
+  const below = window.innerHeight - box.bottom - LIST_GAP - LIST_EDGE;
+  const above = box.top - LIST_GAP - LIST_EDGE;
+  const up = below < LIST_ROOM && above > below;
+  return {
+    left: `${box.left}px`,
+    width: `${box.width}px`,
+    maxHeight: `${Math.max(up ? above : below, 0)}px`,
+    ...(up ? { bottom: `${window.innerHeight - box.top + LIST_GAP}px` } : { top: `${box.bottom + LIST_GAP}px` }),
+  };
+}
+
+function useListPlace(id, shows) {
+  const [place, setPlace] = useState(null);
+  const last = useRef('null');
+  const measure = useRef(null);
+  measure.current = () => {
+    const next = shows ? listPlace(id) : null;
+    const key = JSON.stringify(next);
+    if (key !== last.current) { last.current = key; setPlace(next); }
+  };
+  useLayoutEffect(() => measure.current());
+  useEffect(() => {
+    if (!shows) return undefined;
+    const run = () => measure.current();
+    const field = document.getElementById(id);
+    const sizes = new ResizeObserver(run);
+    sizes.observe((field && field.closest('dialog')) || document.body);
+    window.addEventListener('resize', run);
+    window.addEventListener('scroll', run, true);
+    return () => { sizes.disconnect(); window.removeEventListener('resize', run); window.removeEventListener('scroll', run, true); };
+  }, [id, shows]);
+  return place;
 }
 
 // The folds that the user opened or closed, by `id`, for this visit. A fold keeps
@@ -198,7 +247,7 @@ export function SearchResults({ query, search, disabled, onPick }) {
 // the values also hold the credits of the feed and its tracks (ADR 0146 item 8).
 export function FindOneSheet({ open, start, choices, empty, credits = false, onPick, onClose }) {
   const ref = useSheet(open);
-  return html`<dialog ref=${ref} class="sheet" aria-labelledby="find-one-title" onClose=${onClose}>
+  return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="find-one-title" onClose=${onClose}>
     ${open && html`<${FindOneForm} start=${start} choices=${choices} empty=${empty} credits=${credits} onCancel=${() => ref.current.close()}
       onPick=${(values) => { onPick(values); ref.current.close(); }} />`}
   </dialog>`;
@@ -225,9 +274,9 @@ function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
   };
   return html`<header><h2 id="find-one-title">Find on Music Index</h2></header>
     <div class="body">
-      ${options === null && html`<div class="group rows"><${Field} id="find-one-query" label="Name" type="search" value=${query}
+      ${options === null && html`<section class="page-section pinned-form"><div class="group rows"><${Field} id="find-one-query" label="Name" type="search" value=${query}
         ...${fields.input}>${fields.list}<//></div>
-      <p class="hint">${FIND_ONE_HINT}</p>`}
+      <p class="hint">${FIND_ONE_HINT}</p></section>`}
       <${ErrorNotice} error=${problem} />
       ${none && html`<p class="hint" role="status">${empty}</p>`}
       ${options === null && html`<${SearchResults} query=${query} search=${search} onPick=${open} />`}

@@ -24,8 +24,20 @@ Next: mockups for the operator.
 
 ### 3. An Artist With Releases Shows "Add your first album"
 
-Open. The page of the artist "HeyCitizen" shows the row **Add your first album** of ADR 0119 item 8. The left panel lists four releases of this artist.
+Corrected on local `main` after 0.1.0-rc.21. The correction goes into the next candidate. The page of the artist "HeyCitizen" showed the row **Add your first album** of ADR 0119 item 8. The left panel listed four releases of this artist.
 
-`nextStep` in `crates/api/ui/welcome.js` shows the row when the feed has no `child_ids`. The left panel possibly uses `release_ids`, which the same feed row of `crates/api/src/routes.rs` gives. This cause is not proved. The row must show only for an artist with no release.
+`nextStep` in `crates/api/ui/welcome.js` showed the row when the feed had no `child_ids`. But `child_ids` holds only the publisher feeds below the feed (ADR 0088). The releases are in `release_ids`. `nextStep` now examines both lists, and a test in `crates/api/ui-tests/welcome.test.mjs` gives an artist with a release.
 
-Next: find the list that the left panel uses, add a test with an artist that has releases, and correct `nextStep`.
+### 4. The Field List Changes The Height Of A Sheet
+
+Corrected on local `main` after 0.1.0-rc.21. The correction goes into the next candidate. In the sheet **Find on Music Index: {name}**, a click in the field opened the field list of ADR 0154. The list was in the flow below the field. Thus the sheet became taller, and the content below the field moved down.
+
+After the correction, the list is a floating layer at the field, as on musicindex.org. It has fixed position, so the sheet does not cut it, and the sheet keeps its height. When the window has less space below the field, the list opens above it. The agent screenshots at 1280 px in the dark and the light theme, and at 390 px, show the list at the field. The sheet height does not change.
+
+### 5. The Field List Of A Person Search Has No Album Field
+
+Open. The field list of the person search gives only the artist field and the track fields. It gives no `release:` field.
+
+ADR 0154 item 5 decides this. The search of the page of a person finds only artist and label feeds. The list leaves out each field that Music Index cannot use to find these feeds. A search for an artist by the title of an album needs a different search, and thus a new ADR.
+
+Next: research of the Music Index API, then options for the operator.

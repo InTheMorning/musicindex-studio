@@ -34,6 +34,9 @@ The page of your label page shows three rows: **Add an artist**, **Add a release
 The page of your artist page shows **Add your first album**.
 Select **Add an Album**. The sheet asks for the same fields as a new release. See [Make a new release](new-release.md).
 
+Studio adds the new album to the releases of your artist page.
+When your artist page has releases, this row does not show. Select **＋ Add an Album** at the end of **Releases** to make the next album.
+
 ## Review and write your first pages
 
 Studio does not write to the file host when it makes a draft.

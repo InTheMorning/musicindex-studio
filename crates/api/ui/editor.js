@@ -27,7 +27,7 @@ import { progressPercent } from './upload.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
-import { nextStep, firstStart, FIRST_STEPS, HOST_STEP } from './welcome.js';
+import { nextStep, firstStart, releaseAdd, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyOrMove, missingCount, missingNotice, reviewNotice, dayText,
   SERVER_NOTICE, ADD_TRACKS_NOTICE, ENTRY_TEXT,
@@ -3478,6 +3478,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   // A role change writes the links, so it needs the host of the feed, as a
   // link does (ADR 0041 item 5).
   const readOnly = !feed.connector_id;
+  // The add row at the end of the Releases section (ADR 0164).
+  const more = releaseAdd(feed, model);
 
   // The steps of this page for one change of two drafts.
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
@@ -3580,6 +3582,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
               onClick=${() => removeRow(row)}>Remove</button>
           </div>
         </div>`)}
+        ${more && html`<button class="link-row add" type="button" onClick=${() => setAddOpen('release')}>
+          <span class="num">＋</span><span class="title">${more.label}</span></button>`}
         ${candidates.length > 0 && html`<div class="field">
           <label for="pub-release">Release</label>
           <div class="field-body">
@@ -3603,9 +3607,23 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       </div>
     </section>`,
   };
-  // The first steps of a new publisher feed with no release (ADR 0119 item 8).
-  // Each row opens a sheet of the Add feeds page.
-  const addedFeed = async (f) => { await onListChanged(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); };
+  // The first steps of a new publisher feed with no release (ADR 0119 item 8),
+  // and the add row of the Releases section (ADR 0164). Each row opens a
+  // sheet of the Add feeds page. A new album or playlist becomes a release
+  // of this feed before its page opens (ADR 0164 item 3). When the link
+  // fails, this page stays and shows the error.
+  const addedFeed = async (f) => {
+    if (f && !readOnly && ['music', 'musicl'].includes(mediumOf(f))) {
+      const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links`, {
+        method: 'POST',
+        body: { release: f.id },
+      })).changed);
+      if (!done) { await onListChanged(); return; }
+    } else {
+      await onListChanged();
+    }
+    go(f ? { name: 'feed', id: f.id } : { name: 'releases' });
+  };
   const first = nextStep(feed);
   return html`<${ChangedNotices} changed=${changed} go=${go} />
     ${first === 'album' && html`<div class="group first-step">
@@ -3618,8 +3636,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     ${first === 'label' && html`<div class="group">${FIRST_STEPS.label.map((step) => html`<button class="link-row" type="button" key=${step.open}
       onClick=${() => setAddOpen(step.open)}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
       <span class="text"><span class="label">${step.title}</span><span class="summary">${step.line}</span></span><span class="go" aria-hidden="true">›</span></button>`)}</div>`}
-    ${addOpen && html`<${AddFeedRowSheet} open=${addOpen} connectors=${connectors} feeds=${feeds}
-      start=${firstStart(first, addOpen, model)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
+    ${addOpen && html`<${AddFeedRowSheet} open=${addOpen === 'release' ? 'album' : addOpen} connectors=${connectors} feeds=${feeds}
+      start=${addOpen === 'release' ? more.start : firstStart(first, addOpen, model)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
     ${showSections(pageSequence('publisher'), shown)}`;
 }
 

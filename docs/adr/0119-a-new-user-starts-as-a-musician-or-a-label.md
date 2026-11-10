@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screens 2 to 6 of the mockups in `.studio-dev/mockup-start/site/`.
 - Amended: 2026-11-02 by the operator: "My own server" is the first row of item 6. Item 11 comes from the visual check of task 083.
-- Changed by: [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4, step 2.
+- Changed by: [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4, step 2. [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 9: the new album becomes a release of the artist.
 - Changes: [ADR 0072](0072-add-a-feed-opens-from-releases.md), the empty Releases page. [ADR 0020](0020-first-run-asks-one-question.md) items 1 and 2, the question of the first-run wizard (item 11). [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) does not change for a user with feeds.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the first write. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the file host forms. [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) and [ADR 0083](0083-hosting-is-a-first-class-role.md) for the roles. [ADR 0107](0107-a-user-can-export-and-import-an-account.md) for the import.
 

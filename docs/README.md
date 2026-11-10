@@ -165,6 +165,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0161: A live item needs a stream, and a content link is recommended](adr/0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md)
 - [ADR 0162: Studio fills and checks the stream of a live show](adr/0162-studio-fills-and-checks-the-stream-of-a-live-show.md)
 - [ADR 0163: One sheet finds and links a page on Music Index](adr/0163-one-sheet-finds-and-links-a-page-on-music-index.md)
+- [ADR 0164: The releases of a publisher feed have an add row](adr/0164-the-releases-of-a-publisher-feed-have-an-add-row.md)
 
 ## Plans
 

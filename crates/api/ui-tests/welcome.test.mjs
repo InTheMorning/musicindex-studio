@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import {
-  firstStart,
+  firstStart, releaseAdd,
   WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, HOST_ROWS, welcomeBody, nextStep, FIRST_STEPS,
 } from '../ui/welcome.js';
 import { isTitleCase } from '../ui/casing.js';
@@ -142,4 +142,16 @@ test('the track page shows the text of ADR 0122 item 14 under a placeholder addr
   const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
   assert.equal(HOST_STEP.placeholderAddress, 'Studio cannot make the address of this file yet. The address comes from the public address of the feed, and this file host has none. Studio sets the address when the feed gets a public address.');
   assert.match(editor, /isPlaceholderAddress\(value\.url\) \? HOST_STEP\.placeholderAddress : null/);
+});
+
+test('releaseAdd gives the add row of the Releases section (ADR 0164 items 1 and 2)', () => {
+  const artist = { id: 1, medium: 'publisher', connector_id: 4, publisher_roles: ['artist'], release_ids: [7], child_ids: [] };
+  assert.deepEqual(releaseAdd(artist, { title: 'HeyCitizen' }), { label: 'Add an Album', start: { author: 'HeyCitizen' } });
+  const label = { ...artist, publisher_roles: ['label'] };
+  assert.deepEqual(releaseAdd(label, { title: 'A Label' }), { label: 'Add a Release', start: {} });
+  // The first-step row shows in its place.
+  assert.equal(releaseAdd({ ...artist, release_ids: [] }, { title: 'HeyCitizen' }), null);
+  // No file host, so the feed is read only.
+  assert.equal(releaseAdd({ ...artist, connector_id: null }, { title: 'HeyCitizen' }), null);
+  assert.equal(releaseAdd({ ...artist, medium: 'music' }, { title: 'HeyCitizen' }), null);
 });

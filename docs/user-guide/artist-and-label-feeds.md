@@ -46,6 +46,16 @@ The page **Artist** or **Label** has these sections:
 
 Studio does not put these recipients into the releases of the feed.
 
+## Make a new album for an artist feed or a label feed
+
+1. Open the artist feed or the label feed.
+2. At the end of **Releases**, select **＋ Add an Album**. A label feed shows **＋ Add a Release**.
+3. Type the title. For an artist feed, **Artist** starts with the name of the artist.
+4. Select **Make the Release**.
+
+Studio adds the new release to **Releases** of the feed, and opens the page of the release.
+This change also changes two drafts. Write the two feeds through Review.
+
 ## Add a release to an artist feed or a label feed
 
 1. Open the artist feed or the label feed.

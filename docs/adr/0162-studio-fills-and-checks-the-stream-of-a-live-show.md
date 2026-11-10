@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-09 by the operator. The operator selected the drawings of items 1, 4 and 5. The agent recommended item 7, and the operator did not select an option for it.
 - Item 9 accepted: 2026-11-10 by the operator, after the human check found an Icecast stream with the type HLS. The operator selected the drawing with the warning and the **Use** button.
+- Item 10 accepted: 2026-11-10 by the operator, after the human check of rc.21 step 8. The line showed "audio/mpeg" next to the menu entry "MP3". The operator selected the drawing with the menu name only.
 - Uses: [ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), [ADR 0057](0057-the-private-network-guard-of-the-server.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context
@@ -36,6 +37,7 @@ The operator accepted ADR 0161 on 2026-11-09, and asked for three changes:
 7. A granted change to `live` from a connected app gets the same check, and the same refusal.
 8. The check of item 2 is not a feed rule of ADR 0161. A write of a feed does not check the stream, because a stream can be offline before the show.
 9. The user can select a stream type that does not agree with the type that the stream server sends. Then the result line also shows a warning. The text is "The stream server sends SERVER TYPE, but the stream type is LABEL." A button **Use LABEL** sets the type of the server.
+10. The result line of item 1 and the warning of item 9 name the type of the server with the label of the **Stream type** menu, for example "MP3". A type with no menu entry keeps the name that the server sends.
 
    Two names of one type in the table of ADR 0161 item 3 agree. The core gives the warning. The warning does not stop **Go Live** or a write. A change of the type removes the warning.
 

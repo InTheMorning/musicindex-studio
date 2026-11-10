@@ -1,7 +1,7 @@
 // The rules of the Add feeds page and of the form that makes a feed (ADR 0073).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addChoices, makeFields, feedFileStart, startChoices, MAKE_TYPES } from '../ui/addfeeds.js';
+import { addChoices, makeFields, makeTitle, feedFileStart, startChoices, MAKE_TYPES } from '../ui/addfeeds.js';
 
 test('feedFileStart gives the file name from the title', () => {
   assert.equal(feedFileStart('Pixel Palace'), 'pixel-palace.xml');
@@ -35,7 +35,7 @@ test('addChoices leaves out the make rows and the folder row when no host exists
 
 test('makeFields gives the fields of each type', () => {
   assert.deepEqual(makeFields('album'), { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' });
-  assert.deepEqual(makeFields('publisher'), { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Feed', busyLabel: 'Making the Feed…' });
+  assert.deepEqual(makeFields('publisher'), { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' });
   assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show feed title', authorLabel: 'Artist', role: false, button: 'Make the Show Feed', busyLabel: 'Making the Show Feed…' });
   assert.deepEqual(makeFields('playlist'), { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' });
 });
@@ -70,4 +70,14 @@ test('startChoices leaves out a publisher feed and a playlist', () => {
     { id: 3, medium: 'music', title: 'Album' },
   ];
   assert.deepEqual(startChoices(feeds), [['', 'Empty album'], ['3', 'Album']]);
+});
+
+test('makeTitle names the page that the sheet makes (ADR 0164 item 7)', () => {
+  assert.equal(makeTitle('album', null), 'Make a new release');
+  assert.equal(makeTitle('publisher', 'artist'), 'Make a new artist page');
+  assert.equal(makeTitle('publisher', 'label'), 'Make a new label page');
+  assert.equal(makeTitle('publisher', 'hosting'), 'Make a new hosting page');
+  assert.equal(makeTitle('publisher', null), 'Make a new artist or label page');
+  assert.equal(makeTitle('show', null), 'Make a new show');
+  assert.equal(makeTitle('playlist', null), 'Make a new playlist');
 });

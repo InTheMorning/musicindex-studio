@@ -144,14 +144,15 @@ test('the track page shows the text of ADR 0122 item 14 under a placeholder addr
   assert.match(editor, /isPlaceholderAddress\(value\.url\) \? HOST_STEP\.placeholderAddress : null/);
 });
 
-test('releaseAdd gives the add row of the Releases section (ADR 0164 items 1 and 2)', () => {
+test('releaseAdd gives the add action of the releases (ADR 0164 items 1, 2 and 6)', () => {
   const artist = { id: 1, medium: 'publisher', connector_id: 4, publisher_roles: ['artist'], release_ids: [7], child_ids: [] };
-  assert.deepEqual(releaseAdd(artist, { title: 'HeyCitizen' }), { label: 'Add an Album', start: { author: 'HeyCitizen' } });
+  assert.deepEqual(releaseAdd(artist, 'HeyCitizen'), { label: 'Add an Album', start: { author: 'HeyCitizen' } });
   const label = { ...artist, publisher_roles: ['label'] };
-  assert.deepEqual(releaseAdd(label, { title: 'A Label' }), { label: 'Add a Release', start: {} });
-  // The first-step row shows in its place.
-  assert.equal(releaseAdd({ ...artist, release_ids: [] }, { title: 'HeyCitizen' }), null);
+  assert.deepEqual(releaseAdd(label, 'A Label'), { label: 'Add a Release', start: {} });
+  // The list view of a feed with no release also has the action.
+  assert.deepEqual(releaseAdd({ ...artist, release_ids: [] }, 'HeyCitizen').label, 'Add an Album');
   // No file host, so the feed is read only.
-  assert.equal(releaseAdd({ ...artist, connector_id: null }, { title: 'HeyCitizen' }), null);
-  assert.equal(releaseAdd({ ...artist, medium: 'music' }, { title: 'HeyCitizen' }), null);
+  assert.equal(releaseAdd({ ...artist, connector_id: null }, 'HeyCitizen'), null);
+  assert.equal(releaseAdd({ ...artist, medium: 'music' }, 'HeyCitizen'), null);
+  assert.equal(releaseAdd(null, ''), null);
 });

@@ -53,6 +53,8 @@ Studio does not put these recipients into the releases of the feed.
 3. Type the title. For an artist feed, **Artist** starts with the name of the artist.
 4. Select **Make the Release**.
 
+On a wide window, the list of the releases of the feed also has **＋ Add an Album** or **＋ Add a Release**.
+
 Studio adds the new release to **Releases** of the feed, and opens the page of the release.
 This change also changes two drafts. Write the two feeds through Review.
 

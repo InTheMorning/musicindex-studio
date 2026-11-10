@@ -3478,8 +3478,9 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   // A role change writes the links, so it needs the host of the feed, as a
   // link does (ADR 0041 item 5).
   const readOnly = !feed.connector_id;
-  // The add row at the end of the Releases section (ADR 0164).
-  const more = releaseAdd(feed, model);
+  // The add row at the end of the Releases section. It does not show with a
+  // first-step row (ADR 0164 item 1).
+  const more = nextStep(feed) === null ? releaseAdd(feed, model.title) : null;
 
   // The steps of this page for one change of two drafts.
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });

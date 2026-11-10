@@ -19,8 +19,8 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addChoices, MAKE_TYPES, makeFields, feedFileStart, startChoices } from './addfeeds.js';
-import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody } from './welcome.js';
+import { addChoices, MAKE_TYPES, makeFields, makeTitle, feedFileStart, startChoices } from './addfeeds.js';
+import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
@@ -1397,7 +1397,8 @@ function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', s
 // (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
 // `start` gives optional start values: `author` and `role` (ADR 0119 item 8).
-function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded }) {
+// `onKind` gets the type and the role, for the title of the sheet.
+function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKind }) {
   const [type, setType] = useState(startType);
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
   const [title, setTitle] = useState('');
@@ -1410,6 +1411,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded }) {
   const { busy, error, run } = useAction();
   const authorTypedRef = useRef(false);
   authorTypedRef.current = authorTyped;
+  useEffect(() => { if (onKind) onKind({ type, role }); }, [type, role]);
   const fields = makeFields(type);
   const path = typedPath ?? feedFileStart(title);
   const formError = splitError(error, ['no_public_address', 'file_exists']);
@@ -2659,12 +2661,19 @@ function SettingsPage() {
 
 // The sheet of one row of the Add feeds page (ADR 0073 item 3). `open` is the
 // ID of the row, or null. The forms of "Add a feed you have" do not change.
+// The title of a make row follows the type and the role in the form (ADR 0164
+// item 7).
 function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, onAdded, onClose }) {
   const ref = useSheet(open !== null);
   const makeType = ['album', 'publisher', 'show', 'playlist'].includes(open) ? open : null;
+  // The type and the role of the open form. A value of an earlier row is not used.
+  const [kind, setKind] = useState(null);
+  const now = kind && kind.open === open ? kind : { type: makeType, role: (start || {}).role };
+  const shownTitle = makeType ? makeTitle(now.type, now.role) : title;
   let body = null;
   if (makeType) {
-    body = html`<${MakeFeedForm} key=${open} connectors=${connectors} feeds=${feeds} startType=${makeType} start=${start} onAdded=${onAdded} />`;
+    body = html`<${MakeFeedForm} key=${open} connectors=${connectors} feeds=${feeds} startType=${makeType} start=${start}
+      onAdded=${onAdded} onKind=${(k) => setKind({ ...k, open })} />`;
   } else if (open === 'find') {
     body = found
       ? html`<${FoundFeeds} found=${found} onAdded=${(result) => onAdded(result.added[0])} />
@@ -2677,7 +2686,7 @@ function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, 
   }
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-feed-title" onClose=${onClose}>
     <header>
-      <h2 id="add-feed-title">${title}</h2>
+      <h2 id="add-feed-title">${shownTitle}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">${body}</div>
@@ -2692,10 +2701,8 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
   const groups = addChoices({ hasHost: connectors.length > 0 });
   const rows = groups.flatMap((group) => group.rows);
   const close = () => { setOpen(null); setFound(null); };
-  // A make row opens the form with Type, so its sheet has the title of the
-  // group. The type can change in the form.
-  const makeRow = groups[0].rows.some((row) => row.id === open);
-  const title = makeRow ? 'Make a new feed' : (rows.find((row) => row.id === open) || {}).title || '';
+  // The sheet gives the title of a make row itself.
+  const title = (rows.find((row) => row.id === open) || {}).title || '';
   return html`<div><${Bar}><span class="bar-title">Add feeds</span><//><section class="section">
     ${groups.map((group) => html`<section key=${group.id} class="page-section"><h2>${group.label}</h2>
       ${group.connect && html`<p class="hint">Studio puts the files of a release on a file host. Connect a file host first.</p>
@@ -3108,6 +3115,24 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const outside = useOutsideChecks(releases.rows.map((row) => row.id));
   const head = releases.head;
   const title = head ? head.title : 'Releases';
+  // The add action of the group of a publisher feed (ADR 0164 item 6). A new
+  // album or playlist becomes a release of that feed before its page opens.
+  // When the link fails, the group stays and shows the error.
+  const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
+  const more = releaseAdd(headFeed, headFeed && headFeed.title);
+  const [adding, setAdding] = useState(false);
+  const addAction = useAction();
+  const addedRelease = async (f) => {
+    setAdding(false);
+    if (f && ['music', 'musicl'].includes((f.medium || '').toLowerCase())) {
+      const done = await addAction.run(async () => {
+        await api(`/feeds/${headFeed.id}/links`, { method: 'POST', body: { release: f.id } });
+        return true;
+      });
+      if (done !== true) return;
+    }
+    onAddedFeed(f);
+  };
   // A feed group keeps its own sort and direction (ADR 0085 item 8).
   const pickSort = (id, reversed) => {
     if (inGroup) onGroupSort(id, reversed);
@@ -3129,11 +3154,13 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
           ${hasRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${hasRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
           ${!inGroup && html`<button class="button action" type="button" onClick=${onAddFeed}>＋ Add a Feed</button>`}
+          ${more && html`<button class="button action" type="button" onClick=${() => setAdding(true)}>＋ ${more.label}</button>`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the Feed</button>`}
         </div>`}
       </div>
       ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
       ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
+      <${ErrorNotice} error=${addAction.error} />
       ${releases.letters && html`<${LetterBar} letters=${releases.letters} idOf=${(id) => `release-${id}`} />`}
       ${hasRows
         ? html`<ul class=${`releases-list ${releases.view}`}>
@@ -3157,6 +3184,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
             <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button></div>
           </div>`}
     </section>
+    ${adding && html`<${AddFeedRowSheet} open="album" connectors=${connectors} feeds=${feeds}
+      start=${more.start} onAdded=${addedRelease} onClose=${() => setAdding(false)} />`}
   </div>`;
 }
 
@@ -3299,9 +3328,8 @@ function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
 // and 8). The forms are the same as on the Add feeds page.
 export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onClose }) {
   const [found, setFound] = useState(null);
-  const makeRow = MAKE_TYPES.some(([id]) => id === open);
   const rows = addChoices({ hasHost: connectors.length > 0 }).flatMap((group) => group.rows);
-  const title = makeRow ? 'Make a new feed' : (rows.find((row) => row.id === open) || {}).title || '';
+  const title = (rows.find((row) => row.id === open) || {}).title || '';
   return html`<${AddFeedSheet} open=${open} title=${title} connectors=${connectors} feeds=${feeds}
     found=${found} setFound=${setFound} start=${start} onAdded=${onAdded} onClose=${() => { setFound(null); onClose(); }} />`;
 }

@@ -123,14 +123,14 @@ export function nextStep(feed) {
   return null;
 }
 
-// The add row at the end of the Releases section of a publisher feed (ADR
-// 0164 items 1 and 2). It shows when the feed has a file host and no
-// first-step row. An artist gets "Add an Album" with the artist as the
-// author. Any other role gets "Add a Release" with no start value.
-export function releaseAdd(feed, model) {
-  if (!feed || !isPublisher(feed) || !feed.connector_id || nextStep(feed) !== null) return null;
+// The add action of the releases of a publisher feed (ADR 0164 items 1, 2
+// and 6). It needs a file host. An artist gets "Add an Album" with the
+// artist name as the author. Any other role gets "Add a Release" with no
+// start value. The page of the feed shows it only with no first-step row.
+export function releaseAdd(feed, name) {
+  if (!feed || !isPublisher(feed) || !feed.connector_id) return null;
   if ((feed.publisher_roles || [])[0] === 'artist') {
-    return { label: 'Add an Album', start: { author: (model && model.title) || '' } };
+    return { label: 'Add an Album', start: { author: name || '' } };
   }
   return { label: 'Add a Release', start: {} };
 }

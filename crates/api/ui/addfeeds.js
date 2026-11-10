@@ -36,7 +36,7 @@ export const MAKE_TYPES = [
 
 const FIELDS = {
   album: { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' },
-  publisher: { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Feed', busyLabel: 'Making the Feed…' },
+  publisher: { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' },
   show: { medium: 'music', titleLabel: 'Show feed title', authorLabel: 'Artist', role: false, button: 'Make the Show Feed', busyLabel: 'Making the Show Feed…' },
   playlist: { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' },
 };
@@ -46,6 +46,17 @@ const FIELDS = {
 // is also the author.
 export function makeFields(type) {
   return FIELDS[type] || FIELDS.album;
+}
+
+// The title of the sheet that makes a feed (ADR 0164 item 7). It follows the
+// type, and the role of a publisher feed. It does not use the word "feed".
+const PAGE_WORDS = { artist: 'artist page', label: 'label page', hosting: 'hosting page' };
+
+export function makeTitle(type, role) {
+  if (type === 'publisher') return `Make a new ${PAGE_WORDS[role] || 'artist or label page'}`;
+  if (type === 'show') return 'Make a new show';
+  if (type === 'playlist') return 'Make a new playlist';
+  return 'Make a new release';
 }
 
 // The start value of "Feed file" (ADR 0073 item 8). It is an edit aid, not a

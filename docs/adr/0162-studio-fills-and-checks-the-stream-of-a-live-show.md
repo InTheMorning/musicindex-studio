@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-09 by the operator. The operator selected the drawings of items 1, 4 and 5. The agent recommended item 7, and the operator did not select an option for it.
 - Item 9 accepted: 2026-11-10 by the operator, after the human check found an Icecast stream with the type HLS. The operator selected the drawing with the warning and the **Use** button.
+- Item 5 clarified: 2026-11-10, after the human check of rc.21 step 15. A check did not fill an empty type, because an earlier selection on the page counted. The last sentence of item 5 is a choice of the planning model, and it corrects a defect.
 - Item 10 accepted: 2026-11-10 by the operator, after the human check of rc.21 step 8. The line showed "audio/mpeg" next to the menu entry "MP3". The operator selected the drawing with the menu name only.
 - Uses: [ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), [ADR 0057](0057-the-private-network-guard-of-the-server.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
@@ -30,7 +31,7 @@ The operator accepted ADR 0161 on 2026-11-09, and asked for three changes:
    - A DASH manifest is live when its `type` is `dynamic`.
    - An audio answer is live when bytes arrive and the answer has no `Content-Length`. An answer with a `Content-Length` is a file, not a live stream.
 4. The stream type is a select menu. It holds HLS (`application/x-mpegURL`), MP3 (`audio/mpeg`), AAC (`audio/aac`), M4A (`audio/mp4`), Ogg (`audio/ogg`), DASH (`application/dash+xml`) and **Other…**. **Other…** shows a text field for a different type. A type that is not in the menu shows as **Other…** with its text. The core gives the menu, so the UI has no copy of the types.
-5. Studio fills the stream type until the user selects one. The core gives the type from the extension of the address, with the table of ADR 0161 item 3. A check gives the type that the stream server sends. When that type is a different name of a menu type in the table of ADR 0161 item 3, Studio fills the menu type. For example, `application/vnd.apple.mpegurl` fills HLS. A type that the user selects stays, and the refusal of ADR 0161 item 3 shows when it does not agree.
+5. Studio fills the stream type until the user selects one. The core gives the type from the extension of the address, with the table of ADR 0161 item 3. A check gives the type that the stream server sends. When that type is a different name of a menu type in the table of ADR 0161 item 3, Studio fills the menu type. For example, `application/vnd.apple.mpegurl` fills HLS. A type that the user selects stays, and the refusal of ADR 0161 item 3 shows when it does not agree. An empty type is not a selection: when the type is empty, Studio fills it, also after an earlier selection on the page.
 
    The page keeps the "selected by the user" state only while it is open. After a new load, a type that is not blank counts as selected.
 6. **Go Live** refuses when the stream is not live. The core checks the stream before it changes the status to `live`, and the draft does not change. The text is "Studio cannot go live, because the stream is not live: REASON". A change to `pending` or `ended` has no check.

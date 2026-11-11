@@ -168,6 +168,11 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0164: The releases of a publisher feed have an add row](adr/0164-the-releases-of-a-publisher-feed-have-an-add-row.md)
 - [ADR 0165: The left panel marks the state of each feed](adr/0165-the-left-panel-marks-the-state-of-each-feed.md)
 - [ADR 0166: Settings has tabs and one Save bar](adr/0166-settings-has-tabs-and-one-save-bar.md)
+- [ADR 0167: Each release has an editable library folder](adr/0167-each-release-has-an-editable-library-folder.md)
+- [ADR 0168: A search sheet keeps its field still](adr/0168-a-search-sheet-keeps-its-field-still.md)
+- [ADR 0169: An open credit can find on Music Index](adr/0169-an-open-credit-can-find-on-music-index.md)
+- [ADR 0170: Update people from their linked pages](adr/0170-update-people-from-their-linked-pages.md)
+- [ADR 0171: A closed fold is a row, and Enter closes the field list](adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md)
 
 ## Plans
 

@@ -5,7 +5,7 @@ import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary,
   grantLimit, grantActive, grantSummary, grantWriteText,
   hostUsesSigner, grantBoxState,
-  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning,
+  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress,
 } from '../ui/live.js';
 
 const link = { href: 'https://example.com/show', label: 'Watch' };
@@ -164,7 +164,13 @@ test('the page fills the type until the user selects one', () => {
   assert.equal(filledType(type, false, 'audio/aac'), 'audio/aac');
   // Selected: nothing replaces the type.
   assert.equal(filledType('audio/ogg', true, 'application/x-mpegURL'), 'audio/ogg');
-  assert.equal(filledType(null, true, 'audio/mpeg'), null);
+});
+
+test('an empty type is not a selection, also after an earlier selection (ADR 0162 item 5)', () => {
+  assert.equal(filledType(null, true, 'audio/mpeg'), 'audio/mpeg');
+  assert.equal(filledType('', true, 'audio/mpeg'), 'audio/mpeg');
+  assert.equal(filledType('  ', true, 'audio/mpeg'), 'audio/mpeg');
+  assert.equal(filledType(null, true, null), null);
 });
 
 test('the menu shows a menu type, and a type that is not in it shows as Other with its text', () => {
@@ -179,8 +185,12 @@ test('the menu shows a menu type, and a type that is not in it shows as Other wi
 
 test('the result line of a check gives the type and the time, or the cause', () => {
   assert.deepEqual(
-    checkLine({ live: true, server_type: 'audio/mpeg', cause: null }, '14:05'),
-    { warning: false, text: 'Live · audio/mpeg · checked 14:05' },
+    checkLine({ live: true, server_type: 'audio/mpeg', fill_label: 'MP3', cause: null }, '14:05'),
+    { warning: false, text: 'Live · MP3 · checked 14:05' },
+  );
+  assert.deepEqual(
+    checkLine({ live: true, server_type: 'audio/x-custom', fill_label: 'audio/x-custom', cause: null }, '14:05'),
+    { warning: false, text: 'Live · audio/x-custom · checked 14:05' },
   );
   assert.deepEqual(
     checkLine({ live: false, server_type: null, cause: 'The stream server answered with status 404.' }, '14:05'),
@@ -189,13 +199,19 @@ test('the result line of a check gives the type and the time, or the cause', () 
   assert.equal(checkLine(null, '14:05'), null);
 });
 
+test('an address with a leading space is marked from the core bad field list', () => {
+  const bad = [{ field: 'live_items/0/item/enclosure/url', value: ' https://music.example/live.m3u8' }];
+  assert.equal(hasBadAddress(bad, 'live_items/0/item/enclosure/url'), true);
+  assert.equal(hasBadAddress(bad, 'live_items/0/item/enclosure/media_type'), false);
+});
+
 test('a stream check warns about a selected type that does not agree (ADR 0162 item 9)', () => {
   const result = {
     live: true, server_type: 'audio/mpeg', fill_type: 'audio/mpeg', fill_label: 'MP3',
-    type_warning: 'The stream server sends audio/mpeg, but the stream type is HLS.',
+    type_warning: 'The stream server sends MP3, but the stream type is HLS.',
   };
   assert.deepEqual(checkTypeWarning(result, true), {
-    text: 'The stream server sends audio/mpeg, but the stream type is HLS.',
+    text: 'The stream server sends MP3, but the stream type is HLS.',
     fillType: 'audio/mpeg', fillLabel: 'MP3',
   });
   assert.equal(checkTypeWarning(result, false), null);

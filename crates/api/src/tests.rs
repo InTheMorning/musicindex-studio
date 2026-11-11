@@ -7037,6 +7037,28 @@ async fn draft_with_stream(app: &App, url: &str) -> (String, String, Value) {
 }
 
 #[tokio::test]
+async fn a_stream_address_with_a_space_before_it_is_marked_and_stops_the_write() {
+    // Step 9 of the rc.21 notes, ADR 0023 and ADR 0061.
+    let app = app();
+    let (base, _, draft) = draft_with_stream(&app, " https://example.com/up.mp3").await;
+    assert_eq!(
+        draft["bad_addresses"],
+        json!([{ "field": "live_items/0/item/enclosure/url", "value": " https://example.com/up.mp3" }])
+    );
+    let (_, diff) = call(&app, "GET", &format!("{base}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{base}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "bad_address");
+    assert_eq!(live(&app), FEED);
+}
+
+#[tokio::test]
 async fn go_live_with_a_stream_that_is_not_live_is_refused_and_the_draft_stays() {
     // ADR 0162 items 6 and 8.
     let app = app();
@@ -7140,7 +7162,7 @@ async fn the_stream_routes_give_the_check_the_menu_and_the_suggested_type() {
     .await;
     assert_eq!(
         result["type_warning"],
-        "The stream server sends audio/mpeg, but the stream type is HLS."
+        "The stream server sends MP3, but the stream type is HLS."
     );
     let (_, result) = call(
         &app,

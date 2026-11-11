@@ -207,24 +207,32 @@ export function typeMenuState(mediaType, menu, otherPicked = false) {
 }
 
 // The type after an address change or a check. The page fills the type only
-// until the user selects one (ADR 0162 item 5). A candidate that is not
-// there (an address with no known extension, a check with no type) leaves
-// the type as it is.
+// until the user selects one (ADR 0162 item 5). An empty type is not a
+// selection, so it gets the fill also after an earlier selection. A
+// candidate that is not there (an address with no known extension, a check
+// with no type) leaves the type as it is.
 export function filledType(current, selected, candidate) {
-  if (selected || !candidate) return current;
+  if (!candidate || (selected && typeIsSelected(current))) return current;
   return candidate;
 }
 
 // The result line of a stream check (ADR 0162 item 1). `result` is the
-// answer of the core: `{ live, server_type, cause }`. `checkedAt` is the
-// time of the check as text, such as "14:05". The warning line uses the
-// cause that the core gives.
+// answer of the core: `{ live, server_type, fill_label, cause }`. The line
+// names the type with the menu label that the core gives (item 10).
+// `checkedAt` is the time of the check as text, such as "14:05". The warning
+// line uses the cause that the core gives.
 export function checkLine(result, checkedAt) {
   if (!result) return null;
   if (result.live) {
-    return { warning: false, text: `Live · ${result.server_type || 'type not given'} · checked ${checkedAt}` };
+    const type = result.fill_label || result.server_type || 'type not given';
+    return { warning: false, text: `Live · ${type} · checked ${checkedAt}` };
   }
   return { warning: true, text: result.cause || 'The stream is not live.' };
+}
+
+// Whether the core marked an address field as invalid.
+export function hasBadAddress(bad, path) {
+  return bad.some((entry) => entry.field === path);
 }
 
 // The type warning of a stream check (ADR 0162 item 9). The core gives the

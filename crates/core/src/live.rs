@@ -351,8 +351,9 @@ pub fn stream_type_label(media_type: &str) -> String {
 
 /// The warning of a stream check when the type that the stream server
 /// sends does not agree with the stream type of the show (ADR 0162 item
-/// 9). Two names of one type in the table of ADR 0161 item 3 agree. A
-/// blank stream type gives no warning, because the check fills it.
+/// 9). It names each type with its menu label (item 10). Two names of one
+/// type in the table of ADR 0161 item 3 agree. A blank stream type gives no
+/// warning, because the check fills it.
 #[must_use]
 pub fn stream_type_warning(server_type: &str, media_type: Option<&str>) -> Option<String> {
     let current = media_type.map(str::trim).filter(|t| !t.is_empty())?;
@@ -363,7 +364,8 @@ pub fn stream_type_warning(server_type: &str, media_type: Option<&str>) -> Optio
         return None;
     }
     Some(format!(
-        "The stream server sends {server}, but the stream type is {}.",
+        "The stream server sends {}, but the stream type is {}.",
+        stream_type_label(server),
         stream_type_label(current)
     ))
 }
@@ -844,7 +846,12 @@ mod tests {
         assert_eq!(stream_type_label("audio/x-custom"), "audio/x-custom");
         assert_eq!(
             stream_type_warning("audio/mpeg", Some("application/x-mpegURL")).as_deref(),
-            Some("The stream server sends audio/mpeg, but the stream type is HLS.")
+            Some("The stream server sends MP3, but the stream type is HLS.")
+        );
+        // ADR 0162 item 10: a type with no menu entry keeps its name.
+        assert_eq!(
+            stream_type_warning("audio/x-custom", Some("audio/mpeg")).as_deref(),
+            Some("The stream server sends audio/x-custom, but the stream type is MP3.")
         );
         assert_eq!(stream_type_warning("audio/mpeg", Some("audio/mp3")), None);
         assert_eq!(

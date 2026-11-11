@@ -14,7 +14,7 @@ import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrCh
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
-import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning } from './live.js';
+import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress } from './feedfacts.js';
@@ -61,7 +61,7 @@ const BAD_ADDRESS = 'This is not a full web address. Start it with https://.';
 // (ADR 0023 item 4). `address` can be a list of model paths.
 export function TextField({ id, label, value, onChange, required = false, address, bad = [], ...rest }) {
   const paths = [].concat(address || []);
-  const error = bad.some((b) => paths.includes(b.field)) ? BAD_ADDRESS : null;
+  const error = paths.some((path) => hasBadAddress(bad, path)) ? BAD_ADDRESS : null;
   return html`<${Field} id=${id} label=${label} value=${value ?? ''} error=${error} ...${rest}
     onInput=${(e) => onChange(required ? e.target.value : optional(e.target.value))} />`;
 }
@@ -3246,7 +3246,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     setCheck(null);
     setCheckError(null);
     editStream(() => ({ url: text }));
-    if (selectedType.current || !text) return;
+    if (!text || (selectedType.current && typeIsSelected(stream.media_type))) return;
     api('/stream/type', { method: 'POST', body: { url: text } }).then((answer) => {
       if (streamUrl.current === text) fillType(answer.media_type);
     }, () => {});

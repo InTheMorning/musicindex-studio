@@ -213,17 +213,19 @@ export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOp
   </details>`;
 }
 
-// `fields` is the content of the form. `musicindex` gives the title, the summary
-// and `onOpen` of its row. Each entry of `lists` has a title and rows.
+// `fields` is the content of the form. With no `fields`, as in an open credit
+// (ADR 0169 item 1), the layout has no pinned section. `musicindex` gives the
+// title, the summary and `onOpen` of its row. Each entry of `lists` has a
+// title and rows.
 export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists }) {
   const form = useRef(null);
   // A selection fills the form, so the form must be in view. At narrow width it
   // scrolls with the list.
   const showForm = (e) => {
-    if (e.target.closest('button.link-row:not(:disabled)')) form.current.scrollIntoView({ block: 'nearest' });
+    if (form.current && e.target.closest('button.link-row:not(:disabled)')) form.current.scrollIntoView({ block: 'nearest' });
   };
   return html`<form class="body" id=${id} onSubmit=${onSubmit}>
-    <section class="page-section pinned-form" ref=${form}>${fields}</section>
+    ${fields && html`<section class="page-section pinned-form" ref=${form}>${fields}</section>`}
     ${notice}
     <section class="page-section"><h2>From Music Index</h2>
       <div class="group"><button class="link-row" type="button" onClick=${musicindex.onOpen}>

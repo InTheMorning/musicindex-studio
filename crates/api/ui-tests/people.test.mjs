@@ -1552,6 +1552,27 @@ test('a long list of a sheet starts closed, and each sheet takes the values of a
   assert.deepEqual(recipientChoices({ routes: [] }), [], WHY);
 });
 
+test('an open credit fills empty values and offers Replace or Add when values differ (ADR 0169)', async () => {
+  const { creditFillRows, creditFillValue } = await import('../ui/people.js');
+  const credit = { name: 'Own name', img: null, href: 'https://own.example', npub: 'npub1same', tags: ['kept'] };
+  const page = { name: 'Page name', img: 'https://page.example/p.jpg', href: 'https://other.example', npub: 'npub1same', tags: ['new'] };
+  const rows = creditFillRows(credit, page);
+  assert.deepEqual(rows, [
+    { id: 'name', value: 'Page name', action: 'replace' },
+    { id: 'img', value: 'https://page.example/p.jpg', action: 'fill' },
+    { id: 'href', value: 'https://other.example', action: 'replace' },
+    { id: 'tags', value: ['new'], action: 'add' },
+  ]);
+  const filled = rows.filter((row) => row.action === 'fill').reduce((next, row) => ({ ...next, [row.id]: creditFillValue(next, row) }), credit);
+  assert.equal(filled.name, credit.name, 'A value stays until the user selects Replace.');
+  assert.equal(filled.img, page.img, 'An empty field takes the page value.');
+  assert.equal(rows.some((row) => row.id === 'npub'), false, 'An agreeing value gives no choice.');
+  assert.deepEqual(creditFillValue(credit, rows.find((row) => row.id === 'name')), page.name);
+  assert.deepEqual(creditFillValue(credit, rows.find((row) => row.id === 'tags')), ['kept', 'new'], 'Add keeps the values already in the list.');
+  assert.deepEqual(creditFillRows(credit, {}), [], 'Cancel leaves the credit unchanged.');
+  assert.deepEqual(creditFillRows(credit, { wallets: ['a@x.example'], feed_guid: 'g-1' }), [], 'A key that is not a field of the credit gives no row.');
+});
+
 test('addPickLabel uses title case and the plural', () => {
   assert.equal(addPickLabel(1, 'Person', 'People'), 'Add 1 Person');
   assert.equal(addPickLabel(2, 'Person', 'People'), 'Add 2 People');

@@ -1718,6 +1718,36 @@ export function creditChoices(values, hit = null) {
   }))];
 }
 
+// The values from a selected Music Index page for an open credit (ADR 0169
+// items 2 to 4). Empty fields fill at once, different values need Replace,
+// and list values keep their current items when the user selects Add.
+// A list field of `current` gives Add. A key of the page that is not a field
+// of the credit gives no row.
+export function creditFillRows(current, page) {
+  const fields = ['name', 'role', 'group', 'img', 'href', 'npub'];
+  return Object.entries(page || {}).flatMap(([id, value]) => {
+    if (isEmpty(value)) return [];
+    const existing = current?.[id];
+    if (Array.isArray(existing)) {
+      const before = Array.isArray(existing) ? existing : [];
+      const additions = (Array.isArray(value) ? value : [value]).filter((item) => !before.includes(item));
+      return additions.length ? [{ id, value: additions, action: 'add' }] : [];
+    }
+    if (!fields.includes(id)) return [];
+    if (isEmpty(existing)) return [{ id, value, action: 'fill' }];
+    return existing === value ? [] : [{ id, value, action: 'replace' }];
+  });
+}
+
+// Apply one selected fill row while preserving any values already in a list.
+export function creditFillValue(current, row) {
+  if (row.action === 'add') {
+    const before = Array.isArray(current[row.id]) ? current[row.id] : [];
+    return [...before, ...row.value.filter((item) => !before.includes(item))];
+  }
+  return row.value;
+}
+
 // A result of "Find a Nostr profile" with a missing name or picture takes it from
 // the person that holds the key (ADR 0146 item 5).
 export function withPersonValues(profile, people) {

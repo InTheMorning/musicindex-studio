@@ -2134,7 +2134,7 @@ button.outline-feed {
 .person-head .hint { overflow-wrap: anywhere; }
 .person-head .button.link { display: inline; padding: 0; min-height: 0; }
 /* Task 067d: a key or an address with a copy button. */
-.key-row { display: flex; align-items: center; }
+.key-row { display: flex; align-items: center; min-width: 0; }
 .key-row > .link-row { flex: 1; min-width: 0; width: auto; }
 .key-line { gap: 12px; }
 .key-line .text, .key-row .text { min-width: 0; }

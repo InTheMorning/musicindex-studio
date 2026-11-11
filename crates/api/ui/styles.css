@@ -894,10 +894,13 @@ dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); 
   .stack-page footer { margin-top: auto; display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--sep); }
   /* The bar of a feed has two rows at this width: the back control and the
      title, then the draft status with "Versions" and "Review" (ADR 0039
-     item 10a). */
-  .bar { flex-wrap: wrap; row-gap: 6px; }
-  .bar .draft-toolbar { flex-basis: 100%; }
-  .bar .draft-status { margin-right: auto; }
+     item 10a). At 320 px a long status such as "Saved, not written" and both
+     buttons are wider than the row, so the status wraps and the buttons stay
+     in the window (finding 9 of the rc.21 human test). */
+  .bar { flex-wrap: wrap; row-gap: 6px; padding-inline: 16px; }
+  .bar .draft-toolbar { flex-basis: 100%; min-width: 0; gap: 8px; }
+  .bar .draft-toolbar .button { padding-inline: 14px; }
+  .bar .draft-status { margin-right: auto; min-width: 0; white-space: normal; line-height: 1.2; }
   .hero { grid-template-columns: 1fr; padding: 32px 16px 24px; }
   .section { padding: 8px 16px 24px; }
   .card { padding: 24px 18px; }

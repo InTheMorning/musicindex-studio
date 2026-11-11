@@ -1,6 +1,12 @@
 # Studio V1 Task 106: Narrow Bar Clipping
 
-Status: Ready.
+Status: Complete, with its screenshot visual check on 2026-11-10. The human test on the iPhone is open.
+
+Result: the cause was the status text. `.draft-status` does not wrap, so the draft toolbar could not shrink. At 320 px, "Saved, not written", **Versions** and **Review** went 51 px outside the right edge. On the page of a person, "1 change not saved" with **Discard** and **Save** went 28 px outside the edge.
+
+At 760 px or less, the status wraps to a maximum of two lines. The bar has the page gutter of 16 px, and the buttons have 14 px of side padding. The look of the bar at the desktop width does not change. At 390 px the status stays on one line.
+
+`$overflow()` of `tools/drive-ui.mjs` did not find the defect. It skips an element in an ancestor that scrolls, and `.main` scrolls. The check measured each element that goes outside the window edge. That measurement was empty on each page at 1100, 390 and 320 px, in the dark and the light theme. `$edges()` gave one item, the date field of a track page at 320 px. The build before this change gives the same item, and the screenshot shows the normal inset.
 
 Owner of the rules: none new. The existing layout rules own the bar.
 

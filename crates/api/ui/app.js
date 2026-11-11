@@ -1,5 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
+import { checkCount } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
@@ -2004,7 +2005,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
 }
 
 // The names of the pages that are not the album page or a track.
-const PAGE_NAMES = { lives: 'Live shows', credits: 'Credits', settings: 'Settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
+const PAGE_NAMES = { lives: 'Live shows', credits: 'Credits', check: 'Check', settings: 'Settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
 
 // The keys of a segmented control (musicindex ADR 0051 R-SEG-1 item 7, ADR
 // 0157). The selected segment is the one Tab stop of the row, and the arrow
@@ -2019,16 +2020,111 @@ export function onSegmentKey(event) {
   segments[next].focus();
 }
 
+// The findings of the check of one feed (ADR 0174). The tab shows the count
+// of `check`, and the page of the tab shows its rows. The hook asks for the
+// findings with no read when the draft is loaded and after each save (item
+// 16). The reads run only in `readAgain`. The UI gives each answer of the API
+// as it is, and it keeps no feed rule (ADR 0065).
+export function useFeedCheck(feedId, draft) {
+  const [check, setCheck] = useState(null);
+  const [reading, setReading] = useState(false);
+  const [repairing, setRepairing] = useState(null);
+  const [error, setError] = useState(null);
+  // The message of a refused repair, with the key of its row.
+  const [refused, setRefused] = useState(null);
+  const turn = useRef(0);
+  const running = useRef(false);
+  // A repair puts its own answer here. The draft that the repair gives then
+  // needs no second request.
+  const skip = useRef(false);
+  const active = useRef(feedId);
+  active.current = feedId;
+
+  useEffect(() => {
+    turn.current += 1;
+    running.current = false;
+    skip.current = false;
+    setCheck(null);
+    setReading(false);
+    setRepairing(null);
+    setError(null);
+    setRefused(null);
+  }, [feedId]);
+
+  const load = async () => {
+    const mine = turn.current;
+    try {
+      const answer = await api(`/feeds/${feedId}/check`);
+      if (mine === turn.current && !running.current && active.current === feedId) setCheck(answer);
+    } catch (e) {
+      // The page shows the error of a read. The count stays as it is.
+    }
+  };
+
+  // The draft is saved when its status is "saved". The model then changes
+  // at each save and at each answer of a route, not at each keystroke.
+  const saved = draft.status === 'saved' ? draft.model : null;
+  useEffect(() => {
+    if (!saved) return;
+    if (skip.current) { skip.current = false; return; }
+    load();
+  }, [feedId, saved]);
+
+  const readAgain = async () => {
+    const mine = ++turn.current;
+    running.current = true;
+    setReading(true);
+    setError(null);
+    setRefused(null);
+    try {
+      if (!await draft.flush()) return;
+      const answer = await api(`/feeds/${feedId}/check/reads`, { method: 'POST' });
+      if (mine === turn.current) setCheck(answer);
+    } catch (e) {
+      if (mine === turn.current) setError(e);
+    } finally {
+      if (mine === turn.current) { running.current = false; setReading(false); }
+    }
+  };
+
+  const repair = async (row) => {
+    if (!check || !row.body) return;
+    setRepairing(row.key);
+    setRefused(null);
+    setError(null);
+    try {
+      if (!await draft.flush()) return;
+      const answer = await api(`/feeds/${feedId}/check/repair`, { method: 'POST', body: { ...row.body, revision: check.revision } });
+      skip.current = true;
+      draft.show(answer.draft);
+      setCheck(answer.check);
+    } catch (e) {
+      if (e.code === 'repair_refused') {
+        setRefused({ key: row.key, message: e.message });
+      } else if (e.code === 'stale_revision' || e.code === 'no_such_finding' || e.code === 'read_only') {
+        await load();
+        setRefused({ key: row.key, message: 'The feed changed. Studio checked it again. Select the button again if the finding is still here.' });
+      } else {
+        setError(e);
+      }
+    } finally {
+      setRepairing(null);
+    }
+  };
+
+  return { check, count: checkCount(check), reading, repairing, error, refused, readAgain, repair };
+}
+
 // The tabs of the page of a feed (ADR 0135), or the `tabs` of a different
 // page with `current` and `onSelect`, such as Settings (ADR 0166 item 3). At a
 // narrow width they are one select menu, so that no tab starts outside the
 // window.
-function PageTabs({ feed, view, go, tabs: suppliedTabs, current: selected, onSelect, label = 'Pages of this feed' }) {
+function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, current: selected, onSelect, label = 'Pages of this feed' }) {
   const narrow = useNarrow();
   const settings = suppliedTabs !== undefined;
   const tabs = settings
     ? suppliedTabs.map((tab) => ({ page: tab.id, label: tab.label, current: tab.id === selected, pending: tab.pending }))
-    : pageTabs(feed, view);
+    : pageTabs(feed, view, checkCount);
   if (tabs.length === 0) return null;
   const open = settings
     ? (page) => onSelect(page)
@@ -2092,6 +2188,8 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   // The Artwork sheet that is open: null, `{ kind: 'feed' }` or
   // `{ kind: 'track', key }` (ADR 0070).
   const [artwork, setArtwork] = useState(null);
+  // The findings of the check of this feed (ADR 0174).
+  const check = useFeedCheck(feed.id, draft);
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
@@ -2123,12 +2221,12 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       <${AddressDifferences} feed=${feed} />
       <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} />
     </div>
-    <${PageTabs} feed=${feed} view=${view} go=${go} />
+    <${PageTabs} feed=${feed} view=${view} go=${go} checkCount=${check.count} />
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
       connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
       differences=${differences} onRescan=${onRescan} onListChanged=${onListChanged}
-      artwork=${artwork} onArtwork=${setArtwork} />
+      artwork=${artwork} onArtwork=${setArtwork} check=${check} />
   </div>`;
 }
 

@@ -41,6 +41,7 @@ Most steps are the same in the two. A page tells you when a step is different.
 - [Value routes](value-routes.md)
 - [Nostr keys](nostr-keys.md)
 - [People](people.md)
+- [Check a feed](feed-check.md)
 - [Review and write your changes](review-and-write.md)
 - [Manage the files of a release](release-files.md)
 

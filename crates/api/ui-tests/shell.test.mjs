@@ -391,11 +391,26 @@ test('a playlist has only its head in the outline', () => {
 test('the page of a feed gives the tabs of its type', () => {
   const tabs = (feed, view) => pageTabs(feed, { name: 'feed', id: feed.id, ...view }).map((tab) => tab.label);
   const owner = 'ADR 0135 item 2: check pageTabs in shell.js.';
-  assert.deepEqual(tabs(album), ['Album', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Settings'], owner);
+  assert.deepEqual(tabs(album), ['Album', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Check', 'Settings'], owner);
   const artist = { ...publisher, publisher_roles: ['artist'], roles_confirmed: true };
-  assert.deepEqual(tabs(artist), ['Artist', 'Value Routes', 'Credits', 'Files', 'Settings'], owner);
-  assert.deepEqual(tabs({ ...album, medium: 'musicL' }), ['Playlist', 'Tracks', 'Value Routes', 'Files', 'Settings'], owner);
+  assert.deepEqual(tabs(artist), ['Artist', 'Value Routes', 'Credits', 'Files', 'Check', 'Settings'], owner);
+  assert.deepEqual(tabs({ ...album, medium: 'musicL' }), ['Playlist', 'Tracks', 'Value Routes', 'Files', 'Check', 'Settings'], owner);
   assert.deepEqual(tabs({ ...readOnly, medium: 'podcast' }), [], owner);
+});
+
+test('the tab Check comes before Settings and shows the count of the findings', () => {
+  const owner = 'ADR 0174 item 17: check pageTabs in shell.js.';
+  const labels = (feed, count) => pageTabs(feed, { name: 'feed', id: feed.id }, count).map((tab) => tab.label);
+  const artist = { ...publisher, publisher_roles: ['artist'], roles_confirmed: true };
+  for (const feed of [album, artist, { ...album, medium: 'musicL' }]) {
+    const withCount = labels(feed, 5);
+    assert.equal(withCount[withCount.length - 2], 'Check 5', owner);
+    assert.equal(withCount[withCount.length - 1], 'Settings', owner);
+    assert.equal(labels(feed, 0)[withCount.length - 2], 'Check', owner);
+    assert.equal(labels(feed)[withCount.length - 2], 'Check', owner);
+  }
+  const current = pageTabs(album, { name: 'feed', id: 1, page: 'check' }, 2).filter((tab) => tab.current).map((tab) => tab.page);
+  assert.deepEqual(current, ['check'], owner);
 });
 
 test('a track page has no tabs, and the page of a show keeps the tab Live Shows', () => {

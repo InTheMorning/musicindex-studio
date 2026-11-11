@@ -5,6 +5,7 @@
 // in `crates/api/ui-tests/` examine them.
 import { liveKey, isLiveItem, statusLabel } from './live.js';
 import { coverOf } from './cover.js';
+import { tabLabel } from './feedcheck.js';
 
 // The eight roles of a publisher feed, in the sequence of musicindex ADR
 // 0036 R-ROLE-1 (ADR 0083 item 1).
@@ -207,8 +208,9 @@ function outlineItems(feed, view, model, narrow, feeds) {
 
 // The tabs of the page of a feed (ADR 0135 items 2 to 6). A track page has no
 // tabs. The page of one live show keeps the tab "Live Shows". The labels use
-// title case (musicindex ADR 0023 R-CASE-1).
-export function pageTabs(feed, view) {
+// title case (musicindex ADR 0023 R-CASE-1). The tab Check comes before
+// Settings, and its label has the count of the findings (ADR 0174 item 17).
+export function pageTabs(feed, view, checkCount = 0) {
   if (!isEditable(feed) || view.name !== 'feed') return [];
   const page = view.page || 'album';
   if (page === 'track') return [];
@@ -216,12 +218,13 @@ export function pageTabs(feed, view) {
   const routes = { page: 'recipients', label: 'Value Routes' };
   const credits = { page: 'credits', label: 'Credits' };
   const files = { page: 'files', label: 'Files' };
+  const check = { page: 'check', label: tabLabel(checkCount) };
   const settings = { page: 'settings', label: 'Settings' };
   const list = isPublisher(feed)
-    ? [first, routes, credits, files, settings]
+    ? [first, routes, credits, files, check, settings]
     : isPlaylist(feed)
-      ? [first, { page: 'tracks', label: 'Tracks' }, routes, files, settings]
-      : [first, { page: 'lives', label: 'Live Shows' }, routes, credits, files, settings];
+      ? [first, { page: 'tracks', label: 'Tracks' }, routes, files, check, settings]
+      : [first, { page: 'lives', label: 'Live Shows' }, routes, credits, files, check, settings];
   const shown = page === 'live' ? 'lives' : page;
   return list.map((tab) => ({ ...tab, current: tab.page === shown }));
 }

@@ -4,7 +4,9 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F1.
 
-Status: Started. The operator accepted ADR 0174 on 2026-11-11. Packet 109a is commit `011fea7`. Packet 109b is commit `f49cae7`. The mockup of packet 109c is in `.studio-dev/task-109/out/`: `rows-1280.png`, `none-1280.png`, `rows-390.png` and `none-390.png`. The operator confirmed the tab form of ADR 0174 item 17 on this mockup on 2026-11-11. Packet 109c is not started.
+Status: Complete. The human test is open. The operator accepted ADR 0174 on 2026-11-11.
+
+Packet 109a is commit `011fea7`. Packet 109b is commit `f49cae7`. The operator confirmed the tab form of ADR 0174 item 17 on the mockup in `.studio-dev/task-109/out/` on 2026-11-11. Packet 109c is complete. Its screenshot visual check is in `.studio-dev/task-109/c/out/`, in Light and Dark, at 1280 px and at 390 px.
 
 ## Goal
 

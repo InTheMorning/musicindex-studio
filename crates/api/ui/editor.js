@@ -16,6 +16,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts } from './feedcheck.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, libraryFolderRow } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
@@ -4531,11 +4532,85 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     </section>`}`;
 }
 
+// The page of the tab Check (ADR 0174 items 16 and 19 to 21). The rows come
+// from the core. A repair button asks the repair route, and the answer puts
+// the new draft in the editor. The reads run when the page opens and at
+// "Check Again".
+function CheckPage({ feed, model, check, go }) {
+  const [grants, setGrants] = useState(null);
+  useEffect(() => {
+    check.readAgain();
+    api(`/feeds/${feed.id}/grants`).then(setGrants, () => {});
+  }, [feed.id]);
+  const answer = check.check;
+  const grant = hasShowGrant(grants, model.live_items, Date.now() / 1000);
+  const texts = checkTexts(answer, { grant });
+  const rows = checkRows(answer);
+  const unreadable = unreadableRows(answer);
+  const busy = check.reading || check.repairing !== null;
+  // The button "Select a Language" opens the Settings tab and puts the
+  // focus in the field. The page of Settings needs a moment to appear.
+  const openLanguage = () => {
+    go({ name: 'feed', id: feed.id, page: 'settings' });
+    let tries = 0;
+    const focus = () => {
+      const field = document.getElementById('ch-language');
+      if (field) {
+        field.scrollIntoView({ block: 'center' });
+        field.focus();
+      } else if (tries < 20) {
+        tries += 1;
+        setTimeout(focus, 50);
+      }
+    };
+    setTimeout(focus, 0);
+  };
+  const press = (row) => {
+    if (row.action === 'repair') check.repair(row);
+    else if (row.action === 'open-track') go({ name: 'feed', id: feed.id, page: 'track', track: row.track });
+    else if (row.action === 'open-language') openLanguage();
+  };
+  const again = html`<div class="actions"><button class="button" type="button" disabled=${busy}
+    onClick=${() => check.readAgain()}>${check.reading ? 'Checking…' : 'Check Again'}</button></div>`;
+  return html`<${ErrorNotice} error=${check.error} />
+    ${texts.readOnly && html`<p class="hint">${texts.readOnly}</p>`}
+    ${texts.grant && html`<div class="notice" role="status">${texts.grant}</div>`}
+    ${texts.lead && html`<p class="hint">${texts.lead}</p>`}
+    <section class="page-section"><h2>Findings</h2>
+      ${texts.reading && html`<p class="hint" role="status">${texts.reading}</p>`}
+      ${texts.none && html`<p class="hint">${texts.none}</p>`}
+      ${rows.length > 0 && html`<div class="group host-ops">
+        ${rows.map((row) => html`<div class="host-op-row" key=${row.key}>
+          <span class="kind">${row.level}</span>
+          <span class="text">
+            <span class="title">${row.title}</span>
+            <span class="sub">${row.reason}</span>
+            ${check.refused && check.refused.key === row.key && html`<span class="sub field-error" role="alert">${check.refused.message}</span>`}
+          </span>
+          ${row.button && html`<button class="button" type="button" disabled=${busy}
+            onClick=${() => press(row)}>${check.repairing === row.key ? 'Working…' : row.button}</button>`}
+        </div>`)}
+      </div>`}
+      ${again}
+    </section>
+    ${unreadable.length > 0 && html`<section class="page-section"><h2>Not read</h2>
+      <div class="group host-ops">
+        ${unreadable.map((row) => html`<div class="host-op-row" key=${row.key}>
+          <span class="kind">${row.level}</span>
+          <span class="text">
+            <span class="title mono">${row.title}</span>
+            <span class="sub">${row.reason}</span>
+          </span>
+        </div>`)}
+      </div>
+    </section>`}`;
+}
+
 // The album editor shows one page of the typed model of the draft: the
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged, artwork, onArtwork }) {
+export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged, artwork, onArtwork, check }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -4565,7 +4640,9 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   // When the track key of the view is not in the model, for example after a
   // write that gave each item a new client ID, the editor shows the album
   // page (task 014c, Architecture).
-  if (page === 'settings') {
+  if (page === 'check') {
+    body = html`<${CheckPage} feed=${feed} model=${model} check=${check} go=${go} />`;
+  } else if (page === 'settings') {
     body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist} op3Tracks=${draft.op3Tracks} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}

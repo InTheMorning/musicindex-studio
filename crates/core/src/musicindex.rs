@@ -151,6 +151,26 @@ struct ArtistNameRow {
     name: String,
 }
 
+/// The most pages of copies that one read follows.
+pub const COPIES_PAGE_CAP: usize = 20;
+
+/// One page of the copies of a feed.
+#[derive(Deserialize)]
+struct CopiesPage {
+    data: Vec<IndexCopy>,
+    #[serde(default)]
+    pagination: Option<Pagination>,
+}
+
+/// The cursor of a page.
+#[derive(Deserialize)]
+struct Pagination {
+    #[serde(default)]
+    cursor: Option<String>,
+    #[serde(default)]
+    has_more: bool,
+}
+
 #[derive(Deserialize)]
 struct Envelope<T> {
     data: T,
@@ -667,6 +687,18 @@ impl MusicIndex {
         &self.base
     }
 
+    /// The address of the request for the record of a feed GUID.
+    #[must_use]
+    pub fn feed_address(&self, feed_guid: &str) -> String {
+        format!("{}/v1/feeds/{}", self.base, filter_guid(feed_guid))
+    }
+
+    /// The address of the request for the copies of a feed GUID.
+    #[must_use]
+    pub fn copies_address(&self, feed_guid: &str) -> String {
+        format!("{}/copies", self.feed_address(feed_guid))
+    }
+
     /// The feed address that musicindex knows for a feed GUID. Gives `None`
     /// when musicindex does not know the feed.
     ///
@@ -698,23 +730,44 @@ impl MusicIndex {
         }
     }
 
-    /// The copies of a feed GUID (ADR 0175). The function reads the first
-    /// page. Gives `None` when musicindex does not know the feed.
+    /// The copies of a feed GUID (ADR 0175). The function follows the cursor
+    /// of each page to the last page, or to [`COPIES_PAGE_CAP`] pages.
+    /// Gives `None` when musicindex does not know the feed.
     ///
     /// # Errors
     ///
-    /// Gives a [`WebError`] when the request fails.
+    /// Gives a [`WebError`] when a request fails.
     pub fn feed_copies(&self, feed_guid: &str) -> Result<Option<Vec<IndexCopy>>, WebError> {
         let url = format!("{}/v1/feeds/{}/copies", self.base, filter_guid(feed_guid));
-        match self.web.get(&url, MAX_RESPONSE_BYTES) {
-            Ok(file) => Ok(
-                serde_json::from_slice::<Envelope<Vec<IndexCopy>>>(&file.bytes)
-                    .ok()
-                    .map(|e| e.data),
-            ),
-            Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
-            Err(e) => Err(e),
+        let mut copies = Vec::new();
+        let mut cursor: Option<String> = None;
+        for page in 0..COPIES_PAGE_CAP {
+            let query: Vec<(&str, &str)> = cursor
+                .as_deref()
+                .map(|c| ("cursor", c))
+                .into_iter()
+                .collect();
+            let file = match self.web.get_with_query(&url, &query, MAX_RESPONSE_BYTES) {
+                Ok(file) => file,
+                Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => {
+                    return Ok((page > 0).then_some(copies));
+                }
+                Err(e) => return Err(e),
+            };
+            let Ok(body) = serde_json::from_slice::<CopiesPage>(&file.bytes) else {
+                return Ok((page > 0).then_some(copies));
+            };
+            copies.extend(body.data);
+            cursor = body
+                .pagination
+                .filter(|p| p.has_more)
+                .and_then(|p| p.cursor)
+                .filter(|c| !c.is_empty());
+            if cursor.is_none() {
+                break;
+            }
         }
+        Ok(Some(copies))
     }
 
     /// The title, the payment routes and the tracks of a feed, from the
@@ -1121,6 +1174,49 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn the_copies_follow_the_cursor_to_the_last_page_and_stop_at_the_cap() {
+        const GUID: &str = "917393e3-1b1e-5cef-ace4-edaa54e1f810";
+        let server = TestServer::start(vec![
+            (
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810/copies",
+                200,
+                br#"{"data":[{"url":"https://m.example/1.xml","open":true,"differs_recipients":false}],
+                    "pagination":{"cursor":"next page","has_more":true}}"#.to_vec(),
+            ),
+            (
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810/copies?cursor=next%20page",
+                200,
+                br#"{"data":[{"url":"https://m.example/2.xml","open":true,"differs_recipients":true}],
+                    "pagination":{"cursor":null,"has_more":false}}"#.to_vec(),
+            ),
+            (
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f811/copies",
+                200,
+                br#"{"data":[{"url":"https://m.example/loop.xml"}],
+                    "pagination":{"cursor":"same","has_more":true}}"#.to_vec(),
+            ),
+            (
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f811/copies?cursor=same",
+                200,
+                br#"{"data":[{"url":"https://m.example/loop.xml"}],
+                    "pagination":{"cursor":"same","has_more":true}}"#.to_vec(),
+            ),
+        ]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let copies = index.feed_copies(GUID).unwrap().unwrap();
+        let urls: Vec<&str> = copies.iter().map(|c| c.url.as_str()).collect();
+        assert_eq!(urls, ["https://m.example/1.xml", "https://m.example/2.xml"]);
+        assert!(copies[1].differs_recipients);
+
+        // A cursor that never ends stops at the page cap.
+        let looped = index
+            .feed_copies("917393e3-1b1e-5cef-ace4-edaa54e1f811")
+            .unwrap()
+            .unwrap();
+        assert_eq!(looped.len(), COPIES_PAGE_CAP);
     }
 
     #[test]

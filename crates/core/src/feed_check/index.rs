@@ -56,6 +56,19 @@ pub fn index_line(index: Option<&IndexFacts>, base_build_date: Option<&str>) -> 
     (read < written).then_some(IndexLine::LastWriteNotRead)
 }
 
+/// The report of ADR 0175 item 8. The user gives it to the operator of
+/// Music Index. Studio sends no report. `public_address` is none when the
+/// feed has no public address.
+#[must_use]
+pub fn copy_report(guid: Option<&str>, public_address: Option<&str>, copy_url: &str) -> String {
+    format!(
+        "Feed GUID: {}\nPublic address of the feed: {}\nCopy URL: {copy_url}\n\
+         The copy gives the same feed GUID and has other payment recipients.",
+        guid.unwrap_or("not known"),
+        public_address.unwrap_or("not known"),
+    )
+}
+
 /// The findings `index_address_differs` and `copy_other_recipients`.
 pub(super) fn check_index(facts: &Facts, found: &mut Vec<Finding>) {
     let Some(index) = facts.index.as_ref().filter(|i| i.held) else {

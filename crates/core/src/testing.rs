@@ -35,8 +35,8 @@ struct Response {
 type Routes = Arc<Mutex<HashMap<String, Response>>>;
 
 /// An HTTP server on a loopback port. It answers each `GET` and `HEAD` with
-/// the route for the path, without the query, or with status 404. A route
-/// with a 3xx status is a redirect, and its body is the `Location` address.
+/// the route for the path and the query, else the route for the path alone,
+/// or with status 404. A route with a 3xx status is a redirect, and its body is the `Location` address.
 #[derive(Debug)]
 pub struct TestServer {
     port: u16,
@@ -83,12 +83,14 @@ impl TestServer {
                     header.clear();
                 }
                 let method = line.split_whitespace().next().unwrap_or("GET").to_owned();
-                let path = line.split_whitespace().nth(1).unwrap_or("/");
-                let path = path.split('?').next().unwrap_or(path).to_owned();
+                let target = line.split_whitespace().nth(1).unwrap_or("/").to_owned();
+                let path = target.split('?').next().unwrap_or(&target).to_owned();
+                // A route with a query in its key wins over the route for
+                // the path alone.
                 let route = shared
                     .lock()
                     .ok()
-                    .and_then(|r| r.get(&path).cloned())
+                    .and_then(|r| r.get(&target).or_else(|| r.get(&path)).cloned())
                     .unwrap_or(Response {
                         status: 404,
                         body: b"not found".to_vec(),

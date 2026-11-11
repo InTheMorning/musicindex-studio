@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use studio_core::collection::FeedId;
-use studio_core::feed_check::FindingKind;
+use studio_core::feed_check::{self, FindingKind};
 use studio_core::feed_reads::{self, NetworkFacts};
 use studio_core::pipeline::{self, PipelineError};
 
@@ -48,12 +48,34 @@ fn check_json(w: &Workspace, id: FeedId) -> ApiResult {
             finding.repair = None;
         }
     }
+    let guid = inputs.links.feed.podcast_guid.as_deref();
+    let line = feed_reads::index_line_of(net, guid, inputs.base_build_date.as_deref());
+    // The report of ADR 0175 item 8 is for the user to copy. The core
+    // gives its text.
+    let findings: Vec<serde_json::Value> = result
+        .findings
+        .iter()
+        .map(|finding| {
+            let mut value = serde_json::to_value(finding).unwrap_or_default();
+            if finding.kind == FindingKind::CopyOtherRecipients
+                && let Some(copy) = finding.url.as_deref()
+            {
+                value["report"] = json!(feed_check::copy_report(
+                    guid,
+                    inputs.links.url.as_deref(),
+                    copy
+                ));
+            }
+            value
+        })
+        .collect();
     Ok(Json(json!({
         "revision": inputs.revision,
         "read_only": read_only,
         "read": net.is_some(),
-        "findings": result.findings,
+        "findings": findings,
         "unreadable": result.unreadable,
+        "index_line": line.map(feed_check::IndexLine::text),
     })))
 }
 
@@ -72,21 +94,26 @@ pub(crate) async fn get_check(State(shared): State<Shared>, Path(id): Path<i64>)
 /// findings. The page calls this route when it opens and at **Check
 /// Again** (ADR 0174 item 16).
 pub(crate) async fn run_reads(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
-    let (inputs, feeds, files) = blocking(shared.clone(), move |w| {
+    let (inputs, feeds, files, index) = blocking(shared.clone(), move |w| {
         let id = FeedId(id);
         ensure_draft(w, id)?;
         let hosts = w.hosts()?;
         let inputs = pipeline::check_inputs(&w.collection, &hosts, id)?;
-        Ok((inputs, w.link_reader.clone(), w.file_reader.clone()))
+        Ok((
+            inputs,
+            w.link_reader.clone(),
+            w.file_reader.clone(),
+            w.index.clone(),
+        ))
     })
     .await?;
     let key = inputs.base_key.clone();
     let net = blocking_unlocked(move || {
-        Ok(feed_reads::gather(
-            &inputs.links,
-            feeds.0.as_ref(),
-            files.0.as_ref(),
-        ))
+        let mut net = feed_reads::gather(&inputs.links, feeds.0.as_ref(), files.0.as_ref());
+        // The reads of the index go out with the other reads (ADR 0175
+        // item 1).
+        feed_reads::gather_index(&inputs.links, &index, &mut net);
+        Ok(net)
     })
     .await?;
     blocking(shared, move |w| {

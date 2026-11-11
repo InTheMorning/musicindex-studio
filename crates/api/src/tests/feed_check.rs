@@ -29,11 +29,22 @@ fn feed_xml(extra: &str) -> String {
 /// An app with a connector for the feeds folder, and a feed on it with the
 /// public address `PUBLIC`. Gives the app and the ID of the feed.
 async fn app_with_feed(reader: ScriptedReader, files: ScriptedFileReads) -> (App, i64) {
+    app_with_scripted_index(reader, files, "http://127.0.0.1:9", &feed_xml("")).await
+}
+
+/// The same as `app_with_feed`, with the Music Index API at `index` and the
+/// feed file `xml`.
+async fn app_with_scripted_index(
+    reader: ScriptedReader,
+    files: ScriptedFileReads,
+    index: &str,
+    xml: &str,
+) -> (App, i64) {
     let data = tempfile::tempdir().unwrap();
     let feeds = tempfile::tempdir().unwrap();
     let workspace = Workspace::open(data.path())
         .unwrap()
-        .with_musicindex("http://127.0.0.1:9")
+        .with_musicindex(index)
         .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
         .with_keysend(None)
         .with_address_check(Arc::new(PassAll))
@@ -55,13 +66,7 @@ async fn app_with_feed(reader: ScriptedReader, files: ScriptedFileReads) -> (App
     .await;
     assert_eq!(status, StatusCode::CREATED);
     set_library_root(&app);
-    let id = add_paid_feed(
-        &app,
-        connector["id"].as_i64().unwrap(),
-        "a.xml",
-        &feed_xml(""),
-    )
-    .await;
+    let id = add_paid_feed(&app, connector["id"].as_i64().unwrap(), "a.xml", xml).await;
     (app, id)
 }
 
@@ -118,7 +123,11 @@ async fn the_check_route_gives_the_local_findings_and_the_reads_add_the_network_
     assert_eq!(http["url"], ONE);
     let wrong = finding(&read, "wrong_file_size", Some("t-1"));
     assert_eq!(wrong["repair"], "read_the_size");
-    assert_eq!(read["unreadable"], json!([TWO]));
+    // The index at the dead address also gives a failed read.
+    assert_eq!(
+        read["unreadable"],
+        json!([TWO, "http://127.0.0.1:9/v1/feeds/a"])
+    );
 
     // The facts stay in memory: a route with no read gives the same result.
     let (status, again) = call(&app, "GET", &path, None).await;
@@ -278,4 +287,116 @@ async fn the_reads_run_with_no_lock_of_the_workspace() {
         free.load(std::sync::atomic::Ordering::SeqCst),
         "the read held the lock of the workspace"
     );
+}
+
+const INDEX_GUID: &str = "917393e3-1b1e-5cef-ace4-edaa54e1f810";
+
+fn index_feed_xml() -> String {
+    feed_xml("").replace("<podcast:guid>ga<", &format!("<podcast:guid>{INDEX_GUID}<"))
+}
+
+#[tokio::test]
+async fn the_reads_give_the_two_index_findings_the_report_and_the_line_from_a_scripted_index() {
+    let server = studio_core::testing::TestServer::start(vec![
+        (
+            "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810",
+            200,
+            br#"{"data":{"feed_url":"https://old.example/a.xml","title":"A","last_build_date":1}}"#
+                .to_vec(),
+        ),
+        (
+            "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810/copies",
+            200,
+            br#"{"data":[
+                {"url":"https://mirror.example/a.xml","open":true,"differs_recipients":true},
+                {"url":"https://same.example/a.xml","open":true,"differs_recipients":false}
+            ],"pagination":{"cursor":null,"has_more":false}}"#
+                .to_vec(),
+        ),
+    ]);
+    let (app, id) = app_with_scripted_index(
+        ScriptedReader::empty(),
+        same_file_files(),
+        &server.url(""),
+        &index_feed_xml(),
+    )
+    .await;
+    let path = format!("/api/v1/feeds/{id}/check");
+
+    // No read yet: no index finding and no line.
+    let (_, before) = call(&app, "GET", &path, None).await;
+    assert!(!kinds(&before).contains(&"index_address_differs".to_owned()));
+    assert_eq!(before["index_line"], Value::Null);
+
+    let (status, read) = call(&app, "POST", &format!("{path}/reads"), None).await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    let differs = finding(&read, "index_address_differs", None);
+    assert_eq!(differs["url"], "https://old.example/a.xml");
+    assert_eq!(differs["level"], "notice");
+    let copy = finding(&read, "copy_other_recipients", None);
+    assert_eq!(copy["level"], "warning");
+    assert_eq!(copy["url"], "https://mirror.example/a.xml");
+    let report = copy["report"].as_str().unwrap();
+    assert!(report.contains(INDEX_GUID) && report.contains(PUBLIC));
+    assert!(report.contains("https://mirror.example/a.xml"));
+    assert_eq!(
+        kinds(&read)
+            .iter()
+            .filter(|k| *k == "copy_other_recipients")
+            .count(),
+        1
+    );
+    assert!(finding(&read, "no_self_link", None).get("report").is_none());
+    assert_eq!(read["index_line"], Value::Null);
+    assert_eq!(read["unreadable"], json!([TWO]));
+
+    // The facts stay in memory.
+    let (_, again) = call(&app, "GET", &path, None).await;
+    assert_eq!(again["findings"], read["findings"]);
+}
+
+#[tokio::test]
+async fn an_unknown_feed_gives_the_line_and_a_failed_index_read_gives_the_address() {
+    // A 404: the index does not hold the feed.
+    let server = studio_core::testing::TestServer::start(Vec::new());
+    let (app, id) = app_with_scripted_index(
+        ScriptedReader::empty(),
+        same_file_files(),
+        &server.url(""),
+        &index_feed_xml(),
+    )
+    .await;
+    let path = format!("/api/v1/feeds/{id}/check/reads");
+    let (status, read) = call(&app, "POST", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert_eq!(
+        read["index_line"],
+        "Music Index does not hold this feed yet."
+    );
+    assert!(!kinds(&read).contains(&"index_address_differs".to_owned()));
+
+    // A refused connection: a failed read with the request address.
+    let (app, id) = app_with_scripted_index(
+        ScriptedReader::empty(),
+        same_file_files(),
+        "http://127.0.0.1:9",
+        &index_feed_xml(),
+    )
+    .await;
+    let (status, read) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/check/reads"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    let address = format!("http://127.0.0.1:9/v1/feeds/{INDEX_GUID}");
+    assert!(
+        read["unreadable"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(address))
+    );
+    assert_eq!(read["index_line"], Value::Null);
 }

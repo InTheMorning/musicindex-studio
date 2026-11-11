@@ -10,7 +10,7 @@ use crate::feed::Feed;
 
 mod index;
 
-pub use index::{IndexFacts, IndexLine, index_line};
+pub use index::{IndexFacts, IndexLine, copy_report, index_line};
 
 /// The kind of a finding. Each kind is one row of the table in ADR 0174
 /// item 7.

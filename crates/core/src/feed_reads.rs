@@ -12,8 +12,9 @@ use serde::Serialize;
 
 use crate::discover::ReadFailure;
 use crate::feed::Feed;
-use crate::feed_check::{self, Facts, Finding};
+use crate::feed_check::{self, Facts, Finding, IndexFacts, IndexLine, index_line};
 use crate::move_link::{FeedBody, FeedReader, HopResult, OwnedDraftLinks, tag_chain};
+use crate::musicindex::{IndexCopy, IndexFeed, MusicIndex};
 use crate::net::NetPolicy;
 use crate::web::Web;
 
@@ -97,6 +98,37 @@ impl FileReads for WebFileReads {
     }
 }
 
+/// The reads of the index that the check sends (ADR 0175 item 1). Each
+/// error is the address of the request that failed.
+pub trait IndexReads: Send + Sync {
+    /// The record of the feed with `guid`. Gives none when the index does
+    /// not hold the feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives the address of the request when the read fails.
+    fn feed(&self, guid: &str) -> Result<Option<IndexFeed>, String>;
+
+    /// Each copy of the feed with `guid`. Gives none when the index does
+    /// not hold the feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives the address of the request when the read fails.
+    fn copies(&self, guid: &str) -> Result<Option<Vec<IndexCopy>>, String>;
+}
+
+impl IndexReads for MusicIndex {
+    fn feed(&self, guid: &str) -> Result<Option<IndexFeed>, String> {
+        MusicIndex::feed(self, guid).map_err(|_| self.feed_address(guid))
+    }
+
+    fn copies(&self, guid: &str) -> Result<Option<Vec<IndexCopy>>, String> {
+        self.feed_copies(guid)
+            .map_err(|_| self.copies_address(guid))
+    }
+}
+
 /// The network facts of a feed (ADR 0174 item 4).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NetworkFacts {
@@ -110,6 +142,9 @@ pub struct NetworkFacts {
     pub move_chain: Option<Vec<String>>,
     /// The addresses that Studio could not read (ADR 0174 item 16).
     pub unreadable: Vec<String>,
+    /// What the index held for the feed, with the `podcast:guid` that the
+    /// read used (ADR 0175 item 2). None when no read ran or a read failed.
+    pub index: Option<(String, IndexFacts)>,
 }
 
 /// The `https` address of an `http` address, or none.
@@ -142,8 +177,65 @@ pub fn facts_for(links: &OwnedDraftLinks, net: Option<&NetworkFacts>) -> Facts {
         move_chain: net
             .and_then(|n| n.move_chain.clone())
             .filter(|chain| chain.first().map(String::as_str) == tag),
-        index: None,
+        index: index_of(net, links.feed.podcast_guid.as_deref()).cloned(),
     }
+}
+
+/// The index facts of `net` when they belong to `guid`.
+fn index_of<'a>(net: Option<&'a NetworkFacts>, guid: Option<&str>) -> Option<&'a IndexFacts> {
+    let (read_guid, facts) = net?.index.as_ref()?;
+    (Some(read_guid.as_str()) == guid).then_some(facts)
+}
+
+/// The line under the rows (ADR 0175 item 10). `base_build_date` is the
+/// `lastBuildDate` text of the feed that Studio last wrote.
+#[must_use]
+pub fn index_line_of(
+    net: Option<&NetworkFacts>,
+    guid: Option<&str>,
+    base_build_date: Option<&str>,
+) -> Option<IndexLine> {
+    index_line(index_of(net, guid), base_build_date)
+}
+
+/// Read what the index holds for the feed in `links` and add it to `net`
+/// (ADR 0175 items 1 and 2). A feed with no `podcast:guid` sends no
+/// request. A 404 on the feed gives facts with `held` false. A failed read
+/// gives its address in [`NetworkFacts::unreadable`]. When only the read of
+/// the copies fails, the facts keep the record of the feed and no copies.
+pub fn gather_index(links: &OwnedDraftLinks, reads: &dyn IndexReads, net: &mut NetworkFacts) {
+    net.index = None;
+    let Some(guid) = links.feed.podcast_guid.as_deref().filter(|g| !g.is_empty()) else {
+        return;
+    };
+    let record = match reads.feed(guid) {
+        Ok(record) => record,
+        Err(address) => {
+            net.unreadable.push(address);
+            return;
+        }
+    };
+    let facts = match record {
+        None => IndexFacts::default(),
+        Some(record) => {
+            let copies = match reads.copies(guid) {
+                Ok(copies) => copies.unwrap_or_default(),
+                Err(address) => {
+                    net.unreadable.push(address);
+                    Vec::new()
+                }
+            };
+            IndexFacts {
+                held: true,
+                feed_url: record.url,
+                last_build_date: record.last_build_date,
+                copies,
+            }
+        }
+    };
+    net.index = Some((guid.to_owned(), facts));
+    net.unreadable.sort();
+    net.unreadable.dedup();
 }
 
 /// The result of the check: the findings, and the addresses that Studio
@@ -507,6 +599,77 @@ impl FileReads for ScriptedFileReads {
     }
 }
 
+/// An [`IndexReads`] for a test. It serves the record and the copies that
+/// the test gives and records each read. A feed with no script gives a
+/// failed read.
+#[cfg(any(test, feature = "testing"))]
+#[derive(Debug, Default)]
+pub struct ScriptedIndexReads {
+    feed: Option<Result<Option<IndexFeed>, String>>,
+    copies: Option<Result<Option<Vec<IndexCopy>>, String>>,
+    reads: Mutex<Vec<String>>,
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl ScriptedIndexReads {
+    /// A reader with no script. Each read fails.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// Serve `record` for the feed. A failure carries the request address.
+    #[must_use]
+    pub fn with_feed(mut self, record: Result<Option<IndexFeed>, String>) -> Self {
+        self.feed = Some(record);
+        self
+    }
+
+    /// Serve `copies` for the feed. A failure carries the request address.
+    #[must_use]
+    pub fn with_copies(mut self, copies: Result<Option<Vec<IndexCopy>>, String>) -> Self {
+        self.copies = Some(copies);
+        self
+    }
+
+    /// The reads so far, in order.
+    ///
+    /// # Panics
+    ///
+    /// Panics when another thread poisoned the lock of the reads.
+    #[must_use]
+    pub fn reads(&self) -> Vec<String> {
+        self.reads
+            .lock()
+            .expect("the reads are not poisoned")
+            .clone()
+    }
+
+    fn record(&self, what: &str, guid: &str) {
+        self.reads
+            .lock()
+            .expect("the reads are not poisoned")
+            .push(format!("{what} {guid}"));
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl IndexReads for ScriptedIndexReads {
+    fn feed(&self, guid: &str) -> Result<Option<IndexFeed>, String> {
+        self.record("feed", guid);
+        self.feed
+            .clone()
+            .unwrap_or_else(|| Err("the test index has no feed script".to_owned()))
+    }
+
+    fn copies(&self, guid: &str) -> Result<Option<Vec<IndexCopy>>, String> {
+        self.record("copies", guid);
+        self.copies
+            .clone()
+            .unwrap_or_else(|| Err("the test index has no copies script".to_owned()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -683,5 +846,91 @@ mod tests {
             .with_file(https, 9, b"x");
         let net = gather(&links(feed), &ScriptedReader::empty(), &files);
         assert!(net.same_https.contains(http));
+    }
+
+    fn index_record(url: &str) -> IndexFeed {
+        IndexFeed {
+            url: Some(url.to_owned()),
+            title: None,
+            last_build_date: None,
+        }
+    }
+
+    #[test]
+    fn a_feed_with_no_guid_sends_no_request_to_the_index() {
+        let reads = ScriptedIndexReads::empty();
+        let mut net = NetworkFacts::default();
+        gather_index(&links(Feed::default()), &reads, &mut net);
+        assert_eq!(reads.reads(), Vec::<String>::new());
+        assert_eq!(net.index, None);
+        assert_eq!(net.unreadable, Vec::<String>::new());
+        assert!(
+            check_with(&links(Feed::default()), Some(&net))
+                .findings
+                .iter()
+                .all(|f| !matches!(
+                    f.kind,
+                    feed_check::FindingKind::IndexAddressDiffers
+                        | feed_check::FindingKind::CopyOtherRecipients
+                ))
+        );
+    }
+
+    #[test]
+    fn the_index_reads_give_the_two_index_findings_and_a_404_gives_held_false() {
+        let copies = vec![IndexCopy {
+            url: "https://mirror.example/feed.xml".to_owned(),
+            open: true,
+            differs_recipients: true,
+        }];
+        let reads = ScriptedIndexReads::empty()
+            .with_feed(Ok(Some(index_record("https://old.example/feed.xml"))))
+            .with_copies(Ok(Some(copies)));
+        let mut net = NetworkFacts::default();
+        let feed = feed_with_track("https://files.example/a.mp3", None);
+        gather_index(&links(feed.clone()), &reads, &mut net);
+        assert_eq!(reads.reads().len(), 2);
+        let kinds: Vec<_> = check_with(&links(feed.clone()), Some(&net))
+            .findings
+            .iter()
+            .map(|f| f.kind)
+            .collect();
+        assert!(kinds.contains(&feed_check::FindingKind::IndexAddressDiffers));
+        assert!(kinds.contains(&feed_check::FindingKind::CopyOtherRecipients));
+
+        let reads = ScriptedIndexReads::empty().with_feed(Ok(None));
+        gather_index(&links(feed.clone()), &reads, &mut net);
+        assert_eq!(reads.reads().len(), 1);
+        let (_, facts) = net.index.clone().unwrap();
+        assert!(!facts.held);
+        assert_eq!(
+            index_line_of(Some(&net), Some(GUID), None),
+            Some(IndexLine::NotHeld)
+        );
+        // Facts that another GUID read do not apply.
+        assert_eq!(index_line_of(Some(&net), Some("other"), None), None);
+    }
+
+    #[test]
+    fn a_failed_index_read_gives_the_request_address_and_no_facts() {
+        let feed = feed_with_track("https://files.example/a.mp3", None);
+        let mut net = NetworkFacts::default();
+        let reads = ScriptedIndexReads::empty()
+            .with_feed(Err("https://index.example/v1/feeds/a".to_owned()));
+        gather_index(&links(feed.clone()), &reads, &mut net);
+        assert_eq!(net.unreadable, ["https://index.example/v1/feeds/a"]);
+        assert_eq!(net.index, None);
+
+        // A failed read of the copies keeps the record of the feed.
+        let mut net = NetworkFacts::default();
+        let reads = ScriptedIndexReads::empty()
+            .with_feed(Ok(Some(index_record(URL))))
+            .with_copies(Err("https://index.example/v1/feeds/a/copies".to_owned()));
+        gather_index(&links(feed), &reads, &mut net);
+        assert_eq!(net.unreadable, ["https://index.example/v1/feeds/a/copies"]);
+        assert!(
+            net.index
+                .is_some_and(|(_, f)| f.held && f.copies.is_empty())
+        );
     }
 }

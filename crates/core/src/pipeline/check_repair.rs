@@ -26,6 +26,9 @@ pub struct CheckInputs {
     /// A key for the base file of the draft. The last network facts hold
     /// while the key stays the same (ADR 0174 item 18).
     pub base_key: String,
+    /// The `lastBuildDate` text of the base file, that is, of the feed that
+    /// Studio last wrote (ADR 0175 item 10).
+    pub base_build_date: Option<String>,
 }
 
 /// The inputs of the check for the draft of a feed. The function makes no
@@ -45,6 +48,10 @@ pub fn check_inputs(
         links: super::link_inputs_for(collection, hosts, id)?,
         revision: revision(&draft),
         base_key: sha256_hex(&[&draft.base_xml]),
+        base_build_date: Document::parse_bytes(&draft.base_xml)
+            .ok()
+            .and_then(|doc| Feed::read(&doc).ok())
+            .and_then(|base| base.last_build_date),
     })
 }
 

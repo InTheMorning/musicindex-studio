@@ -4,7 +4,9 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 
-Status: In progress. ADR 0175 is Proposed. Packet 110a is complete. Packet 110b can start. Packet 110c stops at its mockup until the operator confirms it.
+Status: Started. ADR 0175 is Proposed. Packet 110a is complete. Packet 110b is complete without the repair **Point the Old Address Here**. Packet 110c stops at its mockup until the operator confirms it.
+
+Open decision for the operator: the draft holds one feed file and a move. It cannot hold a pointer file at a different address on a different host. The repair of ADR 0175 item 5 needs a new draft element and a new write step. Until the operator decides, each `index_address_differs` finding has no repair.
 
 ## Goal
 

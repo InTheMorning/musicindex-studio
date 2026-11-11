@@ -78,6 +78,14 @@ test('the model keeps its current row when focus leaves the list', () => {
   assert.equal(press(afterTab.model, 'ArrowDown').model.current, 3);
 });
 
+test('grid keys move by tile within a row and by column between rows', () => {
+  const model = createListModel(rows, 0, { mode: 'grid', columns: 2 });
+  assert.equal(press(model, 'ArrowRight').model.current, 1);
+  assert.equal(press(model, 'ArrowDown').model.current, 2);
+  assert.equal(press(createListModel(rows, 3, { mode: 'grid', columns: 2 }), 'ArrowUp').model.current, 1);
+  assert.equal(press(createListModel(rows, 0, { mode: 'grid', columns: 2 }), 'ArrowLeft').model.current, 0);
+});
+
 test('an empty list has no current row and no key action', () => {
   const model = createListModel([]);
   assert.equal(model.current, null);

@@ -3,7 +3,7 @@
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
-import { PickerLayout, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
+import { PickerLayout, FindOneSheet, PickFold, RowList, TakenTag, useFieldList } from './pickers.js';
 import { api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
@@ -99,11 +99,13 @@ function KeyRowView({ npub, profiles, name, action, note }) {
 // One row of a list: a button with the lines of its model. A line is text, or
 // `{ text, error }`. An error line shows in the error color, with the warning
 // icon.
-function ListRow({ id, title, lines, count, lead, onClick, disabled = false, chevron = true, selected = false }) {
+function ListRow({ id, title, lines, count, lead, onClick, disabled = false, chevron = true, selected = false, roving = false }) {
   const line = (l, i) => (typeof l === 'string'
     ? html`<span class="summary" key=${i}>${l}</span>`
     : html`<span class=${l.error ? 'summary check-error' : 'summary'} key=${i}>${l.error && html`<${Icon} name="alert" />`}${l.text}</span>`);
-  return html`<button id=${id} class="link-row" type="button" disabled=${disabled} aria-current=${selected ? 'true' : undefined} onClick=${onClick}>${lead}
+  return html`<button id=${id} class="link-row" type="button" disabled=${disabled && !roving}
+    aria-disabled=${roving && disabled ? 'true' : undefined} aria-current=${selected ? 'true' : undefined}
+    onClick=${disabled ? undefined : onClick}>${lead}
     <span class="text"><span class="label">${title}</span>${lines.map(line)}</span>
     ${count && html`<span class="count">${count}</span>`}${chevron && html`<span class="go">›</span>`}</button>`;
 }
@@ -154,16 +156,16 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
       ${people.length > 0 && html`<div class="releases-tools people-order">
         <${SortMenu} sorts=${order.sorts} sort=${order.sort} reversed=${order.reversed} onSort=${(id, reversed) => onOrder({ sort: id, reversed })} />
       </div>`}</div>`,
-    changes: () => html`<section class="page-section"><h2>Changes to write</h2><div class="group">${data.changes.map((set) => {
+    changes: () => html`<section class="page-section"><h2>Changes to write</h2><${RowList}>${data.changes.map((set) => {
       const row = changeRow(set, data.people, payeesWithNoPerson(data.recipients));
-      return html`<${ListRow} key=${set.id} title=${row.title} lines=${[row.text]} onClick=${() => go(changeSetView(set))} />`;
-    })}</div></section>`,
+      return html`<${ListRow} key=${set.id} title=${row.title} lines=${[row.text]} roving=${true} onClick=${() => go(changeSetView(set))} />`;
+    })}<//></section>`,
     // Each list folds (ADR 0146 item 10). A search opens the lists that it filters.
     suggestions: () => html`<${PickFold} id="people-suggestions" title="Suggestions from your feeds"
       note="Studio found these names in your feeds. Check each one, then make a person."
       rows=${data.suggestions.map((suggestion) => {
         const row = suggestionRow(suggestion);
-        return html`<${ListRow} key=${suggestion.identity} title=${row.title} lines=${row.lines} count="Check"
+        return html`<${ListRow} key=${suggestion.identity} title=${row.title} lines=${row.lines} count="Check" roving=${true}
           lead=${html`<${PersonArt} person=${{ name: suggestion.name, img: (suggestion.credits.find((c) => c.img) || {}).img || '' }} />`}
           onClick=${() => setMaking(suggestion)} />`;
       })} />`,
@@ -171,25 +173,26 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
       ? html`<${PickFold} id="people-people" title="People" startOpen=${true} forceOpen=${query.trim() !== ''}
         lead=${order.letters && html`<${LetterBar} letters=${order.letters} idOf=${(id) => `person-${id}`} />`} rows=${people.map((person) => {
         const row = personRow(person, titles);
-        return html`<${ListRow} key=${person.id} id=${`person-${person.id}`} title=${row.title} lines=${row.lines} count=${row.count}
+        return html`<${ListRow} key=${person.id} id=${`person-${person.id}`} title=${row.title} lines=${row.lines} count=${row.count} roving=${true}
           lead=${html`<${PersonArt} person=${person} />`} onClick=${() => go({ name: 'person', id: person.id })} />`;
       })} />`
       : html`<section class="page-section"><h2>People</h2>
         ${data.people.length === 0 && html`<p class="empty">${PEOPLE_EMPTY}</p>`}
         ${data.people.length > 0 && html`<p class="empty">No person matches the search.</p>`}</section>`),
     // "Show Again" removes the dismissal, and the suggestion comes back (ADR 0158 item 3).
-    hidden: () => html`<${PickFold} id="people-hidden" title="Hidden suggestions" startOpen=${false} rows=${data.hidden.map((suggestion) => {
+    hidden: () => html`<${PickFold} id="people-hidden" title="Hidden suggestions" startOpen=${false}
+      selector=":scope > .link-row.static > button.button" rows=${data.hidden.map((suggestion) => {
       const row = suggestionRow(suggestion);
       return html`<div class="link-row static" key=${suggestion.identity}>
         <span class="text"><span class="label">${row.title}</span>${row.lines.map((l, i) => html`<span class="summary" key=${i}>${l}</span>`)}</span>
-        <button class="button" type="button" disabled=${busy} onClick=${() => run(async () => {
+        <button class="button" type="button" aria-disabled=${busy ? 'true' : undefined} onClick=${busy ? undefined : () => run(async () => {
           await api('/people/suggestions/show', { method: 'POST', body: { identity: suggestion.identity } });
           await load();
         })}>Show Again</button></div>`;
     })} />`,
     payees: () => html`<${PickFold} id="people-payees" title="Payees with no person" forceOpen=${query.trim() !== ''} rows=${payees.map((recipient) => {
       const row = recipientRow(recipient);
-      return html`<${ListRow} key=${JSON.stringify(recipientKey(recipient))} title=${row.title} lines=${row.lines} count=${row.count}
+      return html`<${ListRow} key=${JSON.stringify(recipientKey(recipient))} title=${row.title} lines=${row.lines} count=${row.count} roving=${true}
         onClick=${() => go({ name: 'wallet', recipient })} />`;
     })} />`,
   };
@@ -889,7 +892,7 @@ export function PersonPage({ id, feeds, go }) {
         ${feedOf(entry.id) && html`<div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'feed', id: entry.id })}>${openLabel(feedOf(entry.id))}</button></div>`}
       </details>`;
       })}</div></section>`,
-    check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count}
+    check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count} roving=${true}
       onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
     more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>
       <p class="hint">${MORE_HINT}</p>

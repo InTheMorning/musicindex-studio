@@ -7,6 +7,33 @@ import { api, ErrorNotice, Field, Icon } from './app.js';
 import { LookupRow, PersonArt, useLookup } from './peoplepages.js';
 import { foldStartsOpen, lookupGroups, FIND_ONE_EMPTY, FIND_WAIT, FIND_ONE_HINT, showFindEmpty } from './people.js';
 import { listRows, namePrefix, applyRow, listKey, NAME_PAUSE } from './fieldlist.js';
+import { onPageListKey } from './listkeys.js';
+
+// A list of rows that open a page or select a value, with one Tab stop
+// (ADR 0172 item 2). A row is a `button.link-row`, or the button of a
+// `PickFillRow`. `mode` 'grid' gives the keys of the tiles view (item 3).
+const ROWS = ':scope > button.link-row, :scope > .link-row.static > button.link-row';
+export function RowList({ children, className = 'group', selector = ROWS, mode = 'list', as = 'div' }) {
+  const [current, setCurrent] = useState(0);
+  const ref = useRef(null);
+  const sync = (node) => {
+    ref.current = node;
+    if (!node) return;
+    const rows = Array.from(node.querySelectorAll(selector));
+    const next = rows.length ? Math.min(current, rows.length - 1) : 0;
+    if (next !== current) setCurrent((value) => value === next ? value : next);
+    rows.forEach((row, index) => { row.tabIndex = index === next ? 0 : -1; });
+  };
+  useEffect(() => { sync(ref.current); });
+  const focus = (event) => {
+    const rows = Array.from(event.currentTarget.querySelectorAll(selector));
+    const index = rows.indexOf(event.target);
+    if (index >= 0) setCurrent((value) => value === index ? value : index);
+  };
+  const Tag = as;
+  return html`<${Tag} class=${className} ref=${sync} onfocusin=${focus}
+    onKeyDown=${(event) => onPageListKey(event, current, setCurrent, selector, mode)}>${children}<//>`;
+}
 
 // The field list of a search field (ADR 0154, musicindex ADR 0052 R-QUERY-7).
 // `id` is the ID of the input, `value` its text and `setValue` sets the text.
@@ -175,14 +202,14 @@ const foldStates = new Map();
 
 // A list that folds, with its count. A long list starts closed, unless `startOpen`
 // says different. With `forceOpen`, it stays open, for a search of its rows.
-export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOpen(rows.length), forceOpen = false, onClick }) {
+export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOpen(rows.length), forceOpen = false, onClick, selector = ROWS }) {
   const open = forceOpen || (foldStates.has(id) ? foldStates.get(id) : startOpen);
   const remember = (e) => { if (id && !forceOpen) foldStates.set(id, e.currentTarget.open); };
   return html`<details class="disclosure pick-fold" open=${open} onClick=${onClick} onToggle=${remember}>
     <summary><span class="pick-fold-title">${title}</span><span class="pick-fold-count">${rows.length}</span></summary>
     ${note && html`<p class="note">${note}</p>`}
     ${lead}
-    <div class="group">${rows}</div>
+    <${RowList} selector=${selector}>${rows}<//>
   </details>`;
 }
 
@@ -216,7 +243,7 @@ export function TakenTag({ text = 'Already in this list' }) {
 // row that the list has already keeps its content and has a tag.
 export function PickFillRow({ title, line, lead, after, taken, selected, onSelect }) {
   return html`<div class=${taken ? 'link-row static pick-fill pick-taken' : 'link-row static pick-fill'}>
-    <button class="link-row" type="button" disabled=${taken} aria-current=${selected ? 'true' : undefined} onClick=${onSelect}>
+    <button class="link-row" type="button" aria-disabled=${taken ? 'true' : undefined} aria-current=${selected ? 'true' : undefined} onClick=${taken ? undefined : onSelect}>
       ${lead}<span class="text"><span class="pick-name"><span class="label">${title}</span>${taken && html`<${TakenTag} />`}</span>
         <span class="summary">${line}</span></span>
     </button>${after}</div>`;
@@ -235,16 +262,16 @@ export function SearchResults({ query, search, listOpen, disabled, onPick }) {
     ${feeds.length === 0 && !note && showFindEmpty({ ...search, query, listOpen }) && html`<p class="empty">${FIND_ONE_EMPTY}</p>`}
     ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
       <h2>${group.heading}</h2><p class="hint">${group.note}</p>
-      <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row, false)} />`)}</div>
+      <${RowList}>${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row, false)} />`)}<//>
     </section>`)}
     ${feeds.length > 0 && html`<section class="page-section"><h2>Feeds</h2>
-      <div class="group">${feeds.map((h) => html`<button class="link-row" type="button" key=${h.feed_guid} disabled=${disabled}
-        onClick=${() => onPick(h, true)}>
+      <${RowList}>${feeds.map((h) => html`<button class="link-row" type="button" key=${h.feed_guid} aria-disabled=${disabled ? 'true' : undefined}
+        onClick=${disabled ? undefined : () => onPick(h, true)}>
         <${PersonArt} person=${{ img: h.image_url, name: h.title || '' }} />
         <span class="text"><span class="label">${h.title || h.feed_guid}</span>
           <span class="summary"><span class="dot feed" aria-hidden="true"></span>${h.artist ? `Feed · ${h.artist}` : 'Feed'}</span></span>
         <span class="go" aria-hidden="true">›</span>
-      </button>`)}</div></section>`}`;
+      </button>`) }<//></section>`}`;
 }
 
 // The sheet "Find on musicindex": one selection fills the form (ADR 0145 item 3).

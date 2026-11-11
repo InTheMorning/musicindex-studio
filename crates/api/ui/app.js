@@ -1,7 +1,7 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { pageSequence } from './pages.js';
-import { useFieldList } from './pickers.js';
+import { useFieldList, RowList } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
@@ -2729,11 +2729,11 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
     ${groups.map((group) => html`<section key=${group.id} class="page-section"><h2>${group.label}</h2>
       ${group.connect && html`<p class="hint">Studio puts the files of a release on a file host. Connect a file host first.</p>
         <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a File Host</button></div>`}
-      ${group.rows.length > 0 && html`<div class="group">
+      ${group.rows.length > 0 && html`<${RowList}>
         ${group.rows.map((row) => html`<button key=${row.id} class="link-row" type="button" onClick=${() => setOpen(row.id)}>
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
         </button>`)}
-      </div>`}
+      <//>`}
     </section>`)}
     <${AddFeedSheet} open=${open} title=${title} connectors=${connectors} feeds=${feeds} found=${found} setFound=${setFound}
       onAdded=${onAdded} onClose=${close} />
@@ -3240,7 +3240,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
       <${ErrorNotice} error=${addAction.error} />
       ${releases.letters && html`<${LetterBar} letters=${releases.letters} idOf=${(id) => `release-${id}`} />`}
       ${hasRows
-        ? html`<ul class=${`releases-list ${releases.view}`}>
+        ? html`<${RowList} as="ul" className=${`releases-list ${releases.view}`} mode=${releases.view === 'tiles' ? 'grid' : 'list'} selector=":scope > li > button">
             ${releases.rows.map((row) => html`<li id=${`release-${row.id}`} data-marked=${row.marked ? 'true' : 'false'}>
               <button class=${releases.view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" onClick=${() => onOpen(row.id)}>
                 <${ArtWithDot} dot=${row.dot}><${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always /><//>
@@ -3253,7 +3253,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
                 </span>
               </button>
             </li>`)}
-          </ul>`
+          <//>`
         : inGroup
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">

@@ -3,7 +3,7 @@
 
 // Each row has a kind: 'page', 'expandable' or 'tree'. A row can name its
 // parent by row index and can set `expanded`, `expandable` and `visible`.
-export function createListModel(rows, current = 0) {
+export function createListModel(rows, current = 0, options = {}) {
   const items = (rows || []).map((row) => ({
     kind: row.kind,
     parent: Number.isInteger(row.parent) ? row.parent : null,
@@ -12,7 +12,7 @@ export function createListModel(rows, current = 0) {
     visible: row.visible !== false,
   }));
   const selected = items.length === 0 ? null : Math.max(0, Math.min(current, items.length - 1));
-  return { rows: items, current: selected };
+  return { rows: items, current: selected, mode: options.mode || 'list', columns: Math.max(1, options.columns || 1) };
 }
 
 // Apply one key. The returned action is 'none', 'page' or 'toggle'.
@@ -45,27 +45,58 @@ export function listKey(model, key) {
 
   switch (key) {
     case 'ArrowDown':
+      if (model.mode === 'grid') return move(Math.min(rows.length - 1, current + model.columns));
       return move(nextVisible(current + 1, 1));
     case 'ArrowUp':
+      if (model.mode === 'grid') return move(Math.max(0, current - model.columns));
       return move(nextVisible(current - 1, -1));
+    case 'ArrowRight':
+      if (model.mode === 'grid') return move(Math.min(rows.length - 1, current + 1));
+      return row.expandable && !row.expanded ? toggle(true) : unchanged;
+    case 'ArrowLeft':
+      if (model.mode === 'grid') return move(Math.max(0, current - 1));
+      if (row.expandable && row.expanded) return toggle(false);
+      if (row.parent !== null) return move(row.parent);
+      return unchanged;
     case 'Home':
       return move(firstVisible() < 0 ? current : firstVisible());
     case 'End':
       return move(lastVisible() < 0 ? current : lastVisible());
-    case 'ArrowRight':
-      return row.expandable && !row.expanded
-        ? toggle(true)
-        : unchanged;
-    case 'ArrowLeft':
-      if (row.expandable && row.expanded) return toggle(false);
-      if (row.parent !== null) return move(row.parent);
-      return unchanged;
     case 'Enter':
       if (row.expandable) return toggle(!row.expanded);
       return { model, action: { type: 'page', row: current } };
     default:
       return unchanged;
   }
+}
+
+// Handle keys for a list of page or value buttons. The current row remains
+// selected when focus leaves the list.
+export function onPageListKey(event, current, setCurrent, selector = ':scope > button.link-row', mode = 'list') {
+  const list = event.currentTarget;
+  const elements = Array.from(list.querySelectorAll(selector));
+  const indexByElement = new Map(elements.map((element, index) => [element, index]));
+  const active = indexByElement.get(document.activeElement);
+  if (active === undefined || event.target !== document.activeElement) return;
+  let columns = 1;
+  if (mode === 'grid' && elements.length > 1) {
+    const firstTop = elements[0].getBoundingClientRect().top;
+    columns = elements.findIndex((element) => element.getBoundingClientRect().top > firstTop);
+    if (columns < 1) columns = elements.length;
+  }
+  const result = listKey(createListModel(elements.map(() => ({ kind: 'page' })), active, { mode, columns }), event.key);
+  const next = result.model.current;
+  if (next === active) {
+    if (result.action.type === 'page') {
+      event.preventDefault();
+      if (elements[active]?.getAttribute('aria-disabled') !== 'true') elements[active]?.click();
+    }
+    return;
+  }
+  event.preventDefault();
+  setCurrent(next);
+  elements.forEach((element, index) => { element.tabIndex = index === next ? 0 : -1; });
+  elements[next]?.focus();
 }
 
 // Handle one tree key from the tree's current DOM state. The caller keeps the

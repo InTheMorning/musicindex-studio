@@ -1,6 +1,6 @@
 # Studio V1 Task 108: A List Is One Tab Stop
 
-Status: Started. Packets 108a, 108b and 108c are complete. Packet 108d is open. The operator set the sequence of task 107, then this task, on 2026-11-10.
+Status: Complete, in four packets, with the key drives and the screenshot visual check on 2026-11-11. The human test with a real keyboard in the AppImage is open. The operator set the sequence of task 107, then this task, on 2026-11-10.
 
 Result of 108a and 108b: `crates/api/ui/listkeys.js` gives the model (`createListModel`, `listKey`) and `onTreeKey`, which builds the model from the rows of a tree at each key.
 
@@ -13,6 +13,10 @@ A row with no child rows has no `aria-expanded`. The file picker records the ope
 Result of 108c: `onListKey` in `listkeys.js` gives the keys of a list of expandable rows. The credit and support rows (`EntryRow`), the recipient rows and the rows of "Where this person is" use it. Each `summary` has `aria-expanded` from the open condition of its row, and no role `treeitem`. A `focusin` on a row makes it the current row.
 
 A drive with key events from Chromium at 1100 px gave these results. One Tab goes into each list and the next Tab leaves it. Down, Home, Right, Left and Enter act on the rows. From an open row, Tab goes into its fields, and after the last field Tab goes to "Add a credit".
+
+Result of 108d: `RowList` in `pickers.js` makes a list of rows that open a page or select a value into one Tab stop, with `onPageListKey`. It is on the People page, the page of a person, each `PickFold`, `SearchResults`, the Add feeds page and both views of Releases. The tiles view uses the grid mode of the model, with the column count from the positions of the tiles. A disabled row, and a `PickFillRow` that the list already holds, stays in the list with `aria-disabled`.
+
+The drive gave these results. On Releases, Tab goes into the rows and out again, and Down and End move. In the tiles view, Left and Right stay in a row of tiles, Up and Down keep the column, and Enter opens the release. On the People page and on the Add feeds page, each list is one Tab stop, and a fold header keeps its own Tab stop. In the sheet "Add a Recipient", the 17 payees are one Tab stop, and Enter on a row fills the form.
 
 Owner of the rules: [ADR 0172](../adr/0172-a-list-is-one-tab-stop.md). It applies musicindex ADR 0061 R-LISTKEY-1 and R-LISTKEY-2. [ADR 0171](../adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md) gives the types of row.
 

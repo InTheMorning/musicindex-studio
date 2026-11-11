@@ -14,6 +14,7 @@ use studio_core::collection::{Collection, FeedId};
 use studio_core::connector::{self, HostEnv};
 use studio_core::discover::Found;
 use studio_core::feed::Feed;
+use studio_core::feed_reads::{FileReads, NetworkFacts};
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::move_link::FeedReader;
@@ -562,6 +563,30 @@ impl std::fmt::Debug for LinkReader {
     }
 }
 
+/// The reader of the files that the feed check reads (ADR 0174 items 14 and
+/// 15). The real reader uses the policy `Public` in both shells. Only a test
+/// replaces it, so that no test sends a request to the network.
+#[derive(Clone)]
+pub(crate) struct FileReader(pub(crate) Arc<dyn FileReads>);
+
+impl std::fmt::Debug for FileReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FileReader")
+    }
+}
+
+/// The reader of a new workspace. A test build reads nothing (ADR 0045).
+fn default_file_reader() -> FileReader {
+    #[cfg(test)]
+    {
+        FileReader(Arc::new(studio_core::feed_reads::ScriptedFileReads::empty()))
+    }
+    #[cfg(not(test))]
+    {
+        FileReader(Arc::new(studio_core::feed_reads::WebFileReads::public()))
+    }
+}
+
 /// The reader of a new workspace. A test build reads nothing, so that no
 /// test sends a request to the network (ADR 0045).
 fn default_link_reader() -> LinkReader {
@@ -754,6 +779,12 @@ pub struct Workspace {
     pub(crate) stream_check: Option<StreamChecker>,
     /// The reader of the public feeds of stage 1 (ADR 0126 item 7).
     pub(crate) link_reader: LinkReader,
+    /// The reader of the files of the feed check (ADR 0174 item 15).
+    pub(crate) file_reader: FileReader,
+    /// The last network facts of the feed check for each feed, with the key
+    /// of the base file that they belong to. The facts stay until the base
+    /// file changes or Studio stops (ADR 0174 item 18).
+    pub(crate) check_facts: HashMap<i64, (String, NetworkFacts)>,
     /// The differences between the servers and the computer clock, and the
     /// source that asks them (ADR 0127 item 13). The lock of the keeper is
     /// never held during a request.
@@ -932,6 +963,8 @@ impl Workspace {
             address_check: None,
             stream_check: None,
             link_reader: default_link_reader(),
+            file_reader: default_file_reader(),
+            check_facts: HashMap::new(),
             time_keeper: Arc::new(Mutex::new(TimeKeeper::new())),
             server_time: default_server_time(),
             index: MusicIndex::new(Web::with_policy(&NetPolicy::Open), DEFAULT_API),
@@ -1334,6 +1367,15 @@ impl Workspace {
     #[must_use]
     pub fn with_feed_reader(mut self, reader: Arc<dyn FeedReader>) -> Self {
         self.link_reader = LinkReader(reader);
+        self
+    }
+
+    /// Use a different reader for the files of the feed check, such as a
+    /// test double (ADR 0174 item 15).
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn with_file_reads(mut self, reader: Arc<dyn FileReads>) -> Self {
+        self.file_reader = FileReader(reader);
         self
     }
 

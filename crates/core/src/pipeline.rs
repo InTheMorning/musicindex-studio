@@ -35,6 +35,11 @@ use crate::nostr_events::npub_text;
 use crate::roles;
 use crate::xml::{Document, Element, ParseError};
 
+mod check_repair;
+pub use check_repair::{
+    CheckInputs, Proof, Step, apply_check_repair, check_inputs, repair_step, run_step,
+};
+
 /// The kind of a [`PipelineError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]

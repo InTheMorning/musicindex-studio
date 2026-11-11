@@ -11,6 +11,7 @@ mod collections;
 mod downloads;
 mod dropped;
 mod error;
+mod feed_check;
 mod import;
 mod media;
 mod people;
@@ -411,6 +412,9 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             get(routes::get_draft_merge).post(routes::post_draft_merge),
         )
         .route("/feeds/{id}/link-check", get(routes::link_check))
+        .route("/feeds/{id}/check", get(feed_check::get_check))
+        .route("/feeds/{id}/check/reads", post(feed_check::run_reads))
+        .route("/feeds/{id}/check/repair", post(feed_check::repair))
         .route(
             "/feeds/{id}/draft/use-public-address",
             post(routes::use_public_address),

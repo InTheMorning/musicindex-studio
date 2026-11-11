@@ -10,7 +10,7 @@ use crate::feed::Feed;
 
 /// The kind of a finding. Each kind is one row of the table in ADR 0174
 /// item 7.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FindingKind {
     /// The feed has a public address and no self link.
@@ -79,6 +79,16 @@ pub struct Finding {
     pub entry: Option<String>,
     /// The repair of the finding, when one exists.
     pub repair: Option<RepairKind>,
+    /// The address that the finding names, when it names one. A repair
+    /// changes only this address.
+    pub url: Option<String>,
+}
+
+impl Finding {
+    fn naming(mut self, url: &str) -> Self {
+        self.url = Some(url.to_owned());
+        self
+    }
 }
 
 /// The facts that the caller gathers before the check (ADR 0174 item 4).
@@ -123,6 +133,7 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             reason: "Select the language of this feed.".to_owned(),
             entry: None,
             repair: Some(RepairKind::SelectALanguage),
+            url: None,
         });
     }
     found
@@ -142,6 +153,7 @@ fn notice(
         reason,
         entry,
         repair,
+        url: None,
     }
 }
 
@@ -258,13 +270,16 @@ fn check_item(item: &crate::feed::Item, facts: &Facts, found: &mut Vec<Finding>)
         && facts.same_https.contains(url)
         && url.starts_with("http://")
     {
-        found.push(notice(
-            FindingKind::HttpFile,
-            format!("{track} has an http file"),
-            "The https address gives the same file.".to_owned(),
-            entry.clone(),
-            Some(RepairKind::UseTheHttpsAddress),
-        ));
+        found.push(
+            notice(
+                FindingKind::HttpFile,
+                format!("{track} has an http file"),
+                "The https address gives the same file.".to_owned(),
+                entry.clone(),
+                Some(RepairKind::UseTheHttpsAddress),
+            )
+            .naming(url),
+        );
     }
     if item.duration.as_deref().is_none_or(|d| d.trim().is_empty()) {
         found.push(notice(
@@ -285,13 +300,16 @@ fn check_images(feed: &Feed, facts: &Facts, found: &mut Vec<Finding>) {
     urls.dedup();
     for url in urls.into_iter().flatten() {
         if url.starts_with("http://") && facts.same_https.contains(url) {
-            found.push(notice(
-                FindingKind::HttpFile,
-                "The image has an http address".to_owned(),
-                "The https address gives the same file.".to_owned(),
-                None,
-                Some(RepairKind::UseTheHttpsAddress),
-            ));
+            found.push(
+                notice(
+                    FindingKind::HttpFile,
+                    "The image has an http address".to_owned(),
+                    "The https address gives the same file.".to_owned(),
+                    None,
+                    Some(RepairKind::UseTheHttpsAddress),
+                )
+                .naming(url),
+            );
         }
     }
 }

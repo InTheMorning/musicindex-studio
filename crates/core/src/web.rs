@@ -393,6 +393,80 @@ impl Web {
     }
 }
 
+/// The first bytes of a file and its total size, from a range request
+/// (ADR 0174 item 14).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RangeProbe {
+    /// The total size of the file in bytes, from `Content-Range`.
+    pub total: u64,
+    /// The first bytes of the file.
+    pub first: Vec<u8>,
+}
+
+impl Web {
+    /// Read the first `count` bytes of a file with a range request.
+    ///
+    /// Gives `None` when the server does not answer with the status 206 or
+    /// does not give the total size. Such a server gives no fact.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] for an address that is not `http` or `https`, a
+    /// status that is not a success, a body that is larger than the range,
+    /// or a network failure.
+    pub fn range_probe(&self, url: &str, count: u64) -> Result<Option<RangeProbe>, WebError> {
+        let lower = url.trim().to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(WebError::new(
+                WebErrorKind::InvalidAddress,
+                format!("{url} is not an http or https address"),
+            ));
+        }
+        let mut response = self
+            .agent
+            .get(sent_address(url).as_ref())
+            .header("Range", format!("bytes=0-{}", count.saturating_sub(1)))
+            .call()
+            .map_err(|e| network_error(url, &e))?;
+        let status = response.status().as_u16();
+        if !(200..300).contains(&status) {
+            return Err(WebError {
+                kind: WebErrorKind::Status,
+                status: Some(status),
+                message: format!("{url} answered with status {status}"),
+            });
+        }
+        if status != 206 {
+            return Ok(None);
+        }
+        let Some(total) = header(&response, "content-range").and_then(|v| {
+            v.rsplit_once('/')
+                .and_then(|(_, total)| total.trim().parse().ok())
+        }) else {
+            return Ok(None);
+        };
+        let too_large = || {
+            WebError::new(
+                WebErrorKind::TooLarge,
+                format!("{url} gave more than the range"),
+            )
+        };
+        let first = response
+            .body_mut()
+            .with_config()
+            .limit(count.saturating_add(1))
+            .read_to_vec()
+            .map_err(|e| match e {
+                ureq::Error::BodyExceedsLimit(_) => too_large(),
+                other => WebError::new(WebErrorKind::Network, format!("{url}: {other}")),
+            })?;
+        if first.len() as u64 > count {
+            return Err(too_large());
+        }
+        Ok(Some(RangeProbe { total, first }))
+    }
+}
+
 impl Web {
     /// Send a `GET` for the stream check, with a time limit for the whole
     /// request, and give the response with any status (ADR 0162 item 2).
@@ -729,6 +803,27 @@ mod tests {
             }
         );
         let error = web.media_facts(&server.url("/gone.mp3")).unwrap_err();
+        assert_eq!(error.status(), Some(404));
+    }
+
+    #[test]
+    fn a_range_probe_gives_the_first_bytes_and_the_total_or_no_fact_without_a_206_answer() {
+        use crate::testing::RangeServer;
+
+        let body: Vec<u8> = (0..200_000_u32).map(|i| (i % 251) as u8).collect();
+        let ranged = RangeServer::start(body.clone());
+        let web = Web::new();
+        let probe = web
+            .range_probe(&ranged.url("/a.mp3"), 64 * 1024)
+            .unwrap()
+            .expect("a server that answers a range request gives a fact");
+        assert_eq!(probe.total, 200_000);
+        assert_eq!(probe.first, body[..64 * 1024]);
+        // The plain test server ignores the range request and answers 200.
+        let plain = TestServer::start(Vec::new());
+        plain.set("/a.mp3", 200, vec![7; 1000]);
+        assert_eq!(web.range_probe(&plain.url("/a.mp3"), 100).unwrap(), None);
+        let error = web.range_probe(&plain.url("/gone.mp3"), 100).unwrap_err();
         assert_eq!(error.status(), Some(404));
     }
 

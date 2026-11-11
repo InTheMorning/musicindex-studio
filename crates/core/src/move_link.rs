@@ -643,6 +643,42 @@ fn walk(
     }
 }
 
+/// The result of [`tag_chain`]: each hop, and the condition when the chain
+/// stops.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagChain {
+    /// Each hop, in the sequence of the reads.
+    pub hops: Vec<Hop>,
+    /// The condition that stopped the chain, or none when the chain ended
+    /// at a body that names nothing else.
+    pub stopped: Option<Condition>,
+}
+
+impl TagChain {
+    /// The URL of each hop. The first URL is the start.
+    #[must_use]
+    pub fn urls(&self) -> Vec<String> {
+        self.hops.iter().map(|hop| hop.url.clone()).collect()
+    }
+}
+
+/// Follow the chain that starts at `start` with the rules of stage 1, for
+/// the check of a feed (ADR 0174 item 13). `url` is the URL of the draft.
+/// It counts as visited. The function does not change the refusals of
+/// [`check`].
+#[must_use]
+pub fn tag_chain(
+    reader: &dyn FeedReader,
+    draft_guid: Option<&str>,
+    start: &str,
+    url: Option<&str>,
+) -> TagChain {
+    let mut visited: Vec<String> = url.map(str::to_owned).into_iter().collect();
+    let mut hops = Vec::new();
+    let stopped = walk(reader, draft_guid, start, &mut visited, &mut hops).err();
+    TagChain { hops, stopped }
+}
+
 /// The condition and the hop result for a failed read.
 fn failure_result(kind: FailKind) -> (Condition, HopResult) {
     match kind {

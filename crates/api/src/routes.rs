@@ -2550,7 +2550,7 @@ pub(crate) async fn set_publisher_role(
 /// draft feed move (ADR 0067 item 6).
 ///
 /// This route needs no host and no library: it only shows the draft.
-fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
+pub(crate) fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let row = w.collection.feed(id)?;
     let has_host = row.connector_id.is_some() || w.collection.draft_feed_move(id)?.is_some();
     // The state of the feed list, so that the UI updates the row of this

@@ -1,6 +1,7 @@
 //! Contract tests of the local API (task 007).
 
 mod apps;
+mod feed_check;
 
 use axum::Router;
 use axum::body::Body;

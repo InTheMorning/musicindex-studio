@@ -18,7 +18,7 @@ use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, CreditRow, FeedId, now};
 use crate::feed::{CreditPlace, Recipient, RecipientPlace};
 use crate::keysend::{self, Lookup, LookupResult};
-use crate::lookup::{is_channel_route, save_key_of};
+use crate::lookup::{is_channel_route, norm_name, save_key_of};
 use crate::musicindex::PublisherValues;
 use crate::net::NetPolicy;
 use crate::profiles;
@@ -3161,8 +3161,30 @@ pub struct PageSuggestion {
     pub website: Option<String>,
     /// The Nostr key, when it is new.
     pub npub: Option<String>,
-    /// Each wallet that the person does not have.
+    /// Each wallet whose name matches the person and that the person does not have.
     pub wallets: Vec<PageWallet>,
+    /// Each other wallet that the person does not have.
+    pub other_recipients: Vec<PageWallet>,
+}
+
+/// Whether the recipient of a page wallet is the person (ADR 0159 item 13):
+/// its name is the name of the person, a credit name of the person or the
+/// title of the page. The test ignores case, spaces and punctuation. A
+/// recipient with no name does not match.
+fn page_wallet_matches(person: &Person, title: &str, wallet: &PageWallet) -> bool {
+    let key = |name: &str| norm_name(name).replace(' ', "");
+    let Some(name) = wallet.name.as_deref().map(key).filter(|n| !n.is_empty()) else {
+        return false;
+    };
+    [person.name.as_str(), title]
+        .into_iter()
+        .chain(
+            person
+                .credit_names
+                .iter()
+                .map(|credit| credit.name.as_str()),
+        )
+        .any(|candidate| key(candidate) == name)
 }
 
 /// Compare one read-only page with a person (ADR 0159 items 8 and 9).
@@ -3185,6 +3207,7 @@ pub fn page_suggestions<S: BuildHasher>(
         website: None,
         npub: None,
         wallets: Vec::new(),
+        other_recipients: Vec::new(),
     };
     let Some(values) = values else {
         return suggestion;
@@ -3207,14 +3230,25 @@ pub fn page_suggestions<S: BuildHasher>(
         let Some(key) = save_key_of(route) else {
             continue;
         };
-        if is_member(person, &key, lookups) || suggestion.wallets.iter().any(|w| w.key == key) {
+        if is_member(person, &key, lookups)
+            || suggestion
+                .wallets
+                .iter()
+                .chain(&suggestion.other_recipients)
+                .any(|wallet| wallet.key == key)
+        {
             continue;
         }
-        suggestion.wallets.push(PageWallet {
+        let wallet = PageWallet {
             key,
             recipient_type: route.recipient_type.clone().unwrap_or_default(),
             name: route.name.clone(),
-        });
+        };
+        if page_wallet_matches(person, &page.title, &wallet) {
+            suggestion.wallets.push(wallet);
+        } else {
+            suggestion.other_recipients.push(wallet);
+        }
     }
     suggestion
 }
@@ -4953,12 +4987,85 @@ mod tests {
                 website: None,
                 npub: None,
                 wallets: Vec::new(),
+                other_recipients: Vec::new(),
             },
             "ADR 0159 item 8: a page that agrees must give no suggestion."
         );
 
         let gone = page_suggestions(&p, &link, None, &lookups);
         assert!(gone.missing && gone.picture.is_none() && gone.wallets.is_empty());
+    }
+
+    #[test]
+    fn page_wallets_match_person_credit_or_page_name() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann Bell")).unwrap();
+        let mut p = person(&collection, ann).unwrap();
+        p.credit_names.push(CreditName {
+            id: 1,
+            identity: "credit".to_owned(),
+            name: "The A.B. Group".to_owned(),
+            href: String::new(),
+            npub: String::new(),
+            evidence: "user".to_owned(),
+            linked_at: 0,
+        });
+        let mut page_values = values();
+        page_values.routes = [
+            (" ann-bell! ", "person"),
+            ("ANNBELL", "no-space"),
+            ("the a-b group", "credit"),
+            ("Ann Bell Music", "page"),
+            ("Someone Else", "other"),
+            ("", "no-name"),
+        ]
+        .into_iter()
+        .map(|(name, address)| Recipient {
+            name: Some(name.to_owned()).filter(|name| !name.is_empty()),
+            address: Some(format!("{address}@example.com")),
+            recipient_type: Some("lnaddress".to_owned()),
+            ..Recipient::default()
+        })
+        .collect();
+        let lookups = lookup_map(&collection).unwrap();
+        let suggestion = page_suggestions(
+            &p,
+            &page("g-1", "Ann Bell Music"),
+            Some(&page_values),
+            &lookups,
+        );
+        assert_eq!(suggestion.wallets.len(), 4);
+        assert_eq!(suggestion.other_recipients.len(), 2);
+        assert_eq!(
+            suggestion.other_recipients[0].name.as_deref(),
+            Some("Someone Else")
+        );
+        assert_eq!(suggestion.other_recipients[1].name, None);
+
+        let added_key = suggestion.wallets[0].key.clone();
+        add_wallet(
+            &collection,
+            ann,
+            &suggestion.wallets[0].key,
+            "lnaddress",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        let p = person(&collection, ann).unwrap();
+        let lookups = lookup_map(&collection).unwrap();
+        let suggestion = page_suggestions(
+            &p,
+            &page("g-1", "Ann Bell Music"),
+            Some(&page_values),
+            &lookups,
+        );
+        assert!(
+            !suggestion
+                .wallets
+                .iter()
+                .chain(&suggestion.other_recipients)
+                .any(|wallet| wallet.key == added_key)
+        );
     }
 
     #[test]

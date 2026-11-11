@@ -202,11 +202,11 @@ const foldStates = new Map();
 
 // A list that folds, with its count. A long list starts closed, unless `startOpen`
 // says different. With `forceOpen`, it stays open, for a search of its rows.
-export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOpen(rows.length), forceOpen = false, onClick, selector = ROWS }) {
+export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOpen(rows.length), forceOpen = false, onClick, selector = ROWS, showCount = true }) {
   const open = forceOpen || (foldStates.has(id) ? foldStates.get(id) : startOpen);
   const remember = (e) => { if (id && !forceOpen) foldStates.set(id, e.currentTarget.open); };
   return html`<details class="disclosure pick-fold" open=${open} onClick=${onClick} onToggle=${remember}>
-    <summary><span class="pick-fold-title">${title}</span><span class="pick-fold-count">${rows.length}</span></summary>
+    <summary><span class="pick-fold-title">${title}</span>${showCount && html`<span class="pick-fold-count">${rows.length}</span>`}</summary>
     ${note && html`<p class="note">${note}</p>`}
     ${lead}
     <${RowList} selector=${selector}>${rows}<//>

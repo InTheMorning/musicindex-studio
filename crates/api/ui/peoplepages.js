@@ -855,7 +855,7 @@ export function PersonPage({ id, feeds, go }) {
   // One row of a page suggestion, with "Use" (ADR 0159 item 8).
   const pageRow = (row, onUse, art = false) => html`<div class="link-row static" key=${`${row.guid}-${row.value}`}>
     ${art && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
-    <span class="text"><span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
+    <span class="text">${row.recipient_name && html`<span class="label">${row.recipient_name}</span>`}<span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
     <button class="button action" type="button" aria-label=${`Use ${row.value}`} onClick=${onUse}>Use</button></div>`;
   const feedOf = (feedId) => (feeds || []).find((f) => f.id === feedId);
   const remove = (kind, linkId) => withLeave(() => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' })));
@@ -933,6 +933,9 @@ export function PersonPage({ id, feeds, go }) {
         })}>Dismiss</button></div></div>`)}
       ${fromPages.wallets.length > 0 && html`<div class="group">${fromPages.wallets.map((row) => pageRow(row,
         () => withLeave(() => setEditing({ add: true, start: walletValues({ ...row.key, recipient_type: row.recipient_type }), others: [] }))))}</div>`}
+      ${fromPages.otherRecipients.map((fold) => html`<${PickFold} key=${fold.rows[0].guid} id=${`page-wallets-${fold.rows[0].guid}`} title=${fold.title} startOpen=${false} showCount=${false}
+        rows=${fold.rows.map((row) => pageRow(row,
+          () => withLeave(() => setEditing({ add: true, start: walletValues({ ...row.key, recipient_type: row.recipient_type }), others: [] }))))} />`)}
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => withLeave(() => setLinking('wallets'))} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
       <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources}

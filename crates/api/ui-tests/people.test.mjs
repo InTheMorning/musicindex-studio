@@ -1726,18 +1726,32 @@ test('a read-only row says "Read only", and a page that Music Index does not kno
 test('a page that differs gives suggestions, and a page that agrees gives none (ADR 0159 items 8 and 9)', () => {
   const values = savedValues({ ...MK, pages: [PAGE] });
   const differs = [{ ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
-    wallets: [{ key: { address: 'ann@x.example', custom_key: null, custom_value: null }, recipient_type: 'lnaddress', name: 'Ann' }] }];
+    wallets: [{ key: { address: 'ann@x.example', custom_key: null, custom_value: null }, recipient_type: 'lnaddress', name: 'Ann' }],
+    other_recipients: [
+      { key: { address: 'other@x.example' }, recipient_type: 'lnaddress', name: 'Other' },
+      { key: { address: 'anonymous@x.example' }, recipient_type: 'node', name: null },
+    ] }];
   const out = pageSuggestions(differs, values);
   assert.deepEqual(out.img.map((r) => [r.value, r.line]), [['https://img.example/a.png', 'New picture on "Ann Bell Music"']]);
   assert.deepEqual(out.href.map((r) => r.line), ['New website on "Ann Bell Music"']);
   assert.deepEqual(out.keys.map((r) => r.value), ['npub1ann']);
-  assert.deepEqual(out.wallets.map((r) => [r.value, r.recipient_type]), [['ann@x.example', 'lnaddress']]);
+  assert.deepEqual(out.wallets.map((r) => [r.value, r.recipient_type, r.recipient_name, r.line]), [['ann@x.example', 'lnaddress', 'Ann', 'New wallet on "Ann Bell Music"']]);
+  assert.deepEqual(out.otherRecipients.map((fold) => [fold.title, fold.rows.map((row) => [row.value, row.recipient_name, row.line])]), [[
+    '2 other recipients on Ann Bell Music',
+    [['other@x.example', 'Other', 'Other recipient on "Ann Bell Music"'], ['anonymous@x.example', null, 'Other recipient on "Ann Bell Music"']],
+  ]]);
+  const one = [{ ...differs[0], other_recipients: differs[0].other_recipients.slice(0, 1) }];
+  assert.deepEqual(pageSuggestions(one, values).otherRecipients.map((fold) => fold.title), ['1 other recipient on Ann Bell Music']);
   // "Use" makes a pending value, and the row goes.
   const used = { ...values, img: 'https://img.example/a.png', href: 'https://ann.example', keys: ['npub1ann'],
-    wallets: [{ key: { address: 'Ann@x.example' }, recipient_type: 'lnaddress' }] };
-  assert.deepEqual(pageSuggestions(differs, used), { img: [], href: [], keys: [], wallets: [] });
+    wallets: [
+      { key: { address: 'Ann@x.example' }, recipient_type: 'lnaddress' },
+      { key: { address: 'other@x.example' }, recipient_type: 'lnaddress' },
+      { key: { address: 'anonymous@x.example' }, recipient_type: 'node' },
+    ] };
+  assert.deepEqual(pageSuggestions(differs, used), { img: [], href: [], keys: [], wallets: [], otherRecipients: [] });
   const agrees = [{ ...PAGE, missing: false, picture: null, website: null, npub: null, wallets: [] }];
-  assert.deepEqual(pageSuggestions(agrees, values), { img: [], href: [], keys: [], wallets: [] });
+  assert.deepEqual(pageSuggestions(agrees, values), { img: [], href: [], keys: [], wallets: [], otherRecipients: [] });
   assert.deepEqual(pageSuggestions([{ ...differs[0], missing: true }], values).img, [], 'A missing page gives no suggestion.');
   assert.deepEqual(pageSuggestions(differs, { ...values, pages: [] }).img, [], 'A removed page gives no suggestion.');
 });

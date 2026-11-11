@@ -6760,7 +6760,7 @@ async fn the_page_suggestions_give_the_differences_of_each_read_only_page() {
         200,
         br#"{"data":{"title":"Ann Bell Music","image_url":"https://img.example/a.png",
             "source_links":[{"link_type":"website","url":"https://ann.example"}],
-            "source_ids":[],"payment_routes":[{"recipient_name":"Ann","route_type":"lnaddress","address":"ann@x.example","split":100,"fee":false}]}}"#
+            "source_ids":[],"payment_routes":[{"recipient_name":"Ann","route_type":"lnaddress","address":"ann@x.example","split":100,"fee":false},{"recipient_name":"Other","route_type":"lnaddress","address":"other@x.example","split":0,"fee":false},{"route_type":"node","address":"02abc","split":0,"fee":false}]}}"#
             .to_vec(),
     );
     server.set(
@@ -6816,6 +6816,10 @@ async fn the_page_suggestions_give_the_differences_of_each_read_only_page() {
     assert_eq!(pages[0]["npub"], Value::Null);
     assert_eq!(pages[0]["wallets"][0]["key"]["address"], "ann@x.example");
     assert_eq!(pages[0]["wallets"][0]["recipient_type"], "lnaddress");
+    assert_eq!(pages[0]["wallets"][0]["name"], "Ann");
+    assert_eq!(pages[0]["other_recipients"].as_array().unwrap().len(), 2);
+    assert_eq!(pages[0]["other_recipients"][0]["name"], "Other");
+    assert_eq!(pages[0]["other_recipients"][1]["name"], Value::Null);
     assert_eq!(pages[1]["feed_guid"], "c0ffee-13");
     assert_eq!(pages[1]["missing"], true, "ADR 0159 item 10: {body}");
     let (status, _) = call(&app, "GET", "/api/v1/people/999/page-suggestions", None).await;

@@ -1049,10 +1049,11 @@ export function pickLink(row, feeds, values) {
 // items 8 and 9). `suggestions` is the list of `GET /people/{id}/page-suggestions`.
 // The core compares each page with the saved person. This function removes a
 // value that the pending values already hold, so that a "Use" takes the row
-// away. It gives `{ img, href, keys, wallets }`, each a list of
-// `{ value, line, guid }`. A wallet row also has its `key` and `recipient_type`.
+// away. It gives lists for images, websites, keys, matching wallets, and other
+// recipients. Each row has `{ value, line, guid }`. Wallet rows also have the
+// recipient name, key, and recipient type.
 export function pageSuggestions(suggestions, values) {
-  const out = { img: [], href: [], keys: [], wallets: [] };
+  const out = { img: [], href: [], keys: [], wallets: [], otherRecipients: [] };
   const shown = new Set(guidsOf(values.pages));
   const pendingWallets = (values.wallets || []).map((w) => String(w.key.address).toLowerCase());
   for (const s of suggestions || []) {
@@ -1063,8 +1064,14 @@ export function pageSuggestions(suggestions, values) {
     if (s.npub && !(values.keys || []).includes(s.npub)) out.keys.push({ value: s.npub, line: `New Nostr key on "${title}"`, guid: s.feed_guid });
     for (const w of s.wallets || []) {
       if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
-      out.wallets.push({ value: w.key.address, line: `New wallet on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type });
+      out.wallets.push({ value: w.key.address, line: `New wallet on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type, recipient_name: w.name });
     }
+    const recipients = [];
+    for (const w of s.other_recipients || []) {
+      if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
+      recipients.push({ value: w.key.address, line: `Other recipient on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type, recipient_name: w.name });
+    }
+    if (recipients.length > 0) out.otherRecipients.push({ title: `${recipients.length} other ${recipients.length === 1 ? 'recipient' : 'recipients'} on ${title}`, rows: recipients });
   }
   return out;
 }

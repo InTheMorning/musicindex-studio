@@ -2367,6 +2367,18 @@ fn writer(w: &Workspace, id: FeedId) -> Result<Box<dyn connector::Connector>, Ap
     Ok(w.connector_of(&connector_row)?)
 }
 
+/// Refuse a feed that Studio cannot write, with the `read_only` error.
+pub(crate) fn writer_check(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
+    writer(w, id).map(|_| ())
+}
+
+/// The same as [`ensure_draft`], for a feed that Studio can write. A feed
+/// with no connector gives the `read_only` error and starts no draft.
+pub(crate) fn ensure_writable_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
+    writer_check(w, id)?;
+    ensure_draft(w, id)
+}
+
 /// Start the draft of a feed when it has none (ADR 0041 item 8). A feed
 /// with a draft is not changed. A feed with no connector starts its draft
 /// from its release folder (ADR 0067 item 3).
@@ -3094,7 +3106,7 @@ where
     .await
 }
 
-fn diff_json(w: &Workspace, id: FeedId, checked: Option<CheckedTime>) -> ApiResult {
+pub(crate) fn diff_json(w: &Workspace, id: FeedId, checked: Option<CheckedTime>) -> ApiResult {
     let hosts = w.hosts()?;
     let library = w.library()?;
     // The core sets the date one time for a change, so a second diff has

@@ -12,6 +12,7 @@ mod downloads;
 mod dropped;
 mod error;
 mod feed_check;
+mod feed_retire;
 mod import;
 mod media;
 mod people;
@@ -415,6 +416,16 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/feeds/{id}/check", get(feed_check::get_check))
         .route("/feeds/{id}/check/reads", post(feed_check::run_reads))
         .route("/feeds/{id}/check/repair", post(feed_check::repair))
+        .route("/feeds/{id}/retire/state", post(feed_retire::retire_state))
+        .route(
+            "/feeds/{id}/retire",
+            post(feed_retire::retire_on).delete(feed_retire::retire_off),
+        )
+        .route("/feeds/{id}/delete/draft", post(feed_retire::delete_draft))
+        .route(
+            "/feeds/{id}/delete/restore",
+            post(feed_retire::restore_draft),
+        )
         .route(
             "/feeds/{id}/draft/use-public-address",
             post(routes::use_public_address),

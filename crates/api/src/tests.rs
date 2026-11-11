@@ -2,6 +2,7 @@
 
 mod apps;
 mod feed_check;
+mod feed_retire;
 
 use axum::Router;
 use axum::body::Body;

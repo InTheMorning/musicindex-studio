@@ -3,9 +3,11 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md).
 
-Status: Started. ADR 0131 is Accepted. Packet 111a is complete. Packet 111b can start.
+Status: Started. ADR 0131 is Accepted. Packets 111a and 111b are complete. Packet 111c is at its mockup. It stops there until the operator confirms it.
 
-Open point for packet 111c: the user can discard the draft that brings the file back. Then the feed stays writable with no file on the host. It does not become read-only again. Packet 111c stops at its mockup until the operator confirms it.
+Open point for packet 111c: the user can discard the draft that brings the file back. Then the feed stays writable with no file on the host. It does not become read-only again.
+
+Open point for packet 111c: Music Index gives a 404 for a removed feed. It also gives a 404 with `superseded_by` for a GUID that a GUID change replaced. Step 2 shows the two answers as removed.
 
 ## Goal
 

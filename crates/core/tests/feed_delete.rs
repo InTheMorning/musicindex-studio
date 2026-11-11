@@ -371,3 +371,39 @@ fn each_publisher_feed_that_links_to_the_feed_is_listed() {
             .contains(&other)
     );
 }
+
+#[test]
+fn a_discard_of_the_restore_draft_leaves_the_feed_read_only_with_its_record() {
+    let (mut e, feed) = setup();
+    let before = fs::read(e.dir.path().join("album.xml")).unwrap();
+    let draft =
+        feed_delete::start_delete_draft(&e.collection, &e.hosts, &e.library, feed, false).unwrap();
+    write(&mut e, feed, &draft.diff.id).unwrap();
+
+    feed_delete::start_restore_draft(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    assert_eq!(
+        e.collection.feed(feed).unwrap().connector_id,
+        Some(e.connector_id),
+        "the restore write needs the host"
+    );
+    pipeline::discard_draft(&e.collection, feed).unwrap();
+    e.collection.delete_draft(feed).unwrap();
+
+    // ADR 0131 item 14: no writable feed without a file on the host.
+    let row = e.collection.feed(feed).unwrap();
+    assert_eq!(row.connector_id, None);
+    assert_eq!(row.path, None);
+    assert!(e.collection.feed_host_delete(feed).unwrap().is_some());
+    assert!(e.collection.draft(feed).unwrap().is_none());
+
+    // The restore route works again, and its write clears the record.
+    feed_delete::start_restore_draft(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    write(&mut e, feed, &diff.id).unwrap();
+    assert_eq!(fs::read(e.dir.path().join("album.xml")).unwrap(), before);
+    assert!(e.collection.feed_host_delete(feed).unwrap().is_none());
+    assert_eq!(
+        e.collection.feed(feed).unwrap().connector_id,
+        Some(e.connector_id)
+    );
+}

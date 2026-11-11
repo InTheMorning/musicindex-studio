@@ -2083,6 +2083,21 @@ impl Collection {
         Ok(())
     }
 
+    /// Make a feed read-only again: it has no host and no path. The feed
+    /// keeps its last copy and its release folder. This undoes
+    /// [`Collection::restore_feed_location`] (ADR 0131 item 14).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn clear_feed_location(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET connector_id = NULL, path = NULL WHERE id = ?1",
+            [feed.0],
+        )?;
+        Ok(())
+    }
+
     /// Remove the record of a deleted feed file. A feed with no record is
     /// not an error.
     ///

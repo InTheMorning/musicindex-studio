@@ -5789,6 +5789,13 @@ pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), Pipeline
     collection.remove_draft_feed_delete(id)?;
     collection.remove_signing_plan(id)?;
     collection.remove_draft_grants(id)?;
+    // A delete record that is still there means that a restore write did not
+    // finish (a write removes the record). The feed goes back to the state
+    // after the delete: read-only, with the record. A writable feed with no
+    // file on the host must not occur (ADR 0131 item 14).
+    if collection.feed_host_delete(id)?.is_some() {
+        collection.clear_feed_location(id)?;
+    }
     // The draft is gone, so each open change set row of the feed is closed
     // and a later Discard of the change set does not put back an old draft
     // (ADR 0091 item 20).

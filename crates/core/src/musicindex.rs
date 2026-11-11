@@ -453,6 +453,24 @@ struct FeedData {
     last_build_date: Option<i64>,
 }
 
+/// The body of a 404 for a feed GUID that a GUID change replaced.
+#[derive(Debug, serde::Deserialize)]
+struct SupersededBody {
+    superseded_by: Option<String>,
+}
+
+/// What musicindex answers for the record of a feed GUID.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexPresence {
+    /// The record of the feed.
+    Held(IndexFeed),
+    /// A plain 404. musicindex holds no record of the GUID.
+    Absent,
+    /// A 404 with `superseded_by`. A GUID change replaced the GUID. The
+    /// value is the new GUID.
+    Superseded(String),
+}
+
 /// The address, the title and the build time that musicindex knows for a
 /// feed GUID.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -716,16 +734,38 @@ impl MusicIndex {
     ///
     /// Gives a [`WebError`] when the request fails.
     pub fn feed(&self, feed_guid: &str) -> Result<Option<IndexFeed>, WebError> {
+        Ok(match self.feed_presence(feed_guid)? {
+            IndexPresence::Held(feed) => Some(feed),
+            IndexPresence::Absent | IndexPresence::Superseded(_) => None,
+        })
+    }
+
+    /// The record of a feed GUID, or the reason that musicindex has none. A
+    /// 404 with `superseded_by` in its body names the GUID that replaced the
+    /// GUID of the request. That is not an absent feed (ADR 0131 item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails.
+    pub fn feed_presence(&self, feed_guid: &str) -> Result<IndexPresence, WebError> {
         let url = format!("{}/v1/feeds/{}", self.base, filter_guid(feed_guid));
         match self.web.get(&url, MAX_RESPONSE_BYTES) {
             Ok(file) => Ok(serde_json::from_slice::<Envelope<FeedData>>(&file.bytes)
                 .ok()
-                .map(|e| IndexFeed {
-                    url: e.data.feed_url,
-                    title: e.data.title,
-                    last_build_date: e.data.last_build_date,
+                .map_or(IndexPresence::Absent, |e| {
+                    IndexPresence::Held(IndexFeed {
+                        url: e.data.feed_url,
+                        title: e.data.title,
+                        last_build_date: e.data.last_build_date,
+                    })
                 })),
-            Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
+            Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => {
+                Ok(serde_json::from_slice::<SupersededBody>(e.body())
+                    .ok()
+                    .and_then(|body| body.superseded_by)
+                    .filter(|guid| !guid.is_empty())
+                    .map_or(IndexPresence::Absent, IndexPresence::Superseded))
+            }
             Err(e) => Err(e),
         }
     }

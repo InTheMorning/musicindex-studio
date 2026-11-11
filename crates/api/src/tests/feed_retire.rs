@@ -146,6 +146,7 @@ async fn only_the_retire_state_route_reads_the_index_and_it_reads_once() {
     let answer = state(&app, id).await;
     assert_eq!(index.requests(), 1, "ADR 0131 item 6");
     assert_eq!(answer["removal"]["answer"], "removed");
+    assert_eq!(answer["removal_done"], true);
 }
 
 #[tokio::test]
@@ -158,9 +159,18 @@ async fn the_retire_state_gives_the_index_answer_and_the_request_address() {
     let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
     let answer = state(&app, id).await;
     assert_eq!(answer["removal"]["answer"], "not_yet");
+    assert_eq!(answer["removal_done"], false);
     assert_eq!(answer["ask"], "no");
     assert_eq!(answer["delete"], "not_done");
     assert_eq!(index.requests(), 1);
+
+    // A 404 with superseded_by: the index holds the feed with a new GUID.
+    let index = CountingIndex::start(404, r#"{"error":"superseded","superseded_by":"new-guid"}"#);
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let answer = state(&app, id).await;
+    assert_eq!(answer["removal"]["answer"], "held_with_other_guid");
+    assert_eq!(answer["removal"]["new_guid"], "new-guid");
+    assert_eq!(answer["removal_done"], false);
 
     // A failed read: not known, with the address.
     let (app, id) = app_with("http://127.0.0.1:9", &feed_xml("Album", &guid_tag())).await;

@@ -5,9 +5,7 @@ Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md).
 
 Status: Started. ADR 0131 is Accepted. Packets 111a and 111b are complete. Packet 111c is at its mockup. It stops there until the operator confirms it.
 
-Open point for packet 111c: the user can discard the draft that brings the file back. Then the feed stays writable with no file on the host. It does not become read-only again.
-
-Open point for packet 111c: Music Index gives a 404 for a removed feed. It also gives a 404 with `superseded_by` for a GUID that a GUID change replaced. Step 2 shows the two answers as removed.
+Packet 111d is complete.
 
 ## Goal
 
@@ -50,6 +48,13 @@ ADR 0131 items 5 to 9.
 - The retire sets and clears "Hide from apps" in the draft (ADR 0063).
 - The state of the three steps of item 6, from the draft, the last write and one read of `GET /v1/feeds/{guid}`.
 - The routes of the retire state, of the delete draft and of the delete write.
+
+### 111d: The Restore Discard And The Replaced GUID
+
+Orchestrator decisions of 2026-11-11, on the open points of packet 111b.
+
+- The delete record stays until a restore write is complete. A discard of the restore draft gives the feed the state after the delete again: read-only, with the restore button. A writable feed with no file on the host must not occur. Add a core test.
+- A 404 with `superseded_by` from `GET /v1/feeds/{guid}` is not a removal. Step 2 stays open with the line "Music Index holds this feed with a different GUID." For that answer, the core does not let the user select **Delete the File**. Add a core test for each of the three answers: a 404, a 404 with `superseded_by`, and a 200.
 
 ### 111c: The Sheets And The Retire Page
 

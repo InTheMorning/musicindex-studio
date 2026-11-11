@@ -14,7 +14,7 @@ use crate::discover::ReadFailure;
 use crate::feed::Feed;
 use crate::feed_check::{self, Facts, Finding, IndexFacts, IndexLine, index_line};
 use crate::move_link::{FeedBody, FeedReader, HopResult, OwnedDraftLinks, tag_chain};
-use crate::musicindex::{IndexCopy, IndexFeed, MusicIndex};
+use crate::musicindex::{IndexCopy, IndexFeed, IndexPresence, MusicIndex};
 use crate::net::NetPolicy;
 use crate::web::Web;
 
@@ -109,6 +109,20 @@ pub trait IndexReads: Send + Sync {
     /// Gives the address of the request when the read fails.
     fn feed(&self, guid: &str) -> Result<Option<IndexFeed>, String>;
 
+    /// The record of the feed with `guid`, or the reason that the index has
+    /// none. The retire uses it to tell a GUID that a GUID change replaced
+    /// from an absent feed (ADR 0131 item 6). The check does not use it. The
+    /// default gives no replaced GUID.
+    ///
+    /// # Errors
+    ///
+    /// Gives the address of the request when the read fails.
+    fn feed_presence(&self, guid: &str) -> Result<IndexPresence, String> {
+        Ok(self
+            .feed(guid)?
+            .map_or(IndexPresence::Absent, IndexPresence::Held))
+    }
+
     /// Each copy of the feed with `guid`. Gives none when the index does
     /// not hold the feed.
     ///
@@ -121,6 +135,10 @@ pub trait IndexReads: Send + Sync {
 impl IndexReads for MusicIndex {
     fn feed(&self, guid: &str) -> Result<Option<IndexFeed>, String> {
         MusicIndex::feed(self, guid).map_err(|_| self.feed_address(guid))
+    }
+
+    fn feed_presence(&self, guid: &str) -> Result<IndexPresence, String> {
+        MusicIndex::feed_presence(self, guid).map_err(|_| self.feed_address(guid))
     }
 
     fn copies(&self, guid: &str) -> Result<Option<Vec<IndexCopy>>, String> {

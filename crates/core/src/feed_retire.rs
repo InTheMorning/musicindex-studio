@@ -11,6 +11,7 @@ use crate::collection::{Collection, FeedId};
 use crate::feed::Feed;
 use crate::feed_reads::IndexReads;
 use crate::library::Library;
+use crate::musicindex::IndexPresence;
 use crate::pipeline::{self, PipelineError, PipelineErrorKind};
 use crate::publisher::{self, PublisherError};
 
@@ -39,6 +40,13 @@ pub enum IndexRemoval {
     Removed,
     /// The read gave a record. musicindex holds the entry.
     NotYet,
+    /// The read gave a 404 with `superseded_by`. musicindex holds the feed
+    /// with a different GUID, so it did not remove the feed. The page line
+    /// is "Music Index holds this feed with a different GUID."
+    HeldWithOtherGuid {
+        /// The new GUID that musicindex names.
+        new_guid: String,
+    },
     /// The read failed. The value is the address of the request.
     NotKnownFailed {
         /// The address of the request that failed.
@@ -67,6 +75,9 @@ pub struct RetireState {
     pub ask: RetireAsk,
     /// Step 2.
     pub removal: IndexRemoval,
+    /// True when step 2 is done: only a plain 404. The UI offers **Delete
+    /// the File** as the next step of a retire only when this is true.
+    pub removal_done: bool,
     /// Step 3.
     pub delete: FileDelete,
 }
@@ -124,9 +135,10 @@ pub fn read_removal(guid: Option<&str>, reads: &dyn IndexReads) -> IndexRemoval 
     let Some(guid) = guid else {
         return IndexRemoval::NotKnownNoGuid;
     };
-    match reads.feed(guid) {
-        Ok(None) => IndexRemoval::Removed,
-        Ok(Some(_)) => IndexRemoval::NotYet,
+    match reads.feed_presence(guid) {
+        Ok(IndexPresence::Absent) => IndexRemoval::Removed,
+        Ok(IndexPresence::Held(_)) => IndexRemoval::NotYet,
+        Ok(IndexPresence::Superseded(new_guid)) => IndexRemoval::HeldWithOtherGuid { new_guid },
         Err(address) => IndexRemoval::NotKnownFailed { address },
     }
 }
@@ -136,6 +148,7 @@ pub fn read_removal(guid: Option<&str>, reads: &dyn IndexReads) -> IndexRemoval 
 pub fn retire_state(facts: &RetireFacts, removal: IndexRemoval) -> RetireState {
     RetireState {
         ask: facts.ask,
+        removal_done: removal == IndexRemoval::Removed,
         removal,
         delete: facts.delete,
     }

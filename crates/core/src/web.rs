@@ -46,6 +46,7 @@ pub struct WebError {
     kind: WebErrorKind,
     status: Option<u16>,
     message: String,
+    body: Vec<u8>,
 }
 
 impl WebError {
@@ -54,6 +55,7 @@ impl WebError {
             kind,
             status: None,
             message: message.into(),
+            body: Vec::new(),
         }
     }
 
@@ -72,6 +74,13 @@ impl WebError {
     #[must_use]
     pub fn status(&self) -> Option<u16> {
         self.status
+    }
+
+    /// The first bytes of the body of a 404 answer of [`Web::get`], or
+    /// empty. A caller can read the reason of a 404 from it.
+    #[must_use]
+    pub fn body(&self) -> &[u8] {
+        &self.body
     }
 }
 
@@ -190,10 +199,22 @@ impl Web {
         let mut response = request.call().map_err(|e| network_error(url, &e))?;
         let status = response.status().as_u16();
         if status != 200 {
+            // A 404 can name its reason in the body. Other statuses keep none.
+            let body = if status == 404 {
+                response
+                    .body_mut()
+                    .with_config()
+                    .limit(NOT_FOUND_BODY_BYTES)
+                    .read_to_vec()
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             return Err(WebError {
                 kind: WebErrorKind::Status,
                 status: Some(status),
                 message: format!("{url} answered with status {status}"),
+                body,
             });
         }
         // With no redirect, the file has the address as its source gives it.
@@ -218,6 +239,9 @@ impl Web {
         Ok(WebFile { final_url, bytes })
     }
 }
+
+/// The most bytes of the body of a 404 answer that [`WebError::body`] keeps.
+const NOT_FOUND_BODY_BYTES: u64 = 16 * 1024;
 
 /// The time limit in seconds of [`Web::server_date`] (ADR 0127 item 13).
 const PROBE_SECONDS: u64 = 5;
@@ -287,6 +311,7 @@ impl Web {
                 kind: WebErrorKind::Status,
                 status: Some(status),
                 message: format!("{url} answered with status {status}"),
+                body: Vec::new(),
             });
         }
         let media_type = header(&response, "content-type")
@@ -364,6 +389,7 @@ impl Web {
                 kind: WebErrorKind::Status,
                 status: Some(status),
                 message: format!("{url} answered with status {status}"),
+                body: Vec::new(),
             });
         }
         let mut facts = MediaFacts {
@@ -434,6 +460,7 @@ impl Web {
                 kind: WebErrorKind::Status,
                 status: Some(status),
                 message: format!("{url} answered with status {status}"),
+                body: Vec::new(),
             });
         }
         if status != 206 {
@@ -560,6 +587,7 @@ impl Web {
                     kind: WebErrorKind::Status,
                     status: Some(status),
                     message: format!("{url} answered with status {status}"),
+                    body: Vec::new(),
                 });
             }
         };

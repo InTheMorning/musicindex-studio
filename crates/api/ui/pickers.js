@@ -5,7 +5,7 @@ import { html, useState, useRef, useEffect, useLayoutEffect } from './vendor/htm
 import { useSheet } from './editor.js';
 import { api, ErrorNotice, Field, Icon } from './app.js';
 import { LookupRow, PersonArt, useLookup } from './peoplepages.js';
-import { foldStartsOpen, lookupGroups, FIND_ONE_EMPTY, FIND_WAIT, FIND_ONE_HINT } from './people.js';
+import { foldStartsOpen, lookupGroups, FIND_ONE_EMPTY, FIND_WAIT, FIND_ONE_HINT, showFindEmpty } from './people.js';
 import { listRows, namePrefix, applyRow, listKey, NAME_PAUSE } from './fieldlist.js';
 
 // The field list of a search field (ADR 0154, musicindex ADR 0052 R-QUERY-7).
@@ -115,7 +115,7 @@ export function useFieldList({ id, value, setValue, scope = null }) {
         <span class="label">${row.label}</span>${(row.line || row.placeholder) && html`<span class="summary">${row.line}${row.line && row.placeholder && ' · '}${row.placeholder && html`<span class="field-placeholder">${row.placeholder}</span>`}</span>`}</li>`)}
     </ul>`}
   </div>`;
-  return { input, list };
+  return { input, list, open: shows };
 }
 
 // The place of the floating field list of the input `id`, while `shows` is
@@ -219,14 +219,15 @@ export function PickFillRow({ title, line, lead, after, taken, selected, onSelec
 
 // The results of the one search (ADR 0145 item 3): the artist and label feeds,
 // then the other feeds. `onPick` gets the row, and for a row of the other feeds
-// it gets `true` as its second argument.
-export function SearchResults({ query, search, disabled, onPick }) {
+// it gets `true` as its second argument. `listOpen` is true while the field
+// list of the search field is open.
+export function SearchResults({ query, search, listOpen, disabled, onPick }) {
   const { rows, feeds, note, error } = search;
   const searching = query.trim() !== '';
   return html`<${ErrorNotice} error=${error} />
     ${searching && rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
     ${note && html`<p class="hint" role="status">${note.message}</p>`}
-    ${searching && rows !== null && rows.length === 0 && feeds.length === 0 && !error && !note && html`<p class="empty">${FIND_ONE_EMPTY}</p>`}
+    ${feeds.length === 0 && !note && showFindEmpty({ ...search, query, listOpen }) && html`<p class="empty">${FIND_ONE_EMPTY}</p>`}
     ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
       <h2>${group.heading}</h2><p class="hint">${group.note}</p>
       <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row, false)} />`)}</div>
@@ -279,7 +280,7 @@ function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
       <p class="hint">${FIND_ONE_HINT}</p></section>`}
       <${ErrorNotice} error=${problem} />
       ${none && html`<p class="hint" role="status">${empty}</p>`}
-      ${options === null && html`<${SearchResults} query=${query} search=${search} onPick=${open} />`}
+      ${options === null && html`<${SearchResults} query=${query} search=${search} listOpen=${fields.open} onPick=${open} />`}
       ${options !== null && html`<div class="group">${options.map((option) => html`<button class="link-row" type="button" key=${option.id} onClick=${() => onPick(option.values)}>
         <span class="text"><span class="label">${option.title}</span><span class="summary">${option.line}</span></span></button>`)}</div>`}
     </div>

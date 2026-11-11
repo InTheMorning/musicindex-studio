@@ -411,7 +411,7 @@ function PickerSheet({ open, recipients, onAdd, onClose }) {
           ...${fields.input}>${fields.list}<//>
       </div></section>
       <${ErrorNotice} error=${indexLoad.error} />
-      ${view === 'hits' && html`<${SearchResults} query=${query} search=${search} disabled=${indexLoad.busy} onPick=${(row) => openFeed(row.feed_guid)} />`}
+      ${view === 'hits' && html`<${SearchResults} query=${query} search=${search} listOpen=${fields.open} disabled=${indexLoad.busy} onPick=${(row) => openFeed(row.feed_guid)} />`}
       ${view === 'feed' && feedData && html`<div class="group">
           <button class="link-row" type="button" onClick=${backToHits}>
             <span class="go" aria-hidden="true">‹</span><span class="title">Search results</span></button>

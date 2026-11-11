@@ -709,7 +709,7 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
   };
   const showCard = !!value && !changing;
   const peopleRows = filterRows(nostrPickRows(people, value), query);
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="nostr-sheet-title" onClose=${onClose}>
+  return html`<dialog ref=${ref} class="sheet small search-sheet" aria-labelledby="nostr-sheet-title" onClose=${onClose}>
     <header>
       <h2 id="nostr-sheet-title">Find a Nostr profile</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
@@ -726,7 +726,7 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
         </div>
       </div>`}
       ${!showCard && html`<form class="form" role="search" onSubmit=${runSearch}>
-        <div class="field">
+        <div class="field pinned-form">
           <label for="nostr-query">Name, npub or NIP-05 address</label>
           <div class="inline"><input id="nostr-query" type="search" value=${query} onInput=${(e) => setQuery(e.target.value)} />
             <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>

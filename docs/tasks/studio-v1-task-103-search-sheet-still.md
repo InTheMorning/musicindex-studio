@@ -1,6 +1,12 @@
 # Studio V1 Task 103: Search Sheet Keeps Its Field Still
 
-Status: Ready.
+Status: Complete, with its screenshot visual check on 2026-11-10. The human test on the iPhone with the keyboard open is open.
+
+Result: before this task, the sheet **Find a Nostr profile** had no full height. At 390 px its top was at 340 px, and after the results its field moved from 455 px to 347 px. After this task, that sheet has the class `search-sheet`, and its field is a `pinned-form`. The field of each of the other three sheets did not move before this task.
+
+Before this task, "No feed on Music Index has this name." showed after two letters, while the search for the new text ran. The rule `showFindEmpty` needs a finished search for the text of the field, and a closed field list. `useLookup` gives `searchedFor`, and `useFieldList` gives `open`. The route `/musicindex/search` sends `searched`, the same as the search of a person.
+
+The drive read the field top in each sheet at 390 px in the dark and the light theme, and at 1100 px. The four values were the same in each sheet. At a window height of 520 px, the field stayed in view after the body scrolled. `$overflow()` and `$edges()` were empty in each step.
 
 Owner of the rules: [ADR 0168](../adr/0168-a-search-sheet-keeps-its-field-still.md). Evidence: finding 7 of the [rc.21 findings](../reviews/2026-11-10-rc21-human-test-findings.md).
 

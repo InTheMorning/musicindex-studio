@@ -1973,7 +1973,11 @@ export const FIND_ONE_HINT = 'Studio searches the feeds on musicindex.org.';
 export const FIND_ONE_EMPTY = 'No feed on Music Index has this name.';
 export const FIND_EMPTY = 'No artist or label feed on Music Index has this name.';
 // FIND_EMPTY shows only when a request ran and gave no rows (ADR 0151 item 9).
-export const showFindEmpty = ({ rows, error, searched }) => searched === true && rows !== null && rows.length === 0 && !error;
+// The request is for the text that the field holds, and the field list is
+// closed (ADR 0168 item 3). `searchedFor` is the text of the last finished
+// search.
+export const showFindEmpty = ({ rows, error, searched, query, searchedFor, listOpen = false }) => searched === true
+  && searchedFor === query.trim() && !listOpen && rows !== null && rows.length === 0 && !error;
 export const FIND_WAIT = 'Searching…';
 // The note of the sheet "From Music Index" (ADR 0163 item 10).
 export const FILL_NOTE = 'Studio puts the values in the fields and the page in the links. Select Save to keep them. Studio changes no feed.';

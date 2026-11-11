@@ -15159,6 +15159,10 @@ async fn a_request_with_no_rows_gives_no_note_and_is_marked_as_a_search() {
     assert_eq!(body["note"], Value::Null);
     assert_eq!(body["searched"], true, "ADR 0151 item 9: a request ran");
     assert_eq!(seen.lock().unwrap().len(), 1);
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/search?q=zzz", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["rows"], json!([]));
+    assert_eq!(body["searched"], true, "ADR 0168 item 3: a request ran");
 }
 
 #[tokio::test]

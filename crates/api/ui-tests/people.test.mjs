@@ -1595,11 +1595,21 @@ test('lookupAddress marks only a start text as plain (ADR 0151 item 3)', () => {
 });
 
 test('showFindEmpty needs a request that gave no rows (ADR 0151 item 9)', () => {
-  assert.equal(showFindEmpty({ rows: [], error: null, searched: true }), true);
-  assert.equal(showFindEmpty({ rows: [], error: null, searched: false }), false);
-  assert.equal(showFindEmpty({ rows: [{}], error: null, searched: true }), false);
-  assert.equal(showFindEmpty({ rows: [], error: new Error('x'), searched: true }), false);
-  assert.equal(showFindEmpty({ rows: null, error: null, searched: true }), false);
+  const done = { query: 'Haleen', searchedFor: 'Haleen' };
+  assert.equal(showFindEmpty({ rows: [], error: null, searched: true, ...done }), true);
+  assert.equal(showFindEmpty({ rows: [], error: null, searched: false, ...done }), false);
+  assert.equal(showFindEmpty({ rows: [{}], error: null, searched: true, ...done }), false);
+  assert.equal(showFindEmpty({ rows: [], error: new Error('x'), searched: true, ...done }), false);
+  assert.equal(showFindEmpty({ rows: null, error: null, searched: true, ...done }), false);
+});
+
+test('showFindEmpty waits for the search of the current text, with the list closed (ADR 0168 item 3)', () => {
+  // The last search was for "Hal", and the search for "Hale" still runs.
+  assert.equal(showFindEmpty({ rows: [], error: null, searched: true, query: 'Hale', searchedFor: 'Hal' }), false);
+  // A finished search for the text of the field, with spaces at its ends.
+  assert.equal(showFindEmpty({ rows: [], error: null, searched: true, query: ' Hale ', searchedFor: 'Hale' }), true);
+  // The field list is open.
+  assert.equal(showFindEmpty({ rows: [], error: null, searched: true, query: 'Hale', searchedFor: 'Hale', listOpen: true }), false);
 });
 
 // ADR 0156 items 2 and 3: the summary line and the lines of a feed of the

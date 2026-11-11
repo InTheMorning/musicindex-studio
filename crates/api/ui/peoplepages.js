@@ -551,12 +551,14 @@ function FindSheet({ open, personId, name, feeds, values, query, onQuery, onClos
 }
 
 // The rows of a search. It runs at the start, and 300 ms after each change of
-// the text. `rows` is null while the first search runs.
+// the text. `rows` is null while the first search runs. `searchedFor` is the
+// text of the last finished search.
 export function useLookup(query, path) {
   const [rows, setRows] = useState(null);
   const [feeds, setFeeds] = useState([]);
   const [note, setNote] = useState(null);
   const [searched, setSearched] = useState(false);
+  const [searchedFor, setSearchedFor] = useState(null);
   const [error, setError] = useState(null);
   const first = useRef(true);
   // A start text is plain words until the person edits the field (ADR 0151
@@ -568,20 +570,20 @@ export function useLookup(query, path) {
     const text = query.trim();
     const wait = first.current ? 0 : 300;
     first.current = false;
-    if (text === '') { setRows([]); setFeeds([]); setNote(null); setSearched(false); setError(null); return undefined; }
+    if (text === '') { setRows([]); setFeeds([]); setNote(null); setSearched(false); setSearchedFor(null); setError(null); return undefined; }
     let live = true;
     const load = () => api(lookupAddress(path, text, !edited.current)).then(
-      (result) => { if (live) { setRows(result.rows || []); setFeeds(result.feeds || []); setNote(result.note || null); setSearched(result.searched === true); setError(null); } },
-      (e) => { if (live) { setRows([]); setFeeds([]); setNote(null); setSearched(false); setError(e); } },
+      (result) => { if (live) { setRows(result.rows || []); setFeeds(result.feeds || []); setNote(result.note || null); setSearched(result.searched === true); setSearchedFor(text); setError(null); } },
+      (e) => { if (live) { setRows([]); setFeeds([]); setNote(null); setSearched(false); setSearchedFor(null); setError(e); } },
     );
     const timer = setTimeout(load, wait);
     return () => { live = false; clearTimeout(timer); };
   }, [query]);
-  return { rows, feeds, note, searched, error };
+  return { rows, feeds, note, searched, searchedFor, error };
 }
 
 function FindForm({ personId, name, feeds, values, query, onQuery, onCancel, onPick, onLink }) {
-  const { rows, note, searched, error } = useLookup(query, `/people/${personId}/musicindex`);
+  const { rows, note, searched, searchedFor, error } = useLookup(query, `/people/${personId}/musicindex`);
   const fields = useFieldList({ id: 'find-query', value: query, setValue: onQuery, scope: 'publisher' });
   // A row of the fold makes the link of ADR 0159 item 1 (ADR 0163 item 3).
   const own = linkChoices(feeds, values.members).map(([id, label]) => html`<button class="link-row" type="button" key=${id}
@@ -596,7 +598,7 @@ function FindForm({ personId, name, feeds, values, query, onQuery, onCancel, onP
       <${ErrorNotice} error=${error} />
       ${rows === null && html`<p class="empty" role="status">${FIND_WAIT}</p>`}
       ${note && html`<p class="hint" role="status">${note.message}</p>`}
-      ${showFindEmpty({ rows, error, searched }) && html`<p class="empty">${FIND_EMPTY}</p>`}
+      ${showFindEmpty({ rows, error, searched, query, searchedFor, listOpen: fields.open }) && html`<p class="empty">${FIND_EMPTY}</p>`}
       ${rows !== null && lookupGroups(rows).map((group) => html`<section class="page-section" key=${group.level}>
         <h2>${group.heading}</h2><p class="hint">${group.note}</p>
         <div class="group">${group.rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => onPick(row)} />`)}</div>

@@ -698,21 +698,28 @@ pub(crate) struct IndexValuesQuery {
 }
 
 /// The one search of the sheets that add a value (ADR 0145 item 3): the artist
-/// and label feeds in `rows`, and the other feeds in `feeds`. The requests run
-/// with no lock of the workspace.
+/// and label feeds in `rows`, and the other feeds in `feeds`. `searched` is
+/// true when a request ran (ADR 0168 item 3). The requests run with no lock of
+/// the workspace.
 pub(crate) async fn search_index(
     State(shared): State<Shared>,
     Query(query): Query<MusicIndexQuery>,
 ) -> ApiResult {
     let request = match search_request(plan_search(&query.q, query.plain))? {
         Ok(request) => request,
-        Err(note) => return Ok(Json(json!({ "rows": [], "feeds": [], "note": note }))),
+        Err(note) => {
+            return Ok(Json(
+                json!({ "rows": [], "feeds": [], "note": note, "searched": false }),
+            ));
+        }
     };
     let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
     blocking_unlocked(move || {
         let rows = lookup::search(&index, &request)?;
         let feeds = index.search(&request)?;
-        Ok(Json(json!({ "rows": rows, "feeds": feeds, "note": null })))
+        Ok(Json(
+            json!({ "rows": rows, "feeds": feeds, "note": null, "searched": true }),
+        ))
     })
     .await
 }

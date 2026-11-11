@@ -142,6 +142,7 @@ pub fn facts_for(links: &OwnedDraftLinks, net: Option<&NetworkFacts>) -> Facts {
         move_chain: net
             .and_then(|n| n.move_chain.clone())
             .filter(|chain| chain.first().map(String::as_str) == tag),
+        index: None,
     }
 }
 

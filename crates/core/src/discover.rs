@@ -325,8 +325,11 @@ fn resolve(source: &Source, index: &MusicIndex) -> Result<(String, Option<String
             Ok(Some(IndexFeed {
                 url: Some(url),
                 title,
+                ..
             })) => Ok((url, title)),
-            Ok(Some(IndexFeed { url: None, title })) => Err(Failed {
+            Ok(Some(IndexFeed {
+                url: None, title, ..
+            })) => Err(Failed {
                 title,
                 ..failed(
                     guid,

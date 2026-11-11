@@ -430,15 +430,34 @@ impl SearchNote {
 struct FeedData {
     feed_url: Option<String>,
     title: Option<String>,
+    last_build_date: Option<i64>,
 }
 
-/// The address and the title that musicindex knows for a feed GUID.
+/// The address, the title and the build time that musicindex knows for a
+/// feed GUID.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct IndexFeed {
     /// The feed address.
     pub url: Option<String>,
     /// The title of the feed.
     pub title: Option<String>,
+    /// The `lastBuildDate` that musicindex read, in Unix seconds. It is
+    /// none when musicindex read no date.
+    pub last_build_date: Option<i64>,
+}
+
+/// One copy of a feed: a different URL that gives the same feed GUID
+/// (Stophammer ADR 0058).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct IndexCopy {
+    /// The URL of the copy.
+    pub url: String,
+    /// True when no one has resolved the copy.
+    #[serde(default)]
+    pub open: bool,
+    /// True when the copy has other payment recipients than the feed.
+    #[serde(default)]
+    pub differs_recipients: bool,
 }
 
 #[derive(Deserialize)]
@@ -672,7 +691,27 @@ impl MusicIndex {
                 .map(|e| IndexFeed {
                     url: e.data.feed_url,
                     title: e.data.title,
+                    last_build_date: e.data.last_build_date,
                 })),
+            Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The copies of a feed GUID (ADR 0175). The function reads the first
+    /// page. Gives `None` when musicindex does not know the feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails.
+    pub fn feed_copies(&self, feed_guid: &str) -> Result<Option<Vec<IndexCopy>>, WebError> {
+        let url = format!("{}/v1/feeds/{}/copies", self.base, filter_guid(feed_guid));
+        match self.web.get(&url, MAX_RESPONSE_BYTES) {
+            Ok(file) => Ok(
+                serde_json::from_slice::<Envelope<Vec<IndexCopy>>>(&file.bytes)
+                    .ok()
+                    .map(|e| e.data),
+            ),
             Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
             Err(e) => Err(e),
         }
@@ -1032,6 +1071,56 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].feed_guid, "g1");
         assert_eq!(hits[0].artist.as_deref(), Some("Ann"));
+    }
+
+    #[test]
+    fn a_feed_gives_its_build_time_and_its_copies_and_a_404_gives_none() {
+        let server = TestServer::start(vec![
+            (
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810",
+                200,
+                br#"{"data":{"feed_url":"https://example.com/a.xml","title":"A","last_build_date":1710288000}}"#.to_vec(),
+            ),
+            (
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f811",
+                200,
+                br#"{"data":{"feed_url":"https://example.com/b.xml","title":"B","last_build_date":null}}"#.to_vec(),
+            ),
+            (
+                "/v1/feeds/917393e3-1b1e-5cef-ace4-edaa54e1f810/copies",
+                200,
+                br#"{"data":[
+                    {"url":"https://mirror.example/a.xml","first_seen":1,"open":true,"differs_recipients":true,"resolution":null},
+                    {"url":"https://mirror.example/b.xml","open":false,"differs_recipients":false}
+                ],"pagination":{"cursor":null,"has_more":false},"meta":{},"copies_over_limit":0}"#.to_vec(),
+            ),
+        ]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let feed = index
+            .feed("917393e3-1b1e-5cef-ace4-edaa54e1f810")
+            .unwrap()
+            .unwrap();
+        assert_eq!(feed.last_build_date, Some(1_710_288_000));
+        let none = index
+            .feed("917393e3-1b1e-5cef-ace4-edaa54e1f811")
+            .unwrap()
+            .unwrap();
+        assert_eq!(none.last_build_date, None);
+
+        let copies = index
+            .feed_copies("917393e3-1b1e-5cef-ace4-edaa54e1f810")
+            .unwrap()
+            .unwrap();
+        assert_eq!(copies.len(), 2);
+        assert_eq!(copies[0].url, "https://mirror.example/a.xml");
+        assert!(copies[0].open && copies[0].differs_recipients);
+        assert!(!copies[1].open && !copies[1].differs_recipients);
+        assert_eq!(
+            index
+                .feed_copies("00000000-0000-0000-0000-000000000000")
+                .unwrap(),
+            None
+        );
     }
 
     #[test]

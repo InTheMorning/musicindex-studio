@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 
-Status: Not started. ADR 0175 is Proposed. Packets 110a and 110b can start. Packet 110c stops at its mockup until the operator confirms it.
+Status: In progress. ADR 0175 is Proposed. Packet 110a is complete. Packet 110b can start. Packet 110c stops at its mockup until the operator confirms it.
 
 ## Goal
 

@@ -8,6 +8,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::feed::Feed;
 
+mod index;
+
+pub use index::{IndexFacts, IndexLine, index_line};
+
 /// The kind of a finding. Each kind is one row of the table in ADR 0174
 /// item 7.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -33,12 +37,20 @@ pub enum FindingKind {
     MoveNotConfirmed,
     /// The feed has no `language`.
     NoLanguage,
+    /// The index holds the feed at an address other than the public
+    /// address (ADR 0175 item 3).
+    IndexAddressDiffers,
+    /// An open copy of the feed has other payment recipients (ADR 0175
+    /// item 6).
+    CopyOtherRecipients,
 }
 
-/// How a finding asks for action (ADR 0174 item 3).
+/// How a finding asks for action (ADR 0174 item 3, ADR 0175 item 6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum FindingLevel {
+    /// Money can go to other people. The user cannot repair it.
+    Warning,
     /// The finding has a repair or a button that opens the field.
     Notice,
     /// The finding needs a value from the user.
@@ -112,6 +124,10 @@ pub struct Facts {
     /// tag. The last URL is the end of the chain. It is none when no read
     /// ran.
     pub move_chain: Option<Vec<String>>,
+    /// What the index holds for the feed (ADR 0175 item 2). It is none when
+    /// no read ran, and always none for a feed with no `podcast:guid`,
+    /// because the check sends no request for such a feed.
+    pub index: Option<IndexFacts>,
 }
 
 /// Examine `feed` and give its findings. The function sends no request and
@@ -125,6 +141,7 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
         check_item(&entry.value, facts, &mut found);
     }
     check_images(feed, facts, &mut found);
+    index::check_index(facts, &mut found);
     if feed.language.as_deref().is_none_or(|l| l.trim().is_empty()) {
         found.push(Finding {
             kind: FindingKind::NoLanguage,

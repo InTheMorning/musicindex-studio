@@ -57,8 +57,8 @@ export function applyRow(text, edit, insert) {
 // - 'move': the selection changes, and the key does nothing else.
 // - 'insert': the selected row goes into the text.
 // - 'close': the list closes, and the key does nothing else.
-// - 'pass': the key does what it does with no list. Enter with no selected
-//   row thus runs the search or sends the form.
+// - 'search': Enter runs the search and closes the list.
+// - 'pass': the key does what it does with no list.
 export function listKey({ open, selected }, key, count) {
   const pass = { open, selected, act: 'pass' };
   if (!open || count === 0) return pass;
@@ -70,7 +70,8 @@ export function listKey({ open, selected }, key, count) {
       return { open, selected: selected === 0 ? null : selected - 1, act: 'move' };
     case 'Enter':
     case 'Tab':
-      return selected !== null && selected < count ? { open, selected: null, act: 'insert' } : pass;
+      if (selected !== null && selected < count) return { open, selected: null, act: 'insert' };
+      return key === 'Enter' ? { open: false, selected: null, act: 'search' } : pass;
     case 'Escape':
       return { open: false, selected: null, act: 'close' };
     default:

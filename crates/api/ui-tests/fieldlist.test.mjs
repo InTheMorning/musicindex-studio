@@ -38,10 +38,10 @@ test('a row replaces the range that the core gave, and the cursor follows it', (
 
 // ADR 0154 items 7 and 8: no row is selected at the start, Up and Down move,
 // Tab or Enter puts the selected row in, Escape closes, and Enter with no
-// selected row keeps the action of the field.
+// selected row runs the search and closes the list.
 test('the keys of the list', () => {
   const start = { open: true, selected: null };
-  assert.deepEqual(listKey(start, 'Enter', 3), { open: true, selected: null, act: 'pass' });
+  assert.deepEqual(listKey(start, 'Enter', 3), { open: false, selected: null, act: 'search' });
   assert.deepEqual(listKey(start, 'Tab', 3).act, 'pass');
   assert.deepEqual(listKey(start, 'ArrowDown', 3), { open: true, selected: 0, act: 'move' });
   assert.deepEqual(listKey({ open: true, selected: 2 }, 'ArrowDown', 3).selected, 2);
@@ -56,6 +56,15 @@ test('the keys of the list', () => {
     assert.equal(listKey({ open: false, selected: null }, key, 3).act, 'pass', key);
     assert.equal(listKey({ open: true, selected: null }, key, 0).act, 'pass', key);
   }
+});
+
+// ADR 0171 items 7 and 9: after Enter closes the list, the next letter opens
+// it again with no selected row.
+test('Enter closes the field list, and the list then acts as a closed list', () => {
+  const closed = listKey({ open: true, selected: null }, 'Enter', 3);
+  assert.deepEqual(closed, { open: false, selected: null, act: 'search' });
+  assert.deepEqual(listKey(closed, 'Enter', 3).act, 'pass');
+  assert.deepEqual(listKey({ open: true, selected: 1 }, 'Enter', 3).act, 'insert');
 });
 
 test('a text field shows its example as a placeholder, and puts in only its token (musicindex ADR 0058 R-QUERY-11)', () => {

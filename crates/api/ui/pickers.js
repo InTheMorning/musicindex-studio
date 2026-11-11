@@ -98,6 +98,11 @@ export function useFieldList({ id, value, setValue, scope = null }) {
         return;
       }
       const next = listKey({ open: shows && rows.length > 0, selected }, e.key, rows.length);
+      if (next.act === 'search') {
+        setOpen(false);
+        setSelected(null);
+        return;
+      }
       if (next.act === 'pass') return;
       e.preventDefault();
       e.stopPropagation();

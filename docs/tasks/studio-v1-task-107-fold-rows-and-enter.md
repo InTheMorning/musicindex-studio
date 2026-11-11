@@ -1,6 +1,12 @@
 # Studio V1 Task 107: Fold Rows And Enter In The Field List
 
-Status: Ready.
+Status: Complete, with its screenshot visual check on 2026-11-10. The human test on the iPhone is open.
+
+Result: each fold header had the chevron at its start before this task, from `.disclosure > summary::before`. `PickFold` had its own header style in small bold capitals. That style is removed, so `PickFold` uses the shared `.disclosure` header: body text, no capitals, and the target height. The drive measured 13 px and 28 px at 1100 px, and 17 px and 44 px at 390 px with touch. No tree row has `›` at its end.
+
+Enter with no selected row closes the field list (`listKey` gives the action `search`). The key then goes to the field, so the search runs. The drive pressed Enter after `artist:Ha` on the sheet "By address or name". Before this task the list stayed open over the result line. After this task the list closed, and the next letter opened it again.
+
+The chevron is a CSS mark, so a Node test cannot read it. The browser drive reads it with `getComputedStyle(summary, '::before')`.
 
 Owner of the rules: [ADR 0171](../adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md). It applies musicindex ADR 0060 R-FOLD-1 items 1 to 5, R-FOLD-2 and R-FOLD-3. It also applies musicindex ADR 0052 R-QUERY-7 item 4. [Task 108](studio-v1-task-108-list-keys.md) owns the keys of the lists.
 

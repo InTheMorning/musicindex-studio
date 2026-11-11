@@ -8,6 +8,7 @@ import { api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, Ch
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
+import { onListKey } from './listkeys.js';
 import {
   recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES,
   CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
@@ -705,6 +706,8 @@ export function PersonPage({ id, feeds, go }) {
   // row that the values sheet shows (ADR 0117 items 2 and 8).
   const [finding, setFinding] = useState(null);
   const [picked, setPicked] = useState(null);
+  const [whereCurrent, setWhereCurrent] = useState(0);
+  const [whereOpen, setWhereOpen] = useState({});
   // The credit offers of the last Save that changed the links (ADR 0132 items
   // 11 and 12). The first offer has its sheet open. `made` holds the ID of each
   // change set of these sheets.
@@ -873,12 +876,19 @@ export function PersonPage({ id, feeds, go }) {
       <div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>Find on Music Index</button></div><//>`,
     // One entry for each feed, and one open at a time (ADR 0156, ADR 0028).
     where: () => where.length > 0 && html`<section class="page-section"><h2>Where this person is</h2>
-      <div class="group">${where.map((entry) => html`<details class="disclosure where-entry" name="person-where" key=${entry.id}>
-        <summary><span class="text"><span class="label">${entry.title}</span><span class="summary">${entry.summary}</span></span></summary>
+      <div class="group">${where.map((entry, index) => {
+        const currentIndex = Math.min(whereCurrent, Math.max(0, where.length - 1));
+        const open = Boolean(whereOpen[entry.id]);
+        return html`<details class="disclosure where-entry" name="person-where" key=${entry.id} open=${open}
+          onToggle=${(event) => { const now = event.currentTarget.open; setWhereOpen((rows) => (Boolean(rows[entry.id]) === now ? rows : { ...rows, [entry.id]: now })); }}
+          onfocusin=${() => setWhereCurrent(index)} onKeyDown=${(event) => onListKey(event, currentIndex, setWhereCurrent)}>
+        <summary data-list-row="true" tabindex=${currentIndex === index ? 0 : -1} aria-expanded=${String(open)}>
+          <span class="text"><span class="label">${entry.title}</span><span class="summary">${entry.summary}</span></span></summary>
         <ul class="where-lines">${entry.lines.map((line, i) => html`<li key=${i}><span class="where-place">${line.label}</span>
           ${line.detail && html`<span class="where-detail">${line.detail}</span>`}</li>`)}</ul>
         ${feedOf(entry.id) && html`<div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'feed', id: entry.id })}>${openLabel(feedOf(entry.id))}</button></div>`}
-      </details>`)}</div></section>`,
+      </details>`;
+      })}</div></section>`,
     check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count}
       onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
     more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>

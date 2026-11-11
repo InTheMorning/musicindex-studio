@@ -111,3 +111,35 @@ export function onTreeKey(event, current, setCurrent) {
   if (result.action.type === 'toggle') element?.click();
   if (result.action.type === 'page') element?.click();
 }
+
+// Handle one list key. The caller keeps the current expandable row so Tab
+// returns to the same row after focus leaves the list.
+export function onListKey(event, current, setCurrent) {
+  const row = event.currentTarget.querySelector(':scope > summary[data-list-row]');
+  const list = row?.closest('.group');
+  if (!list) return;
+  const elements = Array.from(list.querySelectorAll(':scope > details > summary[data-list-row]'));
+  if (elements.length === 0) return;
+  const indexByElement = new Map(elements.map((element, index) => [element, index]));
+  const active = indexByElement.get(document.activeElement);
+  if (active === undefined) return;
+  const selected = active;
+  const rows = elements.map((element) => ({
+    kind: 'expandable', expandable: true,
+    expanded: element.getAttribute('aria-expanded') === 'true',
+  }));
+  const result = listKey(createListModel(rows, selected), event.key);
+  const next = result.model.current;
+  const moved = next !== selected;
+  if (!moved && result.action.type === 'none') return;
+
+  event.preventDefault();
+  if (moved) {
+    setCurrent(next);
+    elements.forEach((element, index) => { element.tabIndex = index === next ? 0 : -1; });
+    elements[next]?.focus();
+    return;
+  }
+
+  elements[result.action.row]?.click();
+}

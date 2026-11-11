@@ -8,6 +8,7 @@ import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, mem
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useLookup } from './peoplepages.js';
 import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
+import { onListKey } from './listkeys.js';
 
 
 // ---- Share bars ----
@@ -108,6 +109,8 @@ function Recipients({ id, recipients, defaultType, onChange }) {
   // `{ cid }` with the `_cid` of the row to change, or `{}` for a new row.
   const [sheet, setSheet] = useState(null);
   const [copying, setCopying] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [expandedRows, setExpandedRows] = useState({});
   const blank = { name: null, recipient_type: defaultType, address: null, split: '', custom_key: null, custom_value: null, fee: null };
   const changing = sheet && recipients.find((r) => r._cid === sheet.cid);
   const save = (values) => {
@@ -132,13 +135,25 @@ function Recipients({ id, recipients, defaultType, onChange }) {
   if (order.current.at !== sortAt || !same) {
     order.current = { at: sortAt, cids: splitOrder(recipients).map((i) => recipients[i]._cid) };
   }
+  let rowIndex = 0;
   const row = (r, i) => {
+      const listIndex = rowIndex++;
+      const currentIndex = Math.min(current, Math.max(0, recipients.length - 1));
       const change = (name) => (value) => onChange(setAt(recipients, i, set(r, name, value)));
       const rid = `${id}-r-${r._cid}`;
       const line = r.address ? memberLine(r, true) : { label: 'No address', address: null, account: null };
-      return html`<details class="recipient" name=${`${id}-recipients`} key=${r._cid} ref=${openOnce(r._cid)}
+      const open = Boolean(expandedRows[r._cid]);
+      const openRef = openOnce(r._cid);
+      const setOpenRow = (element) => {
+        openRef(element);
+        // The same object for no change, or each new ref would render again.
+        if (element && element.open) setExpandedRows((rows) => (rows[r._cid] ? rows : { ...rows, [r._cid]: true }));
+      };
+      return html`<details class="recipient" name=${`${id}-recipients`} key=${r._cid} ref=${setOpenRow} open=${open}
+        onToggle=${(event) => { const now = event.currentTarget.open; setExpandedRows((rows) => (Boolean(rows[r._cid]) === now ? rows : { ...rows, [r._cid]: now })); }}
+        onfocusin=${() => setCurrent(listIndex)} onKeyDown=${(event) => onListKey(event, currentIndex, setCurrent)}
         onfocusout=${(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setTimeout(() => setSortAt((n) => n + 1), 200); }}>
-        <summary>
+        <summary data-list-row="true" tabindex=${currentIndex === listIndex ? 0 : -1} aria-expanded=${String(open)}>
           <span class="title">${r.name || r.address || 'New recipient'}</span>
           <${Meter} percent=${percent[i]} />
           <span class="share">${percentText(percent[i])}${isFee(r) ? ' fee' : ''}</span>

@@ -9,7 +9,7 @@ import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, as
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
-import { onTreeKey } from './listkeys.js';
+import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
@@ -127,9 +127,20 @@ export const openOnce = (cid) => (element) => {
   }
 };
 
-export function EntryRow({ group, cid, summary, children }) {
-  return html`<details class="entry-row" name=${group} key=${cid} ref=${openOnce(cid)}>
-    <summary>${summary}</summary>
+export function EntryRow({ group, cid, summary, children, listIndex, current, setCurrent }) {
+  const [expanded, setExpanded] = useState(false);
+  const open = openOnce(cid);
+  const openEntry = (element) => {
+    open(element);
+    if (element && element.open) setExpanded(true);
+  };
+  const inList = listIndex !== undefined;
+  return html`<details class="entry-row" name=${group} key=${cid} ref=${openEntry}
+      onToggle=${(event) => setExpanded(event.currentTarget.open)}
+      onfocusin=${inList ? () => setCurrent(listIndex) : undefined}
+      onKeyDown=${inList ? (event) => onListKey(event, current, setCurrent) : undefined}>
+    <summary data-list-row=${inList ? 'true' : undefined} tabindex=${inList ? (current === listIndex ? 0 : -1) : undefined}
+      aria-expanded=${inList ? String(expanded) : undefined}>${summary}</summary>
     <div class="form">${children}</div>
   </details>`;
 }
@@ -245,6 +256,7 @@ function FundingForm({ fundings, onAdd, onCancel }) {
 function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
   const { feedId } = useContext(PickerContext) || {};
   const [adding, setAdding] = useState(false);
+  const [current, setCurrent] = useState(0);
   const roles = useRoleList();
   return html`${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
     ${persons.map((p, i) => {
@@ -252,7 +264,9 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
       const id = `${prefix}-person-${p._cid}`;
       const summary = html`<span class="title">${p.name || 'New person'}</span>
         <span class="sub">${roleSummary(p.role, p.group, roles || []) || 'host · cast'}</span>`;
-      return html`<${EntryRow} key=${p._cid} group=${`${prefix}-persons`} cid=${p._cid} summary=${summary}>
+      const currentIndex = Math.min(current, Math.max(0, persons.length - 1));
+      return html`<${EntryRow} key=${p._cid} group=${`${prefix}-persons`} cid=${p._cid} summary=${summary}
+        listIndex=${i} current=${currentIndex} setCurrent=${setCurrent}>
         <${TextField} id=${`${id}-name`} label="Name" required value=${p.name} onChange=${change('name')} />
         <${RoleMenu} id=${`${id}-role`} role=${p.role} group=${p.group}
           onChange=${(role, group) => onChange(setAt(persons, i, { ...p, role: role || null, group: group || null }))} />
@@ -275,13 +289,16 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
 
 function Fundings({ fundings, onChange, bad }) {
   const [adding, setAdding] = useState(false);
+  const [current, setCurrent] = useState(0);
   return html`${fundings.length === 0 && html`<p class="hint">No support links yet.</p>`}
     ${fundings.map((f, i) => {
       const change = (name) => (value) => onChange(setAt(fundings, i, set(f, name, value)));
       const id = `funding-${f._cid}`;
       const summary = html`<span class="title">${f.label || 'New support link'}</span>
         <span class="sub mono">${f.url || 'No address'}</span>`;
-      return html`<${EntryRow} key=${f._cid} group="fundings" cid=${f._cid} summary=${summary}>
+      const currentIndex = Math.min(current, Math.max(0, fundings.length - 1));
+      return html`<${EntryRow} key=${f._cid} group="fundings" cid=${f._cid} summary=${summary}
+        listIndex=${i} current=${currentIndex} setCurrent=${setCurrent}>
         <${TextField} id=${`${id}-label`} label="Text" required value=${f.label} onChange=${change('label')} />
         <${TextField} id=${`${id}-url`} label="Address" type="url" address=${`fundings/${i}/url`} bad=${bad} value=${f.url} onChange=${change('url')} />
         <${EntryActions} list=${fundings} index=${i} name=${f.label || 'this support link'} onChange=${onChange} />

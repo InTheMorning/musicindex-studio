@@ -2,8 +2,8 @@
 
 ## Status
 
-Open - 2026-11-11. F0, F1, F2 and the tag of a moved feed have an answer. F3 to
-F6 and a second move are open. Received - 2026-11-04.
+Open - 2026-11-11. F0, F1, F2 and the tag of a moved feed have an answer. ADR
+0175 proposes F3. F4 to F6 and a second move are open. Received - 2026-11-04.
 
 This request comes from the research repository at
 `../musicindex-research`. That repository has no Git remote, and it is private.
@@ -274,7 +274,8 @@ Test the result against the ADR 0053 rule.
 
 ## F3: The Index View
 
-Open. No ADR decides F3. ADR 0126, ADR 0127 and ADR 0128 name it as a non-goal.
+Proposed in [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md). ADR 0126,
+ADR 0127 and ADR 0128 name it as a non-goal.
 F3 does not wait for F1. ADR 0174 item 9 gives F3 the GUID difference between
 the local feed and the index.
 

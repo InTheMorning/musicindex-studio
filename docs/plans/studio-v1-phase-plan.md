@@ -270,6 +270,8 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Visual check: Review shows a refusal and a notice. The operator moves a feed between two real file hosts, and back.
 - Decision: [ADR 0127](../adr/0127-a-changed-feed-gets-a-new-build-date.md). A change of a feed also sets `lastBuildDate`, from a time that a server checks. [Task 092](../tasks/studio-v1-task-092-build-date.md) is complete, with its screenshot visual check. Its human test is open.
 - Decision: [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). On 2026-11-11 the operator lifted the stop on F1. One core check gives findings with a repair through the draft. Form A of the mockups in `.studio-dev/mockup-feedcheck/` goes into the tabs of ADR 0135 as the tab **Check** with a count. [Task 109](../tasks/studio-v1-task-109-feed-check.md) gives the build in three packets. The three packets are complete, with the screenshot visual check, and the human test is open.
+- Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md), Proposed. The check also shows what Music Index holds: a different address and a copy that pays other people. [Task 110](../tasks/studio-v1-task-110-index-view.md) gives the build in three packets, and none is started.
+- Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md). Delete a feed from its file host, with a retire first. [Task 111](../tasks/studio-v1-task-111-delete-from-host.md) gives the build in three packets, and none is started.
 
 ### Phase 13: Desktop Shell
 

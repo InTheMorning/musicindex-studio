@@ -176,6 +176,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0172: A list is one Tab stop](adr/0172-a-list-is-one-tab-stop.md)
 - [ADR 0173: A live show problem shows at its field](adr/0173-a-live-show-problem-shows-at-its-field.md)
 - [ADR 0174: A feed check gives findings and repairs through the draft](adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md)
+- [ADR 0175: The check shows what Music Index holds](adr/0175-the-check-shows-what-music-index-holds.md) (Proposed)
 
 ## Plans
 

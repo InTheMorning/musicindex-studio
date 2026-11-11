@@ -95,6 +95,6 @@ test('A row covers the feed and each release, and a group covers its feeds (ADR 
 test('The style of a mark sets the color of the icon, not only of the row (ADR 0165 item 2)', () => {
   const css = readFileSync(new URL('../ui/styles.css', import.meta.url), 'utf8');
   for (const [tone, token] of [['error', '--error'], ['accent', '--accent'], ['muted', '--muted']]) {
-    assert.ok(css.includes(`.row .state-mark.${tone} .icon { color: var(${token}); }`), tone);
+    assert.ok(css.includes(`.state-mark.${tone} .icon { color: var(${token}); }`), tone);
   }
 });

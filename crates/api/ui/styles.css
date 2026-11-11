@@ -606,11 +606,11 @@ textarea.masked { -webkit-text-security: disc; }
 /* The state mark of a row, between the name and the count (ADR 0165 items 1
    and 2). The icon has a fixed size, so the count does not move. The color
    rules name the icon, because a row sets the color of its icon. */
-.row .state-mark { display: inline-flex; flex: none; align-items: center; }
-.row .state-mark .icon { width: 16px; height: 16px; }
-.row .state-mark.error .icon { color: var(--error); }
-.row .state-mark.accent .icon { color: var(--accent); }
-.row .state-mark.muted .icon { color: var(--muted); }
+.state-mark { display: inline-flex; flex: none; align-items: center; }
+.state-mark .icon { width: 16px; height: 16px; }
+.state-mark.error .icon { color: var(--error); }
+.state-mark.accent .icon { color: var(--accent); }
+.state-mark.muted .icon { color: var(--muted); }
 /* The art of a publisher feed in the left panel, with the type dot on its
    bottom right corner (musicindex ADR 0038 R-DOT-3). The dot has a 2 px
    ring in the color of the surface behind the art, so the ring extends
@@ -1387,6 +1387,9 @@ select.position:focus { background: var(--fill); }
   overflow-wrap: anywhere;
 }
 .segment:hover { color: var(--text); }
+/* The pencil of a tab with a pending change (ADR 0166 item 9) keeps the label
+   on the line of the other labels. */
+.segment .state-mark { display: inline-block; vertical-align: -3px; line-height: 0; }
 .segment[aria-current="page"], .segment[aria-pressed="true"] {
   background-image: linear-gradient(180deg, var(--gloss-top), var(--gloss-bottom));
   color: var(--text);
@@ -1396,6 +1399,26 @@ select.position:focus { background: var(--fill); }
 /* The tabs of the page of a feed (ADR 0135). */
 .page-tabs { margin: 0 32px 8px; max-width: 816px; }
 .page-tab-menu { display: block; width: calc(100% - 32px); margin: 0 16px 8px; }
+/* The tabs of Settings have the space of the mockup below the bar (ADR 0166
+   item 1). A feed page gets its space from its head. */
+.settings-tabs { padding-top: 8px; }
+/* Each section of Settings has the section heading of the app above one
+   group (musicindex ADR 0059 R-SET-2 item 2). Each part of a group has the
+   space of a row. */
+.settings-group > * { padding: 12px 16px; }
+/* A setting with a select menu is one row: the name and the hint at the
+   start, and the menu at the end (ADR 0166 item 6). A text field stays below
+   its name. At 760 px or less, the menu goes below the hint. */
+.field.setting-row { grid-template-columns: minmax(0, 1fr) minmax(160px, 260px); column-gap: 16px; row-gap: 2px; align-items: center; }
+.field.setting-row > label { grid-column: 1; grid-row: 1; }
+.field.setting-row > .field-body { display: contents; }
+.field.setting-row .hint { grid-column: 1; grid-row: 2; }
+.field.setting-row select { grid-column: 2; grid-row: 1 / span 2; }
+.field.setting-row .field-error { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .field.setting-row { grid-template-columns: minmax(0, 1fr); }
+  .field.setting-row select { grid-column: 1; grid-row: 3; margin-top: 4px; }
+}
 .feed-head { padding: 16px 32px 20px; max-width: 880px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (max-width: 760px) {
   .feed-head { padding: 16px 16px 20px; }

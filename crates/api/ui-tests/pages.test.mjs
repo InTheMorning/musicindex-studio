@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { pageSequence, pageNames, tierError, TIERS } from '../ui/pages.js';
+import { pageSequence, settingsTabs, pageNames, tierError, TIERS } from '../ui/pages.js';
 
 const FEED_FIELDS = ['title', 'author', 'nostr', 'artwork', 'description', 'link', 'listing', 'explicit'];
 test('pageSequence gives a new copy at each call', () => {
@@ -80,7 +80,7 @@ test('studio-settings has account only on a server', () => {
   const ids = (server) => pageSequence('studio-settings', { server }).map((s) => s.id);
   assert.deepEqual(ids(true), ['scale', 'lock', 'account', 'apps', 'nostr', 'outside', 'library']);
   // ADR 0107 item 3: the desktop has the section "Move Studio" in the tier setup.
-  assert.deepEqual(ids(false), ['scale', 'lock', 'window', 'apps', 'nostr', 'outside', 'move', 'collections', 'library']);
+  assert.deepEqual(ids(false), ['scale', 'lock', 'window', 'apps', 'nostr', 'outside', 'collections', 'move', 'library']);
   const desktop = pageSequence('studio-settings', { server: false });
   assert.equal(desktop.find((s) => s.id === 'move').tier, 'setup');
   assert.equal(tierError('studio-settings', desktop), null);
@@ -95,6 +95,23 @@ test('a server that holds no assets shows files on this server in the tier limit
   assert.ok(on.includes('library') && !on.includes('files'));
   const desktop = pageSequence('studio-settings', { server: false, holdAssets: false }).map((s) => s.id);
   assert.ok(desktop.includes('library') && !desktop.includes('files'));
+});
+
+test('Settings tabs give the labels and sections of ADR 0166 item 1', () => {
+  const desktop = settingsTabs({ server: false });
+  assert.deepEqual(desktop.map(({ label }) => label), ['General', 'Nostr', 'Apps', 'Data']);
+  assert.deepEqual(desktop.map(({ sections }) => sections.map(({ id }) => id)), [
+    ['scale', 'lock', 'window', 'outside'], ['nostr'], ['apps'], ['collections', 'move', 'library'],
+  ]);
+  const server = settingsTabs({ server: true, holdAssets: true });
+  assert.deepEqual(server.map(({ label }) => label), ['General', 'Account', 'Nostr', 'Apps', 'Data']);
+  assert.deepEqual(server.map(({ sections }) => sections.map(({ id }) => id)), [
+    ['scale', 'lock', 'outside'], ['account'], ['nostr'], ['apps'], ['library'],
+  ]);
+  for (const tabs of [desktop, server, settingsTabs({ server: true, holdAssets: false })]) {
+    for (const tab of tabs) assert.equal(tierError(`studio-settings ${tab.label}`, tab.sections), null);
+  }
+  assert.deepEqual(settingsTabs({ server: true, holdAssets: false }).at(-1).sections.map(({ id }) => id), ['files']);
 });
 
 test('hosts starts with cards', () => {

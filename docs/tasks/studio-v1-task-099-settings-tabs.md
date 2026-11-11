@@ -1,6 +1,6 @@
 # Studio V1 Task 099: Settings Tabs And One Save Bar
 
-Status: Ready.
+Status: Complete, with its screenshot visual checks on 2026-11-11 on the desktop. The human tests are open. The server shell had no screenshot check: the Node tests cover its five tabs. Each section has the section heading of the app above one group (musicindex ADR 0059 R-SET-2 item 2). The hint of the lock setting has more than one line, and R-SET-2 item 1 asks for one line.
 
 Owner of the rules: [ADR 0166](../adr/0166-settings-has-tabs-and-one-save-bar.md), all items including 17 and 18. The shared layout rules are musicindex ADR 0059 (`../musicindex/docs/adr/0059-settings-has-a-tab-row-and-one-save-bar.md`, read only).
 

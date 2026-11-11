@@ -67,23 +67,23 @@ const PAGES = {
     { id: 'delete', tier: 'limits' },
   ],
   'studio-settings': ({ server, holdAssets = true }) => [
-    { id: 'scale', tier: 'setup' },
-    { id: 'lock', tier: 'setup' },
+    { id: 'scale', tier: 'setup', tab: 'general' },
+    { id: 'lock', tier: 'setup', tab: 'general' },
     // Only the desktop app has a window to close (ADR 0124 item 29).
-    ...(server ? [] : [{ id: 'window', tier: 'setup' }]),
-    ...(server ? [{ id: 'account', tier: 'setup' }] : []),
-    { id: 'apps', tier: 'setup' },
-    { id: 'nostr', tier: 'setup' },
-    { id: 'outside', tier: 'setup' },
+    ...(server ? [] : [{ id: 'window', tier: 'setup', tab: 'general' }]),
+    ...(server ? [{ id: 'account', tier: 'setup', tab: 'account' }] : []),
+    { id: 'apps', tier: 'setup', tab: 'apps' },
+    { id: 'nostr', tier: 'setup', tab: 'nostr' },
+    { id: 'outside', tier: 'setup', tab: 'general' },
+    // The panel shows only in the desktop app (ADR 0149 item 5).
+    ...(server ? [] : [{ id: 'collections', tier: 'setup', tab: 'data' }]),
     // The desktop moves its data from here. A server has "Export Account" in
     // the Account panel (ADR 0107 item 3).
-    ...(server ? [] : [{ id: 'move', tier: 'setup' }]),
-    // The panel shows only in the desktop app (ADR 0149 item 5).
-    ...(server ? [] : [{ id: 'collections', tier: 'setup' }]),
+    ...(server ? [] : [{ id: 'move', tier: 'setup', tab: 'data' }]),
     // A server with `--hold-assets off` has no downloads into the library, so
     // the section "Files on this server" takes the place of the library
     // limits (ADR 0105 items 14 and 17).
-    server && !holdAssets ? { id: 'files', tier: 'limits' } : { id: 'library', tier: 'limits' },
+    server && !holdAssets ? { id: 'files', tier: 'limits', tab: 'data' } : { id: 'library', tier: 'limits', tab: 'data' },
   ],
 };
 
@@ -93,6 +93,15 @@ const PAGES = {
 // `library` when `options.server` is true and `options.holdAssets` is false. The other pages ignore `options`.
 export function pageSequence(name, options = {}) {
   return PAGES[name](options);
+}
+
+// The Settings tabs and their sections, in the sequence of ADR 0166 items 1
+// and 2. Each section of `studio-settings` names its tab.
+export function settingsTabs(options = {}) {
+  const labels = { general: 'General', account: 'Account', nostr: 'Nostr', apps: 'Apps', data: 'Data' };
+  const sections = pageSequence('studio-settings', options);
+  const order = options.server ? ['general', 'account', 'nostr', 'apps', 'data'] : ['general', 'nostr', 'apps', 'data'];
+  return order.map((id) => ({ id, label: labels[id], sections: sections.filter((section) => section.tab === id) }));
 }
 
 // The names of the pages that `pageSequence` knows.

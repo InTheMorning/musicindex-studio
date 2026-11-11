@@ -1,6 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
-import { pageSequence } from './pages.js';
+import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
@@ -25,6 +25,7 @@ import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
+import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSheet, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
@@ -1950,7 +1951,7 @@ export function useLeaveGuard(active, guard) {
   latest.current = guard;
   useEffect(() => {
     if (!active || !setGuard) return undefined;
-    setGuard(() => latest.current());
+    setGuard((target) => latest.current(target));
     return () => setGuard(null);
   }, [active, setGuard]);
 }
@@ -2018,22 +2019,29 @@ export function onSegmentKey(event) {
   segments[next].focus();
 }
 
-// The tabs of the page of a feed (ADR 0135). At a narrow width they are one
-// select menu, so that no tab starts outside the window.
-function PageTabs({ feed, view, go }) {
+// The tabs of the page of a feed (ADR 0135), or the `tabs` of a different
+// page with `current` and `onSelect`, such as Settings (ADR 0166 item 3). At a
+// narrow width they are one select menu, so that no tab starts outside the
+// window.
+function PageTabs({ feed, view, go, tabs: suppliedTabs, current: selected, onSelect, label = 'Pages of this feed' }) {
   const narrow = useNarrow();
-  const tabs = pageTabs(feed, view);
+  const settings = suppliedTabs !== undefined;
+  const tabs = settings
+    ? suppliedTabs.map((tab) => ({ page: tab.id, label: tab.label, current: tab.id === selected, pending: tab.pending }))
+    : pageTabs(feed, view);
   if (tabs.length === 0) return null;
-  const open = (page) => go({ name: 'feed', id: feed.id, page, ...(view.from ? { from: view.from } : {}) });
+  const open = settings
+    ? (page) => onSelect(page)
+    : (page) => go({ name: 'feed', id: feed.id, page, ...(view.from ? { from: view.from } : {}) });
   if (narrow) {
-    return html`<select class="button page-tab-menu" aria-label="Page of this feed"
+    return html`<select class="button page-tab-menu" aria-label=${settings ? label : 'Page of this feed'}
       value=${tabs.find((tab) => tab.current)?.page} onChange=${(e) => open(e.target.value)}>
-      ${tabs.map((tab) => html`<option key=${tab.page} value=${tab.page}>${tab.label}</option>`)}
+      ${tabs.map((tab) => html`<option key=${tab.page} value=${tab.page}>${tab.label}${tab.pending ? ' (Not saved)' : ''}</option>`)}
     </select>`;
   }
-  return html`<nav class="page-tabs segmented" aria-label="Pages of this feed" onKeyDown=${onSegmentKey}>
+  return html`<nav class="page-tabs segmented" aria-label=${settings ? label : 'Pages of this feed'} onKeyDown=${onSegmentKey}>
     ${tabs.map((tab) => html`<button key=${tab.page} class="segment" type="button" tabIndex=${tab.current ? 0 : -1}
-      aria-current=${tab.current ? 'page' : undefined} onClick=${() => open(tab.page)}>${tab.label}</button>`)}
+      aria-current=${tab.current ? 'page' : undefined} onClick=${() => open(tab.page)}>${tab.label}<${SettingsPencil} pending=${tab.pending} /></button>`)}
   </nav>`;
 }
 
@@ -2196,90 +2204,68 @@ function FilesOnServerPanel() {
     api('/status').then((status) => setStorage(status.storage || null), () => setStorage(null));
   }, []);
   if (storage === undefined) return null;
-  return html`<article class="panel">
-    <h2>Files on this server</h2>
+  return html`<section class="page-section settings-section">
+    <h2>Files on this server</h2><div class="group settings-group">
     <p class="hint">${SERVER_FILES_NOTE}</p>
     <div class="group rows">
       ${serverFilesRows(storage, sizeText).map((row) => html`<div class="link-row static" key=${row.label}>
         <span class="text"><span class="label">${row.label}</span><span class="summary">${row.summary}</span></span>
       </div>`)}
     </div>
-  </article>`;
+  </div></section>`;
 }
 
-function LibraryPanel() {
+function LibraryPanel({ draft, draftState, changed, causes }) {
   const [library, setLibrary] = useState(null);
   const [maxMb, setMaxMb] = useState('');
   const [minMb, setMinMb] = useState('');
-  const { busy, error, run } = useAction();
   const load = () => api('/library').then((result) => {
     setLibrary(result);
-    setMaxMb(String(Math.round(result.download_max_file_bytes / (1024 * 1024))));
-    setMinMb(String(Math.round(result.download_min_free_bytes / (1024 * 1024))));
+    setMaxMb(draftState.values.libraryMax ?? String(Math.round(result.download_max_file_bytes / (1024 * 1024))));
+    setMinMb(draftState.values.libraryMin ?? String(Math.round(result.download_min_free_bytes / (1024 * 1024))));
   });
   useEffect(() => { load(); }, []);
-  const submit = (event) => {
-    event.preventDefault();
-    run(async () => {
-      await api('/library/limits', {
-        method: 'PUT',
-        body: {
-          download_max_file_bytes: Math.round(Number(maxMb) * 1024 * 1024),
-          download_min_free_bytes: Math.round(Number(minMb) * 1024 * 1024),
-        },
-      });
-      await load();
-    });
+  // Both limits go in one request, so a change of one limit records both.
+  const savedMb = (bytes) => String(Math.round(bytes / (1024 * 1024)));
+  const updateLimits = (max, min) => {
+    setMaxMb(max); setMinMb(min);
+    draft('libraryMax', savedMb(library.download_max_file_bytes), max);
+    draft('libraryMin', savedMb(library.download_min_free_bytes), min);
   };
+  const updateMax = (value) => updateLimits(value, minMb);
+  const updateMin = (value) => updateLimits(maxMb, value);
   if (!library) return null;
-  const ready = Number(maxMb) > 0 && Number(minMb) > 0;
-  return html`<article class="panel">
-    <h2>Library</h2>
+  return html`<section class="page-section settings-section">
+    <h2>Library</h2><div class="group settings-group">
     ${!serverMode && html`<dl class="facts"><dt>Folder</dt><dd class="mono">${library.root}</dd></dl>`}
-    <form class="form" onSubmit=${submit}>
-      <div class="grid2">
-        <${Field} id="limit-max" label="Largest download, in MB" inputmode="numeric" required
-          value=${maxMb} onInput=${(e) => setMaxMb(e.target.value)} />
-        <${Field} id="limit-min" label="Free space to keep, in MB" inputmode="numeric" required
-          value=${minMb} onInput=${(e) => setMinMb(e.target.value)} />
-      </div>
-      <${ErrorNotice} error=${error} />
-      <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
-        ${busy ? 'Saving…' : 'Save the Limits'}</button></div>
-    </form>
-  </article>`;
+    <div class="form">
+        <${Field} id="limit-max" label=${html`Largest download, in MB<${SettingsPencil} pending=${changed('libraryMax')} />`} inputmode="numeric" required
+          error=${causes.libraryMax} value=${maxMb} onInput=${(e) => updateMax(e.target.value)} />
+        <${Field} id="limit-min" label=${html`Free space to keep, in MB<${SettingsPencil} pending=${changed('libraryMin')} />`} inputmode="numeric" required
+          error=${causes.libraryMin} value=${minMb} onInput=${(e) => updateMin(e.target.value)} />
+    </div>
+  </div></section>`;
 }
 
 // The Nostr search relay (ADR 0074 items 16 and 17). An empty field stops the
 // relay search. The core checks the address.
-function NostrPanel() {
+function NostrPanel({ draft, draftState, changed, causes }) {
   const [saved, setSaved] = useState(null);
   const [relay, setRelay] = useState('');
-  const { busy, error, run } = useAction();
   const load = () => api('/settings/nostr').then((result) => {
     setSaved(result.search_relay);
-    setRelay(result.search_relay);
+    setRelay(draftState.values.nostr ?? result.search_relay);
   });
   useEffect(() => { load(); }, []);
-  const submit = (event) => {
-    event.preventDefault();
-    run(async () => {
-      await api('/settings/nostr', { method: 'PUT', body: { search_relay: relay.trim() } });
-      await load();
-    });
-  };
   if (saved === null) return null;
-  return html`<article class="panel">
-    <h2>Nostr</h2>
-    <form class="form" onSubmit=${submit}>
-      <${Field} id="nostr-relay" label="Nostr search relay" type="text" placeholder="wss://search.nos.today"
+  return html`<section class="page-section settings-section">
+    <h2>Nostr</h2><div class="group settings-group">
+    <div class="form">
+      <${Field} id="nostr-relay" label=${html`Nostr search relay<${SettingsPencil} pending=${changed('nostr')} />`} type="text" placeholder="wss://search.nos.today"
         hint="Studio sends the text of a name search to this relay. Leave the field empty to search only your feeds and Music Index."
-        value=${relay} onInput=${(e) => setRelay(e.target.value)} />
-      <${ErrorNotice} error=${error} />
-      <div class="actions"><button class="button primary" type="submit" disabled=${busy || relay.trim() === saved}>
-        ${busy ? 'Saving…' : 'Save'}</button></div>
-    </form>
-  </article>`;
+        error=${causes.nostr} value=${relay} onInput=${(e) => { setRelay(e.target.value); draft('nostr', saved, e.target.value); }} />
+    </div>
+  </div></section>`;
 }
 
 // The connected apps (ADR 0054 items 7 to 10, ADR 0110 items 5 to 11). The
@@ -2362,8 +2348,8 @@ function ConnectedAppsPanel() {
   });
   if (!apps) return null;
   const notice = made && pairingNotice(made, phase);
-  return html`<article class="panel">
-    <h2>Connected apps</h2>
+  return html`<section class="page-section settings-section">
+    <h2>Connected apps</h2><div class="group settings-group">
     ${apps.length === 0 && !adding && html`<p class="hint">No app is connected.</p>`}
     ${apps.length > 0 && html`<ul class="app-list">
       ${apps.map((a) => {
@@ -2406,7 +2392,7 @@ function ConnectedAppsPanel() {
       : html`<div class="actions"><button class="button action" type="button"
           onClick=${() => { setMade(null); setAdding(true); }}>Connect an App</button></div>`}
     <${ErrorNotice} error=${error} />
-  </article>`;
+  </div></section>`;
 }
 
 // The ID of the newest manifest among the relays of a site state.
@@ -2653,10 +2639,62 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMoved }) {
   </div>`;
 }
 
-// The Settings page (ADR 0071 items 5 and 9). It shows the panels of Studio
-// in the sequence of `pageSequence('studio-settings')`. The Account panel
-// shows on a server only.
-function SettingsPage() {
+// The Settings page (ADR 0071 items 5 and 9, ADR 0166 items 1 to 5). It
+// shows the tabs of `settingsTabs`, and the panels of the open tab. The open
+// tab is part of the view, so Back and Forward go between tabs. The page
+// opens on General.
+function SettingsPage({ view, go }) {
+  const [draft, setDraft] = useState(() => makeSettingsDraft({}));
+  const [revision, setRevision] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saveErrors, setSaveErrors] = useState({});
+  const draftView = settingsDraftView(draft);
+  const record = (key, saved, value) => {
+    setSaveErrors((old) => { const next = { ...old }; delete next[key]; return next; });
+    setDraft((old) => {
+      const seeded = Object.prototype.hasOwnProperty.call(old.saved, key) ? old : { ...old, saved: { ...old.saved, [key]: saved }, values: { ...old.values, [key]: saved } };
+      return changeSetting(seeded, key, value);
+    });
+  };
+  const leave = async (target) => {
+    const tabOnly = target && target.name === 'settings' && view.name === 'settings' && target.tab !== view.tab;
+    if (!asksSettingsLeave(draft, tabOnly ? 'tab' : 'page')) return true;
+    const allowed = await askConfirm(CONFIRMS.leavePerson('Your Settings changes are not saved.'));
+    if (allowed && Object.hasOwn(draft.saved, 'scale')) document.documentElement.dataset.uiScale = draft.saved.scale;
+    return allowed;
+  };
+  useLeaveGuard(draftView.count > 0, leave);
+  useEffect(() => {
+    if (!draftView.count) return undefined;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ''; };
+    addEventListener('beforeunload', warn);
+    return () => removeEventListener('beforeunload', warn);
+  }, [draftView.count]);
+  const discard = () => {
+    const next = discardSettings(draft);
+    setDraft(next);
+    setSaveErrors({});
+    if (Object.hasOwn(next.saved, 'scale')) {
+      document.documentElement.dataset.uiScale = next.saved.scale;
+    }
+    setRevision((value) => value + 1);
+  };
+  const save = async () => {
+    setSaving(true);
+    try {
+      const routes = {
+        scale: async (value) => { localStorage.setItem(SCALE_KEY, value); },
+        lock: (value) => api('/settings/lock', { method: 'PUT', body: { minutes: Number(value) } }),
+        window: (value) => api('/window-close', { method: 'PUT', body: { on_close: value } }),
+        outside: (value) => api('/settings/outside-check', { method: 'PUT', body: { enabled: value } }),
+        nostr: (value) => api('/settings/nostr', { method: 'PUT', body: { search_relay: value.trim() } }),
+        library: (max, min) => api('/library/limits', { method: 'PUT', body: { download_max_file_bytes: Math.round(Number(max) * 1024 * 1024), download_min_free_bytes: Math.round(Number(min) * 1024 * 1024) } }),
+      };
+      const result = await saveSettings(draft, routes);
+      setDraft(result.draft);
+      setSaveErrors(result.errors);
+    } finally { setSaving(false); }
+  };
   const panels = {
     scale: ScalePanel,
     lock: LockPanel,
@@ -2670,15 +2708,34 @@ function SettingsPage() {
     library: LibraryPanel,
     files: FilesOnServerPanel,
   };
+  const tabs = settingsTabs(assetMode());
+  const current = tabs.some((tab) => tab.id === view.tab) ? view.tab : 'general';
+  const openTab = (tab) => go({ ...view, tab });
+  const sections = tabs.find((tab) => tab.id === current)?.sections || [];
+  const changed = (key) => draftView.rows.includes(key);
+  // The bar gives the first cause that turns Save off (ADR 0166 item 18).
+  const barCause = draftView.pending.map((key) => draftView.causes[key]).find(Boolean);
   return html`<div>
-    <${Bar}><span class="bar-title">Settings</span><//>
-    <section class="section">
-      ${pageSequence('studio-settings', assetMode()).map((section) => {
+    <${Bar}><span class="bar-title">Settings</span>
+      <div class="draft-toolbar"><span class=${barCause ? 'draft-status error' : 'draft-status'} role="status">${barCause || draftView.status}</span>
+        <button class="button" type="button" disabled=${draftView.discardDisabled || saving} onClick=${discard}>Discard</button>
+        <button class="button primary" type="button" disabled=${draftView.saveDisabled || saving} onClick=${save}>Save</button></div>
+<//>
+    <div class="settings-tabs"><${PageTabs} tabs=${tabs.map((tab) => ({ ...tab, pending: draftView.tabs.includes(tab.id) }))} current=${current} onSelect=${openTab} label="Settings tabs" /></div>
+    <section class="section settings-content">
+      ${sections.map((section) => {
         const Panel = panels[section.id];
-        return html`<${Panel} key=${section.id} />`;
+        return html`<${Panel} key=${`${section.id}-${revision}`} draft=${record} draftState=${draft} changed=${changed} causes=${{ ...draftView.causes, ...saveErrors }} />`;
       })}
     </section>
   </div>`;
+}
+
+// The mark of a setting or a tab with a change that is not saved (ADR 0166
+// item 9): the pencil of ADR 0165 item 2.
+const NOT_SAVED_MARK = { icon: 'pencil', tone: 'accent', text: 'Not saved' };
+function SettingsPencil({ pending }) {
+  return pending && html` <${StateMark} mark=${NOT_SAVED_MARK} />`;
 }
 
 // The sheet of one row of the Add feeds page (ADR 0073 item 3). `open` is the
@@ -3477,12 +3534,12 @@ function Shell({ vault, onLock }) {
   // not ask again.
   const leaving = useRef(false);
   // Runs `action` when the page may leave. Without a guard it runs at once.
-  const guarded = (action) => {
+  const guarded = (action, target) => {
     if (!leaveGuard.current) action();
-    else leaveGuard.current().then((leave) => { if (leave) action(); });
+    else leaveGuard.current(target).then((leave) => { if (leave) action(); });
   };
   // A new view, or with `replace`, the current view changes. The guard asks first.
-  const go = (target, options) => guarded(() => goNow(target, options));
+  const go = (target, options) => guarded(() => goNow(target, options), target);
   const goNow = (target, { replace = false } = {}) => {
     const base = withScroll();
     // A page of the same feed keeps the level that the feed came from
@@ -3565,6 +3622,14 @@ function Shell({ vault, onLock }) {
     // A page with pending changes asks first. The entry of the page goes back
     // in the history, so that "Keep Editing" keeps the page (ADR 0116 item 10).
     const onPop = (event) => {
+      const targetIndex = event.state && event.state.scope === 'shell' ? event.state.index : 0;
+      const currentView = navRef.current.entries[navRef.current.index];
+      const targetView = navRef.current.entries[targetIndex];
+      if (currentView && targetView && currentView.name === 'settings' && targetView.name === 'settings'
+        && currentView.tab !== targetView.tab) {
+        applyPop(event);
+        return;
+      }
       if (!leaveGuard.current || leaving.current) {
         leaving.current = false;
         applyPop(event);
@@ -3712,7 +3777,7 @@ function Shell({ vault, onLock }) {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id, area: 'hosts' }); }} />`;
   } else if (view.name === 'settings') {
-    main = html`<${SettingsPage} />`;
+    main = html`<${SettingsPage} view=${view} go=${go} />`;
   } else if (view.name === 'people') {
     // The People list keeps its sort in the navigation record, as a feed
     // group does (ADR 0085 item 8, ADR 0153).
@@ -4370,8 +4435,8 @@ function AccountPanel() {
       await reload();
     });
   };
-  return html`<article class="panel">
-    <h2>Account</h2>
+  return html`<section class="page-section settings-section">
+    <h2>Account</h2><div class="group settings-group">
     <dl class="facts"><dt>${byEmail ? 'Email address' : 'Nostr key'}</dt><dd class="mono">${accountName(session)}</dd></dl>
     ${showsImportNotice(session) && html`<div class="notice" role="status">
       <strong>${importedNotice({ origin: location.origin, passkeys: hasPasskeys }).strong}</strong>
@@ -4398,7 +4463,7 @@ function AccountPanel() {
           <button class="button destructive" type="button" disabled=${busy} onClick=${() => setDeleting(true)}>Delete the Account</button>
         </div>`}
     <${AuthNotice} error=${error} />
-  </article>`;
+  </div></section>`;
 }
 
 // ---- Export and import of an account (ADR 0107) ----
@@ -4471,17 +4536,17 @@ function ExportSheet({ onClose }) {
 
 // The section "UI scale" of the Settings page (ADR 0134). With touch, the
 // system gives the size, so the section does not show.
-function ScalePanel() {
+function ScalePanel({ draft, changed }) {
   const [level, setLevel] = useState(() => normalizeScale(document.documentElement.dataset.uiScale));
   if (matchMedia('(pointer: coarse)').matches) return null;
   const change = (next) => {
     document.documentElement.dataset.uiScale = next;
-    try { localStorage.setItem(SCALE_KEY, next); } catch (_) {}
+    draft('scale', normalizeScale(localStorage.getItem(SCALE_KEY)), next);
     setLevel(next);
   };
-  return html`<article class="panel">
-    <h2>Appearance</h2>
-    <div class="field"><label for="ui-scale">UI scale</label>
+  return html`<section class="page-section settings-section">
+    <h2>Appearance</h2><div class="group settings-group">
+    <div class="field setting-row"><label for="ui-scale">UI scale<${SettingsPencil} pending=${changed('scale')} /></label>
       <div class="field-body">
         <span class="hint">The size of Studio on this computer.</span>
         <select id="ui-scale" class="button" value=${level} onChange=${(e) => change(e.target.value)}>
@@ -4489,50 +4554,53 @@ function ScalePanel() {
         </select>
       </div>
     </div>
-  </article>`;
+  </div></section>`;
 }
 
 // The time before the vault locks (ADR 0142). The core gives the times.
-function LockPanel() {
+function LockPanel({ draft, draftState, changed, causes }) {
   const [setting, setSetting] = useState(null);
   const { busy, error, run } = useAction();
-  useEffect(() => { run(async () => setSetting(await api('/settings/lock'))); }, []);
-  const change = (value) => run(async () => setSetting(await api('/settings/lock', { method: 'PUT', body: { minutes: Number(value) } })));
-  return html`<article class="panel">
-    <h2>Lock</h2>
+  useEffect(() => { run(async () => {
+    const setting = await api('/settings/lock');
+    setSetting(draftState.values.lock === undefined ? setting : { ...setting, minutes: Number(draftState.values.lock) });
+  }); }, []);
+  const change = (value) => { draft('lock', String(setting.minutes), String(value)); setSetting({ ...setting, minutes: Number(value) }); };
+  return html`<section class="page-section settings-section">
+    <h2>Lock</h2><div class="group settings-group">
     <${ErrorNotice} error=${error} />
-    ${setting && html`<div class="field"><label for="lock-minutes">Lock Studio after</label>
+    ${setting && html`<div class="field setting-row"><label for="lock-minutes">Lock Studio after<${SettingsPencil} pending=${changed('lock')} /></label>
       <div class="field-body">
         <span class="hint">${LOCK_HINT}</span>
         <select id="lock-minutes" class="button" disabled=${busy} value=${String(setting.minutes)} onChange=${(e) => change(e.target.value)}>
           ${setting.choices.map((minutes) => html`<option value=${String(minutes)}>${lockChoiceText(minutes)}</option>`)}
         </select>
+        ${causes.lock && html`<span class="field-error">${causes.lock}</span>`}
       </div>
     </div>`}
-  </article>`;
+  </div></section>`;
 }
 
 // What a close of the window does (ADR 0124 item 29). The route says if this
 // shell has a window, so a browser shows no section.
-function WindowPanel() {
+function WindowPanel({ draft, draftState, changed, causes }) {
   const [state, setState] = useState(null);
-  const { error, run } = useAction();
-  useEffect(() => { api('/window-close').then(setState, () => {}); }, []);
+  useEffect(() => { api('/window-close').then((state) => setState(draftState.values.window === undefined ? state : { ...state, on_close: draftState.values.window }), () => {}); }, []);
   if (!state || !state.available) return null;
-  const change = (onClose) => run(async () => setState(await api('/window-close', { method: 'PUT', body: { on_close: onClose } })));
-  return html`<article class="panel">
-    <h2>Window</h2>
-    <div class="field"><label for="window-close">When I close the window</label>
+  const change = (onClose) => { draft('window', state.on_close || 'tray', onClose); setState({ ...state, on_close: onClose }); };
+  return html`<section class="page-section settings-section">
+    <h2>Window</h2><div class="group settings-group">
+    <div class="field setting-row"><label for="window-close">When I close the window<${SettingsPencil} pending=${changed('window')} /></label>
       <div class="field-body">
         <span class="hint">A connected app can only write while Studio runs. If your desktop has no tray, Studio quits.</span>
         <select id="window-close" class="button" value=${state.on_close || 'tray'} onChange=${(e) => change(e.target.value)}>
           <option value="tray">Keep Studio in the tray</option>
           <option value="quit">Quit Studio</option>
         </select>
+        ${causes.window && html`<span class="field-error">${causes.window}</span>`}
       </div>
     </div>
-    <${ErrorNotice} error=${error} />
-  </article>`;
+  </div></section>`;
 }
 
 // The one store of the results of the check for a change from outside (ADR
@@ -4581,22 +4649,18 @@ function OutsideNotices({ feed, busy, refresh }) {
 }
 
 // The check box of the check for a change from outside (ADR 0150 item 10).
-function OutsidePanel() {
+function OutsidePanel({ draft, draftState, changed, causes }) {
   const [enabled, setEnabled] = useState(null);
-  const { error, run } = useAction();
-  useEffect(() => { api('/settings/outside-check').then((r) => setEnabled(r.enabled), () => {}); }, []);
+  useEffect(() => { api('/settings/outside-check').then((r) => setEnabled(draftState.values.outside ?? r.enabled), () => {}); }, []);
   if (enabled === null) return null;
-  const change = (next) => run(async () => {
-    const saved = await api('/settings/outside-check', { method: 'PUT', body: { enabled: next } });
-    setEnabled(saved.enabled);
-  });
-  return html`<article class="panel">
-    <h2>Outside changes</h2>
+  const change = (next) => { draft('outside', enabled, next); setEnabled(next); };
+  return html`<section class="page-section settings-section">
+    <h2>Outside changes</h2><div class="group settings-group">
     <label class="check"><input type="checkbox" checked=${enabled} onChange=${(e) => change(e.target.checked)} />
-      ${OUTSIDE_SETTING_LABEL}</label>
+      ${OUTSIDE_SETTING_LABEL}<${SettingsPencil} pending=${changed('outside')} /></label>
     <p class="hint">${OUTSIDE_SETTING_HINT}</p>
-    <${ErrorNotice} error=${error} />
-  </article>`;
+    ${causes.outside && html`<span class="field-error">${causes.outside}</span>`}
+  </div></section>`;
 }
 
 // The text of the mark of a collection in the left panel (ADR 0149 item 17).
@@ -4669,8 +4733,8 @@ function CollectionsPanel() {
     await api(`/collections/${collection.folder}`, { method: 'DELETE' });
     await load();
   });
-  return html`<article class="panel">
-    <h2>Collections</h2>
+  return html`<section class="page-section settings-section">
+    <h2>Collections</h2><div class="group settings-group">
     <p class="hint">${COLLECTIONS_HINT}</p>
     <div class="group">
       ${list.map((collection) => {
@@ -4694,19 +4758,19 @@ function CollectionsPanel() {
     </div>
     <${CollectionSheet} kind=${sheet} openName=${openName} onClose=${() => setSheet(null)}
       onDone=${async (made) => { setSheet(null); await load(); await open(made.folder); }} />
-  </article>`;
+  </div></section>`;
 }
 
 // The section "Move Studio" of the Settings page on the desktop (ADR 0107
 // item 3). A server has "Export Account" in the Account panel.
 function MovePanel() {
   const [open, setOpen] = useState(false);
-  return html`<article class="panel">
-    <h2>Move Studio</h2>
+  return html`<section class="page-section settings-section">
+    <h2>Move Studio</h2><div class="group settings-group">
     <p class="hint">Make one file with your feeds, drafts, versions, people and vault. To import it, select Import an Account in a new Studio before you add a feed, or when you make an account on a server.</p>
     <div class="actions"><button class="button action" type="button" onClick=${() => setOpen(true)}>Export Studio</button></div>
     ${open && html`<${ExportSheet} onClose=${() => setOpen(false)} />`}
-  </article>`;
+  </div></section>`;
 }
 
 // A call of an import route: the auth routes of a server need no session,

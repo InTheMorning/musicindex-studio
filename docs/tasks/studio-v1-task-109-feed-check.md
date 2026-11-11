@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F1.
 
-Status: Started. The operator accepted ADR 0174 on 2026-11-11. Packet 109a is commit `011fea7`. Packet 109b is commit `f49cae7`. The mockup of packet 109c is in `.studio-dev/task-109/out/`: `rows-1280.png`, `none-1280.png`, `rows-390.png` and `none-390.png`. Packet 109c waits for the operator to confirm the tab form of ADR 0174 item 17 on its mockup.
+Status: Started. The operator accepted ADR 0174 on 2026-11-11. Packet 109a is commit `011fea7`. Packet 109b is commit `f49cae7`. The mockup of packet 109c is in `.studio-dev/task-109/out/`: `rows-1280.png`, `none-1280.png`, `rows-390.png` and `none-390.png`. The operator confirmed the tab form of ADR 0174 item 17 on this mockup on 2026-11-11. Packet 109c is not started.
 
 ## Goal
 
@@ -58,8 +58,7 @@ ADR 0174 items 10, 13 to 16 and 18.
 
 ADR 0174 items 17 and 19 to 21.
 
-- First make a mockup of the tab **Check** at 1280 px and at 390 px. Give it to the operator. Do not build the page until the operator confirms the tab form.
-- `pageTabs` gets the tab **Check** with its count, before **Settings**.
+- `pageTabs` gets the tab **Check** with its count, before **Settings**. With no finding, the label is "Check".
 - A model module gives the rows, the button labels and the texts of items 19 to 21, with a Node test.
 - The page shows each row, **Check Again**, the text for a read-only feed and the text for a feed with a grant.
 - Update `docs/user-guide/` with a page for the feed check.

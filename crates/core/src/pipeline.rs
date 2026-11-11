@@ -1536,7 +1536,8 @@ pub fn draft_changed(collection: &Collection, id: FeedId) -> Result<bool, Pipeli
     // does not change (ADR 0036 item 12).
     Ok(draft.base_xml != draft.draft_xml
         || !collection.draft_operations(id)?.is_empty()
-        || collection.draft_feed_move(id)?.is_some())
+        || collection.draft_feed_move(id)?.is_some()
+        || collection.has_draft_feed_delete(id)?)
 }
 
 /// The typed model of a draft, and its revision.
@@ -2376,6 +2377,10 @@ fn host_changes(
             OperationKind::Confirm | OperationKind::Hold => {}
         }
     }
+    // A delete of the feed file writes no feed XML (ADR 0131 item 12).
+    if collection.has_draft_feed_delete(row.id)? {
+        return Ok(changes);
+    }
     // The feed XML goes to the host of the feed, or to the new host of a
     // feed move. A feed with no host and no move has no feed XML write.
     let from = writable(row).ok();
@@ -2531,6 +2536,10 @@ fn plan_announcements(
     feed_move: Option<&FeedMove>,
     granted: bool,
 ) -> Result<(Vec<PlannedAnnouncement>, Option<AnnounceSkip>), PipelineError> {
+    // A delete of the feed file announces nothing (ADR 0131).
+    if collection.has_draft_feed_delete(row.id)? {
+        return Ok((Vec::new(), Some(AnnounceSkip::NoAddress)));
+    }
     // A granted write always announces, because a live show needs it (ADR 0136
     // item 6).
     let settings = if granted {
@@ -2889,7 +2898,7 @@ fn feed_refers_in_library(library: &Library, row: &FeedRow, url: &str) -> bool {
 /// The hosted copy of `row` in its release folder, as the feed that Studio
 /// last put there. Gives `None` when the row has no release folder, or the
 /// copy is absent or is not a feed.
-fn hosted_copy(library: &Library, row: &FeedRow) -> Option<Feed> {
+pub(crate) fn hosted_copy(library: &Library, row: &FeedRow) -> Option<Feed> {
     let (folder, path) = (row.folder.as_deref()?, row.path.as_deref()?);
     let file_name = path.rsplit_once('/').map_or(path, |(_, file)| file);
     let bytes = std::fs::read(library.path(folder, file_name)).ok()?;
@@ -3136,6 +3145,9 @@ fn host_operations(
     // Each draft operation gives a copy, or a deletion, or a blocked
     // deletion (ADR 0036 items 12 and 13).
     let all_feeds = collection.feeds()?;
+    // A delete of the feed from its host (ADR 0131): the references of the
+    // feed itself do not keep its own files.
+    let deleting_feed = collection.has_draft_feed_delete(feed_row.id)?;
     for operation in collection.draft_operations(feed_row.id)? {
         match operation.kind {
             DraftOperationKind::Copy => {
@@ -3185,7 +3197,7 @@ fn host_operations(
                     }
                 }
                 if let Some(url) = url.as_deref() {
-                    if urls.iter().any(|address| address == url) {
+                    if !deleting_feed && urls.iter().any(|address| address == url) {
                         referring.push(feed_title(feed_row));
                     }
                     for other in &all_feeds {
@@ -3230,6 +3242,38 @@ fn host_operations(
                 }
             }
         }
+    }
+
+    // The feed file goes last, so that a failed deletion of a different file
+    // leaves the feed as it was (ADR 0131 item 12).
+    if deleting_feed {
+        let (connector_id, path) = writable(feed_row)?;
+        let held_by_other = all_feeds.iter().any(|other| {
+            other.id != feed_row.id
+                && other.connector_id == Some(connector_id)
+                && other.path.as_deref() == Some(path)
+        });
+        if collection.is_feed_pointer(connector_id, path)? || held_by_other {
+            return Err(PipelineError::new(
+                PipelineErrorKind::InvalidOperation,
+                format!(
+                    "ADR 0131 item 13: {path} is a pointer file or the file of a different feed, so Studio does not delete it"
+                ),
+            ));
+        }
+        let size = collection
+            .host_file(connector_id, path)?
+            .map_or(0, |file| file.size);
+        operations.push(HostOperation {
+            kind: OperationKind::Delete,
+            connector_id,
+            path: path.to_owned(),
+            size,
+            library_file_id: None,
+            url: hosts.get(connector_id)?.public_url(path),
+            operation_id: None,
+            waiting: false,
+        });
     }
 
     Ok((operations, blocked))
@@ -4039,6 +4083,17 @@ pub fn write_draft_signed(
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
     let feed_move = feed_move(collection, hosts, &row)?;
+    let deleting_feed = collection.has_draft_feed_delete(id)?;
+    if deleting_feed {
+        // ADR 0131 item 12: a delete changes no feed XML and moves no feed.
+        let raw = current_draft(collection, id)?;
+        if feed_move.is_some() || raw.draft_xml != raw.base_xml || from_host.is_none() {
+            return Err(PipelineError::new(
+                PipelineErrorKind::InvalidOperation,
+                "ADR 0131 item 12: a delete of the feed file has no edit and no feed move",
+            ));
+        }
+    }
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let granted = matches!(links, LinkCheck::GrantedWrite);
@@ -4157,6 +4212,15 @@ pub fn write_draft_signed(
                 format!("{path} changed on the file host after the draft started"),
             ));
         }
+        if deleting_feed {
+            // The delete needs the stamp of the inventory (ADR 0036 item 16).
+            if live.is_none() || collection.host_file(connector_id, &path)?.is_none() {
+                return Err(PipelineError::new(
+                    PipelineErrorKind::Conflict,
+                    format!("{path} is not in the inventory of the file host; scan the host again"),
+                ));
+            }
+        }
         live
     } else {
         // The feed XML at the public address is the base of the draft, and
@@ -4219,6 +4283,19 @@ pub fn write_draft_signed(
             feed_move.as_ref(),
             &stage_two,
         )
+    } else if deleting_feed {
+        // ADR 0131 item 12: a snapshot of the file comes first. The file
+        // itself goes in step 4, with its stamp.
+        match &live {
+            Some(file) => collection
+                .add_snapshot(id, &file.version, &file.bytes)
+                .map(|_| file.version.clone())
+                .map_err(PipelineError::from),
+            None => Err(PipelineError::new(
+                PipelineErrorKind::NotFound,
+                format!("{path} does not exist on the file host"),
+            )),
+        }
     } else if let Some(moved) = &feed_move {
         if source_gone {
             put_feed_from_expired(collection, hosts, id, &draft, moved, &stage_two)
@@ -4288,9 +4365,11 @@ pub fn write_draft_signed(
             collection.set_files_connector(id, Some(moved.connector_id))?;
         }
     }
-    collection.record_state(id, &feed, &version)?;
-    crate::outside::record_write(collection, id, &draft.draft_xml)?;
-    if let Some(folder) = row.folder.as_deref() {
+    if !deleting_feed {
+        collection.record_state(id, &feed, &version)?;
+        crate::outside::record_write(collection, id, &draft.draft_xml)?;
+    }
+    if let Some(folder) = row.folder.as_deref().filter(|_| !deleting_feed) {
         let file_name = path
             .rsplit_once('/')
             .map_or(path.as_str(), |(_, name)| name);
@@ -4301,13 +4380,17 @@ pub fn write_draft_signed(
     // Step 3: confirm that each new file is on its host, and that the
     // public address of each file works, before Studio deletes any file
     // (ADR 0036 item 15, ADR 0043 items 7 and 8).
-    let feed_url = written_feed_url(
-        collection,
-        hosts,
-        id,
-        (connector_id, &path),
-        feed_move.as_ref(),
-    )?;
+    let feed_url = if deleting_feed {
+        None
+    } else {
+        written_feed_url(
+            collection,
+            hosts,
+            id,
+            (connector_id, &path),
+            feed_move.as_ref(),
+        )?
+    };
     if let Err(error) = confirm_new_addresses(hosts, addresses, &operations, feed_url.as_deref()) {
         keep_draft_after_failed_confirmation(
             collection,
@@ -4336,10 +4419,19 @@ pub fn write_draft_signed(
     finish_hosts(collection, hosts, &deleted_on)?;
     record_old_copies(collection, id, &operations)?;
 
+    // ADR 0131 item 14: the feed stays in the collection as read-only, with
+    // its last copy. A write at the same address brings the file back.
+    if deleting_feed {
+        collection.record_feed_host_delete(id, connector_id, &path)?;
+    } else if from_host.is_some() {
+        collection.remove_feed_host_delete(id)?;
+    }
+
     // Step 5: the draft, its host operations, its feed move and its
     // grants go out.
     collection.remove_draft_operations(id)?;
     collection.remove_draft_feed_move(id)?;
+    collection.remove_draft_feed_delete(id)?;
     collection.remove_signing_plan(id)?;
     collection.delete_draft(id)?;
 
@@ -5694,6 +5786,7 @@ fn delete_each_operation(
 pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), PipelineError> {
     collection.remove_draft_operations(id)?;
     collection.remove_draft_feed_move(id)?;
+    collection.remove_draft_feed_delete(id)?;
     collection.remove_signing_plan(id)?;
     collection.remove_draft_grants(id)?;
     // The draft is gone, so each open change set row of the feed is closed

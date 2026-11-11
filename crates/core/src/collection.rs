@@ -600,6 +600,21 @@ CREATE TABLE person_pages (
     PRIMARY KEY (person_id, feed_guid)
 );
 ",
+    // ADR 0131: the delete of a feed file from its host. A draft holds the
+    // mark `draft_feed_deletes`. The write records `feed_host_deletes`, so
+    // that the feed can write its last copy back to the same address.
+    r"
+CREATE TABLE draft_feed_deletes (
+    feed_id INTEGER PRIMARY KEY REFERENCES feeds(id) ON DELETE CASCADE,
+    added_at INTEGER NOT NULL
+);
+CREATE TABLE feed_host_deletes (
+    feed_id INTEGER PRIMARY KEY REFERENCES feeds(id) ON DELETE CASCADE,
+    connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    deleted_at INTEGER NOT NULL
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -1955,6 +1970,146 @@ impl Collection {
         self.db
             .execute("DELETE FROM draft_feed_moves WHERE feed_id = ?1", [feed.0])?;
         Ok(())
+    }
+
+    /// Mark the draft of a feed as the delete of the feed file from its
+    /// host (ADR 0131 item 12).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_draft_feed_delete(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT OR IGNORE INTO draft_feed_deletes (feed_id, added_at) VALUES (?1, ?2)",
+            params![feed.0, now()],
+        )?;
+        Ok(())
+    }
+
+    /// True when the draft of a feed is the delete of the feed file.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn has_draft_feed_delete(&self, feed: FeedId) -> Result<bool, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT 1 FROM draft_feed_deletes WHERE feed_id = ?1",
+                [feed.0],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Remove the delete mark from the draft of a feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_draft_feed_delete(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM draft_feed_deletes WHERE feed_id = ?1",
+            [feed.0],
+        )?;
+        Ok(())
+    }
+
+    /// Record that the write deleted the feed file, and make the feed
+    /// read-only. The feed keeps its last copy and its release folder
+    /// (ADR 0131 item 14).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn record_feed_host_delete(
+        &mut self,
+        feed: FeedId,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        let tx = self.db.transaction()?;
+        tx.execute(
+            "INSERT INTO feed_host_deletes (feed_id, connector_id, path, deleted_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (feed_id) DO UPDATE SET connector_id = ?2, path = ?3, deleted_at = ?4",
+            params![feed.0, connector.0, path, now()],
+        )?;
+        tx.execute(
+            "UPDATE feeds SET connector_id = NULL, path = NULL WHERE id = ?1",
+            [feed.0],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The host and the path of the feed file that a write deleted, or
+    /// `None` when the feed has no such record (ADR 0131 item 14).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn feed_host_delete(
+        &self,
+        feed: FeedId,
+    ) -> Result<Option<(ConnectorId, String)>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT connector_id, path FROM feed_host_deletes WHERE feed_id = ?1",
+                [feed.0],
+                |r| Ok((ConnectorId(r.get(0)?), r.get(1)?)),
+            )
+            .optional()?)
+    }
+
+    /// Give a deleted feed its host and path again, for the draft that
+    /// writes its last copy back (ADR 0131 item 14).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn restore_feed_location(
+        &self,
+        feed: FeedId,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET connector_id = ?2, path = ?3 WHERE id = ?1",
+            params![feed.0, connector.0, path],
+        )?;
+        Ok(())
+    }
+
+    /// Remove the record of a deleted feed file. A feed with no record is
+    /// not an error.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_feed_host_delete(&self, feed: FeedId) -> Result<(), CollectionError> {
+        self.db
+            .execute("DELETE FROM feed_host_deletes WHERE feed_id = ?1", [feed.0])?;
+        Ok(())
+    }
+
+    /// Each path of a pointer file of `feed`, with its host (ADR 0038
+    /// item 20).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn pointers_of_feed(
+        &self,
+        feed: FeedId,
+    ) -> Result<Vec<(ConnectorId, String)>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT connector_id, path FROM feed_pointers WHERE feed_id = ?1 ORDER BY path",
+        )?;
+        let rows = statement.query_map([feed.0], |r| Ok((ConnectorId(r.get(0)?), r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// The ID of the `waiting` announcement of a feed for an address.

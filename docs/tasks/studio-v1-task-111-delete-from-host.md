@@ -3,7 +3,9 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md).
 
-Status: Not started. ADR 0131 is Accepted. Packets 111a and 111b can start. Packet 111c stops at its mockup until the operator confirms it.
+Status: Started. ADR 0131 is Accepted. Packet 111a is complete. Packet 111b can start.
+
+Open point for packet 111c: the user can discard the draft that brings the file back. Then the feed stays writable with no file on the host. It does not become read-only again. Packet 111c stops at its mockup until the operator confirms it.
 
 ## Goal
 

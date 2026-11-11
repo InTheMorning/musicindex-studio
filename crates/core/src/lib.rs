@@ -22,6 +22,7 @@ pub mod download;
 pub mod duration;
 pub mod feed;
 pub mod feed_check;
+pub mod feed_delete;
 pub mod feed_reads;
 pub mod folder_scan;
 pub mod grant;

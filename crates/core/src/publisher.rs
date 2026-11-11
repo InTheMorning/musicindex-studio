@@ -14,6 +14,7 @@ use crate::collection::{
     roles_from_rel,
 };
 use crate::feed::{Entry, Feed, Publisher, RemoteItem};
+use crate::library::Library;
 use crate::pipeline::{self, PipelineError};
 
 /// The media of a release: an album and a playlist (ADR 0086 item 1).
@@ -159,6 +160,41 @@ pub fn linked_releases(
         }
     }
     Ok(linked)
+}
+
+/// Each publisher feed that links to `release`, for the line in the sheet
+/// of a delete (ADR 0131 item 13). The function reads the draft of a
+/// publisher feed, or its hosted copy when it has no draft. The match is
+/// the match of a link (ADR 0041 item 12).
+///
+/// # Errors
+///
+/// Gives a [`PublisherError`] when the collection fails.
+pub fn publishers_linking(
+    collection: &Collection,
+    library: &Library,
+    release: FeedId,
+) -> Result<Vec<FeedId>, PublisherError> {
+    let target = party(collection, &collection.feed(release)?)?;
+    let mut linking = Vec::new();
+    for row in collection.feeds()? {
+        if row.medium.as_deref() != Some("publisher") || row.id == release {
+            continue;
+        }
+        let feed = if collection.draft(row.id)?.is_some() {
+            Some(pipeline::draft_model(collection, row.id)?.0)
+        } else {
+            pipeline::hosted_copy(library, &row)
+        };
+        if feed.is_some_and(|feed| {
+            feed.remote_items
+                .iter()
+                .any(|item| is_release(item.medium.as_deref()) && names(&item.value, &target))
+        }) {
+            linking.push(row.id);
+        }
+    }
+    Ok(linking)
 }
 
 /// Link a publisher feed and a release. Each draft gets its `remoteItem`

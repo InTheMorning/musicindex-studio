@@ -50,6 +50,7 @@ import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
 } from './signing.js';
+import { onTreeKey } from './listkeys.js';
 
 // ---- Access token (ADR 0017) ----
 // The API gives the UI address with the token in the fragment. The UI keeps
@@ -2957,11 +2958,11 @@ function destinationRows(top, go) {
 // A section row or a release row of a level. A section row covers its feed
 // and its releases. A release row covers its feed only (ADR 0165 item 3).
 // `count` is given for a section row, which shows art and a number.
-function LevelRow({ item, set, label, count, onOpen }) {
+function LevelRow({ item, set, label, count, attrs, onOpen }) {
   const mark = useStateMark(set);
   const section = count !== undefined;
   const base = section ? `${label}, ${count} ${count === 1 ? 'release' : 'releases'}` : label;
-  return html`<button class="row" type="button" aria-label=${mark ? `${base}, ${mark.text}` : (section ? base : undefined)}
+  return html`<button class="row" type="button" ...${attrs} aria-label=${mark ? `${base}, ${mark.text}` : (section ? base : undefined)}
     onClick=${onOpen}>
     ${section && html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`}
     <span class="row-label">${label}</span>
@@ -2976,24 +2977,37 @@ function LevelRow({ item, set, label, count, onOpen }) {
 // a release opens its outline at narrow width.
 function Level({ panel, go, back }) {
   const narrow = useNarrow();
+  const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
   const head = panel.head;
-  return html`${back && html`<button class="row" type="button" onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
-    <button class="outline-feed" type="button" aria-label=${`${head.title}, ${head.typeLabel}`}
+  let cursor = back ? 1 : 0;
+  const headIndex = cursor++;
+  // A different level can have fewer rows, so the current row stays in range.
+  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length, 0) + panel.releases.length;
+  const currentIndex = current === null || current >= total ? (back ? 0 : headIndex) : current;
+  // A row with no child rows has no `aria-expanded` (musicindex ADR 0061
+  // R-LISTKEY-2 item 1).
+  const rowAttrs = (index, parent, kind = 'page') => ({
+    role: 'treeitem', tabindex: index === currentIndex ? 0 : -1,
+    'data-list-kind': kind, 'data-list-parent': parent === null ? undefined : String(parent),
+  });
+  return html`<div role="tree" aria-label=${head.title} onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
+    ${back && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
+    <button class="outline-feed" type="button" ...${rowAttrs(headIndex, null, 'tree')} aria-expanded="true" aria-label=${`${head.title}, ${head.typeLabel}`}
       onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
       <${ArtWithDot} dot=${head.dot}><${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" /><//>
       <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
     </button>
     ${panel.sections.map((section) => html`<div class="destination-group">
       <h2 class="panel-heading">${section.heading}</h2>
-      ${section.items.map((item) => html`<${LevelRow} item=${item} set=${panelSet(feeds, item.id)} label=${item.label} count=${item.count}
-        onOpen=${() => go(item.view)} />`)}
+      ${section.items.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${panelSet(feeds, item.id)} label=${item.label} count=${item.count}
+        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(item.view)} />`; })}
     </div>`)}
     ${panel.releases.length > 0 && html`<div class="destination-group">
       <h2 class="panel-heading">Releases</h2>
-      ${panel.releases.map((item) => html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
-        onOpen=${() => go(openFeedView(item.id, narrow, item.from))} />`)}
-    </div>`}`;
+      ${panel.releases.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
+        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(openFeedView(item.id, narrow, item.from))} />`; })}
+    </div>`}</div>`;
 }
 
 // A level as a page of a narrow window (ADR 0088 item 7). Back opens the
@@ -3010,14 +3024,29 @@ function LevelPage({ panel, go }) {
 // width, and the outline page shows it at a narrow width. `showReleases` is
 // given at a wide width only, where the item "Releases" is in the panel.
 function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting }) {
+  const [current, setCurrent] = useState(null);
   const feed = panel.feed;
   const releases = panel.items.find((item) => item.id === 'releases');
   const rest = panel.items.filter((item) => item.id !== 'releases');
+  const childRows = rest.filter((item) => !item.heading);
+  const feedIndex = releases ? 1 : 0;
+  const activeChild = childRows.findIndex((item) => item.current);
+  const defaultCurrent = activeChild >= 0 ? feedIndex + 1 + activeChild : feedIndex;
+  // A different feed can have fewer rows, so the current row stays in range.
+  const currentIndex = current === null || current > feedIndex + childRows.length ? defaultCurrent : current;
+  // A row with no child rows has no `aria-expanded` (musicindex ADR 0061
+  // R-LISTKEY-2 item 1).
+  const rowAttrs = (index, parent, kind = 'page') => ({
+    role: 'treeitem', tabindex: index === currentIndex ? 0 : -1,
+    'data-list-kind': kind, 'data-list-parent': parent === null ? undefined : String(parent),
+  });
+  let childIndex = feedIndex + 1;
   const hasBadAddress = (number) => draft.bad.some((b) => b.field.startsWith(`items/${number - 1}/`));
   // A feed opened from a level goes back to that level (ADR 0088 item 6).
   const up = () => (releases.target ? go(releases.target) : showReleases(feed.id));
-  return html`${releases && html`<button class="row" type="button" onClick=${up}><${Chevron} direction="back" />${releases.label}</button>`}
-    <button class="outline-feed" type="button" aria-current=${currentAttr(feed)}
+  return html`<div role="tree" aria-label=${feed.label} onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
+    ${releases && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${up}><${Chevron} direction="back" />${releases.label}</button>`}
+    <button class="outline-feed" type="button" ...${rowAttrs(feedIndex, null, 'tree')} aria-expanded="true" aria-current=${currentAttr(feed)}
       aria-label=${changedFeeds.has(feed.id) ? `${feed.label}, changes in the library folder` : feed.label}
       onClick=${() => { if (!feed.first) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
       <${ArtWithDot} dot=${feed.dot}><${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always /><//>
@@ -3026,7 +3055,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
         <span class="sub">${feed.typeLabel}</span>
       </div>
     </button>
-    <ul class="tree">
+    <ul class="tree" role="group">
       ${rest.map((item) => {
         if (item.heading) {
           return html`<li key=${item.id} class="tree-heading"><span class="label">${item.label}</span></li>`;
@@ -3037,7 +3066,8 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
             if (item.action === 'add-tracks') onImporting(true);
             else onAdding(item.action === 'add-live' ? 'live' : true);
           };
-          return html`<li key=${item.id}><button class="node add" type="button" onClick=${open}>
+          const index = childIndex++;
+          return html`<li key=${item.id}><button class="node add" type="button" ...${rowAttrs(index, feedIndex)} onClick=${open}>
             <span class="num">＋</span><span class="label">${item.label}</span></button></li>`;
         }
         const open = () => go(item.target || {
@@ -3045,14 +3075,15 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
           ...(item.track === undefined ? {} : { track: item.track }),
         });
         const numbered = item.number !== undefined;
-        return html`<li key=${item.id}><button class="node" type="button" aria-current=${currentAttr(item)} onClick=${open}>
+        const index = childIndex++;
+        return html`<li key=${item.id}><button class="node" type="button" ...${rowAttrs(index, feedIndex)} aria-current=${currentAttr(item)} onClick=${open}>
           ${numbered && html`<span class="num">${item.number}</span>`}
           <span class="label">${item.label}</span>
           ${item.status && html`<span class="sub">${item.status}</span>`}
           ${numbered && hasBadAddress(item.number) && html`<span class="field-error">Address not correct</span>`}
         </button></li>`;
       })}
-    </ul>`;
+    </ul></div>`;
 }
 
 // The footer of the left panel and of the root page: People, File hosts, Settings, and Lock

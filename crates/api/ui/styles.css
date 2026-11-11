@@ -2012,10 +2012,13 @@ button.outline-feed {
   .group > .drop-area { padding: 10px 16px; }
 }
 /* A file row of the sheet. A file with no public address stays in the list
-   with its reason, and the row is disabled. */
-.picker-file:disabled { cursor: default; }
-.picker-file:disabled:hover { background: none; }
-.picker-file:disabled .title { color: var(--muted); }
+   with its reason, and the row cannot be selected. */
+.picker-file:disabled,
+.picker-file[aria-disabled="true"] { cursor: default; }
+.picker-file:disabled:hover,
+.picker-file[aria-disabled="true"]:hover { background: none; }
+.picker-file:disabled .title,
+.picker-file[aria-disabled="true"] .title { color: var(--muted); }
 .picker-thumb {
   width: var(--target);
   height: var(--target);

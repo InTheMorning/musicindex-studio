@@ -9,6 +9,7 @@ import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, as
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
+import { onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
@@ -911,12 +912,13 @@ function usePickerList(path) {
   return state;
 }
 
-// One file of a list. A file with no public address shows its reason, and
-// its row is disabled (ADR 0062 item 9).
-function PickerFile({ file, kind, onSelect }) {
+// One file of a list. A file with no public address shows its reason and
+// cannot be selected (ADR 0062 item 9).
+function PickerFile({ file, kind, onSelect, treeAttrs }) {
   const ok = canSelect(file);
   const facts = [file.size > 0 ? fileSize(file.size) : null, file.media_type ? formatLabel(file.media_type) : null, ok ? null : reasonText(file)];
-  return html`<button class="link-row picker-file" type="button" disabled=${!ok} onClick=${() => onSelect(file)}>
+  return html`<button class="link-row picker-file" type="button" ...${treeAttrs} aria-disabled=${treeAttrs ? (!ok ? 'true' : 'false') : undefined}
+      disabled=${!treeAttrs && !ok} onClick=${() => { if (ok) onSelect(file); }}>
     ${kind === 'image' && html`<${ImageThumb} url=${ok ? file.address : null} glow="var(--c-track)" className="picker-thumb" always />`}
     <span class="title">${file.name}</span>
     <span class="summary">${facts.filter(Boolean).join(' · ')}</span>
@@ -925,22 +927,67 @@ function PickerFile({ file, kind, onSelect }) {
 
 // A folder of files, with the folders in it. A list with no folders is one
 // flat level.
-function PickerTree({ node, kind, onSelect }) {
-  return html`${node.folders.map((folder) => html`<details class="disclosure picker-folder" key=${folder.path}>
-      <summary class="link-row"><span class="label">${folder.name}</span></summary>
-      <div class="picker-children"><${PickerTree} node=${folder} kind=${kind} onSelect=${onSelect} /></div>
-    </details>`)}
-    ${node.files.map((file) => html`<${PickerFile} key=${file.path} file=${file} kind=${kind} onSelect=${onSelect} />`)}`;
+function pickerTreeRows(node, parent = null, rows = [], indexes = new Map()) {
+  for (const folder of node.folders) {
+    const index = rows.length;
+    indexes.set(`folder:${folder.path}`, index);
+    rows.push({ kind: 'tree', parent, expandable: true });
+    pickerTreeRows(folder, index, rows, indexes);
+  }
+  for (const file of node.files) {
+    indexes.set(`file:${file.path}`, rows.length);
+    rows.push({ kind: 'page', parent, expandable: false });
+  }
+  return { rows, indexes };
+}
+
+// `opened` holds the paths of the open folders, so that each render keeps the
+// open condition of each folder and its `aria-expanded`.
+function PickerTree({ node, kind, onSelect, indexes, parentIndex, current, opened, onFolder }) {
+  return html`${node.folders.map((folder) => {
+      const index = indexes.get(`folder:${folder.path}`);
+      const open = opened.has(folder.path);
+      return html`<details class="disclosure picker-folder" key=${folder.path} open=${open}
+          onToggle=${(event) => onFolder(folder.path, event.currentTarget.open)}>
+        <summary class="link-row" role="treeitem" tabindex=${index === current ? 0 : -1}
+          aria-expanded=${String(open)} data-list-kind="tree" data-list-expandable="true"
+          data-list-parent=${parentIndex === null ? undefined : String(parentIndex)}>
+          <span class="label">${folder.name}</span></summary>
+        <div class="picker-children" role="group"><${PickerTree} node=${folder} kind=${kind} onSelect=${onSelect}
+          indexes=${indexes} parentIndex=${index} current=${current} opened=${opened} onFolder=${onFolder} /></div>
+      </details>`;
+    })}
+    ${node.files.map((file) => {
+      const index = indexes.get(`file:${file.path}`);
+      return html`<${PickerFile} key=${file.path} file=${file} kind=${kind} onSelect=${onSelect}
+        treeAttrs=${{ role: 'treeitem', tabindex: index === current ? 0 : -1,
+          'data-list-kind': 'page', 'data-list-parent': parentIndex === null ? undefined : String(parentIndex) }} />`;
+    })}`;
 }
 
 // The files of "This release" or of one host.
 function PickerList({ path, kind, byName, onSelect }) {
+  const [current, setCurrent] = useState(0);
+  const [opened, setOpened] = useState(new Set());
+  const onFolder = (folder, open) => setOpened((now) => {
+    if (now.has(folder) === open) return now;
+    const next = new Set(now);
+    if (open) next.add(folder); else next.delete(folder);
+    return next;
+  });
   const list = usePickerList(path);
   if (list.loading) return html`<p class="hint" role="status">Studio reads the list…</p>`;
   if (list.error) return html`<${ErrorNotice} error=${list.error} />`;
   const files = byName ? list.files.map((f) => ({ ...f, path: f.name })) : list.files;
   if (files.length === 0) return html`<p class="hint">No file of this kind is here.</p>`;
-  return html`<div class="group"><${PickerTree} node=${hostTree(files)} kind=${kind} onSelect=${onSelect} /></div>
+  const node = hostTree(files);
+  const tree = pickerTreeRows(node);
+  const currentIndex = Math.min(current, tree.rows.length - 1);
+  return html`<div class="group" role="tree" aria-label="Files"
+      onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
+    <${PickerTree} node=${node} kind=${kind} onSelect=${onSelect} indexes=${tree.indexes}
+      parentIndex=${null} current=${currentIndex} opened=${opened} onFolder=${onFolder} />
+  </div>
     ${list.truncated && html`<p class="hint">The list stops at the limit of Studio. The file host has more files.</p>`}`;
 }
 

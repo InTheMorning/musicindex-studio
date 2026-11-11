@@ -1,6 +1,14 @@
 # Studio V1 Task 108: A List Is One Tab Stop
 
-Status: Waits for task 107. The operator set this sequence on 2026-11-10, because this task gives keys to the rows that task 107 changes.
+Status: Started. Packets 108a and 108b are complete. Packets 108c and 108d are open. The operator set the sequence of task 107, then this task, on 2026-11-10.
+
+Result of 108a and 108b: `crates/api/ui/listkeys.js` gives the model (`createListModel`, `listKey`) and `onTreeKey`, which builds the model from the rows of a tree at each key.
+
+The left panel (the levels and the outline of a feed) and the folders of the file picker use it. 
+
+A drive with key events from Chromium at 1100 px gave these results. One Tab goes into each tree and the next Tab leaves it. Shift+Tab goes back to the same row. Up, Down, Home and End move, and they skip the rows in a closed folder. Right and Left open and close a folder. Left on a child row goes to its parent. Enter opens the page of a row or opens a folder.
+
+A row with no child rows has no `aria-expanded`. The file picker records the open folders, so `aria-expanded` follows each render. A file with no public address stays in the tree with `aria-disabled`.
 
 Owner of the rules: [ADR 0172](../adr/0172-a-list-is-one-tab-stop.md). It applies musicindex ADR 0061 R-LISTKEY-1 and R-LISTKEY-2. [ADR 0171](../adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md) gives the types of row.
 

@@ -1,6 +1,6 @@
 # Studio V1 Task 100: Stream Type Fixes
 
-Status: Packets 100a, 100b and 100d are complete, with their screenshot visual check on 2026-11-11. Packet 100c waits for a decision of the operator. The human test of **Check Stream** with a real Icecast mount is open.
+Status: Complete, with its screenshot visual checks on 2026-11-11. For packet 100c, the operator selected [ADR 0173](../adr/0173-a-live-show-problem-shows-at-its-field.md): each problem of a live show shows at its field. The human test of a paste on the iPhone is open. The human test of **Check Stream** with a real Icecast mount is open.
 
 Owner of the rules: [ADR 0162](../adr/0162-studio-fills-and-checks-the-stream-of-a-live-show.md) items 5 and 10. Evidence: [findings of rc.21](../reviews/2026-11-10-rc21-human-test-findings.md). Step 9: [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md).
 
@@ -17,7 +17,7 @@ A check fills an empty stream type. The result line and the type warning name th
 
 ## Result Of 100c
 
-A drive reproduced finding 3 on 2026-11-11. The cause is the refusal line "This show has no stream address." in the Status section, above the field. The line goes away when the draft saves after a paste, and it comes back after a delete. The page above the field then changes by 35 px at 1100 px and by 43 px at 390 px. Chromium keeps the field still with scroll anchoring. WebKit possibly does not, but no drive examined WebKit. The fix needs a rule for the place of the refusal line (escalation trigger 1).
+A drive reproduced finding 3 on 2026-11-11. The cause is the refusal line "This show has no stream address." in the Status section, above the field. The line goes away when the draft saves after a paste, and it comes back after a delete. The page above the field then changes by 35 px at 1100 px and by 43 px at 390 px. Chromium keeps the field still with scroll anchoring. WebKit possibly does not, but no drive examined WebKit. The fix needed a rule for the position of the refusal line (escalation trigger 1). ADR 0173 gives it.
 
 ## Files To Inspect
 

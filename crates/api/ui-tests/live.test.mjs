@@ -5,7 +5,7 @@ import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary,
   grantLimit, grantActive, grantSummary, grantWriteText,
   hostUsesSigner, grantBoxState,
-  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress,
+  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup,
 } from '../ui/live.js';
 
 const link = { href: 'https://example.com/show', label: 'Watch' };
@@ -216,4 +216,15 @@ test('a stream check warns about a selected type that does not agree (ADR 0162 i
   });
   assert.equal(checkTypeWarning(result, false), null);
   assert.equal(checkTypeWarning({ ...result, type_warning: null }, true), null);
+});
+
+test('each problem shows in the group of its field (ADR 0173)', () => {
+  const group = (field, hasStream = true) => problemGroup({ field }, hasStream);
+  assert.equal(group('start'), 'show');
+  assert.equal(group('end'), 'show');
+  assert.equal(group('stream'), 'stream');
+  assert.equal(group('contentLink'), 'links');
+  assert.equal(group('status'), 'status');
+  assert.equal(group('later'), 'status', 'A field with no group shows in the Status section.');
+  assert.equal(group('stream', false), 'status', 'A show with a recording has no Stream section.');
 });

@@ -180,6 +180,16 @@ export function grantBoxState(feedHostSigner) {
   return { disabled: false, note: null };
 }
 
+// The group of the live show page that shows a problem of the core (ADR 0173
+// item 2): `show`, `stream`, `links` or `status`. A show with a recording has
+// no Stream section, so its stream problem shows in the Status section
+// (item 3).
+const PROBLEM_GROUPS = { start: 'show', end: 'show', stream: 'stream', contentLink: 'links' };
+export function problemGroup(problem, hasStreamSection) {
+  const group = PROBLEM_GROUPS[problem.field] || 'status';
+  return group === 'stream' && !hasStreamSection ? 'status' : group;
+}
+
 // ---- The stream type and the stream check (ADR 0162) ----
 
 // The value of the "Other…" entry of the stream type menu. It is not a type.

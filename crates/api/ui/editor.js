@@ -14,7 +14,7 @@ import { creditPickRows, supportPickRows, creditChoices, fundingChoices, nostrCh
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
-import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress } from './live.js';
+import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress } from './feedfacts.js';
@@ -3294,6 +3294,9 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
   const links = live.content_links;
   const next = nextAction(live.status);
   const problems = (draft.liveProblems || []).filter((p) => p.guid === live.item.guid);
+  // Each problem shows at the end of the group of its field (ADR 0173).
+  const problemLines = (group) => problems.filter((p) => problemGroup(p, !canRecord(live)) === group)
+    .map((p) => html`<p class=${`live-line ${p.level === 'refusal' ? 'field-error' : 'field-warning'}`} key=${p.field + p.text}>${p.text}</p>`);
   const start = timeText(live.start);
   // The grant of this show and its granted writes. The list loads when the
   // page opens and after each write.
@@ -3341,7 +3344,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     <section class="page-section"><h2>Status</h2>
       <div class="group">
         <p class="live-line">${statusLabel(live.status)}</p>
-        ${problems.map((p) => html`<p class=${`live-line ${p.level === 'refusal' ? 'field-error' : 'field-warning'}`} key=${p.field + p.text}>${p.text}</p>`)}
+        ${problemLines('status')}
         <${ErrorNotice} error=${action.error} />
         ${next && html`<div class="actions"><button class="button primary" type="button"
           disabled=${action.busy || !live.item.guid} onClick=${() => changeStatus(next.status)}>${next.label}</button></div>`}
@@ -3370,6 +3373,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
         <${PickedImageField} field="live-image" subject=${live.item} apply=${(address) => editLive((l) => set(l, 'item', set(l.item, 'image', address)))}
           id=${`${id}-image`} label="Image address" address=${`live_items/${liveIndex}/item/image`} bad=${bad}
           value=${live.item.image} onChange=${itemField('image')} glow="var(--c-track)" />
+        ${problemLines('show')}
       </div>
     </section>
 
@@ -3401,6 +3405,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
             ${checkError && html`<span class="field-warning" role="status">${checkError.message}</span>`}
           </div>
         </div>
+        ${problemLines('stream')}
       </div>
     </section>`}
 
@@ -3420,6 +3425,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     <section class="page-section"><h2>Content links</h2>
       <div class="group">
         <${ContentLinks} id=${id} links=${links} onChange=${field('content_links')} />
+        ${problemLines('links')}
       </div>
     </section>
 

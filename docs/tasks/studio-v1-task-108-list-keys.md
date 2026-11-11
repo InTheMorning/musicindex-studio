@@ -1,6 +1,6 @@
 # Studio V1 Task 108: A List Is One Tab Stop
 
-Status: Ready. The operator sets the sequence of this task and task 107.
+Status: Waits for task 107. The operator set this sequence on 2026-11-10, because this task gives keys to the rows that task 107 changes.
 
 Owner of the rules: [ADR 0172](../adr/0172-a-list-is-one-tab-stop.md). It applies musicindex ADR 0061 R-LISTKEY-1 and R-LISTKEY-2. [ADR 0171](../adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md) gives the types of row.
 

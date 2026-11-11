@@ -2,9 +2,8 @@
 
 ## Status
 
-Open - 2026-11-11. F0, F2 and the tag of a moved feed have an answer. ADR 0174
-proposes F1, and the operator has not accepted it. F3 to F6 and a second move
-are open. Received - 2026-11-04.
+Open - 2026-11-11. F0, F1, F2 and the tag of a moved feed have an answer. F3 to
+F6 and a second move are open. Received - 2026-11-04.
 
 This request comes from the research repository at
 `../musicindex-research`. That repository has no Git remote, and it is private.
@@ -177,13 +176,13 @@ These measures are not defects, and a check must not report them as errors:
 
 ## F1: The Feed Check
 
-Open. On 2026-11-04 the operator stopped F1 until Stophammer had its findings.
+Answered by ADR 0174. On 2026-11-04 the operator stopped F1 until Stophammer had its findings.
 On 2026-11-11 the operator lifted the stop. Stophammer ADR 0083 is Accepted, and
 Stophammer release 0.18.1 holds it.
 [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md)
-proposes F1, with Form A in the tabs of ADR 0135. The operator has not accepted
-it. [Task 109](../tasks/studio-v1-task-109-feed-check.md) gives the build, and
-it waits for that acceptance.
+decides F1, with Form A in the tabs of ADR 0135. The operator accepted it on
+2026-11-11. [Task 109](../tasks/studio-v1-task-109-feed-check.md) gives the
+build.
 
 The proposal is one core function that takes a feed and gives a list of
 findings. Each finding has a level, a reason, and a repair that writes to the
@@ -216,7 +215,7 @@ F1 gives only a notice where F0 does not refuse.
 
 ### A Self Link In Each Feed
 
-Open, with F1. ADR 0174 items 10 to 12 propose parts 1 to 3. For part 4,
+Answered by ADR 0174 items 10 to 12 for parts 1 to 3. For part 4,
 ADR 0126 reads the body only for a move. Part 5 needs no change.
 
 A self link helps when it is correct. It states the address of the feed, and it

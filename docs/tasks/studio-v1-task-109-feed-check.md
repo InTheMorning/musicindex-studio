@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F1.
 
-Status: Not started. Do not start until the operator accepts ADR 0174. Packet 109c also waits for the operator to confirm the tab form of ADR 0174 item 17 on its mockup.
+Status: Not started. The operator accepted ADR 0174 on 2026-11-11. Packet 109c waits for the operator to confirm the tab form of ADR 0174 item 17 on its mockup.
 
 ## Goal
 

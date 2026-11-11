@@ -2,11 +2,11 @@
 
 Status: Ready.
 
-Owner of the rules: [ADR 0171](../adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md), which applies musicindex ADR 0060 R-FOLD-1 and R-FOLD-2 and musicindex ADR 0052 R-QUERY-7 item 4.
+Owner of the rules: [ADR 0171](../adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md). It applies musicindex ADR 0060 R-FOLD-1 items 1 to 5, R-FOLD-2 and R-FOLD-3. It also applies musicindex ADR 0052 R-QUERY-7 item 4. [Task 108](studio-v1-task-108-list-keys.md) owns the keys of the lists.
 
 ## Goal
 
-A closed fold looks like a row that the user can open. A search that Enter starts closes the field list, so the first result is visible.
+A closed fold looks like a row that the user can open, with its chevron at the start. Each row shows where it opens. A search that Enter starts closes the field list, so the first result is visible.
 
 ## Files To Inspect
 
@@ -20,21 +20,23 @@ A closed fold looks like a row that the user can open. A search that Enter start
 
 - No feed rule in the UI (ADR 0065).
 - One fold style in `styles.css` (ADR 0171 item 3). Do not add a style for one fold.
-- The rows of ADR 0171 item 2 keep their own form.
+- The expandable rows and the tree rows of ADR 0171 items 3 and 4 keep their form. This task changes only their signs (ADR 0171 item 4). Task 108 changes their keys.
 - `node --check` misses template errors. Check a `.mjs` copy of each changed UI file.
 
 ## Packets
 
-- 107a: the fold header of ADR 0171 items 1 to 3.
+- 107a: the fold headers and the signs of ADR 0171 items 1 to 6.
 - 107b: Enter closes the field list (ADR 0171 items 4 to 6).
 
 ## Acceptance Criteria
 
 Mechanical:
 
-- A Node test of `PickFold` gives a header with the title, the count and the open condition.
+- A Node test of `PickFold` gives a header with the chevron first, then the title, then the count, and the open condition.
+- A browser drive reads each fold header of ADR 0171 item 2. The chevron is the first child of the header. The header is one Tab stop, and Enter and Space open and close it.
+- A browser drive reads each tree row of ADR 0171 item 4. It has no `›` at its end.
 - A Node test of the field list model gives a closed list after Enter with no selected row. The next letter opens the list again.
-- A browser drive reads each fold header of ADR 0171 item 1 on the People page, a feed page and the sheet "Add a Credit". The text has the body size and no capitals. The height is the target of musicindex ADR 0024 R-TARGET-1 or more.
+- A browser drive reads each fold header of ADR 0171 item 2 on the People page, a feed page and the sheet "Add a Credit". The text has the body size and no capitals. The height is the target of musicindex ADR 0024 R-TARGET-1 or more.
 - A browser drive types `artist:` and two letters in the search field of the Welcome page, then presses Enter. The list closes, and the first result is not covered.
 
 Visual, by the agent: the folds closed and open, and the search after Enter. Take screenshots at 1100 px and at 390 px with touch, in the dark and the light theme, with `$edges()` and `$overflow()`.
@@ -52,5 +54,5 @@ node --test crates/api/ui-tests/*.test.mjs
 
 ## Escalation Triggers
 
-- A fold that is not in the list of ADR 0171 item 2 is also a list item that opens in place.
+- A row that opens in place does not fit one of the three types of ADR 0171 items 2 to 4.
 - The site or v4vmm uses a fold style that does not agree with musicindex ADR 0060.

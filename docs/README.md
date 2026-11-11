@@ -173,6 +173,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0169: An open credit can find on Music Index](adr/0169-an-open-credit-can-find-on-music-index.md)
 - [ADR 0170: Update people from their linked pages](adr/0170-update-people-from-their-linked-pages.md)
 - [ADR 0171: A closed fold is a row, and Enter closes the field list](adr/0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md)
+- [ADR 0172: A list is one Tab stop](adr/0172-a-list-is-one-tab-stop.md)
 
 ## Plans
 

@@ -3,10 +3,11 @@
 - Status: Accepted
 - Date: 2026-11-10
 - Owner: operator
-- Accepted: 2026-11-10 by the operator. The operator selected the row for a closed fold through the questionnaire of the rc.21 human test. The orchestrator session relayed the decisions of the open fold and of the scope.
-- Technical choices: items 3 and 6 are choices of the planning model.
-- Applies: musicindex ADR 0060 R-FOLD-1 and R-FOLD-2. musicindex ADR 0052 R-QUERY-7 item 4, at musicindex `1959db9`.
-- Uses: [ADR 0154](0154-the-search-fields-have-a-field-list.md).
+- Accepted: 2026-11-10 by the operator. The operator selected the row for a closed fold through the questionnaire of the rc.21 human test. The orchestrator session relayed the decisions of the open fold, the chevron at the start and the types of row.
+- Amended: 2026-11-10. Items 1 to 6 follow musicindex `5123573`: the chevron is at the start, and R-FOLD-1 item 5 gives three types of row.
+- Technical choices: items 6 and 9 are choices of the planning model.
+- Applies: musicindex ADR 0060 R-FOLD-1 items 1 to 5, R-FOLD-2 and R-FOLD-3. musicindex ADR 0052 R-QUERY-7 item 4, at musicindex `1959db9`.
+- Uses: [ADR 0154](0154-the-search-fields-have-a-field-list.md). [ADR 0172](0172-a-list-is-one-tab-stop.md) gives the keys of the expandable rows and the tree rows.
 
 ## Context
 
@@ -16,26 +17,27 @@ In Studio, a closed fold, such as "Payees with no person · 10" on the People pa
 
 ### The Folds
 
-1. A closed fold of a section follows musicindex ADR 0060 R-FOLD-1. An open fold follows R-FOLD-2. Examples are `PickFold` in `crates/api/ui/pickers.js` and each other `details.disclosure` that holds a section of a page or a sheet.
-2. A row that is an item in a list and can also open in place is not a fold header (musicindex ADR 0060 R-FOLD-1 item 5). In Studio, such rows are:
-    - the credit and value rows (`entry-row`) and the recipient rows
-    - the folders of the file picker
-    - the rows of "Where this person is"
-    - the expandable rows of the left panel
-3. The fold styles are in one place in `crates/api/ui/styles.css`. A fold does not set its own header style.
+1. A fold header follows musicindex ADR 0060 R-FOLD-1 items 1 to 4 when it is closed, and R-FOLD-2 when it is open. Its chevron is at its start (R-FOLD-3 item 1).
+2. The fold headers of Studio, by the test of R-FOLD-1 item 5:
+    - Each `PickFold` in `crates/api/ui/pickers.js`, for example "Payees with no person" and "Hidden suggestions". These change from small capitals to a row.
+    - Each other `details.disclosure` that names a part of a page, for example "Feed facts", "Advanced", "Identity" and "Properties". These have a row already. They get the chevron at the start.
+3. These rows are expandable rows (R-FOLD-1 item 5), not fold headers: the credit and value rows (`entry-row`), the recipient rows and the rows of "Where this person is". They keep their chevron at the start.
+4. These rows are tree rows (R-FOLD-1 item 5): the rows of the left panel (a release and its tracks) and the folders of the file picker. A tree row has no `›` at its end (R-FOLD-3 item 5).
+5. A row that opens a different page keeps `›` at its end (R-FOLD-3 item 2). A control that opens a menu has `⌄` at its end (R-FOLD-3 item 3).
+6. The fold styles are in one place in `crates/api/ui/styles.css`. A fold does not set its own header style.
 
 ### The Field List
 
-4. Enter with no selected row runs the search and closes the field list (musicindex ADR 0052 R-QUERY-7 item 4).
-5. This applies to each field of ADR 0154.
-6. A new letter in the field opens the list again.
+7. Enter with no selected row runs the search and closes the field list (musicindex ADR 0052 R-QUERY-7 item 4).
+8. This applies to each field of ADR 0154.
+9. A new letter in the field opens the list again.
 
 ## How This Decision Is Checked
 
 Mechanical:
 
 - A Node test of the fold model gives the text, the count and the open condition of a fold header.
-- A browser drive reads the computed style of each fold header of item 1. The text has the body size and no capitals. The height is the target of musicindex ADR 0024 R-TARGET-1 or more.
+- A browser drive reads the computed style of each fold header of item 2. The text has the body size and no capitals. The height is the target of musicindex ADR 0024 R-TARGET-1 or more.
 - A browser drive presses Enter with no selected row in a field of ADR 0154. The list closes and the results show.
 
 Visual, by the agent: the People page, a feed page and a sheet with folds, closed and open. The screenshots use the light and the dark theme, at the desktop width and at 390 px.

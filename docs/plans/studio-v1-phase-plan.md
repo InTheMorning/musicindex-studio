@@ -260,7 +260,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 ### Feed Moves
 
-- The [research request on a feed check](research-feed-check-request.md) gives items F0 to F6. F0 and F2 have a decision.
+- The [research request on a feed check](research-feed-check-request.md) gives items F0 to F6. F0 and F2 have a decision. ADR 0174 proposes F1.
 - Decision: [ADR 0126](../adr/0126-studio-refuses-a-bad-move-link.md). Studio refuses a bad move link, and a return to an earlier host works.
 - [Task 090](../tasks/studio-v1-task-090-bad-move-links.md) is complete in four packets, with its screenshot visual check. Its human test is open.
 - Decision: [ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md). A user moves one release, or all releases of a file host, in one action. The old files stay until the user reviews their deletion. [Task 096](../tasks/studio-v1-task-096-release-moves.md) is complete in three packets, with its screenshot visual check. Its human test is open.
@@ -269,7 +269,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Decision: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md). A moved feed names its own address, and Review warns at each return. [Task 091](../tasks/studio-v1-task-091-own-address-tag.md) is complete, with its screenshot visual check. Its human test waits for a release of Stophammer that holds ADR 0083.
 - Visual check: Review shows a refusal and a notice. The operator moves a feed between two real file hosts, and back.
 - Decision: [ADR 0127](../adr/0127-a-changed-feed-gets-a-new-build-date.md). A change of a feed also sets `lastBuildDate`, from a time that a server checks. [Task 092](../tasks/studio-v1-task-092-build-date.md) is complete, with its screenshot visual check. Its human test is open.
-- On 2026-11-04 the operator stopped F1 until Stophammer has its findings, because they can change how Studio acts. Form A of the mockups in `.studio-dev/mockup-feedcheck/` is the selected place: an outline row with a count opens its own page.
+- Proposed: [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). On 2026-11-11 the operator lifted the stop on F1. One core check gives findings with a repair through the draft. Form A of the mockups in `.studio-dev/mockup-feedcheck/` goes into the tabs of ADR 0135 as the tab **Check** with a count. [Task 109](../tasks/studio-v1-task-109-feed-check.md) gives the build in three packets. It waits for the operator to accept ADR 0174.
 
 ### Phase 13: Desktop Shell
 

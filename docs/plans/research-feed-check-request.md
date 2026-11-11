@@ -2,8 +2,9 @@
 
 ## Status
 
-Open - 2026-11-11. F0, F2 and the tag of a moved feed have an answer. F1, F3 to
-F6 and a second move are open. Received - 2026-11-04.
+Open - 2026-11-11. F0, F2 and the tag of a moved feed have an answer. ADR 0174
+proposes F1, and the operator has not accepted it. F3 to F6 and a second move
+are open. Received - 2026-11-04.
 
 This request comes from the research repository at
 `../musicindex-research`. That repository has no Git remote, and it is private.
@@ -176,9 +177,13 @@ These measures are not defects, and a check must not report them as errors:
 
 ## F1: The Feed Check
 
-Open. On 2026-11-04 the operator stopped F1 until Stophammer has its findings,
-because they can change how Studio acts. No ADR decides F1. Form A of the
-mockups in `.studio-dev/mockup-feedcheck/` is the selected position.
+Open. On 2026-11-04 the operator stopped F1 until Stophammer had its findings.
+On 2026-11-11 the operator lifted the stop. Stophammer ADR 0083 is Accepted, and
+Stophammer release 0.18.1 holds it.
+[ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md)
+proposes F1, with Form A in the tabs of ADR 0135. The operator has not accepted
+it. [Task 109](../tasks/studio-v1-task-109-feed-check.md) gives the build, and
+it waits for that acceptance.
 
 The proposal is one core function that takes a feed and gives a list of
 findings. Each finding has a level, a reason, and a repair that writes to the
@@ -211,8 +216,8 @@ F1 gives only a notice where F0 does not refuse.
 
 ### A Self Link In Each Feed
 
-Open, with F1. No ADR decides parts 1 to 3. For part 4, ADR 0126 reads the body
-only for a move. Part 5 needs no change.
+Open, with F1. ADR 0174 items 10 to 12 propose parts 1 to 3. For part 4,
+ADR 0126 reads the body only for a move. Part 5 needs no change.
 
 A self link helps when it is correct. It states the address of the feed, and it
 confirms a move to that address. A wrong self link hinders the goal, because it
@@ -271,6 +276,8 @@ Test the result against the ADR 0053 rule.
 ## F3: The Index View
 
 Open. No ADR decides F3. ADR 0126, ADR 0127 and ADR 0128 name it as a non-goal.
+F3 does not wait for F1. ADR 0174 item 9 gives F3 the GUID difference between
+the local feed and the index.
 
 `musicindex.rs` reads feeds and routes. The search found no use of
 `GET /v1/feeds/{guid}/copies`, `GET /v1/guid-changes` or
@@ -324,7 +331,9 @@ Studio can examine two points:
 
 ## F4 To F6
 
-Open. No ADR decides F4, F5 or F6. Each one extends F1, so each one waits for F1.
+Open. No ADR decides F4, F5 or F6. The stop on F1 no longer blocks them. Each
+one extends the check of ADR 0174, so each one waits for that record and its
+build.
 
 - **F4.** ADR 0091 gives a change set for one recipient. The proposal extends the
   form to the repairs of F1. In the backup, two hosts have 131 and 105 music feeds

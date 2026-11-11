@@ -4,7 +4,7 @@
 - Date: 2026-11-11
 - Owner: operator
 - Proposed: 2026-11-11 by the planning model, on the operator decision of 2026-11-11 that lifts the stop on F1. The orchestrator session gave that decision.
-- Accepted: 2026-11-11 by the operator. The operator confirmed item 17 on 2026-11-11 on the mockup of packet 109c in `.studio-dev/task-109/out/`.
+- Accepted: 2026-11-11 by the operator. The operator confirmed item 17 on 2026-11-11 on the mockup of packet 109c in `.studio-dev/task-109/out/`. On 2026-11-11 the operator amended item 19: a read-only feed does not show the text of Form A.
 - Technical choices: items 4, 9, 13, 15 and 18 are choices of the planning model.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F1 and the section "A Self Link In Each Feed". Research note `research_notes/studio/improving-the-state-of-feeds.md` in `../musicindex-research`, recommendation 1.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0008](0008-feed-types-and-feed-identity.md), [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0023](0023-web-addresses-and-audio-file-facts.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md), [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md).
@@ -86,7 +86,7 @@ On 2026-11-04 the operator selected Form A of the mockups in `.studio-dev/mockup
 
 17. Form A goes into the tabs of ADR 0135. The page of an album, an artist, a label or a playlist gets the tab **Check** before **Settings**. The tab label has the count of the findings, for example "Check 5". With no finding, the label is "Check", with no count. At 760 px or less, the select menu of the tabs gives the same label (ADR 0135 item 6).
 18. The count of the tab is the count of the local findings and of the last reads in this session of Studio. The API keeps the last read facts of each feed in memory until the feed changes or Studio stops.
-19. The page has the text of Form A first: "Studio does not change the feed until you select a button. Each change goes to the draft, and you review it before the write." Then each finding is one row with its level, its title, its reason and one button.
+19. The page has the text of Form A first: "Studio does not change the feed until you select a button. Each change goes to the draft, and you review it before the write." Then each finding is one row with its level, its title, its reason and one button. A read-only feed has no button (item 20), so its page does not show this text.
 20. A read-only feed shows its findings with no button. A connected app or a show grant can wait for a draft: a granted change stops while the feed has a draft with changes (ADR 0054 item 16). When the feed has a grant, the page says this above the rows.
 21. A page with no finding shows "Studio found no problem in this feed." and **Check Again**.
 

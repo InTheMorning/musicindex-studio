@@ -117,7 +117,7 @@ export function checkTexts(check, { grant = false } = {}) {
   const rows = checkRows(check);
   const answered = Boolean(check);
   return {
-    lead: rows.length > 0 ? CHECK_LEAD : null,
+    lead: rows.length > 0 && !check.read_only ? CHECK_LEAD : null,
     readOnly: answered && check.read_only ? CHECK_READ_ONLY : null,
     grant: grant && !(answered && check.read_only) ? CHECK_GRANT : null,
     none: answered && rows.length === 0 ? CHECK_NONE : null,

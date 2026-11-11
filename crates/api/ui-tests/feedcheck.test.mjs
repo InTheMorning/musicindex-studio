@@ -80,6 +80,7 @@ test('the texts of the page follow items 19 to 21', () => {
   assert.equal(checkTexts(check([])).lead, null, owner);
   assert.equal(checkTexts(rows, { grant: true }).grant, CHECK_GRANT, owner);
   assert.equal(checkTexts(check([finding('no_self_link', null)], { read_only: true })).readOnly, CHECK_READ_ONLY, owner);
+  assert.equal(checkTexts(check([finding('no_self_link', null)], { read_only: true })).lead, null, owner);
   assert.equal(checkTexts(check([], { read_only: true }), { grant: true }).grant, null, owner);
   assert.equal(checkTexts(null).none, null, owner);
   assert.notEqual(checkTexts(null).reading, null, owner);

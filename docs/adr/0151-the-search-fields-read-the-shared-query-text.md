@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-07 by the operator, with five fields and a plain start text.
 - Item 9 added on 2026-11-07 by the operator, who gave the text of the note.
+- Item 10 added on 2026-11-11 through the orchestrator session. Item 10 is Proposed. The operator has not accepted it.
 - Technical choices: item 6 is a choice of the planning model.
 - Source: musicindex ADR 0049, section "What this record leaves open", item 1. `research_notes/search/shared-query-text.md` in `../musicindex-research` gives the research. `../musicindex-lib/docs/plans/search-move-phase-plan.md` Phase 4 gives the sequence.
 
@@ -35,6 +36,11 @@ A person types the text in each field. Two of them can also start with a stored 
 7. A response from the index that cannot decode gives an error, not an empty list.
 8. A field keeps the relevance sequence of the index, and it sends no sort.
 9. A search that covers only artist and label feeds can get no request from the crate for those feeds. It then sends nothing, and a note names each field that causes this. The text that says no feed has this name shows only when a request ran and gave no rows.
+10. Proposed. These two search fields stay plain text, and they read no query text:
+    - The search of the People list (`crates/api/ui/peoplepages.js:152`). It searches the people store of the user.
+    - The search of a Nostr key (`crates/api/ui/editor.js:774`). It searches the Nostr search relay of [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md).
+
+    These fields stay plain text because a local store and a relay have no fields of musicindex ADR 0049.
 
 ## Alternatives Considered
 

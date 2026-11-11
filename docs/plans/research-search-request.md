@@ -2,7 +2,10 @@
 
 ## Status
 
-Received - 2026-10-23. This request comes from the research repository at
+Open - 2026-11-11. Some items of sections 1, 2 and 3 have an answer. The items
+below that start with "Open" need a decision. Received - 2026-10-23.
+
+This request comes from the research repository at
 `../musicindex-research`. That repository has no Git remote, and it is private.
 Its index is `AGENTS.md`.
 
@@ -15,6 +18,18 @@ Stophammer release 0.14.0 is deployed on 2026-10-24. Section 4 gives the
 changes for Studio.
 
 ## 1. Search Findings
+
+- R1: Answered. Commit `fa6d014` sends the feed search with no lock of the
+  workspace, as ADR 0015 requires for blocking work. The tests
+  `the_feed_search_completes_while_the_workspace_lock_is_held` and
+  `the_picker_search_completes_while_the_workspace_lock_is_held` hold this.
+  No ADR records it.
+- R2: Answered by ADR 0151 item 7. A response that cannot decode gives an error.
+- R3: Open. On 2026-11-11, `crates/api/src/error.rs` gives each upstream error
+  as a `502`, and HTTP 429 has no code of its own. This needs a decision.
+- R4: Open. On 2026-11-11, the search sends `limit=25` and reads no cursor. No ADR
+  decides a page of results. This needs a decision.
+- The two Stophammer items: answered by Stophammer release 0.14.0 (section 4).
 
 The report is `reports/2026-10-23-search-code-sharing-and-stophammer.md` in the
 research repository.
@@ -37,6 +52,12 @@ For Studio, the important items are these:
 
 ## 2. Shared Search Code
 
+- Item 1: Open. Studio keeps its own response structs. No ADR decides a shared
+  crate for the responses.
+- Item 2: Answered by ADR 0151 item 4 and ADR 0154. The core reads each query
+  text with the crate `musicindex-search` of `musicindex-lib`.
+- Item 3: Open. No ADR decides a shared file of JavaScript functions.
+
 The website, v4vmm and Studio share no search code. The report proposes:
 
 1. A small crate in the Stophammer workspace with the response structs, the
@@ -52,6 +73,14 @@ Stophammer and Studio are AGPL-3.0-only. v4vmm and the website have no license.
 The operator selects these licenses before the code is shared.
 
 ## 3. PodSovereign
+
+- The connector: Open. ADR 0006 item 5 gives no connector to a host without
+  researched write access. A PodSovereign connector needs a Studio ADR.
+- The Podping method: answered by ADR 0052.
+- The address guard: answered by ADR 0057.
+- The feed move checklist: Open. ADR 0035 items 19 and 20 and ADR 0038 set the
+  redirect at the move. No ADR decides a check of the redirect after the move.
+- The map of the Studio design: information only. It asks for no change.
 
 The research compared PodSovereign, a self-hosted podcast host, with Studio:
 `research_notes/studio/podsovereign-comparison.md` in the research repository.
@@ -71,6 +100,10 @@ The research also keeps a map of the Studio design:
 `research_notes/studio/studio-blueprint.html`.
 
 ## 4. Stophammer Release 0.14.0
+
+Information only. This section records a Stophammer release and asks for no
+Studio change. Section 1 gives the status of R1 to R4. The version in
+`../musicindex/api.json` is an item of the website, not of Studio.
 
 Stophammer deployed release 0.14.0 on 2026-10-24. On that day, `GET
 /node/info` gave `git_revision` `499b301`, and `info.version` of

@@ -2,7 +2,10 @@
 
 ## Status
 
-Received - 2026-11-04. This request comes from the research repository at
+Open - 2026-11-11. F0, F2 and the tag of a moved feed have an answer. F1, F3 to
+F6 and a second move are open. Received - 2026-11-04.
+
+This request comes from the research repository at
 `../musicindex-research`. That repository has no Git remote, and it is private.
 Its index is `AGENTS.md`. The note is
 `research_notes/studio/improving-the-state-of-feeds.md` in that repository. The
@@ -37,6 +40,10 @@ The research note has the same corrections.
 The research recommends F0 to F3 first.
 
 ## F0: Studio Refuses A Bad Move Link
+
+Answered by ADR 0126, and task 090 puts it in the code. A return to an earlier
+host works. Condition 5 stays open: it needs a lookup of a feed by URL in
+Stophammer (task 090, "Open Items That This Task Does Not Close").
 
 On 2026-11-04 the operator stated this requirement: a legitimate move always
 works. A loop or another problematic link fails, and Studio detects and refuses
@@ -123,12 +130,16 @@ and gives the reason, which the node does not give to a publisher.
 
 ## The Limit Of The Effect
 
+Information only. This section asks for no change.
+
 Studio can change only feeds that its users control. Of the 10,649 feeds in the
 backup, 9,344 are on `wavlake.com`. Thus the direct reach is at most 1,305
 feeds. The research has no data on the number of Studio users, so it does not
 estimate the effect.
 
 ## The Measurements
+
+Information only. This section asks for no change.
 
 These counts use the 1,305 feeds and 5,172 tracks outside `wavlake.com`. They
 come from what Stophammer stored, so a value that the parser or the node does
@@ -165,6 +176,10 @@ These measures are not defects, and a check must not report them as errors:
 
 ## F1: The Feed Check
 
+Open. On 2026-11-04 the operator stopped F1 until Stophammer has its findings,
+because they can change how Studio acts. No ADR decides F1. Form A of the
+mockups in `.studio-dev/mockup-feedcheck/` is the selected position.
+
 The proposal is one core function that takes a feed and gives a list of
 findings. Each finding has a level, a reason, and a repair that writes to the
 draft when one exists. ADR 0065 makes the core the place for a feed rule. The
@@ -196,6 +211,9 @@ F1 gives only a notice where F0 does not refuse.
 
 ### A Self Link In Each Feed
 
+Open, with F1. No ADR decides parts 1 to 3. For part 4, ADR 0126 reads the body
+only for a move. Part 5 needs no change.
+
 A self link helps when it is correct. It states the address of the feed, and it
 confirms a move to that address. A wrong self link hinders the goal, because it
 can move a record in Stophammer. Scenario S8 shows the same move through the tag
@@ -221,6 +239,8 @@ The proposal has these parts:
    the copy has no public address. No change is necessary for a copy.
 
 ## F2: The Build Date
+
+Answered by ADR 0127, and task 092 puts it in the code.
 
 **Observation:** outside the test feeds, `crates/` has no mention of
 `lastBuildDate`.
@@ -250,6 +270,8 @@ Test the result against the ADR 0053 rule.
 
 ## F3: The Index View
 
+Open. No ADR decides F3. ADR 0126, ADR 0127 and ADR 0128 name it as a non-goal.
+
 `musicindex.rs` reads feeds and routes. The search found no use of
 `GET /v1/feeds/{guid}/copies`, `GET /v1/guid-changes` or
 `pending_guid_change`.
@@ -272,6 +294,11 @@ keeps the first URL and gives `source_conflict` only to the crawler. Studio is
 where the publisher edits the feed.
 
 ## Feed Moves And The Stophammer Request
+
+- Point 1, a second move: Open. ADR 0126 and ADR 0128 name the update of an
+  older pointer as a non-goal. No ADR decides it.
+- Point 2, the new feed: answered by ADR 0128. Each move gives the feed on the
+  new host a tag that names its own URL. Task 091 puts it in the code.
 
 The research sent a request to Stophammer:
 `docs/plans/research-feed-move-confirmation-request.md` in that repository. It
@@ -297,6 +324,8 @@ Studio can examine two points:
 
 ## F4 To F6
 
+Open. No ADR decides F4, F5 or F6. Each one extends F1, so each one waits for F1.
+
 - **F4.** ADR 0091 gives a change set for one recipient. The proposal extends the
   form to the repairs of F1. In the backup, two hosts have 131 and 105 music feeds
   with no publisher link.
@@ -307,6 +336,8 @@ Studio can examine two points:
   Do this after F1 is stable.
 
 ## What The Research Does Not Propose
+
+Information only. This section asks for no change.
 
 - A repair at import without the user.
 - A public score of a publisher. Many absent fields are optional, so a score can

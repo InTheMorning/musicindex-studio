@@ -2,7 +2,10 @@
 
 ## Status
 
-Received - 2026-10-24. This request comes from the research repository at
+Open - 2026-11-11. Sections 1 and 2 have an answer. Section 3 is
+open. Received - 2026-10-24.
+
+This request comes from the research repository at
 `~/build/musicindex-research`. That repository has no Git remote. Its index is
 `AGENTS.md`.
 
@@ -29,6 +32,8 @@ commits `6bacd1c`, `4fedc27` and `8d02b00`.
 
 ## 1. The Shell Is A Stack With The Outline Exception
 
+Answered by ADR 0039.
+
 The operator selected this shell for the three apps on 2026-10-24. It changes
 Studio ADR 0029 items 5, 6 and 15 (the tree in the sidebar and the drawer).
 
@@ -51,11 +56,19 @@ Studio ADR 0029 items 5, 6 and 15 (the tree in the sidebar and the drawer).
 
 ## 2. Value Routes
 
+Answered by ADR 0039 item 12.
+
 Value routes keep their width of 560 px at most. A share segment and a
 percentage show a tooltip at once, with the name, the percentage and the raw
 share.
 
 ## 3. Open Questions For The Operator
+
+Open. No Studio ADR or task names the questions O-1 to O-16. Some subsequent records
+can answer some questions, but no record maps them. The search of the collection
+(O-9) has no decision (ADR 0039, Consequences). ADR 0151 and ADR 0154 cover the
+searches of Music Index, not the collection. Each question needs an operator
+decision.
 
 The operator has not decided these:
 

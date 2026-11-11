@@ -1076,6 +1076,43 @@ export function pageSuggestions(suggestions, values) {
   return out;
 }
 
+// "Use All Suggestions" (ADR 0170 items 1 to 3): each suggestion of the
+// linked pages as a pending value. The wallets that do not match stay
+// suggestions.
+export function useAllPageSuggestions(suggestions, values) {
+  const rows = pageSuggestions(suggestions, values);
+  return {
+    ...values,
+    img: rows.img[0]?.value || values.img,
+    href: rows.href[0]?.value || values.href,
+    keys: [...new Set([...values.keys, ...rows.keys.map((row) => row.value)])],
+    wallets: [...values.wallets, ...rows.wallets.map((row) => ({ key: row.key, recipient_type: row.recipient_type }))],
+  };
+}
+
+// Whether the page of a person has a suggestion from its linked pages, for
+// the button "Use All Suggestions" (ADR 0170 item 1). `rows` is the result of
+// `pageSuggestions`. The other recipients do not count (item 2).
+export const hasPageSuggestions = (rows) => rows.img.length + rows.href.length + rows.keys.length + rows.wallets.length > 0;
+
+// Whether the People page shows "Update from Linked Pages": one or more
+// people have a linked page (ADR 0170 item 4).
+export const hasLinkedPages = (people = []) => people.some((person) => (person.pages || []).length > 0);
+
+// The people of the review sheet "Update from Linked Pages" (ADR 0170 item
+// 5): each person with a change. `rows` is the list of the core.
+export const linkedPageChanges = (rows = []) => rows.filter((row) => row.img || row.href
+  || (row.keys || []).length > 0 || (row.wallets || []).length > 0);
+
+// The people that start selected in the review sheet: all (ADR 0170 item 5).
+export const linkedPageSelection = (people) => people.map((row) => row.person_id);
+
+// The lines of one person in the review sheet: the values that change.
+export function linkedPageChangeLines(person) {
+  return [person.img && 'Picture', person.href && 'Website', ...(person.keys || []).map(() => 'Nostr key'),
+    ...(person.wallets || []).map((wallet) => `Wallet: ${wallet.key.address}`)].filter(Boolean);
+}
+
 // The offers of a credit after a Save that changes the links (ADR 0118 items 3
 // and 6, ADR 0132 item 11). `before` and `after` are the links before and
 // after the Save, as text IDs. `feeds` is the feed list. `members` is a Map

@@ -235,6 +235,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .route("/media/tickets", post(media::make_ticket))
         .route("/search", get(routes::search))
         .route("/people", get(people::list_people).post(people::add_person))
+        .route(
+            "/people/linked-page-changes",
+            get(people::linked_page_changes).post(people::save_linked_page_changes),
+        )
         .route("/roles", get(people::list_roles))
         .route("/people/export", get(people::export_people))
         .route("/people/suggestions", get(people::list_suggestions))

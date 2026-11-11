@@ -1756,6 +1756,33 @@ test('a page that differs gives suggestions, and a page that agrees gives none (
   assert.deepEqual(pageSuggestions(differs, { ...values, pages: [] }).img, [], 'A removed page gives no suggestion.');
 });
 
+import { useAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines } from '../ui/people.js';
+
+test('linked page updates use matching wallets and review each changed value', () => {
+  const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
+  const pages = [{ ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
+    wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }],
+    other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'lnaddress' }] }];
+  assert.deepEqual(useAllPageSuggestions(pages, values), { ...values, img: 'https://img.example/a.png', href: 'https://ann.example',
+    keys: ['npub1ann'], wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }] });
+  const batch = linkedPageChanges([{ person_id: 1, name: 'Ann', img: null, href: null, keys: [], wallets: [] },
+    { person_id: 2, name: 'Cy', img: 'https://img.example/c.png', href: null, keys: ['npub1cy'], wallets: [{ key: { address: 'cy@x.example' } }] }]);
+  assert.equal(batch.length, 1);
+  assert.deepEqual(linkedPageChangeLines(batch[0]), ['Picture', 'Nostr key', 'Wallet: cy@x.example']);
+  assert.deepEqual(linkedPageSelection(batch), [2], 'Each person starts selected.');
+  assert.equal(hasLinkedPages([{ pages: [] }, { pages: [PAGE] }]), true);
+  assert.equal(hasLinkedPages([{ pages: [] }]), false);
+});
+
+test('"Use All Suggestions" shows only with a suggestion, and the other recipients do not count (ADR 0170 items 1 and 2)', () => {
+  const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
+  const only = [{ ...PAGE, missing: false, picture: null, website: null, npub: null, wallets: [],
+    other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'lnaddress', name: 'Other' }] }];
+  assert.equal(hasPageSuggestions(pageSuggestions(only, values)), false);
+  assert.equal(hasPageSuggestions(pageSuggestions([{ ...only[0], website: 'https://ann.example' }], values)), true);
+  assert.deepEqual(useAllPageSuggestions(only, values).wallets, []);
+});
+
 import { linkFillLabel, linkRow, LINK_READ_ONLY_LINE, LINK_OWN_LINE } from '../ui/people.js';
 
 test('the primary button of the sheet "From Music Index" says what it does (ADR 0163 item 9)', () => {

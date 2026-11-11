@@ -29,7 +29,7 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, useAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, linkRow, linkFillLabel, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
@@ -131,6 +131,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   const [query, setQuery] = useState('');
   const [making, setMaking] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [linkedReview, setLinkedReview] = useState(null);
   const { busy, error, run } = useAction();
   const load = () => run(async () => {
     const [people, suggestions, sets, recipients, hidden] = await Promise.all([
@@ -152,6 +153,10 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
         value=${query} onInput=${(e) => setQuery(e.target.value)} /></div></div>`,
     actions: () => html`<div class="actions">
       <button class="button action" type="button" onClick=${() => setAdding(true)}>Add a Person</button>
+      ${hasLinkedPages(data.people) && html`<button class="button" type="button" disabled=${busy} onClick=${() => run(async () => {
+        const result = await api('/people/linked-page-changes');
+        setLinkedReview(linkedPageChanges(result.people || []));
+      })}>Update from Linked Pages</button>`}
       <button class="button" type="button" disabled=${busy} onClick=${() => run(downloadPeople)}>Export People</button>
       ${people.length > 0 && html`<div class="releases-tools people-order">
         <${SortMenu} sorts=${order.sorts} sort=${order.sort} reversed=${order.reversed} onSort=${(id, reversed) => onOrder({ sort: id, reversed })} />
@@ -203,7 +208,39 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   </section>
   <${CheckSuggestionSheet} suggestion=${making} people=${data ? data.people : []} feeds=${feeds} titles=${titles} go=${go}
     onClose=${() => setMaking(null)} onDismissed=${() => { setMaking(null); load(); }} />
-  <${AddPersonSheet} open=${adding} go=${go} onClose=${() => setAdding(false)} /></div>`;
+  <${AddPersonSheet} open=${adding} go=${go} onClose=${() => setAdding(false)} />
+  <${LinkedPageReview} people=${linkedReview} onClose=${() => setLinkedReview(null)} onDone=${load} /></div>`;
+}
+
+const LINKED_NONE = 'The linked pages have no new values for your people.';
+
+// The review sheet of "Update from Linked Pages" (ADR 0170 items 5 and 6).
+function LinkedPageReview({ people, onClose, onDone }) {
+  const ref = useSheet(people !== null);
+  const [selected, setSelected] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => { setSelected(linkedPageSelection(people || [])); }, [people]);
+  // The core saves the selected people (ADR 0170 item 6).
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api('/people/linked-page-changes', { method: 'POST', body: { people: people.filter((row) => selected.includes(row.person_id)) } });
+      onDone(); ref.current.close();
+    } catch (e) { setError(e); }
+    finally { setBusy(false); }
+  };
+  return html`<dialog ref=${ref} class="sheet" aria-labelledby="linked-review-title" onClose=${onClose}>
+    ${people && html`<header><h2 id="linked-review-title">Update from Linked Pages</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
+      <div class="body">${people.length === 0 && html`<p class="note">${LINKED_NONE}</p>`}
+        ${people.length > 0 && html`<div class="group rows">${people.map((row) => html`<label class="link-row use-row" key=${row.person_id}>
+        <input type="checkbox" checked=${selected.includes(row.person_id)} onChange=${() => setSelected((ids) => ids.includes(row.person_id)
+          ? ids.filter((id) => id !== row.person_id) : [...ids, row.person_id])} />
+        <span class="text"><span class="label">${row.name}</span>${linkedPageChangeLines(row).map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span></label>`)}</div>`}
+        <${ErrorNotice} error=${error} /></div><footer><button class="button" type="button" disabled=${busy} onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button primary" type="button" disabled=${busy || selected.length === 0} onClick=${save}>Update</button></footer>`}
+  </dialog>`;
 }
 
 const Fragment = ({ children }) => children;
@@ -973,6 +1010,9 @@ export function PersonPage({ id, feeds, go }) {
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
           <button class="button destructive" type="button" aria-label=${`Remove the link to ${row.title}`}
             onClick=${() => update(row.page ? { pages: shown.pages.filter((p) => p.feed_guid !== row.page) } : { members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
+      ${hasPageSuggestions(fromPages) && html`<div class="actions">
+        <button class="button action" type="button" onClick=${() => update(useAllPageSuggestions(pageNotes, shown))}>Use All Suggestions</button>
+      </div>`}
       <div class="group"><${AddRow} title="Link to an Artist or Label Page" onClick=${() => setFinding(person.name)} /></div></section>`;
     },
     change: () => html`<section class="page-section"><h2>Change your feeds</h2>

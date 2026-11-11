@@ -6753,6 +6753,76 @@ async fn the_one_search_gives_artists_labels_and_other_feeds() {
 }
 
 #[tokio::test]
+async fn the_linked_page_changes_give_the_matching_values_and_save_only_the_sent_people() {
+    // ADR 0170 items 2, 5 and 6.
+    let server = web_feeds();
+    server.set(
+        "/v1/feeds/c0ffee-11",
+        200,
+        br#"{"data":{"title":"Ann Bell Music","image_url":"https://img.example/a.png",
+            "source_links":[],"source_ids":[],"payment_routes":[
+            {"recipient_name":"Ann","route_type":"lnaddress","address":"ann@x.example","split":90,"fee":false},
+            {"recipient_name":"Other","route_type":"lnaddress","address":"other@x.example","split":10,"fee":false}]}}"#
+            .to_vec(),
+    );
+    let app = app_with_index(&server.url(""));
+    let mut ids = Vec::new();
+    for name in ["Ann", "Ben"] {
+        let (_, person) = call(
+            &app,
+            "POST",
+            "/api/v1/people",
+            Some(json!({ "name": name })),
+        )
+        .await;
+        ids.push(person["id"].as_i64().unwrap());
+    }
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{}/save", ids[0]),
+        Some(json!({ "pages": [{ "feed_guid": "c0ffee-11", "title": "Ann Bell Music" }] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, body) = call(&app, "GET", "/api/v1/people/linked-page-changes", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let people = body["people"].as_array().unwrap();
+    assert_eq!(people.len(), 1, "{body}");
+    assert_eq!(people[0]["person_id"], ids[0]);
+    assert_eq!(people[0]["img"], "https://img.example/a.png");
+    assert_eq!(people[0]["wallets"].as_array().unwrap().len(), 1, "{body}");
+    assert_eq!(people[0]["wallets"][0]["key"]["address"], "ann@x.example");
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/people/linked-page-changes",
+        Some(json!({ "people": [] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, ann) = call(&app, "GET", &format!("/api/v1/people/{}", ids[0]), None).await;
+    assert_eq!(
+        ann["img"], "",
+        "A person that is not sent does not change: {ann}"
+    );
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/people/linked-page-changes",
+        Some(json!({ "people": people })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, ann) = call(&app, "GET", &format!("/api/v1/people/{}", ids[0]), None).await;
+    assert_eq!(ann["img"], "https://img.example/a.png", "{ann}");
+    assert_eq!(ann["wallets"].as_array().unwrap().len(), 1, "{ann}");
+    let (_, body) = call(&app, "GET", "/api/v1/people/linked-page-changes", None).await;
+    assert_eq!(body["people"], json!([]), "The values are saved: {body}");
+}
+
+#[tokio::test]
 async fn the_page_suggestions_give_the_differences_of_each_read_only_page() {
     let server = web_feeds();
     server.set(

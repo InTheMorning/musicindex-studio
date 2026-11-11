@@ -25,7 +25,7 @@ use crate::profiles;
 use crate::web::Web;
 
 /// The ID of a person.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PersonId(pub i64);
 
@@ -1250,7 +1250,7 @@ pub struct PersonSave {
 }
 
 /// A wallet that the save links to a person (ADR 0117 item 7).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct WalletAdd {
     /// The wallet key.
     pub key: RecipientKey,
@@ -3167,6 +3167,110 @@ pub struct PageSuggestion {
     pub other_recipients: Vec<PageWallet>,
 }
 
+/// The changes of one person from the suggestions of its linked pages
+/// (ADR 0170 items 2, 3 and 5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PageSuggestionChanges {
+    /// The person.
+    pub person_id: PersonId,
+    /// The name of the person, for the review sheet.
+    pub name: String,
+    /// A new picture.
+    pub img: Option<String>,
+    /// A new website.
+    pub href: Option<String>,
+    /// Each new Nostr key.
+    pub keys: Vec<String>,
+    /// Each new wallet that matches the person (ADR 0159 item 13).
+    pub wallets: Vec<WalletAdd>,
+}
+
+/// The changes of one person from the suggestions of its linked pages
+/// (ADR 0170 items 2 and 3). The wallets that do not match stay out. The
+/// first page with a picture or a website gives it.
+#[must_use]
+pub fn page_suggestion_changes(person: &Person, pages: &[PageSuggestion]) -> PageSuggestionChanges {
+    let mut changes = PageSuggestionChanges {
+        person_id: person.id,
+        name: person.name.clone(),
+        img: None,
+        href: None,
+        keys: Vec::new(),
+        wallets: Vec::new(),
+    };
+    for page in pages.iter().filter(|page| !page.missing) {
+        changes.img = changes.img.clone().or_else(|| page.picture.clone());
+        changes.href = changes.href.clone().or_else(|| page.website.clone());
+        if let Some(npub) = &page.npub
+            && !changes.keys.contains(npub)
+        {
+            changes.keys.push(npub.clone());
+        }
+        for wallet in &page.wallets {
+            if !changes.wallets.iter().any(|item| item.key == wallet.key) {
+                changes.wallets.push(WalletAdd {
+                    key: wallet.key.clone(),
+                    recipient_type: wallet.recipient_type.clone(),
+                });
+            }
+        }
+    }
+    changes
+}
+
+/// The changes of each person that has a suggestion from its linked pages
+/// (ADR 0170 item 5). `pages` holds the suggestions of each person.
+#[must_use]
+pub fn page_suggestion_changes_batch<S: BuildHasher>(
+    people: &[Person],
+    pages: &HashMap<PersonId, Vec<PageSuggestion>, S>,
+) -> Vec<PageSuggestionChanges> {
+    people
+        .iter()
+        .filter_map(|person| {
+            let changes = page_suggestion_changes(person, pages.get(&person.id)?);
+            (changes.img.is_some()
+                || changes.href.is_some()
+                || !changes.keys.is_empty()
+                || !changes.wallets.is_empty())
+            .then_some(changes)
+        })
+        .collect()
+}
+
+/// Save the changes of the people that the user selected in the review
+/// sheet (ADR 0170 item 6). Each change goes through the save of a person,
+/// so it changes no feed and no change set. A new picture or website
+/// replaces the old value, and the keys and the wallets are added.
+///
+/// # Errors
+///
+/// A person that does not exist, or an error of the collection. The people
+/// before the error stay saved.
+pub fn save_page_suggestion_changes(
+    collection: &Collection,
+    changes: &[PageSuggestionChanges],
+) -> Result<(), CollectionError> {
+    for change in changes {
+        let current = person(collection, change.person_id)?;
+        let fields = (change.img.is_some() || change.href.is_some()).then(|| PersonFields {
+            name: current.name.clone(),
+            usual_role: current.usual_role.clone(),
+            usual_group: current.usual_group.clone(),
+            img: change.img.clone().unwrap_or_else(|| current.img.clone()),
+            href: change.href.clone().unwrap_or_else(|| current.href.clone()),
+        });
+        let save = PersonSave {
+            fields,
+            wallets: change.wallets.clone(),
+            keys: change.keys.clone(),
+            ..PersonSave::default()
+        };
+        save_person(collection, change.person_id, &save)?;
+    }
+    Ok(())
+}
+
 /// Whether the recipient of a page wallet is the person (ADR 0159 item 13):
 /// its name is the name of the person, a credit name of the person or the
 /// title of the page. The test ignores case, spaces and punctuation. A
@@ -4949,6 +5053,7 @@ mod tests {
     fn page_suggestions_give_only_the_values_that_differ() {
         let collection = Collection::open_in_memory().unwrap();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let ben = add_person(&collection, &fields("Ben")).unwrap();
         let lookups = lookup_map(&collection).unwrap();
         let link = page("g-1", "Ann Bell Music");
         let mut p = person(&collection, ann).unwrap();
@@ -4962,6 +5067,48 @@ mod tests {
         assert_eq!(all.wallets[0].key.address, "ann@example.com");
         assert_eq!(all.wallets[0].recipient_type, "lnaddress");
         assert_eq!(all.wallets[0].name.as_deref(), Some("Ann"));
+        let changes = page_suggestion_changes(&p, std::slice::from_ref(&all));
+        assert_eq!(changes.person_id, ann);
+        assert_eq!(changes.name, "Ann");
+        assert_eq!(changes.img.as_deref(), Some("https://img.example/a.png"));
+        assert_eq!(changes.href.as_deref(), Some("https://ann.example"));
+        assert_eq!(changes.keys, ["npub1ann"]);
+        assert_eq!(changes.wallets.len(), 1);
+        assert_eq!(changes.wallets[0].key.address, "ann@example.com");
+        let ben_person = person(&collection, ben).unwrap();
+        let mut ben_page = all.clone();
+        ben_page.feed_guid = "g-2".to_owned();
+        ben_page.picture = Some("https://img.example/ben.png".to_owned());
+        let batch = page_suggestion_changes_batch(
+            &[p.clone(), ben_person],
+            &HashMap::from([(ann, vec![all.clone()]), (ben, vec![ben_page])]),
+        );
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0].person_id, ann);
+        assert_eq!(batch[1].person_id, ben);
+        assert_eq!(batch[1].img.as_deref(), Some("https://img.example/ben.png"));
+
+        let mut hidden = all.clone();
+        hidden.picture = None;
+        hidden.website = None;
+        hidden.npub = None;
+        hidden.wallets.clear();
+        hidden.other_recipients.push(PageWallet {
+            key: RecipientKey {
+                address: "other@example.com".to_owned(),
+                custom_key: None,
+                custom_value: None,
+            },
+            recipient_type: "lnaddress".to_owned(),
+            name: Some("Other".to_owned()),
+        });
+        let empty = page_suggestion_changes(&p, &[hidden]);
+        assert!(
+            empty.img.is_none()
+                && empty.href.is_none()
+                && empty.keys.is_empty()
+                && empty.wallets.is_empty()
+        );
 
         // The person has each value now: the page agrees.
         add_wallet(
@@ -5066,6 +5213,45 @@ mod tests {
                 .chain(&suggestion.other_recipients)
                 .any(|wallet| wallet.key == added_key)
         );
+    }
+
+    #[test]
+    fn the_batch_saves_only_the_selected_people_and_changes_no_feed() {
+        // ADR 0170 item 6.
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let ben = add_person(&collection, &fields("Ben")).unwrap();
+        let ben_before = person(&collection, ben).unwrap();
+        let count = |table: &str| -> i64 {
+            collection
+                .db()
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap()
+        };
+        let (feeds, sets) = (count("feeds"), count("change_sets"));
+        let change = PageSuggestionChanges {
+            person_id: ann,
+            name: "Ann".to_owned(),
+            img: Some("https://img.example/a.png".to_owned()),
+            href: None,
+            keys: vec!["npub1ann".to_owned()],
+            wallets: vec![WalletAdd {
+                key: RecipientKey {
+                    address: "ann@example.com".to_owned(),
+                    custom_key: None,
+                    custom_value: None,
+                },
+                recipient_type: "lnaddress".to_owned(),
+            }],
+        };
+        save_page_suggestion_changes(&collection, &[change]).unwrap();
+        let after = person(&collection, ann).unwrap();
+        assert_eq!(after.img, "https://img.example/a.png");
+        assert_eq!(after.name, "Ann");
+        assert_eq!(after.keys.len(), 1);
+        assert_eq!(after.wallets.len(), 1);
+        assert_eq!(person(&collection, ben).unwrap(), ben_before);
+        assert_eq!((count("feeds"), count("change_sets")), (feeds, sets));
     }
 
     #[test]

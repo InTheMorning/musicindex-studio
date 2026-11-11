@@ -174,6 +174,68 @@ pub(crate) async fn page_suggestions(
     .await
 }
 
+/// The changes of each person from its linked pages (ADR 0170 item 5). The
+/// route reads the linked pages only when the user selects **Update from
+/// Linked Pages**. It saves nothing.
+pub(crate) async fn linked_page_changes(State(shared): State<Shared>) -> ApiResult {
+    let (people_rows, known, index) = blocking(shared, move |w| {
+        let people_rows = people::people(&w.collection)?;
+        let known = lookups(&w.collection)?;
+        Ok((people_rows, known, w.index.clone()))
+    })
+    .await?;
+    blocking_unlocked(move || {
+        let mut suggestions_by_person = HashMap::new();
+        for person in &people_rows {
+            let pages: Vec<_> = person
+                .pages
+                .iter()
+                .filter_map(|page| {
+                    index.publisher_values(&page.feed_guid).ok().map(|values| {
+                        people::page_suggestions(person, page, values.as_ref(), &known)
+                    })
+                })
+                .collect();
+            suggestions_by_person.insert(person.id, pages);
+        }
+        let changes = people::page_suggestion_changes_batch(&people_rows, &suggestions_by_person);
+        Ok(Json(json!({ "people": changes })))
+    })
+    .await
+}
+
+/// The body of `POST /people/linked-page-changes`: the changes of the
+/// people that the user selected in the review sheet.
+#[derive(Deserialize)]
+pub(crate) struct LinkedPageSave {
+    people: Vec<people::PageSuggestionChanges>,
+}
+
+/// Save the changes of the selected people (ADR 0170 item 6). The save
+/// changes no feed.
+pub(crate) async fn save_linked_page_changes(
+    State(shared): State<Shared>,
+    Json(body): Json<LinkedPageSave>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        let addresses: Vec<String> = body
+            .people
+            .iter()
+            .flat_map(|change| &change.wallets)
+            .filter(|wallet| wallet.recipient_type == "lnaddress")
+            .map(|wallet| wallet.key.address.clone())
+            .collect();
+        if let Some(scheme) = w.keysend_scheme
+            && !addresses.is_empty()
+        {
+            keysend::refresh(&w.collection, &w.web, scheme, &addresses, now_seconds())?;
+        }
+        people::save_page_suggestion_changes(&w.collection, &body.people).map_err(person_error)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
 /// The check of the feeds of one person (ADR 0111 items 9 to 13). The route
 /// reads the collection and makes no request.
 pub(crate) async fn check_person(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {

@@ -1,11 +1,11 @@
-// The UI scale (ADR 0134): the levels of v4vmm, with a mouse only.
+// The UI scale (ADR 0134): the levels of HitIt, with a mouse only.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { UI_SCALES, DEFAULT_SCALE, normalizeScale } from '../ui/uiscale.js';
 
 const css = readFileSync(new URL('../ui/styles.css', import.meta.url), 'utf8');
-const owner = 'ADR 0134: each UI scale level has the factor of v4vmm in styles.css, in a block with no coarse pointer.';
+const owner = 'ADR 0134: each UI scale level has the factor of HitIt in styles.css, in a block with no coarse pointer.';
 
 test('a level that is not known gives the default', () => {
   assert.equal(normalizeScale('large'), 'large');
@@ -13,7 +13,7 @@ test('a level that is not known gives the default', () => {
   assert.equal(normalizeScale(null), DEFAULT_SCALE);
 });
 
-test('each level has the factor of v4vmm, and touch has no factor', () => {
+test('each level has the factor of HitIt, and touch has no factor', () => {
   const factors = { 'x-small': '0.85', small: '0.92', large: '1.12', 'x-large': '1.25' };
   assert.deepEqual(UI_SCALES.map(([id]) => id), ['x-small', 'small', 'medium', 'large', 'x-large'], owner);
   const start = css.indexOf('@media not (pointer: coarse) {\n  /* ADR 0134');

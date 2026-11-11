@@ -513,7 +513,7 @@ textarea.masked { -webkit-text-security: disc; }
 /* ---- Shell: sidebar and detail pane. ---- */
 
 @media not (pointer: coarse) {
-  /* ADR 0134: the UI scale, with the factors of v4vmm. */
+  /* ADR 0134: the UI scale, with the factors of HitIt. */
   :root[data-ui-scale="x-small"] { zoom: 0.85; --ui-zoom: 0.85; }
   :root[data-ui-scale="small"] { zoom: 0.92; --ui-zoom: 0.92; }
   :root[data-ui-scale="large"] { zoom: 1.12; --ui-zoom: 1.12; }

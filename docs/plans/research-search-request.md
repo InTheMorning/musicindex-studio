@@ -58,18 +58,18 @@ For Studio, the important items are these:
   text with the crate `musicindex-search` of `musicindex-lib`.
 - Item 3: Open. No ADR decides a shared file of JavaScript functions.
 
-The website, v4vmm and Studio share no search code. The report proposes:
+The website, HitIt and Studio share no search code. The report proposes:
 
 1. A small crate in the Stophammer workspace with the response structs, the
    envelope, the `include` names and the limits, with no HTTP code. Studio
    keeps `ureq`. The crate must build with Rust 1.93.
-2. A query crate from the v4vmm parser of v4vmm ADR 0087, with fields such as
+2. A query crate from the HitIt parser of HitIt ADR 0087, with fields such as
    `artist:` and `title:`. The recipient picker and the first run can use it
    when Stophammer accepts the filters.
 3. The Studio UI and the website use JavaScript with no build step. They can
    share one file of small functions. The benefit is small.
 
-Stophammer and Studio are AGPL-3.0-only. v4vmm and the website have no license.
+Stophammer and Studio are AGPL-3.0-only. HitIt and the website have no license.
 The operator selects these licenses before the code is shared.
 
 ## 3. PodSovereign

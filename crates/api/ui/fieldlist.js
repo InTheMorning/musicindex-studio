@@ -51,7 +51,7 @@ export function applyRow(text, edit, insert) {
   };
 }
 
-// The result of one key in the field (ADR 0154 items 7 and 8, v4vmm ADR 0087
+// The result of one key in the field (ADR 0154 items 7 and 8, HitIt ADR 0087
 // Decision 3). `open` is true when the list shows rows, and `selected` is the
 // index of the selected row or null. `act` is one of:
 // - 'move': the selection changes, and the key does nothing else.

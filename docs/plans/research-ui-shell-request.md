@@ -75,5 +75,5 @@ The operator has not decided these:
 1. The open questions O-1 to O-16 of the Studio journeys. Examples are the
    noun for an item of the collection (O-1), and the choice after a write
    conflict (O-6).
-2. A search of the collection (O-9). The website and v4vmm put one wide search
+2. A search of the collection (O-9). The website and HitIt put one wide search
    field in the toolbar. No decision covers Studio.

@@ -107,7 +107,8 @@ Keep development and check data in `.studio-dev/` at the repository root. Git ig
 - Feed identity does not change. Studio keeps the feed GUID and each item GUID ([ADR 0008](docs/adr/0008-feed-types-and-feed-identity.md)).
 - No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md), [ADR 0054](docs/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - Studio uses the musicindex.org "Afterglow" visual direction ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
-- musicindex ADRs 0020 to 0029 own the interface rules that musicindex.org, Studio and v4vmm share. They replace parts of ADR 0010, ADR 0029 and ADR 0037, and ADR 0010 names each part. A change to a shared rule needs a record in `../musicindex`.
+- musicindex ADRs 0020 to 0029 own the interface rules that musicindex.org, Studio and HitIt share. They replace parts of ADR 0010, ADR 0029 and ADR 0037, and ADR 0010 names each part. A change to a shared rule needs a record in `../musicindex`.
+- From 2026-11-11 the app v4vmm has the name HitIt (HitIt ADR 0096). In archived records, finished tasks, reviews, dated records and accepted ADRs, v4vmm means HitIt.
 
 ## Working Rules
 
@@ -200,7 +201,7 @@ Situational rules:
 - Each date and time field is a `DateTimeField` of `app.js`, in the local time of the browser. The UI sends RFC 3339 text with the local offset. The core writes `pubDate` from `pub_date_time`, and a `pubDate` that the user does not change keeps its bytes ([ADR 0093](docs/adr/0093-dates-and-times-use-a-picker-in-local-time.md)).
 - "Properties" of an audio file shows its size, type and duration as text. The boxes show only after "Advanced" and its warning, also for a missing value ([ADR 0130](docs/adr/0130-the-facts-of-an-audio-file-stay-locked.md)).
 - The field "Duration" edits `duration_seconds` as minutes and seconds. The core writes a changed `itunes:duration` as `HH:MM:SS`, and a duration that the user does not change keeps its bytes ([ADR 0094](docs/adr/0094-a-duration-is-edited-as-minutes-and-seconds.md)).
-- Settings has a "UI scale" with the five levels of v4vmm, with a mouse only. The browser keeps the level. A release tile has a minimum width of 200 px ([ADR 0134](docs/adr/0134-a-ui-scale-and-larger-release-tiles.md)).
+- Settings has a "UI scale" with the five levels of HitIt, with a mouse only. The browser keeps the level. A release tile has a minimum width of 200 px ([ADR 0134](docs/adr/0134-a-ui-scale-and-larger-release-tiles.md)).
 - One check box at the Write button tells Podcast Index and sends a podping. Studio remembers the last choice. A granted write always announces ([ADR 0136](docs/adr/0136-one-announcement-choice-at-the-write.md)).
 - The part "Other" of the share bar holds at most 10 %, and a part of 5 % or more stays in the bar. The bar has a maximum of 20 parts and "Other" ([ADR 0133](docs/adr/0133-the-share-bar-shows-the-divisions-of-a-payment.md)).
 - The writer always escapes `&` and `<`, and `"` in an attribute value. A changed value keeps the form of its source for `'`, `"` in text and `>`: the entity or the literal character. A value with no source form uses the entity ([ADR 0115](docs/adr/0115-a-changed-value-keeps-the-escape-form-of-its-source.md)).

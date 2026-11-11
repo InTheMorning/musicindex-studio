@@ -21,6 +21,7 @@ pub mod discover;
 pub mod download;
 pub mod duration;
 pub mod feed;
+pub mod feed_check;
 pub mod folder_scan;
 pub mod grant;
 pub mod grant_vault;

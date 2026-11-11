@@ -908,9 +908,10 @@ pub fn has_placeholder_guid(guid: &str) -> bool {
 /// The feed GUID is the `UUIDv5` of the public address of `path`
 /// ([`podcast_guid_for_url`]). With no public address, the feed gets a
 /// placeholder GUID, and its draft has no `self` link (ADR 0122 items 5
-/// and 6). The core gives the real GUID when the feed gets a public address
-/// (ADR 0122 item 8). The draft sets `podcast:medium` to `medium`
-/// and `language` to `en`. The caller gives `music` for an album feed
+/// and 6). With a public address, the draft has a `self` link with the exact
+/// text of that address (ADR 0174 item 11). The core gives the real GUID
+/// when the feed gets a public address (ADR 0122 item 8). The draft sets
+/// `podcast:medium` to `medium` and `language` to `en`. The caller gives `music` for an album feed
 /// and `publisher` for a publisher feed (ADR 0041 item 2). The user sets each other field in the editor,
 /// examines the diff, and writes it. The write puts the file only when no
 /// file exists at the path (ADR 0007).
@@ -938,7 +939,7 @@ pub fn new_feed(
     let guid = address
         .as_deref()
         .map_or_else(placeholder_guid, podcast_guid_for_url);
-    let feed = Feed {
+    let mut feed = Feed {
         title: Some(title.to_owned()),
         author: Some(author.to_owned()),
         podcast_guid: Some(guid),
@@ -946,6 +947,9 @@ pub fn new_feed(
         language: Some("en".to_owned()),
         ..Feed::default()
     };
+    if let Some(address) = address.as_deref() {
+        set_self_link(&mut feed, address);
+    }
     feed.write(&mut doc)?;
     let id = collection.add_feed(None, Some((connector_id, path)))?;
     collection.set_address(id, AddressSource::Folder, address.as_deref())?;

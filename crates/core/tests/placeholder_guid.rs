@@ -174,6 +174,29 @@ fn two_new_feeds_with_no_public_address_get_two_placeholder_guids() {
 }
 
 #[test]
+fn a_new_feed_has_a_self_link_with_the_exact_public_address() {
+    let mut s = setup();
+    let connector = s.hosts.get(s.public).unwrap();
+    let id = pipeline::new_feed(
+        &mut s.collection,
+        connector,
+        s.public,
+        "Album.xml",
+        "Album",
+        "Artist",
+        "music",
+    )
+    .unwrap();
+    let (feed, _) = pipeline::draft_model(&s.collection, id).unwrap();
+    assert_eq!(feed.self_url(), Some("https://music.example/Album.xml"));
+    assert_eq!(feed.atom_links.len(), 1);
+
+    let private = new_album(&mut s, "plain.xml");
+    let (feed, _) = pipeline::draft_model(&s.collection, private).unwrap();
+    assert_eq!(feed.self_url(), None);
+}
+
+#[test]
 fn a_write_of_a_placeholder_feed_puts_the_file_and_queues_no_announcement() {
     let mut s = setup();
     let id = new_album(&mut s, "my-album.xml");

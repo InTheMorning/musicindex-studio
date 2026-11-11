@@ -264,3 +264,20 @@ fn each_corpus_feed_writes_the_same_text_with_its_spans() {
         assert!(root.start < root.tag_end && root.tag_end <= root.end && root.end <= text.len());
     }
 }
+
+#[test]
+fn the_check_of_each_corpus_feed_changes_no_byte() {
+    for (name, bytes) in corpus() {
+        let doc = Document::parse_bytes(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let feed = Feed::read(&doc).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let facts = studio_core::feed_check::Facts {
+            public_address: feed.self_url().map(str::to_owned),
+            ..Default::default()
+        };
+        let _ = studio_core::feed_check::check(&feed, &facts);
+        assert!(
+            doc.write().as_bytes() == bytes,
+            "{name}: the check changed the feed"
+        );
+    }
+}

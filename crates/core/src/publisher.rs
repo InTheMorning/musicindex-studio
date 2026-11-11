@@ -428,6 +428,49 @@ pub fn catalogs(feeds: &[(FeedRow, Option<Feed>)]) -> Vec<Catalog> {
     result
 }
 
+/// Give the first artist title and its first parent label title for a release.
+#[must_use]
+pub fn release_levels(
+    feeds: &[(FeedRow, Option<Feed>)],
+    release: FeedId,
+) -> Option<(Option<String>, Option<String>)> {
+    let release_index = feeds.iter().position(|(row, _)| row.id == release)?;
+    let catalog = catalogs(feeds);
+    let title = |id: FeedId| {
+        feeds
+            .iter()
+            .find(|(row, _)| row.id == id)
+            .and_then(|(row, model)| {
+                model
+                    .as_ref()
+                    .and_then(|feed| feed.title.clone())
+                    .or_else(|| row.title.clone())
+            })
+    };
+    let role = |id: FeedId, wanted: PublisherRole| {
+        feeds
+            .iter()
+            .find(|(row, _)| row.id == id)
+            .is_some_and(|(row, _)| row.publisher_roles.contains(&wanted))
+    };
+    let artist = catalog[release_index]
+        .publishers
+        .iter()
+        .copied()
+        .find(|id| role(*id, PublisherRole::Artist));
+    let artist_title = artist.and_then(title);
+    let label_title = artist.and_then(|artist_id| {
+        let index = feeds.iter().position(|(row, _)| row.id == artist_id)?;
+        catalog[index]
+            .parents
+            .iter()
+            .copied()
+            .find(|id| role(*id, PublisherRole::Label))
+            .and_then(title)
+    });
+    Some((artist_title, label_title))
+}
+
 /// Set the feeds directly below and above each publisher feed (ADR 0088
 /// items 1 and 2). Feed B is below feed A when B has a lower rank and the
 /// two share a release. B is directly below A when no feed C is below A

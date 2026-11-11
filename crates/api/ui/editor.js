@@ -17,7 +17,7 @@ import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, tog
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { buildDateNotices } from './builddate.js';
-import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress } from './feedfacts.js';
+import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, libraryFolderRow } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -4159,6 +4159,49 @@ function WaitingMoveEntry({ move, connectors, busy, onDelete, onKeep, onDeleteNo
     </div>`;
 }
 
+// The sheet of "Change…" for the library folder of a release (ADR 0167 item
+// 6). It lists the folders of the library folder, and has a field for a new
+// path. The core refuses a path outside the library folder, with its cause.
+function LibraryFolderSheet({ open, path, onMove, onClose }) {
+  const ref = useSheet(open);
+  const [folders, setFolders] = useState([]);
+  const [target, setTarget] = useState(path || '');
+  const action = useAction();
+  useEffect(() => {
+    if (!open) return;
+    setTarget(path || '');
+    action.run(async () => {
+      const answer = await api('/library/folders');
+      setFolders(answer.folders || []);
+    });
+  }, [open, path]);
+  const move = () => action.run(async () => {
+    await onMove(target);
+    ref.current.close();
+  });
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="library-folder-title" onClose=${onClose}>
+    <header><h2 id="library-folder-title">Change Library Folder</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
+    <div class="body form">
+      <div class="group">
+        <div class="field"><label for="library-folder-list">Folders in the library</label>
+          <select id="library-folder-list" class="button" value="" onChange=${(event) => {
+            if (event.target.value) setTarget(event.target.value);
+            event.target.value = '';
+          }}>
+            <option value="">Choose a folder</option>
+            ${folders.map((folder) => html`<option key=${folder} value=${folder}>${folder}</option>`)}
+          </select></div>
+        <div class="field"><label for="library-folder-path">New folder path</label>
+          <input id="library-folder-path" value=${target} onInput=${(event) => setTarget(event.target.value)} /></div>
+      </div>
+      <${ErrorNotice} error=${action.error} />
+    </div>
+    <footer><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+      <button class="button primary" type="button" disabled=${action.busy || !target.trim()} onClick=${move}>Move the Folder</button></footer>
+  </dialog>`;
+}
+
 // The Files page: the host of the release, each of its library files with
 // their copies, and each other host file of its release folder (ADR 0036
 // items 4, 7, 9 and 11; task 021g, task 022b). `onOpsChanged` tells the
@@ -4170,6 +4213,7 @@ function WaitingMoveEntry({ move, connectors, busy, onDelete, onKeep, onDeleteNo
 function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onRescan }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [libraryFolderOpen, setLibraryFolderOpen] = useState(false);
   const { busy, error: opError, run } = useAction();
   const scan = useAction();
   // The moves that wait (ADR 0148 item 8), and the sheet of a release move.
@@ -4376,6 +4420,11 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const missing = mode.holdAssets ? 0 : missingCount(data.files);
   const feedHost = data.feed_move ? data.feed_move.connector_id : feed.connector_id;
   const tag = newFeedAddress(feed);
+  const libraryRow = libraryFolderRow(data);
+  const moveLibraryFolder = async (path) => {
+    await api(`/feeds/${feed.id}/library-folder`, { method: 'PUT', body: { path } });
+    await load();
+  };
 
   const partMove = data.feed_move && data.files_stay > 0
     ? partMoveNotice(data.files_stay, data.feed_move.connector_id, feed.connector_id, connectors) : null;
@@ -4406,6 +4455,16 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       </div>
       <${ErrorNotice} error=${scan.error} />
       <${ErrorNotice} error=${opError} />
+      ${libraryRow && html`<div class="group">
+        <div class="link-row static"><span class="text"><span class="label">Library folder</span>
+          <span class="summary mono">${libraryRow.path}</span></span>
+          <button class="button" type="button" disabled=${busy} onClick=${() => setLibraryFolderOpen(true)}>Change…</button>
+        </div>
+        ${libraryRow.defaultPath && html`<div class="link-row static"><span class="text">
+          <span class="label">Default folder</span><span class="summary mono">${libraryRow.defaultPath}</span></span>
+          <button class="button" type="button" disabled=${busy} onClick=${() => run(() => moveLibraryFolder(libraryRow.moveToDefault))}>Move to Default</button>
+        </div>`}
+      </div>`}
     </section>
 
     <section class="page-section"><h2>File hosts</h2>
@@ -4437,6 +4496,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 
     <${MoveReleaseSheet} open=${moving !== null} feed=${feed} connectors=${connectors} start=${moving && moving.start}
       onDone=${afterReleaseMove} onClose=${() => setMoving(null)} />
+    <${LibraryFolderSheet} open=${libraryFolderOpen} path=${data.library_folder_path} onMove=${moveLibraryFolder}
+      onClose=${() => setLibraryFolderOpen(false)} />
 
     <section class="page-section"><h2>Library files</h2>
       ${mode.holdAssets && data.remote_count > 0 && html`<div class="notice download-notice">

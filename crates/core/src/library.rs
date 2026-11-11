@@ -46,10 +46,127 @@ impl Library {
         &self.root
     }
 
+    /// List library folders up to three levels below the library root.
+    ///
+    /// # Errors
+    ///
+    /// Gives an I/O error when Studio cannot read a folder.
+    pub fn folders(&self) -> io::Result<Vec<String>> {
+        fn visit(
+            root: &Path,
+            folder: &Path,
+            depth: usize,
+            out: &mut Vec<String>,
+        ) -> io::Result<()> {
+            if depth > 3 {
+                return Ok(());
+            }
+            let mut entries = fs::read_dir(folder)
+                .map_err(|error| named(folder, &error))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| named(folder, &error))?;
+            entries.sort_by_key(std::fs::DirEntry::file_name);
+            for entry in entries {
+                if !entry
+                    .file_type()
+                    .map_err(|error| named(&entry.path(), &error))?
+                    .is_dir()
+                {
+                    continue;
+                }
+                let path = entry.path();
+                let relative = path
+                    .strip_prefix(root)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+                out.push(relative.to_string_lossy().replace('\\', "/"));
+                visit(root, &path, depth + 1, out)?;
+            }
+            Ok(())
+        }
+
+        let mut folders = Vec::new();
+        visit(&self.root, &self.root, 1, &mut folders)?;
+        folders.sort();
+        Ok(folders)
+    }
+
     /// The path of a file in a release folder.
     #[must_use]
     pub fn path(&self, folder: &str, name: &str) -> PathBuf {
         self.root.join(folder).join(name)
+    }
+
+    /// Check whether a relative release folder path stays below the library root.
+    #[must_use]
+    pub fn is_folder_path(path: &str) -> bool {
+        !path.is_empty()
+            && !path.contains(['\\', ':'])
+            && Path::new(path)
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_)))
+    }
+
+    /// Move one release folder to another relative path in this library.
+    ///
+    /// # Errors
+    ///
+    /// Gives an I/O error when either path is invalid or the move fails.
+    pub fn move_folder(&self, from: &str, to: &str) -> io::Result<()> {
+        check_folder_path(from)?;
+        check_folder_path(to)?;
+        let source = self.root.join(from);
+        let destination = self.root.join(to);
+        if source == destination {
+            return Ok(());
+        }
+        if destination.starts_with(&source) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "destination is inside source folder",
+            ));
+        }
+        if destination.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("{} already exists", destination.display()),
+            ));
+        }
+        let parent = destination.parent().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "destination has no parent")
+        })?;
+        if let Err(error) = fs::create_dir_all(parent) {
+            remove_empty_parents(parent, &self.root);
+            return Err(named(parent, &error));
+        }
+        let root = self
+            .root
+            .canonicalize()
+            .map_err(|error| named(&self.root, &error))?;
+        let source_real = match source.canonicalize() {
+            Ok(path) => path,
+            Err(error) => {
+                remove_empty_parents(parent, &self.root);
+                return Err(named(&source, &error));
+            }
+        };
+        let parent_real = match parent.canonicalize() {
+            Ok(path) => path,
+            Err(error) => {
+                remove_empty_parents(parent, &self.root);
+                return Err(named(parent, &error));
+            }
+        };
+        if !source_real.starts_with(&root) || !parent_real.starts_with(&root) {
+            remove_empty_parents(parent, &self.root);
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "source and destination must stay inside the library folder",
+            ));
+        }
+        fs::rename(&source, &destination).map_err(|error| {
+            remove_empty_parents(parent, &self.root);
+            named(&source, &error)
+        })
     }
 
     /// Move or copy `source` into `<root>/<folder>/<name>`. Gives the
@@ -60,7 +177,7 @@ impl Library {
     /// Gives an `io::Error` when `name` is not a plain file name, or
     /// Studio cannot make the release folder or read or write the file.
     pub fn put_file(&self, folder: &str, name: &str, source: &Path) -> io::Result<(u64, String)> {
-        check_plain(folder)?;
+        check_folder_path(folder)?;
         check_plain(name)?;
         let dir = self.root.join(folder);
         fs::create_dir_all(&dir).map_err(|e| named(&dir, &e))?;
@@ -85,7 +202,7 @@ impl Library {
     /// Gives an `io::Error` when Studio cannot make the release folder, or
     /// the write or the rename fails.
     pub fn write_feed_xml(&self, folder: &str, file_name: &str, bytes: &[u8]) -> io::Result<()> {
-        check_plain(folder)?;
+        check_folder_path(folder)?;
         check_plain(file_name)?;
         let dir = self.root.join(folder);
         fs::create_dir_all(&dir).map_err(|e| named(&dir, &e))?;
@@ -110,7 +227,7 @@ impl Library {
     /// Gives an `io::Error` when `folder` or `file_name` is not a plain
     /// name, or Studio cannot read the file.
     pub fn read_feed_xml(&self, folder: &str, file_name: &str) -> io::Result<Vec<u8>> {
-        check_plain(folder)?;
+        check_folder_path(folder)?;
         check_plain(file_name)?;
         let full = self.root.join(folder).join(file_name);
         fs::read(&full).map_err(|e| named(&full, &e))
@@ -124,7 +241,7 @@ impl Library {
     /// Gives an `io::Error` when `name` is not a plain file name, or
     /// Studio cannot remove the file for another reason.
     pub fn remove_file(&self, folder: &str, name: &str) -> io::Result<()> {
-        check_plain(folder)?;
+        check_folder_path(folder)?;
         check_plain(name)?;
         let full = self.root.join(folder).join(name);
         match fs::remove_file(&full) {
@@ -169,6 +286,17 @@ fn check_plain(name: &str) -> io::Result<()> {
     }
 }
 
+fn check_folder_path(path: &str) -> io::Result<()> {
+    if Library::is_folder_path(path) {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{path:?} is not a library folder path"),
+        ))
+    }
+}
+
 /// True when `name` is a plain file name: no path separator, and not `.`
 /// or `..` (ADR 0036 item 4).
 pub(crate) fn is_plain_name(name: &str) -> bool {
@@ -178,6 +306,18 @@ pub(crate) fn is_plain_name(name: &str) -> bool {
 /// Wrap an I/O error so its message names the path that failed.
 fn named(path: &Path, error: &io::Error) -> io::Error {
     io::Error::new(error.kind(), format!("{}: {error}", path.display()))
+}
+
+fn remove_empty_parents(mut path: &Path, root: &Path) {
+    while path != root && path.starts_with(root) {
+        if fs::remove_dir(path).is_err() {
+            break;
+        }
+        let Some(parent) = path.parent() else {
+            break;
+        };
+        path = parent;
+    }
 }
 
 /// Give a release folder the name of its feed file with no extension.
@@ -200,6 +340,62 @@ pub fn release_folder_name(feed_path: &str, taken: &dyn Fn(&str) -> bool) -> Str
     }
 }
 
+/// Give a release its default relative folder path (ADR 0167 items 1 to 3).
+#[must_use]
+pub fn default_release_folder(
+    title: Option<&str>,
+    artist: Option<&str>,
+    label: Option<&str>,
+    taken: &dyn Fn(&str) -> bool,
+) -> String {
+    let mut parts = Vec::new();
+    if let Some(artist) = artist {
+        if let Some(label) = label {
+            parts.push(folder_part(label));
+        }
+        parts.push(folder_part(artist));
+    } else {
+        parts.push("Other".to_owned());
+    }
+    parts.push(folder_part(title.unwrap_or_default()));
+    let base = parts.join("/");
+    if !taken(&base) {
+        return base;
+    }
+    let (parent, name) = base.rsplit_once('/').unwrap_or(("", base.as_str()));
+    for number in 2_u64.. {
+        let name = format!("{name} {number}");
+        let candidate = if parent.is_empty() {
+            name
+        } else {
+            format!("{parent}/{name}")
+        };
+        if !taken(&candidate) {
+            return candidate;
+        }
+    }
+    base
+}
+
+fn folder_part(value: &str) -> String {
+    let safe: String = value
+        .chars()
+        .filter(|character| {
+            !character.is_control()
+                && !matches!(
+                    character,
+                    '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*'
+                )
+        })
+        .collect();
+    let safe = safe.trim();
+    if safe.is_empty() || matches!(safe, "." | "..") {
+        "Untitled".into()
+    } else {
+        safe.into()
+    }
+}
+
 /// The error of [`give_published_folder`].
 #[derive(Debug)]
 pub enum FolderError {
@@ -209,6 +405,8 @@ pub enum FolderError {
     Io(io::Error),
     /// The feed has no address and no path to name its folder from.
     NoAddress,
+    /// The feed has no library folder.
+    NoFolder,
 }
 
 impl std::fmt::Display for FolderError {
@@ -217,6 +415,7 @@ impl std::fmt::Display for FolderError {
             Self::Collection(error) => error.fmt(f),
             Self::Io(error) => error.fmt(f),
             Self::NoAddress => f.write_str("the feed has no address to name its folder from"),
+            Self::NoFolder => f.write_str("the feed has no library folder"),
         }
     }
 }
@@ -233,6 +432,30 @@ impl From<io::Error> for FolderError {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
+}
+
+/// Move a release folder and record its new relative path.
+///
+/// # Errors
+///
+/// Gives an error when the feed has no folder, the move fails, or SQLite fails.
+pub fn move_release_folder(
+    collection: &Collection,
+    library: &Library,
+    feed_id: FeedId,
+    destination: &str,
+) -> Result<(), FolderError> {
+    let row = collection.feed(feed_id)?;
+    let source = row.folder.ok_or(FolderError::NoFolder)?;
+    if source == destination {
+        return Ok(());
+    }
+    library.move_folder(&source, destination)?;
+    if let Err(error) = collection.set_feed_folder(feed_id, destination) {
+        let _ = library.move_folder(destination, &source);
+        return Err(FolderError::Collection(error));
+    }
+    Ok(())
 }
 
 /// Give a published feed its release folder, with its feed XML
@@ -259,12 +482,39 @@ pub fn give_published_folder(
         .as_deref()
         .or(row.path.as_deref())
         .ok_or(FolderError::NoAddress)?;
-    let taken: std::collections::HashSet<String> = collection
-        .feeds()?
-        .into_iter()
-        .filter_map(|feed| feed.folder)
+    let feeds = collection.feeds()?;
+    let models: Vec<_> = feeds
+        .iter()
+        .map(|feed| {
+            let model = crate::pipeline::draft_model(collection, feed.id)
+                .ok()
+                .map(|(model, _)| model);
+            (feed.clone(), model)
+        })
         .collect();
-    let folder = release_folder_name(source, &|name| taken.contains(name));
+    let incoming = crate::xml::Document::parse_bytes(bytes)
+        .ok()
+        .and_then(|document| crate::feed::Feed::read(&document).ok());
+    let mut models = models;
+    if let Some((_, model)) = models.iter_mut().find(|(feed, _)| feed.id == feed_id)
+        && incoming.is_some()
+    {
+        model.clone_from(&incoming);
+    }
+    let (artist, label) =
+        crate::publisher::release_levels(&models, feed_id).unwrap_or((None, None));
+    let title = incoming
+        .as_ref()
+        .and_then(|feed| feed.title.as_deref())
+        .or(row.title.as_deref());
+    let taken: std::collections::HashSet<String> = feeds
+        .iter()
+        .filter_map(|feed| feed.folder.clone())
+        .collect();
+    let root = library.root();
+    let folder = default_release_folder(title, artist.as_deref(), label.as_deref(), &|path| {
+        taken.contains(path) || root.join(path).exists()
+    });
     let file_name = source.rsplit_once('/').map_or(source, |(_, name)| name);
     library.write_feed_xml(&folder, file_name, bytes)?;
     collection.set_feed_folder(feed_id, &folder)?;
@@ -297,6 +547,116 @@ mod tests {
     use super::*;
 
     #[test]
+    fn default_release_folder_uses_artist_label_other_and_unique_names() {
+        let unused = |_: &str| false;
+        assert_eq!(
+            default_release_folder(Some("Album"), Some("Artist"), None, &unused),
+            "Artist/Album"
+        );
+        assert_eq!(
+            default_release_folder(Some("Album"), Some("Artist"), Some("Label"), &unused),
+            "Label/Artist/Album"
+        );
+        assert_eq!(
+            default_release_folder(Some("Album"), None, Some("Label"), &unused),
+            "Other/Album"
+        );
+        let taken = |path: &str| matches!(path, "Artist/Album" | "Artist/Album 2");
+        assert_eq!(
+            default_release_folder(Some("Album"), Some("Artist"), None, &taken),
+            "Artist/Album 3"
+        );
+        assert_eq!(
+            default_release_folder(Some("/"), Some("Artist/"), None, &unused),
+            "Artist/Untitled"
+        );
+    }
+
+    #[test]
+    fn library_folder_move_keeps_files_records_and_feed_xml_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("library");
+        let library = Library::open(&root).unwrap();
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        let source = dir.path().join("track.mp3");
+        fs::write(&source, b"audio").unwrap();
+        collection.set_feed_folder(feed, "Artist/Album").unwrap();
+        library
+            .write_feed_xml("Artist/Album", "feed.custom.xml", b"xml")
+            .unwrap();
+        let (size, sha) = library
+            .put_file("Artist/Album", "track.mp3", &source)
+            .unwrap();
+        collection
+            .add_library_file(
+                feed,
+                "track.mp3",
+                size,
+                Some(&sha),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
+            .unwrap();
+        let before = collection.feed(feed).unwrap();
+
+        move_release_folder(&collection, &library, feed, "Label/Artist/Album").unwrap();
+        let after = collection.feed(feed).unwrap();
+        assert_eq!(after.folder.as_deref(), Some("Label/Artist/Album"));
+        assert_eq!(after.path, before.path);
+        assert_eq!(after.public_url, before.public_url);
+        assert_eq!(after.connector_id, before.connector_id);
+        assert_eq!(
+            fs::read(root.join("Label/Artist/Album/track.mp3")).unwrap(),
+            b"audio"
+        );
+        assert_eq!(
+            fs::read(root.join("Label/Artist/Album/feed.custom.xml")).unwrap(),
+            b"xml"
+        );
+        assert_eq!(collection.library_files(feed).unwrap()[0].path, "track.mp3");
+
+        for invalid in ["../outside", root.to_str().unwrap()] {
+            assert!(move_release_folder(&collection, &library, feed, invalid).is_err());
+            assert_eq!(
+                collection.feed(feed).unwrap().folder.as_deref(),
+                Some("Label/Artist/Album")
+            );
+        }
+        fs::create_dir_all(root.join("Occupied")).unwrap();
+        assert!(move_release_folder(&collection, &library, feed, "Occupied").is_err());
+        assert_eq!(
+            collection.feed(feed).unwrap().folder.as_deref(),
+            Some("Label/Artist/Album")
+        );
+        assert!(root.join("Label/Artist/Album/track.mp3").exists());
+    }
+
+    #[test]
+    fn opening_a_library_does_not_move_an_existing_release_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("library");
+        let old = root.join("feed");
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("feed.xml"), b"xml").unwrap();
+        let collection_path = dir.path().join("collection.sqlite");
+        let mut collection = Collection::open(&collection_path).unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        collection.set_feed_folder(feed, "feed").unwrap();
+        drop(collection);
+        let collection = Collection::open(&collection_path).unwrap();
+        let _library = Library::open(&root).unwrap();
+        assert_eq!(
+            collection.feed(feed).unwrap().folder.as_deref(),
+            Some("feed")
+        );
+        assert!(old.join("feed.xml").exists());
+        assert!(!root.join("Other").exists());
+    }
+
+    #[test]
     fn open_makes_the_folder_and_removes_the_test_file() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("library");
@@ -304,6 +664,31 @@ mod tests {
         assert_eq!(library.root(), root);
         assert!(root.is_dir());
         assert!(!root.join(WRITE_TEST_FILE).exists());
+    }
+
+    #[test]
+    fn library_folders_lists_relative_paths_through_three_levels() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("library");
+        for path in [
+            "Artist/Album/Disc",
+            "Artist/Album/Disc/Deep",
+            "Label/Release",
+        ] {
+            fs::create_dir_all(root.join(path)).unwrap();
+        }
+        let library = Library::open(&root).unwrap();
+
+        assert_eq!(
+            library.folders().unwrap(),
+            [
+                "Artist",
+                "Artist/Album",
+                "Artist/Album/Disc",
+                "Label",
+                "Label/Release"
+            ]
+        );
     }
 
     #[test]
@@ -328,7 +713,6 @@ mod tests {
         let source = dir.path().join("a.mp3");
         fs::write(&source, b"music").unwrap();
         assert!(library.put_file("..", "a.mp3", &source).is_err());
-        assert!(library.put_file("a/b", "a.mp3", &source).is_err());
         assert!(library.write_feed_xml("..", "feed.xml", b"x").is_err());
         assert!(!dir.path().join("a.mp3.studio-tmp").exists());
     }

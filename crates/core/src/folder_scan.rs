@@ -154,7 +154,7 @@ fn scan_row(
     let Some(folder) = row.folder.as_deref() else {
         return Ok(Vec::new());
     };
-    if !is_plain_name(folder) {
+    if !Library::is_folder_path(folder) {
         return Ok(Vec::new());
     }
     let dir = library.root().join(folder);
@@ -264,7 +264,10 @@ pub fn add_new(
     path: &str,
 ) -> Result<LibraryFileId, ScanError> {
     let row = collection.feed(feed_id)?;
-    let folder = row.folder.as_deref().filter(|f| is_plain_name(f));
+    let folder = row
+        .folder
+        .as_deref()
+        .filter(|folder| Library::is_folder_path(folder));
     let (Some(folder), true) = (folder, is_plain_name(path)) else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

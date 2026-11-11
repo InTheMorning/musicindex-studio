@@ -73,6 +73,60 @@ fn remote(medium: &str, guid: &str, url: &str, title: &str, rel: Option<&str>) -
 }
 
 #[test]
+fn release_levels_give_artist_and_parent_label_and_renames_move_no_folder() {
+    let mut s = setup();
+    let label = new_feed(&mut s, "label.xml", "Label One", "publisher");
+    let artist = new_feed(&mut s, "artist.xml", "Artist One", "publisher");
+    let second_label = new_feed(&mut s, "label-2.xml", "Label Two", "publisher");
+    let second_artist = new_feed(&mut s, "artist-2.xml", "Artist Two", "publisher");
+    let release = new_feed(&mut s, "album.xml", "Album", "music");
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(second_label, &[PublisherRole::Label], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(second_artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    publisher::link(&s.collection, label, release).unwrap();
+    publisher::link(&s.collection, artist, release).unwrap();
+    publisher::link(&s.collection, second_label, release).unwrap();
+    publisher::link(&s.collection, second_artist, release).unwrap();
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            let model = pipeline::draft_model(&s.collection, row.id)
+                .ok()
+                .map(|(feed, _)| feed);
+            (row, model)
+        })
+        .collect();
+    assert_eq!(
+        publisher::release_levels(&feeds, release),
+        Some((Some("Artist One".into()), Some("Label One".into())))
+    );
+
+    s.collection
+        .set_feed_folder(release, "Label One/Artist One/Album")
+        .unwrap();
+    pipeline::edit_draft(&s.collection, artist, |feed| {
+        feed.title = Some("Renamed Artist".into());
+    })
+    .unwrap();
+    assert_eq!(
+        s.collection.feed(release).unwrap().folder.as_deref(),
+        Some("Label One/Artist One/Album")
+    );
+}
+
+#[test]
 fn a_new_publisher_feed_is_a_publisher_row_with_no_role() {
     let mut s = setup();
     let publisher = new_feed(&mut s, "label.xml", "Label", "publisher");

@@ -356,6 +356,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             get(routes::list_release_files).delete(routes::delete_pending_file),
         )
         .route(
+            "/feeds/{id}/library-folder",
+            put(routes::set_library_folder),
+        )
+        .route(
             "/feeds/{id}/uploads",
             get(uploads::list_uploads).post(uploads::start_upload),
         )
@@ -446,6 +450,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/library",
             get(routes::get_library).put(routes::put_library),
         )
+        .route("/library/folders", get(routes::library_folders))
         .route("/library/limits", put(routes::put_library_limits))
         .route("/library/scan", post(routes::scan_library))
         .route("/feeds/{id}/library-changes", post(routes::library_changes))

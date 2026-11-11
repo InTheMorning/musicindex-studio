@@ -31,3 +31,18 @@ export function newFeedAddress(feed) {
     note: !elsewhere && feed.public_url ? 'This is the address of this feed.' : null,
   };
 }
+
+// The row "Library folder" of the Files page (ADR 0167 items 5 to 7, 11).
+// `files` is the answer of the Files route. The row always has "Change…".
+// It gives the default path and the relative path for "Move to Default" only
+// when the folder is not at its default path. A server that holds no assets
+// gives no folder, so no row.
+export function libraryFolderRow(files) {
+  if (!files || files.library_folder == null || files.default_library_folder == null || files.library_folder_is_default == null) return null;
+  const moves = !files.library_folder_is_default;
+  return {
+    path: files.library_folder,
+    defaultPath: moves ? files.default_library_folder : null,
+    moveToDefault: moves ? files.default_library_folder_path : null,
+  };
+}

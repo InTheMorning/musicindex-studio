@@ -1,6 +1,8 @@
 # Studio V1 Task 105: Library Folder Of A Release
 
-Status: Ready.
+Status: Complete, with its screenshot visual check on 2026-11-11. The operator accepted the screenshots. The human test with a real release folder is open.
+
+A new release folder gets the default path when Studio imports or reads a published feed. `migrate.rs` keeps the folder names of ADR 0036. `feeds.folder` holds a path relative to the library folder, so no schema change was necessary. The routes are `PUT /feeds/{id}/library-folder` and `GET /library/folders`.
 
 Owner of the rules: [ADR 0167](../adr/0167-each-release-has-an-editable-library-folder.md). It uses ADR 0035 and ADR 0038. It uses ADR 0088 for the levels and ADR 0105 for a server that holds no assets. It uses ADR 0149 for the library of a collection.
 

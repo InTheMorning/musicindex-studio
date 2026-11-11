@@ -3857,6 +3857,10 @@ fn pending_expiry(
     .then(|| file.imported_at + studio_core::assets::PENDING_SECONDS)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the Files response assembles its inventory in one workspace read"
+)]
 pub(crate) async fn list_release_files(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -3955,8 +3959,35 @@ pub(crate) async fn list_release_files(
             None => Vec::new(),
         };
 
+        let no_server_assets = w.collection.asset_rules().is_some() && !w.holds_assets();
+        let library_paths = if no_server_assets {
+            (None, None, None, None)
+        } else if let Some(root) = w.collection.library_root()? {
+            let default = release_default_folder(w, id)?;
+            (
+                feed_row
+                    .folder
+                    .as_deref()
+                    .map(|folder| root.join(folder).to_string_lossy().into_owned()),
+                Some(root.join(&default).to_string_lossy().into_owned()),
+                feed_row.folder.as_deref().map(|folder| folder == default),
+                feed_row.folder.clone(),
+            )
+        } else {
+            (None, None, None, None)
+        };
+
         Ok(Json(json!({
             "folder": feed_row.folder,
+            "library_folder": library_paths.0,
+            "default_library_folder": library_paths.1,
+            "library_folder_is_default": library_paths.2,
+            "library_folder_path": library_paths.3,
+            "default_library_folder_path": if library_paths.0.is_some() {
+                Some(release_default_folder(w, id)?)
+            } else {
+                None
+            },
             "files_connector_id": feed_row.files_connector_id.map(|c| c.0),
             "files": files,
             "remote_count": remote_count,
@@ -3970,6 +4001,90 @@ pub(crate) async fn list_release_files(
         })))
     })
     .await
+}
+
+/// List folders in the library for the library-folder sheet (ADR 0167 item 6).
+pub(crate) async fn library_folders(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, move |w| {
+        if w.collection.asset_rules().is_some() && !w.holds_assets() {
+            return Ok(Json(json!({ "folders": [] })));
+        }
+        let folders = w
+            .library()?
+            .folders()
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+        Ok(Json(json!({ "folders": folders })))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetLibraryFolder {
+    path: String,
+}
+
+/// Move one release folder within its library (ADR 0167 item 8).
+pub(crate) async fn set_library_folder(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SetLibraryFolder>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let feed_id = FeedId(id);
+        if w.collection.asset_rules().is_some() && !w.holds_assets() {
+            return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "assets_unavailable", "This server holds no library, so the release has no library folder."));
+        }
+        if !library::Library::is_folder_path(&body.path) {
+            return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_library_folder", "Studio cannot move the folder there. Give a folder path inside the library folder, such as Artist/Album."));
+        }
+        let library = w.library()?;
+        library::move_release_folder(&w.collection, &library, feed_id, &body.path)
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, "library_move_failed", error.to_string()))?;
+        Ok(Json(json!({
+            "library_folder": library.root().join(&body.path).to_string_lossy(),
+            "default_library_folder": library.root().join(release_default_folder(w, feed_id)?).to_string_lossy(),
+            "library_folder_is_default": body.path == release_default_folder(w, feed_id)?,
+        })))
+    }).await
+}
+
+/// Give the default relative folder path for one release, from publisher levels.
+fn release_default_folder(w: &Workspace, id: FeedId) -> Result<String, ApiError> {
+    let rows = w.collection.feeds()?;
+    let feeds: Vec<_> = rows
+        .into_iter()
+        .map(|row| {
+            let model = files_feed(w, row.id).ok().flatten();
+            (row, model)
+        })
+        .collect();
+    let (artist, label) = publisher::release_levels(&feeds, id).unwrap_or((None, None));
+    let row = feeds
+        .iter()
+        .find(|(row, _)| row.id == id)
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "not_found", "feed not found"))?;
+    let title = row
+        .1
+        .as_ref()
+        .and_then(|feed| feed.title.as_deref())
+        .or(row.0.title.as_deref());
+    let current = row.0.folder.as_deref();
+    let root = w.collection.library_root()?;
+    let taken: std::collections::HashSet<String> = feeds
+        .iter()
+        .filter(|(feed, _)| feed.id != id)
+        .filter_map(|(feed, _)| feed.folder.clone())
+        .collect();
+    Ok(library::default_release_folder(
+        title,
+        artist.as_deref(),
+        label.as_deref(),
+        &|path| {
+            taken.contains(path)
+                || (current != Some(path)
+                    && root.as_ref().is_some_and(|root| root.join(path).exists()))
+        },
+    ))
 }
 
 #[derive(Deserialize)]
@@ -5571,14 +5686,9 @@ fn import_upload(
     // file (ADR 0122 item 12), so the import needs no public address.
     writer(w, id)?;
     let row = w.collection.feed(id)?;
-    let feed_path = row
-        .path
-        .as_deref()
-        .ok_or_else(|| ApiError::internal(format!("feed {} has a connector and no path", id.0)))?;
-
     let hosts = w.hosts()?;
     let library = w.library()?;
-    give_release_folder(w, id, &row, feed_path)?;
+    give_release_folder(w, id, &row)?;
 
     if let Some(path) = restore {
         check_restore(w, id, path, &imported)?;
@@ -5690,22 +5800,11 @@ fn library_file_at(
 
 /// Give a feed its release folder in the library, when it has none yet
 /// (ADR 0036 items 1, 2 and 4). A feed with a folder already keeps it.
-fn give_release_folder(
-    w: &mut Workspace,
-    id: FeedId,
-    row: &FeedRow,
-    feed_path: &str,
-) -> Result<(), ApiError> {
+fn give_release_folder(w: &mut Workspace, id: FeedId, row: &FeedRow) -> Result<(), ApiError> {
     if row.folder.is_some() {
         return Ok(());
     }
-    let taken: std::collections::HashSet<String> = w
-        .collection
-        .feeds()?
-        .into_iter()
-        .filter_map(|feed| feed.folder)
-        .collect();
-    let folder = library::release_folder_name(feed_path, &|name| taken.contains(name));
+    let folder = release_default_folder(w, id)?;
     w.collection.set_feed_folder(id, &folder)?;
     Ok(())
 }

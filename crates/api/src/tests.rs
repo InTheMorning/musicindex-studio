@@ -213,6 +213,7 @@ fn set_library_root(app: &App) {
     collection
         .set_setting("library_root", &json!(root.to_str().unwrap()))
         .unwrap();
+    std::fs::create_dir_all(root.join("album")).unwrap();
 }
 
 /// Make the vault, a local connector, a feed and a library folder. Gives
@@ -244,6 +245,16 @@ async fn set_up(app: &App) -> i64 {
     .await;
     assert_eq!(status, StatusCode::CREATED);
     set_library_root(app);
+    let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
+    db.execute(
+        "UPDATE feeds SET folder = 'album' WHERE id = ?1",
+        [feed["id"].as_i64().unwrap()],
+    )
+    .unwrap();
+    let host_feed = app.feeds.path().join("album.xml");
+    if host_feed.is_file() {
+        std::fs::copy(host_feed, app.data.path().join("library/album/album.xml")).unwrap();
+    }
     feed["id"].as_i64().unwrap()
 }
 
@@ -4398,8 +4409,15 @@ async fn a_published_feed_gets_its_folder_its_xml_and_remote_rows_and_a_refresh_
     .await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
     let id = body["added"][0]["id"].as_i64().unwrap();
-    assert_eq!(body["added"][0]["folder"], "c");
-    let stored = std::fs::read(app.data.path().join("library/c/c.xml")).unwrap();
+    assert_eq!(body["added"][0]["folder"], "Other/Album C");
+    let stored = std::fs::read(
+        app.data
+            .path()
+            .join("library")
+            .join(body["added"][0]["folder"].as_str().unwrap())
+            .join("c.xml"),
+    )
+    .unwrap();
     assert_eq!(stored, xml.as_bytes());
 
     let files_path = format!("/api/v1/feeds/{id}/files");
@@ -4545,6 +4563,10 @@ async fn a_write_keeps_the_remote_rows_in_agreement_with_the_written_feed() {
 async fn a_feed_added_from_a_host_folder_gets_its_release_folder_at_its_first_read() {
     let app = app();
     let id = set_up(&app).await;
+    let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
+    db.execute("UPDATE feeds SET folder = NULL WHERE id = ?1", [id])
+        .unwrap();
+    std::fs::remove_dir_all(app.data.path().join("library/album")).unwrap();
     std::fs::write(
         app.feeds.path().join("album.xml"),
         feed_with_one_enclosure("https://music.example/album/a.mp3", 10),
@@ -4552,10 +4574,17 @@ async fn a_feed_added_from_a_host_folder_gets_its_release_folder_at_its_first_re
     .unwrap();
     let (status, body) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["folder"], "album");
+    assert_eq!(body["folder"], "Other/Album D");
     let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
     assert_eq!(files["remote_count"], 1, "{files}");
-    assert!(app.data.path().join("library/album/album.xml").exists());
+    assert!(
+        app.data
+            .path()
+            .join("library")
+            .join(body["folder"].as_str().unwrap())
+            .join("album.xml")
+            .exists()
+    );
 }
 
 // ---- The download queue (task 023c) ----
@@ -4630,11 +4659,16 @@ async fn a_download_over_http_puts_the_file_in_the_library_with_its_sha256() {
     assert_eq!(started["queued"].as_array().unwrap().len(), 1);
     wait_for_downloads(&app, id).await;
 
-    let stored = std::fs::read(app.data.path().join("library/d/a.mp3")).unwrap();
-    assert_eq!(stored, bytes);
     let collection =
         studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
             .unwrap();
+    let folder = collection
+        .feed(studio_core::collection::FeedId(id))
+        .unwrap()
+        .folder
+        .unwrap();
+    let stored = std::fs::read(app.data.path().join("library").join(folder).join("a.mp3")).unwrap();
+    assert_eq!(stored, bytes);
     let file = &collection
         .library_files(studio_core::collection::FeedId(id))
         .unwrap()[0];
@@ -12603,7 +12637,14 @@ async fn add_the_file_again_gives_a_removed_file_its_bytes_and_the_write_then_su
     let (status, file) = upload(&app, id, "tagged.mp3", bytes.clone()).await;
     assert_eq!(status, StatusCode::CREATED, "{file}");
     use_as_enclosure(&app, id, &file).await;
-    let folder_file = app.data.path().join("library/album/tagged.mp3");
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    let folder = files["folder"].as_str().unwrap().to_owned();
+    let folder_file = app
+        .data
+        .path()
+        .join("library")
+        .join(folder)
+        .join("tagged.mp3");
     assert!(folder_file.exists());
     let row = release_file(&app, id, "tagged.mp3").await;
     assert_eq!(row["local"], true);
@@ -15348,4 +15389,124 @@ async fn the_artist_names_route_gives_the_names_that_start_with_the_text() {
     let (_, body) = call(&app, "GET", "/api/v1/musicindex/artist-names?from=", None).await;
     assert_eq!(body, json!({ "names": [] }));
     assert_eq!(seen.lock().unwrap().len(), before);
+}
+
+#[tokio::test]
+async fn release_files_show_library_paths_and_library_folder_move_refusals() {
+    let app = app();
+    let id = set_up(&app).await;
+    let root = app.data.path().join("library");
+    let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
+    db.execute(
+        "UPDATE feeds SET folder = 'album', title = 'Album' WHERE id = ?1",
+        [id],
+    )
+    .unwrap();
+    let (status, report) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": root.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+
+    let (status, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    assert_eq!(
+        files["library_folder"],
+        root.join("album").to_str().unwrap()
+    );
+    assert_eq!(
+        files["default_library_folder"],
+        root.join("Other/Album").to_str().unwrap()
+    );
+    assert_eq!(files["library_folder_is_default"], false);
+    assert_eq!(files["library_folder_path"], "album");
+    assert_eq!(files["default_library_folder_path"], "Other/Album");
+
+    let (status, moved) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/library-folder"),
+        Some(json!({ "path": "Custom/Album" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    assert_eq!(
+        moved["library_folder"],
+        root.join("Custom/Album").to_str().unwrap()
+    );
+    assert_eq!(
+        moved["default_library_folder"],
+        root.join("Other/Album").to_str().unwrap()
+    );
+    assert_eq!(moved["library_folder_is_default"], false);
+
+    for invalid in ["../outside", root.to_str().unwrap()] {
+        let (status, response) = call(
+            &app,
+            "PUT",
+            &format!("/api/v1/feeds/{id}/library-folder"),
+            Some(json!({ "path": invalid })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{response}");
+        assert!(response.to_string().contains("inside the library folder"));
+    }
+    let (status, unchanged) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{unchanged}");
+    assert_eq!(
+        unchanged["library_folder"],
+        root.join("Custom/Album").to_str().unwrap()
+    );
+}
+
+#[tokio::test]
+async fn release_files_give_null_library_paths_on_a_server_without_assets() {
+    let (app, _handle) = app_assets(false, None);
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let mut collection = collection;
+    let id = collection.add_feed(None, None).unwrap().0;
+    let (status, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    assert_eq!(files["library_folder"], Value::Null);
+    assert_eq!(files["default_library_folder"], Value::Null);
+    assert_eq!(files["library_folder_is_default"], Value::Null);
+}
+
+#[tokio::test]
+async fn the_library_folders_route_lists_relative_paths_through_three_levels() {
+    let app = app();
+    let root = app.data.path().join("library");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        "/api/v1/library",
+        Some(json!({ "root": root.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    for path in [
+        "Artist/Album/Disc",
+        "Artist/Album/Disc/Deep",
+        "Label/Release",
+    ] {
+        std::fs::create_dir_all(root.join(path)).unwrap();
+    }
+
+    let (status, response) = call(&app, "GET", "/api/v1/library/folders", None).await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(
+        response["folders"],
+        json!([
+            "Artist",
+            "Artist/Album",
+            "Artist/Album/Disc",
+            "Label",
+            "Label/Release"
+        ])
+    );
 }

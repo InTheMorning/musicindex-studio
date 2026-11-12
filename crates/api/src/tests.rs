@@ -14644,6 +14644,55 @@ async fn a_move_of_the_release_files_with_no_file_to_move_changes_the_default() 
     assert_eq!(plan["nothing_to_move"], false, "{plan}");
 }
 
+/// ADR 0177 item 4: a new file that is not on a file host yet follows the
+/// release files. The draft gives its address on the target, and the write
+/// uploads it there, not to the previous default file host.
+#[tokio::test]
+async fn a_move_takes_a_new_file_that_is_not_written_yet() {
+    let app = move_app();
+    let id = set_up(&app).await;
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["items"][0]["enclosure"] = json!({
+        "url": file["url"],
+        "length": file["size"].to_string(),
+        "media_type": "audio/mpeg",
+    });
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let folder = tempfile::tempdir().unwrap();
+    let backup = add_host(&app, "Backup", folder.path(), "https://backup.example").await;
+
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={backup}");
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["new_files"], 1, "{plan}");
+    assert!(plan["stays"].as_array().unwrap().is_empty(), "{plan}");
+
+    let diff = move_scoped(&app, id, backup, "both").await;
+    let uploads: Vec<&Value> = diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|op| op["kind"] == "upload")
+        .collect();
+    assert_eq!(uploads.len(), 1, "{diff}");
+    assert_eq!(uploads[0]["connector_id"], backup, "{diff}");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let url = draft["model"]["items"][0]["enclosure"]["url"]
+        .as_str()
+        .unwrap();
+    assert!(url.starts_with("https://backup.example/"), "{url}");
+}
+
 /// ADR 0148 item 15: the files route counts the files that stay behind a
 /// draft feed move.
 #[tokio::test]

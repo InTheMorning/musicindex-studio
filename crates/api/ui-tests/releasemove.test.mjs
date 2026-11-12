@@ -97,3 +97,15 @@ test('What moves has the three values of ADR 0177, and the first is the start va
     'The feed file and the release files', 'Only the feed file', 'Only the release files']);
   assert.deepEqual(MOVE_SCOPES.map((scope) => scope.value), ['both', 'feed', 'files']);
 });
+
+test('planRows names the new files that go to the target at the write (ADR 0177 item 4)', () => {
+  const rows = planRows({ ...plan, new_files: 2 }, hosts);
+  assert.ok(rows.some((r) => r.label === '2 new files' && r.value.endsWith('at the write')), JSON.stringify(rows));
+  assert.ok(!planRows(plan, hosts).some((r) => r.label.includes('new file')));
+});
+
+test('planRows gives no count of zero file hosts when no known host has the files', () => {
+  const rows = planRows({ ...plan, from_connector_ids: [] }, hosts);
+  assert.ok(rows.every((r) => !r.value.startsWith('0 file hosts')), JSON.stringify(rows));
+  assert.ok(rows.some((r) => r.value.startsWith('Their addresses →')), JSON.stringify(rows));
+});

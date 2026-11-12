@@ -41,7 +41,7 @@ import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playerMark, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
-import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice } from './releasemove.js';
+import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -1697,6 +1697,7 @@ function FeedMoveRow({ move, connectors, onUndo, busy }) {
       <span class="sub">To <span class="mono">${move.url}</span></span>
       <span class="sub">${moveNote(move.method)}</span>
       ${move.replaces_pointer && html`<span class="sub">${REPLACES_POINTER_NOTE}</span>`}
+      ${replacesCopyNote(move) && html`<span class="sub">${replacesCopyNote(move)}</span>`}
       <span class="sub">${connectorName(connectors, move.connector_id)}</span>
     </span>
     <button class="button" type="button" disabled=${busy} onClick=${onUndo}>Undo</button>
@@ -1734,6 +1735,13 @@ function LinkNotices({ report, busy, onRepair }) {
 // The warning of a return (ADR 0128 items 7 to 9). It does not stop the write.
 function ReturnWarning({ move }) {
   const view = returnWarning(move);
+  return view && html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`;
+}
+
+// The warning of a move that replaces a different file (ADR 0178 item 6). It
+// does not stop the write.
+function ReplaceWarning({ move }) {
+  const view = replaceWarning(move);
   return view && html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`;
 }
 
@@ -2093,6 +2101,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
       ${diff && html`<${ReturnWarning} move=${diff.feed_move} />`}
+      ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${BuildDateNotices} state=${diff.build_date} />`}
       ${sentCount > 0 && html`<div class="notice" role="status">${reviewNotice(sentCount)}</div>`}
@@ -4038,12 +4047,14 @@ function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
     });
     return () => { live = false; };
   }, [open, chosen, what, feed.id]);
-  const add = () => run(async () => {
-    await api(`/feeds/${feed.id}/move`, { method: 'POST', body: { connector_id: chosen, delete_later: deleteLater, wait_days: wait, what } });
+  // `replace` is true only from "Replace the File" (ADR 0178 item 6).
+  const add = (replace) => run(async () => {
+    await api(`/feeds/${feed.id}/move`, { method: 'POST', body: { connector_id: chosen, delete_later: deleteLater, wait_days: wait, what, replace } });
     await onDone();
     ref.current.close();
   });
   const stays = plan ? stayRows(plan) : [];
+  const refusal = existsRefusalView(error);
   const hasOld = plan && plan.from_connector_ids.length > 0;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-release-title" onClose=${() => { setTarget(null); setWhat(MOVE_SCOPES[0].value); onClose(); }}>
     <header>
@@ -4063,7 +4074,14 @@ function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
             ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
           </select></div>
       </div>
-      <${ErrorNotice} error=${error} />
+      ${refusal
+        ? html`<div class="notice error" role="alert"><strong>${refusal.title}</strong>
+          <p>${refusal.text}</p>
+          ${refusal.facts.map((row) => html`<p key=${row.label}>${row.label}: <span class=${row.mono ? 'mono' : ''}>${row.value}</span></p>`)}
+          <p>${refusal.note}</p>
+          <div class="actions"><button class="button" type="button" disabled=${busy}
+            onClick=${() => add(true)}>${refusal.replace}</button></div></div>`
+        : html`<${ErrorNotice} error=${error} />`}
       ${plan && html`<section class="page-section"><h2>The plan</h2>
         <div class="group move-group">
           ${planRows(plan, connectors).map((row) => html`<div class="link-row static" key=${row.label}>
@@ -4086,7 +4104,7 @@ function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
     </div>
     <footer>
       <button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-      <button class="button primary" type="button" disabled=${busy || !plan || plan.nothing_to_move} onClick=${add}>Add to the Draft</button>
+      <button class="button primary" type="button" disabled=${addDisabled(plan, busy, error)} onClick=${() => add(false)}>Add to the Draft</button>
     </footer>
   </dialog>`;
 }

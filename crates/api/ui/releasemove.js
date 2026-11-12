@@ -140,3 +140,53 @@ export function partMoveNotice(count, toId, fromId, connectors) {
     text: `The feed still works while ${from} keeps ${count === 1 ? 'this file' : 'these files'}.`,
   };
 }
+
+// The refusal of a move because a different file is at the feed path on the
+// new file host (ADR 0178 items 4 and 5). `error` is an error of the API. The
+// result is `null` for any other error. The core gives the file as the
+// `details` of the error, and these functions give only its words.
+export const REPLACE_LABEL = 'Replace the File';
+export const REPLACE_NOTE = 'Review shows this replace before the write. Nothing changes on a file host until you write.';
+
+export function existsRefusalView(error) {
+  const file = error && error.code === 'file_exists' ? error.details : null;
+  if (!file || !file.path) return null;
+  // A path and a GUID are addresses, so only they use the code font.
+  const facts = [
+    { label: 'File', value: file.path, mono: true },
+    { label: 'Title', value: file.title || 'Not a feed that Studio can read' },
+  ];
+  if (file.guid) facts.push({ label: 'GUID', value: file.guid, mono: true });
+  facts.push({ label: 'Size', value: sizeText(file.size) });
+  return {
+    title: 'A different file is at the feed path.',
+    text: `${file.host} has a file at ${file.path}. It is not a copy of this feed.`,
+    facts,
+    note: REPLACE_NOTE,
+    replace: REPLACE_LABEL,
+  };
+}
+
+// "Add to the Draft" is not available while the sheet waits for a plan, has
+// nothing to move or shows a refusal (ADR 0178 item 8).
+export function addDisabled(plan, busy, error) {
+  return Boolean(busy || !plan || plan.nothing_to_move || existsRefusalView(error));
+}
+
+// The Review text of a feed move that replaces an old copy of the same feed
+// (ADR 0178 item 3), or `null`.
+export const REPLACES_COPY_NOTE = 'Replaces an old copy of this feed';
+export const replacesCopyNote = (move) => (move && move.replaces_copy ? REPLACES_COPY_NOTE : null);
+
+// The Review warning of a feed move that replaces a different file (ADR 0178
+// item 6). It names the title of the file, or its path when it is not a feed.
+export function replaceWarning(move) {
+  const mark = move && move.replaces_file;
+  if (!mark) return null;
+  return {
+    title: 'This move replaces a different file.',
+    text: mark.title
+      ? `The write replaces the feed "${mark.title}" at ${move.path}.`
+      : `The write replaces the file ${move.path}. It is not a feed that Studio can read.`,
+  };
+}

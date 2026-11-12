@@ -2,7 +2,7 @@
 
 Decision: [ADR 0178](../adr/0178-a-move-replaces-a-file-at-the-feed-path-in-studio.md).
 
-Status: Open.
+Status: Complete on 2026-11-11. The four commit checks are green. The visual check ran at 1280 px and 390 px, in the dark and the light theme. The refusal shows after **Add to the Draft**, because the core reads the file at that time. The human gate is open.
 
 ## Goal
 

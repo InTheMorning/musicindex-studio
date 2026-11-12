@@ -11,6 +11,7 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 | Check | Owner | Result |
 |---|---|---|
 | Build and start | — | Passed. The window opened on Releases. |
+| Settings: Discard with the real lock and close settings | ADR 0166, task 099 | Passed. After a tab change, the two changes stayed. Discard gave back the saved values, and the close followed the saved value. |
 | Move with "Only the release files" | ADR 0177 | Passed. The media files went from `bastone` to `heycitizen`, at `https://music.cancelbandcamp.com/TestAlbum/test/`. Each new address answered `200`. The feed file stayed on `bastone` at its address. |
 
 ## Findings
@@ -58,3 +59,13 @@ The agent read the file at `https://music.cancelbandcamp.com/TestAlbum/test.xml`
 The core accepts such a file only when the collection has a record of it as a placed file or a pointer file. This collection has no record. The cause of the missing record is not known. The collection came from an import of an account file (ADR 0176), and the import can be the cause.
 
 The sheet also kept **Add to the Draft** available after the refusal.
+
+### Finding 5: The Controls Of One Copy Of A File
+
+Owner: [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) item 13, [ADR 0037](../adr/0037-button-roles.md) and [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md).
+
+On the **Files** page, a copy that the feed does not use has the button **Reference**. The operator did not know what it does. It puts the address of that copy in the feed, in place of the current address.
+
+The operator agreed to the name **Use This Copy**. The other copy shows "Used by the feed", so the two rows use the same word.
+
+The row of one file also has three controls that change the copy that the feed uses: **Reference**, **Move to {host}** and the select menu "File host of this file". ADR 0177 gave the release one way to move. The operator agreed that the ADR of finding 1 also examines these three controls.

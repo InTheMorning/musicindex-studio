@@ -200,6 +200,13 @@ impl From<PipelineError> for ApiError {
             )
             .with_details(details);
         }
+        // ADR 0178 item 4: the refusal gives the path, the host, the title
+        // and the GUID of the file.
+        if let Some(file) = error.existing_file() {
+            let details = serde_json::to_value(file).unwrap_or_default();
+            return Self::new(StatusCode::CONFLICT, "file_exists", error.to_string())
+                .with_details(details);
+        }
         let (status, code) = match error.kind() {
             PipelineErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
             PipelineErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),

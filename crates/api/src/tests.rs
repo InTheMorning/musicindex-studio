@@ -5252,6 +5252,23 @@ async fn the_feed_host_route_puts_a_feed_move_into_the_diff() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "file_exists");
+    // ADR 0178 item 4: the refusal gives the file as data.
+    assert_eq!(body["error"]["details"]["path"], "album.xml");
+    assert_eq!(body["error"]["details"]["connector_id"], busy_id);
+    assert_eq!(body["error"]["details"]["host"], "Busy");
+    assert_eq!(body["error"]["details"]["size"], 5);
+    assert_eq!(body["error"]["details"]["title"], Value::Null);
+    assert_eq!(body["error"]["details"]["guid"], Value::Null);
+    // ADR 0178 item 6: with `replace`, the draft holds the mark.
+    let (status, diff) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": busy_id, "replace": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(diff["feed_move"]["replaces_file"]["size"], 5);
 }
 
 /// The body of a new SFTP host on a test server. The login is the plain key.

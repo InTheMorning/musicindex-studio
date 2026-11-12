@@ -1,4 +1,4 @@
-//! The routes of the collections of the desktop app (ADR 0149, ADR 0176).
+//! The routes of the collections of the desktop app (ADR 0149, ADR 0176, ADR 0183).
 //!
 //! Only the router of the desktop app has these routes. A server, and a shell
 //! with `--data-dir`, have none.
@@ -824,7 +824,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_export_of_a_closed_collection_gives_the_archive_of_the_open_one() {
+    async fn an_export_of_a_closed_collection_keeps_the_open_collection_unchanged() {
         let fixture = fixture();
         let closed = account_collection(&fixture, "Closed", "mark").await;
         // The open vault needs a recent unlock. The closed vault stays shut.
@@ -837,6 +837,9 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::CREATED);
+        let (status, before) =
+            call(&fixture.router, "GET", "/api/v1/collections", None, true).await;
+        assert_eq!(status, StatusCode::OK);
         let (status, facts) = call(
             &fixture.router,
             "GET",
@@ -905,7 +908,14 @@ mod tests {
             StatusCode::CONFLICT,
             "the open collection uses the account export"
         );
+        let (status, after) = call(&fixture.router, "GET", "/api/v1/collections", None, true).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            after, before,
+            "ADR 0183 item 4: export keeps the open collection"
+        );
     }
+
 
     #[tokio::test]
     async fn a_copy_gives_the_vault_to_the_copy_and_waits_for_a_write() {
@@ -961,4 +971,5 @@ mod tests {
         let (_, session) = call(&router, "GET", "/auth/v1/session", None, true).await;
         assert_eq!(session["collections"], json!(false));
     }
+
 }

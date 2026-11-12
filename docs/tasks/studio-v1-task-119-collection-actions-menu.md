@@ -2,7 +2,7 @@
 
 Decision: [ADR 0183](../adr/0183-each-collection-row-has-one-actions-menu.md).
 
-Status: Not started.
+Status: Complete on 2026-11-12. The four commit checks are green. The screenshot visual check passed at 1280 px and at 390 px, in the light and dark themes. The open menus are not clipped, and they agree with the mockup. The badge "Current" uses the check icon of the badge "Default" of a wallet.
 
 ## Goal
 

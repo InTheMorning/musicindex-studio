@@ -28,7 +28,7 @@ import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, moveNotice, eachLimited, panelSet, stateMark } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, moveNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -4770,6 +4770,19 @@ function OutsideNotices({ feed, busy, refresh }) {
   const { busy: sending, error, run } = useAction();
   const load = () => api(`/feeds/${feed.id}/outside?index=true`).then(setCheck, () => {});
   useEffect(() => { setCheck(null); load(); }, [feed.id, feed.last_version]);
+  useEffect(() => {
+    const delay = nextNoticeLoad(check, Date.now() / 1000);
+    if (delay === null) return undefined;
+    const timer = setTimeout(load, delay);
+    return () => clearTimeout(timer);
+  }, [check, feed.id]);
+  // A Read Again of the page ends when `busy` changes to false. Then the
+  // notice loads again, because a podping can be sent (ADR 0189 item 6).
+  const wasBusy = useRef(busy);
+  useEffect(() => {
+    if (wasBusy.current && !busy) load();
+    wasBusy.current = busy;
+  }, [busy]);
   const notice = outsideNotice(check);
   const move = moveNotice(check);
   const index = move ? null : indexNotice(check);

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md).
 
-Status: Complete on 2026-11-12. Packets 120a, 120b and 120c are complete. 120a and 120c have their screenshot visual checks. The human test with a real move between two file hosts is open.
+Status: Complete on 2026-11-12. Packets 120a, 120b and 120c are complete. 120a and 120c have their screenshot visual checks. The human test passed on 2026-11-12 in the release build of local `main`: after a real move, the notice showed the podping state, and it went after Music Index read the new address.
 
 ## Goal
 
@@ -59,7 +59,7 @@ Visual, by the planning model:
 
 - The notice with each podping state, at 1280 px and at 390 px, in the light and dark themes.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-12:
 
 - The human criterion of ADR 0184, with a real move between two file hosts.
 

@@ -59,6 +59,33 @@ export function indexNotice(check) {
   };
 }
 
+const localTime = (seconds) => new Date(seconds * 1000).toLocaleString();
+
+// The notice after a move by Studio (ADR 0184 items 3 to 7). A feed with no
+// public address has no send button (item 11).
+export function moveNotice(check) {
+  if (!check || check.index_is_move_source !== true || !check.last_move) return null;
+  const lines = (check.last_move.announcements || []).map((announcement) => {
+    const line = { url: announcement.url, text: 'Podping: not sent.' };
+    if (announcement.state === 'waiting') {
+      line.text = `Podping: waiting, sends at ${localTime(announcement.send_at)}.`;
+    } else if (announcement.state === 'sent') {
+      line.text = `Podping: sent at ${localTime(announcement.finished_at)}.`;
+    } else if (announcement.state === 'failed') {
+      line.text = `Podping: failed at ${localTime(announcement.finished_at)}${announcement.error ? `: ${announcement.error}` : ''}.`;
+      if (check.own_url) line.action = 'Send the Podping Again';
+    } else if (announcement.state === 'not_sent' && check.own_url) {
+      line.action = 'Send the Podping';
+    }
+    return line;
+  });
+  return {
+    tone: 'plain',
+    strong: `You moved this feed at ${localTime(check.last_move.moved_at)}. Music Index reads the new address after it gets the podping.`,
+    lines,
+  };
+}
+
 // Call `work` for each item, with at most `limit` calls at one time. A failed
 // call does not stop the others.
 export async function eachLimited(items, limit, work) {

@@ -1665,11 +1665,12 @@ pub(crate) async fn outside_check(
             "state": null,
             "read": false,
             "last_move": last_move,
+            "index_is_move_source": false,
         })));
     }
     let Some(address) = outside::address_of(&row) else {
         return Ok(Json(
-            json!({ "enabled": true, "state": null, "read": false, "last_move": last_move }),
+            json!({ "enabled": true, "state": null, "read": false, "last_move": last_move, "index_is_move_source": false }),
         ));
     };
     let ask_index = query.index;
@@ -1694,12 +1695,15 @@ pub(crate) async fn outside_check(
             outside::OutsideResult::Changed => (Some("changed"), None),
             outside::OutsideResult::Moved { url } => (Some("moved"), Some(url)),
         };
+        let index_is_move_source =
+            outside::index_is_move_source(index_url.as_deref(), last_move.as_ref());
         Ok(Json(json!({
             "enabled": true,
             "state": state,
             "read": read,
             "new_url": new_url,
             "index_url": index_url,
+            "index_is_move_source": index_is_move_source,
             "own_url": address,
             "connected": row.connector_id.is_some(),
             "last_move": last_move,

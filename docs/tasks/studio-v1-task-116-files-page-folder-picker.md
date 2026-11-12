@@ -2,7 +2,7 @@
 
 Decision: [ADR 0180](../adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md).
 
-Status: In progress. Packet 116a is complete on 2026-11-12, with its screenshot visual check. The row "Media files", the three values of "What moves", the heading "Old files to delete" and the release folder row with only the path and **Change…** show.
+Status: In progress. Packets 116a and 116b are complete on 2026-11-12, with their screenshot visual checks. In 116b, the browser and the server show a list of folder rows. The desktop app shows **Choose Folder…**. The human test of the folder dialog of the system is open. The row "Media files", the three values of "What moves", the heading "Old files to delete" and the release folder row with only the path and **Change…** show.
 
 ## Goal
 

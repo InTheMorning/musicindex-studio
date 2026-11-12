@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine } from './review.js';
-import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet } from './app.js';
+import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
@@ -4191,22 +4191,41 @@ function WaitingMoveEntry({ move, connectors, busy, onDelete, onKeep, onDeleteNo
     </div>`;
 }
 
-// The sheet of "Change…" for the library folder of a release (ADR 0167 item
-// 6). It lists the folders of the library folder, and has a field for a new
-// path. The core refuses a path outside the library folder, with its cause.
-function LibraryFolderSheet({ open, path, onMove, onClose }) {
+// The sheet of "Change…" for the library folder of a release (ADR 0180 items
+// 5 to 11). The desktop app opens the folder dialog of the system. A different
+// shell shows the folders of the library folder, one level at a time. The core
+// refuses a path outside the library folder, with its cause.
+function LibraryFolderSheet({ open, path, defaultPath, onMove, onClose }) {
   const ref = useSheet(open);
   const [folders, setFolders] = useState([]);
   const [target, setTarget] = useState(path || '');
+  const [parent, setParent] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [addingFolder, setAddingFolder] = useState(false);
   const action = useAction();
   useEffect(() => {
     if (!open) return;
     setTarget(path || '');
     action.run(async () => {
-      const answer = await api('/library/folders');
+      const answer = await api(`/library/folders${parent ? `?parent=${encodeURIComponent(parent)}` : ''}`);
       setFolders(answer.folders || []);
     });
-  }, [open, path]);
+  }, [open, path, parent]);
+  const choose = () => action.run(async () => {
+    const answer = await api('/choose-folder', { method: 'POST' });
+    if (answer.path) setTarget(answer.path);
+  });
+  const makeFolder = () => action.run(async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    const answer = await api('/library/folders', { method: 'POST', body: { parent, name } });
+    setFolders((items) => [...items, name].sort());
+    setParent(answer.parent || parent);
+    setTarget(answer.path);
+    setNewFolderName('');
+    setAddingFolder(false);
+  });
+  const desktopApp = inDesktopApp();
   const move = () => action.run(async () => {
     await onMove(target);
     ref.current.close();
@@ -4216,17 +4235,31 @@ function LibraryFolderSheet({ open, path, onMove, onClose }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
     <div class="body form">
       <div class="group">
-        <div class="field"><label for="library-folder-list">Folders in the library</label>
-          <select id="library-folder-list" class="button" value="" onChange=${(event) => {
-            if (event.target.value) setTarget(event.target.value);
-            event.target.value = '';
-          }}>
-            <option value="">Choose a folder</option>
-            ${folders.map((folder) => html`<option key=${folder} value=${folder}>${folder}</option>`)}
-          </select></div>
-        <div class="field"><label for="library-folder-path">New folder path</label>
-          <input id="library-folder-path" value=${target} onInput=${(event) => setTarget(event.target.value)} /></div>
+        <div class="link-row static"><span class="text"><span class="label">Selected folder</span>
+          <span class="summary mono" aria-live="polite">${target}</span></span></div>
       </div>
+      <div class="actions">
+        ${desktopApp && html`<button class="button" type="button" disabled=${action.busy} onClick=${choose}>Choose Folder…</button>`}
+        <button class="button" type="button" disabled=${action.busy} onClick=${() => setTarget(defaultPath || '')}>Default</button>
+        ${!desktopApp && !addingFolder && html`<button class="button" type="button" onClick=${() => setAddingFolder(true)}>New Folder</button>`}
+      </div>
+      ${!desktopApp && addingFolder && html`<div class="group">
+        <div class="field"><label for="new-library-folder">${parent ? `New folder in ${parent}` : 'New folder'}</label>
+          <input id="new-library-folder" value=${newFolderName} onInput=${(event) => setNewFolderName(event.target.value)} /></div>
+        <div class="actions"><button class="button" type="button" onClick=${() => { setAddingFolder(false); setNewFolderName(''); }}>Cancel</button>
+          <button class="button" type="button" disabled=${action.busy || !newFolderName.trim()} onClick=${makeFolder}>Create Folder</button></div>
+      </div>`}
+      ${!desktopApp && html`<section class="page-section"><h2>${parent ? `In ${parent}` : 'In the library folder'}</h2>
+        <div class="group folder-browser">
+          ${parent && html`<button class="link-row" type="button" onClick=${() => setParent(parent.split('/').slice(0, -1).join('/'))}>
+            <span class="go" aria-hidden="true">‹</span><span class="text"><span class="label">Up One Level</span></span></button>`}
+          ${folders.map((folder) => {
+            const child = parent ? `${parent}/${folder}` : folder;
+            return html`<button class="link-row" key=${child} type="button" onClick=${() => { setTarget(child); setParent(child); }}>
+              <span class="text"><span class="label">${folder}</span></span><span class="go" aria-hidden="true">›</span></button>`;
+          })}
+          ${!parent && folders.length === 0 && html`<p class="hint">The library folder has no folders.</p>`}
+        </div></section>`}
       <${ErrorNotice} error=${action.error} />
     </div>
     <footer><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
@@ -4501,7 +4534,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 
     <${MoveReleaseSheet} open=${moving !== null} feed=${feed} connectors=${connectors} start=${moving && moving.start}
       onDone=${afterReleaseMove} onClose=${() => setMoving(null)} />
-    <${LibraryFolderSheet} open=${libraryFolderOpen} path=${data.library_folder_path} onMove=${moveLibraryFolder}
+    <${LibraryFolderSheet} open=${libraryFolderOpen} path=${data.library_folder_path} defaultPath=${data.default_library_folder_path} onMove=${moveLibraryFolder}
       onClose=${() => setLibraryFolderOpen(false)} />
 
     <section class="page-section"><h2>Library files</h2>

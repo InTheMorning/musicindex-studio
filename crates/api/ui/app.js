@@ -102,6 +102,12 @@ let onUnlockNeeded = null;
 let onSessionLost = null;
 let unlocking = null;
 
+// True in the desktop app, which has the route of the folder dialog of the
+// system (ADR 0180 item 8).
+export function inDesktopApp() {
+  return !serverMode && hasCollections;
+}
+
 // Keep the mode and the CSRF token of a session response.
 function applySession(session) {
   serverMode = session.mode === 'server';

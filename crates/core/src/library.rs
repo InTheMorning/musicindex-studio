@@ -90,6 +90,95 @@ impl Library {
         Ok(folders)
     }
 
+    /// List direct child folders below one library path.
+    ///
+    /// # Errors
+    ///
+    /// Gives an I/O error when Studio cannot read the folder.
+    pub fn folders_under(&self, parent: &str) -> io::Result<Vec<String>> {
+        if !parent.is_empty() && !Self::is_folder_path(parent) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid library folder",
+            ));
+        }
+        let root = self
+            .root
+            .canonicalize()
+            .map_err(|error| named(&self.root, &error))?;
+        let folder = root.join(parent);
+        let canonical = folder
+            .canonicalize()
+            .map_err(|error| named(&folder, &error))?;
+        if !canonical.starts_with(&root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "folder is outside the library",
+            ));
+        }
+        let mut names = fs::read_dir(&folder)
+            .map_err(|error| named(&folder, &error))?
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                entry
+                    .file_type()
+                    .ok()
+                    .filter(std::fs::FileType::is_dir)
+                    .map(|_| entry.file_name())
+            })
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        names.sort();
+        Ok(names)
+    }
+
+    /// Create one folder below the library root.
+    ///
+    /// # Errors
+    ///
+    /// Gives an I/O error when the path is invalid or Studio cannot make it.
+    pub fn create_folder(&self, parent: &str, name: &str) -> io::Result<String> {
+        if (!parent.is_empty() && !Self::is_folder_path(parent))
+            || name.is_empty()
+            || name == "."
+            || name == ".."
+            || name.contains(['/', '\\'])
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid library folder",
+            ));
+        }
+        let relative = if parent.is_empty() {
+            name.to_owned()
+        } else {
+            format!("{parent}/{name}")
+        };
+        if !Self::is_folder_path(&relative) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid library folder",
+            ));
+        }
+        let root = self
+            .root
+            .canonicalize()
+            .map_err(|error| named(&self.root, &error))?;
+        let parent_path = root.join(parent);
+        let canonical_parent = parent_path
+            .canonicalize()
+            .map_err(|error| named(&parent_path, &error))?;
+        if !canonical_parent.starts_with(&root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "folder is outside the library",
+            ));
+        }
+        let path = canonical_parent.join(name);
+        fs::create_dir(&path).map_err(|error| named(&path, &error))?;
+        Ok(relative)
+    }
+
     /// The path of a file in a release folder.
     #[must_use]
     pub fn path(&self, folder: &str, name: &str) -> PathBuf {
@@ -632,6 +721,23 @@ mod tests {
             Some("Label/Artist/Album")
         );
         assert!(root.join("Label/Artist/Album/track.mp3").exists());
+    }
+
+    #[test]
+    fn library_folder_browser_lists_children_and_makes_a_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let library = Library::open(dir.path().join("library")).unwrap();
+        fs::create_dir_all(library.root().join("Artist/Album")).unwrap();
+        fs::create_dir_all(library.root().join("Label")).unwrap();
+
+        assert_eq!(library.folders_under("").unwrap(), ["Artist", "Label"]);
+        assert_eq!(library.folders_under("Artist").unwrap(), ["Album"]);
+        assert_eq!(
+            library.create_folder("Artist", "New Album").unwrap(),
+            "Artist/New Album"
+        );
+        assert!(library.root().join("Artist/New Album").is_dir());
+        assert!(library.create_folder("../outside", "bad").is_err());
     }
 
     #[test]

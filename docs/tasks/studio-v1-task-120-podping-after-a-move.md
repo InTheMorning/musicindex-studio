@@ -2,7 +2,7 @@
 
 Decision: [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md).
 
-Status: Not started.
+Status: In progress. Packet 120a is complete on 2026-11-12, with its screenshot visual check.
 
 ## Goal
 
